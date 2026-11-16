@@ -80,7 +80,7 @@ impl Manager {
             .await
     }
 
-    /// Ask the workspace's demo `name`, or every demo there, to stop. Their
+    /// Ask the space's demo `name`, or every demo there, to stop. Their
     /// records go once their wrappers finish; a demo whose wrapper has not
     /// reconnected since a daemon restart has its verified processes stopped
     /// as `shoal stop` stops them.
@@ -88,9 +88,9 @@ impl Manager {
         if let Some(name) = &name {
             crate::demos::validate_name(name)?;
         }
-        let workspace = self.workspace(selector).await?.id;
+        let space = self.space(selector).await?.id;
         let executions: Vec<ExecutionId> = self
-            .demos(Some(&SpaceSelector::id(&workspace)))
+            .demos(Some(&SpaceSelector::id(&space)))
             .await?
             .into_iter()
             .filter(|demo| name.as_ref().is_none_or(|name| *name == demo.launch.name))

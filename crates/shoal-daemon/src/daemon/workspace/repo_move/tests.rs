@@ -459,7 +459,7 @@ async fn messages_and_files_follow_their_copies_to_the_new_root() -> Result<()> 
         )
         .await?;
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done {
                 results: vec![file.into()],
@@ -729,7 +729,7 @@ async fn disk_cleanup_behind_a_move_checks_where_results_went() -> Result<()> {
     let report = temp.path().join("report.md");
     fs::write(&report, "No leaks")?;
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done {
                 results: vec![report.into()],

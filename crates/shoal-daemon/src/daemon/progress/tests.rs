@@ -445,7 +445,7 @@ async fn completion_removes_the_spaces_blockers() {
     };
     manager.set_progress(&selector, add).await.unwrap();
     manager
-        .mark_done(&selector, Done::default(), &Attacher::User)
+        .mark_space_done(&selector, Done::default(), &Attacher::User)
         .await
         .unwrap();
     assert!(manager.space_progress(&selector).await.unwrap().is_none());

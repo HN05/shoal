@@ -10,42 +10,65 @@ use crate::{
     daemon::{
         events::EventCause,
         item_numbers::ItemNumber,
+        links::{pr::current_head, space::require_ready_space},
         notifications::NotificationKind,
-        progress, questions, store,
+        progress, questions,
         workspace::{GuardMode, Manager, ResourceGuard, turn_retry},
         workspace_files::Attacher,
     },
     hooks::{self, Hook, HookKind},
-    model::{Completion, HandedBack, SpaceKind, Workspace},
+    model::{Completion, HandedBack, Space},
 };
 use shoal_protocol::{assignments::Done, space_names::SpaceSelector};
+use shoal_refs::CommitId;
 
 impl Manager {
-    /// Record the work of the workspace or running chat `selector` names as
-    /// done, as [`Self::mark_done`] or [`Self::mark_chat_done`] does.
+    /// Stop the space's demos unless `done` keeps them, then record `done`
+    /// for the space `selector` names, at the HEAD of where its agent works.
+    /// Copies of the files it hands back are attached by `attacher`, and the
+    /// space's attached files keep them after its removal.
     pub async fn mark_space_done(
         &self,
         selector: &SpaceSelector,
         done: Done,
         attacher: &Attacher,
     ) -> Result<Completion> {
-        let space = self.space(selector).await?;
-        match space.kind() {
-            SpaceKind::Workspace => {
-                (self.mark_done(&SpaceSelector::id(&space.id), done, attacher)).await
-            }
-            SpaceKind::Chat => self.mark_chat_done(&space.id, done, attacher).await,
+        done.check()?;
+        // Before completion, whose cleanup may remove the space at once.
+        if !done.keep_demos {
+            self.stop_demos(selector, None).await?;
         }
+        // Serialize cleanup choices with the PR and completion sweeps.
+        let (space, _guard) = self.lock_space_gate(selector).await?;
+        let head = self.completion_head(&space, done.integrated).await?;
+        let results = (self.keep_results(&space.clone().into(), done.results, attacher)).await?;
+        let completion = Completion {
+            head,
+            cleanup: done.cleanup,
+            integrated: done.integrated,
+            results,
+            summary: done.summary,
+            error: None,
+        };
+        self.record_done(&space, completion).await
     }
 
-    /// Withdraw the completion the workspace or chat `selector`
-    /// names recorded.
+    /// Withdraw the completion the space `selector` names recorded; only
+    /// holds and open questions keep the space.
     pub async fn undo_space_done(&self, selector: &SpaceSelector) -> Result<Completion> {
-        let space = self.space(selector).await?;
-        match space.kind() {
-            SpaceKind::Workspace => self.undo_done(&SpaceSelector::id(&space.id)).await,
-            SpaceKind::Chat => self.undo_chat_done(&space.id).await,
-        }
+        let (space, _guard) = self.lock_space_gate(selector).await?;
+        self.verify_space(&space).await?;
+        let id = space.id.clone();
+        let completion = self
+            .store
+            .write(move |tx| {
+                require_ready_space(tx, &id)?;
+                take_completion(tx, &id)?.context("the space is not marked done")
+            })
+            .await?;
+        self.signals.wake_cleanup();
+        self.agent_settles.request(&space.id);
+        Ok(completion)
     }
 
     /// The completion the space `id` recorded, a workspace's or a chat's.
@@ -67,29 +90,11 @@ impl Manager {
             .await
     }
 
-    /// Withdraw a recorded completion; only holds and open questions keep the
-    /// workspace.
-    pub async fn undo_done(&self, selector: &SpaceSelector) -> Result<Completion> {
-        let (workspace, _guard) = self.lock_pr_gate(selector).await?;
-        self.verify_worktree(&workspace).await?;
-        let id = workspace.id.clone();
-        let completion = self
-            .store
-            .write(move |tx| {
-                store::require_ready(tx, &workspace.id)?;
-                take_completion(tx, &workspace.id)?.context("assignment is not marked done")
-            })
-            .await?;
-        self.signals.wake_cleanup();
-        self.agent_settles.request(&id);
-        Ok(completion)
-    }
-
-    /// `shoal restore` restores a stopped agent of the workspace, which says
-    /// its work is not finished: withdraw a standing completion, so a
-    /// protection stop restores the agent.
-    pub(crate) async fn reopen_for_resume(&self, workspace_id: &SpaceId) {
-        match self.completion(workspace_id).await {
+    /// `shoal restore` restores a stopped agent of the space, which says its
+    /// work is not finished: withdraw a standing completion, so a protection
+    /// stop restores the agent and completion cleanup leaves the space.
+    pub(crate) async fn reopen_for_resume(&self, space_id: &SpaceId) {
+        match self.completion(space_id).await {
             Ok(Some(_)) => {}
             Ok(None) => return,
             Err(error) => {
@@ -97,94 +102,80 @@ impl Manager {
                 return;
             }
         }
-        if let Err(error) = self.undo_done(&SpaceSelector::id(workspace_id)).await {
+        if let Err(error) = self.undo_space_done(&SpaceSelector::id(space_id)).await {
             crate::daemon::log!("completion of the resumed agent not withdrawn: {error:#}");
         }
     }
 
-    /// Stop the workspace's demos unless `done` keeps them, then record
-    /// `done` at its HEAD. Copies of the files it hands back are attached by
-    /// `attacher`, and the workspace's attached files keep them after its
-    /// removal.
-    pub async fn mark_done(
-        &self,
-        selector: &SpaceSelector,
-        done: Done,
-        attacher: &Attacher,
-    ) -> Result<Completion> {
-        done.check()?;
-        // Before completion, whose cleanup may remove the workspace at once.
-        if !done.keep_demos {
-            self.stop_demos(selector, None).await?;
+    /// The HEAD a completion of `space` records, of where its agent works:
+    /// a workspace's verified worktree on its own branch, or the worktree
+    /// or checkout a chat runs in. A chat without a repository records an
+    /// empty one, since its `root_dir` is no repository. Only a workspace
+    /// is `integrated`: that records that another branch has its commits.
+    async fn completion_head(&self, space: &Space, integrated: bool) -> Result<CommitId> {
+        if let Some(workspace) = space.to_workspace() {
+            // A workspace at a commit holds no assignment of its own.
+            workspace.require_branch("shoal done")?;
+            self.verify_worktree(&workspace).await?;
+            return current_head(&workspace).await;
         }
-        // Serialize cleanup choices with the PR and completion sweeps.
-        let (workspace, _guard) = self.lock_pr_gate(selector).await?;
-        // A workspace at a commit holds no assignment of its own.
-        workspace.require_branch("shoal done")?;
-        self.verify_worktree(&workspace).await?;
-        let head = crate::daemon::links::pr::current_head(&workspace).await?;
-        let results =
-            (self.keep_results(&workspace.clone().into(), done.results, attacher)).await?;
-        let completion = Completion {
-            head,
-            cleanup: done.cleanup,
-            integrated: done.integrated,
-            results,
-            summary: done.summary,
-            error: None,
-        };
-        self.record_done(&workspace, completion).await
+        ensure!(
+            !integrated,
+            "{space} has no branch of its own whose commits another branch could have"
+        );
+        if space.workdir.root_dir().is_some() {
+            return Ok(String::new().into());
+        }
+        let (head, _) = (crate::git::head_and_branch(space.workdir.path()).await)
+            .context("cannot read the HEAD where the space works")?;
+        Ok(head)
     }
 
-    /// Record `completion`, with cleanup also when the workspace's settings
-    /// request it. Caller holds the workspace's PR gate and has verified
+    /// Record `completion`, with cleanup also when the space's settings
+    /// request it. Caller holds the space's PR gate and has verified
     /// ownership and the completion's HEAD.
-    async fn record_done(
-        &self,
-        workspace: &Workspace,
-        completion: Completion,
-    ) -> Result<Completion> {
-        let settings = self.workspace_settings(workspace).await?;
-        let hook = self.done_hook(workspace, &settings).await?;
-        self.verify_worktree(workspace).await?;
+    async fn record_done(&self, space: &Space, completion: Completion) -> Result<Completion> {
+        let settings = self.present_space_settings(space).await?;
+        let hook = self.done_hook(space, &settings).await?;
+        self.verify_space(space).await?;
         let completion = Completion {
             cleanup: completion.cleanup || settings.cleanup.done.enabled,
             ..completion
         };
-        let persisted = self.persist_completion(&workspace.id, &completion).await?;
+        let persisted = self.persist_completion(&space.id, &completion).await?;
         // Rerunning the hook is the one effect a repeated done may have left.
         ensure!(
             persisted.changed || hook.is_some(),
-            "assignment is already marked done at this HEAD"
+            "the space is already marked done at this HEAD"
         );
         if persisted.progressed {
-            self.publications.request(&workspace.id);
+            self.publications.request(&space.id);
         }
-        self.agent_settles.request(&workspace.id);
+        self.agent_settles.request(&space.id);
         let closed = persisted.closed;
-        self.forget_last_sessions(&workspace.id);
-        // A done assignment needs no agent; only naming the workspace in
-        // `shoal restore` restores it now.
-        if let Err(error) = self.cancel_stopped_restores(&workspace.id).await {
+        self.forget_last_sessions(&space.id);
+        // Finished work needs no agent; only naming the space in `shoal
+        // restore` restores it now.
+        if let Err(error) = self.cancel_stopped_restores(&space.id).await {
             crate::daemon::log!("agent queue: {error:#}");
         }
         self.notify_space(
-            &workspace.name,
-            &workspace.id,
+            &space.name,
+            &space.id,
             NotificationKind::SpaceDone,
-            done_notice(&workspace.number.to_string(), &completion, &closed),
+            done_notice(&space.number.to_string(), &completion, &closed),
         )
         .await;
         if let Some((command, _resources)) = hook {
-            self.run_done_hook(workspace, &command, &completion).await;
+            (self.run_done_hook(space, &settings, &command, &completion)).await;
         }
         self.signals.wake_cleanup();
         Ok(completion)
     }
 
     /// Record `completion`, with its summary as the status line, and close
-    /// the workspace's open questions, which the finished assignment waits on
-    /// no longer, waking waits on them.
+    /// the space's open questions, which its finished work waits on no
+    /// longer, waking waits on them.
     async fn persist_completion(&self, id: &SpaceId, completion: &Completion) -> Result<Persisted> {
         let id = id.to_owned();
         let completion = completion.clone();
@@ -192,14 +183,14 @@ impl Manager {
         let persisted = self
             .store
             .write(move |tx| {
-                store::require_ready(tx, &id)?;
+                require_ready_space(tx, &id)?;
                 let replaced = record_completion(tx, &id, &completion)?;
                 // Completion removes what blocked the space.
                 let progressed =
                     progress::record_status(tx, &id, completion.summary.as_deref(), now)?
                         | progress::remove_blockers(tx, &id, now)?;
                 let closed = questions::close_open(tx, &id)?;
-                // A finished assignment leaves its failed turn alone.
+                // Finished work leaves its failed turn alone.
                 turn_retry::cancel(tx, &id)?;
                 Ok(Persisted {
                     changed: replaced || !closed.is_empty() || progressed,
@@ -214,46 +205,43 @@ impl Manager {
         Ok(persisted)
     }
 
-    /// The configured `hooks.post_done`, holding off permit and lifecycle changes
-    /// until it has run.
+    /// The configured `hooks.post_done`, in where the space's agent works,
+    /// holding off permit and lifecycle changes until it has run.
     async fn done_hook(
         &self,
-        workspace: &Workspace,
+        space: &Space,
         settings: &Effective,
     ) -> Result<Option<(PathBuf, ResourceGuard)>> {
         let Some(path) = HookKind::PostDone.command(settings) else {
             return Ok(None);
         };
-        let guard = self
-            .gates
-            .resource_guard(&workspace.id, GuardMode::Exclusive)?;
-        Ok(Some((workspace.path.join(path), guard)))
+        let guard = (self.gates).resource_guard(&space.id, GuardMode::Exclusive)?;
+        Ok(Some((space.workdir.path().join(path), guard)))
     }
 
-    /// Failure only notifies; it never undoes completion.
-    async fn run_done_hook(&self, workspace: &Workspace, command: &Path, completion: &Completion) {
+    /// Run `hooks.post_done` in `space` with what its repository's `[env]`
+    /// adds, which a space without a repository goes without. Failure only
+    /// notifies; it never undoes completion.
+    async fn run_done_hook(
+        &self,
+        space: &Space,
+        settings: &Effective,
+        command: &Path,
+        completion: &Completion,
+    ) {
         let result = async {
-            let settings = self.workspace_settings(workspace).await?;
-            let repository = workspace.repository();
-            let configured_env = (self.hook_environment(workspace, repository, &settings)).await?;
-            hooks::run_detached(
-                Hook::PostDone(completion),
-                workspace,
-                command,
-                &self.paths,
-                &configured_env,
-            )
-            .await
+            let configured_env = match &space.repository_id {
+                Some(repository) => (self.hook_environment(space, repository, settings)).await?,
+                None => Default::default(),
+            };
+            let hook = Hook::PostDone(completion);
+            (hooks::run_detached(hook, space, command, &self.paths, &configured_env)).await
         }
         .await;
         if let Err(error) = result {
-            self.notify_space(
-                &workspace.name,
-                &workspace.id,
-                NotificationKind::HookFailed,
-                format!("assignment finished; {error:#}"),
-            )
-            .await;
+            let kind = NotificationKind::HookFailed;
+            let message = format!("finished; {error:#}");
+            (self.notify_space(&space.name, &space.id, kind, message)).await;
         }
     }
 }
@@ -311,9 +299,9 @@ pub(crate) fn take_completion(
 }
 
 /// What the user is told about a completion, the questions it closed and
-/// the files it handed back, in the workspace numbered `workspace`.
-fn done_notice(workspace: &str, completion: &Completion, closed: &[ItemNumber]) -> String {
-    let mut notice = String::from("assignment finished");
+/// the files it handed back, in the space numbered `space`.
+fn done_notice(space: &str, completion: &Completion, closed: &[ItemNumber]) -> String {
+    let mut notice = String::from("finished");
     if completion.integrated {
         notice.push_str("; integrated elsewhere");
     }
@@ -322,14 +310,14 @@ fn done_notice(workspace: &str, completion: &Completion, closed: &[ItemNumber]) 
     } else {
         "; no cleanup requested"
     });
-    push_completion_details(&mut notice, workspace, completion, closed);
+    push_completion_details(&mut notice, space, completion, closed);
     notice
 }
 
 /// Add the questions a completion closed, the results it handed back and,
 /// last, its summary to the notice of the space `space`, a number, which
 /// selects it.
-pub(crate) fn push_completion_details(
+fn push_completion_details(
     notice: &mut String,
     space: &str,
     completion: &Completion,

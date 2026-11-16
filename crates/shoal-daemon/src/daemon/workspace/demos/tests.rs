@@ -200,13 +200,13 @@ async fn completion_stops_the_workspaces_demos_unless_it_keeps_them() {
         ..Done::default()
     };
     manager
-        .mark_done(&selector, kept, &Attacher::User)
+        .mark_space_done(&selector, kept, &Attacher::User)
         .await
         .unwrap();
     assert!(!*web.stop.borrow_and_update());
 
-    manager.undo_done(&selector).await.unwrap();
-    (manager.mark_done(&selector, Done::default(), &Attacher::User))
+    manager.undo_space_done(&selector).await.unwrap();
+    (manager.mark_space_done(&selector, Done::default(), &Attacher::User))
         .await
         .unwrap();
     assert!(*web.stop.borrow_and_update());

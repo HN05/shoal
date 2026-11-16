@@ -261,7 +261,7 @@ async fn cleanup_deletes_the_results_of_removed_workspaces_last() {
     let report = root.path().join("report.md");
     std::fs::write(&report, "No leaks").unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&audit.id),
             Done {
                 results: vec![report.into()],

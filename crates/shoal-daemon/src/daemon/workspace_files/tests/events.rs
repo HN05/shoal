@@ -73,7 +73,7 @@ async fn every_route_records_one_added_event_per_file() {
         .await
         .unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done {
                 results: vec![shot.into()],
@@ -169,7 +169,7 @@ async fn every_deletion_records_one_removed_event_per_file() {
             .await
             .unwrap();
         manager
-            .mark_done(
+            .mark_space_done(
                 &SpaceSelector::id(&audit.id),
                 Done {
                     results: vec![file(result)],
@@ -193,7 +193,7 @@ async fn every_deletion_records_one_removed_event_per_file() {
         .unwrap();
     // Removal keeps every file.
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&child.id),
             Done {
                 results: vec![file("kept.md")],

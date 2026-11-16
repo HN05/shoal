@@ -67,7 +67,7 @@ async fn launches_start_on_a_blocker_once_it_is_done_at_its_head() {
     assert_eq!(ui.blockers, ["api"]);
 
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&api.id),
             Done::default(),
             &Attacher::User,
@@ -82,7 +82,7 @@ async fn launches_start_on_a_blocker_once_it_is_done_at_its_head() {
     assert_eq!(entry(&manager, &ui.id).await.blockers, ["api"]);
 
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&api.id),
             Done::default(),
             &Attacher::User,
@@ -111,7 +111,11 @@ async fn launches_blocked_by_a_chat_start_once_it_is_done_or_removed() {
     assert_eq!(ui.blockers, ["notes"]);
 
     manager
-        .mark_chat_done(&notes.id, Done::default(), &Attacher::User)
+        .mark_space_done(
+            &SpaceSelector::id(&notes.id),
+            Done::default(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager.dispatch_queue().await.unwrap();
@@ -212,7 +216,7 @@ async fn issue_blockers_wait_for_closure_or_a_done_workspace_linking_them() {
         ["fix or pending"]
     );
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&fix.id),
             Done::default(),
             &Attacher::User,
@@ -264,7 +268,7 @@ async fn done_blockers_build_on_the_one_that_contains_the_others() {
     .await;
     for workspace in [&lower, &separate, &upper] {
         manager
-            .mark_done(
+            .mark_space_done(
                 &SpaceSelector::id(&workspace.id),
                 Done::default(),
                 &Attacher::User,

@@ -187,8 +187,8 @@ impl Manager {
     }
 
     /// Verify a workspace's worktree before a request relies on it; a
-    /// chat's checkout is the registered one.
-    pub(crate) async fn verify_space(&self, space: &LinkSpace) -> Result<()> {
+    /// chat owns no worktree to verify.
+    pub(crate) async fn verify_space(&self, space: &Space) -> Result<()> {
         match space.to_workspace() {
             Some(workspace) => self.verify_worktree(&workspace).await,
             None => Ok(()),

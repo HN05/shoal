@@ -1332,7 +1332,7 @@ async fn a_removal_moves_results_up_in_the_transaction_that_deletes_it() {
     let report = temp.path().join("report.md");
     fs::write(&report, "No leaks").unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&bottom.id),
             Done {
                 results: vec![report.into()],

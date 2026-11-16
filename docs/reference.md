@@ -4124,7 +4124,7 @@ import there is reported while the rest are copied.
 user. It replaces the whole recorded completion when anything it records differs, and fails when it would change nothing: the same
 completion with no open question to close and no `hooks.post_done` to rerun.
 [`[cleanup.done] enabled`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#cleanup) defaults to true; `--cleanup` requests cleanup when it is
-false. It first stops the workspace's [demos](#demos) unless `--keep-demos` leaves
+false. It first stops the space's [demos](#demos) unless `--keep-demos` leaves
 them running until cleanup. `--integrated` records that another branch has the
 work under new commits, as after a cherry-pick or a rebase that edited them: until
 HEAD moves, commits no remote or default branch has no longer keep the workspace
@@ -4156,12 +4156,14 @@ merged workspace nobody uses is removed by [merged cleanup](#merged-workspaces)
 whether or not its agent ran `done`.
 
 A [chat](#chats), named or the one this runs in, records that its work is
-finished at its checkout's HEAD, and its agent and session keep running until
-completion cleanup, requested as for a workspace, removes the chat and the
-spaces below it after the grace period, stopping its agent, whatever PRs it
-watches. It has no branch or demos, so `--integrated` and
-`--keep-demos` are refused. `--attach` hands files back into the chat's attached files, `--summary` records its summary, its
-open questions close, and its coordinator is told, else the user, as for a workspace. Its
+finished at the HEAD of where it works, the worktree it runs in or its
+repository's checkout, or an empty HEAD without a repository, and its agent and
+session keep running until completion cleanup, requested as for a workspace,
+removes the chat and the spaces below it after the grace period, stopping its
+agent, whatever PRs it watches. It has no branch of its own, so `--integrated`
+is refused. Otherwise `done` acts on it as on a workspace: `--attach`,
+`--summary`, closing its open questions, telling its coordinator, else the
+user, and `hooks.post_done`. Its
 closed linked items stop being polled, as a finished workspace's do. `work
 --chats` shows the chat as `finished`, `shoal inbox` and the menu list it, and
 its record carries the `completion` until `shoal done --undo` withdraws it.
@@ -4172,7 +4174,9 @@ Issue associations and PR watches remain registered. It does not keep the worksp
 cleanup proceeds as if `done` had not run.
 
 `hooks.post_done` runs in the daemon after recording completion, before cleanup,
-with the worktree as its working directory, no terminal, and a 60-second limit.
+where the space's agent works as its working directory, no terminal, and a
+60-second limit; a chat without a repository runs the global config's hook in
+its `root_dir`, without `[env]`.
 It follows normal global and repository configuration precedence and receives the
 [hook identity environment](#workspace-setup-and-hooks) plus
 `SHOAL_DONE_CHOICE=keep` or `cleanup`. It runs even when cleanup retains the

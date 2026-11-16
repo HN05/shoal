@@ -126,7 +126,7 @@ async fn a_space_blocker_clears_once_that_space_is_done_or_removed() {
             .is_empty()
     );
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&api.id),
             Done::default(),
             &Attacher::User,

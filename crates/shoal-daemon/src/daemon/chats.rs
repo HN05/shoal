@@ -454,12 +454,6 @@ impl Manager {
             .await
     }
 
-    /// The settings of `chat`: its repository's, or the global config's
-    /// alone for a chat without a repository.
-    pub(crate) async fn chat_settings(&self, chat: &Chat) -> Result<crate::config::Effective> {
-        self.space_settings_in(chat.repository_id.as_ref()).await
-    }
-
     /// The settings of a space of the repository `id`, or the global
     /// config's alone for a space without one.
     pub(crate) async fn space_settings_in(
@@ -776,7 +770,6 @@ fn forget_unstarted(tx: &rusqlite::Transaction<'_>, id: &SpaceId, error: &str) -
     Ok(())
 }
 
-mod done;
 mod files;
 pub(crate) mod launches;
 

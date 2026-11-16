@@ -39,7 +39,7 @@ async fn idle_in_held_done_workspace(
         .await
         .unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done {
                 cleanup: true,

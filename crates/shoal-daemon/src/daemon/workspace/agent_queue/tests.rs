@@ -206,7 +206,7 @@ async fn completed_workspaces_and_registered_agents_release_starting_slots() {
     assert!(!started(&second.id));
 
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
@@ -1586,7 +1586,7 @@ async fn a_oneshot_run_starts_beside_the_agents_without_a_slot() {
         .unwrap();
     manager.consume_queue_entry(&first.id, &workspace.id).await;
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,

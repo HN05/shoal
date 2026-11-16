@@ -723,7 +723,7 @@ async fn done_closes_open_questions_for_good() {
         .await
         .unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done {
                 cleanup: true,
@@ -771,7 +771,7 @@ async fn done_closes_open_questions_for_good() {
 
     // Withdrawing completion leaves it closed, and its number stays taken.
     manager
-        .undo_done(&SpaceSelector::id(&workspace.id))
+        .undo_space_done(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert!(!manager.has_open_questions(&workspace.id).await.unwrap());

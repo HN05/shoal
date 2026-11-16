@@ -243,11 +243,11 @@ async fn done_takes_the_agent_account_off_and_undoing_it_puts_it_back() {
     fixture.link_as(workspace, Assigner::Agent).await;
     let selector = SpaceSelector::id(&workspace.id);
     let done = Done::default();
-    (manager.mark_done(&selector, done, &Attacher::User))
+    (manager.mark_space_done(&selector, done, &Attacher::User))
         .await
         .unwrap();
     manager.settle_requested_agents().await;
-    manager.undo_done(&selector).await.unwrap();
+    manager.undo_space_done(&selector).await.unwrap();
     manager.settle_requested_agents().await;
     assert_eq!(
         fixture.changes(),
@@ -263,7 +263,7 @@ async fn a_chats_agent_gives_up_its_issue_once_done() {
     let chat = crate::daemon::test_support::chat(manager, "plan", "plan", repository, None).await;
     fixture.link_space(&chat.id, Assigner::User).await;
     let done = Done::default();
-    (manager.mark_chat_done(&chat.id, done, &Attacher::User))
+    (manager.mark_space_done(&SpaceSelector::id(&chat.id), done, &Attacher::User))
         .await
         .unwrap();
     manager.settle_requested_agents().await;

@@ -1203,7 +1203,7 @@ async fn a_done_workspace_does_not_restore_its_stopped_agent() {
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
@@ -1232,7 +1232,7 @@ async fn resuming_a_done_workspaces_agent_lets_a_later_stop_restore_it() {
     wait_started(&manager, &workspace).await;
     let execution = only_execution(&manager, &workspace).await;
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
@@ -1335,7 +1335,7 @@ async fn an_automatic_restore_in_a_new_wrapper_keeps_the_completion() {
     wait_started(&manager, &workspace).await;
     let execution = only_execution(&manager, &workspace).await;
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
@@ -1436,7 +1436,7 @@ async fn finishing_the_assignment_cancels_a_waiting_restore() {
     wait_paused(&manager, &workspace).await;
     wait_restore_queued(&manager).await;
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,

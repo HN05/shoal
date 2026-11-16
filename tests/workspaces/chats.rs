@@ -525,11 +525,9 @@ fn a_chat_records_its_work_done_and_withdraws_it() {
     let (mut agent, chat) = start_test_chat(&fixture, "planning");
     let report = fixture.root.path().join("report.md");
     fs::write(&report, "plan\n").unwrap();
-    // The branch and demo options are a workspace's.
-    for flag in ["--integrated", "--keep-demos"] {
-        let output = fixture.run(&["done", &fixture.id("planning"), flag]);
-        assert!(!output.status.success(), "{flag}: {}", printed(&output));
-    }
+    // The branch option is a workspace's.
+    let output = fixture.run(&["done", &fixture.id("planning"), "--integrated"]);
+    assert!(!output.status.success(), "{}", printed(&output));
     // Done again at the same HEAD with nothing new changes nothing.
     fixture.ok(&["done", &fixture.id("planning")]);
     let output = fixture.run(&["done", &fixture.id("planning")]);

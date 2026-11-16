@@ -202,7 +202,7 @@ async fn results_name_the_agent_that_handed_them_back() {
     let report = temp.path().join("report.md");
     std::fs::write(&report, "done").unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done {
                 results: vec![report.into()],
@@ -408,7 +408,7 @@ async fn titles_stay_with_their_files_until_a_new_one() {
         .await
         .unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done {
                 results: vec![titled(&report, "Audit findings")],
@@ -617,7 +617,7 @@ async fn results_outlive_removal_as_long_as_its_record() {
     let report = temp.path().join("report.md");
     std::fs::write(&report, "No leaks").unwrap();
     let completion = manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&child.id),
             Done {
                 results: vec![report.into()],
@@ -735,7 +735,7 @@ async fn results_stay_reachable_when_a_workspace_between_goes() {
     let report = temp.path().join("report.md");
     std::fs::write(&report, "No leaks").unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&bottom.id),
             Done {
                 results: vec![report.into()],
@@ -815,7 +815,7 @@ async fn expiry_refuses_results_whose_directory_was_replaced() {
     let report = temp.path().join("report.md");
     std::fs::write(&report, "No leaks").unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&audit.id),
             Done {
                 results: vec![report.into()],
@@ -877,7 +877,7 @@ async fn a_completion_hands_back_a_bounded_number_of_files() {
         })
         .collect();
     let done = manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&audit.id),
             Done {
                 results,
@@ -897,7 +897,7 @@ async fn kept_results_answer_to_the_name_the_workspace_had_when_removed() {
     let report = temp.path().join("report.md");
     std::fs::write(&report, "No leaks").unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&audit.id),
             Done {
                 results: vec![report.into()],
@@ -1004,7 +1004,7 @@ async fn handing_back_a_changed_file_completes_again() {
     let report = temp.path().join("report.md");
     std::fs::write(&report, "First draft").unwrap();
     let first = manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&audit.id),
             Done {
                 results: vec![report.clone().into()],
@@ -1016,7 +1016,7 @@ async fn handing_back_a_changed_file_completes_again() {
         .unwrap();
     // The same file again changes nothing.
     let again = manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&audit.id),
             Done {
                 results: vec![report.clone().into()],
@@ -1028,7 +1028,7 @@ async fn handing_back_a_changed_file_completes_again() {
     assert!(again.is_err());
     std::fs::write(&report, "Revised").unwrap();
     let revised = manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&audit.id),
             Done {
                 results: vec![report.into()],

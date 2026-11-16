@@ -168,7 +168,7 @@ async fn failed_step_does_not_skip_later_steps() {
     // Completion cleanup retains the dirty workspace and cannot record why.
     fs::write(done.path.join("work"), "retain").unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&done.id),
             Done {
                 cleanup: true,
@@ -335,7 +335,7 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
         choices: vec![],
     };
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
@@ -370,7 +370,7 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
         CleanupReason::Completed { integrated: false }
     );
     manager
-        .undo_done(&SpaceSelector::id(&workspace.id))
+        .undo_space_done(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
 
@@ -939,7 +939,7 @@ async fn a_sweep_skips_workspaces_where_file_access_stalled_and_cleans_up_the_ot
         };
         let done = create("done").await.unwrap();
         manager
-            .mark_done(
+            .mark_space_done(
                 &SpaceSelector::id(&done.id),
                 Done {
                     cleanup: true,
@@ -1070,7 +1070,7 @@ async fn completion_cleanup_keeps_a_parent_whose_child_elsewhere_stalled() {
         .unwrap();
     assert_ne!(parent.path.parent(), child.path.parent());
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&parent.id),
             Done {
                 cleanup: true,
@@ -1192,7 +1192,7 @@ async fn pr_cleanup_skips_a_base_whose_stacked_workspace_elsewhere_stalled() {
 async fn a_child_keeps_while_its_completed_parent_elsewhere_stalled() {
     let (_temp, manager, parent, child) = split_across_directories(false).await;
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&parent.id),
             Done {
                 cleanup: true,
@@ -1326,7 +1326,11 @@ async fn a_chat_shoal_saved_or_with_assignment_state_is_kept_from_idle_cleanup()
     let (temp, manager) = crate::daemon::test_support::manager().await;
     let (chat, _) = chat_with_workspace(&temp, &manager).await;
     manager
-        .mark_chat_done(&chat.id, Done::default(), &Attacher::User)
+        .mark_space_done(
+            &SpaceSelector::id(&chat.id),
+            Done::default(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     // Saved for `shoal restore`, it is kept as a workspace's saved agent
@@ -1382,8 +1386,8 @@ async fn completion_cleanup_removes_a_done_chat_whatever_prs_it_watches() {
         .unwrap();
     assert!(manager.pr_registration(&chat.id).await.unwrap().is_some());
     manager
-        .mark_chat_done(
-            &chat.id,
+        .mark_space_done(
+            &SpaceSelector::id(&chat.id),
             Done {
                 cleanup: true,
                 ..Done::default()
@@ -1411,8 +1415,8 @@ async fn a_stalled_directory_below_a_done_chat_starts_no_grace_period() {
         .await
         .unwrap();
     let completion = manager
-        .mark_chat_done(
-            &chat.id,
+        .mark_space_done(
+            &SpaceSelector::id(&chat.id),
             Done {
                 cleanup: true,
                 ..Done::default()
@@ -1443,8 +1447,8 @@ async fn a_stopped_chat_withdraws_its_completion_and_stays() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
     let (chat, opened) = chat_with_workspace(&temp, &manager).await;
     manager
-        .mark_chat_done(
-            &chat.id,
+        .mark_space_done(
+            &SpaceSelector::id(&chat.id),
             Done {
                 cleanup: true,
                 ..Done::default()
@@ -1471,8 +1475,8 @@ async fn a_done_chat_something_keeps_still_takes_the_workspaces_below_it() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
     let (chat, opened) = chat_with_workspace(&temp, &manager).await;
     manager
-        .mark_chat_done(
-            &chat.id,
+        .mark_space_done(
+            &SpaceSelector::id(&chat.id),
             Done {
                 cleanup: true,
                 ..Done::default()

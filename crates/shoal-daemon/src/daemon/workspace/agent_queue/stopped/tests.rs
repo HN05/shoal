@@ -176,7 +176,7 @@ async fn signal_stops_queue_their_restore_once_the_execution_has_ended() {
     signal_stop(&manager, &open.id, "ended");
     stop(&manager, &open.id, "manual", STOPPED);
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&done.id),
             Done::default(),
             &Attacher::User,
@@ -234,6 +234,26 @@ async fn a_signal_stopped_idle_chat_agent_waits_for_an_update() {
 
     let waiting = entry(&manager, "idle-agent").await;
     assert!(waiting.waits_for_update && waiting.state == Queued);
+}
+
+/// Restoring a done chat's agent withdraws the chat's completion, as it
+/// does a workspace's, so completion cleanup leaves the restored chat.
+#[tokio::test]
+async fn queueing_a_done_chats_restore_withdraws_its_completion() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let chat = crate::daemon::test_support::chat(&manager, "talk", "chat", Some(&repo), None).await;
+    let selector = SpaceSelector::id(&chat.id);
+    (manager.mark_space_done(&selector, Done::default(), &Attacher::User))
+        .await
+        .unwrap();
+    stop(&manager, &chat.id, "stopped-agent", STOPPED);
+
+    (manager.queue_stopped_restore(&selector, &"stopped-agent".into(), herdr()))
+        .await
+        .unwrap();
+
+    assert_eq!(manager.completion(&chat.id).await.unwrap(), None);
 }
 
 #[tokio::test]
@@ -518,7 +538,7 @@ async fn a_stop_or_completion_keeps_stopped_agents_down() {
         .await
         .unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&finished.id),
             Done::default(),
             &Attacher::User,

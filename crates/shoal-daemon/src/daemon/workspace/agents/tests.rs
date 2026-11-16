@@ -112,7 +112,7 @@ async fn agent_exit_wakes_cleanup_for_completed_workspace() {
         .await
         .unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done {
                 cleanup: true,

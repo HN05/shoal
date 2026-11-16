@@ -42,7 +42,7 @@ async fn completion_without_cleanup_blocks_idle_and_pr_cleanup_until_requested()
         .await
         .unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
@@ -61,7 +61,7 @@ async fn completion_without_cleanup_blocks_idle_and_pr_cleanup_until_requested()
     reopened.sweep_prs().await.unwrap();
     assert!(workspace.path.exists());
     reopened
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done {
                 cleanup: true,
@@ -83,7 +83,7 @@ async fn completion_retains_dirty_unpushed_and_newer_work() {
     let file = workspace.path.join("new-work");
     fs::write(&file, "keep").unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
@@ -94,7 +94,7 @@ async fn completion_retains_dirty_unpushed_and_newer_work() {
     assert_retained(&manager, &workspace).await;
     commit(&workspace.path, "new-work");
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
@@ -127,7 +127,7 @@ async fn completion_retains_dirty_unpushed_and_newer_work() {
     );
     assert_eq!(fs::read_to_string(&file).unwrap(), "newer");
     reopened
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done {
                 cleanup: true,
@@ -165,7 +165,7 @@ async fn completion_rechecks_work_after_removal_hooks() {
         .await
         .unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
@@ -205,7 +205,7 @@ async fn a_removal_holds_only_its_own_workspaces_gate() {
         .await
         .unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done {
                 cleanup: true,
@@ -227,14 +227,14 @@ async fn a_removal_holds_only_its_own_workspaces_gate() {
     .await;
     assert!(manager.gates.try_lock_prs([&workspace.id]).is_none());
     // Another workspace's commands do not wait for the removal.
-    bounded(manager.mark_done(
+    bounded(manager.mark_space_done(
         &SpaceSelector::id(&other.id),
         Done::default(),
         &Attacher::User,
     ))
     .await
     .unwrap();
-    bounded(manager.undo_done(&SpaceSelector::id(&other.id)))
+    bounded(manager.undo_space_done(&SpaceSelector::id(&other.id)))
         .await
         .unwrap();
     assert!(!sweep.is_finished());
@@ -254,7 +254,7 @@ async fn bounded<T>(future: impl std::future::Future<Output = T>) -> T {
 async fn undone_withdraws_completion_without_blocking_cleanup() {
     let (_root, manager, workspace) = fixture().await;
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done {
                 cleanup: true,
@@ -265,12 +265,12 @@ async fn undone_withdraws_completion_without_blocking_cleanup() {
         .await
         .unwrap();
     let withdrawn = manager
-        .undo_done(&SpaceSelector::id(&workspace.id))
+        .undo_space_done(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert!(withdrawn.cleanup);
     manager
-        .undo_done(&SpaceSelector::id(&workspace.id))
+        .undo_space_done(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap_err();
     assert!(manager.completion(&workspace.id).await.unwrap().is_none());
@@ -327,7 +327,7 @@ async fn an_unreadable_chat_completion_leaves_other_spaces_to_completion_cleanup
         .await
         .unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
@@ -377,7 +377,7 @@ async fn issue_and_watch_completion_wait_for_explicit_done() {
     assert!(inspection.pr_cleanup.unwrap().error.is_none());
     // Explicit completion applies the watch's merge checks.
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done {
                 cleanup: true,
@@ -409,7 +409,7 @@ async fn holds_retain_completion_without_turning_it_into_an_error() {
         .await
         .unwrap();
     let completed = manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
@@ -454,7 +454,7 @@ async fn questions_asked_after_done_retain_completion_and_pr_cleanup() {
         .await
         .unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
@@ -521,7 +521,7 @@ async fn completion_cleans_up_commits_the_start_branch_took_unchanged() {
             .is_some()
     );
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
@@ -545,7 +545,7 @@ async fn completion_retains_commits_the_start_branch_took_adapted() {
         Err(CleanupReason::Unpushed { commits: 1 })
     );
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
@@ -556,7 +556,7 @@ async fn completion_retains_commits_the_start_branch_took_adapted() {
     assert_retained(&manager, &workspace).await;
     // Marking the same HEAD integrated updates the completion.
     let completion = manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done {
                 integrated: true,
@@ -584,7 +584,7 @@ async fn an_integrated_completion_retains_dirty_and_newer_work() {
     commit(&workspace.path, "new-work");
     fs::write(workspace.path.join("unsaved"), "keep").unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done {
                 integrated: true,
@@ -617,7 +617,7 @@ async fn plain_done_returns_an_integrated_completion_to_normal_retention() {
         .await
         .unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done {
                 integrated: true,
@@ -628,7 +628,7 @@ async fn plain_done_returns_an_integrated_completion_to_normal_retention() {
         .await
         .unwrap();
     let completion = manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
@@ -717,7 +717,7 @@ async fn a_parents_completion_takes_its_unheld_children_whatever_their_work() {
     let leaf = split("leaf", nested.id.clone()).await;
 
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&parent.id),
             Done::default(),
             &Attacher::User,
@@ -792,7 +792,7 @@ async fn a_held_parents_completion_takes_the_chats_below_it_deepest_first() {
     }
 
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&parent.id),
             Done::default(),
             &Attacher::User,
@@ -830,7 +830,7 @@ async fn children_stay_while_their_parents_completion_does_not_stand() {
         .await
         .unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&parent.id),
             Done::default(),
             &Attacher::User,
@@ -841,7 +841,7 @@ async fn children_stay_while_their_parents_completion_does_not_stand() {
     assert!(child.path.exists());
     // Nor once it is withdrawn.
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&parent.id),
             Done {
                 cleanup: true,
@@ -852,14 +852,14 @@ async fn children_stay_while_their_parents_completion_does_not_stand() {
         .await
         .unwrap();
     manager
-        .undo_done(&SpaceSelector::id(&parent.id))
+        .undo_space_done(&SpaceSelector::id(&parent.id))
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
     assert!(child.path.exists());
     // Nor once the parent committed after it.
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&parent.id),
             Done {
                 cleanup: true,
@@ -905,7 +905,7 @@ async fn an_unreadable_ancestor_completion_leaves_other_completions_to_their_cle
         .await
         .unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&other.id),
             Done::default(),
             &Attacher::User,
@@ -967,8 +967,8 @@ async fn a_worker_opened_outside_its_done_chat_after_the_sweep_chose_it_stays() 
         .await
         .unwrap();
     manager
-        .mark_chat_done(
-            &chat.id,
+        .mark_space_done(
+            &SpaceSelector::id(&chat.id),
             Done {
                 cleanup: true,
                 ..Done::default()
@@ -1025,8 +1025,8 @@ async fn a_removal_under_a_done_chat_keeps_the_chats_workspaces_below_it() {
         .await
         .unwrap();
     manager
-        .mark_chat_done(
-            &chat.id,
+        .mark_space_done(
+            &SpaceSelector::id(&chat.id),
             Done {
                 cleanup: true,
                 ..Done::default()

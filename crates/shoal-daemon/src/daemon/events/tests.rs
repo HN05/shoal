@@ -285,7 +285,7 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
         .unwrap();
     std::fs::write(workspace.path.join("dirty"), "keep this work").unwrap();
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done {
                 cleanup: true,

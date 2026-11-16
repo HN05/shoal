@@ -101,9 +101,10 @@ async fn a_worktree_that_cannot_be_made_gives_the_chat_back() {
     let repo = registered(root.path(), &manager).await;
     let talk = chat(&manager, "talk", "worker", Some(&repo), None).await;
     let attacher = crate::daemon::workspace_files::Attacher::User;
-    let done = (manager.mark_chat_done(&talk.id, Default::default(), &attacher))
-        .await
-        .unwrap();
+    let done =
+        (manager.mark_space_done(&SpaceSelector::id(&talk.id), Default::default(), &attacher))
+            .await
+            .unwrap();
     let converting = Converting {
         chat: talk.clone(),
         mode: ModeName::DEFAULT,

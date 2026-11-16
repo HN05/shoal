@@ -282,7 +282,7 @@ async fn a_finished_assignment_cancels_its_retry() {
     )
     .await;
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
@@ -292,7 +292,7 @@ async fn a_finished_assignment_cancels_its_retry() {
     assert_eq!(retry(&manager, &workspace).await, None);
     // Withdrawing completion does not bring the old retry back.
     manager
-        .undo_done(&SpaceSelector::id(&workspace.id))
+        .undo_space_done(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert_eq!(deliver_now(&manager).await, None);

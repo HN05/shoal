@@ -3365,7 +3365,11 @@ defers cleanup: only holds, open questions, a pending PR proposal or push reques
 agent launches keep a workspace.
 The daemon runs `hooks.post_done`
 after persisting completion and before cleanup, using normal
-config precedence and the worktree's hook identity plus the keep/cleanup choice.
+config precedence and the space's hook identity plus the keep/cleanup choice,
+where its agent works: a workspace's worktree, the worktree or checkout a chat
+runs in, or a chat without a repository's `root_dir` with the global config's
+hook. Completion is one operation for every space, which reads only what needs
+a worktree, its branch, verification and `--integrated`, from the space's own.
 It is bounded, excludes lifecycle and permit changes, and reports failure through
 a notification without undoing completion or blocking cleanup. Explicit signals
 rerun it; events are not queued or replayed on restart. Completion/PR serialization

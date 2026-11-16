@@ -331,7 +331,7 @@ async fn a_restart_in_a_new_wrapper_keeps_a_done_workspaces_completion() {
     wait_started(&manager, &workspace).await;
     let execution = agent_execution(&manager, &workspace).await;
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             shoal_protocol::assignments::Done::default(),
             &shoal_protocol::files::Attacher::User,

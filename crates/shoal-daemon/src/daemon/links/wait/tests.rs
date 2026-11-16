@@ -2800,7 +2800,7 @@ async fn branch_conflicts_of_work_integrated_elsewhere_are_not_reported() {
         crate::daemon::test_support::commit(repo, "tracked");
     }
     manager
-        .mark_done(
+        .mark_space_done(
             &SpaceSelector::id(&workspace.id),
             Done {
                 integrated: true,
@@ -2815,7 +2815,7 @@ async fn branch_conflicts_of_work_integrated_elsewhere_are_not_reported() {
     assert!(poll().await.unwrap().is_empty());
     // Withdrawing the completion reports the conflict again.
     manager
-        .undo_done(&SpaceSelector::id(&workspace.id))
+        .undo_space_done(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     let updates = poll().await.unwrap();
