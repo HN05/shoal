@@ -823,6 +823,8 @@ impl Manager {
             }
         }
         self.touch(&space.id).await;
+        // The reports its hooks left while the daemon was away wait for it.
+        self.signals.wake_lost_reports();
         Ok(ReattachedExecution { space, stop })
     }
 

@@ -24,7 +24,8 @@ use crate::{
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// How often the daemon looks for the reports hooks left.
+/// How often the daemon looks for the reports hooks left, besides each
+/// time a wrapper reattaches, which a report may wait for.
 const SWEEP_INTERVAL: Duration = Duration::from_secs(15);
 
 /// When the latest of each space's state reports that this daemon
@@ -104,7 +105,10 @@ pub(crate) async fn run(manager: Arc<Manager>) {
             let _operation = manager.gates.operation().await;
             manager.recover_lost_reports().await;
         }
-        tokio::time::sleep(SWEEP_INTERVAL).await;
+        tokio::select! {
+            () = manager.signals.lost_reports_woken() => {}
+            () = tokio::time::sleep(SWEEP_INTERVAL) => {}
+        }
     }
 }
 

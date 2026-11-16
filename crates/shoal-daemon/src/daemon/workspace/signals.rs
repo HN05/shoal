@@ -15,6 +15,7 @@ pub(crate) struct Signals {
     environment: Notify,
     turn_retry: Notify,
     execution_unknown: Notify,
+    lost_reports: Notify,
 }
 
 impl Signals {
@@ -98,6 +99,16 @@ impl Signals {
 
     pub(crate) fn execution_unknown(&self) -> Notified<'_> {
         self.execution_unknown.notified()
+    }
+
+    /// Look for the reports hooks left now, since a wrapper they may wait
+    /// for reattached.
+    pub(crate) fn wake_lost_reports(&self) {
+        self.lost_reports.notify_one();
+    }
+
+    pub(crate) fn lost_reports_woken(&self) -> Notified<'_> {
+        self.lost_reports.notified()
     }
 }
 
