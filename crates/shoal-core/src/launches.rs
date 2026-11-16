@@ -119,7 +119,7 @@ pub fn fitting_kind(launch: &Launch) -> Option<SpaceKind> {
 
 /// Whether the positional argument links a PR or branch, which only a
 /// workspace starts on.
-pub fn links_branch(launch: &Launch) -> bool {
+fn links_branch(launch: &Launch) -> bool {
     matches!(
         launch.target,
         Some(StartTarget::Pull(_) | StartTarget::Branch { .. })

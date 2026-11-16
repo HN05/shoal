@@ -13,7 +13,7 @@ use super::shape::Shape;
 use crate::{
     daemon::{scope::Caller, workspace::Manager},
     launches::{self as fits, workspace::LaunchReads},
-    model::{SpaceKind, Workspace},
+    model::{Repository, SpaceKind, Workspace},
     start_plan::Creation,
 };
 
@@ -61,15 +61,9 @@ impl Manager {
             manager: self,
             caller,
         };
-        let copied = self.launch_copy(&launch, caller).await?;
-        let mut creation = new_creation(&launch, copied.as_ref().map(|copy| &copy.creation));
-        let copied_repository = match &copied {
-            Some(copied) => Some(self.repository(copied.repository.clone()).await?),
-            None => None,
-        };
+        let (mut creation, copied) = self.launch_creation(&launch, caller).await?;
         let target =
-            (self.workspace_target(&launch, &mut creation, copied_repository.as_ref(), &reads))
-                .await?;
+            (self.workspace_target(&launch, &mut creation, copied.as_ref(), &reads)).await?;
         let selector = (&target.repo.id).into();
         let settled =
             crate::launches::workspace::settle(&reads, (&selector, &target.repo), &mut creation);
@@ -79,10 +73,8 @@ impl Manager {
                 .await;
         }
         let blockers = (self.named_blockers(&target.repo.id, &launch.blockers, caller)).await?;
-        if let Some(caller) = caller {
-            let (given, repository) = (&launch.permissions, Some(&target.repo.id));
-            (self.ensure_caller_holds(Some(&caller.space_id), given, repository)).await?;
-        }
+        self.ensure_launch_held(&launch, &target.repo, caller)
+            .await?;
         let agent = self.planned_agent(&launch, &target, &creation).await?;
         let issue = self.planned_issue(&target, caller).await?;
         if issue.is_none() && creation.unsettled() {
@@ -91,9 +83,7 @@ impl Manager {
                 .await;
         }
         let creation = plan::issue_settled(&reads, &target.repo, creation, issue.as_ref()).await?;
-        if let (Some(_), Some(refusal)) = (&agent.agent, &launch.unplaceable) {
-            anyhow::bail!("{refusal}");
-        }
+        ensure_placeable(&launch, &agent)?;
         let planned = start::Planned {
             repo: target.repo,
             creation,
@@ -103,6 +93,38 @@ impl Manager {
         };
         self.start_planned(launch, shape, planned, (source, &reads))
             .await
+    }
+
+    /// What `launch` creates as it names it, a copy of the workspace it
+    /// copies, if any, whose repository comes with it.
+    async fn launch_creation(
+        &self,
+        launch: &Launch,
+        caller: Option<&Caller>,
+    ) -> Result<(Creation, Option<Repository>)> {
+        let Some(copied) = self.launch_copy(launch, caller).await? else {
+            return Ok((new_creation(launch, None), None));
+        };
+        let repository = self.repository(copied.repository.clone()).await?;
+        Ok((
+            new_creation(launch, Some(&copied.creation)),
+            Some(repository),
+        ))
+    }
+
+    /// Refuse the permissions `launch` gives its agent in `repo` where the
+    /// scoped `caller` does not hold them.
+    async fn ensure_launch_held(
+        &self,
+        launch: &Launch,
+        repo: &Repository,
+        caller: Option<&Caller>,
+    ) -> Result<()> {
+        let Some(caller) = caller else {
+            return Ok(());
+        };
+        let (given, repository) = (&launch.permissions, Some(&repo.id));
+        (self.ensure_caller_holds(Some(&caller.space_id), given, repository)).await
     }
 
     /// Start `launch`'s agent as the worker of `workspace`, which already has
@@ -176,6 +198,15 @@ impl Manager {
         (self.launch_in_chat(chat, shape, source, caller))
             .await
             .map(Launched::Chat)
+    }
+}
+
+/// Refuse `launch` when it starts `agent` and its caller's terminal could
+/// place no agent in the background, as the launch says why.
+fn ensure_placeable(launch: &Launch, agent: &plan::PlannedAgent) -> Result<()> {
+    match (&agent.agent, &launch.unplaceable) {
+        (Some(_), Some(refusal)) => anyhow::bail!("{refusal}"),
+        _ => Ok(()),
     }
 }
 
