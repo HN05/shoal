@@ -163,25 +163,7 @@ impl Manager {
         if stopped.is_empty() {
             return;
         }
-        let queued = self
-            .queued_stopped_restores()
-            .await
-            .unwrap_or_else(|error| {
-                log!("shutdown stop: agent queue unavailable: {error:#}");
-                HashSet::new()
-            });
-        let waiting: Vec<&PresentSpace> = stopped
-            .iter()
-            .filter(|space| {
-                waits_for_resume(&self.paths, space, &queued).unwrap_or_else(|error| {
-                    log!(
-                        "shutdown stop: stopped work of {} unreadable: {error:#}",
-                        space.name()
-                    );
-                    true
-                })
-            })
-            .collect();
+        let waiting = self.awaiting_restore(stopped).await;
         let continues = continuation(&waiting);
         let count = stopped.len();
         let spaces = if count == 1 { "space" } else { "spaces" };
@@ -192,6 +174,29 @@ impl Manager {
             format!("Stopped work in {count} {spaces} {moment}; {continues}"),
         )
         .await;
+    }
+
+    /// Those of the `stopped` spaces whose saved work only `shoal restore`
+    /// continues; one whose saved work is unreadable counts.
+    async fn awaiting_restore<'a>(&self, stopped: &'a [PresentSpace]) -> Vec<&'a PresentSpace> {
+        let queued = self
+            .queued_stopped_restores()
+            .await
+            .unwrap_or_else(|error| {
+                log!("shutdown stop: agent queue unavailable: {error:#}");
+                HashSet::new()
+            });
+        (stopped.iter())
+            .filter(|space| {
+                waits_for_resume(&self.paths, space, &queued).unwrap_or_else(|error| {
+                    log!(
+                        "shutdown stop: stopped work of {} unreadable: {error:#}",
+                        space.name()
+                    );
+                    true
+                })
+            })
+            .collect()
     }
 }
 
