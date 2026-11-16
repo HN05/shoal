@@ -398,6 +398,27 @@ impl Manager {
     /// Name by ID the existing workspace `workspace` that `caller`'s launch
     /// reopens for its agent, which must be one its scope reaches other
     /// than its own.
+    /// Confine a workspace start of `caller` to its own tree: below its own
+    /// space unless `parent` names one below it, from a copy of a workspace
+    /// it reaches, or reopening a workspace below its own, which keeps its
+    /// place.
+    pub(in crate::daemon) async fn confine_workspace_start(
+        &self,
+        caller: &Caller,
+        parent: &mut Option<SpaceSelector>,
+        start: &mut crate::protocol::operations::WorkspaceStart,
+    ) -> Result<()> {
+        use crate::protocol::operations::WorkspaceStart;
+        match start {
+            WorkspaceStart::Workspace(workspace) => {
+                return self.reopened_below(caller, workspace).await;
+            }
+            WorkspaceStart::Copy { source, .. } => self.copy_within(caller, source).await?,
+            _ => {}
+        }
+        self.parent_below(caller, parent).await
+    }
+
     pub(in crate::daemon) async fn reopened_below(
         &self,
         caller: &Caller,

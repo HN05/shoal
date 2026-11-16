@@ -192,7 +192,9 @@ impl Scoped for OperationMethod {
                 queue_entry,
                 ..
             } => {
-                confine_start(manager, caller, parent, start).await?;
+                manager
+                    .confine_workspace_start(caller, parent, start)
+                    .await?;
                 if let Some(entry) = queue_entry {
                     manager.ensure_own_launch(caller, entry, start).await?;
                 }
@@ -224,27 +226,10 @@ async fn queued_start(
     let Some(queued) = manager.queued_scope(&entry).await? else {
         return Ok(None);
     };
-    confine_start(manager, &queued, parent, start).await?;
+    manager
+        .confine_workspace_start(&queued, parent, start)
+        .await?;
     Ok(Some(queued))
-}
-
-/// Confine a workspace start of `caller` to its own tree: below its own
-/// space unless `parent` names one below it, from a copy of a workspace it
-/// reaches, or reopening a workspace below its own, which keeps its place.
-async fn confine_start(
-    manager: &Manager,
-    caller: &Caller,
-    parent: &mut Option<SpaceSelector>,
-    start: &mut WorkspaceStart,
-) -> Result<()> {
-    match start {
-        WorkspaceStart::Workspace(workspace) => {
-            return manager.reopened_below(caller, workspace).await;
-        }
-        WorkspaceStart::Copy { source, .. } => manager.copy_within(caller, source).await?,
-        _ => {}
-    }
-    manager.parent_below(caller, parent).await
 }
 
 /// Who follows an operation: the scope token it sent, which must stay
