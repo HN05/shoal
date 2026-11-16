@@ -43,7 +43,11 @@ pub(in crate::cli::commands) async fn start(
             None => chosen(ctx, repository).await?,
         };
         check_parent(ctx, Some(&repo), None, options.parent.as_ref()).await?;
-        let settings = settings(ctx, &repo).await?;
+        let settings = shoal_workers::settings::of(
+            &ctx.paths,
+            ConfigTarget::Repository(repo.id.clone().into()),
+        )
+        .await?;
         options.check_agent(&settings)?;
         let mode = (subject.mode).chosen(
             ctx,
@@ -168,7 +172,11 @@ pub(in crate::cli::commands) async fn start_in_workspace(
         let repo = workspace_repository(ctx, &workspace).await?;
         let parent = options.parent.as_ref();
         check_parent(ctx, Some(&repo), Some(&workspace), parent).await?;
-        let settings = settings(ctx, &repo).await?;
+        let settings = shoal_workers::settings::of(
+            &ctx.paths,
+            ConfigTarget::Repository(repo.id.clone().into()),
+        )
+        .await?;
         options.check_agent(&settings)?;
         let mode = (subject.mode).chosen(
             ctx,
@@ -270,14 +278,6 @@ pub(in crate::cli::commands) async fn workspace_repository(
         .into_iter()
         .find(|repo| repo.id == *workspace.repository())
         .with_context(|| format!("the repository of workspace {} is missing", workspace.name))
-}
-
-/// The repository's settings, which choose the chat's agent and template.
-pub(in crate::cli::commands) async fn settings(
-    ctx: &Context,
-    repo: &Repository,
-) -> Result<Effective> {
-    shoal_workers::settings::of(&ctx.paths, ConfigTarget::Repository(repo.id.clone().into())).await
 }
 
 /// The named repository, else the current checkout's or workspace's, else a picker.

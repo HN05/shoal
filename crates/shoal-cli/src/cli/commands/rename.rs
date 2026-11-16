@@ -2,7 +2,6 @@
 //! user types, or ask its agent to choose.
 use anyhow::{Context as _, Result, ensure};
 
-use super::chat;
 use crate::{
     cli::{
         context::Context,
@@ -108,7 +107,7 @@ async fn ask_name(ctx: &Context) -> Result<SpaceName> {
 /// `shoal messages send` queues. Without an agent the message would wait
 /// unread, so that is refused.
 pub(super) async fn request(ctx: &Context, space: Option<SpaceSelector>) -> Result<i32> {
-    chat::ensure_scope_token(ctx)?;
+    super::start::ensure_scope_token(ctx)?;
     let selector = chosen_space(ctx, space).await?;
     let space = (crate::client::workspaces::present_space(&ctx.paths, &selector).await?)
         .with_context(|| format!("no space {selector}"))?;

@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 
 use crate::{
     agent::{Agent, ModelChoice},
@@ -202,7 +202,7 @@ impl Options {
     /// chat goes below its own space, and one without a terminal or a
     /// scoped one's runs detached rather than beside it.
     pub fn for_caller(self, ctx: &Context) -> Result<Self> {
-        ensure_scope_token(ctx)?;
+        crate::cli::commands::start::ensure_scope_token(ctx)?;
         let place = (self.place).for_starter(crate::env::is_scoped(), ctx.on_terminal());
         Ok(Self { place, ..self })
     }
@@ -255,17 +255,6 @@ impl Narrowing {
             Self::Recorded(narrowing) => (Vec::new(), Some(narrowing)),
         }
     }
-}
-
-/// Refuse a workspace process that cleared its scope token, which the
-/// daemon would take for the user; with the token its chats go below its
-/// own space.
-pub(in crate::cli::commands) fn ensure_scope_token(ctx: &Context) -> Result<()> {
-    ensure!(
-        crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
-        "workspace processes start and ask chats only with their scope token"
-    );
-    Ok(())
 }
 
 #[cfg(test)]

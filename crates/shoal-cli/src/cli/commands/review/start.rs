@@ -188,7 +188,8 @@ async fn check_reviewer(
     post: Option<bool>,
     model: &ModelChoice,
 ) -> Result<()> {
-    let settings = super::super::chat::settings(ctx, repo).await?;
+    let target = ConfigTarget::Repository(repo.id.clone().into());
+    let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
     let agent = match reviewer {
         Reviewer::Agent(agent) => agent.clone(),
         Reviewer::Ask if post.is_some() || !settings.commands.contains_key(MANUAL) => None,
