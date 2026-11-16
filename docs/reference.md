@@ -4378,7 +4378,11 @@ request, a review is refused while others are pending; Bitbucket posts each line
 A failure after part of a review was posted says that it reached the forge.
 `issue ls` and `pr ls` list the repository's issues or PRs, newest first,
 through the forge's own search: words after the command are text it searches for
-in titles and descriptions, repeated `--label` keeps items with every label,
+in titles and descriptions, which `--match` matches by `keyword`, by `meaning`
+through GitHub's search by meaning, or `both` ways by default: every keyword
+match and the meaning matches it misses, newest first within `--limit`, or the
+keyword matches alone while GitHub limits searches by meaning and on a forge
+without that search, where `meaning` is refused. Repeated `--label` keeps items with every label,
 `--author` those a login opened, and `--state open|closed|all` defaults to open,
 with merged PRs counted as closed. `--limit` caps the list at 1 to 1000 items,
 30 by default. `--repo` searches another repository, named as for

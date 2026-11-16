@@ -76,7 +76,8 @@ impl Backend for GitHub {
             | Capability::ApprovePrs
             | Capability::RequestChanges
             | Capability::Reactions
-            | Capability::RevertPrs => Support::Supported,
+            | Capability::RevertPrs
+            | Capability::MeaningSearch => Support::Supported,
         }
     }
 

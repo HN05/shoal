@@ -2417,7 +2417,13 @@ choosing a login or a host's forge themselves, and the CLI resolves no forge
 host of its own: a scoped caller reads as the agent account and anyone else as
 the user's own logins, in another repository too, since checking for a
 duplicate before filing there is only a read. A search uses each forge's own search and
-reads pages only until the limit is met. `shoal forge api` passes any request under
+reads pages only until the limit is met. A search for words matches them both
+ways by default: GitHub's search by meaning misses exact matches, such as an
+error message or a flag, that keyword search finds, so `both` adds its matches
+to the keyword ones, and gives the keyword ones alone under the stricter rate
+limit GitHub keeps for it. A forge's rate limit for some requests, such as
+GitHub's for searches, holds back only those requests, never the watches and
+reads the others serve. `shoal forge api` passes any request under
 the repository's forge API root through the daemon the same way, for reads no
 command models. The daemon
 cannot tell what another method changes, so a scoped caller sends only GET

@@ -14,6 +14,9 @@ use shoal_forge_types::{
 pub(crate) const GIT_REVERT: &str =
     "shoal pr revert opens the revert from a new workspace with git revert";
 
+/// What to search with on a forge that cannot search by meaning.
+pub(crate) const KEYWORD_SEARCH: &str = "search by keyword with --match keyword, or with --match both, which matches by keyword alone there";
+
 /// Whether a forge has a capability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Support {

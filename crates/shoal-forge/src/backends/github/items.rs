@@ -13,7 +13,10 @@ use crate::{
     },
     conventions::draft::DraftMarker,
     items::{create::Head, item::ItemRequests, reaction::Subject},
-    transport::api::{Request, TransportRequests, encode},
+    transport::{
+        api::{Request, TransportRequests, encode},
+        limits::rate_limited,
+    },
     updates::DISCUSSION,
 };
 use shoal_forge_types::{
@@ -23,7 +26,7 @@ use shoal_forge_types::{
         create::{NewIssue, NewPull},
         item::{Current, Item, ItemState},
         link::ItemKind,
-        list::{Search, StateFilter},
+        list::{Matching, Search, StateFilter},
     },
     numbers::{CommentId, IssueNumber, PullNumber},
     raw::HttpMethod,
@@ -183,7 +186,8 @@ impl GitHubShapes for GitHub {
 const SEARCH_PAGE: usize = 100;
 
 /// Up to `search.limit` issues or PRs of the repository that GitHub's
-/// search matches, newest first.
+/// search matches, newest first. Matching both ways takes the keyword
+/// matches alone when GitHub limits its searches by meaning.
 async fn searched(
     repo: &ForgeRepo,
     account: &Account,
@@ -191,23 +195,80 @@ async fn searched(
     search: &Search,
 ) -> Result<Vec<Value>> {
     let query = encode(&search_query(repo, kind, search), false);
+    let found = |search_type| search_pages(repo, account, &query, search_type, search.limit);
+    match search.matched_by() {
+        Matching::Keyword => found(SearchType::Keyword).await,
+        Matching::Meaning => found(SearchType::Hybrid).await,
+        Matching::Both => {
+            let keyword = found(SearchType::Keyword).await?;
+            match found(SearchType::Hybrid).await {
+                Ok(meaning) => Ok(merged(keyword, meaning, search.limit)),
+                Err(error) if rate_limited(&error).is_some() => Ok(keyword),
+                Err(error) => Err(error),
+            }
+        }
+    }
+}
+
+/// How GitHub's search matches the query's words.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SearchType {
+    Keyword,
+    /// By keyword and by meaning, under a rate limit of its own.
+    Hybrid,
+}
+
+/// Up to `limit` items GitHub's search of `search_type` finds for the
+/// encoded `query`, newest first.
+async fn search_pages(
+    repo: &ForgeRepo,
+    account: &Account,
+    query: &str,
+    search_type: SearchType,
+    limit: usize,
+) -> Result<Vec<Value>> {
     let mut found = Vec::new();
     for page in 1.. {
-        let endpoint = format!(
-            "search/issues?q={query}&sort=created&order=desc&per_page={SEARCH_PAGE}&page={page}"
-        );
-        let request = Request::get(endpoint).counted_against("search");
+        let request = search_request(query, search_type, page);
         let response = repo.send(account, &request).await?;
         let items = response["items"]
             .as_array()
             .context("GitHub's search returned no item list")?;
         found.extend(items.iter().cloned());
-        if items.len() < SEARCH_PAGE || found.len() >= search.limit {
+        if items.len() < SEARCH_PAGE || found.len() >= limit {
             break;
         }
     }
-    found.truncate(search.limit);
+    found.truncate(limit);
     Ok(found)
+}
+
+/// The request for `page` of GitHub's search of `search_type` for the
+/// encoded `query`, counted against that search's rate limit.
+fn search_request(query: &str, search_type: SearchType, page: usize) -> Request {
+    let (parameter, limit) = match search_type {
+        SearchType::Keyword => ("", "search"),
+        SearchType::Hybrid => ("&search_type=hybrid", "semantic_search"),
+    };
+    let endpoint = format!(
+        "search/issues?q={query}{parameter}&sort=created&order=desc&per_page={SEARCH_PAGE}&page={page}"
+    );
+    Request::get(endpoint).counted_against(limit)
+}
+
+/// The `keyword` matches with the `meaning` matches they miss, newest
+/// first, cut to `limit`. GitHub numbers issues and PRs together in the
+/// order they are opened.
+fn merged(keyword: Vec<Value>, meaning: Vec<Value>, limit: usize) -> Vec<Value> {
+    let mut items = keyword;
+    for item in meaning {
+        if !items.iter().any(|found| found["number"] == item["number"]) {
+            items.push(item);
+        }
+    }
+    items.sort_by_key(|item| std::cmp::Reverse(item["number"].as_u64()));
+    items.truncate(limit);
+    items
 }
 
 /// GitHub's search query for `search` among the repository's items of `kind`.

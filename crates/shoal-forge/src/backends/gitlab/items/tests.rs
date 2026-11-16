@@ -2,6 +2,7 @@ use serde_json::json;
 
 use super::*;
 use crate::items::item::ItemRequests;
+use shoal_forge_types::items::list::Matching;
 use shoal_forge_types::numbers::CommentId;
 
 fn gitlab() -> ForgeRepo {
@@ -70,6 +71,7 @@ fn closed_merge_request_searches_list_all_to_include_merged_ones() {
         labels: vec!["bug".into(), "ui".into()],
         author: Some("dev".into()),
         text: Some("crash on start".into()),
+        matching: Matching::Keyword,
         limit: 30,
     };
     assert_eq!(

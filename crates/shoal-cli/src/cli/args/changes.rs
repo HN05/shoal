@@ -432,6 +432,11 @@ pub struct ListArgs {
     /// Text the forge searches for in titles and descriptions.
     #[arg(value_name = "TEXT")]
     pub query: Vec<String>,
+    /// How to match TEXT: by its words, by what it means where the forge
+    /// searches by meaning, as shoal forge capabilities shows, or both ways,
+    /// which matches by words alone on a forge without that search.
+    #[arg(long = "match", value_enum, default_value_t = crate::forge::items::list::Matching::Both)]
+    pub matching: crate::forge::items::list::Matching,
     /// Search another repository: a registered repository's name, OWNER/NAME
     /// on the current repository's forge, or a repository URL on any forge;
     /// defaults to the current workspace's or checkout's repository.

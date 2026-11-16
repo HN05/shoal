@@ -26,3 +26,6 @@ impl ForgeRepo {
         Ok(items)
     }
 }
+
+#[cfg(test)]
+mod tests;

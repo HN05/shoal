@@ -5,7 +5,7 @@ use crate::{
     },
     forge::items::{
         link::ItemKind,
-        list::{Search, StateFilter},
+        list::{Matching, Search, StateFilter},
     },
     protocol::ItemContext,
 };
@@ -55,6 +55,7 @@ async fn a_scoped_chat_lists_items_as_the_agent_account() {
         labels: Vec::new(),
         author: None,
         text: None,
+        matching: Matching::Keyword,
         limit: 1,
     };
     let agent = Caller {

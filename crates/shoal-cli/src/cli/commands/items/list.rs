@@ -20,6 +20,7 @@ pub(super) async fn list(ctx: &Context, kind: ItemKind, args: ListArgs) -> Resul
         labels: args.labels,
         author: args.author,
         text: (!query.is_empty()).then_some(query),
+        matching: args.matching,
         limit: args.limit.into(),
     };
     // Refuse a bad filter before the picker asks for anything.

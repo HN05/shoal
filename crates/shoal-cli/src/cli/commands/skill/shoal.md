@@ -270,7 +270,7 @@ shoal pr resolve <comment-id> --body-file F
 shoal pr react +1 [--comment <comment-id>] [--remove]
 shoal pr review [<number>] --comment --body-file F --line PATH:LINE 'text'
 shoal issue open --title T --body-file F [--link] [--repo OWNER/NAME]
-shoal issue ls <words> [--state all] [--label L] [--author A] [--limit N]
+shoal issue ls <words> [--match keyword|meaning|both] [--state all] [--label L] [--author A] [--limit N]
 shoal repo labels
 ```
 
@@ -303,7 +303,9 @@ unlink or the space's removal, and linking it warns of anyone else assigned;
 `[issue] assign` also or instead adds the user's own login. `--repo OWNER/NAME`, or a repository URL on another forge, opens it
 in another repository, as the space's `issue_other_repositories` permission
 allows;
-`issue ls` and `pr ls` take `--repo` too. `shoal pr revert [<number>]`
+`issue ls` and `pr ls` take `--repo` too, and match their words by
+`--match keyword`, `meaning` where the forge searches by meaning, or `both`
+ways by default, which on another forge is its keyword search. `shoal pr revert [<number>]`
 opens a PR that undoes a merged one; where the forge cannot, it opens it from a
 child workspace already marked done, which goes once the revert merges.
 `pr review --approve` and `--request-changes` follow the space's

@@ -45,6 +45,7 @@ states!(Capability: Variants {
     Reactions => "reactions",
     RevertPrs => "revert_prs",
     RunJobs => "run_jobs",
+    MeaningSearch => "meaning_search",
 });
 
 impl Capability {
@@ -85,6 +86,7 @@ impl Capability {
             Self::Reactions => "react to issues, PRs and comments",
             Self::RevertPrs => "have the forge revert merged PRs",
             Self::RunJobs => "run CI jobs on this machine",
+            Self::MeaningSearch => "search issues and PRs by meaning",
         }
     }
 

@@ -14,6 +14,15 @@ states!(StateFilter: ValueEnum {
     All => "all",
 });
 
+states!(Matching: ValueEnum {
+    /// The words themselves.
+    Keyword => "keyword",
+    /// What the words mean, as the forge's search by meaning finds it.
+    Meaning => "meaning",
+    /// Either: every keyword match, with the meaning matches it misses.
+    Both => "both",
+});
+
 /// The most items one listing returns.
 pub const MAX_LIMIT: usize = 1000;
 
@@ -30,6 +39,8 @@ pub struct Search {
     pub author: Option<String>,
     /// Text the forge's search matches in titles and descriptions.
     pub text: Option<String>,
+    /// How the forge matches `text`.
+    pub matching: Matching,
     pub limit: usize,
 }
 
@@ -54,6 +65,7 @@ impl Search {
             labels: Vec::new(),
             author: None,
             text: None,
+            matching: Matching::Keyword,
             limit,
         }
     }
@@ -84,9 +96,22 @@ impl Search {
         Ok(())
     }
 
-    /// The capabilities the forge needs for the search.
-    pub fn needs(&self) -> Option<Capability> {
-        (!self.labels.is_empty()).then_some(Capability::Labels)
+    /// How the forge matches the search's text: by keyword for a search
+    /// without any, which matches every item.
+    pub fn matched_by(&self) -> Matching {
+        match self.text {
+            Some(_) => self.matching,
+            None => Matching::Keyword,
+        }
+    }
+
+    /// The capabilities the forge needs for the search. Matching `both`
+    /// ways needs none, since a forge without a search by meaning matches
+    /// by keyword alone.
+    pub fn needs(&self) -> Vec<Capability> {
+        let labels = (!self.labels.is_empty()).then_some(Capability::Labels);
+        let meaning = (self.matched_by() == Matching::Meaning).then_some(Capability::MeaningSearch);
+        labels.into_iter().chain(meaning).collect()
     }
 }
 

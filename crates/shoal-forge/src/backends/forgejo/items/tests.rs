@@ -1,5 +1,5 @@
 use super::*;
-use shoal_forge_types::items::list::StateFilter;
+use shoal_forge_types::items::list::{Matching, StateFilter};
 
 #[test]
 fn added_exclusive_labels_replace_those_of_their_scope() {
@@ -33,12 +33,14 @@ fn added_exclusive_labels_replace_those_of_their_scope() {
 }
 
 #[test]
+/// Matching both ways is Forgejo's keyword search.
 fn searches_go_through_the_issue_list_for_either_kind() {
     let mut search = Search {
         state: StateFilter::All,
         labels: Vec::new(),
         author: None,
         text: None,
+        matching: Matching::Both,
         limit: 30,
     };
     assert_eq!(

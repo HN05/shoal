@@ -48,6 +48,7 @@ impl Backend for Bitbucket {
     fn support(&self, capability: Capability) -> Support {
         match capability {
             Capability::RunJobs => Support::Unsupported(None),
+            Capability::MeaningSearch => Support::Unsupported(Some(capability::KEYWORD_SEARCH)),
             Capability::ReopenPrs => Support::Unsupported(Some(
                 "Bitbucket cannot reopen a declined pull request; open a new one",
             )),

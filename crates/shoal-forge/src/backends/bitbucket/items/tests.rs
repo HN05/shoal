@@ -2,6 +2,7 @@ use serde_json::json;
 
 use super::*;
 use crate::items::item::ItemRequests;
+use shoal_forge_types::items::list::Matching;
 use shoal_forge_types::numbers::CommentId;
 
 fn percent_decoded(text: &str) -> String {
@@ -177,6 +178,7 @@ fn searches_query_states_text_and_author_newest_first() {
         labels: Vec::new(),
         author: None,
         text: None,
+        matching: Matching::Keyword,
         limit: 30,
     };
     let decoded = |kind, search: &Search| {
