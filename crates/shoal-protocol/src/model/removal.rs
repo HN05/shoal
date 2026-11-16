@@ -115,9 +115,6 @@ pub struct KeptChat {
     /// Where it ran in a terminal host, when it ran in one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<crate::sessions::Origin>,
-    /// The agent session its hooks reported last.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session: Option<shoal_ids::agent_session_ids::AgentSessionId>,
 }
 
 /// What a removal keeps of a workspace only.
@@ -170,6 +167,14 @@ impl RemovedSpace {
     pub fn repository(&self) -> anyhow::Result<&RepositoryId> {
         (self.repository_id.as_ref())
             .with_context(|| format!("{} belonged to no repository", self.space_id))
+    }
+
+    /// Whether one of its agents reported a session to continue.
+    pub fn has_session(&self) -> bool {
+        self.agents
+            .iter()
+            .any(|agent| agent.record.session.is_some())
+            || self.last_sessions.iter().any(|last| last.session.is_some())
     }
 
     /// Whether it is a copy of another space, whose agents start from forks

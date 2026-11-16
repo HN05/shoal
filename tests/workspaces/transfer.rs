@@ -1188,7 +1188,12 @@ fn talk_until(fixture: &Fixture, ending: impl FnOnce(&Path, &Value)) {
         });
         wait_until("chat started", || home.join("chat-started").exists());
         let chats = fixture.ok(&["list", "--chats"]);
-        assert_eq!(chats[0]["session"], "chat-session", "{chats}");
+        let space = chats[0]["id"].clone();
+        let sessions = fixture.request(serde_json::json!({"space_sessions": {"space": space}}));
+        assert_eq!(
+            sessions["data"]["sessions"][0]["session"], "chat-session",
+            "{sessions}"
+        );
         let project = chat_project(fixture);
         fs::create_dir_all(&project).unwrap();
         let transcript = project.join("chat-session.jsonl");

@@ -4,7 +4,6 @@
 //! repository. A chat's agent runs under the execution wrapper as an
 //! execution of the chat, which runs while its execution is recorded; the
 //! chat lasts until it is removed.
-use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::scope_tokens::ScopeToken;
@@ -245,7 +244,6 @@ impl Manager {
             origin,
             tmp_dir: None,
             root_dir: home.root_dir.clone(),
-            session: None,
             running: false,
             links: SpaceLinks::default(),
             review: Vec::new(),
@@ -264,7 +262,7 @@ impl Manager {
 
     /// Record the removed chat `chat` again, as its restore reopens it: in
     /// its repository, or else in the `root_dir` it ran in, below `parent`
-    /// when given, with its session.
+    /// when given.
     pub(crate) async fn record_restored_chat(
         &self,
         chat: Chat,
@@ -367,30 +365,6 @@ impl Manager {
             chat: renamed,
             previous_name: old.name,
         })
-    }
-
-    /// Record `session` as the agent session the running chat `id` continues.
-    pub(crate) async fn record_chat_session(
-        &self,
-        id: &SpaceId,
-        session: AgentSessionId,
-    ) -> Result<()> {
-        let (chat, reported) = (id.to_owned(), session.clone());
-        let recorded = self
-            .store
-            .run(move |db| {
-                Ok(db.execute(
-                    "UPDATE chats SET session=?2 WHERE id=?1",
-                    params![chat, reported],
-                )?)
-            })
-            .await?;
-        // A chat that became a workspace since the report found it: its
-        // agent's session goes with the conversion.
-        if recorded == 0 {
-            self.record_converting_session(id, session).await?;
-        }
-        Ok(())
     }
 
     /// Running and stopped chats in start order.
@@ -587,8 +561,8 @@ fn insert(
         workspace::set_parent(tx, &chat.id, Some(parent))?;
     }
     tx.execute(
-        "INSERT INTO chats(id,agent,started_at,origin,workspace_id,root_dir,session)
-         VALUES (?1,?2,?3,?4,?5,?6,?7)",
+        "INSERT INTO chats(id,agent,started_at,origin,workspace_id,root_dir)
+         VALUES (?1,?2,?3,?4,?5,?6)",
         params![
             chat.id,
             chat.agent,
@@ -599,7 +573,6 @@ fn insert(
                 .transpose()?,
             workspace,
             (chat.root_dir.as_deref()).map(|root| root.to_string_lossy().into_owned()),
-            chat.session,
         ],
     )?;
     chat.number = spaces::records::record(
@@ -688,7 +661,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
     db.prepare(
         "SELECT chats.id,space.repository_id,space.name,chats.agent,
                     EXISTS (SELECT 1 FROM executions e WHERE e.space_id=chats.id) AS running,
-                    chats.started_at,chats.origin,repositories.workspaces_dir,chats.session,
+                    chats.started_at,chats.origin,repositories.workspaces_dir,
                     space_completion.record AS completion,
                     workspaces.id,home.name,workspaces.branch,space.number,space.mode,
                     chats.root_dir,space.narrowing,chats.converted
@@ -703,7 +676,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
         let id: SpaceId = row.get(0)?;
         let repository_id: Option<RepositoryId> = row.get(1)?;
         let root_dir = row
-            .get::<_, Option<String>>(15)?
+            .get::<_, Option<String>>(14)?
             .map(std::path::PathBuf::from);
         let tmp_dir = match (&repository_id, row.get::<_, Option<String>>(7)?) {
             (Some(repository_id), Some(directory)) => {
@@ -715,17 +688,17 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
         };
         Ok(Chat {
             id,
-            number: row.get(13)?,
+            number: row.get(12)?,
             repository_id,
             name: row.get(2)?,
             agent: row.get(3)?,
-            mode: row.get(14)?,
+            mode: row.get(13)?,
             narrowing: store::json_column(row, "narrowing")?.unwrap_or_default(),
-            workspace: match row.get::<_, Option<SpaceId>>(10)? {
+            workspace: match row.get::<_, Option<SpaceId>>(9)? {
                 Some(id) => Some(WorkspaceRef {
                     id,
-                    name: row.get(11)?,
-                    branch: row.get(12)?,
+                    name: row.get(10)?,
+                    branch: row.get(11)?,
                 }),
                 None => None,
             },
@@ -733,7 +706,6 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
             origin: store::json_column(row, "origin")?,
             tmp_dir,
             root_dir,
-            session: row.get(8)?,
             running: row.get("running")?,
             links: SpaceLinks::default(),
             review: Vec::new(),
@@ -748,7 +720,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
             asleep: None,
             parent: None,
             children: Vec::new(),
-            converted: row.get(17)?,
+            converted: row.get(16)?,
         })
     })?
     .collect::<rusqlite::Result<Vec<Chat>>>()?

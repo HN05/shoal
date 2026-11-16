@@ -27,7 +27,6 @@ fn spaces() -> Spaces {
         origin: None,
         tmp_dir: None,
         root_dir: None,
-        session: None,
         running,
         links: Default::default(),
         review: Vec::new(),

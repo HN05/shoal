@@ -105,14 +105,14 @@ impl Manager {
     /// as a workspace's copy has them, which start from forks of their
     /// sessions.
     pub(super) async fn copy_chat(&self, chat: Chat) -> Result<Prepared> {
+        let mut record = (self.chat_removal_record(&chat.id, EventCause::Manual)).await?;
+        record.agents = self.copied_agents(&chat.id).await?;
         ensure!(
-            chat.session.is_some(),
+            record.has_session(),
             "the agent of chat {} reported no session to fork",
             chat.name
         );
         let repo = self.chat_repository(&chat).await?;
-        let mut record = (self.chat_removal_record(&chat.id, EventCause::Manual)).await?;
-        record.agents = self.copied_agents(&chat.id).await?;
         let mut manifest = Manifest::of(repo.as_ref(), record).await?;
         manifest.copy = Some(Copied::default());
         Ok(Prepared {

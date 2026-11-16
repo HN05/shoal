@@ -425,11 +425,14 @@ mod streams {
             until(&mut subscription, reported(workspace.id.clone(), session)).await;
         }
 
+        let execution = manager.workspace_executions(&chat.id).await.unwrap()[0]
+            .id
+            .clone();
         manager
             .set_agent_state(
                 &SpaceSelector::id(&chat.id),
                 AgentState::Idle,
-                None,
+                Some(execution),
                 Some("c1".into()),
             )
             .await

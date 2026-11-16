@@ -18,7 +18,6 @@ use crate::{
     model::SpaceKind,
     sessions::Origin,
 };
-use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::scope_tokens::ScopeToken;
 
 /// A conversion whose agent still runs where the space was, until its turn
@@ -28,8 +27,9 @@ use shoal_protocol::scope_tokens::ScopeToken;
 pub(crate) enum Pending {
     /// A chat that became a workspace, with the row the chat had, which
     /// gives its running agent and gives the chat back should the
-    /// workspace's worktree fail, and the execution its agent's last
-    /// session in the workspace is kept under.
+    /// workspace's worktree fail, and the execution that agent runs as,
+    /// whose session files hold its session and under which its last
+    /// session in the workspace is kept.
     Workspace {
         mode: ModeName,
         chat: ChatRow,
@@ -66,7 +66,6 @@ const CHAT_COLUMNS: &[&str] = &[
     "agent",
     "started_at",
     "origin",
-    "session",
     "asks_in_chat",
     "workspace_id",
     "root_dir",
@@ -101,8 +100,6 @@ struct KeptCompletion {
 #[derive(Debug, Deserialize)]
 pub(crate) struct ChatAgent {
     pub agent: Agent,
-    #[serde(default)]
-    pub session: Option<AgentSessionId>,
     #[serde(default)]
     pub origin: Option<String>,
     #[serde(default)]
@@ -179,21 +176,6 @@ pub(crate) fn all_pending(db: &Connection) -> Result<Vec<(SpaceId, Pending)>> {
             Ok((id, serde_json::from_str(&record)?))
         })
         .collect()
-}
-
-/// Keep `session` as the one the agent of the chat that became the
-/// workspace `id` reported last, which its hand-over continues.
-pub(crate) fn record_session(
-    db: &Connection,
-    id: &SpaceId,
-    session: &AgentSessionId,
-) -> Result<()> {
-    db.execute(
-        "UPDATE space_conversions SET record=json_set(record,'$.chat.session',?2)
-         WHERE space_id=?1 AND json_extract(record,'$.to')='workspace'",
-        params![id, session],
-    )?;
-    Ok(())
 }
 
 /// Record `operation` as the one preparing the workspace `id` a chat
@@ -282,27 +264,28 @@ pub(crate) fn record_chat_conversion(
 /// questions, approval requests and unread messages become the workspace's,
 /// and its agent's scope token, which it keeps, acts for the workspace until
 /// the agent restarts there.
-/// Returns the row the chat had.
+/// Returns the row the chat had and the execution its agent runs as.
 pub(crate) fn replace_chat(
     tx: &Transaction<'_>,
     id: &SpaceId,
     mode: &ModeName,
     narrowing: &PermissionsConfig,
-) -> Result<ChatRow> {
-    anyhow::ensure!(
-        crate::daemon::store::exists(
-            tx,
-            "SELECT 1 FROM chats JOIN executions ON executions.space_id=chats.id
-             WHERE chats.id=?1",
-            [id]
-        )?,
-        "the chat was stopped meanwhile; it stays a chat"
-    );
+) -> Result<(ChatRow, ExecutionId)> {
+    // A chat's executions run its agent and nothing else.
+    let execution: Option<ExecutionId> = tx
+        .query_row(
+            "SELECT executions.id FROM chats JOIN executions ON executions.space_id=chats.id
+             WHERE chats.id=?1 ORDER BY executions.rowid DESC LIMIT 1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let execution = execution.context("the chat was stopped meanwhile; it stays a chat")?;
     let row = chat_row(tx, id)?;
     forget_completion(tx, id)?;
     spaces::convert(tx, id, SpaceKind::Workspace, mode, narrowing)?;
     tx.execute("DELETE FROM chats WHERE id=?1", [id])?;
-    Ok(row)
+    Ok((row, execution))
 }
 
 /// Forget the conversion of the chat that became the workspace `id`, whose
@@ -342,13 +325,12 @@ pub(crate) fn restore_chat(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) ->
 }
 
 /// The stopped chat a workspace becomes: its agent, the execution it ran
-/// as, the session it carries on and the place it ran in, its mode and the
+/// as, whose session it carries on, the place it ran in, its mode and the
 /// permissions given to it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ConvertedChat {
     pub agent: Agent,
     pub execution: ExecutionId,
-    pub session: Option<AgentSessionId>,
     pub origin: Option<Origin>,
     pub mode: ModeName,
     pub narrowing: PermissionsConfig,
@@ -365,15 +347,14 @@ pub(crate) fn replace_workspace(
     chat: &ConvertedChat,
 ) -> Result<Vec<ApprovalRequest>> {
     tx.execute(
-        "INSERT INTO chats(id,agent,started_at,origin,session,converted)
-         VALUES (?1,?2,unixepoch(),?3,?4,1)",
+        "INSERT INTO chats(id,agent,started_at,origin,converted)
+         VALUES (?1,?2,unixepoch(),?3,1)",
         params![
             id,
             chat.agent,
             (chat.origin.as_ref())
                 .map(serde_json::to_string)
                 .transpose()?,
-            chat.session,
         ],
     )?;
     spaces::convert(tx, id, SpaceKind::Chat, &chat.mode, &chat.narrowing)?;

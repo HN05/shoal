@@ -15,7 +15,7 @@ use crate::{
         scope::Caller,
         workspace::Manager,
     },
-    model::{Chat, PresentSpace, Relation, Workspace},
+    model::{Chat, Relation, Workspace},
 };
 use shoal_forge::updates::Snapshot;
 use shoal_protocol::{
@@ -267,13 +267,13 @@ async fn sessions(
     workspaces: &[Workspace],
     chats: &[Chat],
 ) -> Result<Vec<Record>> {
-    let spaces = (workspaces.iter().cloned().map(PresentSpace::Workspace))
-        .chain(chats.iter().cloned().map(PresentSpace::Chat));
+    let spaces =
+        (workspaces.iter().map(|workspace| &workspace.id)).chain(chats.iter().map(|chat| &chat.id));
     let mut records = Vec::new();
-    for space in spaces {
+    for id in spaces {
         records.push(Record::Sessions(ReportedSessions {
-            space_id: space.id().to_owned(),
-            sessions: manager.reported_sessions(&space).await?,
+            space_id: id.to_owned(),
+            sessions: manager.reported_sessions(id).await?,
         }));
     }
     Ok(records)

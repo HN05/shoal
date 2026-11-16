@@ -600,6 +600,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 189 {
         db.execute_batch(include_str!("agent_queue_sources.sql"))?;
     }
+    if version >= 190 {
+        db.execute_batch(include_str!("space_sessions.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -1763,6 +1766,51 @@ fn migration_keeps_every_scope_token_acting_for_its_space() -> Result<()> {
         db.query_row("SELECT COUNT(*) FROM space_scopes", [], |r| r
             .get::<_, i64>(0))?,
         2
+    );
+    Ok(())
+}
+
+#[test]
+fn migration_keeps_chat_sessions_where_every_space_keeps_them() -> Result<()> {
+    let mut db = historical_database(189)?;
+    db.execute_batch(
+        r#"BEGIN;
+         INSERT INTO chats(id,agent,started_at,session) VALUES ('chat','claude',1,'s1');
+         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('chat','chat','repo','chat');
+         COMMIT;
+         INSERT INTO executions(id,space_id,state,agent) VALUES ('agent','workspace','running','claude');
+         INSERT INTO space_conversions(space_id,record) VALUES
+             ('workspace','{"to":"workspace","execution":"new","chat":{"agent":"claude","session":"s2"}}'),
+             ('other','{"to":"workspace","execution":"new","chat":{"session":"s3"}}'),
+             ('converting','{"to":"chat","chat":{"agent":"claude","session":"s4"}}');
+         INSERT INTO removed_spaces(space_id,repository_id,chat,name,expires_at,record) VALUES
+             ('removed','repo',1,'removed',1,'{"chat":{"agent":"claude","session":"s5"}}');"#,
+    )?;
+
+    migrate(&mut db)?;
+
+    let columns: Vec<String> = db
+        .prepare("SELECT name FROM pragma_table_info('chats')")?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    assert!(!columns.iter().any(|column| column == "session"));
+    // The chat that became a workspace keeps its agent's session under the
+    // execution that agent runs as; one whose agent is gone keeps its own.
+    let records: Vec<String> = db
+        .prepare(
+            "SELECT record FROM (SELECT space_id,record FROM space_conversions
+                UNION ALL SELECT space_id,record FROM removed_spaces) ORDER BY space_id",
+        )?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    assert_eq!(
+        records,
+        [
+            r#"{"to":"chat","chat":{"agent":"claude"}}"#,
+            r#"{"to":"workspace","execution":"new","chat":{}}"#,
+            r#"{"chat":{"agent":"claude"}}"#,
+            r#"{"to":"workspace","execution":"agent","chat":{"agent":"claude"}}"#,
+        ]
     );
     Ok(())
 }

@@ -11,13 +11,18 @@ use crate::connection::{Daemon, request};
 use shoal_protocol::protocol::WorkspaceMethod;
 use shoal_protocol::space_names::SpaceSelector;
 
+/// The sessions the agents of the workspace or chat `space` reported.
+pub async fn space_sessions(daemon: &impl Daemon, space: SpaceSelector) -> Result<SpaceSessions> {
+    request(daemon, WorkspaceMethod::SpaceSessions { space }).await
+}
+
 /// The sessions the agents of the workspace or chat `space` reported, each
 /// with its files on this machine.
 pub async fn space_transcripts(
     daemon: &impl Daemon,
     space: SpaceSelector,
 ) -> Result<Vec<Transcript>> {
-    let sessions: SpaceSessions = request(daemon, WorkspaceMethod::SpaceSessions { space }).await?;
+    let sessions = space_sessions(daemon, space).await?;
     let home = daemon.paths().home.clone();
     tokio::task::spawn_blocking(move || locate(&home, &sessions))
         .await

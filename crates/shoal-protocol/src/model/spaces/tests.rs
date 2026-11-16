@@ -27,7 +27,6 @@ fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_number_or_id() {
         origin: None,
         tmp_dir: None,
         root_dir: None,
-        session: None,
         running,
         links: Default::default(),
         review: Vec::new(),

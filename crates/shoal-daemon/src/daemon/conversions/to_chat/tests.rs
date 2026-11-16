@@ -138,7 +138,6 @@ async fn the_worktree_goes_with_a_checkpoint_and_the_space_stays_a_chat() {
     let chat = ConvertedChat {
         agent: "claude".into(),
         execution,
-        session: Some("s1".into()),
         origin: None,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
@@ -163,10 +162,6 @@ async fn the_worktree_goes_with_a_checkpoint_and_the_space_stays_a_chat() {
     );
     assert!(!converted.running);
     assert!(converted.converted);
-    assert_eq!(
-        converted.session.map(|session| session.to_string()),
-        Some("s1".into())
-    );
     let status = converted.progress.and_then(|progress| progress.status);
     assert_eq!(status.as_deref(), Some("Merged"));
     let children: Vec<_> = converted.children.iter().map(|child| &child.id).collect();
@@ -203,7 +198,6 @@ async fn a_workspace_that_becomes_a_chat_keeps_only_the_chats_own_token() {
     let chat = ConvertedChat {
         agent: "claude".into(),
         execution: ExecutionId::generate(),
-        session: None,
         origin: None,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
@@ -231,7 +225,6 @@ async fn a_converted_workspace_restores_beside_the_chat_it_became() {
     let chat = ConvertedChat {
         agent: "claude".into(),
         execution: ExecutionId::generate(),
-        session: None,
         origin: None,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
@@ -273,7 +266,6 @@ async fn a_conversion_of_a_workspace_whose_agent_stopped_is_not_recorded() {
     let chat = ConvertedChat {
         agent: "claude".into(),
         execution: ExecutionId::generate(),
-        session: None,
         origin: None,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
@@ -307,7 +299,6 @@ async fn a_workspace_built_on_after_the_command_keeps_its_worktree() {
     let chat = ConvertedChat {
         agent: "claude".into(),
         execution: ExecutionId::generate(),
-        session: None,
         origin: None,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
@@ -346,7 +337,6 @@ async fn nothing_builds_on_a_workspace_that_becomes_a_chat() {
     let chat = ConvertedChat {
         agent: "claude".into(),
         execution: ExecutionId::generate(),
-        session: None,
         origin: None,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
@@ -391,7 +381,6 @@ async fn a_failed_conversion_leaves_the_workspace_its_record_and_checkpoints() {
     let chat = ConvertedChat {
         agent: "claude".into(),
         execution: ExecutionId::generate(),
-        session: None,
         origin: None,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),

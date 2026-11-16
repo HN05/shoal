@@ -110,10 +110,7 @@ async fn export(manager: &Manager, selector: &str, file: &Path) -> anyhow::Resul
 async fn a_chat_ends_into_a_package_that_continues_its_session() {
     let (root, manager, pid) = chat("plan-cache").await;
     let chat = manager.chats().await.unwrap().remove(0);
-    manager
-        .record_chat_session(&chat.id, "s1".into())
-        .await
-        .unwrap();
+    crate::daemon::test_support::report_session(&manager, &chat.id, "s1").await;
     let file = root.path().join("plan-cache.shoal");
 
     let exported = export(&manager, "plan-cache", &file).await.unwrap();
@@ -133,10 +130,6 @@ async fn a_chat_ends_into_a_package_that_continues_its_session() {
     assert_eq!(
         sessions.reported().collect::<Vec<_>>(),
         [(&crate::agent::Agent::from("claude"), &"s1".into())]
-    );
-    assert_eq!(
-        sessions.last_sessions[0].execution.as_str(),
-        chat.id.as_str()
     );
 }
 
@@ -164,10 +157,7 @@ async fn a_chat_ends_with_the_agent_its_launcher_started() {
         .unwrap()
         .expect("the launcher's agent runs");
     let chat = manager.chats().await.unwrap().remove(0);
-    manager
-        .record_chat_session(&chat.id, "s1".into())
-        .await
-        .unwrap();
+    crate::daemon::test_support::report_session(&manager, &chat.id, "s1").await;
 
     export(&manager, "launched", &root.path().join("launched.shoal"))
         .await
@@ -183,10 +173,7 @@ async fn a_chat_ends_with_the_agent_its_launcher_started() {
 async fn a_chat_whose_package_cannot_be_written_names_how_it_continues() {
     let (root, manager, pid) = chat("unwritten").await;
     let chat = manager.chats().await.unwrap().remove(0);
-    manager
-        .record_chat_session(&chat.id, "s1".into())
-        .await
-        .unwrap();
+    crate::daemon::test_support::report_session(&manager, &chat.id, "s1").await;
     // A file the package would replace, which it never does.
     let file = root.path().join("unwritten.shoal");
     fs::write(&file, "kept").unwrap();
@@ -250,10 +237,7 @@ async fn a_chat_in_a_workspace_moves_naming_the_workspace() {
         )
         .await
         .unwrap();
-    manager
-        .record_chat_session(&chat.id, "s1".into())
-        .await
-        .unwrap();
+    crate::daemon::test_support::report_session(&manager, &chat.id, "s1").await;
     let file = root.path().join("worker-chat.shoal");
 
     export(&manager, &chat.name, &file).await.unwrap();
@@ -382,10 +366,7 @@ async fn a_chat_that_starts_after_the_export_checked_keeps_everything() {
 async fn a_chat_copy_keeps_the_chat_running() {
     let (root, manager, pid) = chat("plan-cache").await;
     let chat = manager.chats().await.unwrap().remove(0);
-    manager
-        .record_chat_session(&chat.id, "s1".into())
-        .await
-        .unwrap();
+    crate::daemon::test_support::report_session(&manager, &chat.id, "s1").await;
     let refused = manager
         .copy_space(
             &manager.named("plan-cache").await,
@@ -448,10 +429,7 @@ async fn removed_chat(
         .unwrap();
     let chat = crate::daemon::test_support::chat(&manager, name, mode, Some(&repo), None).await;
     if let Some(session) = session {
-        manager
-            .record_chat_session(&chat.id, session.into())
-            .await
-            .unwrap();
+        crate::daemon::test_support::report_session(&manager, &chat.id, session).await;
     }
     manager
         .remove_chat(&SpaceSelector::id(&chat.id), None)
@@ -495,10 +473,6 @@ async fn a_removed_chat_exports_from_its_record_which_stays() {
         sessions.reported().collect::<Vec<_>>(),
         [(&crate::agent::Agent::from("claude"), &"s1".into())]
     );
-    assert_eq!(
-        sessions.last_sessions[0].execution.as_str(),
-        chat.id.as_str()
-    );
     let kept = manager.removed_spaces().await.unwrap();
     assert_eq!(
         kept.iter()
@@ -524,10 +498,7 @@ async fn a_removed_chat_without_a_session_is_not_exported() {
 async fn a_chat_without_a_repository_moves_and_copies_for_root_dir() {
     let (root, manager) = manager().await;
     let chat = crate::daemon::test_support::chat(&manager, "lead", "orchestrate", None, None).await;
-    manager
-        .record_chat_session(&chat.id, "s1".into())
-        .await
-        .unwrap();
+    crate::daemon::test_support::report_session(&manager, &chat.id, "s1").await;
     let selector = SpaceSelector::id(&chat.id);
     let copy = root.path().join("copy.shoal");
     let moved = root.path().join("lead.shoal");
@@ -560,10 +531,7 @@ async fn a_chat_without_a_repository_moves_and_copies_for_root_dir() {
 async fn a_chat_without_a_repository_below_one_moves_with_it_into_root_dir() {
     let (root, manager) = manager().await;
     let lead = crate::daemon::test_support::chat(&manager, "lead", "orchestrate", None, None).await;
-    manager
-        .record_chat_session(&lead.id, "s1".into())
-        .await
-        .unwrap();
+    crate::daemon::test_support::report_session(&manager, &lead.id, "s1").await;
     let helper =
         crate::daemon::test_support::chat(&manager, "helper", "orchestrate", None, Some(&lead.id))
             .await;
@@ -613,10 +581,7 @@ async fn a_carried_chat_whose_worktree_is_not_here_opens_in_the_checkout() {
         )
         .await
         .unwrap();
-    exporting
-        .record_chat_session(&reading.id, "s1".into())
-        .await
-        .unwrap();
+    crate::daemon::test_support::report_session(&exporting, &reading.id, "s1").await;
     (exporting.remove_chat(&SpaceSelector::id(&reading.id), None))
         .await
         .unwrap();
@@ -675,11 +640,8 @@ async fn a_moved_chat_keeps_its_id_with_the_chats_it_carried_below_it() {
     let lead = start("lead", None).await;
     let helper = start("helper", Some(&lead.id)).await;
     for chat in [&lead, &helper] {
-        let session = format!("s-{}", chat.name).into();
-        exporting
-            .record_chat_session(&chat.id, session)
-            .await
-            .unwrap();
+        let session = format!("s-{}", chat.name);
+        crate::daemon::test_support::report_session(&exporting, &chat.id, &session).await;
     }
     let file = source.path().join("lead.shoal");
     let selector = SpaceSelector::id(&lead.id);

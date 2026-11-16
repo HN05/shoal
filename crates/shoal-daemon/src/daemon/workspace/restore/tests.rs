@@ -1158,9 +1158,7 @@ async fn a_restored_agent_forks_the_session_another_space_holds() {
     // A chat here continues the same session meanwhile.
     let chat =
         crate::daemon::test_support::chat(&manager, "holder", "chat", Some(&repo), None).await;
-    (manager.record_chat_session(&chat.id, "s1".into()))
-        .await
-        .unwrap();
+    crate::daemon::test_support::report_session(&manager, &chat.id, "s1").await;
 
     let restored = manager.restore_workspace(&selector).await.unwrap();
     assert_eq!(restored.warnings.len(), 1, "{:?}", restored.warnings);

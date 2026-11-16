@@ -9,7 +9,6 @@ use anyhow::Result;
 use crate::{
     daemon::workspace::Manager,
     execution::recovery::{self, LastSession},
-    model::{Chat, PresentSpace, Workspace},
     paths::Paths,
     state::ExecutionState,
 };
@@ -22,7 +21,7 @@ impl Manager {
     /// its repository's agents ran with.
     pub async fn space_sessions(&self, selector: &SpaceSelector) -> Result<SpaceSessions> {
         let space = self.space(selector).await?;
-        let sessions = self.reported_sessions(&space).await?;
+        let sessions = self.reported_sessions(space.id()).await?;
         let settings = self.present_space_settings(&space).await?;
         let integrations = sessions
             .iter()
@@ -43,16 +42,13 @@ impl Manager {
         })
     }
 
-    /// The sessions the agents of `space` reported, each once, those running
-    /// now first.
-    pub(crate) async fn reported_sessions(
-        &self,
-        space: &PresentSpace,
-    ) -> Result<Vec<ReportedSession>> {
-        let sessions = match space {
-            PresentSpace::Workspace(workspace) => self.workspace_sessions(workspace).await?,
-            PresentSpace::Chat(chat) => chat_session(chat).into_iter().collect(),
-        };
+    /// The sessions the agents of the space `id` reported, each once, those
+    /// running now first: the session each of its agent executions last
+    /// reported, then those of its stopped agents and last sessions.
+    pub(crate) async fn reported_sessions(&self, id: &SpaceId) -> Result<Vec<ReportedSession>> {
+        let mut sessions = self.execution_sessions(id).await?;
+        sessions.extend(stopped_sessions(&self.paths, id)?);
+        sessions.extend(last_sessions(&self.paths, id)?);
         let mut seen = BTreeSet::new();
         Ok(sessions
             .into_iter()
@@ -60,25 +56,16 @@ impl Manager {
             .collect())
     }
 
-    /// The session each of the workspace's agent executions last reported,
-    /// then those of its stopped agents and last sessions.
-    async fn workspace_sessions(&self, workspace: &Workspace) -> Result<Vec<ReportedSession>> {
-        let mut sessions = self.execution_sessions(workspace).await?;
-        sessions.extend(stopped_sessions(&self.paths, &workspace.id)?);
-        sessions.extend(last_sessions(&self.paths, &workspace.id)?);
-        Ok(sessions)
-    }
-
-    /// The session each of the workspace's agent executions last reported,
-    /// those that run their agent first.
-    async fn execution_sessions(&self, workspace: &Workspace) -> Result<Vec<ReportedSession>> {
-        let mut executions = self.workspace_executions(&workspace.id).await?;
+    /// The session each of the agent executions of the space `id` last
+    /// reported, those that run their agent first.
+    async fn execution_sessions(&self, id: &SpaceId) -> Result<Vec<ReportedSession>> {
+        let mut executions = self.workspace_executions(id).await?;
         executions.sort_by_key(|execution| !runs_agent(execution));
         Ok(executions
             .into_iter()
             .filter_map(|execution| {
                 Some(ReportedSession {
-                    session: recovery::reported_session(&self.paths, &workspace.id, &execution.id)?,
+                    session: recovery::reported_session(&self.paths, id, &execution.id)?,
                     current: runs_agent(&execution),
                     agent: execution.agent?,
                     execution: Some(execution.id),
@@ -88,9 +75,9 @@ impl Manager {
     }
 }
 
-/// The sessions of the workspace's stopped agents.
-fn stopped_sessions(paths: &Paths, workspace_id: &SpaceId) -> Result<Vec<ReportedSession>> {
-    Ok(recovery::stopped_agents(paths, workspace_id)?
+/// The sessions of the space's stopped agents.
+fn stopped_sessions(paths: &Paths, space_id: &SpaceId) -> Result<Vec<ReportedSession>> {
+    Ok(recovery::stopped_agents(paths, space_id)?
         .into_iter()
         .filter_map(|stopped| {
             Some(ReportedSession {
@@ -103,9 +90,9 @@ fn stopped_sessions(paths: &Paths, workspace_id: &SpaceId) -> Result<Vec<Reporte
         .collect())
 }
 
-/// The sessions of the agents that exited, the workspace's last sessions.
-fn last_sessions(paths: &Paths, workspace_id: &SpaceId) -> Result<Vec<ReportedSession>> {
-    Ok(LastSession::all(paths, workspace_id)?
+/// The sessions of the agents that exited, the space's last sessions.
+fn last_sessions(paths: &Paths, space_id: &SpaceId) -> Result<Vec<ReportedSession>> {
+    Ok(LastSession::all(paths, space_id)?
         .into_iter()
         .filter_map(|last| {
             Some(ReportedSession {
@@ -121,17 +108,6 @@ fn last_sessions(paths: &Paths, workspace_id: &SpaceId) -> Result<Vec<ReportedSe
 /// Whether `execution`'s wrapper runs its agent now.
 fn runs_agent(execution: &crate::model::Execution) -> bool {
     execution.state == ExecutionState::Running && execution.child.is_some()
-}
-
-/// The session the chat's hooks reported last, which its agent runs while
-/// the chat does.
-fn chat_session(chat: &Chat) -> Option<ReportedSession> {
-    Some(ReportedSession {
-        agent: chat.agent.clone(),
-        session: chat.session.clone()?,
-        execution: None,
-        current: chat.running,
-    })
 }
 
 #[cfg(test)]

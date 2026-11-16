@@ -250,11 +250,11 @@ impl Manager {
     /// [`Self::ensure_movable_chat`] refuses of a live chat that its removal left:
     /// one whose agent reported no session to continue.
     async fn movable_removed_chat(&self, removed: &RemovedSpace) -> Result<Option<Repository>> {
-        let kept = removed
+        removed
             .chat()
             .context("the removal record is not a chat's")?;
         ensure!(
-            kept.session.is_some(),
+            removed.has_session(),
             "the agent of chat {} reported no session to continue elsewhere; shoal restore {} opens it here again",
             removed.name,
             removed.space_id
@@ -314,7 +314,7 @@ impl Manager {
     /// stays.
     async fn ensure_movable_chat(&self, chat: &Chat) -> Result<()> {
         ensure!(
-            chat.session.is_some(),
+            !self.reported_sessions(&chat.id).await?.is_empty(),
             "the agent of chat {} reported no session to continue elsewhere, so the chat keeps running",
             chat.name
         );

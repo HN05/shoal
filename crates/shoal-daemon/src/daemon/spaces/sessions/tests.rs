@@ -132,24 +132,23 @@ async fn a_chat_lists_the_session_its_hooks_reported() -> Result<()> {
         Vec::new()
     );
 
-    manager
-        .set_agent_state(
-            &manager.named("planning").await,
-            AgentState::Idle,
-            None,
-            Some("c1".into()),
-        )
-        .await?;
+    let selector = manager.named("planning").await;
+    let chat = manager.chat(&selector).await?;
+    let execution = manager.workspace_executions(&chat.id).await?[0].id.clone();
+    (manager.set_agent_state(
+        &selector,
+        AgentState::Idle,
+        Some(execution.clone()),
+        Some("c1".into()),
+    ))
+    .await?;
     assert_eq!(
-        manager
-            .space_sessions(&manager.named("planning").await)
-            .await?
-            .sessions,
+        manager.space_sessions(&selector).await?.sessions,
         vec![ReportedSession {
             agent: "claude".into(),
             session: "c1".into(),
-            execution: None,
-            current: true,
+            execution: Some(execution),
+            current: false,
         }]
     );
     Ok(())

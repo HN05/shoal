@@ -133,10 +133,7 @@ async fn a_workspace_that_changed_after_its_export_stays() {
 async fn a_moving_chat_stops_its_agent_and_stays_until_its_end() {
     let (root, manager, pid) = super::chat("plan-cache").await;
     let chat = manager.chats().await.unwrap().remove(0);
-    manager
-        .record_chat_session(&chat.id, "s1".into())
-        .await
-        .unwrap();
+    crate::daemon::test_support::report_session(&manager, &chat.id, "s1").await;
     let selector = SpaceSelector::id(&chat.id);
 
     let (_, file) = export_moving(&manager, &selector, root.path()).await;
@@ -157,10 +154,7 @@ async fn a_moving_chat_stops_its_agent_and_stays_until_its_end() {
 async fn a_moving_chat_stops_the_chats_below_it_and_takes_them_at_its_end() {
     let (root, manager, _pid) = super::chat("lead").await;
     let lead = manager.chats().await.unwrap().remove(0);
-    manager
-        .record_chat_session(&lead.id, "s1".into())
-        .await
-        .unwrap();
+    crate::daemon::test_support::report_session(&manager, &lead.id, "s1").await;
     let repo = manager.repositories().await.unwrap().remove(0);
     let child = test_support::chat(&manager, "child", "chat", Some(&repo), Some(&lead.id)).await;
     let mut process = test_support::agent_process(&manager, &child.id).await;

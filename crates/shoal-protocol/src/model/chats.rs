@@ -5,7 +5,6 @@ use super::{
 };
 use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
-use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 
@@ -55,9 +54,6 @@ pub struct Chat {
     /// and keeps its temporary directory however `root_dir` changes later.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub root_dir: Option<std::path::PathBuf>,
-    /// The agent session its hooks reported last, which an export continues.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session: Option<AgentSessionId>,
     /// Whether its agent runs: an execution of it is recorded. A stopped
     /// chat keeps what its agent's stop saved for `shoal restore`, as a
     /// workspace does.

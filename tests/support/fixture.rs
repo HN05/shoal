@@ -21,9 +21,11 @@ use crate::support::{
 /// memory or CPU. The daemon's unit tests cover the warnings.
 pub const NO_OVERLOAD_WARNINGS: &str = "machine.overload.warning.enabled = false\n";
 
-/// A chat's agent for [`Base::run_chat`]: it runs until its wrapper stops it
-/// or exits, or [`Base::end_chat_agent`] ends it.
+/// A chat's agent for [`Base::run_chat`]: it keeps the scope token it
+/// carries for [`Base::chat_scope`], then runs until its wrapper stops it or
+/// exits, or [`Base::end_chat_agent`] ends it.
 const CHAT_AGENT: &str = "#!/bin/sh\ntrap 'exit 0' TERM\n\
+    printf %s \"$SHOAL_SCOPE_TOKEN\" > \"$HOME/scope-$SHOAL_CHAT\"\n\
     while kill -0 \"$PPID\" 2>/dev/null && [ ! -e \"$HOME/exit-$SHOAL_CHAT\" ]; do sleep 1; done\n";
 
 pub struct Base {
@@ -179,6 +181,14 @@ impl Base {
                 panic!("the chat's agent was never tracked: {shown}");
             }
         }
+    }
+
+    /// The scope token the agent [`Self::run_chat`] runs in the chat `id`
+    /// carries, which its hooks report with, once it started.
+    pub fn chat_scope(&self, id: &str) -> String {
+        let path = self.root.path().join(format!("scope-{id}"));
+        support::wait::wait_until("the chat's agent started", || path.exists());
+        fs::read_to_string(path).unwrap()
     }
 
     /// End the agent [`Self::run_chat`] runs in the chat `id` as if it exited

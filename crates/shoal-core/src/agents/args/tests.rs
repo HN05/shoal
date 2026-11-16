@@ -88,7 +88,6 @@ fn chat(
         origin: None,
         tmp_dir,
         root_dir: None,
-        session: None,
         links: Default::default(),
         review: Vec::new(),
         holds: Vec::new(),

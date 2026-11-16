@@ -334,50 +334,23 @@ async fn checkpoint_delivery(
     })
 }
 
-/// `record` with agents that have `sessions`, a chat's continuing the
-/// first session they report.
+/// `record` with agents that have `sessions`.
 fn with_sessions(record: &RemovedSpace, sessions: Sessions) -> RemovedSpace {
-    let session = (sessions.reported().next()).map(|(_, session)| session.clone());
-    let mut record = RemovedSpace {
+    RemovedSpace {
         agents: sessions.agents,
         last_sessions: sessions.last_sessions,
         ..record.clone()
-    };
-    if let RemovedKind::Chat { chat } = &mut record.kind {
-        chat.session = session;
     }
-    record
 }
 
 /// The agents of the space `removed` records, with their sessions, as
-/// `machine` recorded them: a chat's agent, when none of them reports a
-/// session, as the last session of the one its chat continues.
+/// `machine` recorded them.
 fn recorded_sessions(machine: Option<String>, removed: &RemovedSpace) -> Sessions {
-    let mut sessions = Sessions {
+    Sessions {
         machine,
         agents: removed.agents.clone(),
         last_sessions: removed.last_sessions.clone(),
-    };
-    if let Some(kept) = removed.chat()
-        && sessions.reported().next().is_none()
-        && kept.session.is_some()
-    {
-        sessions.last_sessions.push(LastSession {
-            narrowing: kept.narrowing,
-            // A chat's agent runs in no execution; its chat's ID keys it.
-            execution: ExecutionId::from(removed.space_id.to_string()),
-            agent: kept.agent.clone(),
-            session: kept.session.clone(),
-            moved: false,
-            copied: None,
-            converted: false,
-            origin: None,
-            stop: None,
-            model: Default::default(),
-            mode: kept.mode.clone(),
-        });
     }
-    sessions
 }
 
 /// A Git bundle of a package's checkpoint, in a directory of its own because
@@ -611,7 +584,7 @@ fn kept_on(
 
 /// The record for another machine, where its agents' sessions do not exist
 /// and the package carries the session files it kept: a chat's keeps no
-/// session or place there either.
+/// place there either.
 fn moved(removed: RemovedSpace) -> RemovedSpace {
     let mut moved = RemovedSpace {
         agents: removed.agents.into_iter().map(moved_agent).collect(),
@@ -624,7 +597,6 @@ fn moved(removed: RemovedSpace) -> RemovedSpace {
         ..removed
     };
     if let RemovedKind::Chat { chat } = &mut moved.kind {
-        chat.session = None;
         chat.origin = None;
     }
     moved

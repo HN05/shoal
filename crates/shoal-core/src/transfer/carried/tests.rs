@@ -43,14 +43,13 @@ fn a_carried_chat_keeps_its_session_only_where_its_agent_continues_it() {
         "links": {"issues": [], "prs": []},
         "last_sessions": [{"execution": "c1", "agent": "claude", "session": "s1"}],
         "cause": "manual", "removed_at": 1, "expires_at": 2,
-        "chat": {"agent": "claude", "mode": "chat", "session": "s1",
+        "chat": {"agent": "claude", "mode": "chat",
             "origin": {"host": "herdr", "place": "tab"}},
     }))
     .unwrap();
     let carried = CarriedChat::of(None, Some("m1".into()), removed);
-    // The record carries no session of its own, nor the place it ran in.
-    let kept = carried.chat.chat().unwrap();
-    assert_eq!((&kept.session, &kept.origin), (&None, &None));
+    // The record carries no place it ran in.
+    assert_eq!(carried.chat.chat().unwrap().origin, None);
     let manifest = crate::transfer::Manifest {
         remote_url: None,
         space: crate::transfer::PackagedSpace {
@@ -72,7 +71,7 @@ fn a_carried_chat_keeps_its_session_only_where_its_agent_continues_it() {
     let session = |machine| {
         let sessions = manifest.chat_sessions_on(&carried, Some(machine), None);
         let chat = carried.chat_with(sessions);
-        chat.chat().unwrap().session.clone()
+        (chat.last_sessions.first()).and_then(|last| last.session.clone())
     };
 
     let s1: AgentSessionId = "s1".into();

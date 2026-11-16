@@ -10,10 +10,10 @@ use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 impl Manager {
     /// Record the removed chat `removed` again, stopped, in the place it
     /// ran, below its parent while that takes it, with its links, mode,
-    /// permissions, session and the stopped agent and last session it
-    /// saved, which a restore of its agent continues, and the session files
-    /// an import kept for it; `caller` relinks only what it may link. The
-    /// caller links its PRs and puts the session files in place.
+    /// permissions and the stopped agents and last sessions it saved, which
+    /// a restore of its agent continues, and the session files an import
+    /// kept for it; `caller` relinks only what it may link. The caller links
+    /// its PRs and puts the session files in place.
     pub(super) async fn reopen_removed_chat(
         &self,
         removed: RemovedSpace,
@@ -29,7 +29,7 @@ impl Manager {
         let id = &chat.id;
         warnings.extend(self.relink_space(id, &removed.links, caller).await);
         let session_files = self.restore_agents(&removed, id, &mut warnings).await;
-        if kept.session.is_none() && removed.agents.is_empty() && removed.last_sessions.is_empty() {
+        if removed.agents.is_empty() && removed.last_sessions.is_empty() {
             warnings.push(format!(
                 "{} saved no session of its agent, whose restore starts a new one",
                 removed.name
@@ -101,7 +101,6 @@ fn restored_record(removed: &RemovedSpace, kept: &KeptChat) -> Chat {
         origin: kept.origin.clone(),
         tmp_dir: None,
         root_dir: kept.root_dir.clone(),
-        session: kept.session.clone(),
         running: false,
         links: Default::default(),
         review: Vec::new(),

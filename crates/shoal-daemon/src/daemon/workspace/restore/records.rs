@@ -121,7 +121,6 @@ impl Manager {
                     workspace: chat.workspace,
                     root_dir: chat.root_dir,
                     origin: chat.origin,
-                    session: chat.session,
                 }),
             },
         };

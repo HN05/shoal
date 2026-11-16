@@ -412,7 +412,6 @@ async fn no_agent_starts_in_a_workspace_that_becomes_a_chat() {
     let chat = crate::daemon::conversions::record::ConvertedChat {
         agent: "claude".into(),
         execution: shoal_ids::execution_ids::ExecutionId::generate(),
-        session: Some("s1".into()),
         origin: None,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),

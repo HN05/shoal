@@ -388,12 +388,14 @@ fn the_wake_hook_exits_with_its_agent() {
 #[test]
 fn a_chats_hooks_report_its_failed_turn_and_wake_it_for_its_messages() {
     let fixture = Fixture::new();
-    let (mut agent, _) = start_test_chat(&fixture, "planning");
+    let (mut agent, chat) = start_test_chat(&fixture, "planning");
 
-    // A failed turn reports for the chat, which keeps the session it names.
+    // A failed turn its agent's hook reports for the chat keeps the session
+    // it names.
     let mut report = fixture
         .command()
         .current_dir(&fixture.repo)
+        .env("SHOAL_SCOPE_TOKEN", fixture.chat_scope(&chat))
         .args([
             "--json",
             "internal",
@@ -415,8 +417,11 @@ fn a_chats_hooks_report_its_failed_turn_and_wake_it_for_its_messages() {
     assert!(output.status.success(), "{}", printed(&output));
     let status: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(status["state"], "idle", "{status}");
-    let chats = fixture.request(serde_json::json!("list_chats"));
-    assert_eq!(chats["data"][0]["session"], "failed-turn", "{chats}");
+    let sessions = fixture.request(serde_json::json!({"space_sessions": {"space": chat}}));
+    assert_eq!(
+        sessions["data"]["sessions"][0]["session"], "failed-turn",
+        "{sessions}"
+    );
 
     // The wake hook named the chat waits for its messages.
     let mut hook = fixture

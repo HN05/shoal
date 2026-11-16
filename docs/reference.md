@@ -1813,8 +1813,8 @@ terminal or a scoped caller's records the chat at once, below where it goes,
 and reports it with its entry; `--now` starts the chat regardless of the
 limits, a scoped caller's as its space's
 [`limits` permission](#permitted-actions) allows. The
-daemon records each chat under its name, with the session the agent's
-session-start hook last reported, which
+daemon records each chat under its name, and its agent's session as a
+workspace agent's, the one the agent's session-start hook last reported, which
 [`shoal move`](#move-a-space-to-another-machine) continues on another machine.
 The chat runs while its agent runs, and stops when it exits or
 [`shoal stop`](#recovery) stops it: it waits for `shoal restore <chat>`, while

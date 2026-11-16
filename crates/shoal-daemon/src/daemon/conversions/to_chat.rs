@@ -4,7 +4,6 @@
 use anyhow::{Context as _, Result, bail, ensure};
 
 use super::record::ConvertedChat;
-use crate::execution::recovery;
 use crate::{
     config::modes::ModeName,
     daemon::workspace::Manager,
@@ -81,7 +80,7 @@ impl Manager {
     }
 
     /// The stopped chat the workspace `id` becomes in `mode`, whose agent
-    /// `execution` runs, with the session it reported so far.
+    /// `execution` runs.
     async fn converted_chat(
         &self,
         id: &SpaceId,
@@ -99,7 +98,6 @@ impl Manager {
             .context("the execution to carry on runs no agent")?;
         Ok(ConvertedChat {
             agent,
-            session: recovery::reported_session(&self.paths, id, &execution),
             origin: recorded.origin,
             mode,
             narrowing: recorded.narrowing,

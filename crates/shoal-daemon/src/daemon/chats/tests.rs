@@ -159,40 +159,32 @@ async fn a_chat_keeps_the_session_its_agent_reports() {
         .start_chat(repo.id.into(), "reporter".into(), "claude".into(), None)
         .await
         .unwrap();
-    assert_eq!(chat.session, None);
-    let reported = manager
-        .set_agent_state(
-            &manager.named("reporter").await,
+    let sessions = || async {
+        let reported = manager.reported_sessions(&chat.id).await.unwrap();
+        (reported.into_iter())
+            .map(|reported| reported.session.to_string())
+            .collect::<Vec<_>>()
+    };
+    assert!(sessions().await.is_empty());
+    let execution = manager.workspace_executions(&chat.id).await.unwrap()[0]
+        .id
+        .clone();
+    let selector = SpaceSelector::id(&chat.id);
+    let report = |session: Option<&str>| {
+        manager.set_agent_state(
+            &selector,
             crate::state::AgentState::Idle,
-            None,
-            Some("session-1".into()),
+            Some(execution.clone()),
+            session.map(Into::into),
         )
-        .await
-        .unwrap();
-    assert_eq!(reported.state, crate::state::AgentState::Idle);
+    };
+    report(Some("session-1")).await.unwrap();
     // A report without a session, or with another, keeps the latest one.
-    for session in [None, Some("session-2".into())] {
-        manager
-            .set_agent_state(
-                &SpaceSelector::id(&chat.id),
-                crate::state::AgentState::Idle,
-                None,
-                session,
-            )
-            .await
-            .unwrap();
+    for session in [None, Some("session-2")] {
+        report(session).await.unwrap();
     }
-    let chats = manager.chats().await.unwrap();
-    assert_eq!(chats[0].session, Some("session-2".into()));
-    manager
-        .set_agent_state(
-            &SpaceSelector::id(&chat.id),
-            crate::state::AgentState::Idle,
-            None,
-            Some("../escape".into()),
-        )
-        .await
-        .unwrap_err();
+    assert_eq!(sessions().await, ["session-2"]);
+    report(Some("../escape")).await.unwrap_err();
 }
 
 #[tokio::test]

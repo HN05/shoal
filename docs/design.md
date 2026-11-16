@@ -2771,9 +2771,9 @@ Happy app.
 A chat's agent runs the turn-state hooks a workspace's agent runs, without the
 worktree hooks and lifecycle permission rules, which need a worktree. The
 `agent-state` and `turn-failed` commands act on the space they run in and record
-the chat's state as a workspace's, and the record keeps the session so the chat
-can move. Its state ends with its agent's execution, as a workspace agent's
-does; keep-awake reads it as a workspace agent's.
+the chat's state as a workspace's, and the execution's session files keep the
+session so the chat can move. Its state ends with its agent's execution, as a
+workspace agent's does; keep-awake reads it as a workspace agent's.
 
 A chat may also belong to no repository: a mode with `repository = false`,
 such as the built-in `orchestrate`, starts it in `root_dir`, with the global

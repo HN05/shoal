@@ -273,20 +273,6 @@ impl Manager {
         Ok(())
     }
 
-    /// Keep `session` as the one the agent of the chat that became the
-    /// workspace `id` reported last, which its hand-over continues; a
-    /// workspace without such an agent keeps none.
-    pub(crate) async fn record_converting_session(
-        &self,
-        id: &SpaceId,
-        session: AgentSessionId,
-    ) -> Result<()> {
-        let id = id.to_owned();
-        let recorded = (self.store).run(move |db| super::record::record_session(db, &id, &session));
-        // Under the hand-overs, so no relocation keeps a session it misses.
-        self.conversion_handovers.hold(recorded).await
-    }
-
     /// Keep the chat that the workspace `id` becomes stopped, as a stop of
     /// its agent keeps that agent down until `shoal restore`.
     async fn hold_converting_chat(&self, id: &SpaceId) -> Result<()> {
@@ -297,10 +283,10 @@ impl Manager {
     }
 
     /// Keep the session of the agent of the chat that became the workspace
-    /// `id`, whose row was `chat`, as the workspace's last session under
-    /// `execution`, marked converted, in `mode`, then stop the agent where it
-    /// ran, an execution of the space, and forget the conversion and the
-    /// scope the agent carried there.
+    /// `id`, whose row was `chat`, which runs as `execution`, as the
+    /// workspace's last session under that execution, marked converted, in
+    /// `mode`, then stop the agent where it ran, and forget the conversion
+    /// and the scope the agent carried there.
     async fn hand_over(
         &self,
         id: &SpaceId,
@@ -310,9 +296,9 @@ impl Manager {
     ) -> Result<()> {
         let agent = chat.agent()?;
         let last = LastSession {
+            session: self.latest_session(id, &execution),
             execution,
             agent: agent.agent.clone(),
-            session: agent.session.clone(),
             moved: false,
             copied: None,
             converted: true,
@@ -341,15 +327,12 @@ impl Manager {
     /// still runs or exited, told what the space is now, unless a stop
     /// `held` it, which leaves the chat for `shoal restore`.
     async fn relocate_to_chat(&self, id: &SpaceId, chat: ConvertedChat, held: bool) -> Result<()> {
-        let chat = ConvertedChat {
-            session: self.latest_session(id, &chat),
-            ..chat
-        };
+        let session = self.latest_session(id, &chat.execution);
         self.convert_worktree_to_chat(id, &chat).await?;
         let last = LastSession {
             execution: chat.execution.clone(),
             agent: chat.agent.clone(),
-            session: chat.session.clone(),
+            session,
             moved: false,
             copied: None,
             converted: true,
@@ -371,17 +354,14 @@ impl Manager {
             .map(drop)
     }
 
-    /// The session the agent `chat` carries on reported last in the workspace
-    /// `id`: while it runs, else as its last session kept it when it exited,
-    /// else as the conversion recorded it.
-    fn latest_session(&self, id: &SpaceId, chat: &ConvertedChat) -> Option<AgentSessionId> {
-        let execution = &chat.execution;
-        recovery::reported_session(&self.paths, id, execution)
-            .or_else(|| {
-                let path = LastSession::path(&self.paths, id, execution);
-                LastSession::load(&path).ok().flatten()?.session
-            })
-            .or_else(|| chat.session.clone())
+    /// The session the agent that runs or ran as `execution` in the space
+    /// `id` reported last: while it runs, else as its last session kept it
+    /// when it exited.
+    fn latest_session(&self, id: &SpaceId, execution: &ExecutionId) -> Option<AgentSessionId> {
+        recovery::reported_session(&self.paths, id, execution).or_else(|| {
+            let path = LastSession::path(&self.paths, id, execution);
+            LastSession::load(&path).ok().flatten()?.session
+        })
     }
 
     /// Tell the user that the agent of the space `id` did not restart in

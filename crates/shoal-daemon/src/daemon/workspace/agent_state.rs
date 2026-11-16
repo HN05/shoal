@@ -460,8 +460,7 @@ impl Manager {
     ) -> Result<Option<AgentStatus>> {
         let space = self.space(selector).await?;
         if let Some(session) = session {
-            self.record_agent_session(&space, execution.as_ref(), session)
-                .await?;
+            self.record_agent_session(space.id(), execution.as_ref(), session)?;
         }
         let made = made.unwrap_or_else(SystemTime::now);
         // A late turn's prompt cache, too, lives from when the turn ended.
@@ -487,12 +486,12 @@ impl Manager {
         Ok(Some(status))
     }
 
-    /// Record the agent `session` reported in `space`: the session of the
-    /// agent `execution` runs, for resuming it, and a chat's own, which its
-    /// export continues elsewhere.
-    async fn record_agent_session(
+    /// Record the agent `session` reported in the space `id` as the session
+    /// of the agent `execution` runs, for resuming it; a report without an
+    /// execution runs no agent of the space's.
+    fn record_agent_session(
         &self,
-        space: &PresentSpace,
+        id: &SpaceId,
         execution: Option<&ExecutionId>,
         session: AgentSessionId,
     ) -> Result<()> {
@@ -500,23 +499,11 @@ impl Manager {
             recovery::valid_session(session.as_str()),
             "invalid agent session ID"
         );
-        match (space, execution) {
-            (_, Some(execution)) => {
-                // A subscription follows the session, which the store leaves out.
-                if recovery::save_session(&self.paths, space.id(), execution, &session)? {
-                    self.signals.agent_changed();
-                }
-            }
-            // The agent of a chat that became the workspace, which its
-            // hand-over continues.
-            (PresentSpace::Workspace(workspace), None) => {
-                self.record_converting_session(&workspace.id, session.clone())
-                    .await?
-            }
-            (PresentSpace::Chat(_), None) => {}
-        }
-        if let PresentSpace::Chat(chat) = space {
-            self.record_chat_session(&chat.id, session).await?;
+        // A subscription follows the session, which the store leaves out.
+        if let Some(execution) = execution
+            && recovery::save_session(&self.paths, id, execution, &session)?
+        {
+            self.signals.agent_changed();
         }
         Ok(())
     }

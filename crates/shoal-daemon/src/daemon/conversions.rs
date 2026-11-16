@@ -44,11 +44,12 @@ impl Converting {
     /// Replace the chat with the workspace just recorded under its ID, and
     /// record that the chat's agent restarts there once its turn ends.
     pub(crate) fn replace_chat(&self, tx: &Transaction<'_>) -> Result<()> {
-        let chat = record::replace_chat(tx, &self.chat.id, &self.mode, &self.chat.narrowing)?;
+        let (chat, execution) =
+            record::replace_chat(tx, &self.chat.id, &self.mode, &self.chat.narrowing)?;
         let pending = Pending::Workspace {
             mode: self.mode.clone(),
             chat,
-            execution: shoal_ids::execution_ids::ExecutionId::generate(),
+            execution,
             preparation: None,
             prepared: false,
             hook_failure: None,

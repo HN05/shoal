@@ -256,16 +256,11 @@ impl Manager {
         let chats = self.chats().await?;
         let spaces = (workspaces
             .iter()
-            .map(|workspace| (&workspace.id, &workspace.name, None)))
-        .chain(
-            chats
-                .iter()
-                .map(|chat| (&chat.id, &chat.name, chat.session.as_ref())),
-        );
+            .map(|workspace| (&workspace.id, &workspace.name)))
+        .chain(chats.iter().map(|chat| (&chat.id, &chat.name)));
         let mut held = HashMap::new();
-        for (space, name, session) in spaces.filter(|(space, ..)| *space != id) {
-            let sessions = crate::execution::recovery::held_sessions(&self.paths, space);
-            for session in sessions.into_iter().chain(session.cloned()) {
+        for (space, name) in spaces.filter(|(space, _)| *space != id) {
+            for session in crate::execution::recovery::held_sessions(&self.paths, space) {
                 held.entry(session).or_insert_with(|| name.clone());
             }
         }

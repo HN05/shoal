@@ -4,6 +4,7 @@
 use anyhow::{Result, ensure};
 
 use super::Output;
+use crate::client::transcripts;
 use crate::{
     cli::{context::Context, ui},
     model::{Chat, PresentSpace, SpaceHold, SpaceKind, SpaceRef, Spaces},
@@ -120,7 +121,7 @@ pub(super) async fn check_export(
         }
         PresentSpace::Chat(chat) => {
             let taken = spaces.taken_with(&chat.id);
-            (Ending::Chat(check_chat_export(chat)?), taken)
+            (Ending::Chat(check_chat_export(ctx, chat).await?), taken)
         }
     };
     Ok(Checked {
@@ -141,9 +142,10 @@ fn carried_chats(spaces: &Spaces, id: &SpaceId) -> Vec<Chat> {
 
 /// Refuse to export a chat whose agent reported no session, which would not
 /// continue elsewhere, or as [`ensure_not_running_in`] refuses.
-fn check_chat_export(chat: Chat) -> Result<Chat> {
+async fn check_chat_export(ctx: &Context, chat: Chat) -> Result<Chat> {
+    let sessions = transcripts::space_sessions(&ctx.paths, SpaceSelector::id(&chat.id)).await?;
     ensure!(
-        chat.session.is_some(),
+        !sessions.sessions.is_empty(),
         "the agent of chat {} reported no session to continue elsewhere, so the chat keeps running",
         chat.name
     );

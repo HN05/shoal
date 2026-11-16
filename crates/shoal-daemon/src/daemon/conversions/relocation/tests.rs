@@ -40,9 +40,10 @@ async fn converted(
     let process = crate::daemon::test_support::agent_process(manager, &talk.id).await;
     let selector = SpaceSelector::id(&talk.id);
     let working = AgentState::Working;
-    (manager.set_agent_state(&selector, working, None, Some("s1".into())))
+    (manager.set_agent_state(&selector, working, None, None))
         .await
         .unwrap();
+    crate::daemon::test_support::report_session(manager, &talk.id, "s1").await;
     let talk = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
     let token = manager.chat_scope(&talk.id).await.unwrap();
     let converting = Converting {
@@ -245,7 +246,6 @@ async fn a_workspace_whose_agent_exited_still_becomes_a_chat_with_its_session() 
     let chat = crate::daemon::conversions::record::ConvertedChat {
         agent: "claude".into(),
         execution,
-        session: Some("s1".into()),
         origin: None,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
@@ -256,10 +256,11 @@ async fn a_workspace_whose_agent_exited_still_becomes_a_chat_with_its_session() 
 
     let chat = manager.chat_by_id(&workspace.id).await.unwrap().unwrap();
     assert!(chat.converted);
-    assert_eq!(
-        chat.session.map(|session| session.to_string()),
-        Some("s2".into())
-    );
+    let sessions = manager.reported_sessions(&chat.id).await.unwrap();
+    let sessions: Vec<_> = (sessions.iter())
+        .map(|reported| reported.session.as_str())
+        .collect();
+    assert_eq!(sessions, ["s2"]);
 }
 
 /// Whether a restore of the agent of the space `id` is queued.
@@ -304,7 +305,6 @@ async fn a_stop_keeps_the_chat_a_workspace_becomes_down() {
     let chat = crate::daemon::conversions::record::ConvertedChat {
         agent: "claude".into(),
         execution: shoal_ids::execution_ids::ExecutionId::generate(),
-        session: Some("s1".into()),
         origin: None,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
@@ -340,7 +340,6 @@ async fn a_stop_while_the_relocation_waits_keeps_the_chat_down() {
     let chat = crate::daemon::conversions::record::ConvertedChat {
         agent: "claude".into(),
         execution: shoal_ids::execution_ids::ExecutionId::generate(),
-        session: Some("s1".into()),
         origin: None,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
@@ -389,7 +388,8 @@ async fn the_hand_over_continues_the_session_reported_after_the_conversion() {
     let selector = SpaceSelector::id(&workspace.id);
     let idle = AgentState::Idle;
 
-    (manager.set_agent_state(&selector, idle, None, Some("s3".into())))
+    crate::daemon::test_support::report_session(&manager, &workspace.id, "s3").await;
+    (manager.set_agent_state(&selector, idle, None, None))
         .await
         .unwrap();
     manager.relocate_finished_turns().await.unwrap();
@@ -445,7 +445,6 @@ async fn a_relocation_hands_over_the_converting_agents_its_removal_reaches() {
     let chat = crate::daemon::conversions::record::ConvertedChat {
         agent: "claude".into(),
         execution: shoal_ids::execution_ids::ExecutionId::generate(),
-        session: Some("s1".into()),
         origin: None,
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
@@ -597,73 +596,4 @@ async fn a_preparation_end_reported_before_its_record_is_kept() {
     };
     assert!(prepared);
     assert_eq!(hook_failure.as_deref(), Some("hook exited 1"));
-}
-
-#[tokio::test]
-async fn a_session_report_waits_for_a_hand_over_under_way() {
-    let (root, manager) = manager().await;
-    let (workspace, _process, _token) = converted(root.path(), &manager).await;
-    let (held, holding) = tokio::sync::oneshot::channel();
-    let (release, released) = tokio::sync::oneshot::channel::<()>();
-    let handing_over = tokio::spawn({
-        let manager = manager.clone();
-        async move {
-            let work = async {
-                held.send(()).unwrap();
-                released.await.ok();
-            };
-            manager.conversion_handovers.hold(work).await;
-        }
-    });
-    holding.await.unwrap();
-
-    let reporting = tokio::spawn({
-        let (manager, id) = (manager.clone(), workspace.id.clone());
-        async move { manager.record_converting_session(&id, "s4".into()).await }
-    });
-    crate::daemon::conversions::handovers::WAITING
-        .notified()
-        .await;
-    let during = converting_session(&manager, &workspace).await;
-    release.send(()).unwrap();
-    handing_over.await.unwrap();
-    reporting.await.unwrap().unwrap();
-
-    assert_eq!(
-        during.as_deref(),
-        Some("s1"),
-        "the report waits for the hand-over"
-    );
-    let after = converting_session(&manager, &workspace).await;
-    assert_eq!(after.as_deref(), Some("s4"));
-}
-
-/// The session the conversion of `workspace` keeps for its chat's agent.
-async fn converting_session(manager: &Manager, workspace: &Workspace) -> Option<String> {
-    let id = workspace.id.clone();
-    let pending = (manager.store)
-        .run(move |db| crate::daemon::conversions::pending(db, &id))
-        .await
-        .unwrap();
-    let Some(crate::daemon::conversions::Pending::Workspace { chat, .. }) = pending else {
-        panic!("expected the conversion: {pending:?}");
-    };
-    chat.agent()
-        .unwrap()
-        .session
-        .map(|session| session.to_string())
-}
-
-#[tokio::test]
-async fn a_session_report_for_a_chat_that_became_a_workspace_goes_with_the_conversion() {
-    let (root, manager) = manager().await;
-    let (workspace, _process, _token) = converted(root.path(), &manager).await;
-
-    // The report found the chat before the conversion replaced it.
-    (manager.record_chat_session(&workspace.id, "s5".into()))
-        .await
-        .unwrap();
-
-    let kept = converting_session(&manager, &workspace).await;
-    assert_eq!(kept.as_deref(), Some("s5"));
 }

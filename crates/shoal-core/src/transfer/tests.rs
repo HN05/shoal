@@ -74,10 +74,11 @@ fn a_chat_package_holds_its_removal_record_and_continues_its_session() {
             "prs": [{"kind": "pr", "url": "https://forge.example/team/repo/pulls/14", "title": "Fix it"}],
             "related": [{"kind": "issue", "url": "https://forge.example/team/repo/issues/9", "title": null}],
         },
+        "last_sessions": [{"execution": "e1", "agent": "claude", "session": "s1"}],
         "cause": "manual",
         "removed_at": 1,
         "expires_at": 2,
-        "chat": {"agent": "claude", "mode": "plan", "session": "s1"},
+        "chat": {"agent": "claude", "mode": "plan"},
     }))
     .unwrap();
     let mut manifest = Manifest {
@@ -112,7 +113,7 @@ fn a_chat_package_holds_its_removal_record_and_continues_its_session() {
     // record it imports.
     let sessions = import.manifest.sessions_on(Some("m2"), None);
     let imported = import.manifest.space.record_with(sessions);
-    let session = imported.chat().unwrap().session.as_ref();
+    let session = (imported.last_sessions.first()).and_then(|last| last.session.as_ref());
     assert_eq!(session.map(AgentSessionId::as_str), Some("s1"));
     // Without its files, another machine starts a new session.
     manifest.session_files.clear();
