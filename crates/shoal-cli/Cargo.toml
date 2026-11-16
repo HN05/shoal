@@ -27,6 +27,7 @@ shoal-protocol = { workspace = true, features = ["clap"] }
 shoal-refs.workspace = true
 shoal-schedule.workspace = true
 shoal-subprocess.workspace = true
+shoal-workers.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "net", "io-util", "process", "rt", "rt-multi-thread", "signal", "sync", "time"] }
 toml.workspace = true

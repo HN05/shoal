@@ -4,16 +4,12 @@
 //! workspace repository's remotes to the `shoal::` transport, so Git hands
 //! every push to them to Shoal's remote helper, which asks the daemon before
 //! it pushes. Fetches keep their URLs.
-mod helper;
-
 use crate::paths::PathsExt;
 use std::{ffi::OsStr, os::unix::fs::PermissionsExt, path::Path};
 
 use anyhow::{Context, Result};
 
 use crate::{env, git, paths::Paths};
-
-pub use helper::serve;
 
 /// The transport the rewritten URLs name: Git runs `git-remote-shoal` for
 /// a URL that starts with `shoal::`.
@@ -109,7 +105,7 @@ fn write_helper(paths: &Paths) -> Result<tempfile::TempDir> {
 
 /// Remove the rewrites from the Git settings `command` passes on, for a
 /// push Shoal already authorized or the helper runs itself.
-pub(crate) fn strip(command: &mut tokio::process::Command) {
+pub fn strip(command: &mut tokio::process::Command) {
     crate::agent_git::retain(command, |(key, _)| !is_rewrite(key));
 }
 

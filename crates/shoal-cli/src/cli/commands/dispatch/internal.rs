@@ -112,10 +112,10 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             args,
         } => crate::secrets::run_tool(&ctx.paths, &launchers, &tool, args).await,
         InternalCommand::PushGate { remote, url } => {
-            crate::push_gate::serve(&ctx.paths, remote, url).await
+            shoal_workers::push_gate::serve(&ctx.paths, remote, url).await
         }
         InternalCommand::GitCredential { operation } => {
-            crate::git_credential::answer(&ctx.paths, operation).await
+            shoal_workers::git_credential::answer(&ctx.paths, operation).await
         }
         InternalCommand::QueueStart { entry } => crate::queued_starts::run(&ctx.paths, entry).await,
         InternalCommand::ChatStart => crate::chat_starts::run(&ctx.paths).await,

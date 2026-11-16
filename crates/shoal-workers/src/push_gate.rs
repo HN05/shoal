@@ -302,7 +302,7 @@ fn git(args: &[String]) -> tokio::process::Command {
         .args(args)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped());
-    super::strip(&mut command);
+    shoal_core::push_gate::strip(&mut command);
     command
 }
 

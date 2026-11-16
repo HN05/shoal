@@ -1295,6 +1295,7 @@ dependencies = [
  "shoal-refs",
  "shoal-schedule",
  "shoal-subprocess",
+ "shoal-workers",
  "tempfile",
  "tokio",
  "toml",
@@ -1539,6 +1540,18 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "shoal-workers"
+version = "0.17.2"
+dependencies = [
+ "anyhow",
+ "shoal-client",
+ "shoal-core",
+ "shoal-protocol",
+ "shoal-refs",
+ "tokio",
 ]
 
 [[package]]

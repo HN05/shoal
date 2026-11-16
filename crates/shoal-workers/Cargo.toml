@@ -1,0 +1,19 @@
+[package]
+name = "shoal-workers"
+version.workspace = true
+description = "The execution wrapper and the workers: the code that runs in the processes Shoal starts and calls the daemon"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+shoal-client.workspace = true
+shoal-core.workspace = true
+shoal-protocol.workspace = true
+shoal-refs.workspace = true
+tokio = { workspace = true, features = ["process"] }
+
+[dev-dependencies]
+shoal-core = { workspace = true, features = ["test-support"] }

@@ -34,6 +34,7 @@ shoal-schedule = { path = "crates/shoal-schedule" }
 shoal-states = { path = "crates/shoal-states" }
 shoal-subprocess = { path = "crates/shoal-subprocess" }
 shoal-time = { path = "crates/shoal-time" }
+shoal-workers = { path = "crates/shoal-workers" }
 tempfile = "3"
 tokio = "1"
 toml = "1.1.6"
