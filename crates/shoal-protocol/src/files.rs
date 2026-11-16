@@ -155,18 +155,21 @@ impl From<&AttachedFile> for SentFile {
     }
 }
 
+/// The space a file is attached to, which may be gone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AttachedTo {
+    pub id: SpaceId,
+    /// Its name when the file was attached, or its last once it is removed.
+    pub name: SpaceName,
+    pub kind: crate::model::SpaceKind,
+}
+
 /// A file attached to a workspace or chat: Shoal's copy and how it came.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AttachedFile {
     pub id: i64,
-    /// The name of the workspace it is attached to: when it was attached, or
-    /// the last one once the workspace is removed. None for a chat's file.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workspace: Option<SpaceName>,
-    /// The name of the chat it is attached to, as [`Self::workspace`] names
-    /// a workspace's.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub chat: Option<SpaceName>,
+    /// The space it is attached to.
+    pub space: AttachedTo,
     pub source: FileSource,
     /// The attached file's name.
     pub name: String,

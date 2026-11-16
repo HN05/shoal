@@ -101,7 +101,7 @@ async fn every_route_records_one_added_event_per_file() {
         .unwrap();
     let added = &events[2];
     assert_eq!(
-        (&added.space_id, added.space_kind),
+        (&added.file.space.id, added.file.space.kind),
         (&workspace.id, SpaceKind::Workspace)
     );
     assert_eq!(
@@ -122,7 +122,7 @@ async fn every_route_records_one_added_event_per_file() {
         .unwrap();
     assert_eq!(line["type"], "file");
     assert_eq!(line["kind"], "file_added");
-    assert_eq!(line["file"]["workspace"], workspace.name.as_str());
+    assert_eq!(line["file"]["space"]["name"], workspace.name.as_str());
 }
 
 #[tokio::test]
@@ -258,10 +258,10 @@ async fn every_deletion_records_one_removed_event_per_file() {
     // A removed workspace's events keep its identity.
     let gone = &removed[2];
     assert_eq!(
-        (&gone.space_id, gone.space_kind),
+        (&gone.file.space.id, gone.file.space.kind),
         (&expired.id, SpaceKind::Workspace)
     );
-    assert_eq!(gone.file.workspace.as_deref(), Some("expired"));
+    assert_eq!(gone.file.space.name, "expired");
     assert_eq!(
         gone.repository_id.as_ref(),
         workspace.repository_id.as_ref()
@@ -313,10 +313,10 @@ async fn a_chats_file_events_name_the_chat() {
     );
     for event in &events {
         assert_eq!(
-            (&event.space_id, event.space_kind),
+            (&event.file.space.id, event.file.space.kind),
             (&chat.id, SpaceKind::Chat)
         );
-        assert_eq!(event.file.chat.as_deref(), Some("planning"));
+        assert_eq!(event.file.space.name, "planning");
     }
 }
 
@@ -374,7 +374,7 @@ async fn the_file_events_of_a_chat_without_a_repository_name_none() {
     );
     for event in &events {
         assert_eq!(
-            (&event.space_id, event.space_kind),
+            (&event.file.space.id, event.file.space.kind),
             (&chat.id, SpaceKind::Chat)
         );
         assert_eq!(event.repository_id, None);

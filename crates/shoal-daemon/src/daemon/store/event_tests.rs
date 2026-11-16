@@ -740,7 +740,7 @@ fn the_journal_names_every_space_it_recorded_by_its_id_and_kind() -> Result<()> 
     );
     let file: FileEventDetails = serde_json::from_str(&rows[4].3)?;
     assert_eq!(
-        (file.space_id.as_str(), file.space_kind),
+        (file.file.space.id.as_str(), file.file.space.kind),
         ("c", SpaceKind::Chat)
     );
     let shoal: ShoalEventDetails = serde_json::from_str(&rows[6].3)?;

@@ -32,11 +32,7 @@ pub(super) fn describe(entry: &LogEntry) -> (String, String) {
 pub(super) fn space(entry: &LogEntry) -> String {
     match entry {
         LogEntry::Event(event) => event.details.name.to_string(),
-        LogEntry::File(event) => {
-            let file = &event.details.file;
-            (file.workspace.as_ref().or(file.chat.as_ref()))
-                .map_or_else(String::new, ToString::to_string)
-        }
+        LogEntry::File(event) => event.details.file.space.name.to_string(),
         LogEntry::Shoal(_) => "Shoal".to_owned(),
     }
 }

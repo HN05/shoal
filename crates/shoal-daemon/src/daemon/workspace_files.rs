@@ -30,7 +30,7 @@ pub(crate) use records::{
 use layout::{Kept, Layout};
 
 pub(crate) use shoal_protocol::files::{
-    AttachedFile, Attacher, FileSource, NewFile, SentFile, check_path, check_sent,
+    AttachedFile, AttachedTo, Attacher, FileSource, NewFile, SentFile, check_path, check_sent,
     missing_selection,
 };
 #[cfg(test)]

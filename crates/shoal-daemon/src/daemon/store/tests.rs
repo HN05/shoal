@@ -641,6 +641,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 202 {
         db.execute_batch(include_str!("issue_proposal_heads.sql"))?;
     }
+    if version >= 203 {
+        db.execute_batch(include_str!("file_spaces.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -2217,6 +2220,45 @@ fn migrated_issue_proposals_name_the_workspace_head_in_one_value() -> Result<()>
 }
 
 #[test]
+fn migrated_file_events_name_their_space_in_the_file() -> Result<()> {
+    use crate::{daemon::events::FileEventDetails, model::SpaceKind};
+    let mut db = historical_database(202)?;
+    db.execute(
+        r#"INSERT INTO space_events(space_id,record) VALUES ('chat','{"kind":"file_added",
+            "space_id":"chat","space_kind":"chat","repository_id":"repo","file":{"id":1,
+            "chat":"planning","source":"added","name":"notes.md","path":"/notes.md","bytes":1,
+            "created_at":1}}')"#,
+        [],
+    )?;
+
+    migrate(&mut db)?;
+    // A file attached since names its space as the migrated event does.
+    db.execute(
+        "INSERT INTO space_files(space_id,space,repository_id,source,name,path,bytes,created_at)
+            VALUES ('workspace','worker','repo','added','report.md','/report.md',1,2)",
+        [],
+    )?;
+
+    let spaces: Vec<(String, String, SpaceKind)> = db
+        .prepare("SELECT record FROM space_events WHERE json_extract(record,'$.kind')='file_added' ORDER BY id")?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .map(|record| {
+            let details: FileEventDetails = serde_json::from_str(&record?)?;
+            let space = details.file.space;
+            Ok((space.id.to_string(), space.name.to_string(), space.kind))
+        })
+        .collect::<Result<_>>()?;
+    assert_eq!(
+        spaces,
+        [
+            ("chat".into(), "planning".into(), SpaceKind::Chat),
+            ("workspace".into(), "worker".into(), SpaceKind::Workspace),
+        ]
+    );
+    Ok(())
+}
+
+#[test]
 fn failed_migration_rolls_back_all_pending_steps() -> Result<()> {
     let mut db = historical_database(1)?;
     db.execute_batch("ALTER TABLE executions ADD COLUMN wrapper TEXT;")?;
@@ -3211,7 +3253,7 @@ fn removed_spaces_keep_their_files_until_their_chat_or_removal_record_expires() 
     // A removed chat's file events still name it as a chat.
     db.execute("DELETE FROM space_files WHERE space_id='chat'", [])?;
     let chat: (String, String) = db.query_row(
-        "SELECT space_id,json_extract(record,'$.space_kind') FROM space_events
+        "SELECT space_id,json_extract(record,'$.file.space.kind') FROM space_events
             WHERE json_extract(record,'$.kind')='file_removed'",
         [],
         |r| Ok((r.get(0)?, r.get(1)?)),

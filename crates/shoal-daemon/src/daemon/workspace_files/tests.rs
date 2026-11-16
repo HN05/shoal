@@ -263,7 +263,7 @@ async fn files_sent_with_messages_are_listed_until_they_expire() {
     assert_eq!(listed.name, "crash.log");
     assert_eq!(listed.bytes, 5);
     assert_eq!(listed.source, FileSource::Message);
-    assert_eq!(listed.workspace.as_deref(), Some("receiver"));
+    assert_eq!(listed.space.name, "receiver");
     assert_eq!(std::fs::read_to_string(&listed.path).unwrap(), "panic");
 
     manager
@@ -580,7 +580,7 @@ async fn deleting_every_workspaces_files_spares_active_ones() {
     let [gone] = deleted.as_slice() else {
         panic!("{deleted:?}");
     };
-    assert_eq!(gone.workspace.as_deref(), Some("receiver"));
+    assert_eq!(gone.space.name, "receiver");
     assert!(!gone.path.exists());
     for spared in [&active, &unresolved] {
         assert_eq!(
@@ -921,7 +921,7 @@ async fn kept_results_answer_to_the_name_the_workspace_had_when_removed() {
         .attached_files(&SpaceSelector::id(&renamed.id))
         .await
         .unwrap();
-    assert_eq!(files[0].workspace, Some(renamed.name.clone()));
+    assert_eq!(files[0].space.name, renamed.name);
 }
 
 #[tokio::test]
@@ -1121,8 +1121,12 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
         .unwrap();
     assert_eq!(files, added);
     assert_eq!(
-        (files[0].chat.as_deref(), files[0].expires_at),
-        (Some("planning"), None)
+        (
+            files[0].space.name.as_str(),
+            files[0].space.kind,
+            files[0].expires_at
+        ),
+        ("planning", crate::model::SpaceKind::Chat, None)
     );
     // Deleting the files of every idle workspace spares a running chat's.
     assert!(manager.remove_idle_files().await.unwrap().is_empty());
@@ -1204,7 +1208,7 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
         let files = (manager.attached_files(&SpaceSelector::id(&chat.id)))
             .await
             .unwrap();
-        assert_eq!(files[0].chat.as_deref(), Some("planning"), "{files:?}");
+        assert_eq!(files[0].space.name, "planning", "{files:?}");
         assert!(files[0].expires_at.is_some(), "{files:?}");
     }
     manager.expire_results().await.unwrap();
@@ -1451,7 +1455,7 @@ async fn a_disposable_workspaces_files_outlive_it_for_the_retention_period() {
         panic!("{kept:?}");
     };
     assert_eq!(kept.path, added.path);
-    assert_eq!(kept.workspace.as_deref(), Some("scratch"));
+    assert_eq!(kept.space.name, "scratch");
     assert!(kept.expires_at.is_some());
     assert!(added.path.exists());
 }

@@ -5652,7 +5652,7 @@ unchanged.
 A `type: "file"` line records a file [attached](#attached-files) to a workspace
 or chat by any route (`kind: "file_added"`) or deleted by any route, including
 `shoal files rm`, workspace removal, the retention sweep and disk space cleanup
-(`kind: "file_removed"`): its `id`, `created_at`, `space_id`, `space_kind`,
+(`kind: "file_removed"`): its `id`, `created_at`,
 `repository_id` (null for a chat without a repository),
 and `file`, the record as
 `shoal files --json` lists it, with its own `id`. Attaching a file that is
@@ -5853,8 +5853,8 @@ them back to the space it reopens, where they were. Disk space cleanup
 deletes them sooner when nothing else frees enough space. A space is named by
 the workspace's or chat's number or ID, a removed one's by ID; run from a chat's agent outside any workspace, `shoal files`, `add`
 and `rm` act on its chat.
-`--json` gives each as a record with `workspace` or `chat`, the name of what it
-is attached to, `source`, `path`, `bytes`, `title` when it has one, and
+`--json` gives each as a record with `space`, what it is attached to, by its
+`id`, its `name` then or its last once removed, and its `kind`, `source`, `path`, `bytes`, `title` when it has one, and
 `attached_by`:
 `{"kind": "user"}` for a file attached from outside any agent,
 `{"kind": "agent"}` with a workspace agent's name as `agent`, its `execution`

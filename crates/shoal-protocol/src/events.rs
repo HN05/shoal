@@ -507,13 +507,11 @@ pub struct FileEvent {
     pub details: FileEventDetails,
 }
 
-/// A file event as stored: its space may be gone, so it carries the space's
-/// identity in place of its record.
+/// A file event as stored: its space may be gone, so its file carries the
+/// space's identity in place of its record.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileEventDetails {
     pub kind: FileEventKind,
-    pub space_id: SpaceId,
-    pub space_kind: SpaceKind,
     /// Null for the file of a chat without a repository.
     pub repository_id: Option<RepositoryId>,
     /// The record as `shoal files` lists it.

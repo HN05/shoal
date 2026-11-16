@@ -4,18 +4,21 @@
 //! its ID; its row in `removed_space_files` says how long its files stay.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::space_names::SpaceName;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
-use super::{AttachedFile, Attacher, FileSource, HomeKey, SentFile, Space, layout::Copy};
+use super::{
+    AttachedFile, AttachedTo, Attacher, FileSource, HomeKey, SentFile, Space, layout::Copy,
+};
+use shoal_protocol::model::SpaceKind;
 
 const COLUMNS: &str = "id,space,source,name,title,path,bytes,created_at,attached_by,
     (SELECT expires_at FROM removed_space_files r WHERE r.space_id=space_files.space_id),
     space_id IN (SELECT id FROM spaces WHERE kind='chat')
-        OR space_id IN (SELECT space_id FROM removed_space_files WHERE chat)";
+        OR space_id IN (SELECT space_id FROM removed_space_files WHERE chat),
+    space_id";
 
 /// The owners of attached files that are gone.
 const GONE: &str = "space_id NOT IN (SELECT id FROM spaces)";
@@ -59,15 +62,17 @@ pub(crate) fn ids_at(db: &Connection, paths: &[PathBuf]) -> Result<String> {
 }
 
 fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AttachedFile> {
-    let space: SpaceName = row.get(1)?;
-    let (workspace, chat) = match row.get(10)? {
-        true => (None, Some(space)),
-        false => (Some(space), None),
+    let kind = match row.get(10)? {
+        true => SpaceKind::Chat,
+        false => SpaceKind::Workspace,
     };
     Ok(AttachedFile {
         id: row.get(0)?,
-        workspace,
-        chat,
+        space: AttachedTo {
+            id: row.get(11)?,
+            name: row.get(1)?,
+            kind,
+        },
         source: row.get(2)?,
         name: row.get(3)?,
         title: row.get(4)?,
