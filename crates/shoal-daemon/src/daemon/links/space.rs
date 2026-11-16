@@ -35,6 +35,18 @@ impl From<Workspace> for LinkSpace {
     }
 }
 
+impl<'a> From<&'a LinkSpace> for crate::hooks::HookSpace<'a> {
+    fn from(space: &'a LinkSpace) -> Self {
+        match space {
+            LinkSpace::Workspace(workspace) => Self::Workspace(workspace),
+            LinkSpace::Chat { chat, checkout } => Self::Chat {
+                chat,
+                checkout: &checkout.path,
+            },
+        }
+    }
+}
+
 impl LinkSpace {
     pub(crate) fn id(&self) -> &SpaceId {
         match self {

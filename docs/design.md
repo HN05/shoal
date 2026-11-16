@@ -1006,7 +1006,7 @@ launch that a blocker holds queues before its workspace exists, so the
 workspace can start from the done blocker's branch: the entry records the
 caller's space, which the daemon starts it for and whose scope the user's
 process that opens the workspace then acts in, so it opens it only where the
-caller could. The launch keeps that space while it waits and goes with it. A workspace's
+caller could. The launch keeps that space while it waits and goes with it. A space's
 coordinator is the agent of the nearest space above it that has one, whatever
 its kind, which one operation queues a message for: the events about
 it that notify the user, the child agent's messages, questions and completion

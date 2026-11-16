@@ -23,11 +23,12 @@ use crate::{
         scope::Caller,
     },
     forge::items::link::{ItemKind, LinkKind, Selection},
-    hooks::{self, Hook, HookKind, HookSpace},
+    hooks::{self, Hook, HookKind},
     model::{Chat, ReadyMarks, Repository, ReviewMark, SkippedPr},
 };
 use pulls::Pulls;
-use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+use shoal_protocol::space_names::SpaceSelector;
+use shoal_refs::CommitId;
 
 mod pulls;
 
@@ -74,70 +75,50 @@ pub(crate) fn forget(db: &Connection, id: &SpaceId, urls: &[String]) -> Result<(
 }
 
 impl Manager {
-    /// Mark the selected linked items ready, or the workspace itself when
-    /// nothing is linked and nothing was selected. A linked PR is marked
-    /// only while it is open with HEAD as its head on the forge; the others are
-    /// skipped, and an explicitly selected one fails. Marking again refreshes
-    /// the mark and reruns `hooks.post_ready`. With
+    /// Mark the selected linked items ready, or the space itself when
+    /// nothing is linked and nothing was selected, and tell the space's
+    /// coordinator. A linked PR of a workspace is marked only while it is
+    /// open with HEAD as its head on the forge, and a chat's while it is open;
+    /// the others are skipped, and an explicitly selected one fails. Marking
+    /// again refreshes the mark and reruns `hooks.post_ready`. With
     /// `[pr] undraft_on_ready`, marked draft PRs leave draft before the hook runs,
     /// which removes their progress section with the next publication; a
     /// failure there keeps the marks and runs the hook. For a scoped
-    /// `caller`, `[review] require_for_ready` applies to HEAD.
+    /// `caller`, `[review] require_for_ready` applies to a workspace's HEAD.
     pub async fn mark_ready(
         &self,
         selector: &SpaceSelector,
         selection: Selection,
         caller: Option<&Caller>,
     ) -> Result<ReadyMarks> {
-        if let space @ LinkSpace::Chat { .. } = self.link_space(selector).await? {
-            return self.mark_chat_ready(&space, selection).await;
-        }
-        let id = self.workspace(selector).await?.id;
+        let id = self.link_space(selector).await?.id().to_owned();
         let _guard = self.lock_change_gates(&id, &[]).await?;
-        let workspace = self.workspace_by_id(&id).await?;
-        workspace.require_branch("shoal ready")?;
-        let settings = self.workspace_settings(&workspace).await?;
+        let space = self.link_space(&SpaceSelector::id(&id)).await?;
+        let head = self.ready_head(&space, caller).await?;
+        let settings = self.space_settings(&space).await?;
         let command = HookKind::PostReady
             .command(&settings)
-            .map(|path| workspace.path.join(path));
+            .map(|path| space.origin_path().join(path));
         // Like hooks.post_done, the hook excludes lifecycle and permit changes.
         let _resources = match command {
-            Some(_) => Some(
-                self.gates
-                    .resource_guard(&workspace.id, GuardMode::Exclusive)?,
-            ),
+            Some(_) => Some(self.gates.resource_guard(&id, GuardMode::Exclusive)?),
             None => None,
         };
-        self.verify_worktree(&workspace).await?;
-        let head = current_head(&workspace).await?;
-        if caller.is_some() {
-            self.require_review(&workspace, Gate::Ready, &head).await?;
-        }
         let kind = marked_kind(&selection)?;
-        let explicit = marked_item(self.explicit_item(&workspace.path, &selection).await?);
-        let space = LinkSpace::from(workspace.clone());
-        let pulls =
-            (self.markable_pulls(&space, kind, explicit.as_ref(), Some(head.as_str()))).await?;
-        let mut ready = (self.record_marks(&workspace.id, kind, explicit, pulls)).await?;
+        let explicit = marked_item(self.explicit_item(space.origin_path(), &selection).await?);
+        let head = head.as_ref().map(CommitId::as_str);
+        let pulls = (self.markable_pulls(&space, kind, explicit.as_ref(), head)).await?;
+        let mut ready = (self.record_marks(&id, kind, explicit, pulls)).await?;
         let undrafted = match settings.pr.undraft_on_ready {
             true => self.set_draft(&space, &pr_urls(&ready.marks), false).await,
             false => Ok(()),
         };
         if let Some(command) = command {
-            match self.configured_workspace_environment(&workspace).await {
-                Ok(configured) => {
-                    let marks = &ready.marks;
-                    (self.run_post_ready((&workspace).into(), &command, &configured, marks)).await;
-                }
-                Err(error) => {
-                    self.post_ready_failed((&workspace.name, &workspace.id), &error)
-                        .await
-                }
-            }
+            (self.run_post_ready(&space, &settings, &command, &ready.marks)).await;
         }
         self.tell_coordinator(
-            &workspace.name,
-            Some(&workspace.id),
+            space.name(),
+            Some(&id),
             None,
             ready_notice(&ready.marks),
             Vec::new(),
@@ -149,72 +130,62 @@ impl Manager {
         Ok(ready)
     }
 
-    /// [`Self::mark_ready`] for a chat, which works on no branch of its own,
-    /// so each linked open PR is marked whatever its head. A chat is unscoped,
-    /// so no review gate applies, and no coordinator hears of it.
-    async fn mark_chat_ready(&self, space: &LinkSpace, selection: Selection) -> Result<ReadyMarks> {
-        let LinkSpace::Chat { chat, checkout } = space else {
-            bail!("only a chat is marked this way");
+    /// The HEAD a workspace's marks are for, once `[review]
+    /// require_for_ready` passes for a scoped `caller`. A chat has none: it
+    /// works on no branch of its own, so its linked PRs are marked whatever
+    /// their head, and has no HEAD for a review to cover.
+    async fn ready_head(
+        &self,
+        space: &LinkSpace,
+        caller: Option<&Caller>,
+    ) -> Result<Option<CommitId>> {
+        let Some(workspace) = space.workspace() else {
+            return Ok(None);
         };
-        let _guard = self.lock_change_gates(space.id(), &[]).await?;
-        let settings = self.space_settings(space).await?;
-        let kind = marked_kind(&selection)?;
-        let explicit = marked_item(self.explicit_item(&checkout.path, &selection).await?);
-        let pulls = (self.markable_pulls(space, kind, explicit.as_ref(), None)).await?;
-        let mut ready = (self.record_marks(space.id(), kind, explicit, pulls)).await?;
-        let undrafted = match settings.pr.undraft_on_ready {
-            true => self.set_draft(space, &pr_urls(&ready.marks), false).await,
-            false => Ok(()),
-        };
-        if let Some(command) = HookKind::PostReady.command(&settings) {
-            let hook = HookSpace::Chat {
-                chat,
-                checkout: &checkout.path,
-            };
-            // As for a workspace, a hook that cannot run keeps the marks.
-            match chat_hook_environment(chat, checkout, &settings) {
-                Ok(configured) => {
-                    let command = checkout.path.join(command);
-                    self.run_post_ready(hook, &command, &configured, &ready.marks)
-                        .await;
-                }
-                Err(error) => self.post_ready_failed((&chat.name, &chat.id), &error).await,
-            }
+        workspace.require_branch("shoal ready")?;
+        self.verify_worktree(workspace).await?;
+        let head = current_head(workspace).await?;
+        if caller.is_some() {
+            self.require_review(workspace, Gate::Ready, &head).await?;
         }
-        undrafted.context("marked ready for review, but a PR is still a draft")?;
-        (self.check_conventions(space, &settings, &mut ready.marks)).await;
-        Ok(ready)
+        Ok(Some(head))
     }
 
-    /// Run `hooks.post_ready` in `space` with the `configured`
-    /// environment; a failure notifies and keeps the marks.
+    /// Run `hooks.post_ready` in `space` with what `[env]` adds; a failure,
+    /// or an environment that cannot be rendered, notifies and keeps the marks.
     async fn run_post_ready(
         &self,
-        space: HookSpace<'_>,
+        space: &LinkSpace,
+        settings: &Effective,
         command: &Path,
-        configured: &BTreeMap<String, OsString>,
         marks: &[ReviewMark],
     ) {
-        let hook = Hook::PostReady(marks);
-        let result = hooks::run_detached(hook, space, command, &self.paths, configured).await;
+        let result = match self.hook_environment(space, settings).await {
+            Ok(configured) => {
+                let hook = Hook::PostReady(marks);
+                hooks::run_detached(hook, space, command, &self.paths, &configured).await
+            }
+            Err(error) => Err(error),
+        };
         if let Err(error) = result {
-            let space = match space {
-                HookSpace::Workspace(workspace) => (&workspace.name, &workspace.id),
-                HookSpace::Chat { chat, .. } => (&chat.name, &chat.id),
-            };
-            self.post_ready_failed(space, &error).await;
+            let message = format!("marked ready for review; {error:#}");
+            let kind = NotificationKind::HookFailed;
+            (self.notify_space(space.name(), space.id(), kind, message)).await;
         }
     }
 
-    /// Tell the user that `hooks.post_ready` of the space failed.
-    async fn post_ready_failed(&self, (name, id): (&SpaceName, &SpaceId), error: &anyhow::Error) {
-        self.notify_space(
-            name,
-            id,
-            NotificationKind::HookFailed,
-            format!("marked ready for review; {error:#}"),
-        )
-        .await;
+    /// What `[env]` adds to the environment of the space's hooks.
+    async fn hook_environment(
+        &self,
+        space: &LinkSpace,
+        settings: &Effective,
+    ) -> Result<BTreeMap<String, OsString>> {
+        match space {
+            LinkSpace::Workspace(workspace) => {
+                self.configured_workspace_environment(workspace).await
+            }
+            LinkSpace::Chat { chat, checkout } => chat_hook_environment(chat, checkout, settings),
+        }
     }
 
     /// Record marks of `kind`, or of the `explicit` item, leaving out the
@@ -421,11 +392,11 @@ fn pr_urls(marks: &[ReviewMark]) -> Vec<ItemRef> {
         .collect()
 }
 
-/// What the coordinating agent hears when the workspace marks work ready.
+/// What the coordinating agent hears when the space marks work ready.
 fn ready_notice(marks: &[ReviewMark]) -> String {
     let items = marks
         .iter()
-        .map(|mark| mark.url.as_ref().map_or("the workspace", ItemRef::url))
+        .map(|mark| mark.url.as_ref().map_or("the space", ItemRef::url))
         .collect::<Vec<_>>()
         .join(", ");
     format!("marked ready for review: {items}")

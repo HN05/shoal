@@ -2830,15 +2830,15 @@ the agent's own workspace as a Codex subagent does with the agent's
 instructions, the child its brief names, leaving the agent's own workspace for
 the agent to finish.
 
-A workspace's coordinator is the agent of its nearest ancestor that has one,
-or the running [chat](#chats) that owns the workspace or an ancestor nearer than
-that agent. The coordinator receives, as messages naming the workspace, what
-would otherwise notify the user. That covers the workspace agent's messages from
-`shoal alerts send`, its questions, its completion, and its ready-for-review marks,
-which never notify the user otherwise. It also covers the daemon's reports that
-the workspace's agent exited or was stopped. Without a coordinator, or when its unread messages are full,
-the user receives them as before. A workspace without an agent of its own is its
-coordinator's own work, so what a process does there reaches the user. A
+A space's coordinator is the agent of its nearest ancestor that has one, a
+workspace's or a [chat](#chats)'s. The coordinator receives, as messages naming
+the space, what would otherwise notify the user. That covers the space agent's
+messages from `shoal alerts send`, its questions, its completion, and its
+ready-for-review marks, which never notify the user otherwise. It also covers
+the daemon's reports that the space's agent exited or was stopped. Without a
+coordinator, or when its unread messages are full, the user receives them as
+before. A space without an agent of its own is its coordinator's own work, so
+what a process does there reaches the user. A
 coordinator answers a question asked below it with
 `shoal questions <S.N> --answer <answer>`, or passes it up: an agent with its own
 `shoal questions ask`, a chat by asking the user in the chat.

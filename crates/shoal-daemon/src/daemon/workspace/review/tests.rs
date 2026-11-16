@@ -7,6 +7,7 @@ use crate::{
     },
     forge::{ForgeRepo, items::reference::ItemRef},
     protocol::AssignmentMethod,
+    state::AgentState,
 };
 use shoal_forge::test_support::Server;
 use shoal_protocol::space_names::SpaceSelector;
@@ -800,4 +801,59 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .unwrap();
     assert!(draft());
     assert_eq!(marks().await, 0);
+}
+
+#[tokio::test]
+async fn a_chats_ready_mark_reaches_the_agent_above_it() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let coordinator = manager
+        .create_workspace(&repo.id, "coordinator".into(), None, None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(repo.id.into(), "review".into(), "claude".into(), None)
+        .await
+        .unwrap();
+    // The chat acts on the forge through its repository's checkout.
+    let github = FakeGitHub::start(&manager).await;
+    git(&checkout, &["remote", "add", "origin", &github.remote()]);
+    manager
+        .assign_parent(&chat.id, Some(coordinator.id.clone()))
+        .await
+        .unwrap();
+    for id in [&coordinator.id, &chat.id] {
+        manager
+            .set_agent_state(&SpaceSelector::id(id), AgentState::Working, None, None)
+            .await
+            .unwrap();
+    }
+    let pr = url_of(
+        &ForgeRepo::parse(&github.remote()).unwrap(),
+        LinkKind::Pr,
+        12,
+    );
+    link(&manager, chat.id.as_str(), &pr, None).await;
+
+    manager
+        .mark_ready(&SpaceSelector::id(&chat.id), Selection::default(), None)
+        .await
+        .unwrap();
+    let received: Vec<_> = (manager.agent_messages(&SpaceSelector::id(&coordinator.id)))
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|message| message.message)
+        .collect();
+    assert_eq!(
+        received,
+        [format!(
+            "{} review: marked ready for review: {pr}",
+            chat.number
+        )]
+    );
 }
