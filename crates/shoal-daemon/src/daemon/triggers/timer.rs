@@ -122,7 +122,7 @@ impl Manager {
         let Some(queued) = queued else {
             return Ok(());
         };
-        if self.agent_running_or_queued(&queued.waits_for).await? {
+        if self.still_running(&queued.waits_for).await? {
             return Ok(());
         }
         let firing = Firing {
@@ -134,10 +134,7 @@ impl Manager {
             .launch_trigger(trigger, &firing, queued.waiting)
             .await?;
         self.store
-            .write(move |tx| {
-                let space = run.space_id.as_ref();
-                state::settle(tx, queued.id, run.outcome, run.reason.as_deref(), space)
-            })
+            .write(move |tx| state::settle(tx, queued.id, &run))
             .await
     }
 
@@ -180,5 +177,6 @@ fn missed_run(first: UnixTime, last: UnixTime) -> TriggerRun {
         outcome: RunOutcome::Skipped,
         reason: Some(reason),
         space_id: None,
+        queue_entry: None,
     }
 }

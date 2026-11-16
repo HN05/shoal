@@ -3,7 +3,7 @@
 //! scoped caller's permission allows.
 use std::{sync::Arc, time::Duration};
 
-use shoal_ids::space_ids::SpaceId;
+use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use shoal_protocol::triggers::{RunOrigin, RunOutcome, TriggerRun};
 
 use crate::{
@@ -15,7 +15,7 @@ use crate::{
         triggers::firing::Firing,
         workspace::Manager,
     },
-    model::Repository,
+    model::{ChatQueueRequest, Repository},
     paths::Paths,
     protocol::ItemContext,
     time::UnixTime,
@@ -83,6 +83,7 @@ async fn runs(manager: &Manager, repo: &Repository, name: &str) -> Vec<TriggerRu
                     outcome: row.get(2)?,
                     reason: row.get(3)?,
                     space_id: row.get(4)?,
+                    queue_entry: None,
                 })
             })?;
             Ok(runs.collect::<rusqlite::Result<Vec<_>>>()?)
@@ -198,13 +199,26 @@ async fn a_paused_trigger_waits_and_resumes_without_catching_up() {
 
 /// Record a started run of the repository's trigger `name` in `space`.
 async fn started_in(manager: &Manager, repo: &Repository, name: &str, space: &SpaceId) {
+    record_started(manager, repo, name, Some(space.clone()), None).await;
+}
+
+/// Record a started run of the repository's trigger `name` that launched
+/// `space`, else the launch waiting in the agent queue as `entry`.
+async fn record_started(
+    manager: &Manager,
+    repo: &Repository,
+    name: &str,
+    space_id: Option<SpaceId>,
+    queue_entry: Option<QueueEntryId>,
+) {
     let (scope, name) = (repo.id.to_string(), name.to_owned());
     let run = TriggerRun {
         at: UnixTime::now(),
         origin: RunOrigin::Source,
         outcome: RunOutcome::Started,
         reason: None,
-        space_id: Some(space.clone()),
+        space_id,
+        queue_entry,
     };
     manager
         .store
@@ -273,6 +287,33 @@ async fn overlap_queue_launches_once_the_last_agent_stops() {
         ]
     );
     assert_eq!(started_tasks(), [vec!["Check".to_owned()]]);
+}
+
+#[tokio::test]
+async fn a_launch_waiting_in_the_agent_queue_overlaps_until_it_ends() {
+    let (_temp, manager, repo) = with_triggers(&overlapping("skip")).await;
+    let request = ChatQueueRequest {
+        source: None,
+        repository: Some((&repo.id).into()),
+        name: "waiting".into(),
+        agent: "claude".into(),
+        mode: "chat".into(),
+        narrowing: Default::default(),
+        plan: "{}".into(),
+        env: Default::default(),
+        now: false,
+        priority: None,
+        records_when_waiting: false,
+    };
+    let admission = manager.queue_chat_add(request, None).await.unwrap();
+    let entry = admission.entry.unwrap().id;
+    record_started(&manager, &repo, "check", None, Some(entry.clone())).await;
+
+    let waiting = fire(&manager, &repo, "check").await;
+    assert_eq!(waiting.unwrap().outcome, RunOutcome::Skipped);
+    manager.fail_queue_entry(&entry, "cancelled").await.unwrap();
+    let ended = fire(&manager, &repo, "check").await;
+    assert_eq!(ended.unwrap().outcome, RunOutcome::Started);
 }
 
 #[tokio::test]

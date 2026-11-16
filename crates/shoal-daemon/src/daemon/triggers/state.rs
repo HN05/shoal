@@ -3,7 +3,7 @@
 //! it started.
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
-use shoal_ids::space_ids::SpaceId;
+use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use shoal_protocol::launches::Launch;
 use shoal_protocol::triggers::{RunOutcome, TriggerRun};
 
@@ -40,11 +40,43 @@ pub(super) struct Waiting {
     pub key: Option<String>,
 }
 
+/// What a started run launched: the space it started, or the agent queue
+/// entry of a new space's launch that waits there to open it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum Started {
+    Space(SpaceId),
+    Entry(QueueEntryId),
+}
+
+impl Started {
+    /// What a run that launched `space`, else `entry`, launched.
+    fn of(space: Option<SpaceId>, entry: Option<QueueEntryId>) -> Option<Self> {
+        space.map(Self::Space).or(entry.map(Self::Entry))
+    }
+
+    /// The run's `space_id` and `queue_entry`.
+    pub fn columns(&self) -> (Option<&SpaceId>, Option<&QueueEntryId>) {
+        match self {
+            Self::Space(space) => (Some(space), None),
+            Self::Entry(entry) => (None, Some(entry)),
+        }
+    }
+}
+
+impl std::fmt::Display for Started {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Space(space) => write!(f, "space {space}"),
+            Self::Entry(entry) => write!(f, "queued launch {entry}"),
+        }
+    }
+}
+
 /// A queued run of a trigger.
 pub(super) struct Queued {
     pub id: i64,
-    /// The space whose agent it waits for.
-    pub waits_for: SpaceId,
+    /// What it waits for: the trigger's last launch, until its agent stops.
+    pub waits_for: Started,
     pub waiting: Waiting,
 }
 
@@ -119,8 +151,8 @@ pub(super) fn record(
 ) -> Result<()> {
     let waiting = waiting.map(serde_json::to_string).transpose()?;
     db.execute(
-        "INSERT INTO trigger_runs(scope,name,at,origin,outcome,reason,space_id,launch)
-            VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+        "INSERT INTO trigger_runs(scope,name,at,origin,outcome,reason,space_id,queue_entry,launch)
+            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
         params![
             scope,
             name,
@@ -129,6 +161,7 @@ pub(super) fn record(
             run.outcome,
             run.reason,
             run.space_id,
+            run.queue_entry,
             waiting,
         ],
     )?;
@@ -144,7 +177,7 @@ pub(super) fn record(
 pub(super) fn last_run(db: &Connection, scope: &str, name: &str) -> Result<Option<TriggerRun>> {
     Ok(db
         .query_row(
-            "SELECT at,origin,outcome,reason,space_id FROM trigger_runs
+            "SELECT at,origin,outcome,reason,space_id,queue_entry FROM trigger_runs
                 WHERE scope=?1 AND name=?2 ORDER BY id DESC LIMIT 1",
             params![scope, name],
             |row| {
@@ -154,36 +187,57 @@ pub(super) fn last_run(db: &Connection, scope: &str, name: &str) -> Result<Optio
                     outcome: row.get(2)?,
                     reason: row.get(3)?,
                     space_id: row.get(4)?,
+                    queue_entry: row.get(5)?,
                 })
             },
         )
         .optional()?)
 }
 
-/// The space the trigger's newest started run started.
-pub(super) fn last_space(db: &Connection, scope: &str, name: &str) -> Result<Option<SpaceId>> {
-    Ok(db
+/// The trigger's newest started run that launched something, by its ID,
+/// with what it launched.
+pub(super) fn last_started(
+    db: &Connection,
+    scope: &str,
+    name: &str,
+) -> Result<Option<(i64, Started)>> {
+    let row = db
         .query_row(
-            "SELECT space_id FROM trigger_runs
-                WHERE scope=?1 AND name=?2 AND outcome=?3 AND space_id IS NOT NULL
+            "SELECT id,space_id,queue_entry FROM trigger_runs
+                WHERE scope=?1 AND name=?2 AND outcome=?3
+                    AND (space_id IS NOT NULL OR queue_entry IS NOT NULL)
                 ORDER BY id DESC LIMIT 1",
             params![scope, name, RunOutcome::Started],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
-        .optional()?)
+        .optional()?;
+    Ok(row.and_then(|(id, space, entry)| Some((id, Started::of(space, entry)?))))
+}
+
+/// Record that the run `id`, whose launch waited in the agent queue,
+/// opened `space`.
+pub(super) fn opened(db: &Connection, id: i64, space: &SpaceId) -> Result<()> {
+    db.execute(
+        "UPDATE trigger_runs SET space_id=?2 WHERE id=?1",
+        params![id, space],
+    )?;
+    Ok(())
 }
 
 /// The trigger's run that waits to launch, if any.
 pub(super) fn queued(db: &Connection, scope: &str, name: &str) -> Result<Option<Queued>> {
     let row = db
         .query_row(
-            "SELECT id,space_id,launch FROM trigger_runs
+            "SELECT id,space_id,queue_entry,launch FROM trigger_runs
                 WHERE scope=?1 AND name=?2 AND outcome=?3 ORDER BY id LIMIT 1",
             params![scope, name, RunOutcome::Queued],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get::<_, String>(2)?)),
+            |row| {
+                let started = Started::of(row.get(1)?, row.get(2)?);
+                Ok((row.get(0)?, started, row.get::<_, String>(3)?))
+            },
         )
         .optional()?;
-    let Some((id, waits_for, waiting)) = row else {
+    let Some((id, Some(waits_for), waiting)) = row else {
         return Ok(None);
     };
     Ok(Some(Queued {
@@ -193,18 +247,13 @@ pub(super) fn queued(db: &Connection, scope: &str, name: &str) -> Result<Option<
     }))
 }
 
-/// Record how the queued run `id` ended: started in `space`, or failed for
-/// `reason`.
-pub(super) fn settle(
-    db: &Connection,
-    id: i64,
-    outcome: RunOutcome,
-    reason: Option<&str>,
-    space: Option<&SpaceId>,
-) -> Result<()> {
+/// Record how the queued run `id` ended, as `run` did: started, with what
+/// it launched, or failed for its reason.
+pub(super) fn settle(db: &Connection, id: i64, run: &TriggerRun) -> Result<()> {
     db.execute(
-        "UPDATE trigger_runs SET outcome=?2,reason=?3,space_id=?4,launch=NULL WHERE id=?1",
-        params![id, outcome, reason, space],
+        "UPDATE trigger_runs SET outcome=?2,reason=?3,space_id=?4,queue_entry=?5,launch=NULL
+            WHERE id=?1",
+        params![id, run.outcome, run.reason, run.space_id, run.queue_entry],
     )?;
     Ok(())
 }

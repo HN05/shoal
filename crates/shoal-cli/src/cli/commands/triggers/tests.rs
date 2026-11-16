@@ -29,6 +29,7 @@ fn rows_name_where_each_trigger_is_and_what_its_last_run_did() {
         outcome: RunOutcome::Queued,
         reason: None,
         space_id: Some("s1".into()),
+        queue_entry: None,
     };
     let triggers = [
         status("nightly", None, None),

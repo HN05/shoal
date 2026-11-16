@@ -2291,11 +2291,12 @@ the launch's source, which [`shoal log`](#space-log) shows with the agent's
 start. A path with no value, a value its flag refuses or a launch that fails
 fails the run, recording why.
 
-Only a firing that would start a new space meets `overlap`: while the space of
-the trigger's last started run still has its agent running or queued, `skip`
-records the run as skipped, `queue` records it as queued and launches it once
-that agent stops, skipping any further firing while one waits, and `parallel`
-launches at once. A run whose rendered `key` matches that of a run the trigger
+Only a firing that would start a new space meets `overlap`: while the agent
+of the trigger's last started run still runs or is queued, its new space's
+launch still waiting in the agent queue included, or while a queued run of
+the trigger waits, `skip` records the run as skipped, `queue` records it as
+queued and launches it once that agent stops, skipping any further firing
+while one waits, and `parallel` launches at once. A run whose rendered `key` matches that of a run the trigger
 started within `key_window` is recorded as a duplicate; the keys outlive
 restarts until their window ends. A trigger without a key never drops a firing
 as a duplicate.

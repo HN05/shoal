@@ -144,15 +144,17 @@ fn configured_in(repository: Option<&RepositoryId>, repositories: &[Repository])
         )
 }
 
-/// A run's outcome, with the space it started or waits for, or why it
-/// skipped or failed.
+/// A run's outcome, with the space it started or waits for, or the queued
+/// launch of a space not yet opened, or why it skipped or failed.
 fn run_text(run: &TriggerRun) -> String {
-    let detail = match (&run.space_id, &run.reason) {
+    let launched = (run.space_id.as_ref().map(|space| format!("space {space}")))
+        .or_else(|| (run.queue_entry.as_ref()).map(|entry| format!("queued launch {entry}")));
+    let detail = match (launched, &run.reason) {
         (_, Some(reason)) => format!(": {reason}"),
-        (Some(space), None) if run.outcome == RunOutcome::Queued => {
-            format!(", waiting for space {space}")
+        (Some(launched), None) if run.outcome == RunOutcome::Queued => {
+            format!(", waiting for {launched}")
         }
-        (Some(space), None) => format!(" space {space}"),
+        (Some(launched), None) => format!(" {launched}"),
         (None, None) => String::new(),
     };
     format!("{}{detail}", run.outcome)

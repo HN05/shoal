@@ -1,7 +1,7 @@
 //! Triggers: `[triggers.NAME]` config that starts agents when an event
 //! source fires, and the runtime state the daemon keeps for each.
 use serde::{Deserialize, Serialize};
-use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_states::states;
 
 use crate::time::UnixTime;
@@ -63,6 +63,10 @@ pub struct TriggerRun {
     /// The space it started, or the one it waits for while queued.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub space_id: Option<SpaceId>,
+    /// The agent queue entry of a new space's launch that waited there
+    /// before it opened its space, or that a queued run waits for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queue_entry: Option<QueueEntryId>,
 }
 
 /// A configured trigger with its runtime state, as `shoal trigger ls`

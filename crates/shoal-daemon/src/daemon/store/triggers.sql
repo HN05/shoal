@@ -13,8 +13,10 @@ CREATE TABLE trigger_states (
     PRIMARY KEY(scope, name)
 );
 
--- Each trigger's newest runs. A queued run keeps the launch it waits to
--- make, as JSON, and the space whose agent it waits for, until it starts.
+-- Each trigger's newest runs, with the space a started run started, or the
+-- agent queue entry of its new space's launch until that opens the space. A
+-- queued run keeps the launch it waits to make, as JSON, and the space or
+-- entry it waits for, until it starts.
 CREATE TABLE trigger_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     scope TEXT NOT NULL,
@@ -24,6 +26,7 @@ CREATE TABLE trigger_runs (
     outcome TEXT NOT NULL CHECK(outcome IN ('started','queued','skipped','duplicate','failed')),
     reason TEXT,
     space_id TEXT,
+    queue_entry TEXT,
     launch TEXT
 );
 CREATE INDEX trigger_runs_by_trigger ON trigger_runs(scope, name, id);

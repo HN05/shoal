@@ -6,13 +6,13 @@ use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
 use serde_json::Value;
-use shoal_ids::space_ids::SpaceId;
+use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use shoal_protocol::launches::{Launch, LaunchSource, Launched};
 use shoal_protocol::triggers::{RunOrigin, RunOutcome, TriggerRun};
 
 use super::{
     Configured,
-    state::{self, Waiting},
+    state::{self, Started, Waiting},
 };
 use crate::{
     daemon::workspace::Manager,
@@ -42,12 +42,12 @@ impl From<TriggerRun> for Ran {
 }
 
 /// What a firing's launch meets: a run of the trigger that waits to
-/// launch, or else the trigger's last space, while its agent runs or waits
-/// in the agent queue.
+/// launch, or else the trigger's last launch, while its agent runs or
+/// waits in the agent queue.
 enum Overlapping {
     Free,
     Waiting,
-    Busy(SpaceId),
+    Busy(Started),
 }
 
 impl Manager {
@@ -123,8 +123,7 @@ impl Manager {
                 Ok(run(firing, RunOutcome::Skipped, Some(reason)).into())
             }
             (Overlapping::Busy(busy), Overlap::Skip) => {
-                let reason =
-                    format!("the agent of space {busy}, from the last run, has not stopped");
+                let reason = format!("the agent of {busy}, from the last run, has not stopped");
                 Ok(run(firing, RunOutcome::Skipped, Some(reason)).into())
             }
             (Overlapping::Busy(busy), Overlap::Queue) => Ok(queued(firing, waiting, busy)),
@@ -133,8 +132,8 @@ impl Manager {
 
     /// What `launch`, which would start a new space, meets: a queued run of
     /// the trigger, whatever its last agent does now, else the trigger's
-    /// last space while its agent runs or is queued; a launch in an existing
-    /// workspace meets none.
+    /// last launch while its agent runs or is queued; a launch in an
+    /// existing workspace meets none.
     async fn overlapping(&self, trigger: &Configured, launch: &Launch) -> Result<Overlapping> {
         if launch.in_workspace.is_some() {
             return Ok(Overlapping::Free);
@@ -144,22 +143,57 @@ impl Manager {
             .store
             .read(move |tx| {
                 let queued = state::queued(tx, &scope, &name)?;
-                Ok((queued.is_some(), state::last_space(tx, &scope, &name)?))
+                Ok((queued.is_some(), state::last_started(tx, &scope, &name)?))
             })
             .await?;
         if queued {
             return Ok(Overlapping::Waiting);
         }
-        Ok(match last {
-            Some(space) if self.agent_running_or_queued(&space).await? => Overlapping::Busy(space),
-            _ => Overlapping::Free,
+        let Some((run, started)) = last else {
+            return Ok(Overlapping::Free);
+        };
+        let started = self.opened_space(run, started).await?;
+        Ok(match self.still_running(&started).await? {
+            true => Overlapping::Busy(started),
+            false => Overlapping::Free,
         })
     }
 
-    /// Whether the agent of `space` runs or waits in the agent queue.
-    pub(super) async fn agent_running_or_queued(&self, space: &SpaceId) -> Result<bool> {
-        Ok(self.recorded_agent_spaces().await?.contains(space)
-            || self.queued_agent_workspaces().await?.contains(space))
+    /// What the run `run` launched: the space its queue entry opened once
+    /// it did, which the run then records, else what it recorded.
+    async fn opened_space(&self, run: i64, started: Started) -> Result<Started> {
+        let Started::Entry(entry) = &started else {
+            return Ok(started);
+        };
+        let Some(space) = self.started_launch(entry).await? else {
+            return Ok(started);
+        };
+        let opened = space.clone();
+        self.store
+            .write(move |tx| state::opened(tx, run, &opened))
+            .await?;
+        Ok(Started::Space(space))
+    }
+
+    /// Whether the agent `started` names still runs or waits: a space's
+    /// agent, or a launch that waits in the agent queue or runs in the
+    /// space it opened.
+    pub(super) async fn still_running(&self, started: &Started) -> Result<bool> {
+        let space = match started {
+            Started::Space(space) => space.clone(),
+            Started::Entry(entry) => {
+                let entries = self.queue_entries().await?;
+                if entries.iter().any(|queued| queued.id == *entry) {
+                    return Ok(true);
+                }
+                match self.started_launch(entry).await? {
+                    Some(space) => space,
+                    None => return Ok(false),
+                }
+            }
+        };
+        Ok(self.recorded_agent_spaces().await?.contains(&space)
+            || self.queued_agent_workspaces().await?.contains(&space))
     }
 
     /// Launch what `waiting` names for the trigger as the user, keeping its
@@ -185,8 +219,10 @@ impl Manager {
                 .write(move |tx| state::keep_key(tx, &scope, &name, &key, expires))
                 .await?;
         }
+        let (space_id, queue_entry) = launched_columns(&launched);
         Ok(TriggerRun {
-            space_id: launched_space(&launched),
+            space_id,
+            queue_entry,
             ..run(firing, RunOutcome::Started, None)
         })
     }
@@ -211,10 +247,12 @@ impl Manager {
 }
 
 /// The queued run of `firing`, which launches what `waiting` names once
-/// the agent of `busy` stops.
-fn queued(firing: &Firing, waiting: Waiting, busy: SpaceId) -> Ran {
+/// the agent `busy` names stops.
+fn queued(firing: &Firing, waiting: Waiting, busy: Started) -> Ran {
+    let (space_id, queue_entry) = busy.columns();
     let run = TriggerRun {
-        space_id: Some(busy),
+        space_id: space_id.cloned(),
+        queue_entry: queue_entry.cloned(),
         ..run(firing, RunOutcome::Queued, None)
     };
     Ran {
@@ -231,18 +269,25 @@ fn run(firing: &Firing, outcome: RunOutcome, reason: Option<String>) -> TriggerR
         outcome,
         reason,
         space_id: None,
+        queue_entry: None,
     }
 }
 
-/// The space `launched` started, or whose worker it queued.
-fn launched_space(launched: &Launched) -> Option<SpaceId> {
+/// The space `launched` started, or whose worker it queued, else the
+/// agent queue entry its new space's launch waits in.
+fn launched_columns(launched: &Launched) -> (Option<SpaceId>, Option<QueueEntryId>) {
     use shoal_protocol::chats::StartedChat;
-    match launched {
+    let space = match launched {
         Launched::Chat(StartedChat::Queued(queued)) => Some(queued.chat.id.clone()),
         Launched::Chat(StartedChat::Background(chat)) => chat.id.clone(),
         Launched::Chat(StartedChat::Detached(chat)) => Some(chat.chat.id.clone()),
         Launched::Worker(worker) => Some(worker.workspace.id.clone()),
         Launched::Workspace(started) => Some(started.workspace.id.clone()),
-        Launched::Waiting { entry, .. } => entry.space_id.clone().or(entry.opens.clone()),
-    }
+        Launched::Waiting { entry, .. } => {
+            let space = entry.space_id.clone().or(entry.opens.clone());
+            let entry = space.is_none().then(|| entry.id.clone());
+            return (space, entry);
+        }
+    };
+    (space, None)
 }
