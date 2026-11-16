@@ -7,8 +7,9 @@ import unittest
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent
-# A generous hang guard for the child to get ready or exit.
-WAIT_SECONDS = 60
+# How long the child sleeps: one that a signal fails to unwind exits after
+# this, so the test waits for its exit without a deadline of its own.
+SLEEP_SECONDS = 300
 
 
 class TerminationTests(unittest.TestCase):
@@ -20,7 +21,7 @@ class TerminationTests(unittest.TestCase):
                            "record.unwind_on_termination()\n"
                            "try:\n"
                            "    print('ready', flush=True)\n"
-                           "    time.sleep(300)\n"
+                           f"    time.sleep({SLEEP_SECONDS})\n"
                            "finally:\n"
                            f"    open({str(cleaned)!r}, 'w').close()\n")
                 child = subprocess.Popen([sys.executable, "-c", program], cwd=SCRIPTS,
@@ -28,7 +29,7 @@ class TerminationTests(unittest.TestCase):
                                          stdout=subprocess.PIPE, text=True)
                 self.assertEqual(child.stdout.readline(), "ready\n")
                 child.send_signal(number)
-                status = child.wait(timeout=WAIT_SECONDS)
+                status = child.wait()
                 child.stdout.close()
                 self.assertEqual(status, 128 + number)
                 self.assertTrue(cleaned.exists())
