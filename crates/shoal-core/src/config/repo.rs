@@ -9,7 +9,7 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 pub use shoal_protocol::config::repo::{ConfigLayer, ConflictPolicy, PortDefinition};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -31,6 +31,11 @@ pub struct ConfigLayers {
     /// rejects it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rejected_worktree_file: Option<String>,
+    /// The secrets the repository's webhook triggers sign with that these
+    /// layers may not name, such as those of its checkout's file, which a
+    /// workspace's own file can lack; no agent receives them.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub signing_secrets: BTreeSet<String>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]

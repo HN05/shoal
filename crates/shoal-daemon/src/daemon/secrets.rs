@@ -22,8 +22,7 @@ impl Manager {
     pub async fn secret_catalog(&self, selector: &SpaceSelector) -> Result<SecretCatalog> {
         let workspace = self.workspace(selector).await?;
         let settings = self.workspace_settings(&workspace).await?;
-        let secrets = crate::secrets::for_agents(&self.config(), &settings)
-            .into_iter()
+        let secrets = (settings.agent_secrets.into_iter())
             .map(|(name, secret)| CatalogSecret {
                 name,
                 tools: secret.tools,
@@ -102,7 +101,7 @@ impl Manager {
         source: Option<&SecretSpecification>,
     ) -> Result<Secret> {
         let settings = self.workspace_settings(workspace).await?;
-        let secret = crate::secrets::for_agents(&self.config(), &settings)
+        let secret = (settings.agent_secrets.clone())
             .remove(name)
             .ok_or_else(|| anyhow!("secrets.{name} is not configured for this workspace"))?;
         ensure!(

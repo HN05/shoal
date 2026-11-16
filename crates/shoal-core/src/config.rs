@@ -355,7 +355,13 @@ impl Config {
         let tools = crate::ai::tools(&agents);
         crate::config::proxies::validate_routes(&tools, &self.machine.proxies)?;
         let proxies = crate::config::proxies::routes(&tools, &self.machine.proxies);
-        Ok(Effective::new(settings, tools, proxies))
+        let triggers = (settings.triggers.values()).chain(self.triggers().values());
+        let signing = (triggers.filter_map(|trigger| trigger.signing_secret()))
+            .chain(layers.signing_secrets.iter().map(String::as_str));
+        let agent_secrets = crate::secrets::for_agents(&settings.secrets, signing);
+        let mut effective = Effective::new(settings, tools, proxies);
+        effective.agent_secrets = agent_secrets;
+        Ok(effective)
     }
 }
 

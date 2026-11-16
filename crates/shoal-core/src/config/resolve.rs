@@ -34,6 +34,10 @@ pub struct Effective {
     /// The proxy each AI tool's tracked agents reach their upstream through.
     #[serde(skip)]
     pub proxies: BTreeMap<String, crate::config::proxies::Proxy>,
+    /// The secrets agents receive: every one but those a webhook trigger
+    /// of the repository or the global config signs requests with.
+    #[serde(skip)]
+    pub agent_secrets: crate::secrets::Secrets,
 }
 
 impl std::ops::Deref for Effective {
@@ -239,6 +243,7 @@ impl Effective {
         crate::ai::inherit_launchers(&tools, &mut launchers);
         let resume_commands = commands(|agent| &agent.resume_command);
         Self {
+            agent_secrets: settings.secrets.clone(),
             settings,
             tools,
             launchers,

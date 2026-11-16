@@ -15,7 +15,10 @@ use crate::{
 use anyhow::{Context, Result};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::space_names::SpaceSelector;
-use std::{collections::BTreeMap, path::PathBuf};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::PathBuf,
+};
 
 mod rejected;
 pub(crate) use rejected::RejectedConfigs;
@@ -138,10 +141,29 @@ impl Manager {
             }
         };
         let layers = self.config_layers(&workspace.repository_id, file).await?;
+        let signing_secrets = self
+            .checkout_signing_secrets(&workspace.repository_id)
+            .await;
         Ok(ConfigLayers {
             rejected_worktree_file: rejected,
+            signing_secrets,
             ..layers
         })
+    }
+
+    /// The secrets the webhook triggers of `repository`'s checkout file sign
+    /// with, which fire whatever a workspace's own file says; none while the
+    /// file cannot be read, when no trigger of it fires either.
+    async fn checkout_signing_secrets(&self, repository: &RepositoryId) -> BTreeSet<String> {
+        let Ok(checkout) = self.repository(repository).await else {
+            return BTreeSet::new();
+        };
+        let Ok((file, _)) = self.worktree_file(&checkout.path).await else {
+            return BTreeSet::new();
+        };
+        (file.triggers.values())
+            .filter_map(|trigger| trigger.signing_secret().map(str::to_owned))
+            .collect()
     }
 
     /// The repository layer for `target`; a repository's file is the one in
@@ -262,6 +284,7 @@ impl Manager {
             worktree_template_files,
             local_template_files,
             rejected_worktree_file: None,
+            signing_secrets: BTreeSet::new(),
         })
     }
 

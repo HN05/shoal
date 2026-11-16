@@ -94,20 +94,25 @@ async fn apply_records_the_names_hooks_drop() {
 fn agents_never_receive_a_secret_a_webhook_signs_with() {
     let config = crate::config::Config::from_toml(
         "[secrets.GLOBAL_HOOK]\ncommand = ['true']\n[secrets.API_KEY]\ncommand = ['true']\n\
-         [secrets.REPO_HOOK]\ncommand = ['true']\n\
          [triggers.forge]\non = 'webhook'\nsecret = 'GLOBAL_HOOK'\nsignature = 'forgejo'\n",
     )
     .unwrap();
     let layers = crate::config::repo::ConfigLayers {
         local_config: crate::config::repo::parse(
-            "[triggers.issues]\non = 'webhook'\nsecret = 'REPO_HOOK'\nsignature = 'github'\n",
+            "[secrets.REPO_HOOK]\ncommand = ['true']\n[secrets.CHECKOUT_HOOK]\ncommand = ['true']\n\
+             [triggers.issues]\non = 'webhook'\nsecret = 'REPO_HOOK'\nsignature = 'github'\n",
         )
         .unwrap(),
+        // A trigger of the checkout's file, which a worktree's can lack.
+        signing_secrets: ["CHECKOUT_HOOK".to_owned()].into(),
         ..Default::default()
     };
+
     let settings = config.resolve(&layers).unwrap();
 
-    let agents = for_agents(&config, &settings);
-
-    assert_eq!(agents.keys().collect::<Vec<_>>(), ["API_KEY"]);
+    assert_eq!(
+        settings.agent_secrets.keys().collect::<Vec<_>>(),
+        ["API_KEY"]
+    );
+    assert_eq!(settings.secrets.len(), 4);
 }

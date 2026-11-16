@@ -263,3 +263,29 @@ async fn a_sample_request_fires_unsigned_and_names_the_condition_that_drops_it()
         (RunOutcome::Started, RunOrigin::Manual)
     );
 }
+
+#[tokio::test]
+async fn a_workspace_whose_file_lacks_the_checkouts_trigger_still_never_gets_its_secret() {
+    let secrets =
+        "[secrets.HOOK]\ncommand = ['printf', 's3cret']\n[secrets.API_KEY]\ncommand = ['true']\n";
+    let (_temp, manager, repo) = with_triggers(secrets).await;
+    let workspace = (manager.create_workspace(&repo.id, "fix".into(), None, None, None))
+        .await
+        .unwrap();
+    // A trigger the checkout's file gained after the workspace branched.
+    std::fs::write(
+        repo.path.join(".shoal.toml"),
+        "[triggers.labelled]\non = 'webhook'\nsecret = 'HOOK'\nsignature = 'forgejo'\n",
+    )
+    .unwrap();
+
+    let selector = shoal_protocol::space_names::SpaceSelector::id(&workspace.id);
+    let catalog = manager.secret_catalog(&selector).await.unwrap();
+
+    let names: Vec<_> = catalog
+        .secrets
+        .iter()
+        .map(|secret| secret.name.as_str())
+        .collect();
+    assert_eq!(names, ["API_KEY"]);
+}
