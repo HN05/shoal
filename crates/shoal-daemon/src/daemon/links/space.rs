@@ -140,24 +140,30 @@ impl Manager {
         }
     }
 
-    /// The space without a repository `space` names, a chat, acting in the
-    /// registered repository `repository` names, which counts as its own;
-    /// a space with a repository acts only in that one.
+    /// The space `space` names acting in the registered repository
+    /// `repository` names: its own, or for a space without one, a chat, any,
+    /// which then counts as its own. A space with a repository acts only in
+    /// that one.
     async fn space_acting_in(
         &self,
         space: &SpaceSelector,
         repository: &RepositoryId,
     ) -> Result<LinkSpace> {
         let space = self.space(space).await?;
-        anyhow::ensure!(
-            space.repository_id.is_none(),
-            "space {} acts only in its own repository",
-            space.name
-        );
-        Ok(LinkSpace::acting_in(
-            space,
-            self.repository(repository).await?,
-        ))
+        match &space.repository_id {
+            Some(own) => {
+                anyhow::ensure!(
+                    own == repository,
+                    "space {} acts only in its own repository",
+                    space.name
+                );
+                LinkSpace::own(space)
+            }
+            None => Ok(LinkSpace::acting_in(
+                space,
+                self.repository(repository).await?,
+            )),
+        }
     }
 
     /// The space `id`, while it exists, acting in the registered repository

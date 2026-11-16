@@ -123,6 +123,30 @@ async fn a_chat_without_a_repository_acts_in_each_repository_under_its_permissio
 }
 
 #[tokio::test]
+async fn a_space_naming_its_own_repository_acts_there_as_itself() {
+    let (temp, manager) = manager().await;
+    let repos = repositories(&temp, &manager, &["repo", "other"]).await;
+    let workspace = manager
+        .create_workspace(&repos[0].id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    let context = |repository: &Repository| ItemContext::Space {
+        space: SpaceSelector::id(&workspace.id),
+        repository: Some(repository.id.clone()),
+    };
+    let own = manager.context_space(&context(&repos[0])).await.unwrap();
+    assert_eq!(
+        (
+            own.id.clone(),
+            own.repository_id().clone(),
+            own.keeps_links()
+        ),
+        (workspace.id.clone(), repos[0].id.clone(), true)
+    );
+    assert!(manager.context_space(&context(&repos[1])).await.is_err());
+}
+
+#[tokio::test]
 async fn a_name_or_url_finds_the_registered_repository_it_names() {
     let (temp, manager) = manager().await;
     let repos = repositories(&temp, &manager, &["repo", "other"]).await;
