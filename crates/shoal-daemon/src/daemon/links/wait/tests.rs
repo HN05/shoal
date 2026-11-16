@@ -1793,7 +1793,7 @@ async fn the_agent_account_done_takes_off_is_the_spaces_own_change() {
             .is_empty()
     );
     let selector = SpaceSelector::id(&workspace.id);
-    (manager.mark_done(&selector, Done::default(), &Attacher::User))
+    (manager.mark_space_done(&selector, Done::default(), &Attacher::User))
         .await
         .unwrap();
     manager.settle_requested_agents().await;
