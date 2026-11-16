@@ -197,9 +197,11 @@ async fn unfinished_removal(
         Ok(_) => error.context(format!(
             "{failed}: it stopped partway, so its tracked files were checked out again; removing it again continues with what is left"
         )),
-        Err(restore) => error.context(format!(
-            "{failed}: it stopped partway, and checking its tracked files out again failed: {restore:#}; removing it again puts them back first"
-        )),
+        Err(restore) => error
+            .context(format!(
+                "checking its tracked files out again failed: {restore:#}; removing it again puts them back first"
+            ))
+            .context(interrupted::Unrestored(path.to_owned())),
     }
 }
 

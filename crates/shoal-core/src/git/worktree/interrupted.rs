@@ -8,6 +8,22 @@ use anyhow::{Context, Result};
 
 use crate::fsutil::{self, off_runtime};
 
+/// The error of a removal of the worktree at its path that stopped before
+/// Git finished and could not put back what it deleted, leaving its marker
+/// for the next removal, which a caller tells from other failures by it.
+#[derive(Debug)]
+pub struct Unrestored(pub PathBuf);
+
+impl std::fmt::Display for Unrestored {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "removing the worktree at {} stopped partway",
+            self.0.display()
+        )
+    }
+}
+
 /// The file in a worktree's admin directory that says a removal began
 /// deleting the worktree, holding the text of its `.git` link. Git deletes
 /// it with the admin directory once the removal finishes.

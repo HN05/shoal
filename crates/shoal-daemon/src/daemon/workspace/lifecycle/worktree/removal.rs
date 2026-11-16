@@ -236,16 +236,16 @@ impl Manager {
 
     /// What a `removal` of `workspace` that failed with `error` leaves:
     /// whether the workspace can no longer be ready, with the error to
-    /// record. Its directory was deleted, or a removal that stopped partway
-    /// could not put back what it deleted, which the next removal does once
-    /// the error says a [`STOPPED_REMOVAL`] left it.
+    /// record. Its directory was deleted, or its `worktree remove` stopped
+    /// partway and could not put back what it deleted, which the next
+    /// removal does once the error says a [`STOPPED_REMOVAL`] left it.
     pub(in crate::daemon::workspace) async fn failed_worktree_removal(
         &self,
         workspace: &Workspace,
         removal: Removal<'_>,
         error: anyhow::Error,
     ) -> (bool, anyhow::Error) {
-        if interrupted_removal_left(workspace).await {
+        if error.downcast_ref::<interrupted::Unrestored>().is_some() {
             return (true, error.context(format!("{STOPPED_REMOVAL} partway")));
         }
         let deleted = matches!(removal, Removal::Deleted)
@@ -607,16 +607,6 @@ impl Manager {
             workspace.name
         );
         Ok(())
-    }
-}
-
-/// Whether a removal of `workspace` that stopped partway left its marker,
-/// as when it could not put back what it deleted; a marker that cannot be
-/// read counts too.
-async fn interrupted_removal_left(workspace: &Workspace) -> bool {
-    match &workspace.git_dir {
-        Some(admin_dir) => !matches!(interrupted::began(admin_dir).await, Ok(false)),
-        None => false,
     }
 }
 

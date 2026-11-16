@@ -137,3 +137,21 @@ async fn a_directory_left_where_the_worktree_moved_from_is_refused() {
     assert!(restore(&workspace, &admin).await.is_err());
     assert!(!workspace.join(".git").exists());
 }
+
+/// A stopped removal that cannot put back what it deleted fails with an
+/// error the caller tells apart, leaving its marker for the next removal.
+#[tokio::test]
+async fn a_stopped_removal_that_cannot_restore_says_so() {
+    let root = tempfile::tempdir().unwrap();
+    let (_repo, workspace, admin) = worktree(root.path()).await;
+    let link = std::fs::read_to_string(workspace.join(".git")).unwrap();
+    let marked = super::super::mark_removal(&workspace, Some(&link))
+        .await
+        .unwrap();
+    std::fs::write(admin.join("gitdir"), "/elsewhere/.git\n").unwrap();
+    let stopped = anyhow::anyhow!("`git worktree remove` was stopped");
+    let error =
+        super::super::unfinished_removal(&workspace, marked.as_deref(), true, stopped).await;
+    assert!(error.downcast_ref::<Unrestored>().is_some(), "{error:#}");
+    assert!(began(&admin).await.unwrap());
+}
