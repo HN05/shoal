@@ -514,8 +514,8 @@ Service setup manages one per-user launchd/systemd service and refuses to change
 its state directory until the existing service is stopped; foreground mode covers
 environments without a service manager. The service captures the installing shell's
 `PATH`. A managed daemon keeps the installed definition of its state directory
-current, rewriting it at startup when its release renders it differently and
-reloading systemd without restarting anything: service managers read only the
+current, rewriting it at startup when its release renders it differently, with
+the executable and `PATH` the installed one starts, and reloading systemd without restarting anything: service managers read only the
 file `shoal daemon install` wrote, and a definition in a system directory would
 need root and a distribution package. The unit and every scope Shoal starts set
 `OOMPolicy=continue`, so an OOM kill ends only the process it chose and the

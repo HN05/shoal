@@ -41,3 +41,15 @@ fn systemd_escapes_expansion_and_quotes() {
     );
     assert!(definition.content.contains("%%name/$$data"));
 }
+
+#[test]
+fn a_definition_starts_what_it_was_rendered_for() {
+    let launch = Launch {
+        executable: "/tmp/a & b/%n/$shoal \"x\\y".into(),
+        search_path: "/opt/%p/$bin:/a \"b\\c\":/usr/bin".into(),
+    };
+    for platform in [Platform::Mac, Platform::Linux] {
+        let rendered = render(&paths(), &launch, platform).unwrap();
+        assert_eq!(super::launch(&rendered.content, platform).unwrap(), launch);
+    }
+}

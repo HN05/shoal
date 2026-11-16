@@ -102,8 +102,7 @@ it with the same `--state-dir` (or `SHOAL_STATE_DIR`). State defaults to
 user. Service commands target the one registered per-user service, whose state
 directory must match. At startup, a daemon its service manager started rewrites
 the installed definition of its state directory when its release renders it
-differently, from the executable it was started through and the `PATH` it was
-given, and on Linux reloads systemd, which the running service applies at once;
+differently, keeping the executable and `PATH` it starts, and on Linux reloads systemd, which the running service applies at once;
 it restarts nothing, launchd reads a rewritten plist at the service's next load,
 and a failure is an `environment_problem` alert naming `shoal daemon install`. `shoal status` outside a space shows the daemon's PID,
 version and unread notifications, exits 1 when it is offline, and names each
