@@ -166,6 +166,7 @@ impl Manager {
     }
 
     /// Begin the worktree's part of `removal` of the reserved `workspace`:
+    /// put back what an earlier removal that stopped partway deleted, then
     /// resolve the post-remove hook and Xcode data while its record exists.
     pub(in crate::daemon::workspace) async fn begin_worktree_removal(
         &self,
@@ -178,6 +179,7 @@ impl Manager {
         }
         let post_remove = if present {
             self.ensure_no_pending_rename(&workspace.id).await?;
+            self.restore_interrupted_removal(workspace).await?;
             self.prepare_post_remove_hook(workspace).await?
         } else {
             None
@@ -188,6 +190,23 @@ impl Manager {
             present,
             post_remove,
         })
+    }
+
+    /// Put back the `.git` link and tracked files that an earlier removal of
+    /// `workspace`, stopped before Git finished, deleted and did not put
+    /// back itself, as when the daemon stopped meanwhile, so that its
+    /// inspection does not take them for unsaved work.
+    async fn restore_interrupted_removal(&self, workspace: &Workspace) -> Result<()> {
+        let Some(admin_dir) = &workspace.git_dir else {
+            return Ok(());
+        };
+        if git::worktree::interrupted::restore(&workspace.path, admin_dir).await? {
+            crate::daemon::log!(
+                "restored the files an interrupted removal of {} deleted",
+                workspace.name
+            );
+        }
+        Ok(())
     }
 
     /// Whether a failed `removal` of `workspace` leaves it unable to be ready

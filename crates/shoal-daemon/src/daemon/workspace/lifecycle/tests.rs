@@ -1583,6 +1583,30 @@ async fn removal_retains_a_kept_worktree_git_disowned() {
     );
 }
 
+/// A removal that stopped partway, its marker left as when the daemon
+/// stopped meanwhile, deleted tracked files and the `.git` link, which are
+/// nobody's work: the next removal puts them back, finds the worktree
+/// clean and removes it without consent to delete unsaved work.
+#[tokio::test]
+async fn removal_finishes_one_that_stopped_partway() {
+    let (_root, manager, workspace) = fixture().await;
+    let link = fs::read_to_string(workspace.path.join(".git")).unwrap();
+    let admin_dir = workspace.git_dir.clone().unwrap();
+    fs::write(admin_dir.join("shoal-removal"), link).unwrap();
+    fs::remove_file(workspace.path.join("tracked")).unwrap();
+    fs::remove_file(workspace.path.join(".git")).unwrap();
+    manager
+        .remove_workspace(
+            &SpaceSelector::id(&workspace.id),
+            NOTHING.clone(),
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    assert!(!workspace.path.exists());
+    assert!(!admin_dir.exists());
+}
+
 /// A workspace's life from creation to removal, with a removal hook that runs
 /// Git, which [`a_runners_repository_variables_reach_no_git_of_the_tests`]
 /// runs as the tests of a runner in another repository.
