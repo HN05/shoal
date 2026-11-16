@@ -237,15 +237,20 @@ impl Manager {
                 (self.give_resource_lease_to_user(&workspace.id, pool, name)).await
             }
         };
-        if let Err(error) = handed {
-            log!(
-                "{} stays the {}'s: {error:#}",
-                lease.held,
-                lease.acquirer.kind()
-            );
-        }
+        // Shoal tries again on the next pass while the lease stays the agent's.
+        let owner = match handed {
+            Ok(()) => "it is yours now",
+            Err(handover) => {
+                log!(
+                    "{} stays the {}'s: {handover:#}",
+                    lease.held,
+                    lease.acquirer.kind()
+                );
+                "Shoal tries again"
+            }
+        };
         let message = format!(
-            "The {} that acquired {} ended, but releasing it failed: {error:#}; it is yours now, and {} releases it",
+            "The {} that acquired {} ended, but releasing it failed: {error:#}; {owner}, and {} releases it",
             lease.acquirer.kind(),
             lease.held,
             lease.held.release_command(workspace.number),
