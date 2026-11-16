@@ -5866,11 +5866,9 @@ and `rm` act on its chat.
 `id`, its `name` then or its last once removed, and its `kind`, `source`, `path`, `bytes`, `title` when it has one, and
 `attached_by`:
 `{"kind": "user"}` for a file attached from outside any agent,
-`{"kind": "agent"}` with a workspace agent's name as `agent`, its `execution`
-and, once the agent has reported it, its `session`, or `{"kind": "chat"}` with
-the agent's name as `agent` and the chat's ID as `chat` for a file a running
-chat's agent attaches outside any workspace. Files attached before Shoal recorded
-this have no `attached_by`. Every way of attaching takes a file as `PATH` or
+or `{"kind": "agent"}` with the agent's name as `agent`, a workspace's or a
+chat's, its `execution` and, once the agent has reported it, its `session`.
+Every way of attaching takes a file as `PATH` or
 `PATH#TITLE`, splitting at the first `#`; the title, a single line of at most
 128 characters, says what the file is, and clients show the name where there is
 none. `shoal files add` copies files of at most 100 MiB

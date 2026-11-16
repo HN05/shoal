@@ -27,7 +27,7 @@ states!(FileSource {
 pub enum Attacher {
     /// A request from outside any agent.
     User,
-    /// A request from an agent's process tree.
+    /// A request from an agent's process tree, a workspace's or a chat's.
     Agent {
         /// The agent, named as `--agent` names it.
         agent: crate::agent::Agent,
@@ -37,13 +37,6 @@ pub enum Attacher {
         /// before its first report.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         session: Option<shoal_ids::agent_session_ids::AgentSessionId>,
-    },
-    /// A request from a chat's agent, which runs outside any execution.
-    Chat {
-        /// The chat's agent, named as `--agent` names it.
-        agent: crate::agent::Agent,
-        /// The chat's ID.
-        chat: SpaceId,
     },
 }
 

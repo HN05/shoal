@@ -3365,9 +3365,9 @@ has the ID, and a record of its own says how long its files stay, apart from
 a workspace's removal record, which a disposable workspace lacks. Each attached file records who attached it: the user, or the
 agent whose process tree sent the request, by both its execution, which pins
 the run, and the session it reported, which outlives a restart or resume and
-names the conversation a client shows the file in. A chat's agent runs
-outside any execution, so its requests name the chat they come from, and its
-files record the chat as who attached them; like scope, this is cooperative.
+names the conversation a client shows the file in, a chat's agent as a
+workspace's, since it runs as an execution of its chat; like scope, this is
+cooperative.
 The journal records each file's record as it is added and deleted, by store
 triggers so no route of attaching or deleting is missed, and carries the
 owner's ID from the record because a removed space has no row

@@ -13,7 +13,8 @@ use crate::{
     execution::recovery,
     model::Workspace,
 };
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 /// Whether permissions bind this test process; root reads and deletes past
 /// them, as in CI's containers.
@@ -50,16 +51,22 @@ async fn command_caller(
     manager.caller(&token).await.unwrap().unwrap()
 }
 
-/// The caller that the processes of a tracked agent `name` in `workspace`
-/// send requests as.
-async fn agent_caller(manager: &Manager, workspace: &Workspace, name: &str) -> Caller {
-    let caller = command_caller(manager, workspace, None).await;
+/// The caller that the processes of a tracked agent `name` in the space
+/// `id` named `space` send requests as.
+async fn agent_caller(manager: &Manager, id: &SpaceId, space: &SpaceName, name: &str) -> Caller {
+    let token = manager
+        .begin_agent_execution(id.as_str())
+        .await
+        .unwrap()
+        .plan
+        .scope_token;
+    let caller = manager.caller(&token).await.unwrap().unwrap();
     manager
         .track_agent(
             caller.execution_id().unwrap(),
             &crate::execution::TrackedAgent::named(name),
-            &workspace.id,
-            &workspace.name,
+            id,
+            space,
             true,
             Duration::ZERO,
         )
@@ -107,7 +114,7 @@ async fn files_from_outside_any_agent_are_the_users() {
 async fn an_agents_files_name_its_kind_and_session() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;
-    let caller = agent_caller(&manager, &workspace, "happy claude").await;
+    let caller = agent_caller(&manager, &workspace.id, &workspace.name, "happy claude").await;
     let execution = caller.execution_id().unwrap().to_owned();
     // An agent that has not reported its session yet.
     assert_eq!(
@@ -193,7 +200,7 @@ async fn an_agents_files_name_its_kind_and_session() {
 async fn results_name_the_agent_that_handed_them_back() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;
-    let caller = agent_caller(&manager, &workspace, "codex").await;
+    let caller = agent_caller(&manager, &workspace.id, &workspace.name, "codex").await;
     let attacher = manager.attacher(Some(&caller)).await;
     let report = temp.path().join("report.md");
     std::fs::write(&report, "done").unwrap();
@@ -1374,17 +1381,21 @@ async fn files_of_a_chat_without_a_repository_stay_with_the_root_dir_it_started_
 }
 
 #[tokio::test]
-async fn a_chats_agent_attaches_as_its_chat_while_it_runs() {
+async fn a_chats_agent_attaches_as_an_agent_with_its_execution_and_session() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;
     let chat = chat(&manager, &workspace, "planning").await;
-    let token = manager.chat_scope(&chat.id).await.unwrap();
-    let caller = manager.caller(&token).await.unwrap().unwrap();
-    let as_chat = Attacher::Chat {
+    // Stopped, so the execution registered below is its agent.
+    manager.end_executions(&chat.id).await;
+    let caller = agent_caller(&manager, &chat.id, &chat.name, "claude").await;
+    let execution = caller.execution_id().unwrap().to_owned();
+    recovery::save_session(&manager.paths, &chat.id, &execution, &"s1".into()).unwrap();
+    let as_agent = Attacher::Agent {
         agent: "claude".into(),
-        chat: chat.id.clone(),
+        execution: execution.clone(),
+        session: Some("s1".into()),
     };
-    // A chat's agent attaching to a workspace attaches as its chat.
+    // A chat's agent attaching to a workspace attaches as itself.
     let report = temp.path().join("report.md");
     std::fs::write(&report, "Plan").unwrap();
     let attacher = manager.attacher(Some(&caller)).await;
@@ -1396,10 +1407,15 @@ async fn a_chats_agent_attaches_as_its_chat_while_it_runs() {
         )
         .await
         .unwrap();
-    assert_eq!(added[0].attached_by, as_chat);
+    assert_eq!(added[0].attached_by, as_agent);
 
-    manager.end_executions(&chat.id).await;
-    assert_eq!(manager.attacher(Some(&caller)).await, Attacher::User);
+    // Its execution's record names it after a restart, before it reattaches.
+    manager
+        .executions
+        .with_agents(|agents| agents.remove(&execution))
+        .await
+        .unwrap();
+    assert_eq!(manager.attacher(Some(&caller)).await, as_agent);
 }
 
 mod events;

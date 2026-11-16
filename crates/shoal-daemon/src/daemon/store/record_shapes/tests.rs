@@ -278,3 +278,39 @@ fn saved_agent_files_take_the_current_shape() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn files_a_chat_attached_become_the_users() -> Result<()> {
+    let mut db = before(213)?;
+    let agent = json!({"kind": "agent", "agent": "claude", "execution": "e1"});
+    db.execute_batch(&format!(
+        r#"INSERT INTO space_files(space_id,space,source,name,path,bytes,created_at,attached_by)
+             VALUES ('w','w','added','a.md','/repo/a.md',1,1,
+                 '{{"kind":"chat","agent":"claude","chat":"c"}}'),
+             ('w','w','added','b.md','/repo/b.md',1,1,'{agent}');"#
+    ))?;
+    migrate(&mut db)?;
+    let attacher = |name: &str| -> Result<Value> {
+        let text: String = db.query_row(
+            "SELECT attached_by FROM space_files WHERE name=?1",
+            [name],
+            |row| row.get(0),
+        )?;
+        Ok(serde_json::from_str(&text)?)
+    };
+    assert_eq!(attacher("a.md")?, json!({"kind": "user"}));
+    assert_eq!(attacher("b.md")?, agent);
+    let added = |name: &str| {
+        record(
+            &db,
+            "space_events",
+            &format!("json_extract(record,'$.file.name')='{name}'"),
+        )
+    };
+    assert_eq!(
+        added("a.md")?["file"]["attached_by"],
+        json!({"kind": "user"})
+    );
+    assert_eq!(added("b.md")?["file"]["attached_by"], agent);
+    Ok(())
+}

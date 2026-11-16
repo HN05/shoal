@@ -50,6 +50,17 @@ const USER_ATTACHED_FILES: &str = r#"
         WHERE json_valid(record) AND json_type(record,'$.file') IS NOT NULL
             AND coalesce(json_type(record,'$.file.attached_by'),'null')='null';"#;
 
+/// Files and their events that name a chat as their attacher, which
+/// recorded no execution for an agent to name, were the user's: every agent
+/// attaches as an agent now, a chat's as a workspace's.
+pub(super) const USER_CHAT_ATTACHERS: &str = r#"
+    UPDATE space_files SET attached_by='{"kind":"user"}'
+        WHERE json_valid(attached_by) AND json_extract(attached_by,'$.kind')='chat';
+    UPDATE space_events
+        SET record=json_set(record,'$.file.attached_by',json('{"kind":"user"}'))
+        WHERE json_valid(record)
+            AND json_extract(record,'$.file.attached_by.kind')='chat';"#;
+
 /// Link events without a relation were assignments.
 const ASSIGNED_LINK_EVENTS: &str = "
     UPDATE space_events SET record=json_set(record,'$.link.relation','assigned')

@@ -890,11 +890,11 @@ fn a_chats_agent_attaches_files_the_user_lists_after_the_chat_ends() {
     assert_eq!(added[0]["space"]["name"], "planning", "{added}");
     assert_eq!(added[0]["space"]["kind"], "chat", "{added}");
     assert_eq!(added[0]["title"], "Plan", "{added}");
-    assert_eq!(
-        added[0]["attached_by"],
-        serde_json::json!({"kind": "chat", "agent": "claude", "chat": chat}),
-        "{added}"
-    );
+    // As any agent, by the execution its chat runs it as.
+    let attacher = &added[0]["attached_by"];
+    assert_eq!(attacher["kind"], "agent", "{added}");
+    assert_eq!(attacher["agent"], "claude", "{added}");
+    assert!(attacher["execution"].is_string(), "{added}");
     let copy = PathBuf::from(added[0]["path"].as_str().unwrap());
     assert!(copy.to_str().unwrap().contains(&chat), "{added}");
     assert_eq!(in_chat(&["files"]), added);

@@ -574,7 +574,7 @@ fn a_chat_records_its_work_done_and_withdraws_it() {
     assert!(output.status.success(), "{}", printed(&output));
     let files = fixture.ok(&["files", &fixture.id("planning")]);
     assert_eq!(files[1]["name"], "notes.md", "{files}");
-    assert_eq!(files[1]["attached_by"]["kind"], "chat", "{files}");
+    assert_eq!(files[1]["attached_by"]["kind"], "agent", "{files}");
     let completion: Value = serde_json::from_slice(&output.stdout).unwrap();
     let withdrawn = fixture.ok(&["done", "--undo", &fixture.id("planning")]);
     assert_eq!(withdrawn["withdrawn"]["results"], completion["results"]);

@@ -11,7 +11,6 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, ensure};
 use tokio::sync::OwnedMutexGuard;
 
-use crate::refusal::Reason;
 use crate::{
     daemon::{scope::Caller, workspace::Manager},
     model::{Chat, HandedBack, Repository, Workspace},
@@ -206,15 +205,13 @@ impl Manager {
     }
 
     /// Who a request from `caller` attaches files as: the agent it comes
-    /// from, the chat whose agent's scope it carries, else the user.
+    /// from, whatever its space, else the user.
     pub(crate) async fn attacher(&self, caller: Option<&Caller>) -> Attacher {
-        let Some(caller) = caller else {
-            return Attacher::User;
+        let agent = match caller {
+            Some(caller) => self.caller_agent(caller).await,
+            None => None,
         };
-        if self.caller_is_chat(caller).await.unwrap_or_default() {
-            return self.chat_attacher(&caller.space_id).await;
-        }
-        let Some(agent) = self.caller_agent(caller).await else {
+        let Some(agent) = agent else {
             return Attacher::User;
         };
         Attacher::Agent {
@@ -225,28 +222,6 @@ impl Manager {
             ),
             agent: agent.name,
             execution: agent.execution,
-        }
-    }
-
-    /// The chat `chat` as an attacher while it runs, else the user.
-    async fn chat_attacher(&self, chat: &SpaceId) -> Attacher {
-        match self.chat(&SpaceSelector::id(chat)).await {
-            Ok(crate::model::Chat {
-                running: true,
-                id,
-                part:
-                    crate::model::ChatPart {
-                        agent: Some(agent), ..
-                    },
-                ..
-            }) => Attacher::Chat { agent, chat: id },
-            Ok(_) => Attacher::User,
-            Err(error) => {
-                if !matches!(Reason::of(&error), Some(Reason::NotFound)) {
-                    crate::daemon::log!("attaching chat unknown: {error:#}");
-                }
-                Attacher::User
-            }
         }
     }
 
