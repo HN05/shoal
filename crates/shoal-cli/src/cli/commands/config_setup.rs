@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result};
 
-use super::chat;
+use super::start;
 use crate::config_file::ConfigExt;
 use crate::{
     agent::{Agent, ModelChoice},
@@ -25,12 +25,12 @@ pub(super) async fn start(ctx: &Context, mut args: ConfigSetupArgs) -> Result<i3
 async fn setup(ctx: &Context, mut args: ConfigSetupArgs) -> Result<i32> {
     // Chosen before the config is written, so a refused agent leaves none.
     let settings = shoal_workers::settings::of(&ctx.paths, ConfigTarget::Global).await?;
-    let agent = chat::chat_agent(ctx, &settings, args.agent.take())?;
+    let agent = start::chat_agent(ctx, &settings, args.agent.take())?;
     let model = std::mem::take(&mut args.model).into();
-    chat::check_model(&settings, &agent, &model)?;
+    start::check_model(&settings, &agent, &model)?;
     let config = installed_config(ctx)?;
     let options = options(args, agent, model, ctx.on_terminal());
-    chat::start_outside_repositories(ctx, topic(&config), options).await
+    start::start_outside_repositories(ctx, topic(&config), options).await
 }
 
 /// How the setup chat of `agent` starts: as chats do, at once, and unless
@@ -43,16 +43,16 @@ fn options(
     agent: Agent,
     model: ModelChoice,
     on_terminal: bool,
-) -> chat::Options {
+) -> start::Options {
     let place = match (args.here, on_terminal) {
-        (true, _) => chat::ChatPlace::Here,
-        (false, true) => chat::ChatPlace::Beside,
-        (false, false) => chat::ChatPlace::Background,
+        (true, _) => start::ChatPlace::Here,
+        (false, true) => start::ChatPlace::Beside,
+        (false, false) => start::ChatPlace::Background,
     };
-    chat::Options {
+    start::Options {
         now: false,
         priority: None,
-        narrowing: chat::Narrowing::Requested(Default::default()),
+        narrowing: start::Narrowing::Requested(Default::default()),
         agent: Some(agent),
         place,
         name: args.name,
@@ -80,9 +80,9 @@ fn installed_config(ctx: &Context) -> Result<PathBuf> {
 
 /// The chat that sets up the global config `config`, reopened in a new tab
 /// or restored by the same command.
-pub(in crate::cli::commands) fn topic(config: &Path) -> chat::Topic {
-    chat::Topic {
-        relaunch: chat::Relaunch::ConfigSetup,
+pub(in crate::cli::commands) fn topic(config: &Path) -> start::Topic {
+    start::Topic {
+        relaunch: start::Relaunch::ConfigSetup,
         name: Some(modes::ModeName::SETUP.into()),
         mode: modes::ModeName::SETUP,
         subject: Some(Subject::told(subject(config))),

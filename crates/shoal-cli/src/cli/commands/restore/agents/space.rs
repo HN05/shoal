@@ -149,7 +149,7 @@ async fn restore(
             // A chat changes by a workspace becoming it, or by its restore
             // while another space holds its session.
             ByKind::Chat(chat) => {
-                crate::cli::commands::chat::start_changed(ctx, &chat, &session, records).await
+                crate::cli::commands::start::start_changed(ctx, &chat, &session, records).await
             }
         };
     }

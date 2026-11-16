@@ -3,7 +3,7 @@ use std::path::Path;
 use super::{installed_config, options, subject};
 use crate::{
     agent::Agent,
-    cli::{args::service::ConfigSetupArgs, commands::chat::ChatPlace, context::Context},
+    cli::{args::service::ConfigSetupArgs, commands::start::ChatPlace, context::Context},
     config::Config,
     paths::Paths,
 };

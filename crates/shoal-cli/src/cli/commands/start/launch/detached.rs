@@ -7,7 +7,7 @@ use crate::{
     agent::Agent,
     cli::{
         args::create::StartArgs,
-        commands::chat::{Narrowing, Relaunch, Topic},
+        commands::start::{Narrowing, Relaunch, Topic},
         context::Context,
     },
 };

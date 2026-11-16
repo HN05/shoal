@@ -7,7 +7,7 @@ use crate::{
     agent::{Agent, ModelChoice},
     cli::{
         args::create::{CreateCommand, StartArgs},
-        commands::chat::{ChatPlace, Narrowing},
+        commands::start::{ChatPlace, Narrowing},
     },
     config::permissions::PermissionsConfig,
 };

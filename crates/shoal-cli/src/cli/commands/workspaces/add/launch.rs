@@ -19,7 +19,7 @@ use super::{
 use crate::{
     cli::{
         agents,
-        commands::{chat, queued_agents},
+        commands::{queued_agents, start},
         context::Context,
         ui::ModeChoice,
     },
@@ -175,7 +175,7 @@ async fn has_default(settings: &AddSettings<'_>) -> Result<bool> {
 async fn send(ctx: &Context, launch: Launch, agent: Option<crate::agent::Agent>) -> Result<i32> {
     let launched = crate::client::launches::launch(&ctx.paths, launch);
     match launched.await? {
-        Launched::Chat(started) => chat::report_started(ctx, started),
+        Launched::Chat(started) => start::report_started(ctx, started),
         Launched::Worker(worker) => {
             let QueuedWorker { workspace, entry } = *worker;
             ctx.show(&workspace, |_| ())?;

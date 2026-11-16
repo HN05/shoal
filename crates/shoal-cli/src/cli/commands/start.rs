@@ -1,13 +1,16 @@
 //! `shoal start`: start an agent in a mode, which decides what the agent is
 //! told, whether it starts in a repository and, unless the command says
 //! otherwise, whether it starts in a workspace or a chat.
+//!
+//! A chat's agent talks with the user about a repository in its registered
+//! checkout, about a workspace's work in its worktree, or without a
+//! repository in `root_dir`. A chat is no workspace's agent, so it is not a
+//! tracked execution; the daemon records it while its agent runs. Every
+//! start makes a new chat, focused as its mode says.
 use anyhow::{Context as _, Result, ensure};
 use shoal_ids::{agent_session_ids::AgentSessionId, space_ids::SpaceId};
 
-use super::{
-    chat,
-    workspaces::{self, DaemonReads, link::AddInput},
-};
+use super::workspaces::{self, DaemonReads, link::AddInput};
 use crate::{
     agent::Agent,
     cli::{
@@ -297,8 +300,8 @@ fn located(args: &StartArgs) -> Result<Launch> {
 /// names no branch, issue, PR or copy, in a chat that its
 /// agent makes a workspace once it knows the work.
 pub(super) async fn in_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Result<i32> {
-    if let Some(settings) = launch::detached(ctx, &args).await? {
-        return launch::workspace(ctx, args, mode, settings).await;
+    if let Some(settings) = launch::workspace::detached(ctx, &args).await? {
+        return launch::workspace::start(ctx, args, mode, settings).await;
     }
     let unsettled = args.clone();
     match in_new_workspace(ctx, args, mode).await {
@@ -328,7 +331,7 @@ async fn as_chat(
     args.repository_override = Some(starts.repository.value().to_owned());
     args.checked_repository = None;
     let mode = starts.mode.unwrap_or(modes::ModeName::DEFAULT);
-    let options = chat::Options::taken_from(&mut args);
+    let options = Options::taken_from(&mut args);
     in_chat_with(ctx, args, ModeChoice::Named(mode), options).await
 }
 
@@ -507,7 +510,7 @@ fn named_repository(
 /// Start the agent in a chat in a repository's checkout, or with `--in` in
 /// a workspace's worktree.
 async fn in_chat(ctx: &Context, mut args: StartArgs, mode: ModeChoice) -> Result<i32> {
-    let options = chat::Options::taken_from(&mut args);
+    let options = Options::taken_from(&mut args);
     in_chat_with(ctx, args, mode, options).await
 }
 
@@ -516,7 +519,7 @@ async fn in_chat_with(
     ctx: &Context,
     args: StartArgs,
     mode: ModeChoice,
-    options: chat::Options,
+    options: Options,
 ) -> Result<i32> {
     let (repository, issue) = launches::chat_target(
         args.repository,
@@ -525,14 +528,14 @@ async fn in_chat_with(
         args.in_workspace.is_some(),
     )?;
     let issue = issue.map(|issue| issue.named().cloned());
-    let subject = chat::Subject {
+    let subject = home::Subject {
         mode,
         issue,
         prompt: None,
     };
     match args.in_workspace {
-        Some(workspace) => chat::start_in_workspace(ctx, workspace, subject, options).await,
-        None => chat::start(ctx, repository, subject, options).await,
+        Some(workspace) => home::start_in_workspace(ctx, workspace, subject, options).await,
+        None => home::start(ctx, repository, subject, options).await,
     }
 }
 
@@ -544,8 +547,8 @@ async fn outside_repositories(
     mode: modes::ModeName,
 ) -> Result<i32> {
     launches::ensure_no_repository(&args.launch(), &mode)?;
-    let topic = chat::Topic::outside_repositories(&mode);
-    chat::start_outside_repositories(ctx, topic, chat::Options::taken_from(&mut args)).await
+    let topic = Topic::outside_repositories(&mode);
+    home::start_outside_repositories(ctx, topic, Options::taken_from(&mut args)).await
 }
 
 /// The permissions a start's `--permission` assignments give its agent,
@@ -554,7 +557,18 @@ fn given(changes: &[PermissionChange]) -> PermissionsConfig {
     PermissionChange::combined(changes).set
 }
 
+mod agent;
+mod home;
+mod issue;
 mod launch;
+mod options;
+mod topic;
+
+pub(super) use agent::{chat_agent, check_model};
+pub(super) use home::{start_handed, start_outside_repositories};
+pub(super) use launch::{report_started, start_changed};
+pub(super) use options::{ChatPlace, Narrowing, Options};
+pub(super) use topic::{Relaunch, Topic};
 
 #[cfg(test)]
 mod tests;

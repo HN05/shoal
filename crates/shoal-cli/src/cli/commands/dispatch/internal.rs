@@ -5,8 +5,8 @@ use crate::{
     cli::{
         args::internal::InternalCommand,
         commands::{
-            agent_state, approvals, chat, environment, events, menu, messages, progress, subagents,
-            worktree_hooks,
+            agent_state, approvals, environment, events, menu, messages, progress, start,
+            subagents, worktree_hooks,
         },
         context::Context,
         terminal,
@@ -117,7 +117,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
         }
         InternalCommand::QueueStart { entry } => crate::queued_starts::run(&ctx.paths, entry).await,
         InternalCommand::ChatStart => crate::chat_starts::run(&ctx.paths).await,
-        InternalCommand::Chat { handoff } => chat::start_handed(&ctx, &handoff).await,
+        InternalCommand::Chat { handoff } => start::start_handed(&ctx, &handoff).await,
         InternalCommand::Operation => crate::operations::run(&ctx.paths).await,
         InternalCommand::Launch { file } => crate::terminal::run_launch(&file),
         InternalCommand::TakeOver {

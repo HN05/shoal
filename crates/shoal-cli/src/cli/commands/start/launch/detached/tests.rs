@@ -4,7 +4,7 @@ use shoal_schedule::priority::Priority;
 
 use super::*;
 use crate::{
-    cli::commands::chat::{ChatPlace, Topic},
+    cli::commands::start::{ChatPlace, Topic},
     config::{modes::ModeName, permissions::PermissionsConfig},
     model::Repository,
 };
