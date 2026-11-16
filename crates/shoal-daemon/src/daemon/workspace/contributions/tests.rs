@@ -160,7 +160,7 @@ async fn a_contribution_goes_once_its_workspaces_and_checkpoints_are_gone() {
     );
 
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
@@ -234,7 +234,11 @@ async fn an_ended_chats_files_keep_a_contribution_until_they_expire() {
         .unwrap();
     manager.end_executions(&chat.id).await;
     manager
-        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .remove_selected(
+            &SpaceSelector::id(&chat.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     manager.sweep_contributions().await.unwrap();

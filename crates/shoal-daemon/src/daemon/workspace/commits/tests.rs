@@ -347,7 +347,7 @@ async fn a_removed_workspace_at_a_commit_is_restored_without_a_branch() {
         .await
         .unwrap();
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             crate::removal::UnsavedWork::All,
             crate::removal::InspectionPolicy::GitOnly,
@@ -535,7 +535,7 @@ async fn removing_one_switched_onto_a_branch_leaves_that_branch() {
     // On a branch, its starting commit no longer counts as kept.
     assert_eq!(check.unpushed_commits, 1, "{check:?}");
     let removed = manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             crate::removal::UnsavedWork::All,
             crate::removal::InspectionPolicy::GitOnly,
@@ -642,7 +642,7 @@ async fn a_restored_prs_workspace_drops_a_base_that_is_gone() {
         .await
         .unwrap();
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&opened.workspace.id),
             crate::removal::UnsavedWork::All,
             crate::removal::InspectionPolicy::GitOnly,
@@ -879,7 +879,7 @@ async fn a_restored_workspace_at_a_commit_cuts_a_name_an_older_shoal_recorded() 
         .unwrap();
     let selector = SpaceSelector::id(&workspace.id);
     manager
-        .remove_workspace(
+        .remove_selected(
             &selector,
             crate::removal::UnsavedWork::All,
             crate::removal::InspectionPolicy::GitOnly,

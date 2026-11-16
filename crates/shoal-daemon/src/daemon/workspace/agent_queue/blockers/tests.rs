@@ -47,7 +47,7 @@ async fn space(manager: &Manager, name: &str) -> Blocker {
 
 async fn remove(manager: &Manager, workspace: &Workspace) {
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::default(),
             InspectionPolicy::IncludeDirectoryProcesses,
@@ -129,7 +129,11 @@ async fn launches_blocked_by_a_chat_start_once_it_is_done_or_removed() {
     let docs = add_blocked(&manager, &repo, "docs", vec![blocker]).await;
     manager.end_executions(&talk.id).await;
     manager
-        .remove_chat(&SpaceSelector::id(&talk.id), None)
+        .remove_selected(
+            &SpaceSelector::id(&talk.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     manager.dispatch_queue().await.unwrap();

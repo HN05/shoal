@@ -1,5 +1,6 @@
 use super::*;
 use crate::daemon::test_support::{chat, manager, repository};
+use crate::removal::{InspectionPolicy, UnsavedWork};
 use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
@@ -16,7 +17,11 @@ async fn a_removed_chat_keeps_a_record_of_how_and_where_it_ran() {
         .unwrap();
     let removed_chat = chat(&manager, "notes", "plan", Some(&repo), Some(&parent.id)).await;
     manager
-        .remove_chat(&SpaceSelector::id(&removed_chat.id), None)
+        .remove_selected(
+            &SpaceSelector::id(&removed_chat.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
 
@@ -67,7 +72,10 @@ async fn a_converted_workspace_keeps_its_record_beside_the_chat_it_became() {
         .await
         .unwrap();
     let chat = SpaceSelector::id(&workspace.id);
-    manager.remove_chat(&chat, None).await.unwrap();
+    manager
+        .remove_selected(&chat, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
 
     // Each record has its own ID: the chat the workspace's, the workspace
     // a new one, which its checkpoints moved to.

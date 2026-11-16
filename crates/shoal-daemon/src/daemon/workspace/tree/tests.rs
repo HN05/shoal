@@ -97,7 +97,7 @@ async fn splitting_records_the_parent_and_removal_takes_the_subtree_first() {
         .unwrap();
     std::fs::write(leaf.path.join("draft.txt"), "draft").unwrap();
     let removed = manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&root.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
@@ -172,7 +172,7 @@ async fn a_child_that_cannot_go_retains_its_parent() {
         .await
         .unwrap();
     let removed = manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&parent.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
@@ -384,7 +384,7 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
         .unwrap();
     // So does the removal itself, for a hold acquired after authorization.
     let removed = manager
-        .remove_unheld_workspace(
+        .remove_unheld(
             &SpaceSelector::id(&child.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
@@ -1307,7 +1307,7 @@ async fn a_launch_reopens_only_its_recorded_workspace() {
     assert!(opened.reused && opened.workspace.id == child.id);
     // Removed during the handoff, the child is not created again from its branch.
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&child.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
@@ -2652,7 +2652,7 @@ async fn a_removal_takes_only_the_children_it_was_confirmed_with() {
         .await
         .unwrap();
     let removed = manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&parent.id),
             confirmed.clone(),
             InspectionPolicy::GitOnly,
@@ -2675,7 +2675,7 @@ async fn a_removal_takes_only_the_children_it_was_confirmed_with() {
         .await
         .unwrap();
     let removed = manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&parent.id),
             UnsavedWork::confirming(&check),
             InspectionPolicy::GitOnly,

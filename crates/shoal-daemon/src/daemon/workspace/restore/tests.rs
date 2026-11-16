@@ -81,7 +81,7 @@ async fn removal_checkpoint_keeps_files_workspace_processes_write_as_they_stop()
     .expect("workspace process did not start");
 
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
@@ -136,7 +136,7 @@ async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
         .unwrap();
 
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::IncludeDirectoryProcesses,
@@ -295,7 +295,7 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
         .unwrap();
     let status = git(&workspace.path, &["status", "--porcelain"]);
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::IncludeDirectoryProcesses,
@@ -418,7 +418,7 @@ async fn a_started_restore_keeps_expiry_from_its_record_checkpoints_and_files() 
         .unwrap();
     fs::write(workspace.path.join("scratch"), "notes\n").unwrap();
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::IncludeDirectoryProcesses,
@@ -502,7 +502,7 @@ async fn restore_refuses_a_branch_that_moved_away_or_is_in_use() {
     fs::write(workspace.path.join("work"), "work\n").unwrap();
     commit(&workspace.path, "work");
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::IncludeDirectoryProcesses,
@@ -708,7 +708,7 @@ async fn a_failed_removal_keeps_its_checkpoint() {
     let path = workspace.path.to_str().unwrap();
     git(&checkout, &["worktree", "lock", path]);
     let removed = manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::IncludeDirectoryProcesses,
@@ -763,7 +763,7 @@ async fn restore_skips_setup_a_workspace_skipped() {
         .await
         .unwrap();
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::IncludeDirectoryProcesses,
@@ -796,7 +796,7 @@ async fn restore_keeps_the_recorded_base_and_its_stack() {
         .unwrap();
     assert_eq!(upper.base_ref.as_deref(), Some("refs/heads/lower"));
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&upper.id),
             UnsavedWork::All,
             InspectionPolicy::IncludeDirectoryProcesses,
@@ -889,7 +889,7 @@ async fn restore_cuts_a_name_an_older_shoal_recorded_to_fit() {
         .unwrap();
     let selector = SpaceSelector::id(&workspace.id);
     manager
-        .remove_workspace(
+        .remove_selected(
             &selector,
             UnsavedWork::All,
             InspectionPolicy::IncludeDirectoryProcesses,
@@ -955,7 +955,7 @@ async fn restore_gives_the_workspace_the_files_the_removed_one_kept() {
         panic!("{added:?}");
     };
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
@@ -998,7 +998,7 @@ async fn restore_gives_the_workspace_the_files_the_removed_one_kept() {
 
     // Removed again, they expire with it.
     manager
-        .remove_workspace(&id, UnsavedWork::All, InspectionPolicy::GitOnly)
+        .remove_selected(&id, UnsavedWork::All, InspectionPolicy::GitOnly)
         .await
         .unwrap();
     manager
@@ -1043,7 +1043,7 @@ async fn a_scoped_caller_restores_only_below_a_parent_in_its_scope() {
         .unwrap();
     for id in [&child.id, &top.id] {
         let selector = SpaceSelector::id(id);
-        (manager.remove_workspace(&selector, UnsavedWork::All, InspectionPolicy::GitOnly))
+        (manager.remove_selected(&selector, UnsavedWork::All, InspectionPolicy::GitOnly))
             .await
             .unwrap();
     }
@@ -1105,7 +1105,7 @@ async fn a_restored_workspace_goes_below_its_parent_while_that_exists() {
     let remove = |selector: SpaceSelector| {
         let manager = std::sync::Arc::clone(&manager);
         async move {
-            (manager.remove_workspace(&selector, UnsavedWork::All, InspectionPolicy::GitOnly))
+            (manager.remove_selected(&selector, UnsavedWork::All, InspectionPolicy::GitOnly))
                 .await
                 .unwrap();
         }
@@ -1156,7 +1156,7 @@ async fn a_restored_agent_forks_the_session_another_space_holds() {
     )
     .unwrap();
     let selector = SpaceSelector::id(&workspace.id);
-    (manager.remove_workspace(&selector, UnsavedWork::All, InspectionPolicy::GitOnly))
+    (manager.remove_selected(&selector, UnsavedWork::All, InspectionPolicy::GitOnly))
         .await
         .unwrap();
     // A chat here continues the same session meanwhile.
@@ -1212,7 +1212,10 @@ async fn a_scoped_caller_cannot_restore_a_chat_into_a_worktree_outside_its_scope
         .await
         .unwrap();
     let selector = SpaceSelector::id(&chat.id);
-    manager.remove_chat(&selector, None).await.unwrap();
+    manager
+        .remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
     let caller = Caller {
         space_id: own.id.clone(),
         execution: None,

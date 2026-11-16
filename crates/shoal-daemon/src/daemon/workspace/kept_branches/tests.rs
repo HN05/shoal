@@ -54,7 +54,7 @@ async fn kept(manager: &Manager, repo: &Repository, name: &str) -> String {
     fs::write(workspace.path.join(name), name).unwrap();
     commit(&workspace.path, name);
     let removed = manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,

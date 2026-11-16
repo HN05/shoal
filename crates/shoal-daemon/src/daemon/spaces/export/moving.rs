@@ -55,7 +55,12 @@ impl Manager {
             ByKind::Chat(chat) => {
                 let taking = self.chat_taking(&chat.id, &unsaved).await?;
                 self.hand_over_assignees(&chat.id).await?;
-                (self.remove_chat(&SpaceSelector::id(&chat.id), Some(taking))).await?;
+                (self.remove_selected(
+                    &SpaceSelector::id(&chat.id),
+                    UnsavedWork::taking(taking),
+                    InspectionPolicy::GitOnly,
+                ))
+                .await?;
                 return Ok(None);
             }
         };

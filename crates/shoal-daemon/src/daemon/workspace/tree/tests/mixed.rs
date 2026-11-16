@@ -193,7 +193,7 @@ async fn removing_a_workspace_removes_a_chat_below_it_and_what_is_below_that() {
     assert_eq!(below, [&worker.id, &chat.id], "deepest first");
 
     let removed = manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&root.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
@@ -330,7 +330,7 @@ async fn removing_a_workspace_removes_the_chats_in_it_first() {
     // A chat started in it after the confirmation keeps it all.
     let (late, late_process) = chat_in(&manager, &host, "late").await;
     let removed = manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&host.id),
             confirmed,
             InspectionPolicy::GitOnly,
@@ -339,7 +339,11 @@ async fn removing_a_workspace_removes_the_chats_in_it_first() {
     assert!(removed.is_err());
     assert_eq!(manager.chats().await.unwrap().len(), 3);
     manager
-        .remove_chat(&SpaceSelector::id(&late.id), None)
+        .remove_selected(
+            &SpaceSelector::id(&late.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     drop(late_process);
@@ -349,7 +353,7 @@ async fn removing_a_workspace_removes_the_chats_in_it_first() {
         .await
         .unwrap();
     let removed = manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&host.id),
             UnsavedWork::confirming(&check),
             InspectionPolicy::GitOnly,

@@ -1,3 +1,4 @@
+use crate::removal::{InspectionPolicy, UnsavedWork};
 use crate::{
     daemon::{
         notifications::NotificationKind,
@@ -358,7 +359,11 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
     );
     assert!(user(&manager).await.is_empty());
     manager
-        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .remove_selected(
+            &SpaceSelector::id(&chat.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     let unread = (manager.store)
@@ -425,7 +430,7 @@ async fn a_removed_workspace_gives_the_user_the_events_it_had_not_received() {
     assert!(user(&manager).await.is_empty());
 
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&parent.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,
@@ -500,7 +505,11 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
     // chat is removed.
     manager.assign_parent(&worker.id, None).await.unwrap();
     manager
-        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .remove_selected(
+            &SpaceSelector::id(&chat.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     let handed = manager.notifications(true, 50).await.unwrap();
@@ -597,7 +606,11 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
     manager.end_executions(&chat.id).await;
     manager.assign_parent(&worker.id, None).await.unwrap();
     manager
-        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .remove_selected(
+            &SpaceSelector::id(&chat.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     let notifications = manager.notifications(false, 100).await.unwrap();

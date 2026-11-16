@@ -1,4 +1,5 @@
 use super::{Attacher, FileSource, chat, workspace};
+use crate::removal::{InspectionPolicy, UnsavedWork};
 use crate::{
     daemon::{test_support::manager, workspace::Manager},
     model::SpaceKind,
@@ -32,7 +33,7 @@ fn summary(events: &[FileEventDetails]) -> Vec<(FileEventKind, &str, FileSource)
 
 async fn remove(manager: &Manager, id: &SpaceId) {
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,
@@ -285,7 +286,11 @@ async fn a_chats_file_events_name_the_chat() {
         .unwrap();
     manager.end_executions(&chat.id).await;
     manager
-        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .remove_selected(
+            &SpaceSelector::id(&chat.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     manager
@@ -342,7 +347,11 @@ async fn the_file_events_of_a_chat_without_a_repository_name_none() {
         .unwrap();
     manager.end_executions(&chat.id).await;
     manager
-        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .remove_selected(
+            &SpaceSelector::id(&chat.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     manager

@@ -83,7 +83,7 @@ async fn a_removed_workspace_keeps_no_number() {
         .await
         .unwrap();
     let number = SpaceSelector::Number(worker.number);
-    (manager.remove_workspace(&number, UnsavedWork::default(), InspectionPolicy::GitOnly))
+    (manager.remove_selected(&number, UnsavedWork::default(), InspectionPolicy::GitOnly))
         .await
         .unwrap();
     assert!(manager.space(&number).await.is_err());

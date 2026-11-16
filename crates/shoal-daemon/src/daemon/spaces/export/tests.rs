@@ -349,7 +349,7 @@ async fn a_chat_that_starts_after_the_export_checked_keeps_everything() {
         .await
         .unwrap();
     let removed = manager
-        .remove_workspace_taking(
+        .remove_selected_taking(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
@@ -434,7 +434,11 @@ async fn removed_chat(
         crate::daemon::test_support::report_session(&manager, &chat.id, session).await;
     }
     manager
-        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .remove_selected(
+            &SpaceSelector::id(&chat.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     (root, manager, chat)
@@ -587,9 +591,13 @@ async fn a_carried_chat_whose_worktree_is_not_here_opens_in_the_checkout() {
         .await
         .unwrap();
     crate::daemon::test_support::report_session(&exporting, &reading.id, "s1").await;
-    (exporting.remove_chat(&SpaceSelector::id(&reading.id), None))
-        .await
-        .unwrap();
+    (exporting.remove_selected(
+        &SpaceSelector::id(&reading.id),
+        UnsavedWork::default(),
+        InspectionPolicy::GitOnly,
+    ))
+    .await
+    .unwrap();
     let removed = (exporting.removed_spaces().await.unwrap().into_iter())
         .find(|removed| removed.space_id == reading.id)
         .unwrap();
@@ -613,9 +621,13 @@ async fn an_imported_chat_keeps_its_id_and_a_copy_takes_its_own() {
     let reading =
         crate::daemon::test_support::chat(&exporting, "reading", "chat", Some(&source_repo), None)
             .await;
-    (exporting.remove_chat(&SpaceSelector::id(&reading.id), None))
-        .await
-        .unwrap();
+    (exporting.remove_selected(
+        &SpaceSelector::id(&reading.id),
+        UnsavedWork::default(),
+        InspectionPolicy::GitOnly,
+    ))
+    .await
+    .unwrap();
     let removed = exporting.removed_spaces().await.unwrap().remove(0);
 
     let moved = (importing.import_space(chat_import(Some(&target_repo), removed.clone())))

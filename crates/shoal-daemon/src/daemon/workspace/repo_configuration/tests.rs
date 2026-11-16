@@ -64,7 +64,7 @@ async fn a_workspace_recorded_where_the_local_config_belongs_is_never_local_conf
     let agent = settings.agent.default.as_ref().map(ToString::to_string);
     assert_ne!(agent.as_deref(), Some("codex"));
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::IncludeDirectoryProcesses,

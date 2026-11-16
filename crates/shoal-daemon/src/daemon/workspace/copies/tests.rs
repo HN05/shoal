@@ -247,7 +247,7 @@ async fn a_copy_starts_from_a_checkpoint_of_a_live_or_removed_workspace() {
     );
 
     f.manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&f.source.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
@@ -340,7 +340,7 @@ async fn an_untouched_copy_goes_without_consent_and_a_changed_one_does_not() {
         let manager = f.manager.clone();
         async move {
             manager
-                .remove_workspace(
+                .remove_selected(
                     &SpaceSelector::id(&id),
                     UnsavedWork::default(),
                     InspectionPolicy::GitOnly,
@@ -393,7 +393,7 @@ async fn agents_copy_only_live_workspaces_of_their_own_tree() {
         .await
         .unwrap();
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&other.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
@@ -419,7 +419,7 @@ async fn removing_an_untouched_copy_keeps_its_branch_when_only_it_has_the_commit
     assert_eq!(check.unpushed_commits, 1);
     assert!(check.commits_kept() && !check.branch_preserved());
     f.manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&copy.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
@@ -469,7 +469,7 @@ async fn removal_keeps_starting_files_above_the_archive_limit() {
     crate::daemon::test_support::configure(&f.manager, "[cleanup.restore]\narchive_max_mb = 0\n")
         .await;
     f.manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&copy.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,

@@ -1,6 +1,6 @@
-//! Removing a workspace in the background: the request returns once the
-//! workspace is reserved and passes removal's first checks, and whoever
-//! asked learns of a failure later.
+//! Removing a space in the background: the request returns once the space
+//! is reserved and passes removal's first checks, and whoever asked learns
+//! of a failure later.
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
@@ -14,29 +14,28 @@ use crate::{
         scope::Caller,
         workspace::Manager,
     },
-    model::Workspace,
+    model::Space,
     removal::{InspectionPolicy, UnsavedWork},
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
-    /// Start removing the workspace `selector` names at `caller`'s request,
-    /// as [`Self::remove_workspace`] removes it for the user, or as
-    /// [`Self::remove_unheld_workspace`] does for a scoped caller.
-    /// Returns the workspace once it is reserved and passes the checks
-    /// removal makes before changing anything; the rest goes on in the
-    /// background, which a daemon update waits for. A failure from then on
-    /// retains the workspace and reaches the agent of the caller's space,
-    /// or else the user.
-    pub(crate) async fn start_workspace_removal(
+    /// Start removing the space `selector` names at `caller`'s request, as
+    /// [`Self::remove_selected`] removes it for the user, or as
+    /// [`Self::remove_unheld`] does for a scoped caller. Returns the space
+    /// once it is reserved and passes the checks removal makes before
+    /// changing anything; the rest goes on in the background, which a daemon
+    /// update waits for. A failure from then on retains the space and
+    /// reaches the agent of the caller's space, or else the user.
+    pub(crate) async fn start_removal(
         self: &Arc<Self>,
         selector: &SpaceSelector,
         unsaved: UnsavedWork,
         caller: Option<&Caller>,
-    ) -> Result<Workspace> {
+    ) -> Result<Space> {
         let operation = self.gates.owned_operation().await;
-        let id = self.workspace(selector).await?.id;
+        let id = self.space(selector).await?.id;
         let (checked, passed) = oneshot::channel();
         let manager = self.clone();
         let release_holds = caller.is_none();
@@ -47,24 +46,24 @@ impl Manager {
             let _operation = operation;
             let removal = manual(&unsaved, release_holds);
             let mut checked = Some(checked);
-            let mut workspace = None;
+            let mut reserved = None;
             let removed = manager.remove_space_checked(&id, removal, |space| {
-                workspace = Some(space.to_workspace().context("no longer a workspace")?);
-                if let (Some(checked), Some(workspace)) = (checked.take(), &workspace) {
-                    let _ = checked.send(Ok(workspace.clone()));
+                if let Some(checked) = checked.take() {
+                    let _ = checked.send(Ok(space.clone()));
                 }
+                reserved = Some(space.clone());
                 Ok(())
             });
             let Err(error) = removed.await else {
                 return;
             };
-            match (checked, workspace) {
+            match (checked, reserved) {
                 (Some(checked), _) => {
                     let _ = checked.send(Err(error));
                 }
-                (None, Some(workspace)) => {
+                (None, Some(space)) => {
                     manager
-                        .report_failed_removal(&workspace, requester.as_ref(), &error)
+                        .report_failed_removal(&space, requester.as_ref(), &error)
                         .await;
                 }
                 (None, None) => log!("removal of {id} failed: {error:#}"),
@@ -76,23 +75,24 @@ impl Manager {
     }
 
     /// Tell the agent of `requester`, or else the user, that removing
-    /// `workspace` failed with `error` and the workspace stays. A requesting
-    /// chat removed before it reads the message hands it to the user.
+    /// `space` failed with `error` and the space stays. A requesting chat
+    /// removed before it reads the message hands it to the user.
     async fn report_failed_removal(
         &self,
-        workspace: &Workspace,
+        space: &Space,
         requester: Option<&SpaceId>,
         error: &anyhow::Error,
     ) {
         let kind = NotificationKind::RemovalFailed;
         let message = format!(
-            "removal failed: {error:#}; the workspace stays, and shoal rm {} tries again",
-            workspace.number
+            "removal failed: {error:#}; the {} stays, and shoal rm {} tries again",
+            space.kind(),
+            space.number
         );
         if let Some(requester) = requester {
             let about = agent_messages::About {
-                name: workspace.name.clone(),
-                id: Some(workspace.id.clone()),
+                name: space.name.clone(),
+                id: Some(space.id.clone()),
                 kind: Some(kind),
             };
             let queued =
@@ -102,7 +102,7 @@ impl Manager {
                 Err(error) => log!("removal failure not sent to {requester}: {error:#}"),
             }
         }
-        self.notify_about(About::space(&workspace.name, &workspace.id), kind, message)
+        self.notify_about(About::space(&space.name, &space.id), kind, message)
             .await;
     }
 }

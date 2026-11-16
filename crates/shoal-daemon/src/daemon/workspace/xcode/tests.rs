@@ -42,7 +42,7 @@ async fn cleanup_skips_a_busy_repository_and_recorded_worktrees() {
     // Creating a workspace or merging holds the gate.
     let gate = manager.gates.lock_git(&repo.id).await;
     manager
-        .remove_workspace(
+        .remove_selected(
             &manager.named("removed").await,
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
@@ -116,7 +116,7 @@ async fn removal_prunes_package_checkouts_nothing_pins() {
         }
     }
     manager
-        .remove_workspace(
+        .remove_selected(
             &manager.named("removed").await,
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
@@ -157,7 +157,7 @@ async fn removal_deletes_the_workspaces_derived_data_under_the_xcode_preset() {
         ));
     }
     let remove =
-        |name| manager.remove_workspace(name, UnsavedWork::default(), InspectionPolicy::GitOnly);
+        |name| manager.remove_selected(name, UnsavedWork::default(), InspectionPolicy::GitOnly);
     let first = manager.named("first").await;
     remove(&first).await.unwrap();
     assert!(!folders[0].exists());

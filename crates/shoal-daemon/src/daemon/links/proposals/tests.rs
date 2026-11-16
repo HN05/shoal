@@ -283,7 +283,7 @@ async fn a_proposal_keeps_its_number_and_reserves_its_removed_space() {
     let proposed = store_issue_proposal(&manager, &proposer.clone().into()).await;
     assert_eq!(proposed.number.space, proposer.number);
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&proposer.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,
@@ -565,7 +565,7 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
     manager.notify_approval(&pending).await;
     for id in [&child.id, &parent.id] {
         manager
-            .remove_workspace(
+            .remove_selected(
                 &SpaceSelector::id(id),
                 UnsavedWork::default(),
                 InspectionPolicy::GitOnly,

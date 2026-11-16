@@ -1,4 +1,5 @@
 use super::super::tests::{fixture, fixture_with_hook, fixture_with_removal_hook};
+use crate::removal::InspectionPolicy;
 use crate::{
     daemon::{notifications::NotificationKind, scope::Caller},
     removal::{NOTHING, UnsavedWork},
@@ -27,7 +28,7 @@ async fn returns_before_the_removal_finishes() {
     .await;
     let selector = SpaceSelector::id(&workspace.id);
     manager
-        .start_workspace_removal(&selector, NOTHING.clone(), None)
+        .start_removal(&selector, NOTHING.clone(), None)
         .await
         .unwrap();
     let reserved = manager.workspace_by_id(&workspace.id).await.unwrap();
@@ -46,7 +47,7 @@ async fn refuses_unconfirmed_work_before_returning() {
     std::fs::write(workspace.path.join("draft.txt"), "unsaved").unwrap();
     let selector = SpaceSelector::id(&workspace.id);
     let error = manager
-        .start_workspace_removal(&selector, NOTHING.clone(), None)
+        .start_removal(&selector, NOTHING.clone(), None)
         .await
         .unwrap_err();
     assert!(format!("{error:#}").contains("confirm it or pass --yes"));
@@ -54,7 +55,7 @@ async fn refuses_unconfirmed_work_before_returning() {
     assert_eq!(retained.state, WorkspaceState::Ready);
 
     manager
-        .start_workspace_removal(&selector, everything(), None)
+        .start_removal(&selector, everything(), None)
         .await
         .unwrap();
     drop(manager.gates.quiesce().await);
@@ -66,7 +67,7 @@ async fn a_failure_retains_the_workspace_and_tells_the_user() {
     let (_root, manager, workspace) = fixture_with_removal_hook("exit 1").await;
     let selector = SpaceSelector::id(&workspace.id);
     manager
-        .start_workspace_removal(&selector, NOTHING.clone(), None)
+        .start_removal(&selector, NOTHING.clone(), None)
         .await
         .unwrap();
     drop(manager.gates.quiesce().await);
@@ -90,7 +91,7 @@ async fn a_failure_reaches_the_requesting_agent() {
         .await
         .unwrap();
     manager
-        .start_workspace_removal(
+        .start_removal(
             &SpaceSelector::id(&workspace.id),
             NOTHING.clone(),
             Some(&caller_in(&requester.id)),
@@ -132,7 +133,7 @@ async fn a_failure_outlives_the_requesting_chat() {
         .await
         .unwrap();
     manager
-        .start_workspace_removal(
+        .start_removal(
             &SpaceSelector::id(&workspace.id),
             NOTHING.clone(),
             Some(&caller_in(&chat.id)),
@@ -155,7 +156,11 @@ async fn a_failure_outlives_the_requesting_chat() {
 
     process.kill();
     manager
-        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .remove_selected(
+            &SpaceSelector::id(&chat.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     assert!(

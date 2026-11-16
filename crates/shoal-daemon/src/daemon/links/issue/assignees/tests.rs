@@ -52,7 +52,7 @@ async fn the_assignee_stays_while_another_space_of_the_login_links_the_issue() {
     // Removing the last space that links it takes it back.
     let selector = SpaceSelector::id(&second.id);
     (fixture.manager)
-        .remove_workspace(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
         .await
         .unwrap();
     assert_eq!(fixture.changes(), [json!(["shoal-user"]), json!([])]);
@@ -66,7 +66,7 @@ async fn an_assignee_a_removal_cannot_take_back_notifies_the_user() {
     fixture.link(workspace).await;
     let selector = SpaceSelector::id(&workspace.id);
     (fixture.manager)
-        .remove_workspace(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
         .await
         .unwrap();
     let notifications = fixture.manager.notifications(true, 10).await.unwrap();
@@ -88,7 +88,7 @@ async fn a_moved_space_leaves_its_assignee_to_the_other_machine() {
     let manager = &fixture.manager;
     manager.hand_over_assignees(&workspace.id).await.unwrap();
     let selector = SpaceSelector::id(&workspace.id);
-    (manager.remove_workspace(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly))
+    (manager.remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly))
         .await
         .unwrap();
     assert_eq!(fixture.changes(), [json!(["shoal-user"])]);
@@ -102,7 +102,7 @@ async fn a_restored_space_takes_back_the_assignee_shoal_added_before() {
     fixture.link(workspace).await;
     // The removal could not take it back, so the forge still shows it.
     fixture.refuse(Refuse::Removing);
-    (manager.remove_workspace(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly))
+    (manager.remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly))
         .await
         .unwrap();
     fixture.refuse(Refuse::Nothing);

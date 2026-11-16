@@ -4,6 +4,7 @@
 //! under the agent slots. An admitted chat's start worker opens a background
 //! place for it, and the daemon answers once the chat runs its agent; one
 //! whose agent waits is recorded at once, and the answer names its entry.
+use crate::removal::{InspectionPolicy, UnsavedWork};
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{
@@ -165,7 +166,14 @@ impl Manager {
         let chat = (self.start_new_chat(start.repository.clone(), workspace, new)).await?;
         if let Err(error) = self.attach_chat(entry, &chat.id).await {
             let selector = shoal_protocol::space_names::SpaceSelector::id(&chat.id);
-            if let Err(removal) = self.remove_chat(&selector, Some(Vec::new())).await {
+            if let Err(removal) = self
+                .remove_selected(
+                    &selector,
+                    UnsavedWork::taking(Vec::new()),
+                    InspectionPolicy::GitOnly,
+                )
+                .await
+            {
                 crate::daemon::log!("chat {} kept without its launch: {removal:#}", chat.id);
             }
             return Err(error);

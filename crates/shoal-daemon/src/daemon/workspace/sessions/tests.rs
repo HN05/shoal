@@ -173,7 +173,7 @@ async fn removal_closes_every_owned_session_and_orphan_sweep_preserves_live_owne
             std::fs::remove_dir_all(&workspace.path)?;
         }
         manager
-            .remove_workspace(
+            .remove_selected(
                 &SpaceSelector::id(&workspace.id),
                 UnsavedWork::All,
                 InspectionPolicy::GitOnly,
@@ -193,7 +193,7 @@ async fn refused_removal_keeps_sessions() -> Result<()> {
     std::fs::write(workspace.path.join("unsaved"), "work")?;
     assert!(
         manager
-            .remove_workspace(
+            .remove_selected(
                 &SpaceSelector::id(&workspace.id),
                 UnsavedWork::default(),
                 InspectionPolicy::GitOnly
@@ -214,7 +214,7 @@ async fn failed_session_close_does_not_block_removal_or_other_sessions_and_is_re
     host.add("good", workspace.id.as_str())?;
     host.fail.store(true, Ordering::Relaxed);
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
@@ -878,7 +878,11 @@ async fn a_chats_removal_closes_the_places_shoal_created_that_it_runs_in() -> Re
     assert!(host.closed()?.is_empty());
     for (chat, _process) in &chats {
         manager
-            .remove_chat(&SpaceSelector::id(&chat.id), None)
+            .remove_selected(
+                &SpaceSelector::id(&chat.id),
+                UnsavedWork::default(),
+                InspectionPolicy::GitOnly,
+            )
             .await?;
     }
     assert_eq!(host.closed()?, ["opened", "taken"]);

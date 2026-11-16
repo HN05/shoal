@@ -123,7 +123,7 @@ async fn names_suffix_only_conflicts_and_serialize_concurrent_adds() {
     fs::write(workspace.path.join("work"), "work\n").unwrap();
     commit(&workspace.path, "work");
     f.manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             crate::removal::UnsavedWork::default(),
             InspectionPolicy::IncludeDirectoryProcesses,
@@ -522,7 +522,7 @@ async fn check_branch_compatibility(cases: &[(String, String, bool)]) {
             format!("refs/heads/{expected}\n")
         );
         f.manager
-            .remove_workspace(
+            .remove_selected(
                 &SpaceSelector::id(&allocated.id),
                 crate::removal::UnsavedWork::All,
                 InspectionPolicy::IncludeDirectoryProcesses,
@@ -754,7 +754,7 @@ async fn existing_branch_refuses_other_checkouts_and_takes_a_free_directory() {
         Some("main")
     );
     f.manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&main.workspace.id),
             crate::removal::UnsavedWork::default(),
             InspectionPolicy::IncludeDirectoryProcesses,
@@ -1129,7 +1129,7 @@ async fn existing_default_branch_survives_normal_workspace_removal() {
     let before = git(&f.repo, &["rev-parse", "main"]);
     let removed = f
         .manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&opened.workspace.id),
             crate::removal::UnsavedWork::default(),
             InspectionPolicy::IncludeDirectoryProcesses,
@@ -2460,7 +2460,7 @@ async fn adoption_of_default_branch_uses_opening_commit_and_retains_branch() {
         Some(git(&path, &["rev-parse", "HEAD"]).trim())
     );
     f.manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&w.id),
             crate::removal::UnsavedWork::default(),
             InspectionPolicy::IncludeDirectoryProcesses,

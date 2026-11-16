@@ -146,7 +146,7 @@ async fn a_removed_workspace_is_restored_before_its_merge_is_undone() {
     let (before, head) = (f.main(), rev(&worker.path, "HEAD"));
     f.merge("worker").await;
     f.manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&worker.id),
             crate::removal::UnsavedWork::All,
             crate::removal::InspectionPolicy::GitOnly,

@@ -18,7 +18,7 @@ async fn agents(names: &[&str], assignees: &[&str], config: &str) -> Fixture {
 async fn remove(fixture: &Fixture, workspace: &Workspace) {
     let selector = SpaceSelector::id(&workspace.id);
     (fixture.manager)
-        .remove_workspace(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
         .await
         .unwrap();
 }

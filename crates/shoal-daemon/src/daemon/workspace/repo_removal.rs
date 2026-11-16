@@ -357,7 +357,7 @@ impl Manager {
             if self.find_workspace(&workspace.id).await?.is_none() {
                 continue;
             }
-            self.remove_workspace(
+            self.remove_selected(
                 &SpaceSelector::id(&workspace.id),
                 UnsavedWork::All,
                 InspectionPolicy::GitOnly,

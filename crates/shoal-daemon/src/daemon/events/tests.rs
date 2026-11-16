@@ -230,7 +230,7 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
         match cause {
             EventCause::Manual => {
                 manager
-                    .remove_workspace(
+                    .remove_selected(
                         &SpaceSelector::id(&workspace.id),
                         UnsavedWork::default(),
                         InspectionPolicy::GitOnly,

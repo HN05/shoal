@@ -591,7 +591,7 @@ async fn attached_files_are_copied_beside_the_workspaces_until_removal() {
         .unwrap();
     assert!(copy.exists(), "a delivered message keeps its files");
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,
@@ -724,7 +724,7 @@ async fn a_send_waiting_through_removal_leaves_no_files() {
         let (manager, id) = (manager.clone(), workspace.id.clone());
         async move {
             manager
-                .remove_workspace(
+                .remove_selected(
                     &SpaceSelector::id(&id),
                     crate::removal::UnsavedWork::default(),
                     crate::removal::InspectionPolicy::GitOnly,

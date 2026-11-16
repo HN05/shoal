@@ -596,7 +596,7 @@ async fn a_removed_workspace_has_nothing_to_copy() {
         .await
         .unwrap();
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,

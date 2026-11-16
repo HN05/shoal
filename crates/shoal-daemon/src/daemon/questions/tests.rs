@@ -456,7 +456,7 @@ async fn open_questions_keep_the_workspace_and_removal_deletes_them() {
         .await
         .unwrap();
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,

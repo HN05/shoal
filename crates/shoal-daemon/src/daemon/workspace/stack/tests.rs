@@ -53,7 +53,7 @@ async fn creation_infers_the_base_and_removal_moves_stacked_workspaces_down() {
 
     for (removed, base) in [(&middle, Some(reference(&lower))), (&lower, None)] {
         manager
-            .remove_workspace(
+            .remove_selected(
                 &SpaceSelector::id(&removed.id),
                 UnsavedWork::default(),
                 InspectionPolicy::GitOnly,

@@ -1,3 +1,4 @@
+use crate::removal::{InspectionPolicy, UnsavedWork};
 use shoal_ids::execution_ids::ExecutionId;
 use std::{sync::Arc, time::Duration};
 
@@ -448,7 +449,11 @@ async fn a_chats_agent_asks_hears_the_answer_in_its_inbox_and_asks_in_its_conver
     manager.end_executions(&chat.id).await;
     assert_eq!(manager.questions(None).await.unwrap().questions.len(), 1);
     manager
-        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .remove_selected(
+            &SpaceSelector::id(&chat.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     assert!(manager.questions(None).await.unwrap().questions.is_empty());

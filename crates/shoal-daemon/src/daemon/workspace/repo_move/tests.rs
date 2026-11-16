@@ -5,6 +5,7 @@ use crate::daemon::{
     workspace::{ExecutionKind, identity},
     workspace_files::Attacher,
 };
+use crate::removal::{InspectionPolicy, UnsavedWork};
 use crate::time::UnixTime;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::assignments::Done;
@@ -739,7 +740,7 @@ async fn disk_cleanup_behind_a_move_checks_where_results_went() -> Result<()> {
         )
         .await?;
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,
@@ -853,7 +854,9 @@ async fn a_root_move_takes_the_files_of_removed_chats_without_a_repository() -> 
     let selector = SpaceSelector::id(&chat.id);
     (manager.add_attached_files(&selector, vec![report.into()], &Attacher::User)).await?;
     manager.end_executions(&chat.id).await;
-    manager.remove_chat(&selector, None).await?;
+    manager
+        .remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .await?;
 
     manager.move_repositories(Layout::Excluded).await?;
 
@@ -868,7 +871,9 @@ async fn a_root_move_takes_the_session_files_kept_for_chats_without_a_repository
     let (temp, manager, chat, root) = with_master().await?;
     let selector = SpaceSelector::id(&chat.id);
     manager.end_executions(&chat.id).await;
-    manager.remove_chat(&selector, None).await?;
+    manager
+        .remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .await?;
     let record = manager.removed_spaces().await?.remove(0);
     let contents = temp.path().join("carried");
     fs::write(&contents, "{}\n")?;

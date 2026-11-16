@@ -103,20 +103,18 @@ pub(super) async fn handle(
             Body::RemovalResult(match caller {
                 Some(_) => {
                     manager
-                        .remove_unheld_workspace(&workspace, unsaved, InspectionPolicy::GitOnly)
+                        .remove_unheld(&workspace, unsaved, InspectionPolicy::GitOnly)
                         .await?
                 }
                 None => {
                     manager
-                        .remove_workspace(&workspace, unsaved, InspectionPolicy::GitOnly)
+                        .remove_selected(&workspace, unsaved, InspectionPolicy::GitOnly)
                         .await?
                 }
             })
         }
         RemovalMethod::StartRemoval { workspace, unsaved } => {
-            manager
-                .start_workspace_removal(&workspace, unsaved, caller)
-                .await?;
+            manager.start_removal(&workspace, unsaved, caller).await?;
             Body::Ok
         }
         RemovalMethod::Cleanup { dry_run, selection } => {

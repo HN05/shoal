@@ -278,7 +278,7 @@ async fn cleanup_deletes_the_results_of_removed_workspaces_last() {
         .path
         .clone();
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&audit.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,

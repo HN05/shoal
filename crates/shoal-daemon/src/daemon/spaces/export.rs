@@ -273,7 +273,7 @@ impl Manager {
     ) -> Result<RemovalResult> {
         let taking = self.exported_with(workspace, &unsaved).await?;
         let selector = SpaceSelector::id(&workspace.id);
-        (self.remove_workspace_taking(&selector, unsaved, inspection, &taking)).await
+        (self.remove_selected_taking(&selector, unsaved, inspection, &taking)).await
     }
 
     /// The IDs of the spaces the export of `workspace` removes first, of
@@ -302,7 +302,12 @@ impl Manager {
         self.ensure_movable_chat(&chat).await?;
         let carried = self.chats_carried_by(&chat.id).await?;
         let taking = self.chat_taking(&chat.id, unsaved).await?;
-        (self.remove_chat(&SpaceSelector::id(&chat.id), Some(taking))).await?;
+        (self.remove_selected(
+            &SpaceSelector::id(&chat.id),
+            UnsavedWork::taking(taking),
+            InspectionPolicy::GitOnly,
+        ))
+        .await?;
         let removed = self.removal_record(&chat.id).await?;
         self.prepare_removed_chat(removed, &carried).await
     }

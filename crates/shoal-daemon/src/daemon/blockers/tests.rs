@@ -134,7 +134,7 @@ async fn a_space_blocker_clears_once_that_space_is_done_or_removed() {
         .await
         .unwrap();
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&docs.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::IncludeDirectoryProcesses,

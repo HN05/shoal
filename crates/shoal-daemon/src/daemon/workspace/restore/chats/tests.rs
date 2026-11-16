@@ -34,7 +34,10 @@ async fn a_removed_chat_comes_back_under_its_id_below_its_parent() {
     let repo = manager.repository(parent.repository()).await.unwrap();
     let removed = chat(&manager, "notes", "plan", Some(&repo), Some(&parent.id)).await;
     let selector = SpaceSelector::id(&removed.id);
-    manager.remove_chat(&selector, None).await.unwrap();
+    manager
+        .remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
 
     let restored = restore_chat(&manager, &removed.id).await;
     let chat = restored.chat;
@@ -66,7 +69,10 @@ async fn a_removed_chat_keeps_its_running_agent_with_its_session() {
     let removed = chat(&manager, "notes", "plan", Some(&repo), None).await;
     crate::daemon::test_support::report_session(&manager, &removed.id, "s1").await;
     let selector = SpaceSelector::id(&removed.id);
-    manager.remove_chat(&selector, None).await.unwrap();
+    manager
+        .remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
 
     let records = manager.removed_spaces().await.unwrap();
     let [record] = records.as_slice() else {
@@ -94,7 +100,7 @@ async fn a_chat_in_a_removed_workspace_restores_once_that_workspace_does() {
         .start_chat_in_workspace(&selector, "review".into(), "claude".into(), None)
         .await
         .unwrap();
-    (manager.remove_workspace(&selector, UnsavedWork::All, InspectionPolicy::GitOnly))
+    (manager.remove_selected(&selector, UnsavedWork::All, InspectionPolicy::GitOnly))
         .await
         .unwrap();
     assert_eq!(manager.removed_spaces().await.unwrap().len(), 2);
@@ -120,7 +126,11 @@ async fn a_chat_without_a_repository_gets_back_the_session_files_its_root_dir_ke
     let (root, manager) = manager().await;
     let removed = chat(&manager, "notes", "chat", None, None).await;
     manager
-        .remove_chat(&SpaceSelector::id(&removed.id), None)
+        .remove_selected(
+            &SpaceSelector::id(&removed.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     let record = manager.removed_spaces().await.unwrap().remove(0);

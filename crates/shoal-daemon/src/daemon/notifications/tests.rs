@@ -519,7 +519,7 @@ async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
     assert_eq!(std::fs::read_to_string(copy).unwrap(), "png");
 
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&child.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,

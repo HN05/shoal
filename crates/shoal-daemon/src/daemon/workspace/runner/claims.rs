@@ -475,7 +475,7 @@ impl Manager {
 
     /// Remove a job's workspace whatever it holds; its claim goes with it.
     pub(super) async fn remove_job_workspace(&self, workspace_id: &SpaceId) -> Result<()> {
-        self.remove_workspace(
+        self.remove_selected(
             &SpaceSelector::id(workspace_id),
             crate::removal::UnsavedWork::All,
             InspectionPolicy::GitOnly,

@@ -513,7 +513,7 @@ async fn removing_the_workspace_stops_its_review() {
     }
     let mut ended = manager.reviews.ended.subscribe();
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&fixture.workspace.id),
             crate::removal::UnsavedWork::All,
             crate::removal::InspectionPolicy::GitOnly,

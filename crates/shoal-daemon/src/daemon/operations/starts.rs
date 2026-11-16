@@ -440,7 +440,7 @@ impl Manager {
     /// Remove the new `workspace`, which nothing ran in yet.
     async fn discard_new(&self, workspace: &Workspace) {
         let removal = self
-            .remove_workspace(
+            .remove_selected(
                 &SpaceSelector::id(&workspace.id),
                 UnsavedWork::All,
                 InspectionPolicy::GitOnly,

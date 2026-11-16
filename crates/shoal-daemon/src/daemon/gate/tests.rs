@@ -340,7 +340,7 @@ async fn an_issue_proposal_whose_space_is_gone_goes_to_the_user() {
         crate::daemon::links::proposals::store_issue_proposal(&fixture.manager, &space).await;
     let manager = &fixture.manager;
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&fixture.workspace.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,

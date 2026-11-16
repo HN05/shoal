@@ -1,6 +1,7 @@
 //! Trees below a chat without a repository, which takes children in every
 //! repository and whose scope reaches every space.
 use crate::execution::recovery::LastSessionExt;
+use crate::removal::{InspectionPolicy, UnsavedWork};
 use crate::{
     daemon::{
         chats::NewChat,
@@ -126,7 +127,11 @@ async fn a_chat_without_a_repository_keeps_its_temporary_directory_in_root_dir()
     manager.sweep_tmp_dirs().await.unwrap();
     assert!(tmp_dir.is_dir(), "{}", tmp_dir.display());
     manager
-        .remove_chat(&SpaceSelector::id(&master.id), None)
+        .remove_selected(
+            &SpaceSelector::id(&master.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     assert!(!tmp_dir.exists(), "{}", tmp_dir.display());
@@ -243,7 +248,11 @@ async fn removing_a_chat_without_a_repository_removes_its_children_in_every_repo
     let second = worked(&manager, &repos[1], "second", Some(&master.id)).await;
     super::mixed::stop_chat(&manager, &master, process).await;
     let removed = manager
-        .remove_chat(&SpaceSelector::id(&master.id), None)
+        .remove_selected(
+            &SpaceSelector::id(&master.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     let mut children: Vec<_> = removed.children.iter().map(SpaceName::as_str).collect();

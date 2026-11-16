@@ -10,12 +10,13 @@ use crate::{
     daemon::{cleanup::Snapshot, events::EventCause, space_processes::WorktreeTies},
     model::{Completion, Space, SpaceRef},
     process::DirectoryUsers,
-    removal::{IdleRestore, Inspection, InspectionPolicy, RemovalResult, UnsavedWork},
+    removal::{
+        BranchOutcome, IdleRestore, Inspection, InspectionPolicy, RemovalResult, UnsavedWork,
+    },
     state::WorkspaceState,
 };
 use anyhow::{Context, Result, bail, ensure};
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::chats::RemovedChat;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use shoal_refs::CommitId;
 
@@ -50,10 +51,28 @@ impl SpaceRemoval {
         let worktree = self.worktree.context("the space has no worktree")?;
         Ok(worktree.with_children(self.children))
     }
+
+    /// The protocol's result of removing a space: its worktree's, or for a
+    /// space without one, a removal that had no branch to delete.
+    pub(crate) fn result(self) -> RemovalResult {
+        match self.worktree {
+            Some(worktree) => worktree.with_children(self.children),
+            None => RemovalResult {
+                removed: true,
+                branch: None,
+                branch_outcome: BranchOutcome::NotAttempted,
+                hook_error: None,
+                children: self.children,
+            },
+        }
+    }
 }
 
 impl Manager {
-    pub async fn remove_workspace(
+    /// Remove the space `selector` names at a request, stopping its agent,
+    /// first the spaces below it, deleting only the `unsaved` work the
+    /// caller saw.
+    pub async fn remove_selected(
         &self,
         selector: &SpaceSelector,
         unsaved: UnsavedWork,
@@ -65,13 +84,13 @@ impl Manager {
             release_holds: true,
             taking: None,
         };
-        self.remove_selected_workspace(selector, removal).await
+        self.remove_requested(selector, removal).await
     }
 
-    /// Remove the workspace as [`Self::remove_workspace`] does, taking only
-    /// the spaces `taking` names before it: one that appears in it or below
-    /// it meanwhile retains them all.
-    pub(crate) async fn remove_workspace_taking(
+    /// Remove the space as [`Self::remove_selected`] does, taking only the
+    /// spaces `taking` names before it: one that appears in it or below it
+    /// meanwhile retains them all.
+    pub(crate) async fn remove_selected_taking(
         &self,
         selector: &SpaceSelector,
         unsaved: UnsavedWork,
@@ -84,12 +103,12 @@ impl Manager {
             release_holds: true,
             taking: Some(taking),
         };
-        self.remove_selected_workspace(selector, removal).await
+        self.remove_requested(selector, removal).await
     }
 
-    /// Remove the workspace as [`Self::remove_workspace`] does, refusing it
+    /// Remove the space as [`Self::remove_selected`] does, refusing it
     /// while it has holds, which are the user's and host apps'.
-    pub async fn remove_unheld_workspace(
+    pub async fn remove_unheld(
         &self,
         selector: &SpaceSelector,
         unsaved: UnsavedWork,
@@ -101,45 +120,16 @@ impl Manager {
             release_holds: false,
             taking: None,
         };
-        self.remove_selected_workspace(selector, removal).await
+        self.remove_requested(selector, removal).await
     }
 
-    async fn remove_selected_workspace(
+    async fn remove_requested(
         &self,
         selector: &SpaceSelector,
         removal: Removal<'_>,
     ) -> Result<RemovalResult> {
-        let workspace = self.workspace(selector).await?;
-        (self.remove_space(&workspace.id, removal).await?).workspace_result()
-    }
-
-    /// Remove the chat `selector` names, by ID or name, at the user's
-    /// request, stopping its agent: first the spaces below it, of which
-    /// `children`, when given, are the IDs the user saw and the only ones it
-    /// takes. Returns the chat and the names of the spaces it took.
-    pub async fn remove_chat(
-        &self,
-        selector: &SpaceSelector,
-        children: Option<Vec<SpaceId>>,
-    ) -> Result<RemovedChat> {
-        let chat = self.chat(selector).await?;
-        let unsaved = UnsavedWork::Confirmed {
-            files: false,
-            detached_head: None,
-            files_restorable: false,
-            children,
-        };
-        let removal = Removal::Manual {
-            unsaved: &unsaved,
-            inspection: InspectionPolicy::GitOnly,
-            release_holds: true,
-            taking: None,
-        };
-        let removed = self.remove_space(&chat.id, removal).await?;
-        Ok(RemovedChat {
-            chat,
-            children: removed.children,
-        })
+        let space = self.space(selector).await?;
+        Ok(self.remove_space(&space.id, removal).await?.result())
     }
 
     /// Remove `space`, which idle or merged cleanup found unchanged as

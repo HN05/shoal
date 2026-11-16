@@ -181,7 +181,7 @@ async fn a_subscription_sends_its_snapshot_then_each_kind_of_change() {
     .await;
 
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
@@ -228,7 +228,7 @@ async fn the_user_keeps_seeing_an_issue_proposal_its_workspace_left() {
     let proposal = store_issue_proposal(&daemon.manager, &workspace.clone().into()).await;
     daemon
         .manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,

@@ -275,7 +275,7 @@ async fn the_users_removal_takes_a_workspace_whose_setup_never_started() {
         .unwrap();
     let selected = SpaceSelector::id(&workspace.id);
     let remove =
-        || manager.remove_workspace(&selected, UnsavedWork::default(), InspectionPolicy::GitOnly);
+        || manager.remove_selected(&selected, UnsavedWork::default(), InspectionPolicy::GitOnly);
     assert!(remove().await.is_err());
     assert_eq!(
         manager.workspace_by_id(&workspace.id).await.unwrap().state,
@@ -320,7 +320,7 @@ async fn removal_waiting_for_creation_keeps_what_creation_recorded() {
         let id = workspace.id.clone();
         async move {
             manager
-                .remove_workspace(
+                .remove_selected(
                     &SpaceSelector::id(&id),
                     UnsavedWork::default(),
                     InspectionPolicy::GitOnly,
@@ -480,7 +480,7 @@ async fn removal_retains_session_logs_until_ownership_is_released() {
 
     assert!(
         manager
-            .remove_workspace(
+            .remove_selected(
                 &SpaceSelector::id(&workspace.id),
                 UnsavedWork::default(),
                 InspectionPolicy::GitOnly
@@ -492,7 +492,7 @@ async fn removal_retains_session_logs_until_ownership_is_released() {
     assert_eq!(fs::read_to_string(&log).unwrap(), "session output");
 
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
@@ -512,7 +512,7 @@ async fn removal_needs_consent_to_delete_commits_on_a_detached_head() {
     let head = git(&workspace.path, &["rev-parse", "HEAD"]);
 
     let removed = manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
@@ -528,7 +528,7 @@ async fn removal_needs_consent_to_delete_commits_on_a_detached_head() {
     );
 
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
@@ -554,7 +554,7 @@ async fn consent_covers_only_the_unsaved_work_it_saw() {
     crate::daemon::test_support::commit(&workspace.path, "later");
 
     let removed = manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             files_only,
             InspectionPolicy::GitOnly,
@@ -568,7 +568,7 @@ async fn consent_covers_only_the_unsaved_work_it_saw() {
         .await
         .unwrap();
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::confirming(&check),
             InspectionPolicy::GitOnly,
@@ -593,7 +593,7 @@ async fn removal_keeps_files_it_promised_to_restore_when_the_checkpoint_cannot()
         .await;
 
     let removed = manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             promised(true),
             InspectionPolicy::GitOnly,
@@ -603,7 +603,7 @@ async fn removal_keeps_files_it_promised_to_restore_when_the_checkpoint_cannot()
     assert!(workspace.path.join("draft").exists());
 
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             promised(false),
             InspectionPolicy::GitOnly,
@@ -621,7 +621,7 @@ async fn removal_of_a_detached_head_without_unpushed_commits_keeps_the_branch() 
     git(&workspace.path, &["switch", "--detach"]);
 
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
@@ -987,7 +987,7 @@ async fn removal_stops_processes_carrying_the_workspace_identity() {
     let unrelated_identity = identity::capture(unrelated.id().unwrap()).unwrap().unwrap();
 
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
@@ -1017,7 +1017,7 @@ async fn removal_stops_processes_its_post_remove_hook_leaves() {
     .await;
 
     let outcome = manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
@@ -1058,7 +1058,7 @@ async fn removal_deletes_a_branch_a_remote_has_and_keeps_unpushed_work() {
 
     for (workspace, deleted) in [(&pushed, true), (&unpushed, false)] {
         let removed = manager
-            .remove_workspace(
+            .remove_selected(
                 &SpaceSelector::id(&workspace.id),
                 UnsavedWork::default(),
                 InspectionPolicy::GitOnly,
@@ -1160,7 +1160,7 @@ async fn automatic_removal_keeps_branch_when_default_branch_is_unknown() {
         .await
         .unwrap();
     let removed = manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
@@ -1185,7 +1185,7 @@ async fn removal_stops_detached_processes_running_from_the_worktree() {
     let attached_identity = identity::capture(attached.id().unwrap()).unwrap().unwrap();
 
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
@@ -1219,7 +1219,7 @@ async fn removal_stops_detached_programs_built_in_the_worktree() {
     .await;
 
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
@@ -1286,7 +1286,7 @@ while [ ! -e '{pids}' ]; do sleep 1; done"#,
     .await;
 
     let removed = manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
@@ -1343,7 +1343,7 @@ async fn a_removal_moves_results_up_in_the_transaction_that_deletes_it() {
         .await
         .unwrap();
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&bottom.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
@@ -1479,7 +1479,7 @@ async fn a_disposable_workspace_deletes_only_its_own_new_branch() {
         .unwrap();
     git(&workspace.path, &["switch", "-q", "kept"]);
     let removed = manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
@@ -1498,7 +1498,7 @@ async fn the_log_shows_a_removal_that_failed_once_however_often_it_fails() {
     let selector = SpaceSelector::id(&workspace.id);
     for _ in 0..2 {
         manager
-            .remove_workspace(&selector, NOTHING.clone(), InspectionPolicy::GitOnly)
+            .remove_selected(&selector, NOTHING.clone(), InspectionPolicy::GitOnly)
             .await
             .unwrap_err();
     }
@@ -1541,7 +1541,7 @@ async fn disowned_workspace(disposable: bool) -> (tempfile::TempDir, Arc<Manager
 async fn removal_deletes_a_disposable_worktree_git_disowned() {
     let (_root, manager, workspace) = disowned_workspace(true).await;
     let removed = manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
@@ -1566,7 +1566,7 @@ async fn removal_deletes_a_disposable_worktree_git_disowned() {
 async fn removal_retains_a_kept_worktree_git_disowned() {
     let (_root, manager, workspace) = disowned_workspace(false).await;
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
@@ -1619,7 +1619,7 @@ async fn removal_finishes_one_that_stopped_partway() {
     let (_root, manager, workspace) = fixture().await;
     let admin_dir = cut_short_removal(&manager, &workspace, Some(DAEMON_STOPPED)).await;
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             NOTHING.clone(),
             InspectionPolicy::GitOnly,
@@ -1639,7 +1639,7 @@ async fn a_failed_retry_keeps_the_stopped_removal_pending() {
     // Ownership no longer verifies, so the retry fails before restoring.
     fs::write(admin_dir.join("shoal-workspace"), "another\n").unwrap();
     let selector = SpaceSelector::id(&workspace.id);
-    (manager.remove_workspace(&selector, NOTHING.clone(), InspectionPolicy::GitOnly))
+    (manager.remove_selected(&selector, NOTHING.clone(), InspectionPolicy::GitOnly))
         .await
         .unwrap_err();
     let retained = manager.workspace_by_id(&workspace.id).await.unwrap();
@@ -1656,7 +1656,7 @@ async fn check_deletions_kept(failure: Option<&str>) {
     let (_root, manager, workspace) = fixture().await;
     let admin_dir = cut_short_removal(&manager, &workspace, failure).await;
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             NOTHING.clone(),
             InspectionPolicy::GitOnly,
@@ -1696,7 +1696,7 @@ async fn startup_restores_what_a_cut_short_removal_deleted() {
 async fn workspace_life_with_git_in_a_hook() {
     let (_root, manager, workspace) = fixture_with_removal_hook("git branch hooked").await;
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
@@ -1767,7 +1767,7 @@ async fn failed_checkout() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
 async fn removal_deletes_what_a_failed_checkout_left() {
     let (_root, manager, workspace) = failed_checkout().await;
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
@@ -1788,7 +1788,7 @@ async fn removal_deletes_what_a_failed_checkout_left() {
 /// workspace's: it stays, and the error names it for the user to delete.
 async fn retains_unproven(manager: &Manager, workspace: &Workspace) {
     let error = manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,

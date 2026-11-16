@@ -43,7 +43,7 @@ async fn a_removal_the_daemon_stopped_fails_its_workspace_for_shoal_rm() {
     );
 
     manager
-        .remove_workspace(&selector, NOTHING.clone(), InspectionPolicy::GitOnly)
+        .remove_selected(&selector, NOTHING.clone(), InspectionPolicy::GitOnly)
         .await
         .unwrap();
     assert!(manager.workspace_by_id(&workspace.id).await.is_err());

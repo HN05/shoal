@@ -1,3 +1,4 @@
+use crate::removal::{InspectionPolicy, UnsavedWork};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::assignments::Done;
 use std::time::Duration;
@@ -269,7 +270,7 @@ async fn files_sent_with_messages_are_listed_until_they_expire() {
     assert_eq!(std::fs::read_to_string(&listed.path).unwrap(), "panic");
 
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,
@@ -645,7 +646,7 @@ async fn results_outlive_removal_as_long_as_its_record() {
     );
 
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&child.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,
@@ -747,7 +748,7 @@ async fn results_stay_reachable_when_a_workspace_between_goes() {
         .unwrap();
     for removed in [&bottom, &middle] {
         manager
-            .remove_workspace(
+            .remove_selected(
                 &SpaceSelector::id(&removed.id),
                 crate::removal::UnsavedWork::default(),
                 crate::removal::InspectionPolicy::GitOnly,
@@ -832,7 +833,7 @@ async fn expiry_refuses_results_whose_directory_was_replaced() {
         .path
         .clone();
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&audit.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,
@@ -912,7 +913,7 @@ async fn kept_results_answer_to_the_name_the_workspace_had_when_removed() {
         .await
         .unwrap();
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&audit.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,
@@ -1153,7 +1154,11 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
 
     manager.end_executions(&chat.id).await;
     manager
-        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .remove_selected(
+            &SpaceSelector::id(&chat.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     manager.expire_results().await.unwrap();
@@ -1270,7 +1275,11 @@ async fn a_chat_without_a_repository_keeps_its_files_in_root_dir() {
 
     manager.end_executions(&chat.id).await;
     manager
-        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .remove_selected(
+            &SpaceSelector::id(&chat.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     manager.expire_results().await.unwrap();
@@ -1340,7 +1349,11 @@ async fn files_of_a_chat_without_a_repository_stay_with_the_root_dir_it_started_
 
     manager.end_executions(&chat.id).await;
     manager
-        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .remove_selected(
+            &SpaceSelector::id(&chat.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     manager
@@ -1436,7 +1449,7 @@ async fn a_disposable_workspaces_files_outlive_it_for_the_retention_period() {
         panic!("{added:?}");
     };
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&disposable.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,
@@ -1485,7 +1498,7 @@ async fn removal_deletes_the_directories_of_files_already_deleted() {
     std::fs::create_dir_all(&directory).unwrap();
     std::fs::write(directory.join("leftover"), "").unwrap();
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,

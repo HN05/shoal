@@ -63,7 +63,7 @@ async fn a_workspace_has_its_own_tmpdir_until_it_is_removed() {
 
     std::fs::write(expected.join("scratch"), "garbage").unwrap();
     manager
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,

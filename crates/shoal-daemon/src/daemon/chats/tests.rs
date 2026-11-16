@@ -1,5 +1,6 @@
 use super::*;
 use crate::paths::StateFiles;
+use crate::removal::{InspectionPolicy, UnsavedWork};
 use crate::{
     daemon::{
         events::{EventCause, EventItem, EventKind},
@@ -368,7 +369,11 @@ async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
     assert!(!manager.chats().await.unwrap()[0].running);
     assert!(tmp_dir.exists());
     manager
-        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .remove_selected(
+            &SpaceSelector::id(&chat.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     assert!(manager.chats().await.unwrap().is_empty());
@@ -453,7 +458,11 @@ async fn a_removed_chat_takes_its_executions_restores_and_recovery_records() {
     .unwrap();
 
     manager
-        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .remove_selected(
+            &SpaceSelector::id(&chat.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     let left = manager
@@ -510,17 +519,24 @@ async fn removing_a_chat_removes_the_workspaces_below_it_first_and_stops_its_age
     // A removal the user confirmed for fewer spaces than are below it takes
     // none of them, and the chat stays.
     manager
-        .remove_chat(&manager.named("talk").await, Some(vec![opened.id.clone()]))
+        .remove_selected(
+            &manager.named("talk").await,
+            UnsavedWork::taking(vec![opened.id.clone()]),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap_err();
     assert!(manager.workspace_by_id(&split.id).await.is_ok());
     assert!(manager.chat(&manager.named("talk").await).await.is_ok());
 
     let removed = manager
-        .remove_chat(&manager.named("talk").await, None)
+        .remove_selected(
+            &manager.named("talk").await,
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
-    assert_eq!(removed.chat.id, chat.id);
     assert_eq!(removed.children, ["split", "opened"]);
     assert!(manager.workspace_by_id(&opened.id).await.is_err());
     assert!(manager.workspace_by_id(&split.id).await.is_err());
@@ -547,7 +563,11 @@ async fn removing_a_chat_stops_its_processes_outside_its_executions() {
     let process = chat_process(&manager, &chat).await;
 
     manager
-        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .remove_selected(
+            &SpaceSelector::id(&chat.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
 
@@ -869,7 +889,11 @@ async fn a_chat_s_log_shows_a_removal_that_failed() {
     let selector = SpaceSelector::id(&chat.id);
     // Confirmed without the workspace below it, the removal fails.
     manager
-        .remove_chat(&selector, Some(Vec::new()))
+        .remove_selected(
+            &selector,
+            UnsavedWork::taking(Vec::new()),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap_err();
 

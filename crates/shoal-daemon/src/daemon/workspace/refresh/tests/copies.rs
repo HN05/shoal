@@ -128,7 +128,7 @@ async fn a_copy_of_a_removed_workspace_has_nothing_to_refresh_from() {
     let (f, source) = Fixture::copied().await;
     let copy = f.copy(&source, "copy", None, false).await;
     (f.manager)
-        .remove_workspace(
+        .remove_selected(
             &SpaceSelector::id(&source.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
