@@ -366,7 +366,7 @@ async fn relay(
                     drop(claim);
                 }
                 let resumed_here = std::mem::take(resuming);
-                let _operation = match unattachable.take() {
+                let operation = match unattachable.take() {
                     Some(operation) => operation,
                     None => manager.gates.owned_operation().await,
                 };
@@ -393,6 +393,9 @@ async fn relay(
                     (manager.record_agent(&space.id, EventKind::AgentStarted, started)).await;
                 }
                 protocol::write(writer, &Control::Started).await?;
+                // A slow host close holds back no daemon update; a stop
+                // that arrives meanwhile waits in `stop` until it returns.
+                drop(operation);
                 manager.close_left_places(&space.id, left).await;
             }
             ExecutionEvent::Finished { exit_code } => {
