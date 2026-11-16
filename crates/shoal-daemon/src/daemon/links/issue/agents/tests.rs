@@ -44,6 +44,16 @@ async fn the_users_assignment_names_the_other_assignees_before_an_agent_works_it
 }
 
 #[tokio::test]
+async fn the_user_hears_nothing_of_their_own_assignment() {
+    let fixture = agents(&["fix"], &["shoal-user"], "").await;
+    let warnings = fixture
+        .link_as(&fixture.workspaces[0], Assigner::Agent)
+        .await;
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(fixture.changes(), [json!(["shoal-user", "shoal-agent"])]);
+}
+
+#[tokio::test]
 async fn the_users_assignment_to_a_space_without_an_agent_assigns_nobody() {
     let fixture = agents(&["fix"], &[], "").await;
     assert!(fixture.link(&fixture.workspaces[0]).await.is_empty());

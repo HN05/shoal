@@ -81,6 +81,15 @@ impl ForgeRepo {
         }))
     }
 
+    /// How `account` is named among this repository's assignees: none for
+    /// an account without a login of its own there.
+    pub async fn assignee_login(&self, account: &Account) -> Result<Option<String>> {
+        if !account.has_login(self) {
+            return Ok(None);
+        }
+        self.kind().own_assignee(self, account).await
+    }
+
     /// Remove the login `account` signs in as from the assignees of `issue`,
     /// of this repository, unless it is closed. An account without a login
     /// of its own there removes nothing.

@@ -125,6 +125,17 @@ async fn a_closed_issue_is_neither_assigned_nor_unassigned() {
 }
 
 #[tokio::test]
+async fn an_accounts_assignee_login_is_its_own_login() {
+    let server = issue_server("open", &[]);
+    let account = agent_on(&server, "agent").remembering(Memory::default());
+    let (repo, _) = issue(&server);
+    let login = repo.assignee_login(&account).await.unwrap();
+    assert_eq!(login.as_deref(), Some("Agent"));
+    let none = Account::agent(Default::default(), Default::default());
+    assert_eq!(repo.assignee_login(&none).await.unwrap(), None);
+}
+
+#[tokio::test]
 async fn an_account_without_its_own_login_assigns_nothing() {
     let server = issue_server("open", &[]);
     let account = Account::agent(Default::default(), Default::default());

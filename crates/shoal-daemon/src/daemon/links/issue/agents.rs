@@ -81,15 +81,33 @@ impl Manager {
 
     /// Settle the agent account on the issue `url`, which a space whose
     /// `[issue] assign` assigns it just linked as assigned. Returns what the
-    /// caller hears: with `others`, the issue's other assignees, or why it
-    /// was not settled.
+    /// caller hears: with `others`, the issue's assignees other than the
+    /// agent account and the user, or why it was not settled.
     pub(super) async fn assign_linked_agent(&self, url: &ItemRef, others: bool) -> Vec<String> {
-        match self.settle_issue_agent(url).await {
-            Ok(Some(assigned)) if others && !assigned.is_empty() => {
-                vec![super::also_assigned(url, &assigned)]
-            }
+        let assigned = match self.settle_issue_agent(url).await {
+            Ok(Some(assigned)) if others => self.besides_user(url, assigned).await,
             Ok(_) => Vec::new(),
-            Err(error) => vec![unsettled(url, &error)],
+            Err(error) => return vec![unsettled(url, &error)],
+        };
+        match assigned.is_empty() {
+            true => Vec::new(),
+            false => vec![super::also_assigned(url, &assigned)],
+        }
+    }
+
+    /// The `logins` of the issue `url`'s assignees but the user's own,
+    /// which a user who assigned the issue to themselves needs no word of;
+    /// all of them when the forge does not say which is the user's.
+    async fn besides_user(&self, url: &ItemRef, logins: Vec<String>) -> Vec<String> {
+        let user = match self.item_forge(url).await {
+            Ok(forge) => forge.assignee_login(&self.user_account()).await,
+            Err(error) => Err(error),
+        };
+        match user {
+            Ok(Some(user)) => (logins.into_iter())
+                .filter(|login| !login.eq_ignore_ascii_case(&user))
+                .collect(),
+            _ => logins,
         }
     }
 
