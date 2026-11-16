@@ -944,7 +944,7 @@ fn a_chats_agent_attaches_files_the_user_lists_after_the_chat_ends() {
     agent.wait().unwrap();
     let stopped = fixture.ok(&["files", &fixture.id("planning")]);
     assert!(stopped[0]["expires_at"].is_null(), "{stopped}");
-    fixture.ok(&["rm", &chat, "--yes"]);
+    fixture.ok(&["rm", "--wait", &chat, "--yes"]);
     let kept = fixture.ok(&["files", &chat]);
     assert_eq!(kept[0]["path"], added[0]["path"], "{kept}");
     assert!(kept[0]["expires_at"].is_i64(), "{kept}");
