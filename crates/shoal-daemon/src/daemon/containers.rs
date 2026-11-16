@@ -28,7 +28,8 @@ use crate::{
 use shoal_protocol::{
     acquirers::Acquirer,
     containers::{
-        ContainerCatalog, ContainerOverview, ContainerProject, ContainerState, Containers,
+        ContainerCatalog, ContainerOverview, ContainerProject, ContainerRuntime, ContainerState,
+        Containers,
     },
     space_names::SpaceSelector,
 };
@@ -143,12 +144,7 @@ impl Manager {
         let settings = (self.workspace_settings_from(&config, workspace).await?)
             .into_settings()
             .containers;
-        let compose = settings.compose.with_context(|| {
-            format!(
-                "the repository of {} configures no containers; set [containers] compose",
-                workspace.name
-            )
-        })?;
+        let compose = configured_compose(workspace, settings.compose)?;
         ensure_ready(workspace)?;
         let ports = match self
             .reserve_ports(workspace, settings.ports, caller)
@@ -157,31 +153,21 @@ impl Manager {
             Ok(ports) => ports,
             Err(pending) => return Ok(pending),
         };
-        let runtime = match self.container_project(&workspace.id).await? {
-            Some(recorded) if recorded.project.state == ContainerState::Running => {
-                let renewed = self.renew_containers(recorded, starter).await?;
-                return Ok(ContainerAcquisition::Started(Box::new(
-                    self.describe_containers(renewed).await,
-                )));
+        let recorded = self.container_project(&workspace.id).await?;
+        let project = match recorded {
+            Some(running) if running.project.state == ContainerState::Running => {
+                self.renew_containers(running, starter).await?
             }
-            // A project keeps the runtime that started it.
-            Some(recorded) => recorded.project.runtime,
-            None => compose::find_runtime(config.machine.containers.runtime)?,
+            recorded => {
+                // A project keeps the runtime that started it.
+                let runtime = match recorded {
+                    Some(recorded) => recorded.project.runtime,
+                    None => compose::find_runtime(config.machine.containers.runtime)?,
+                };
+                let starting = starting_project(workspace, compose, runtime, starter);
+                self.run_project(workspace, starting, &ports).await?
+            }
         };
-        let recorded = Recorded {
-            project: ContainerProject {
-                workspace_id: workspace.id.clone(),
-                project: compose::project_name(&workspace.id),
-                runtime,
-                compose: compose.clone(),
-                state: ContainerState::Starting,
-                acquirer: starter.acquirer,
-                reason: starter.reason,
-                error: None,
-            },
-            for_agent: starter.for_agent,
-        };
-        let project = self.run_project(workspace, recorded, &ports).await?;
         Ok(ContainerAcquisition::Started(Box::new(
             self.describe_containers(project).await,
         )))
@@ -356,6 +342,39 @@ impl Manager {
             services,
             services_error,
         }
+    }
+}
+
+/// The Compose file `[containers] compose` names for `workspace`.
+fn configured_compose(workspace: &Workspace, compose: Option<String>) -> Result<String> {
+    compose.with_context(|| {
+        format!(
+            "the repository of {} configures no containers; set [containers] compose",
+            workspace.name
+        )
+    })
+}
+
+/// The project of `workspace` from `compose` on `runtime`, as `starter`
+/// starts it.
+fn starting_project(
+    workspace: &Workspace,
+    compose: String,
+    runtime: ContainerRuntime,
+    starter: Starter,
+) -> Recorded {
+    Recorded {
+        project: ContainerProject {
+            workspace_id: workspace.id.clone(),
+            project: compose::project_name(&workspace.id),
+            runtime,
+            compose,
+            state: ContainerState::Starting,
+            acquirer: starter.acquirer,
+            reason: starter.reason,
+            error: None,
+        },
+        for_agent: starter.for_agent,
     }
 }
 
