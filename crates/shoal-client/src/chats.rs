@@ -2,7 +2,7 @@
 //! parents and scope, listing them and removing them.
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::chats::{RemovedChat, StartedChat};
+use shoal_protocol::chats::RemovedChat;
 
 use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;

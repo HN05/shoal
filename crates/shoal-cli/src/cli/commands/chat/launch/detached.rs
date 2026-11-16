@@ -12,7 +12,6 @@ use crate::{
     },
 };
 use shoal_protocol::chats::{QueuedChat, StartedChat};
-use shoal_protocol::launches::StartTarget;
 use shoal_protocol::launches::{IssueChoice, Launch, LaunchSource, Launched, SpaceChoice};
 use shoal_protocol::space_names::SpaceName;
 

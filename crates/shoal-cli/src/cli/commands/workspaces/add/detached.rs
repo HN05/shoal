@@ -24,8 +24,6 @@ use crate::{
     start_plan::AddPlan,
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
-use shoal_protocol::queue::WorkerStart;
-use shoal_protocol::space_names::SpaceSelector;
 
 /// Whether a start's agent, if `agent`, starts detached, unless `--here`
 /// asks to run it in place: for a scoped caller, whose own processes it
