@@ -520,7 +520,7 @@ impl Manager {
     pub async fn chat_scope(&self, id: &SpaceId) -> Result<ScopeToken> {
         let id = id.to_owned();
         let token = (self.store)
-            .run(move |db| crate::daemon::scope::tokens::chat_token(db, &id))
+            .run(move |db| crate::daemon::scope::tokens::agent_token(db, &id))
             .await?;
         token.context("no such chat")
     }
@@ -606,7 +606,7 @@ fn insert(
             created_at: chat.started_at,
         },
     )?;
-    crate::daemon::scope::tokens::issue(tx, &chat.id)?;
+    crate::daemon::scope::tokens::issue_agent(tx, &chat.id)?;
     if parent.is_some() {
         chat.parent = workspace::parent(tx, &chat.id)?;
     }

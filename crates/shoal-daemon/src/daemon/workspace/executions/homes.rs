@@ -193,7 +193,7 @@ impl Home {
     pub(super) fn scope_token(&self, tx: &Transaction<'_>) -> Result<ScopeToken> {
         match self {
             Self::Workspace { .. } => Ok(crate::daemon::scope::new_token()),
-            Self::Chat { chat, .. } => tokens::chat_token(tx, &chat.id)?.context("no such chat"),
+            Self::Chat { chat, .. } => tokens::agent_token(tx, &chat.id)?.context("no such chat"),
         }
     }
 

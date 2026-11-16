@@ -627,6 +627,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 198 {
         db.execute_batch(include_str!("agent_assigned_issues.sql"))?;
     }
+    if version >= 199 {
+        db.execute_batch(include_str!("space_scope_agents.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -1809,6 +1812,34 @@ fn migration_keeps_every_scope_token_acting_for_its_space() -> Result<()> {
         db.query_row("SELECT COUNT(*) FROM space_scopes", [], |r| r
             .get::<_, i64>(0))?,
         2
+    );
+    Ok(())
+}
+
+#[test]
+fn migration_marks_each_chats_token_as_its_agents() -> Result<()> {
+    let mut db = historical_database(198)?;
+    db.execute_batch(
+        "BEGIN;
+         INSERT INTO chats(id) VALUES ('chat');
+         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('chat','chat','repo','chat');
+         COMMIT;
+         INSERT INTO space_scopes(token,space_id)
+            VALUES ('chat-token','chat'),('exported','workspace');",
+    )?;
+
+    migrate(&mut db)?;
+
+    let tokens = db
+        .prepare("SELECT token,agent FROM space_scopes ORDER BY token")?
+        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, bool>(1)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    assert_eq!(
+        tokens,
+        [
+            ("chat-token".to_owned(), true),
+            ("exported".to_owned(), false)
+        ]
     );
     Ok(())
 }

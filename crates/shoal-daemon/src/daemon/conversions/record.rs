@@ -278,7 +278,7 @@ pub(crate) fn relocated_chat(
     token: Option<&ScopeToken>,
 ) -> Result<()> {
     if let Some(token) = token {
-        tokens::revoke(tx, id, token)?;
+        tokens::revoke_agent(tx, id, token)?;
     }
     forget(tx, id)
 }
@@ -332,7 +332,7 @@ pub(crate) fn replace_workspace(
     // The environments the workspace exported go with its worktree, and the
     // chat's agent carries a token of its own.
     tokens::clear(tx, id)?;
-    tokens::issue(tx, id)?;
+    tokens::issue_agent(tx, id)?;
     // Requests bound to the worktree, its branch or its leases go with them.
     tx.execute(
         "DELETE FROM access_requests WHERE space_id=?1 AND target_key NOT LIKE 'action/%'",
@@ -379,7 +379,7 @@ fn chat_row(db: &Connection, id: &SpaceId) -> Result<ChatRow> {
         .optional()?
         .with_context(|| format!("no chat {id}"))?;
     let mut row: ChatRow = serde_json::from_str(&row)?;
-    row.scope_token = tokens::chat_token(db, id)?;
+    row.scope_token = tokens::agent_token(db, id)?;
     row.space_completion = db
         .query_row(
             "SELECT record,cause FROM space_completion WHERE space_id=?1",
@@ -412,7 +412,7 @@ fn give_back_chat_row(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) -> Resu
     spaces::convert(tx, id, SpaceKind::Chat, &row.mode()?, &narrowing)?;
     tokens::clear(tx, id)?;
     match &row.scope_token {
-        Some(token) => tokens::record(tx, id, token),
+        Some(token) => tokens::record_agent(tx, id, token),
         None => Ok(()),
     }
 }
