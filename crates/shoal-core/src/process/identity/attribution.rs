@@ -65,7 +65,7 @@ pub async fn scan(ids: HashSet<ExecutionId>) -> Result<Scan> {
 /// Live same-user processes carrying the identity of chat `id`: its agent
 /// and what the agent started with its environment.
 pub async fn scan_chat(id: &SpaceId) -> Result<Vec<Identity>> {
-    let scan = scan_marked(Marker::Chat, HashSet::from([id.clone()])).await?;
+    let scan = scan_marked(Marker::Space, HashSet::from([id.clone()])).await?;
     Ok(scan.processes.into_iter().map(|p| p.identity).collect())
 }
 
@@ -74,7 +74,7 @@ pub async fn scan_chat(id: &SpaceId) -> Result<Vec<Identity>> {
 /// exported environment, each paired with the workspace it carries.
 /// Unreadable environments cannot be attributed and are left out.
 pub async fn scan_workspaces(ids: HashSet<SpaceId>) -> Result<Vec<(SpaceId, Identity)>> {
-    let scan = scan_marked(Marker::Workspace, ids).await?;
+    let scan = scan_marked(Marker::Space, ids).await?;
     Ok(scan
         .processes
         .into_iter()

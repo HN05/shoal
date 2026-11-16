@@ -285,7 +285,7 @@ async fn workspace(paths: &CommandPaths) -> Result<SpaceSelector> {
     let cwd = crate::fsutil::current_dir::current_directory()?;
     let current = cwd.and_then(|cwd| Workspace::innermost(&workspaces, &cwd));
     let own = || {
-        crate::env::workspace_scoped()
+        crate::env::workspace_scope()
             .then(|| workspaces.first())
             .flatten()
     };

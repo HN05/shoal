@@ -21,7 +21,7 @@ fn install_done_hook(fixture: &Fixture) -> PathBuf {
     let hook = fixture.root.path().join("done hook.sh");
     install_test_script(
         &hook,
-        "#!/bin/sh\nprintf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\\n' \"$SHOAL_HOOK\" \"$SHOAL_WORKSPACE\" \"$SHOAL_WORKSPACE_ID\" \"$SHOAL_WORKSPACE_PATH\" \"$PWD\" \"$SHOAL_STATE_DIR\" \"$SHOAL_DONE_CHOICE\" \"${SHOAL_SCOPE_TOKEN-unset}\" \"${SHOAL_EXECUTION_ID-unset}\" \"${SHOAL_RESERVED_PORT_ENV-unset}\" >> \"$HOME/done-events\"\n",
+        "#!/bin/sh\nprintf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\\n' \"$SHOAL_HOOK\" \"$SHOAL_WORKSPACE\" \"$SHOAL_SPACE\" \"$SHOAL_WORKSPACE_PATH\" \"$PWD\" \"$SHOAL_STATE_DIR\" \"$SHOAL_DONE_CHOICE\" \"${SHOAL_SCOPE_TOKEN-unset}\" \"${SHOAL_EXECUTION_ID-unset}\" \"${SHOAL_RESERVED_PORT_ENV-unset}\" >> \"$HOME/done-events\"\n",
     );
     hook
 }
@@ -106,7 +106,7 @@ fn agent_exit_hook_can_signal_completion_without_a_post_done_hook() {
     install_test_script(
         &hook,
         format!(
-            "#!/bin/sh\nexec '{}' --json done \"$SHOAL_WORKSPACE_ID\"\n",
+            "#!/bin/sh\nexec '{}' --json done \"$SHOAL_SPACE\"\n",
             support::shoal_binary()
         ),
     );

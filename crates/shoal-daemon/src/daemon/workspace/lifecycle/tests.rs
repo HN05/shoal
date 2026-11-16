@@ -972,7 +972,7 @@ fn workspace_process(root: &std::path::Path, workspace: &str) -> tokio::process:
     crate::daemon::test_support::spawn_marked_child(
         crate::daemon::test_support::marked_child()
             .env_clear()
-            .env(crate::env::WORKSPACE_ID, workspace)
+            .env(crate::env::SPACE, workspace)
             .current_dir(root)
             .process_group(0),
     )

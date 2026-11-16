@@ -381,7 +381,7 @@ async fn resolve_workspace(
 
 /// The workspace containing the current directory, for an unscoped caller.
 pub fn current_workspace(workspaces: &[Workspace]) -> Result<Option<&Workspace>> {
-    if crate::env::workspace_scoped() {
+    if Scoping::of_workspace() == Scoping::Scoped {
         return Ok(None);
     }
     let cwd = current_directory()?;
@@ -534,7 +534,7 @@ pub fn current_chat(explicit: &Option<SpaceSelector>) -> Option<SpaceId> {
     if explicit.is_some() {
         return None;
     }
-    crate::env::in_chat()
+    crate::env::own_chat()
 }
 
 /// [`select_space`] for a command that also acts on every space: `None`

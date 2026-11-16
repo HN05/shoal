@@ -128,16 +128,16 @@ fn command(ctx: &Context) -> Result<&str> {
 }
 
 /// The most recent of the workspaces and `chats` in `command`'s history
-/// other than the current workspace and chat.
+/// other than the current workspace and the space this process runs in.
 async fn previous_among(ctx: &Context, command: &str, chats: &[Chat]) -> Result<Option<SpaceId>> {
     let workspaces = crate::client::spaces::list(&ctx.paths)
         .await?
         .into_workspaces();
-    let current_chat = crate::env::chat();
+    let own = crate::env::own_space();
     let current: Vec<&SpaceId> = ui::current_workspace(&workspaces)?
         .map(|workspace| &workspace.id)
         .into_iter()
-        .chain(current_chat.as_ref())
+        .chain(own.as_ref())
         .collect();
     let spaces: Vec<&SpaceId> = workspaces
         .iter()

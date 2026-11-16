@@ -1120,7 +1120,10 @@ script and failures gate readiness; `.worktreeinclude`, a convention other workt
 tools share, selects what to copy, and `setup.copy_ignored_exclude` leaves entries
 out. The copy is Shoal's own, ported from Worktrunk's `wt step copy-ignored`.
 
-Hooks are deliberately untracked user processes with the workspace identity
+Every process Shoal starts, an execution, a hook, an export or a CI job's
+step, names its space in `SHOAL_SPACE` whatever its kind, and only a space with
+a worktree gets the worktree's variables, so a chat in a workspace's worktree
+carries none of the workspace's. Hooks are deliberately untracked user processes with the space identity
 but no scope token, because their purpose is to start or stop things that
 outlive the hook (a tmux session, say) without becoming execution survivors.
 Nothing outlives the workspace: removal stops every verified process that still

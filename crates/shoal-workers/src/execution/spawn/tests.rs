@@ -297,14 +297,14 @@ fn a_chats_agent_runs_with_its_chats_identity_and_scope() {
 
     let environment = environment_of(&command);
     let set = |name: &str| environment.get(name).cloned().flatten();
-    assert_eq!(set(env::CHAT), Some("chat".into()));
+    assert_eq!(set(env::SPACE), Some("chat".into()));
     assert_eq!(set(env::EXECUTION_ID), Some("execution".into()));
     assert_eq!(
         set(env::SCOPE_TOKEN),
         Some(plan.scope_token.expose().into())
     );
     assert_eq!(set(env::TMPDIR), Some("/tmp/chat".into()));
-    for workspace in [env::WORKSPACE_ID, env::WORKSPACE_PATH] {
+    for workspace in [env::WORKSPACE_NAME, env::WORKSPACE_PATH] {
         assert_eq!(environment.get(workspace), Some(&None), "{workspace}");
     }
 }

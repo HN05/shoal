@@ -155,7 +155,7 @@ async fn check_chat_export(ctx: &Context, chat: Chat) -> Result<Chat> {
 /// chat would end before the export finished.
 fn ensure_not_running_in(chat: &Chat) -> Result<()> {
     ensure!(
-        crate::env::chat().as_ref() != Some(&chat.id),
+        crate::env::own_space().as_ref() != Some(&chat.id),
         "this process runs in chat {}, which the export ends; export it from another terminal",
         chat.name
     );

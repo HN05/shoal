@@ -280,7 +280,7 @@ pub async fn chat_process(manager: &Manager, chat: &crate::model::Chat) -> u32 {
     let directory = manager.chat_tmp_dir(repository.as_ref(), chat).unwrap();
     let output = unmarked("sh")
         .args(["-c", "sleep 6021 </dev/null >/dev/null 2>&1 & echo $!"])
-        .env(crate::env::CHAT, &chat.id)
+        .env(crate::env::SPACE, &chat.id)
         .current_dir(directory.unwrap())
         .output()
         .unwrap();

@@ -56,7 +56,7 @@ async fn finish(paths: &CommandPaths, plan: String) -> Result<Unmerged> {
     crate::client::executions::check_unmerge(paths).await?;
     let plan: UnmergePlan = serde_json::from_str(&plan)?;
     anyhow::ensure!(
-        std::env::var(env::WORKSPACE_ID)? == plan.workspace.id,
+        std::env::var(env::SPACE)? == plan.workspace.id,
         "unmerge worker requires its authorized workspace"
     );
     crate::git::unmerge::finish_unmerge(plan).await

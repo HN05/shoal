@@ -236,33 +236,35 @@ pub(crate) fn prepend_path(command: &mut Command, directories: &OsStr) {
     }
 }
 
-/// Shared identity values for hooks, tracked executions and external processes.
-fn workspace_identity(space: &ExecutionSpace, paths: &Paths) -> BTreeMap<String, OsString> {
-    BTreeMap::from([
-        (WORKSPACE_ID.into(), space.id.clone().into()),
-        (RUN_ID.into(), space.id.clone().into()),
-        (WORKSPACE_NAME.into(), space.directory_name().into()),
+/// The identity of `space` its hooks, tracked executions and external
+/// processes share: the space, the state directory whose daemon recorded
+/// it, which their Shoal commands must reach, and a worktree's directory
+/// name.
+fn space_identity(space: &ExecutionSpace, paths: &Paths) -> BTreeMap<String, OsString> {
+    let mut values = BTreeMap::from([
+        (SPACE.into(), space.id.clone().into()),
         (STATE_DIR.into(), paths.state.as_os_str().to_owned()),
-    ])
+    ]);
+    if space.kind == SpaceKind::Workspace {
+        values.insert(WORKSPACE_NAME.into(), space.directory_name().into());
+    }
+    values
 }
 
-/// Give `command` the identity of the chat `chat`: the chat and the state
-/// directory whose daemon recorded it, as its hooks and its agent receive
-/// them.
-pub(crate) fn apply_chat_identity(command: &mut Command, chat: &SpaceId, paths: &Paths) {
-    for name in not_chat_identity() {
+/// Give `command` the identity of the space an execution runs in, without
+/// the shell's directive and the port exports it inherited, nor, for a
+/// space without a worktree, the worktree variables.
+pub fn apply_space_identity(command: &mut Command, space: &ExecutionSpace, paths: &Paths) {
+    let inherited = match space.kind {
+        SpaceKind::Workspace => inherited_port_exports(),
+        SpaceKind::Chat => not_worktree_identity(),
+    };
+    for name in inherited {
         command.env_remove(name);
     }
-    command.env(CHAT, chat).env(STATE_DIR, &paths.state);
-}
-
-/// Give `command` the identity of the space an execution runs in: a
-/// workspace's, or a chat's, which leaves a workspace's out.
-pub fn apply_space_identity(command: &mut Command, space: &ExecutionSpace, paths: &Paths) {
-    match space.kind {
-        SpaceKind::Workspace => apply_workspace_identity(command, space, paths),
-        SpaceKind::Chat => apply_chat_identity(command, &space.id, paths),
-    }
+    command
+        .envs(space_identity(space, paths))
+        .env_remove(SHELL_DIRECTIVE);
 }
 
 /// What an execution's processes get last, so no configured variable
@@ -282,19 +284,17 @@ pub fn execution_environment(
     values
 }
 
-/// What a chat's processes leave out of this process's environment: a
-/// workspace's identity and port exports, which a shell Shoal opened in a
-/// workspace carries, and the shell's directive.
-pub fn not_chat_identity() -> Vec<OsString> {
+/// What the processes of a space without a worktree leave out of this
+/// process's environment: a worktree's variables and port exports, and the
+/// execution marker, which a shell Shoal opened in a workspace carries.
+fn not_worktree_identity() -> Vec<OsString> {
     let mut names = inherited_port_exports();
     names.extend(
         [
             EXECUTION_ID,
-            WORKSPACE_ID,
             WORKSPACE_PATH,
-            RUN_ID,
             WORKSPACE_NAME,
-            SHELL_DIRECTIVE,
+            RESERVED_PORT_ENV,
         ]
         .map(OsString::from),
     );
@@ -311,7 +311,7 @@ pub fn chat_environment(
     paths: &Paths,
 ) -> BTreeMap<String, OsString> {
     let mut values = BTreeMap::from([
-        (CHAT.into(), chat.clone().into()),
+        (SPACE.into(), chat.clone().into()),
         (STATE_DIR.into(), paths.state.as_os_str().to_owned()),
     ]);
     if let Some(directory) = tmp_dir {
@@ -327,7 +327,7 @@ pub fn workspace_environment(
     paths: &Paths,
     ports: &[PortReservation],
 ) -> BTreeMap<String, OsString> {
-    let mut values = workspace_identity(space, paths);
+    let mut values = space_identity(space, paths);
     values.insert(WORKSPACE_PATH.into(), space.path.as_os_str().to_owned());
     values.insert(
         RESERVED_PORT_ENV.into(),
@@ -344,20 +344,6 @@ pub fn workspace_environment(
             .map(|port| (port.env_var.clone(), port.port.to_string().into())),
     );
     values
-}
-
-/// Set shared workspace identity and clear inherited port exports and shell state.
-pub(crate) fn apply_workspace_identity(
-    command: &mut Command,
-    space: &ExecutionSpace,
-    paths: &Paths,
-) {
-    for name in inherited_port_exports() {
-        command.env_remove(name);
-    }
-    command
-        .envs(workspace_identity(space, paths))
-        .env_remove(SHELL_DIRECTIVE);
 }
 
 /// Whether an [`OUTPUT`] setting selects JSON; unset or empty selects text.
@@ -391,40 +377,30 @@ pub fn output_setting() -> (String, String) {
     (OUTPUT.into(), std::env::var(OUTPUT).unwrap_or_default())
 }
 
-/// The chat this process runs under, if any.
-pub fn chat() -> Option<SpaceId> {
-    std::env::var(CHAT)
-        .ok()
-        .filter(|chat| !chat.is_empty())
-        .map(SpaceId::from)
-}
-
-/// Whether this process carries a workspace's scope, which names its own
-/// workspace, rather than a chat's or none.
-pub fn workspace_scoped() -> bool {
-    is_scoped() && in_chat().is_none()
-}
-
-/// The chat whose own agent this process belongs to: a workspace's process
-/// that a chat started, which keeps the chat's marker, belongs to the
-/// workspace instead.
-pub fn in_chat() -> Option<SpaceId> {
-    own_chat(std::env::var_os(WORKSPACE_ID), chat())
-}
-
-/// The space whose process this is: its workspace, else the chat whose own
-/// agent it belongs to.
+/// The space whose process this is, as [`SPACE`] names it.
 pub fn own_space() -> Option<SpaceId> {
-    std::env::var(WORKSPACE_ID)
+    std::env::var(SPACE)
         .ok()
         .filter(|own| !own.is_empty())
         .map(SpaceId::from)
-        .or_else(in_chat)
 }
 
-/// `chat`, unless `workspace` names the workspace the process belongs to.
-fn own_chat(workspace: Option<OsString>, chat: Option<SpaceId>) -> Option<SpaceId> {
-    chat.filter(|_| workspace.is_none_or(|workspace| workspace.is_empty()))
+/// Whether the space whose process this is has a worktree, as
+/// [`WORKSPACE_PATH`] says.
+fn own_worktree() -> bool {
+    std::env::var_os(WORKSPACE_PATH).is_some_and(|path| !path.is_empty())
+}
+
+/// The space whose process this is when it has no worktree: the chat whose
+/// agent this process belongs to.
+pub fn own_chat() -> Option<SpaceId> {
+    own_space().filter(|_| !own_worktree())
+}
+
+/// Whether this process carries a scope other than its own chat's, which
+/// names its own workspace, as a scope a starter handed it does.
+pub fn workspace_scope() -> bool {
+    is_scoped() && own_chat().is_none()
 }
 
 /// True when this process or an ancestor carries scope for the `state`

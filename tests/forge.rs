@@ -834,7 +834,7 @@ fn a_chat_opens_issues_and_acts_on_its_linked_items() {
         let output = fixture
             .command()
             .current_dir(&fixture.repo)
-            .env("SHOAL_CHAT", &chat)
+            .env("SHOAL_SPACE", &chat)
             .arg("--json")
             .args(args)
             .output()
@@ -5560,8 +5560,8 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
 fn chat_issue_open(config: &str) -> (std::process::Output, Vec<Value>) {
     let fixture = Fixture::new(Forge::Forgejo, config);
     let (mut agent, chat) = fixture.run_chat("planning", &[]);
-    let scope = fixture.request(json!({"chat_scope": {"chat": chat}}));
-    let token = scope["data"]["token"].as_str().unwrap().to_owned();
+    let scope = fixture.request(json!({"issue_scope": {"space": chat}}));
+    let token = scope["data"].as_str().unwrap().to_owned();
     let created = json!({"number": 40, "title": "Flaky", "state": "open", "labels": []});
     fixture.respond(json!({
         "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
@@ -5571,7 +5571,7 @@ fn chat_issue_open(config: &str) -> (std::process::Output, Vec<Value>) {
     let output = fixture
         .command()
         .current_dir(fixture.root.path())
-        .env("SHOAL_CHAT", &chat)
+        .env("SHOAL_SPACE", &chat)
         .env("SHOAL_SCOPE_TOKEN", &token)
         .args(["--json", "issue", "open", "--title", "Flaky"])
         .output()
@@ -5629,8 +5629,8 @@ fn a_chats_change_takes_the_users_login_by_same_as() {
 fn a_chats_proposed_issue_opens_from_its_checkout_on_approval() {
     let fixture = Fixture::new(Forge::GitHub, "[permissions]\nissue_open = 'propose'\n");
     let (mut agent, chat) = fixture.run_chat("planning", &[]);
-    let scope = fixture.request(json!({"chat_scope": {"chat": chat}}));
-    let token = scope["data"]["token"].as_str().unwrap().to_owned();
+    let scope = fixture.request(json!({"issue_scope": {"space": chat}}));
+    let token = scope["data"].as_str().unwrap().to_owned();
     let created = json!({"number": 40, "title": "Flaky", "state": "open", "labels": []});
     fixture.respond(json!({
         "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
@@ -5640,7 +5640,7 @@ fn a_chats_proposed_issue_opens_from_its_checkout_on_approval() {
         let output = fixture
             .command()
             .current_dir(&fixture.repo)
-            .env("SHOAL_CHAT", &chat)
+            .env("SHOAL_SPACE", &chat)
             .env("SHOAL_SCOPE_TOKEN", &token)
             .arg("--json")
             .args(args)
@@ -5744,12 +5744,12 @@ fn a_parent_with_the_permission_opens_a_proposal_below_it_with_its_edits() {
         "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
         "GET repos/team/project/issues/40": {"body": created},
     }));
-    let scope = fixture.request(json!({"chat_scope": {"chat": chat}}));
-    let token = scope["data"]["token"].as_str().unwrap().to_owned();
+    let scope = fixture.request(json!({"issue_scope": {"space": chat}}));
+    let token = scope["data"].as_str().unwrap().to_owned();
     let output = fixture
         .command()
         .current_dir(&fixture.repo)
-        .env("SHOAL_CHAT", &chat)
+        .env("SHOAL_SPACE", &chat)
         .env("SHOAL_SCOPE_TOKEN", &token)
         .args([
             "--json",

@@ -546,10 +546,9 @@ pub fn unmarked(program: &str) -> Command {
 
 /// The variables that tell Shoal which space or execution a process
 /// belongs to, which a runner inside a workspace or chat carries.
-const IDENTITY: [&str; 4] = [
+const IDENTITY: [&str; 3] = [
     crate::env::EXECUTION_ID,
-    crate::env::WORKSPACE_ID,
-    crate::env::CHAT,
+    crate::env::SPACE,
     crate::env::ONESHOT_RUN,
 ];
 

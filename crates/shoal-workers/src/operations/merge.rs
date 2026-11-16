@@ -61,7 +61,7 @@ async fn finish(paths: &CommandPaths, plan: String) -> Result<MergedBranch> {
     crate::client::executions::check_merge(paths).await?;
     let plan: MergePlan = serde_json::from_str(&plan)?;
     anyhow::ensure!(
-        std::env::var(env::WORKSPACE_ID)? == plan.workspace.id,
+        std::env::var(env::SPACE)? == plan.workspace.id,
         "merge worker requires its authorized workspace"
     );
     crate::git::repo::finish_merge(plan).await

@@ -64,7 +64,7 @@ pub(super) async fn workspace(
         .map(|path| repositories::absolute(ctx, path))
         .transpose()?;
     // A start in a chat puts its workspace below the chat.
-    launch.parent = (launch.parent.take()).or(crate::env::in_chat().map(SpaceSelector::Id));
+    launch.parent = (launch.parent.take()).or(crate::env::own_chat().map(SpaceSelector::Id));
     launch.directory = ui::current_directory()?;
     launch.env = Some(crate::terminal::start_environment());
     launch.setup_env = Some(crate::env::without_secrets());

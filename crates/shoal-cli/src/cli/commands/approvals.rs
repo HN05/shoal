@@ -99,8 +99,8 @@ async fn can_decide(ctx: &Context, request: &ApprovalRequest) -> Result<bool> {
     if !crate::env::inherits_scope(&ctx.paths.state) {
         return Ok(true);
     }
-    let owner = match crate::env::in_chat() {
-        Some(chat) => chat,
+    let owner = match crate::env::own_space() {
+        Some(own) => own,
         None => {
             let owner = ui::select_workspace(ctx, None, ui::Fallback::OwnWorkspace).await?;
             crate::client::workspaces::inspect(&ctx.paths, owner.clone())

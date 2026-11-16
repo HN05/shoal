@@ -147,12 +147,41 @@ fn configured_paths_preserve_non_utf8_bytes() {
     );
 }
 
+/// The variables `command` sets, with `None` for those it removes.
+fn applied(command: &Command) -> BTreeMap<String, Option<String>> {
+    (command.as_std().get_envs())
+        .map(|(name, value)| {
+            let value = value.map(|value| value.to_string_lossy().into_owned());
+            (name.to_string_lossy().into_owned(), value)
+        })
+        .collect()
+}
+
 #[test]
-fn a_workspace_process_a_chat_started_belongs_to_the_workspace() {
-    let chat = || Some(SpaceId::from("chat"));
-    assert_eq!(own_chat(None, chat()), chat());
-    assert_eq!(own_chat(Some(OsString::new()), chat()), chat());
-    // A command a chat ran in a workspace keeps the chat's marker.
-    assert_eq!(own_chat(Some("workspace".into()), chat()), None);
-    assert_eq!(own_chat(None, None), None);
+fn every_space_names_itself_and_only_a_worktree_keeps_its_variables() {
+    let paths = Paths::for_test(Path::new("/tmp/root"));
+    let space = |kind| ExecutionSpace {
+        id: SpaceId::from("space"),
+        number: Default::default(),
+        kind,
+        path: PathBuf::from("/work/fix-login"),
+    };
+    let mut command = Command::new("true");
+    apply_space_identity(&mut command, &space(SpaceKind::Workspace), &paths);
+    let workspace = applied(&command);
+    assert_eq!(workspace[SPACE].as_deref(), Some("space"));
+    assert_eq!(workspace[WORKSPACE_NAME].as_deref(), Some("fix-login"));
+    assert!(!workspace.contains_key(WORKSPACE_PATH));
+    let mut command = Command::new("true");
+    apply_space_identity(&mut command, &space(SpaceKind::Chat), &paths);
+    let chat = applied(&command);
+    assert_eq!(chat[SPACE].as_deref(), Some("space"));
+    for dropped in [
+        WORKSPACE_PATH,
+        WORKSPACE_NAME,
+        RESERVED_PORT_ENV,
+        EXECUTION_ID,
+    ] {
+        assert_eq!(chat[dropped], None, "{dropped}");
+    }
 }

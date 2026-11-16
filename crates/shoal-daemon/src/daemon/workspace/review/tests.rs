@@ -497,7 +497,7 @@ async fn a_chats_post_ready_hook_gets_the_configured_environment() {
     install_test_script(
         &hook,
         format!(
-            "#!/bin/sh\nprintf '%s|%s' \"$GREETING\" \"$SHOAL_CHAT\" > '{}'\n",
+            "#!/bin/sh\nprintf '%s|%s' \"$GREETING\" \"$SHOAL_SPACE\" > '{}'\n",
             record.display()
         ),
     );

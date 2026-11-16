@@ -124,7 +124,7 @@ fn setup_launch(
         now: true,
         task: workspaces::launch_args(options.args)?,
         // A setup started in a chat goes below the chat.
-        parent: crate::env::in_chat().map(SpaceSelector::Id),
+        parent: crate::env::own_chat().map(SpaceSelector::Id),
         directory: ui::current_directory()?,
         env: Some(crate::terminal::start_environment()),
         setup_env: Some(crate::env::without_secrets()),

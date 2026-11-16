@@ -547,7 +547,7 @@ workspace's count and the PID and command of the first ten, and with `--json`
 `leftover_count` and a `leftovers` list of the first ten with `pid`, `command`,
 `directory` and `started_at` in Unix seconds. Its agent's hook names each new
 one once, up to ten per delivery, and they create no notification. A space's untracked processes carry its identity
-(`SHOAL_WORKSPACE_ID`, or `SHOAL_CHAT` for a chat) or are its leftovers:
+(`SHOAL_SPACE`) or are its leftovers:
 processes whose parent exited, so that launchd or init adopted them, or on
 Linux the subreaper that adopts the daemon's orphans, such as `systemd --user`,
 or that descend from such a process, working in the worktree or the space's temporary
@@ -813,7 +813,7 @@ or process works, ○ quiet, ◌ changing state, or ✗ failed. Each shows the
 space's number, then names the workspace, its repository when the
 rows span several, its status, what its processes use while any run, and the
 linked issue's title or CI job, cut with `…` to fit a terminal's width. Usage counts every
-process carrying the workspace's `SHOAL_WORKSPACE_ID`: CPU as a percent of one
+process carrying the workspace's `SHOAL_SPACE`: CPU as a percent of one
 core over the daemon's last ten-second sample, including children those
 processes have waited for, then memory, resident on Linux and the physical
 footprint on macOS. `shoal status` adds the process count, and `--json` gives
@@ -3485,8 +3485,8 @@ still happens. `status` shows `Setup: skipped` and `--json` `setup_skipped`;
 without setup is restored without it too.
 
 Hooks are untracked: they run as your own processes with `SHOAL_HOOK` (the key
-without `_cmd`), `SHOAL_WORKSPACE` (the workspace's `{workspace}`), `SHOAL_WORKSPACE_ID`, `SHOAL_WORKSPACE_PATH`,
-and `SHOAL_STATE_DIR`, without a scope token, port variables or `SHOAL_OUTPUT`, so whatever they leave running (a tmux
+without `_cmd`), `SHOAL_SPACE` (the space's ID), `SHOAL_STATE_DIR` and, for a space with a
+worktree, `SHOAL_WORKSPACE` (its `{workspace}`) and `SHOAL_WORKSPACE_PATH`, without a scope token, port variables or `SHOAL_OUTPUT`, so whatever they leave running (a tmux
 server, say) is not a Shoal execution. `hooks.post_setup` runs without a terminal
 after `start` or `setup` has a ready workspace and before any `--agent`; a
 nonzero exit keeps the workspace, skips the agent, and fails the command.
@@ -3771,7 +3771,7 @@ workspace's build, and neither agent's scope reaches it.
 `forgejo-runner`'s host backend starts each step in a directory of its own,
 not the job's workspace, so a job for this runner names the workspace as its
 working directory and has no checkout step, since the workspace has the commit
-already. `SHOAL_WORKSPACE_PATH` and `SHOAL_WORKSPACE_ID`, which Shoal gives
+already. `SHOAL_WORKSPACE_PATH` and `SHOAL_SPACE`, which Shoal gives
 every job's steps and its `env` context, serve both, also in a job that other
 runners take too. On GitHub the variables reach the steps from a job-started
 hook, after job defaults are read, and the job's default working directory is
@@ -3786,7 +3786,7 @@ jobs:
         working-directory: ${{ env.SHOAL_WORKSPACE_PATH }}
     steps:
       - uses: actions/checkout@v4
-        if: ${{ !env.SHOAL_WORKSPACE_ID }}
+        if: ${{ !env.SHOAL_SPACE }}
       - run: cargo test --locked
 ```
 

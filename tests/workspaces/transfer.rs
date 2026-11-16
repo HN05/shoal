@@ -1278,7 +1278,7 @@ fn a_chat_moves_with_its_session_and_continues_it() {
         // chat it would end under itself.
         let inside = fixture
             .command()
-            .env("SHOAL_CHAT", chats[0]["id"].as_str().unwrap())
+            .env("SHOAL_SPACE", chats[0]["id"].as_str().unwrap())
             .args(["move", "export", "-o", file, "--yes"])
             .stdin(Stdio::null())
             .output()

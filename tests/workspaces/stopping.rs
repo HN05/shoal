@@ -96,7 +96,7 @@ fn stop_levels_take_leftovers_then_every_untracked_process() {
     fixture.commands.join(&mut marked);
     let mut marked = marked
         .args(["--exact", "stopping::run_until_stopped", "--ignored"])
-        .env("SHOAL_WORKSPACE_ID", workspace["id"].as_str().unwrap())
+        .env("SHOAL_SPACE", workspace["id"].as_str().unwrap())
         .stdout(Stdio::null())
         .spawn()
         .unwrap();

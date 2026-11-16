@@ -19,10 +19,10 @@ impl Scoping {
         Self::when(crate::env::inherits_scope(state))
     }
 
-    /// Scoped when this process carries a workspace's scope, which names its
-    /// own workspace; a chat's scope names none.
+    /// Scoped when this process carries a scope that names its own
+    /// workspace; a chat's scope names none.
     pub fn of_workspace() -> Self {
-        Self::when(crate::env::workspace_scoped())
+        Self::when(crate::env::workspace_scope())
     }
 
     /// The spaces among `spaces`, those this process sees, that it acts on

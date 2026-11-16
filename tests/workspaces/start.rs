@@ -245,7 +245,7 @@ fn a_scoped_start_reports_an_agent_refused_after_the_childs_setup() {
 fn a_scoped_start_runs_its_agent_here_as_the_childs() {
     let config = "[agents.waiter]\ncommand = ['sh', '-c', '. \"$HOME/agent.sh\"']\n";
     let fixture = Fixture::with_config(Some(config));
-    let agent = "echo \"$SHOAL_WORKSPACE_ID\" \"$SHOAL_SCOPE_TOKEN\" > \"$HOME/agent-env\"\n\
+    let agent = "echo \"$SHOAL_SPACE\" \"$SHOAL_SCOPE_TOKEN\" > \"$HOME/agent-env\"\n\
                  trap 'exit 0' TERM\n\
                  echo $$ > \"$HOME/agent-pid\"\n\
                  while :; do sleep 1; done\n";
@@ -1245,7 +1245,7 @@ fn chat_opening_fixture() -> Fixture {
     fs::write(
         home.join("chat-agent.sh"),
         format!(
-            "echo \"$SHOAL_CHAT\" > \"$HOME/chat-id\"\n\
+            "echo \"$SHOAL_SPACE\" > \"$HOME/chat-id\"\n\
              '{}' open --app codex < /dev/null > /dev/null 2> \"$HOME/open-error\"\n\
              echo $? > \"$HOME/open-status\"\n",
             support::shoal_binary(),

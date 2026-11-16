@@ -161,7 +161,7 @@ async fn a_job_runs_a_just_in_time_runner_from_a_copy_of_the_installation() {
         workspace: Path::new("/work/ci-rust-11"),
         labels: &labels,
         job: &job,
-        env: &[("SHOAL_WORKSPACE_ID".into(), "id".into())],
+        env: &[("SHOAL_SPACE".into(), "id".into())],
     };
     let github = repo_on(&server, ForgeKind::GitHub, "team/repo");
     let account = agent_on(&server, "user");

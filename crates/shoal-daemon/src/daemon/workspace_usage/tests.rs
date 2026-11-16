@@ -359,7 +359,7 @@ async fn readings_cover_the_processes_carrying_a_workspace_identity() {
     // The test binary's own helper, since platform binaries such as
     // macOS's sh hide their environment.
     let child = crate::daemon::test_support::spawn_marked_child(
-        crate::daemon::test_support::marked_child().env(crate::env::WORKSPACE_ID, &id),
+        crate::daemon::test_support::marked_child().env(crate::env::SPACE, &id),
     );
     let processes = identity::scan_workspaces(HashSet::from([id.clone()]))
         .await

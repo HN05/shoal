@@ -34,7 +34,7 @@ pub(super) async fn resolve_add_target(
     let mut repositories = None;
     // A chat opens workspaces only in its own repository, which is
     // registered, so registering another is never offered there.
-    let offer = !crate::env::is_scoped() && crate::env::in_chat().is_none();
+    let offer = !crate::env::is_scoped() && crate::env::own_chat().is_none();
     let selector = match repository {
         Some(selector) if !offer => selector,
         Some(selector) => repositories::offer_unregistered(ctx, &selector)

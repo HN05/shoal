@@ -556,7 +556,7 @@ fn job_env(workspace: &Workspace) -> Vec<(String, String)> {
             crate::env::WORKSPACE_PATH.into(),
             workspace.path.to_string_lossy().into_owned(),
         ),
-        (crate::env::WORKSPACE_ID.into(), workspace.id.to_string()),
+        (crate::env::SPACE.into(), workspace.id.to_string()),
     ]
 }
 

@@ -371,8 +371,8 @@ pub(super) enum Parent {
 impl Parent {
     /// The chat `id`, named `name`, with the scope token its agent carries.
     pub(super) fn chat(fixture: &Fixture, name: &'static str, id: String) -> Self {
-        let scope = fixture.request(serde_json::json!({"chat_scope": {"chat": id}}));
-        let token = scope["data"]["token"].as_str().unwrap().to_owned();
+        let scope = fixture.request(serde_json::json!({"issue_scope": {"space": id}}));
+        let token = scope["data"].as_str().unwrap().to_owned();
         Self::Chat { name, id, token }
     }
 
@@ -388,7 +388,7 @@ impl Parent {
             Self::Workspace(name) => scoped_command(fixture, name, args),
             Self::Chat { id, token, .. } => fixture
                 .command()
-                .env("SHOAL_CHAT", id)
+                .env("SHOAL_SPACE", id)
                 .env("SHOAL_SCOPE_TOKEN", token)
                 .arg("--json")
                 .args(args)

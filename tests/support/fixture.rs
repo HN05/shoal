@@ -25,8 +25,8 @@ pub const NO_OVERLOAD_WARNINGS: &str = "machine.overload.warning.enabled = false
 /// carries for [`Base::chat_scope`], then runs until its wrapper stops it or
 /// exits, or [`Base::end_chat_agent`] ends it.
 const CHAT_AGENT: &str = "#!/bin/sh\ntrap 'exit 0' TERM\n\
-    printf %s \"$SHOAL_SCOPE_TOKEN\" > \"$HOME/scope-$SHOAL_CHAT\"\n\
-    while kill -0 \"$PPID\" 2>/dev/null && [ ! -e \"$HOME/exit-$SHOAL_CHAT\" ]; do sleep 1; done\n";
+    printf %s \"$SHOAL_SCOPE_TOKEN\" > \"$HOME/scope-$SHOAL_SPACE\"\n\
+    while kill -0 \"$PPID\" 2>/dev/null && [ ! -e \"$HOME/exit-$SHOAL_SPACE\" ]; do sleep 1; done\n";
 
 pub struct Base {
     // Fields drop in declaration order: the commands stop while the daemon

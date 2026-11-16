@@ -62,7 +62,7 @@ pub(super) async fn plan_addition(
         narrowing: Default::default(),
         fork: None,
         queue_entry: None,
-        chat: env::in_chat(),
+        chat: env::own_chat(),
         parent: None,
         workspace: None,
     })
@@ -129,7 +129,7 @@ pub(super) async fn check_add_creation(
     creation: &Creation,
     parent: Option<&SpaceSelector>,
 ) -> Result<()> {
-    let parent = (parent.cloned()).or_else(|| env::in_chat().map(SpaceSelector::Id));
+    let parent = (parent.cloned()).or_else(|| env::own_chat().map(SpaceSelector::Id));
     if !ctx.interactive() && parent.is_none() {
         return Ok(());
     }

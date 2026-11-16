@@ -831,7 +831,7 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
         recorded.contains(&format!("cwd={}\n", checkout.display())),
         "{recorded}"
     );
-    assert!(recorded.contains(&format!("chat={}\n", chat_record["id"].as_str().unwrap())));
+    assert!(recorded.contains(&format!("space={}\n", chat_record["id"].as_str().unwrap())));
     assert!(recorded.contains("stdin=eof\nstdout=notty"), "{recorded}");
     let claude = args(&recorded);
     assert_eq!(

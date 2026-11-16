@@ -106,8 +106,8 @@ async fn confirm_grant(
 ) -> Result<()> {
     use crate::protocol::{Body, SecretMethod};
     use shoal_protocol::{approvals::DecisionStatus, secrets::SecretRequest};
-    let workspace = std::env::var(env::WORKSPACE_ID)
-        .with_context(|| format!("{tool} needs secrets.{name}, but its workspace is unknown"))?;
+    let workspace = std::env::var(env::SPACE)
+        .with_context(|| format!("{tool} needs secrets.{name}, but its space is unknown"))?;
     let method = SecretMethod::SecretAcquire {
         workspace: SpaceSelector::Id(SpaceId::from(workspace)),
         name: name.to_owned(),

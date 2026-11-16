@@ -207,7 +207,7 @@ fn a_chats_alert_names_it_until_withdrawn() {
         let output = fixture
             .command()
             .current_dir(&fixture.repo)
-            .env("SHOAL_CHAT", &chat)
+            .env("SHOAL_SPACE", &chat)
             .arg("--json")
             .args(args)
             .output()
@@ -875,7 +875,7 @@ fn a_chats_agent_attaches_files_the_user_lists_after_the_chat_ends() {
         let output = fixture
             .command()
             .current_dir(&fixture.repo)
-            .env("SHOAL_CHAT", &chat)
+            .env("SHOAL_SPACE", &chat)
             .env("SHOAL_SCOPE_TOKEN", &token)
             .arg("--json")
             .args(args)
@@ -1334,7 +1334,7 @@ fn a_chats_agent_asks_the_user_and_reads_the_answer_in_its_inbox() {
         let output = fixture
             .command()
             .current_dir(&fixture.repo)
-            .env("SHOAL_CHAT", &chat)
+            .env("SHOAL_SPACE", &chat)
             .arg("--json")
             .args(args)
             .output()

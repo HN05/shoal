@@ -33,7 +33,7 @@ def record_launch():
         f'execution={env.get("SHOAL_EXECUTION_ID", "")}\n'
         f'workspace={env.get("SHOAL_WORKSPACE", "")}\n'
         f'port={env.get("SHOAL_PORT_WEB", "")}\n'
-        f'chat={env.get("SHOAL_CHAT", "")}\n'
+        f'space={env.get("SHOAL_SPACE", "")}\n'
         f'reconnect={reconnect}\nstdin={stdin}\nstdout={stdout}\n'
         f'git_config={git_config}\n'
     )

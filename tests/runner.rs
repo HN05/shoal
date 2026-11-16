@@ -90,7 +90,7 @@ fn the_runner_runs_a_waiting_job_in_its_own_workspace_and_deletes_itself_when_tu
     install_test_script(
         root.join("bin/forgejo-runner"),
         format!(
-            "#!/bin/sh\nmkdir -p '{calls}'\nprintf '%s\\n' \"$@\" > '{calls}/args'\nprintf '%s\\n' \"$SHOAL_WORKSPACE_ID\" > '{calls}/workspace'\nwhile [ ! -e '{finish}' ]; do sleep 0.1; done\n",
+            "#!/bin/sh\nmkdir -p '{calls}'\nprintf '%s\\n' \"$@\" > '{calls}/args'\nprintf '%s\\n' \"$SHOAL_SPACE\" > '{calls}/workspace'\nwhile [ ! -e '{finish}' ]; do sleep 0.1; done\n",
             calls = calls.display(),
             finish = finish.display(),
         ),

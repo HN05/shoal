@@ -319,7 +319,7 @@ impl Inbox {
     }
 
     async fn current(ctx: &Context, fallback: Fallback) -> Result<Self> {
-        if let Some(chat) = crate::env::in_chat() {
+        if let Some(chat) = crate::env::own_chat() {
             return Ok(Self {
                 space: SpaceSelector::Id(chat),
                 kind: "chat",

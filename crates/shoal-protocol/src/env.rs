@@ -48,16 +48,15 @@ pub const RELEASE_INVOKED_IDENTITY: &str = "SHOAL_RELEASE_INVOKED_IDENTITY";
 /// Colon-separated descriptors of the release copy locks a wrapper holds,
 /// which it keeps open across replacing itself; removed at startup.
 pub const RELEASE_LOCKS: &str = "SHOAL_RELEASE_LOCKS";
-/// The chat whose agent this process runs under; workspaces opened here belong
-/// to that chat.
-pub const CHAT: &str = "SHOAL_CHAT";
+/// The ID of the space, a workspace or a chat, every process Shoal starts
+/// runs in.
+pub const SPACE: &str = "SHOAL_SPACE";
 /// Cooperative workspace scope for tracked or externally launched processes.
 pub const SCOPE_TOKEN: &str = "SHOAL_SCOPE_TOKEN";
 /// Execution marker used to discover owned processes during recovery.
 pub const EXECUTION_ID: &str = "SHOAL_EXECUTION_ID";
-pub const WORKSPACE_ID: &str = "SHOAL_WORKSPACE_ID";
-/// Legacy alias of [`WORKSPACE_ID`] kept for existing agent integrations.
-pub const RUN_ID: &str = "SHOAL_RUN_ID";
+/// The directory name of the worktree of the space, set only for a space
+/// with one.
 pub const WORKSPACE_NAME: &str = "SHOAL_WORKSPACE";
 /// Colon-separated names of the port variables exported to the command.
 pub const RESERVED_PORT_ENV: &str = "SHOAL_RESERVED_PORT_ENV";
@@ -78,7 +77,8 @@ pub const HOOK: &str = "SHOAL_HOOK";
 /// Set on an agent hook that waits in the background for the agent's next
 /// update, outside the agent's process group, without doing work.
 pub const WAITING_HOOK: &str = "SHOAL_WAITING_HOOK";
-/// Recorded worktree path, including after removal.
+/// Recorded worktree path, including after removal, set only for a space
+/// with a worktree.
 pub const WORKSPACE_PATH: &str = "SHOAL_WORKSPACE_PATH";
 /// JSON resource lease passed to permit hooks.
 pub const RESOURCE_LEASE: &str = "SHOAL_RESOURCE_LEASE";

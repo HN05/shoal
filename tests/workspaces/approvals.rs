@@ -1192,8 +1192,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
     let exported = fixture.ok(&["internal", "env", &fixture.id("external")]);
     let values: std::collections::BTreeMap<String, String> =
         serde_json::from_value(exported.clone()).unwrap();
-    assert_eq!(exported["SHOAL_WORKSPACE_ID"], workspace["id"]);
-    assert_eq!(exported["SHOAL_RUN_ID"], workspace["id"]);
+    assert_eq!(exported["SHOAL_SPACE"], workspace["id"]);
     assert_eq!(exported["SHOAL_WORKSPACE"], "external");
     assert_eq!(
         exported["SHOAL_STATE_DIR"],

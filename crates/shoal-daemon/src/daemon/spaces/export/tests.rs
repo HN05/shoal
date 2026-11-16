@@ -39,7 +39,7 @@ async fn chat_running(name: &str, script: &str) -> (tempfile::TempDir, Arc<Manag
     // test holds the test runner's output open.
     let mut process = unmarked("sh")
         .args(["-c", script])
-        .env(crate::env::CHAT, &chat.id)
+        .env(crate::env::SPACE, &chat.id)
         .process_group(0)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())

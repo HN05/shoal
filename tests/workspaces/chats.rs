@@ -24,7 +24,7 @@ fn chat_session_fixture_with(config: &str) -> Fixture {
         fixture.repo.join("chat-agent.sh"),
         format!(
             "printf '%s\\n' \"$@\" > \"$HOME/chat-args\"\n\
-             echo \"$SHOAL_CHAT\" > \"$HOME/chat-id\"\n\
+             echo \"$SHOAL_SPACE\" > \"$HOME/chat-id\"\n\
              echo \"$TMPDIR\" > \"$HOME/chat-tmpdir\"\n\
              printf '{{\"session_id\":\"chat-session\"}}' | '{}' internal agent-state idle >/dev/null || exit 3\n\
              case \" $* \" in *' --resume '*) exit 0;; esac\n\
@@ -75,7 +75,7 @@ fn a_saved_chats_open_question_stays_in_the_inbox() {
         let output = fixture
             .command()
             .current_dir(&fixture.repo)
-            .env("SHOAL_CHAT", chat.as_str().unwrap())
+            .env("SHOAL_SPACE", chat.as_str().unwrap())
             .args(["--json", "questions", "ask", "Which database?"])
             .args(["--recommend", "SQLite"])
             .output()
@@ -348,7 +348,7 @@ fn a_chats_commands_act_on_the_workspace_below_it_whose_directory_they_run_in() 
             "--branch",
             "opened",
         ])
-        .env("SHOAL_CHAT", &chat)
+        .env("SHOAL_SPACE", &chat)
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -365,7 +365,7 @@ fn a_chats_commands_act_on_the_workspace_below_it_whose_directory_they_run_in() 
             "--branch",
             "deeper",
         ])
-        .env("SHOAL_CHAT", &nested)
+        .env("SHOAL_SPACE", &nested)
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -376,7 +376,7 @@ fn a_chats_commands_act_on_the_workspace_below_it_whose_directory_they_run_in() 
         let output = fixture
             .command()
             .current_dir(directory.as_str().unwrap())
-            .env("SHOAL_CHAT", &chat)
+            .env("SHOAL_SPACE", &chat)
             .args(["--json", "rename", name])
             .output()
             .unwrap();
@@ -566,7 +566,7 @@ fn a_chat_records_its_work_done_and_withdraws_it() {
     let output = fixture
         .command()
         .args(["--json", "done", "--attach", notes.to_str().unwrap()])
-        .env("SHOAL_CHAT", &chat)
+        .env("SHOAL_SPACE", &chat)
         .env("SHOAL_SCOPE_TOKEN", fixture.chat_scope(&chat))
         .current_dir(&fixture.repo)
         .output()
@@ -599,7 +599,7 @@ fn completion_cleanup_removes_a_done_chat_with_the_workspaces_below_it() {
             "--branch",
             "opened",
         ])
-        .env("SHOAL_CHAT", &chat)
+        .env("SHOAL_SPACE", &chat)
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -645,7 +645,7 @@ fn a_hold_keeps_a_stopped_chat_until_it_is_released() {
     let listed = fixture
         .command()
         .args(["--json", "leases", "hold"])
-        .env("SHOAL_CHAT", &chat)
+        .env("SHOAL_SPACE", &chat)
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -689,7 +689,7 @@ fn a_hold_keeps_a_stopped_chat_until_it_is_released() {
 pub(crate) fn install_recording_agent(fixture: &Fixture, agent: &str) {
     install_test_script(
         fixture.root.path().join("bin").join(agent),
-        "#!/bin/sh\npwd > \"$HOME/chat-cwd\"\nprintf '%s\\0' \"$@\" > \"$HOME/chat-args\"\necho \"${ZMX_SESSION:-none}\" >> \"$HOME/chat-sessions\"\necho \"$SHOAL_CHAT\" > \"$HOME/chat-id\"\necho \"$SHOAL_SCOPE_TOKEN\" > \"$HOME/chat-scope\"\necho \"$SHOAL_OUTPUT\" > \"$HOME/chat-output\"\necho \"$SHOAL_WORKSPACE_ID$SHOAL_WORKSPACE\" > \"$HOME/chat-workspace\"\n",
+        "#!/bin/sh\npwd > \"$HOME/chat-cwd\"\nprintf '%s\\0' \"$@\" > \"$HOME/chat-args\"\necho \"${ZMX_SESSION:-none}\" >> \"$HOME/chat-sessions\"\nif [ -z \"$SHOAL_WORKSPACE_PATH\" ]; then echo \"$SHOAL_SPACE\"; fi > \"$HOME/chat-id\"\necho \"$SHOAL_SCOPE_TOKEN\" > \"$HOME/chat-scope\"\necho \"$SHOAL_OUTPUT\" > \"$HOME/chat-output\"\necho \"$SHOAL_WORKSPACE_PATH$SHOAL_WORKSPACE\" > \"$HOME/chat-workspace\"\n",
     );
 }
 
@@ -1054,7 +1054,7 @@ fn removing_a_chat_removes_the_workspaces_below_it_and_stops_its_agent() {
             "--branch",
             "opened",
         ])
-        .env("SHOAL_CHAT", &chat)
+        .env("SHOAL_SPACE", &chat)
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -1108,7 +1108,7 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
                 "--branch",
                 name,
             ])
-            .env("SHOAL_CHAT", &chat)
+            .env("SHOAL_SPACE", &chat)
             .stdin(Stdio::null())
             .output()
             .unwrap()
@@ -1146,7 +1146,7 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
             "queued",
         ])
         .args(["--agent", "missing-agent"])
-        .env("SHOAL_CHAT", &chat)
+        .env("SHOAL_SPACE", &chat)
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -1164,7 +1164,7 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
                 "--branch",
                 "third-work",
             ])
-            .env("SHOAL_CHAT", &chat),
+            .env("SHOAL_SPACE", &chat),
         "y\n",
         true,
     );
@@ -1532,7 +1532,7 @@ fn a_scoped_start_runs_a_chat_here_as_its_own() {
     let fixture = Fixture::with_config(Some(
         "[agents.claude]\ncommand = ['sh', './chat-agent.sh']\n",
     ));
-    let agent = r#"echo "$SHOAL_CHAT" "$SHOAL_SCOPE_TOKEN" > "$HOME/chat-env""#;
+    let agent = r#"echo "$SHOAL_SPACE" "$SHOAL_SCOPE_TOKEN" > "$HOME/chat-env""#;
     fs::write(fixture.repo.join("chat-agent.sh"), agent).unwrap();
     fixture.add("parent");
     let parent = fixture.id("parent");
@@ -1579,7 +1579,7 @@ fn any_space_opens_any_kind_of_child() {
         fixture.repo.join("chat-agent.sh"),
         format!(
             "shoal='{}'\n\
-             echo \"$SHOAL_CHAT\" >> \"$HOME/chats-started\"\n\
+             echo \"$SHOAL_SPACE\" >> \"$HOME/chats-started\"\n\
              if [ ! -e \"$HOME/nested-started\" ]; then\n\
              touch \"$HOME/nested-started\"\n\
              \"$shoal\" start --mode chat --agent claude --name nested </dev/null > \"$HOME/nested-chat\" 2>&1\n\
@@ -1700,7 +1700,7 @@ fn a_chat_between_workspaces_decides_and_coordinates_for_the_one_below() {
         home.join("agent.sh"),
         format!(
             "shoal='{}'\n\
-             if [ -n \"$SHOAL_WORKSPACE_ID\" ]; then\n\
+             if [ -n \"$SHOAL_WORKSPACE_PATH\" ]; then\n\
              \"$shoal\" --json acquire port web --reason 'serve preview' > \"$HOME/asked.tmp\" 2>&1\n\
              mv \"$HOME/asked.tmp\" \"$HOME/asked\"\n\
              while [ ! -e \"$HOME/release\" ]; do sleep 0.1; done\n\
@@ -1867,7 +1867,8 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
             .command()
             .current_dir(&worktree)
             .env("ZMX_SESSION", "outer")
-            .env("SHOAL_WORKSPACE_ID", "worker-id")
+            .env("SHOAL_SPACE", "worker-id")
+            .env("SHOAL_WORKSPACE_PATH", &worktree)
             .env("SHOAL_WORKSPACE", "worker")
             .args(["start", "--in", "--mode", "chat", "--agent", "claude"]),
         "\n",
@@ -1912,7 +1913,7 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
         fixture
             .command()
             .current_dir(&worktree)
-            .env("SHOAL_CHAT", id)
+            .env("SHOAL_SPACE", id)
             .env("SHOAL_SCOPE_TOKEN", scope.trim())
             .arg("--json")
             .args(args)
@@ -2217,7 +2218,7 @@ fn a_chat_on_an_issue_is_assigned_the_issue() {
     install_test_script(
         fixture.root.path().join("bin").join("pi"),
         format!(
-            "#!/bin/sh\n'{}' --json view --space \"$SHOAL_CHAT\" --no-comments > \"$HOME/plan-view\"\n",
+            "#!/bin/sh\n'{}' --json view --space \"$SHOAL_SPACE\" --no-comments > \"$HOME/plan-view\"\n",
             support::shoal_binary()
         ),
     );
@@ -2388,7 +2389,7 @@ fn chat_rename_renames_the_named_current_or_picked_chat() {
     // The chat this runs in, as its agent would.
     let output = fixture
         .command()
-        .env("SHOAL_CHAT", &plan)
+        .env("SHOAL_SPACE", &plan)
         .args(["rename", "repo-plan-8"])
         .output()
         .unwrap();
@@ -2426,7 +2427,7 @@ fn a_name_request_reaches_the_chats_agent() {
     // workspace.
     let output = fixture
         .command()
-        .env("SHOAL_CHAT", &chat)
+        .env("SHOAL_SPACE", &chat)
         .args(["--json", "messages"])
         .output()
         .unwrap();
@@ -2475,7 +2476,7 @@ fn a_restored_chat_continues_its_session_with_its_messages_waiting() {
 fn chat_messages(fixture: &Fixture, id: &str) -> String {
     let output = fixture
         .command()
-        .env("SHOAL_CHAT", id)
+        .env("SHOAL_SPACE", id)
         .args(["--json", "messages"])
         .output()
         .unwrap();

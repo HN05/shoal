@@ -273,8 +273,8 @@ fn on_terminal() -> bool {
 /// kept the opener's would count as the opener's, which its stop would end,
 /// and its scope token, which a shell left in the place would keep.
 pub(super) fn foreign_place_variables(host: HostName) -> Vec<&'static str> {
-    use crate::env::{CHAT, EXECUTION_ID, RUN_ID, SCOPE_TOKEN, WORKSPACE_ID};
-    let marks = [CHAT, EXECUTION_ID, WORKSPACE_ID, RUN_ID, SCOPE_TOKEN];
+    use crate::env::{EXECUTION_ID, SCOPE_TOKEN, SPACE};
+    let marks = [SPACE, EXECUTION_ID, SCOPE_TOKEN];
     hosts()
         .filter(|other| other.name() != host)
         .filter_map(Host::places)

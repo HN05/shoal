@@ -141,7 +141,7 @@ async fn the_identity_marker_finds_attached_processes_and_ties_detached_ones() {
     let space = workspace(root.path());
     let elsewhere = root.path().join("elsewhere");
     std::fs::create_dir(&elsewhere).unwrap();
-    let marker = [(crate::env::WORKSPACE_ID, space.id.as_str())];
+    let marker = [(crate::env::SPACE, space.id.as_str())];
     let detached = Adopted::start(
         &elsewhere,
         &runs_until_stopped(&this_binary()),
@@ -217,7 +217,7 @@ async fn a_chat_finds_processes_by_its_marker_and_temporary_directory() {
         directories: vec![tmp_dir.clone()],
         programs: None,
     };
-    let marker = [(crate::env::CHAT, "chat-id")];
+    let marker = [(crate::env::SPACE, "chat-id")];
     let marked = Adopted::start(
         &elsewhere,
         &runs_until_stopped(&this_binary()),
@@ -241,7 +241,7 @@ async fn hooks_the_surveying_process_runs_are_not_found() {
     let space = workspace(root.path());
     let start = |hook: bool| {
         let mut command = run_until_stopped_in(root.path());
-        command.env(crate::env::WORKSPACE_ID, &space.id);
+        command.env(crate::env::SPACE, &space.id);
         if hook {
             command.env(crate::env::HOOK, "post_setup");
         }
@@ -308,7 +308,7 @@ fn found_in(inventory: &Inventory, tracked: &[Identity], space: &Space) -> Vec<u
 fn ancestry_passes_through_setuid_programs() {
     let marked = || {
         carrying(Marks {
-            workspace: Some("workspace-id".into()),
+            space: Some("workspace-id".into()),
             ..Marks::default()
         })
     };
@@ -329,30 +329,4 @@ fn ancestry_passes_through_setuid_programs() {
     let found = found_in(&inventory, &[], &space);
     assert!(found.contains(&child), "{found:?}");
     assert!(!found.contains(&sudo), "{found:?}");
-}
-
-/// A process a chat started with a workspace's exported environment carries
-/// both identities, and belongs to the workspace alone.
-#[test]
-fn a_workspace_marker_outranks_the_chat_marker_it_was_started_under() {
-    let both = 1_000_000;
-    let owners = Owners::default();
-    let inventory = Inventory {
-        observed: HashMap::from([listed_process(
-            both,
-            1,
-            carrying(Marks {
-                workspace: Some("workspace-id".into()),
-                chat: Some("chat-id".into()),
-                ..Marks::default()
-            }),
-        )]),
-        ..Inventory::new(&owners)
-    };
-
-    assert_eq!(
-        found_in(&inventory, &[], &identified("workspace-id")),
-        [both]
-    );
-    assert!(found_in(&inventory, &[], &identified("chat-id")).is_empty());
 }

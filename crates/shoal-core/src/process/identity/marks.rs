@@ -16,8 +16,7 @@ pub(super) struct Observed {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct Marks {
     pub(super) execution: Option<ExecutionId>,
-    pub(super) workspace: Option<String>,
-    pub(super) chat: Option<String>,
+    pub(super) space: Option<String>,
     /// The run directory of a one-shot agent run.
     pub(super) oneshot: Option<String>,
     /// It runs one of the hooks the daemon starts.
@@ -28,8 +27,7 @@ pub(super) struct Marks {
 #[derive(Clone, Copy)]
 pub(super) enum Marker {
     Execution,
-    Workspace,
-    Chat,
+    Space,
     OneShot,
 }
 
@@ -45,8 +43,7 @@ impl Marks {
         };
         Self {
             execution: value(crate::env::EXECUTION_ID).map(ExecutionId::from),
-            workspace: value(crate::env::WORKSPACE_ID),
-            chat: value(crate::env::CHAT),
+            space: value(crate::env::SPACE),
             oneshot: value(crate::env::ONESHOT_RUN),
             hook: value(crate::env::HOOK).is_some(),
         }
@@ -55,25 +52,13 @@ impl Marks {
     pub(super) fn get(&self, marker: Marker) -> Option<&str> {
         match marker {
             Marker::Execution => self.execution.as_ref().map(ExecutionId::as_str),
-            Marker::Workspace => self.workspace.as_deref(),
-            // A workspace's process a chat started belongs to the workspace.
-            Marker::Chat => self.chat.as_deref().filter(|_| !self.of_workspace()),
+            Marker::Space => self.space.as_deref(),
             Marker::OneShot => self.oneshot.as_deref(),
         }
     }
 
-    /// Whether a workspace owns the process: every process of a
-    /// workspace's execution carries its marker, while a chat's agent's
-    /// carries the chat's with its execution's.
-    pub(super) fn of_workspace(&self) -> bool {
-        self.workspace.is_some()
-    }
-
     pub(super) fn is_empty(&self) -> bool {
-        self.execution.is_none()
-            && self.workspace.is_none()
-            && self.chat.is_none()
-            && self.oneshot.is_none()
+        self.execution.is_none() && self.space.is_none() && self.oneshot.is_none()
     }
 }
 

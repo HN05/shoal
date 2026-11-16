@@ -212,12 +212,9 @@ impl<'a> Survey<'a> {
         };
         let marked: HashSet<u32> = candidates()
             .filter(|pid| {
-                // A workspace's process a chat started is the workspace's alone.
-                self.marks.get(pid).is_some_and(|marks| {
-                    [Marker::Workspace, Marker::Chat]
-                        .into_iter()
-                        .any(|marker| marks.get(marker) == Some(space.id.as_str()))
-                })
+                self.marks
+                    .get(pid)
+                    .is_some_and(|marks| marks.get(Marker::Space) == Some(space.id.as_str()))
             })
             .collect();
         let tied: HashSet<u32> = candidates()

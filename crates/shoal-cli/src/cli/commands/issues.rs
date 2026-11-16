@@ -3,7 +3,7 @@ use anyhow::{Context as _, Result, ensure};
 use shoal_protocol::model::ByKind;
 
 use crate::{
-    cli::{client, context::Context, ui},
+    cli::{client, context::Context, scoping::Scoping, ui},
     forge::{
         ForgeRepo,
         items::{
@@ -208,10 +208,9 @@ impl Issue {
 /// this runs in, whose scope reads only there, when it is of `repo`, else
 /// the repository's registered checkout.
 pub(in crate::cli) async fn read_context(ctx: &Context, repo: &Repository) -> Result<ItemContext> {
-    let own = if crate::env::workspace_scoped() {
-        Some(ui::select_workspace(ctx, None, ui::Fallback::OwnWorkspace).await?)
-    } else {
-        crate::env::chat().map(SpaceSelector::Id)
+    let own = match Scoping::of_workspace() {
+        Scoping::Scoped => Some(ui::select_workspace(ctx, None, ui::Fallback::OwnWorkspace).await?),
+        Scoping::Unscoped => crate::env::own_space().map(SpaceSelector::Id),
     };
     if let Some(space) = own
         && let Some(space) = crate::client::workspaces::present_space(&ctx.paths, &space).await?
