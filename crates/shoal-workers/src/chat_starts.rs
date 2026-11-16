@@ -117,8 +117,9 @@ impl NewChat {
             false,
         )
         .await?;
-        handoff.wait().await?;
+        let id = handoff.wait().await?;
         Ok(BackgroundChat {
+            id,
             repository: self.repository.map(|repository| repository.id),
             chat: self.name,
             agent: self.agent,

@@ -9,6 +9,9 @@ use shoal_ids::execution_ids::ExecutionId;
 /// A chat started in a background place.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BackgroundChat {
+    /// Its ID, once the place reports it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<shoal_ids::space_ids::SpaceId>,
     pub chat: SpaceName,
     pub agent: crate::agent::Agent,
     /// Its repository's ID; none for a chat without one.

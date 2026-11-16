@@ -165,8 +165,9 @@ impl Launch {
             false,
         )
         .await?;
-        handoff.wait().await?;
+        let id = handoff.wait().await?;
         Ok(BackgroundChat {
+            id,
             repository: repository.map(|repo| repo.id.clone()),
             chat: self.chat.name,
             agent: self.agent,
@@ -283,7 +284,7 @@ impl Launch {
     /// execution wrapper, labelling this terminal as the chat's.
     async fn run_here(self, ctx: &Context, chat: &Chat, model_args: Vec<OsString>) -> Result<i32> {
         act_in_chat_scope(ctx, chat).await?;
-        crate::chat_handoff::report(&Ok(()));
+        crate::chat_handoff::report_started(&chat.id);
         let _hold = admission::hold_launch(ctx).await;
         run_agent(ctx, chat, self.agent, self.chat, model_args, Vec::new()).await
     }

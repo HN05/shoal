@@ -315,6 +315,7 @@ async fn run_worker(
     tests::STARTED.lock().unwrap().push((start.clone(), scoped));
     Ok(StartedChat::Background(
         shoal_protocol::chats::BackgroundChat {
+            id: None,
             chat: start.name.clone().unwrap_or_else(|| "chat".into()),
             agent: start.agent.clone().context("the start names no agent")?,
             repository: None,

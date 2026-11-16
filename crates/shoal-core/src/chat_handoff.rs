@@ -10,6 +10,7 @@
 //! never the place's environment, which a shell left there after the chat
 //! would keep.
 use crate::protocol::ChatStart;
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::scope_tokens::ScopeToken;
 use std::{
     fs::File,
@@ -33,6 +34,9 @@ const UNSCOPED: &str = "unscoped";
 const REPORT: &str = "report";
 /// What the place reports once the chat holds its own scope token.
 const STARTED: &str = "started";
+/// The file holding the started chat's ID, written before the report, so a
+/// starter of a release that reads only the report still takes it.
+const CHAT: &str = "chat";
 /// The file holding the start of a chat the daemon resolved, which the
 /// place's chat worker carries out.
 const START: &str = "start";
@@ -78,18 +82,16 @@ impl Handoff {
         std::fs::write(self.0.path().join(START), start).context("write the chat's handoff")
     }
 
-    /// Wait until the place reports, returning why the chat did not start
-    /// as the error.
-    pub async fn wait(self) -> Result<()> {
+    /// Wait until the place reports: the ID of the chat it started, when it
+    /// names one, or why the chat did not start as the error.
+    pub async fn wait(self) -> Result<Option<SpaceId>> {
         let deadline = tokio::time::Instant::now() + PICKUP;
         loop {
             // The place reports before it exits, so a place found ended
             // before the report is read ended without one.
             let place = place(self.0.path())?;
-            match reported(self.0.path())? {
-                Some(text) if text == STARTED => return Ok(()),
-                Some(error) => bail!("{error}"),
-                None => {}
+            if let Some(text) = reported(self.0.path())? {
+                return started(self.0.path(), &text);
             }
             match place {
                 Place::Waiting => ensure!(
@@ -104,6 +106,17 @@ impl Handoff {
             }
             tokio::time::sleep(POLL).await;
         }
+    }
+}
+
+/// The chat the place of the handoff at `path` started, when it names one,
+/// or the failure its report `text` gives.
+fn started(path: &Path, text: &str) -> Result<Option<SpaceId>> {
+    ensure!(text == STARTED, "{text}");
+    match std::fs::read_to_string(path.join(CHAT)) {
+        Ok(chat) => Ok(Some(SpaceId::from(chat))),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error).context("read the chat's handoff"),
     }
 }
 
@@ -216,9 +229,25 @@ fn take_scope(path: &Path) -> Result<Option<ScopeToken>> {
     }
 }
 
+/// Report to the starter that waits on this place that the chat `chat`
+/// started; only the first report counts.
+pub fn report_started(chat: &SpaceId) {
+    report_text(STARTED.to_owned(), Some(chat));
+}
+
 /// Report to the starter that waits on this place that the chat started,
 /// or why it did not; only the first report counts.
 pub fn report<T>(outcome: &Result<T>) {
+    let text = match outcome {
+        Ok(_) => STARTED.to_owned(),
+        Err(error) => format!("{error:#}"),
+    };
+    report_text(text, None);
+}
+
+/// Leave `text` as the first report of this place, after the ID of the
+/// `chat` it started.
+fn report_text(text: String, chat: Option<&SpaceId>) {
     static REPORTED: AtomicBool = AtomicBool::new(false);
     let Some(directory) = RECEIVED.get() else {
         return;
@@ -226,19 +255,23 @@ pub fn report<T>(outcome: &Result<T>) {
     if REPORTED.swap(true, Ordering::SeqCst) {
         return;
     }
-    let text = match outcome {
-        Ok(_) => STARTED.to_owned(),
-        Err(error) => format!("{error:#}"),
-    };
+    if let Some(chat) = chat {
+        write_whole(directory, CHAT, chat.as_str());
+    }
     write_report(directory, &text);
 }
 
-/// Leave `text` as the report in the handoff `directory` whole, so the
-/// starter reads all of it or none: written beside it, then moved there.
+/// Leave `text` as the report in the handoff `directory`.
 fn write_report(directory: &Path, text: &str) {
-    let staging = directory.join(format!("{REPORT}.staging"));
+    write_whole(directory, REPORT, text);
+}
+
+/// Leave `text` as the file `name` in the handoff `directory` whole, so the
+/// starter reads all of it or none: written beside it, then moved there.
+fn write_whole(directory: &Path, name: &str, text: &str) {
+    let staging = directory.join(format!("{name}.staging"));
     if std::fs::write(&staging, text).is_ok()
-        && std::fs::rename(&staging, directory.join(REPORT)).is_err()
+        && std::fs::rename(&staging, directory.join(name)).is_err()
     {
         let _ = std::fs::remove_file(&staging);
     }

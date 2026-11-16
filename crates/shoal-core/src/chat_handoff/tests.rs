@@ -11,9 +11,10 @@ async fn the_starter_takes_the_places_report() {
         let handed = std::fs::read_to_string(handoff.path().join(SCOPE)).unwrap();
         assert_eq!(handed, token);
     }
+    write_whole(started.path(), CHAT, "chat-id");
     write_report(started.path(), STARTED);
     write_report(failed.path(), "the agent is not installed");
-    started.wait().await.unwrap();
+    assert_eq!(started.wait().await.unwrap(), Some("chat-id".into()));
     let error = failed.wait().await.unwrap_err();
     assert_eq!(error.to_string(), "the agent is not installed");
 }
