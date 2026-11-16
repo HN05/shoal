@@ -139,16 +139,6 @@ fn events_after(db: &Connection, cursor: EventCursor, limit: u32) -> Result<Vec<
     .collect()
 }
 
-/// The fields that open every event of a space, from its row in
-/// [`SPACE_ROWS`].
-const SPACE_FIELDS: &str = "'space_id',spaces.id,'space_kind',spaces.kind,
-    'repository_id',spaces.repository_id,'name',spaces.name,
-    'path',workspaces.path,'branch',workspaces.branch";
-
-/// Each space with its worktree's location when it is a workspace.
-const SPACE_ROWS: &str =
-    "spaces LEFT JOIN workspaces ON workspaces.id=spaces.id AND spaces.kind='workspace'";
-
 /// Append in the transaction that owns the transition, before deleting ownership.
 pub(crate) fn record(
     db: &Connection,
@@ -159,16 +149,14 @@ pub(crate) fn record(
 ) -> Result<()> {
     // Repeated cleanup failures are unchanged state, even when notifications are read.
     db.execute(
-        &format!(
-            "INSERT INTO space_events(space_id,record)
-             SELECT spaces.id, json_object('kind',?2,{SPACE_FIELDS},'cause',?3,'error',?4)
-             FROM {SPACE_ROWS} WHERE spaces.id=?1 AND NOT EXISTS (
+        "INSERT INTO space_events(space_id,record)
+             SELECT id, json_set(record,'$.kind',?2,'$.cause',?3,'$.error',?4)
+             FROM space_event_records WHERE id=?1 AND NOT EXISTS (
                  SELECT 1 FROM space_events WHERE id=(
                      SELECT MAX(id) FROM space_events WHERE space_id=?1
                  ) AND json_extract(record,'$.kind')=?2 AND json_extract(record,'$.cause')=?3
                      AND json_extract(record,'$.error') IS ?4
-             )"
-        ),
+             )",
         params![id, kind, cause, error],
     )?;
     Ok(())
@@ -205,12 +193,10 @@ pub(crate) fn record_link(
         EventKind::Linked | EventKind::Unlinked
     ));
     db.execute(
-        &format!(
-            "INSERT INTO space_events(space_id,record)
-             SELECT spaces.id, json_object('kind',?2,{SPACE_FIELDS},'cause',NULL,'error',NULL,
-                 'link',json_object('kind',?3,'url',?4,'relation',?5))
-             FROM {SPACE_ROWS} WHERE spaces.id=?1"
-        ),
+        "INSERT INTO space_events(space_id,record)
+             SELECT id, json_set(record,'$.kind',?2,
+                 '$.link',json_object('kind',?3,'url',?4,'relation',?5))
+             FROM space_event_records WHERE id=?1",
         params![id, event_kind, kind, url, relation],
     )?;
     Ok(())
@@ -226,12 +212,10 @@ pub(crate) fn record_item(
 ) -> Result<()> {
     let kind = kind.into();
     db.execute(
-        &format!(
-            "INSERT INTO space_events(space_id,record)
-             SELECT spaces.id, json_object('kind',?2,{SPACE_FIELDS},'cause',NULL,'error',NULL,
-                 'item',json_object('kind',?3,'url',?4,'action',?5))
-             FROM {SPACE_ROWS} WHERE spaces.id=?1"
-        ),
+        "INSERT INTO space_events(space_id,record)
+             SELECT id, json_set(record,'$.kind',?2,
+                 '$.item',json_object('kind',?3,'url',?4,'action',?5))
+             FROM space_event_records WHERE id=?1",
         params![id, EventKind::ItemChanged, kind, url, action],
     )?;
     Ok(())
@@ -246,13 +230,11 @@ pub(crate) fn record_item_activity(
     update: &crate::forge::updates::Update,
 ) -> Result<()> {
     db.execute(
-        &format!(
-            "INSERT INTO space_events(space_id,record)
-             SELECT spaces.id, json_object('kind',?2,{SPACE_FIELDS},'cause',NULL,'error',NULL,
-                 'item_activity',json_object('kind',?3,'url',?4,
+        "INSERT INTO space_events(space_id,record)
+             SELECT id, json_set(record,'$.kind',?2,
+                 '$.item_activity',json_object('kind',?3,'url',?4,
                      'update',json_object('kind',?5,'message',?6)))
-             FROM {SPACE_ROWS} WHERE spaces.id=?1"
-        ),
+             FROM space_event_records WHERE id=?1",
         params![
             id,
             EventKind::ItemActivity,
@@ -274,12 +256,9 @@ fn record_with(
     payload: &impl serde::Serialize,
 ) -> Result<()> {
     db.execute(
-        &format!(
-            "INSERT INTO space_events(space_id,record)
-             SELECT spaces.id,
-                 json_object('kind',?2,{SPACE_FIELDS},'cause',NULL,'error',NULL,?3,json(?4))
-             FROM {SPACE_ROWS} WHERE spaces.id=?1"
-        ),
+        "INSERT INTO space_events(space_id,record)
+             SELECT id, json_set(record,'$.kind',?2,'$.'||?3,json(?4))
+             FROM space_event_records WHERE id=?1",
         params![id, kind, field, serde_json::to_string(payload)?],
     )?;
     Ok(())

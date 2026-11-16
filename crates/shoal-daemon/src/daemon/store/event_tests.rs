@@ -221,6 +221,7 @@ fn remove_schema_objects(db: &Connection) -> Result<()> {
     // One transaction syncs the whole removal once instead of every statement.
     let tx = db.unchecked_transaction()?;
     let db: &Connection = &tx;
+    db.execute_batch(include_str!("event_spaces_undo.sql"))?;
     db.execute_batch(include_str!("space_scope_agents_undo.sql"))?;
     db.execute_batch(include_str!("agent_assigned_issues_undo.sql"))?;
     db.execute_batch(include_str!("container_projects_undo.sql"))?;
@@ -544,6 +545,42 @@ fn chat_events_reach_the_journal_under_the_chat() -> Result<()> {
         assert_eq!(event.space_kind, crate::model::SpaceKind::Chat);
         assert_eq!(event.name, "planner");
     }
+    for (_, record) in &rows {
+        let record: serde_json::Value = serde_json::from_str(record)?;
+        assert_eq!(
+            (record.get("path"), record.get("branch")),
+            (None, None),
+            "{record}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn stored_chat_events_lose_their_path_and_branch() -> Result<()> {
+    let mut db = Connection::open_in_memory()?;
+    migrate_to(&mut db, 211)?;
+    let chat = serde_json::json!({"kind": "renamed", "space_id": "c", "space_kind": "chat",
+        "repository_id": null, "name": "plan", "cause": null, "error": null});
+    let workspace = serde_json::json!({"kind": "branch_changed", "space_id": "w",
+        "space_kind": "workspace", "repository_id": "repo", "name": "fix", "path": "/fix",
+        "branch": null, "cause": null, "error": null});
+    let mut earlier_chat = chat.clone();
+    earlier_chat["path"] = serde_json::Value::Null;
+    earlier_chat["branch"] = serde_json::Value::Null;
+    for (space, record) in [("c", &earlier_chat), ("w", &workspace)] {
+        db.execute(
+            "INSERT INTO space_events(space_id,record) VALUES (?1,?2)",
+            rusqlite::params![space, record.to_string()],
+        )?;
+    }
+    migrate(&mut db)?;
+    let records = db
+        .prepare("SELECT record FROM space_events ORDER BY id")?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .map(|record| Ok(serde_json::from_str(&record?)?))
+        .collect::<Result<Vec<serde_json::Value>>>()?;
+    assert_eq!(records, [chat, workspace]);
     Ok(())
 }
 

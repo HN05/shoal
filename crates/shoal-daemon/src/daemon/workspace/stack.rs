@@ -93,16 +93,14 @@ fn change_base(
 /// Journal the workspace's current base workspace.
 pub(crate) fn record_base_changed(db: &Connection, id: &SpaceId, cause: EventCause) -> Result<()> {
     db.execute(
-        "INSERT INTO space_events(space_id,record) SELECT spaces.id, json_object(
-            'kind',?2,'space_id',spaces.id,'space_kind',spaces.kind,
-            'repository_id',spaces.repository_id,'name',spaces.name,'path',stacked.path,
-            'branch',stacked.branch,'cause',?3,'error',NULL,
-            'base_workspace',json((SELECT json_object('id',base.id,'name',base_space.name,
+        "INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
+            '$.kind',?2,'$.cause',?3,
+            '$.base_workspace',json((SELECT json_object('id',base.id,'name',base_space.name,
                     'branch',base.branch)
                 FROM workspaces base JOIN spaces base_space USING(id)
                 WHERE base.id=stacked.base_workspace_id))
-        ) FROM workspaces stacked JOIN spaces USING(id)
-        WHERE stacked.id=?1",
+        ) FROM space_event_records JOIN workspaces stacked USING(id)
+        WHERE id=?1 AND space_kind='workspace'",
         params![id, EventKind::BaseChanged, cause],
     )?;
     Ok(())
