@@ -4,6 +4,7 @@ mod approvals;
 mod assignments;
 mod chats;
 mod ci;
+mod containers;
 pub(super) mod daemon;
 mod demos;
 mod executions;
@@ -87,6 +88,7 @@ pub(super) async fn handle(
         Operation::Secret(method) => secrets::handle(&server.manager, method, caller).await,
         Operation::Resource(method) => resources::handle(&server.manager, method, caller).await,
         Operation::Simulator(method) => simulators::handle(&server.manager, method, caller).await,
+        Operation::Container(method) => containers::handle(&server.manager, method, caller).await,
         Operation::Subscription(method) => {
             subscriptions::handle(&server.manager, method, caller, scope)
         }

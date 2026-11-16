@@ -1,10 +1,10 @@
 //! The request envelope and the method each request carries.
 use super::{
-    AgentMethod, ApprovalMethod, AssignmentMethod, ChatMethod, CiMethod, DaemonMethod, DemoMethod,
-    ExecutionMethod, ExitRequest, FileMethod, HoldMethod, ItemMethod, LaunchMethod,
-    NotificationMethod, OperationMethod, PortMethod, QuestionMethod, QueueMethod, Reattach,
-    RecoveryMethod, RemovalMethod, RepositoryMethod, ResourceMethod, ReviewMethod, SecretMethod,
-    SimulatorMethod, SubscriptionMethod, TriggerMethod, VERSION, WorkspaceMethod,
+    AgentMethod, ApprovalMethod, AssignmentMethod, ChatMethod, CiMethod, ContainerMethod,
+    DaemonMethod, DemoMethod, ExecutionMethod, ExitRequest, FileMethod, HoldMethod, ItemMethod,
+    LaunchMethod, NotificationMethod, OperationMethod, PortMethod, QuestionMethod, QueueMethod,
+    Reattach, RecoveryMethod, RemovalMethod, RepositoryMethod, ResourceMethod, ReviewMethod,
+    SecretMethod, SimulatorMethod, SubscriptionMethod, TriggerMethod, VERSION, WorkspaceMethod,
 };
 use serde::{Deserialize, Serialize};
 
@@ -78,6 +78,7 @@ pub enum Operation {
     Secret(SecretMethod),
     Resource(ResourceMethod),
     Simulator(SimulatorMethod),
+    Container(ContainerMethod),
     Subscription(SubscriptionMethod),
     Trigger(TriggerMethod),
 }
@@ -161,6 +162,7 @@ impl Operation {
             | Self::Secret(_)
             | Self::Resource(_)
             | Self::Simulator(_)
+            | Self::Container(_)
             | Self::Trigger(_) => Lifetime::Reply,
         }
     }
@@ -221,6 +223,7 @@ from_domains!(
     Secret(SecretMethod),
     Resource(ResourceMethod),
     Simulator(SimulatorMethod),
+    Container(ContainerMethod),
     Subscription(SubscriptionMethod),
     Trigger(TriggerMethod),
 );

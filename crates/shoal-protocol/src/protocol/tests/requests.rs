@@ -249,6 +249,10 @@ const REQUESTS: &[&str] = &[
     r#"{"sim_catalog":{"workspace":"fix"}}"#,
     r#"{"sim_overview":{"workspace":null}}"#,
     r#"{"sim_list":{"workspace":"fix"}}"#,
+    r#"{"container_catalog":{"workspace":"fix"}}"#,
+    r#"{"container_overview":{"workspace":null}}"#,
+    r#"{"acquire_containers":{"workspace":"fix","reason":"database"}}"#,
+    r#"{"release_containers":{"workspace":"fix"}}"#,
     r#"{"sim_acquire":{"workspace":"fix","request":{"request_id":"u1","clean":false,"name":"default","profile":null,"device":null,"runtime":null,"reason":null,"queue":false}}}"#,
     r#"{"sim_release":{"workspace":"fix","name":"default"}}"#,
     r#"{"sim_history":{"workspace":null,"limit":20,"before":null}}"#,
@@ -320,6 +324,7 @@ fn every_request_has_its_json_above() {
         variants::<SecretMethod>(),
         variants::<ResourceMethod>(),
         variants::<SimulatorMethod>(),
+        variants::<ContainerMethod>(),
         variants::<SubscriptionMethod>(),
         variants::<TriggerMethod>(),
     ]

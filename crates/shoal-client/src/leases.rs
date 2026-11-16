@@ -1,5 +1,5 @@
 //! Leases a workspace holds: acquiring, releasing and listing its ports,
-//! simulators, resource permits, secret grants and holds.
+//! simulators, containers, resource permits, secret grants and holds.
 use std::time::Duration;
 
 use anyhow::Result;
@@ -9,8 +9,12 @@ use crate::connection::{Daemon, call, request};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     approvals::{ApprovalRequest, DecisionStatus},
+    containers::{ContainerCatalog, ContainerOverview, Containers},
     model::{PortCatalog, PortOverview, PortRequest, PortReservation, PortSuggestion, SpaceHold},
-    protocol::{Body, HoldMethod, PortMethod, ResourceMethod, SecretMethod, SimulatorMethod},
+    protocol::{
+        Body, ContainerMethod, HoldMethod, PortMethod, ResourceMethod, SecretMethod,
+        SimulatorMethod,
+    },
     resources::{Catalog, Overview, ResourceLease, ResourceRequest},
     secrets::{SecretCatalog, SecretGrant, SecretRequest},
     sim::{AuditEntry, SimRequest, Simulator, SimulatorCatalog, SimulatorOverview},
@@ -225,6 +229,57 @@ pub async fn simulator_history(
         before,
     };
     request(daemon, method).await
+}
+
+/// What starting a workspace's containers came to.
+pub enum ContainerAcquisition {
+    Started(Box<Containers>),
+    /// A port it reserves waits for, or was refused by, a decision.
+    Approval(Box<ApprovalRequest>),
+    /// The preferred port of one it reserves is taken; the daemon suggests
+    /// another, which `acquire port` reserves.
+    Suggested(PortSuggestion),
+}
+
+/// Start the containers of `workspace`, or return them when they run.
+pub async fn acquire_containers(
+    daemon: &impl Daemon,
+    workspace: SpaceSelector,
+    reason: Option<String>,
+) -> Result<ContainerAcquisition> {
+    match call(
+        daemon,
+        ContainerMethod::AcquireContainers { workspace, reason },
+    )
+    .await?
+    {
+        Body::Containers(containers) => Ok(ContainerAcquisition::Started(containers)),
+        Body::ApprovalRequest(request) => Ok(ContainerAcquisition::Approval(request)),
+        Body::PortSuggestion(suggestion) => Ok(ContainerAcquisition::Suggested(suggestion)),
+        body => Err(body.unexpected("Containers, ApprovalRequest or PortSuggestion")),
+    }
+}
+
+/// Stop the containers of `workspace`, keeping their volumes and ports.
+pub async fn release_containers(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<()> {
+    request(daemon, ContainerMethod::ReleaseContainers { workspace }).await
+}
+
+/// The containers of `workspace`, or of every workspace.
+pub async fn containers(
+    daemon: &impl Daemon,
+    workspace: Option<SpaceSelector>,
+) -> Result<ContainerOverview> {
+    request(daemon, ContainerMethod::ContainerOverview { workspace }).await
+}
+
+/// What `workspace`'s repository configures for its containers, and the
+/// runtime that runs them.
+pub async fn container_catalog(
+    daemon: &impl Daemon,
+    workspace: SpaceSelector,
+) -> Result<ContainerCatalog> {
+    request(daemon, ContainerMethod::ContainerCatalog { workspace }).await
 }
 
 pub async fn acquire_resource(

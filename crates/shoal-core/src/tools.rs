@@ -39,6 +39,8 @@ tools! {
     // feature-specific and platform tools are diagnosed when invoked.
     Zmx => ("zmx", None),
     Xcrun => ("xcrun", None),
+    Docker => ("docker", None),
+    Podman => ("podman", None),
     Tmux => ("tmux", None),
     Zellij => ("zellij", None),
     Curl => (programs::CURL, None),
@@ -52,7 +54,7 @@ tools! {
 
 impl Tool {
     /// Whether the program is executable on this process's `PATH`.
-    pub(crate) fn installed(self) -> bool {
+    pub fn installed(self) -> bool {
         let path = std::env::var_os("PATH").unwrap_or_default();
         crate::fsutil::executables::find_executable(std::ffi::OsStr::new(self.program()), &path)
             .is_some()

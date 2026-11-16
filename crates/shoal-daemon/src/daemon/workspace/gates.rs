@@ -30,6 +30,7 @@ pub struct Gates {
     registry: Mutex<()>,
     checkpoints: Mutex<()>,
     simulators: Mutex<()>,
+    containers: Keyed<Mutex<()>>,
     proposal_files: Mutex<()>,
     announcements: Mutex<()>,
     git: Keyed<Mutex<()>>,
@@ -256,6 +257,12 @@ impl Gates {
     /// Serialize every simctl transition.
     pub(crate) async fn lock_simulators(&self) -> MutexGuard<'_, ()> {
         self.simulators.lock().await
+    }
+
+    /// Serialize the `compose` calls on the project of the workspace `id`,
+    /// with the record each one changes.
+    pub(crate) async fn lock_containers(&self, id: &SpaceId) -> OwnedMutexGuard<()> {
+        self.containers.gate(id.as_str()).lock_owned().await
     }
 
     /// [`Self::lock_simulators`] when no transition is in progress.

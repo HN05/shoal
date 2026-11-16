@@ -153,6 +153,7 @@ impl Scoped for Operation {
             Operation::Secret(method) => method.scope(manager, caller).await,
             Operation::Resource(method) => method.scope(manager, caller).await,
             Operation::Simulator(method) => method.scope(manager, caller).await,
+            Operation::Container(method) => method.scope(manager, caller).await,
             Operation::Subscription(method) => method.scope(manager, caller).await,
             Operation::Trigger(method) => method.scope(manager, caller).await,
         }

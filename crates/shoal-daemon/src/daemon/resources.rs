@@ -75,7 +75,7 @@ fn row_lease(row: &rusqlite::Row<'_>) -> rusqlite::Result<ResourceLease> {
 }
 
 /// The acquirer a lease row records in its two columns.
-fn row_acquirer(row: &rusqlite::Row<'_>) -> rusqlite::Result<Acquirer> {
+pub(crate) fn row_acquirer(row: &rusqlite::Row<'_>) -> rusqlite::Result<Acquirer> {
     let index = row.as_ref().column_index("acquirer")?;
     Acquirer::from_parts(row.get(index)?, row.get("acquirer_execution")?).map_err(|error| {
         rusqlite::Error::FromSqlConversionFailure(index, rusqlite::types::Type::Text, error.into())
