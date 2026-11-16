@@ -5,14 +5,15 @@ use serde_json::json;
 
 const CONTAINERS: &str = "[containers]\ncompose = 'compose.yaml'\nports = ['db']\n";
 
-/// A fixture whose repository runs `config`'s containers with the compose
-/// fixture as Docker.
+/// A fixture whose repository, with a Compose file, runs `config`'s
+/// containers with the compose fixture as Docker.
 fn with_containers(config: &str) -> Fixture {
     let fixture = Fixture::new();
     install_test_script(
         fixture.root.path().join("bin/docker"),
         include_str!("../fixtures/compose.py"),
     );
+    fs::write(fixture.repo.join("compose.yaml"), "services: {}\n").unwrap();
     commit_resource_config(&fixture.repo, config);
     fixture
 }
@@ -210,13 +211,20 @@ fn removal_takes_the_project_down_with_its_volumes_even_without_its_worktree() {
     for project in &projects {
         assert_eq!(commands(&fixture, project), ["up", "down"]);
     }
-    let down = (compose_events(&fixture).into_iter())
-        .find(|event| event["command"] == "down")
-        .unwrap();
+    // With its file while the worktree has it, by name once it is gone.
+    let downs: Vec<Value> = (compose_events(&fixture).into_iter())
+        .filter(|event| event["command"] == "down")
+        .collect();
+    let down = |project: &Value| {
+        let event = downs.iter().find(|event| event["project"] == *project);
+        event.unwrap()["args"].clone()
+    };
+    let removal = ["down", "--volumes", "--remove-orphans"];
     assert_eq!(
-        down["args"],
-        json!(["down", "--volumes", "--remove-orphans"])
+        down(&projects[0]),
+        json!([&["-f", "compose.yaml"][..], &removal].concat())
     );
+    assert_eq!(down(&projects[1]), json!(removal));
 }
 
 #[test]

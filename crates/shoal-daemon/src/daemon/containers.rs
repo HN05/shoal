@@ -185,7 +185,10 @@ impl Manager {
         // The record comes first, so whatever `up` leaves has one.
         self.save_containers(&recorded).await?;
         let project = &recorded.project;
-        let up = (Compose::of(project).up(&workspace.path, &project.compose, ports)).await;
+        let up = Compose::at(project, Some(&workspace.path))
+            .await
+            .up(ports)
+            .await;
         recorded.project.state = match &up {
             Ok(()) => ContainerState::Running,
             Err(_) => ContainerState::Failed,
@@ -289,7 +292,8 @@ impl Manager {
         if recorded.project.state == ContainerState::Stopped {
             return Ok(());
         }
-        Compose::of(&recorded.project).stop().await?;
+        let compose = Compose::at(&recorded.project, Some(&workspace.path)).await;
+        compose.stop().await?;
         recorded.project.state = ContainerState::Stopped;
         recorded.project.acquirer = Acquirer::User;
         recorded.for_agent = false;
@@ -304,7 +308,8 @@ impl Manager {
         let Some(recorded) = self.container_project(&workspace.id).await? else {
             return Ok(());
         };
-        (Compose::of(&recorded.project).down().await).with_context(|| {
+        let compose = Compose::at(&recorded.project, Some(&workspace.path)).await;
+        (compose.down().await).with_context(|| {
             format!(
                 "the containers of {} were not removed; retaining it",
                 workspace.name
@@ -327,7 +332,11 @@ impl Manager {
             if recorded.project.state != ContainerState::Failed {
                 return Ok(());
             }
-            Compose::of(&recorded.project).stop().await?;
+            let worktree = self.workspace_by_id(workspace).await?.path;
+            Compose::at(&recorded.project, Some(&worktree))
+                .await
+                .stop()
+                .await?;
             recorded.project.state = ContainerState::Stopped;
             self.save_containers(&recorded).await
         };
@@ -356,7 +365,13 @@ impl Manager {
 
     /// `project` with its services as the runtime lists them.
     async fn describe_containers(&self, project: ContainerProject) -> Containers {
-        let (services, services_error) = match Compose::of(&project).services().await {
+        let workspace = self.workspace_by_id(&project.workspace_id).await;
+        let worktree = workspace
+            .as_ref()
+            .ok()
+            .map(|workspace| workspace.path.as_path());
+        let compose = Compose::at(&project, worktree).await;
+        let (services, services_error) = match compose.services().await {
             Ok(services) => (services, None),
             Err(error) => (Vec::new(), Some(format!("{error:#}"))),
         };

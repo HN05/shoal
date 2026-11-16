@@ -1,12 +1,13 @@
-//! A runtime's `compose`, run on one workspace's project by its name.
+//! A runtime's `compose`, run on one workspace's project by its name, with
+//! its file while the worktree has it.
 use std::{path::Path, time::Duration};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 use serde::Deserialize;
 use shoal_ids::space_ids::SpaceId;
 use tokio::process::Command;
 
-use crate::{model::PortReservation, tools::Tool};
+use crate::{fsutil::off_runtime, model::PortReservation, tools::Tool};
 use shoal_protocol::containers::{
     ContainerProject, ContainerRuntime, ContainerService, PublishedPort,
 };
@@ -57,23 +58,37 @@ fn tool(runtime: ContainerRuntime) -> Tool {
 pub(super) struct Compose<'a> {
     runtime: ContainerRuntime,
     project: &'a str,
+    /// The worktree and its Compose file, while both exist.
+    file: Option<(&'a Path, &'a str)>,
 }
 
 impl<'a> Compose<'a> {
-    pub(super) fn of(project: &'a ContainerProject) -> Self {
+    /// `compose` on `project` in its workspace's `worktree`: with its file
+    /// while the worktree has it, as podman-compose needs, and by its name
+    /// alone otherwise, as for a deleted worktree.
+    pub(super) async fn at(project: &'a ContainerProject, worktree: Option<&'a Path>) -> Self {
+        let file = match worktree {
+            Some(worktree) => (off_runtime::try_exists(&worktree.join(&project.compose)).await)
+                .unwrap_or(false)
+                .then_some((worktree, project.compose.as_str())),
+            None => None,
+        };
         Self {
             runtime: project.runtime,
             project: &project.project,
+            file,
         }
     }
 
-    /// Start the services of `file` in the worktree `dir`, each of `ports`
-    /// in its variable, and wait until they run or report healthy.
-    pub(super) async fn up(&self, dir: &Path, file: &str, ports: &[PortReservation]) -> Result<()> {
+    /// Start the services of the file, each of `ports` in its variable, and
+    /// wait until they run or report healthy.
+    pub(super) async fn up(&self, ports: &[PortReservation]) -> Result<()> {
+        ensure!(
+            self.file.is_some(),
+            "the worktree has no Compose file to start"
+        );
         let mut command = self.command();
-        command
-            .current_dir(dir)
-            .args(["-f", file, "up", "--detach", "--wait"]);
+        command.args(["up", "--detach", "--wait"]);
         for port in ports {
             command.env(&port.env_var, port.port.to_string());
         }
@@ -102,11 +117,14 @@ impl<'a> Compose<'a> {
         parse_services(&run(command, TIMEOUT).await?)
     }
 
-    /// `<runtime> compose -p <project>`, which names the project without
-    /// reading its file.
+    /// `<runtime> compose --project-name <project>`, with `-f <file>` in
+    /// the worktree while it has the file.
     fn command(&self) -> Command {
         let mut command = Command::new(tool(self.runtime).program());
         command.args(["compose", "--project-name", self.project]);
+        if let Some((worktree, file)) = self.file {
+            command.current_dir(worktree).args(["-f", file]);
+        }
         command
     }
 }
