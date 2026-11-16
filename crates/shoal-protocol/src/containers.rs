@@ -32,14 +32,6 @@ states!(
     }
 );
 
-/// `[machine.containers]`: the engine this machine runs projects with.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct ContainerMachine {
-    /// Unset takes the first of Docker and Podman on `PATH`.
-    pub runtime: Option<ContainerRuntime>,
-}
-
 states!(
     /// Where a recorded project is, as Shoal last left it.
     ContainerState {

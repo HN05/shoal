@@ -51,7 +51,7 @@ pub struct Machine {
     pub git_profiles: crate::config::git_profiles::Git,
     pub simulators: crate::sim::SimConfig,
     pub webhooks: Webhooks,
-    pub containers: shoal_protocol::containers::ContainerMachine,
+    pub containers: Containers,
     /// The options of `[machine]` that take another's value.
     #[serde(skip)]
     pub same_as: same_as::References,
@@ -81,4 +81,13 @@ impl Machine {
         *self = machine;
         Ok(())
     }
+}
+
+/// `[machine.containers]`: the engine this machine runs workspaces'
+/// projects with.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Containers {
+    /// Unset takes the first of Docker and Podman on `PATH`.
+    pub runtime: Option<shoal_protocol::containers::ContainerRuntime>,
 }
