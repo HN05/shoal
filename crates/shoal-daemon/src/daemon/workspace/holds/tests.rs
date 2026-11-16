@@ -349,8 +349,13 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
             .collect::<Vec<_>>(),
         ["editor"]
     );
-    // The user's hold refuses the parent's agent removing the child.
-    scope::authorize(&manager, Some(&"parent".into()), &mut remove)
+    // The user's hold refuses the parent's agent removing the child, from
+    // the check that comes before the removal.
+    let mut check = crate::protocol::RemovalMethod::CheckRemoval {
+        space: SpaceSelector::id(&child.id),
+        include_changes: false,
+    };
+    scope::authorize(&manager, Some(&"parent".into()), &mut check)
         .await
         .unwrap_err();
 }

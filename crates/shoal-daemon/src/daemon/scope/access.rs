@@ -168,21 +168,21 @@ impl Manager {
         Ok(workspace)
     }
 
-    /// `workspace`, which must be one below the caller's. Removing it
-    /// releases the user's holds of it and of the spaces below it, which is
-    /// the `user_holds` permission's: a removal that `takes` the holds uses
-    /// up its approval, and a check before one asks for it but leaves it.
-    pub(in crate::daemon) async fn unheld_workspace_below<'a>(
+    /// Let `caller` remove the space `selector` names, releasing the user's
+    /// holds of it and of the spaces below it, as its `user_holds`
+    /// permission allows: a removal that `takes` the holds uses up its
+    /// approval, and a check before one asks for it but leaves it. Returns
+    /// whether the user holds any of them, which only a removal this
+    /// authorized releases.
+    pub(in crate::daemon) async fn authorize_held_removal(
         &self,
         caller: &Caller,
-        workspace: &'a mut SpaceSelector,
-        refusal: &str,
+        selector: &SpaceSelector,
         takes: bool,
-    ) -> Result<&'a mut SpaceSelector> {
-        let workspace = self.workspace_below(caller, workspace, refusal).await?;
-        let space = self.space(workspace).await?;
+    ) -> Result<bool> {
+        let space = self.space(selector).await?;
         if !self.user_holds_below(&space.id).await? {
-            return Ok(workspace);
+            return Ok(false);
         }
         // A name may repeat, so the space's ID binds the approval.
         let removal = format!("remove {} ({}), which the user holds", space.name, space.id);
@@ -194,7 +194,7 @@ impl Manager {
             true => self.authorize_action(Some(caller), action).await?,
             false => self.check_action(caller, action).await?,
         }
-        Ok(workspace)
+        Ok(true)
     }
 
     /// Whether the user holds the space `id` or one below it.

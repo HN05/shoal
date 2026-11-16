@@ -101,13 +101,14 @@ pub(super) async fn handle(
         )),
         RemovalMethod::RemoveSpace { space, unsaved } => {
             let inspection = InspectionPolicy::GitOnly;
-            Body::RemovalResult(match caller {
-                Some(_) => manager.remove_unheld(&space, unsaved, inspection).await?,
-                None => manager.remove_selected(&space, unsaved, inspection).await?,
+            Body::RemovalResult(match releases_holds(manager, caller, &space).await? {
+                true => manager.remove_selected(&space, unsaved, inspection).await?,
+                false => manager.remove_unheld(&space, unsaved, inspection).await?,
             })
         }
         RemovalMethod::StartRemoval { space, unsaved } => {
-            manager.start_removal(&space, unsaved, caller).await?;
+            let release_holds = releases_holds(manager, caller, &space).await?;
+            (manager.start_removal(&space, unsaved, caller, release_holds)).await?;
             Body::Ok
         }
         RemovalMethod::Cleanup { dry_run, selection } => {
@@ -141,6 +142,22 @@ pub(super) async fn handle(
             Body::RestoredSpace(manager.import_space(*import).await?)
         }
     }))
+}
+
+/// Whether removing `space` at `caller`'s request releases the user's holds
+/// of it and of the spaces below it: the user's own request always does,
+/// and a scoped caller's once its `user_holds` permission lets it take the
+/// holds there are. A hold the user places after that still refuses the
+/// removal.
+async fn releases_holds(
+    manager: &Manager,
+    caller: Option<&Caller>,
+    space: &SpaceSelector,
+) -> Result<bool> {
+    match caller {
+        Some(caller) => manager.authorize_held_removal(caller, space, true).await,
+        None => Ok(true),
+    }
 }
 
 /// What a [`RemovalMethod::StopSpace`] request asks of the stop.
@@ -191,13 +208,15 @@ impl Scoped for RemovalMethod {
         match self {
             // The check asks for the user's holds too, so a batch refuses
             // before removing any.
-            RemovalMethod::CheckRemoval { space, .. } => manager
-                .unheld_workspace_below(caller, space, REFUSAL, false)
-                .await
-                .map(Some),
+            RemovalMethod::CheckRemoval { space, .. } => {
+                let space = manager.workspace_below(caller, space, REFUSAL).await?;
+                manager.authorize_held_removal(caller, space, false).await?;
+                Ok(Some(space))
+            }
+            // The removal takes the user's holds where it releases them.
             RemovalMethod::RemoveSpace { space, .. }
             | RemovalMethod::StartRemoval { space, .. } => manager
-                .unheld_workspace_below(caller, space, REFUSAL, true)
+                .workspace_below(caller, space, REFUSAL)
                 .await
                 .map(Some),
             // Its answer confines the spaces to those below the caller's.
@@ -274,3 +293,6 @@ fn administered(method: &mut RemovalMethod) -> Option<&mut SpaceSelector> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -290,17 +290,14 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
         )
         .await
         .unwrap();
-    manager
-        .executions
-        .issue_scope(
-            "scope".into(),
-            Caller {
-                space_id: parent.id.clone(),
-                execution: None,
-                granted: None,
-                read_only: false,
-            },
-        )
+    let scoped = Caller {
+        space_id: parent.id.clone(),
+        execution: None,
+        granted: None,
+        read_only: false,
+    };
+    (manager.executions)
+        .issue_scope("scope".into(), scoped.clone())
         .await;
     let check = |space: &str| RemovalMethod::CheckRemoval {
         space: space.into(),
@@ -309,6 +306,15 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
     let remove = |space: &str| RemovalMethod::RemoveSpace {
         space: space.into(),
         unsaved: UnsavedWork::default(),
+    };
+    // The removal asks for the user's holds once its scope check passes.
+    let server = crate::daemon::tests::server(manager.clone());
+    let request = |mut method: RemovalMethod| {
+        let (manager, server, scoped) = (&manager, &server, &scoped);
+        async move {
+            crate::daemon::scope::authorize(manager, Some(&"scope".into()), &mut method).await?;
+            crate::daemon::requests::handle(server, method.into(), Some(scoped), None).await
+        }
     };
     for (target, allowed) in [
         (child.id.as_str(), true),
@@ -337,10 +343,8 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
         .await
         .unwrap();
     // The check refuses too, so a batch refuses before removing any.
-    for mut method in [check(&child.name), remove(&child.name)] {
-        let authorized =
-            crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
-        assert!(authorized.is_err(), "{method:?}");
+    for method in [check(&child.name), remove(&child.name)] {
+        assert!(request(method).await.is_err());
     }
     // Removing it would release the holds of the workspaces below it too.
     manager
@@ -369,10 +373,7 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
         )
         .await
         .unwrap();
-    let mut method = remove(&child.name);
-    let authorized =
-        crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
-    assert!(authorized.is_err());
+    assert!(request(remove(&child.name)).await.is_err());
     manager
         .acquire_hold(
             &SpaceSelector::id(&child.id),

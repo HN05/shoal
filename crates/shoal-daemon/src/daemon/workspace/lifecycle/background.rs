@@ -22,23 +22,23 @@ use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// Start removing the space `selector` names at `caller`'s request, as
-    /// [`Self::remove_selected`] removes it for the user, or as
-    /// [`Self::remove_unheld`] does for a scoped caller. Returns the space
-    /// once it is reserved and passes the checks removal makes before
-    /// changing anything; the rest goes on in the background, which a daemon
-    /// update waits for. A failure from then on retains the space and
-    /// reaches the agent of the caller's space, or else the user.
+    /// [`Self::remove_selected`] removes it, or without `release_holds` as
+    /// [`Self::remove_unheld`] does. Returns the space once it is reserved
+    /// and passes the checks removal makes before changing anything; the
+    /// rest goes on in the background, which a daemon update waits for. A
+    /// failure from then on retains the space and reaches the agent of the
+    /// caller's space, or else the user.
     pub(crate) async fn start_removal(
         self: &Arc<Self>,
         selector: &SpaceSelector,
         unsaved: UnsavedWork,
         caller: Option<&Caller>,
+        release_holds: bool,
     ) -> Result<Space> {
         let operation = self.gates.owned_operation().await;
         let id = self.space(selector).await?.id;
         let (checked, passed) = oneshot::channel();
         let manager = self.clone();
-        let release_holds = caller.is_none();
         let requester = caller.map(|caller| caller.space_id.clone());
         // The reservation lives in the task, which reports the first checks'
         // outcome and goes on after them.
