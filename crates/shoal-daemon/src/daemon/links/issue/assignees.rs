@@ -7,11 +7,17 @@ use rusqlite::{Connection, OptionalExtension};
 use shoal_ids::space_ids::SpaceId;
 
 use crate::{
-    daemon::{notifications::NotificationKind, scope::Caller, workspace::Manager},
+    daemon::{
+        links::wait::record_shoal_change, notifications::NotificationKind, scope::Caller,
+        workspace::Manager,
+    },
     forge::{ForgeRepo, items::reference::ItemRef},
     model::{Assigner, IssueAssignee},
 };
-use shoal_forge::items::assignment::{Assignment, AssignmentRequests};
+use shoal_forge::{
+    items::assignment::{Assignment, AssignmentRequests},
+    updates::Edited,
+};
 
 /// Who a caller assigns an issue to a space as.
 pub(crate) trait AssignerOf {
@@ -71,6 +77,7 @@ impl Manager {
         let Some(assignment) = assigned else {
             return Ok(None);
         };
+        (self.record_assignee_change(url, assignment.edited.clone())).await;
         let (id, issue, login) = (id.to_owned(), url.clone(), assignment.login.clone());
         let added = assignment.added;
         let dropped = (self.store)
@@ -136,8 +143,26 @@ impl Manager {
         }
         let url: ItemRef = url.parse()?;
         let forge = self.item_forge(&url).await?;
-        forge.unassign(&self.user_account(), &url, login).await?;
+        let removal = forge.unassign(&self.user_account(), &url, login).await?;
+        self.record_assignee_change(&url, removal.edited).await;
         Ok(())
+    }
+
+    /// Record `edited`, the change Shoal just made on its own to the
+    /// assignees of the issue `url`, as every space's own change, so no
+    /// watch reports it. The caller holds the issue's assignee gate. A
+    /// failure only lets watches report it, so it is logged.
+    pub(super) async fn record_assignee_change(&self, url: &ItemRef, edited: Edited) {
+        if edited.is_empty() {
+            return;
+        }
+        let issue = url.clone();
+        let recorded = (self.store)
+            .write(move |tx| record_shoal_change(tx, issue.url(), &edited))
+            .await;
+        if let Err(error) = recorded {
+            crate::daemon::log!("Shoal's assignee change of {url} not recorded: {error:#}");
+        }
     }
 }
 

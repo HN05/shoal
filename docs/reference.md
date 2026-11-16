@@ -5114,8 +5114,9 @@ a number the one `--repo` names. Watches return on comments,
 reviews, edits, completed CI checks, new merge conflicts, closure, reopening, merging,
 or a merged base workspace, except for comments, review thread replies, edits, closing
 and reopening that the workspace itself made through Shoal, on its own items or those of
-a space below it whose activity it receives; the agent of a space below with its own agent
-still hears of them, and the same change made another way, such as in the web interface,
+a space below it whose activity it receives, and the assignees Shoal adds or removes on its
+own, which no space's watch reports; the agent of a space below with its own agent
+still hears of the others, and the same change made another way, such as in the web interface,
 is reported. An `edited` update names what changed of an
 item's title, description, labels, assignees, milestone and, for a PR, its draft
 state and base branch, such as `Labels added: bug; title changed to "Fix"`;

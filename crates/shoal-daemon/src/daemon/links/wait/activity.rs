@@ -202,6 +202,33 @@ pub(crate) fn record_own_change(
     save_cursor_record(db, workspace_id, change.url, &record)
 }
 
+/// Record `edited`, a change Shoal made to the item at `url` on its own,
+/// such as an assignee it added, on every space's cursor of the item, so
+/// no watch reports it.
+pub(in crate::daemon::links) fn record_shoal_change(
+    db: &rusqlite::Connection,
+    url: &str,
+    edited: &Edited,
+) -> Result<()> {
+    if edited.is_empty() {
+        return Ok(());
+    }
+    let spaces = db
+        .prepare("SELECT space_id FROM pr_activity WHERE url=?1")?
+        .query_map([url], |row| row.get(0))?
+        .collect::<rusqlite::Result<Vec<SpaceId>>>()?;
+    for id in spaces {
+        let change = OwnChange {
+            url,
+            authored: Vec::new(),
+            state: None,
+            edited: edited.clone(),
+        };
+        record_own_change(db, &id, change)?;
+    }
+    Ok(())
+}
+
 /// Record `change`, which the space `id` made, on its cursor and on those of
 /// the spaces below it whose activity its agent receives and that follow the
 /// item, so none of its deliveries reports the change back. A space below

@@ -420,7 +420,8 @@ item's title, description, labels, assignees, milestone, draft state or base
 branch; a failed CI check with its failing step when the runner records it;
 the passed checks once none on the PR's head is pending; a merge conflict,
 again after a push or base change that leaves it conflicting; closing and
-merging. It leaves out what the space itself did through Shoal. For Claude
+merging. It leaves out what the space itself did through Shoal and the
+assignees Shoal adds or removes on its own. For Claude
 Code, and for a workspace's Codex in a place its host types into,
 launched through Shoal, hooks deliver activity as context after tool calls and start the next
 turn with it after a turn ends; a delivery replaces a running watch. Other

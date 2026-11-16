@@ -130,6 +130,7 @@ impl Manager {
         let Some(assigned) = forge.assign_own(&self.agent_account(), url).await? else {
             return Ok(None);
         };
+        self.record_assignee_change(url, assigned.edited).await;
         let issue = url.url().to_owned();
         (self
             .store
@@ -149,6 +150,9 @@ impl Manager {
             return forge.others_assigned(&account, url).await;
         }
         let removed = forge.unassign_own(&account, url).await?;
+        if let Some(removed) = &removed {
+            (self.record_assignee_change(url, removed.edited.clone())).await;
+        }
         let issue = url.url().to_owned();
         (self
             .store

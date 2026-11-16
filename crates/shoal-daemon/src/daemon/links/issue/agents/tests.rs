@@ -1,5 +1,5 @@
 use super::*;
-use crate::daemon::links::issue::test_support::{AGENT_TOKEN, Fixture};
+use crate::daemon::links::issue::test_support::{AGENT_TOKEN, Fixture, run_agent};
 use crate::daemon::{workspace::ExecutionKind, workspace_files::Attacher};
 use crate::execution::recovery::RecordExt;
 use crate::paths::StateFiles;
@@ -158,27 +158,6 @@ async fn a_relinked_agents_assignment_puts_the_agent_account_on_again() {
     let warnings = (fixture.manager.relink_space(&workspace.id, &links, None)).await;
     assert!(warnings.is_empty(), "{warnings:?}");
     assert_eq!(fixture.change_tokens(), ["token agent"]);
-}
-
-/// Start a tracked agent in `workspace`, which runs until its execution
-/// finishes.
-async fn run_agent(manager: &Manager, workspace: &Workspace) -> ExecutionId {
-    let execution = manager
-        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
-        .await
-        .unwrap();
-    let agent = TrackedAgent::named("claude");
-    let id = execution.plan.id.clone();
-    (manager.track_agent(
-        &id,
-        &agent,
-        &workspace.id,
-        &workspace.name,
-        false,
-        Default::default(),
-    ))
-    .await;
-    id
 }
 
 /// Save the stop of the agent `execution` ran in `workspace`, with a

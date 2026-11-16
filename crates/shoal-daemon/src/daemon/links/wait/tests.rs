@@ -20,6 +20,7 @@ use super::{
 use crate::time::UnixTime;
 use crate::{
     daemon::{
+        links::issue::test_support::{AGENT_TOKEN, Fixture, run_agent},
         links::pr::RegistrationKind,
         test_support::{manager, repository},
         workspace::Manager,
@@ -1742,6 +1743,86 @@ async fn edits_are_reported_except_the_workspaces_own() {
     };
     assert_eq!(edited.kind, UpdateKind::Edited);
     assert!(edited.message.contains("bug"), "{}", edited.message);
+}
+
+/// A scripted forge's issue 7, whose agent account has a token, linked to
+/// its one workspace by the user.
+async fn assigned_issue() -> Fixture {
+    let fixture = Fixture::start(&["fix"], &[], "", AGENT_TOKEN).await;
+    fixture.link(&fixture.workspaces[0]).await;
+    fixture
+}
+
+/// What the watch of `fixture`'s workspace reports of its issue 7, read
+/// with `assignees` by a poll that started `seconds` from now, after every
+/// change so far.
+async fn observe_issue(fixture: &Fixture, assignees: &[&str], seconds: u64) -> Vec<Update> {
+    let url = format!("http://{}/team/repo/issues/7", fixture.server.host);
+    let snapshot = serde_json::from_value(json!({"comments": {}, "checks": {},
+        "conflict": null, "state": "open", "errors": {}, "details": {"title": "Bug",
+        "body": "", "labels": [], "assignees": assignees}}))
+    .unwrap();
+    let at = UnixTime::now() + Duration::from_secs(seconds);
+    let id = &fixture.workspaces[0].id;
+    let report = BranchReport::Conflicts;
+    (fixture
+        .manager
+        .record_observed(id, vec![(url, snapshot)], &Selection::default(), report, at))
+    .await
+    .unwrap()
+}
+
+/// The one update of `updates`, an edit that names `login`.
+fn edit_naming(updates: &[Update], login: &str) {
+    let [edited] = updates else {
+        panic!("{updates:?}");
+    };
+    assert_eq!(edited.kind, UpdateKind::Edited);
+    assert!(edited.message.contains(login), "{}", edited.message);
+}
+
+#[tokio::test]
+async fn the_agent_account_done_takes_off_is_the_spaces_own_change() {
+    let fixture = assigned_issue().await;
+    let (manager, workspace) = (&fixture.manager, &fixture.workspaces[0]);
+    run_agent(manager, workspace).await;
+    manager.settle_requested_agents().await;
+    assert!(
+        observe_issue(&fixture, &["shoal-agent"], 1)
+            .await
+            .is_empty()
+    );
+    let selector = SpaceSelector::id(&workspace.id);
+    (manager.mark_done(&selector, Done::default(), &Attacher::User))
+        .await
+        .unwrap();
+    manager.settle_requested_agents().await;
+    assert_eq!(fixture.changes().last(), Some(&json!([])));
+    assert!(observe_issue(&fixture, &[], 2).await.is_empty());
+    // The same change made on the forge is someone else's.
+    edit_naming(
+        &observe_issue(&fixture, &["shoal-agent"], 3).await,
+        "shoal-agent",
+    );
+}
+
+#[tokio::test]
+async fn the_agent_account_an_agents_start_puts_on_is_the_spaces_own_change() {
+    let fixture = assigned_issue().await;
+    let (manager, workspace) = (&fixture.manager, &fixture.workspaces[0]);
+    assert!(observe_issue(&fixture, &[], 1).await.is_empty());
+    run_agent(manager, workspace).await;
+    manager.settle_requested_agents().await;
+    assert_eq!(fixture.changes(), [json!(["shoal-agent"])]);
+    assert!(
+        observe_issue(&fixture, &["shoal-agent"], 2)
+            .await
+            .is_empty()
+    );
+    edit_naming(
+        &observe_issue(&fixture, &["shoal-agent", "ann"], 3).await,
+        "ann",
+    );
 }
 
 #[tokio::test]

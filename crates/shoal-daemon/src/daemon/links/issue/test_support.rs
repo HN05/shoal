@@ -3,12 +3,13 @@ use std::sync::{Arc, Mutex};
 
 use crate::daemon::test_support::{configure, git, manager, repository};
 use crate::{
-    daemon::workspace::Manager,
+    daemon::workspace::{ExecutionKind, Manager},
+    execution::TrackedAgent,
     model::{Assigner, Workspace},
 };
 use serde_json::{Value, json};
 use shoal_forge::test_support::Server;
-use shoal_ids::space_ids::SpaceId;
+use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Which assignee edits the scripted forge refuses.
@@ -184,4 +185,25 @@ pub(crate) fn logins(names: &[&str]) -> Vec<Value> {
     (names.iter())
         .map(|login| json!({"login": login}))
         .collect()
+}
+
+/// Start a tracked agent in `workspace`, which runs until its execution
+/// finishes.
+pub(crate) async fn run_agent(manager: &Manager, workspace: &Workspace) -> ExecutionId {
+    let execution = manager
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    let agent = TrackedAgent::named("claude");
+    let id = execution.plan.id.clone();
+    (manager.track_agent(
+        &id,
+        &agent,
+        &workspace.id,
+        &workspace.name,
+        false,
+        Default::default(),
+    ))
+    .await;
+    id
 }
