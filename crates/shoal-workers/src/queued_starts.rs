@@ -12,7 +12,7 @@ use crate::client::queue;
 use crate::{client::connection::CommandPaths, state::QueueKind};
 use shoal_ids::queue_entry_ids::QueueEntryId;
 
-pub use launch::{plan as launch_plan, start_admitted as start_admitted_launch};
+pub use launch::plan as launch_plan;
 
 /// Start the admitted queue `entry`: open its launch's place, or restore its
 /// stopped agent, freeing its slot with the error when that fails.

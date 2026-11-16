@@ -11,13 +11,12 @@ use crate::cli::{
 };
 use crate::client::connection::CommandPaths;
 use crate::client::preparation::Preparing;
-use crate::protocol::operations::{Preparation, QueuedLaunch};
+use crate::protocol::operations::Preparation;
 
 /// What preparing the added workspace does after setup: linking `pr`, then
-/// the post-setup hook, then queuing `agent`.
+/// the post-setup hook.
 pub(super) struct AfterSetup {
     pub pr: Option<crate::forge::items::reference::ItemInput>,
-    pub agent: Option<Box<QueuedLaunch>>,
     /// The agent that waits for a retried setup should setup fail.
     pub waiting: Option<WaitingAgent>,
 }
@@ -36,7 +35,7 @@ pub(super) async fn follow_add_setup(
         setup: true,
         post_setup: !preparing.reused(),
         pr: rest.pr.clone(),
-        agent: rest.agent.clone(),
+        agent: None,
         waiting: None,
     };
     let prepared = operations::follow_preparation(ctx, preparing).await?;

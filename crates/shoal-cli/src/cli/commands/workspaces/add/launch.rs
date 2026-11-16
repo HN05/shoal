@@ -201,7 +201,6 @@ async fn follow_workspace(
     // The preparation leaves the agent waiting should setup fail.
     let mut rest = AfterSetup {
         pr: None,
-        agent: None,
         waiting: None,
     };
     let agent = ResolvedAddAgent {

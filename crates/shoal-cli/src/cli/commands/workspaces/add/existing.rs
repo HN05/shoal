@@ -10,7 +10,7 @@ use anyhow::{Result, ensure};
 use super::{
     AddOptions, Planned,
     agent::{AddSettings, AgentLaunch, choose_add_agent, resolve_add_agent},
-    detached::{starts_detached, starts_here},
+    detached::daemon_starts,
     launch::launch_worker,
     mode::choose_add_mode,
     plan::start_as,
@@ -65,8 +65,12 @@ pub(in crate::cli::commands) async fn start_worker(
     // Without an agent, the start reopens the workspace here, as a new
     // workspace's start without one opens it.
     let launches = agent.agent.is_some()
-        && starts_detached(ctx, true, &options)
-        && !starts_here(&settings, agent.agent.as_ref()).await?;
+        && daemon_starts(
+            ctx,
+            options.here,
+            agent.agent.as_ref(),
+            settings.get().await?,
+        );
     if launches {
         let picked = (mode, agent);
         return launch_worker(ctx, &workspace, picked, args, (options, &settings)).await;

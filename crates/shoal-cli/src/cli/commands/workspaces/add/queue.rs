@@ -70,19 +70,16 @@ pub(super) async fn admit(
         }
     };
     let blockers = launch_blockers(ctx, target, issue, now, blockers).await?;
-    admit_launch(ctx, target, plan, issue, (now, blockers), true).await
+    admit_launch(ctx, target, plan, issue, (now, blockers)).await
 }
 
-/// [`admit`] the plan's agent, which starts `now` or waits for `blockers`,
-/// in this process once admitted when `caller_starts`, otherwise from the
-/// daemon.
+/// [`admit`] the plan's agent, which starts `now` or waits for `blockers`.
 pub(super) async fn admit_launch(
     ctx: &Context,
     target: &AddTarget,
     plan: &mut AddPlan,
     issue: Option<&issues::Issue>,
     (now, blockers): (bool, Vec<Blocker>),
-    caller_starts: bool,
 ) -> Result<Option<i32>> {
     let Some(agent) = plan.agent_name() else {
         return Ok(None);
@@ -98,7 +95,6 @@ pub(super) async fn admit_launch(
         now,
         blockers,
         opens: reopened_workspace(ctx, target, plan).await?,
-        caller_starts,
     };
     match queued_agents::admit(ctx, plan, launch).await? {
         queued_agents::Admission::Start { entry, base } => {

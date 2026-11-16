@@ -33,10 +33,11 @@ use self::{
         AddSettings, check_chosen_model, choose_add_agent, choose_for_picked_issue,
         resolve_add_agent,
     },
-    detached::{add_detached, ensure_detachable, starts_detached},
+    detached::ensure_detachable,
     finish::execute_add_with_target,
     handoff::start_beside,
     mode::choose_add_mode,
+    place::{add_placed, places_after_setup},
     plan::{absolute, check_add_creation, plan_addition, start_as},
     queue::{admit, failing_entry, named_blockers},
     source::{load_add_issue, pick_add_source, select_add_creation},
@@ -157,8 +158,8 @@ struct Planned {
     blockers: Vec<crate::model::Blocker>,
 }
 
-/// Start the `planned` addition's agent as `options` say: detached, from the
-/// agent queue, beside this terminal or here.
+/// Start the `planned` addition's agent as `options` say: placed once its
+/// workspace is set up, from the agent queue, beside this terminal or here.
 async fn start_planned(
     ctx: &Context,
     planned: Planned,
@@ -171,12 +172,12 @@ async fn start_planned(
         issue,
         blockers,
     } = planned;
-    if starts_detached(ctx, plan.agent_name().is_some(), &options) {
+    if places_after_setup(ctx, &plan, &options) {
         ensure_detachable(settings.get().await?, plan.agent.agent.as_ref(), &options)?;
         // Boxed, as are the launches below it: the start path's futures
         // nest deep enough to overflow the main thread's stack in debug
         // builds on Linux.
-        return Box::pin(add_detached(ctx, plan, target, issue, options, blockers)).await;
+        return Box::pin(add_placed(ctx, plan, target, issue, options, blockers)).await;
     }
     if let Some(queued) = admit(
         ctx,

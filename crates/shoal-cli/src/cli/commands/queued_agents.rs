@@ -41,12 +41,10 @@ pub(super) struct Launch {
     pub blockers: Vec<Blocker>,
     /// The existing workspace the launch reopens, whose agent it becomes.
     pub opens: Option<SpaceId>,
-    /// The caller starts the launch once admitted, even in the existing
-    /// workspace it opens, which the daemon otherwise starts.
-    pub caller_starts: bool,
 }
 
-/// Ask the daemon for a slot for `launch`, which `plan` starts.
+/// Ask the daemon for a slot for `launch`, which `plan` starts in this
+/// process once admitted, even in the existing workspace it opens.
 pub(super) async fn admit(ctx: &Context, plan: &AddPlan, launch: Launch) -> Result<Admission> {
     let request = QueueRequest {
         repository: plan.repository.clone(),
@@ -60,7 +58,7 @@ pub(super) async fn admit(ctx: &Context, plan: &AddPlan, launch: Launch) -> Resu
         env: terminal::start_environment(),
         now: launch.now,
         workspace: launch.opens.map(SpaceSelector::Id),
-        starts_in_caller: launch.caller_starts,
+        starts_in_caller: true,
         blockers: launch.blockers,
         priority: plan.creation.options.priority,
         source: Some(LaunchSource::Manual),

@@ -9,8 +9,10 @@ use crate::{
 };
 
 /// Start `plan` beside this terminal, focused or in the background, unless
-/// `options.here` keeps it in place or the call has no terminal to start it
-/// beside. Returns whether it left this process, which `--json` reports.
+/// `options.here` keeps it in place, the call has no terminal to start it
+/// beside, or a scoped caller makes it, whose start without an agent opens
+/// its workspace here. Returns whether it left this process, which
+/// `--json` reports.
 pub(super) async fn start_beside(
     ctx: &Context,
     target: &AddTarget,
@@ -19,7 +21,7 @@ pub(super) async fn start_beside(
     issue: Option<&issues::Issue>,
     options: AddOptions,
 ) -> Result<bool> {
-    if options.here || !ctx.on_terminal() {
+    if options.here || !ctx.on_terminal() || crate::env::is_scoped() {
         return Ok(false);
     }
     let settings = settings.get().await?;

@@ -1,21 +1,65 @@
-//! Placing the agent of a start without a terminal once its workspace is
-//! set up, from that workspace's own settings: queued for the daemon, or,
-//! for an agent that runs its own way and so leaves this process at once,
-//! started here when the agent limits admit it.
+//! Placing the agent of the user's start without a terminal once its
+//! workspace is set up, from that workspace's own settings: queued for the
+//! daemon, or, for an agent that runs its own way and so leaves this
+//! process at once, started here when the agent limits admit it. The
+//! daemon carries out every other start without a terminal.
 use std::ffi::OsString;
 
 use anyhow::Result;
 
-use super::finish::{holding, report_queued_in};
+use super::{
+    AddOptions,
+    finish::{AgentStart, add_planned, execute_add_with_target, holding, report_queued_in},
+    queue::{admit_launch, launch_blockers},
+    target::AddTarget,
+};
 use crate::{
     agent::Agent,
-    cli::{agents, commands::queued_agents, context::Context, terminal},
-    model::{QueueEntry, Workspace},
+    cli::{
+        agents,
+        commands::{issues, queued_agents},
+        context::Context,
+        terminal,
+    },
+    model::{Blocker, QueueEntry, Workspace},
     protocol::{ConfigTarget, operations::QueuedLaunch},
     queued_launches,
     start_plan::{AddPlan, ResolvedAddAgent},
 };
 use shoal_protocol::space_names::SpaceSelector;
+
+/// Whether `plan`'s agent is placed once its workspace is set up: the
+/// user's, started without a terminal and not here, which the daemon leaves
+/// to this process only when it runs its own way.
+pub(super) fn places_after_setup(ctx: &Context, plan: &AddPlan, options: &AddOptions) -> bool {
+    plan.agent_name().is_some()
+        && !crate::env::is_scoped()
+        && super::detached::leaves_caller(ctx, options.here)
+}
+
+/// Open the planned workspace and place its agent once setup ends. A
+/// launch that waits for `blockers`, or the issues the forge records as
+/// blocking its issue, queues whole, as from a terminal, and starts here
+/// once admitted.
+pub(super) async fn add_placed(
+    ctx: &Context,
+    mut plan: AddPlan,
+    target: AddTarget,
+    issue: Option<issues::Issue>,
+    options: AddOptions,
+    blockers: Vec<Blocker>,
+) -> Result<i32> {
+    let now = options.now;
+    let blockers = launch_blockers(ctx, &target, issue.as_ref(), now, blockers).await?;
+    if blockers.is_empty() {
+        return add_planned(ctx, plan, target, issue, AgentStart::Placed { now }).await;
+    }
+    let admitted = admit_launch(ctx, &target, &mut plan, issue.as_ref(), (false, blockers));
+    if let Some(queued) = admitted.await? {
+        return Ok(queued);
+    }
+    execute_add_with_target(ctx, plan, target, issue).await
+}
 
 /// The launch of the agent that starts in this process.
 pub(super) struct HereLaunch {
@@ -116,7 +160,6 @@ async fn admit_here(
         now: launch.now,
         blockers: Vec::new(),
         opens: Some(workspace.id.clone()),
-        caller_starts: true,
     };
     let plan = AddPlan::agent_in(workspace, launch)?;
     match queued_agents::admit(ctx, &plan, request).await? {

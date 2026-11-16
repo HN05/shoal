@@ -2,7 +2,7 @@
 use shoal_ids::space_ids::SpaceId;
 use std::ffi::OsString;
 
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 
 use super::{
     place::{HereLaunch, launch_placed},
@@ -76,12 +76,10 @@ pub(super) async fn holding<T>(
 pub(super) enum AgentStart {
     /// In this process.
     Here,
-    /// Queued by the workspace's preparation, which the daemon starts
-    /// detached, at once regardless of the limits when `now`.
-    Queued { now: bool },
     /// Where the set-up workspace's settings put it: in this process when the
     /// agent runs its own way there, which leaves this process at once,
-    /// otherwise queued as `Queued` once setup is done.
+    /// otherwise queued in the workspace for the daemon to start detached,
+    /// at once regardless of the limits when `now`.
     Placed { now: bool },
 }
 
@@ -110,20 +108,13 @@ pub(super) async fn add_planned(
         workspace,
     } = plan;
     let pr = creation.pr.clone();
-    // A queued agent starts detached, so the caller's terminal, such as a
-    // chat's session, stays its own.
     let told = (&prompt, args.as_slice(), &fork);
     let own = queued_launch(&agent, issue.as_ref(), (&mode, narrowing), told, false)?;
-    let (launch, placed) = match start {
-        AgentStart::Queued { now } => (
-            queued_launch(&agent, issue.as_ref(), (&mode, narrowing), told, now)?,
-            None,
-        ),
-        AgentStart::Placed { now } => (
-            None,
-            queued_launch(&agent, issue.as_ref(), (&mode, narrowing), told, now)?,
-        ),
-        AgentStart::Here => (None, None),
+    let placed = match start {
+        AgentStart::Placed { now } => {
+            queued_launch(&agent, issue.as_ref(), (&mode, narrowing), told, now)?
+        }
+        AgentStart::Here => None,
     };
     // The agent this start runs itself, which its preparation leaves
     // waiting in the queue should setup fail.
@@ -134,9 +125,8 @@ pub(super) async fn add_planned(
         creation,
         parent: parent.or(chat.map(SpaceSelector::Id)),
         workspace,
-        agent: launch.clone(),
         queue_entry: queue_entry.clone(),
-        waiting: own.filter(|_| launch.is_none()),
+        waiting: own,
     };
     // The daemon gave the starting entry the workspace before its setup.
     let preparing = start_add_workspace(ctx, &target, start, issue.as_ref()).await?;
@@ -148,7 +138,7 @@ pub(super) async fn add_planned(
     };
     // A placed agent may still be queued, so this place becomes the
     // workspace's only once it launches here.
-    if launch.is_none() && placed.is_none() {
+    if placed.is_none() {
         let with_agent = agent.agent.is_some();
         terminal::host_workspace(ctx, opened, with_agent, &label).await?;
     }
@@ -157,22 +147,14 @@ pub(super) async fn add_planned(
         .or(prompt.map(crate::config::templates::Subject::told));
     // Preparation leaves the agent it queues waiting itself.
     let waiting = has_agent.then(|| WaitingAgent::new(queue_entry.clone()));
-    let mut rest = AfterSetup {
-        pr,
-        agent: launch.clone(),
-        waiting,
-    };
+    let mut rest = AfterSetup { pr, waiting };
     let finished = finish_add_workspace(ctx, preparing, &mut rest, &agent, named).await?;
     // A failed setup frees the entry's slot, leaving the agent waiting.
     let (queue_entry, waits) = match rest.waiting {
         Some(waiting) => (waiting.starting.clone(), waiting.failed()),
         None => (queue_entry, false),
     };
-    let Some(Prepared {
-        workspace,
-        agent: entry,
-    }) = finished
-    else {
+    let Some(Prepared { workspace, .. }) = finished else {
         if let Some(entry) = &queue_entry {
             let error = anyhow::anyhow!(
                 "setup of {name} did not complete; retry it with `shoal setup {number}` or skip it with `shoal setup {number} --skip`"
@@ -186,10 +168,6 @@ pub(super) async fn add_planned(
     }
     if let Some(entry) = &queue_entry {
         crate::env::launch_queue_entry(entry);
-    }
-    if launch.is_some() {
-        let entry = entry.context("preparation queued no agent")?;
-        return report_queued_in(ctx, &workspace, &entry);
     }
     let opening = agents::Opening::New {
         mode: mode.unwrap_or(crate::config::modes::ModeName::DEFAULT),
@@ -304,8 +282,6 @@ struct AddStart {
     creation: Creation,
     parent: Option<SpaceSelector>,
     workspace: Option<SpaceId>,
-    /// The agent its preparation queues.
-    agent: Option<Box<QueuedLaunch>>,
     /// The starting queue entry whose launch opens it.
     queue_entry: Option<QueueEntryId>,
     /// The agent the caller starts itself, which waits should setup fail.
@@ -321,7 +297,6 @@ async fn start_add_workspace<'c>(
         creation,
         parent,
         workspace,
-        agent,
         queue_entry,
         waiting,
     }: AddStart,
@@ -346,7 +321,7 @@ async fn start_add_workspace<'c>(
         options,
         issue: issue.map(|issue| issue.url.clone().into()),
         pr,
-        agent: agent.map(|agent| Box::new((*agent).into())),
+        agent: None,
         queue_entry,
         waiting,
     };
@@ -377,9 +352,6 @@ pub(super) async fn finish_add_workspace(
     };
     // An agent left waiting by a failed setup starts from the queue.
     let waits = rest.waiting.as_ref().is_some_and(WaitingAgent::failed);
-    if waits {
-        rest.agent = None;
-    }
     // The post-setup hook may change how the agent launches, so the shell's
     // destination waits for it; a failed hook starts no agent.
     let (prepared, post_setup) = match post_setup {
@@ -421,12 +393,10 @@ async fn prepare_after_setup(
     reused: bool,
     rest: &mut AfterSetup,
 ) -> Result<(Prepared, Result<()>)> {
-    let (pr, agent) = (rest.pr.take(), rest.agent.take());
     let waits = rest.waiting.as_ref().is_some_and(WaitingAgent::failed);
     let steps = Preparation {
         post_setup: !reused || waits,
-        pr,
-        agent,
+        pr: rest.pr.take(),
         ..Default::default()
     };
     let env = crate::env::without_secrets();
