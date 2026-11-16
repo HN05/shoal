@@ -23,8 +23,8 @@ mod watch;
 
 pub(in crate::cli) use add::execute_add;
 pub(super) use add::{
-    AddOptions, AgentLaunch, DaemonReads, StartsAsChat, add, check_target, launch_args,
-    launch_workspace, link, start_worker,
+    AddOptions, AgentLaunch, DaemonReads, StartsAsChat, add, check_target, daemon_starts,
+    launch_args, launch_workspace, leaves_caller, link, start_worker,
 };
 pub(super) use adopt::adopt;
 pub(super) use cd::cd;

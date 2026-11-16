@@ -37,6 +37,27 @@ pub(super) fn starts_detached(ctx: &Context, agent: bool, options: &AddOptions) 
     agent && !options.here && !ctx.on_terminal()
 }
 
+/// Whether the daemon carries out a start not run `here` whose agent, if
+/// any, is `agent`: one for a scoped caller, whose own processes its agent
+/// must not be, or without a terminal to start it beside, unless the user's
+/// agent runs its own way under `settings`, which starts in this process.
+pub(in crate::cli::commands) fn daemon_starts(
+    ctx: &Context,
+    here: bool,
+    agent: Option<&crate::agent::Agent>,
+    settings: &Effective,
+) -> bool {
+    let own_way = !crate::env::is_scoped()
+        && agent.is_some_and(|agent| agents::runs_its_own_way(agent, settings));
+    leaves_caller(ctx, here) && !own_way
+}
+
+/// Whether a start not run `here` leaves this process: for a scoped
+/// caller, or for one without a terminal.
+pub(in crate::cli::commands) fn leaves_caller(ctx: &Context, here: bool) -> bool {
+    !here && (crate::env::is_scoped() || !ctx.on_terminal())
+}
+
 /// Open the planned workspace and start its agent detached. A scoped
 /// caller's preparation queues the agent. The user's agent is placed once
 /// setup ends. A blocked launch queues whole, as from a terminal.

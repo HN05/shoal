@@ -7,11 +7,16 @@ use std::{
 };
 
 use anyhow::{Context as _, Result};
+use shoal_protocol::{launches::Launch, space_names::SpaceSelector};
 
 use super::{repositories, workspaces};
 use crate::{
     agent::{Agent, ModelChoice},
-    cli::{agents, context::Context, ui::ModeChoice},
+    cli::{
+        agents,
+        context::Context,
+        ui::{self, ModeChoice},
+    },
     config::modes,
     git,
     model::Repository,
@@ -37,7 +42,8 @@ pub(super) struct Options {
 }
 
 /// Start the setup agent of the repository `repository` names, else the
-/// current one, else one picked.
+/// current one, else one picked, through the daemon unless it starts in
+/// this process.
 pub(super) async fn start(
     ctx: &Context,
     repository: Option<String>,
@@ -49,16 +55,48 @@ pub(super) async fn start(
     // Chosen before anything is created, so a declined agent leaves no
     // workspace.
     let target = ConfigTarget::Repository(selector.clone());
-    let Some(agent) = agents::default_agent(ctx, target, options.agent.clone()).await? else {
+    let Some(agent) = agents::default_agent(ctx, target.clone(), options.agent.clone()).await?
+    else {
         return Ok(0);
     };
     let local_config = local_config(ctx, selector).await?;
     let prompt = subject(repository::name(&repo), &local_config);
+    let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
+    match workspaces::daemon_starts(ctx, options.here, Some(&agent), &settings) {
+        true => launch(ctx, &repo, (agent, prompt), options, &settings).await,
+        false => start_here(ctx, &repo, (agent, prompt), options).await,
+    }
+}
+
+/// Have the daemon start the setup `agent` of `repo` on `prompt` in setup
+/// mode, as `options` ask, which the repository's `settings` refuse when
+/// they cannot start it in the background.
+async fn launch(
+    ctx: &Context,
+    repo: &Repository,
+    (agent, prompt): (Agent, String),
+    options: Options,
+    settings: &crate::config::Effective,
+) -> Result<i32> {
+    let launch = setup_launch(repo, (agent, prompt), options)?;
+    let mode = ModeChoice::Named(modes::ModeName::SETUP);
+    let options = workspaces::AddOptions::default();
+    workspaces::launch_workspace(ctx, launch, mode, (&options, settings)).await
+}
+
+/// Start the setup `agent` of `repo` on `prompt` from this process, in this
+/// terminal or beside it, as `options` ask.
+async fn start_here(
+    ctx: &Context,
+    repo: &Repository,
+    (agent, prompt): (Agent, String),
+    options: Options,
+) -> Result<i32> {
     let launch = add_options(&options, prompt, ctx.on_terminal());
     workspaces::add(
         ctx,
         Some(repo.id.clone().into()),
-        creation(&repo).await?,
+        creation(repo).await?,
         None,
         workspaces::AgentLaunch::Explicit(Some(agent)),
         options.args,
@@ -67,10 +105,36 @@ pub(super) async fn start(
     .await
 }
 
+/// The launch that has the daemon start the setup `agent` of `repo` on
+/// `prompt` with the model and arguments `options` give, on the setup
+/// branch, which opens its workspace or the branch an earlier setup left.
+/// The user waits for it, so it skips the queue.
+fn setup_launch(
+    repo: &Repository,
+    (agent, prompt): (Agent, String),
+    options: Options,
+) -> Result<Launch> {
+    Ok(Launch {
+        repository: Some(repo.id.to_string()),
+        branch: Some(BRANCH.to_owned()),
+        repository_setup: true,
+        agent: Some(agent),
+        model: options.model,
+        prompt: Some(prompt),
+        now: true,
+        task: workspaces::launch_args(options.args)?,
+        // A setup started in a chat goes below the chat.
+        parent: crate::env::in_chat().map(SpaceSelector::Id),
+        directory: ui::current_directory()?,
+        env: Some(crate::terminal::start_environment()),
+        setup_env: Some(crate::env::without_secrets()),
+        ..Default::default()
+    })
+}
+
 /// How the setup agent starts on `prompt` as `options` ask: the user waits
 /// for it, so it skips the queue and, from a call `on_terminal`, takes a
-/// focused tab whatever the `focus` setting says. A call without a terminal
-/// starts it detached, with nothing to focus.
+/// focused tab whatever the `focus` setting says.
 fn add_options(options: &Options, prompt: String, on_terminal: bool) -> workspaces::AddOptions {
     workspaces::AddOptions {
         here: options.here,

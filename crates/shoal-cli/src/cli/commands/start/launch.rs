@@ -24,14 +24,13 @@ use crate::{
 /// beside, unless the user's agent runs its own way, which starts in this
 /// process.
 pub(super) async fn detached(ctx: &Context, args: &StartArgs) -> Result<Option<Effective>> {
-    if args.here || !(crate::env::is_scoped() || !ctx.on_terminal()) {
+    if !workspaces::leaves_caller(ctx, args.here) {
         return Ok(None);
     }
     let settings = launch_settings(ctx, args).await?;
-    let agent = (args.agent.clone()).or_else(|| settings.agent.default.clone());
-    let own_way = !crate::env::is_scoped()
-        && agent.is_some_and(|agent| crate::cli::agents::runs_its_own_way(&agent, &settings));
-    Ok((!own_way).then_some(settings))
+    let agent = (args.agent.as_ref()).or(settings.agent.default.as_ref());
+    let launches = workspaces::daemon_starts(ctx, args.here, agent, &settings);
+    Ok(launches.then_some(settings))
 }
 
 /// The settings of the registered repository `args` name without asking,

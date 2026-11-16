@@ -17,6 +17,7 @@ mod target;
 mod waiting;
 
 pub(in crate::cli::commands) use agent::AgentLaunch;
+pub(in crate::cli::commands) use detached::{daemon_starts, leaves_caller};
 pub(in crate::cli::commands) use existing::start_worker;
 pub(in crate::cli) use finish::execute_add;
 pub(in crate::cli::commands) use launch::launch_workspace;

@@ -1,8 +1,9 @@
 //! Registering, cloning, syncing and removing repositories, the root and
 //! clone directories, and repository setup.
-use super::chats::{chat_args, install_recording_agent};
+use super::chats::{chat_args, install_recording_agent, journal};
 #[cfg(target_os = "macos")]
 use super::simulators::SIM_CONFIG;
+use super::zmx::wait_zmx_sessions_ended;
 use super::*;
 
 #[test]
@@ -1336,6 +1337,55 @@ fn repository_setup_starts_a_setup_agent_on_the_setup_branch() {
     let output = setup();
     assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
+}
+
+/// Without a terminal, the daemon starts the setup agent from the launch
+/// the setup sends, in setup mode on its subject, and its start records
+/// the launch's source.
+#[test]
+fn repository_setup_without_a_terminal_launches_its_agent_through_the_daemon() {
+    let fixture = Fixture::new();
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    // The agent writes its arguments whole, so their file holds them all
+    // once it exists.
+    install_test_script(
+        fixture.root.path().join("bin/claude"),
+        "#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$HOME/chat-args.tmp\"\nmv \"$HOME/chat-args.tmp\" \"$HOME/chat-args\"\n",
+    );
+    let repo = fixture.repo.to_str().unwrap();
+    let local_config = fixture.ok(&["repo", "config", repo])["path"].clone();
+    let file_name = Path::new(local_config.as_str().unwrap())
+        .file_name()
+        .unwrap();
+    let args = fixture.root.path().join("chat-args");
+    let setup = || {
+        let output = fixture
+            .command()
+            .args(["repo", "setup", repo, "--agent", "claude"])
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{}", printed(&output));
+        wait_until("the setup agent start", || args.exists());
+        let prompt = chat_args(&fixture).pop().unwrap();
+        assert!(prompt.contains(file_name.to_str().unwrap()), "{prompt}");
+        fs::remove_file(&args).unwrap();
+    };
+    setup();
+    let workspace = &fixture.ok(&["status", &fixture.id("shoal-setup")])["workspace"];
+    assert_eq!(workspace["mode"], "setup", "{workspace}");
+    // A later setup starts the agent of the same workspace on its subject,
+    // once the first has exited.
+    wait_until("the setup agent exit", || {
+        (journal(&fixture).iter()).any(|event| event["kind"] == "agent_exited")
+    });
+    setup();
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
+    let started = (journal(&fixture).into_iter())
+        .find(|event| event["kind"] == "agent_started")
+        .unwrap();
+    assert_eq!(started["agent"]["source"]["kind"], "manual", "{started}");
+    wait_zmx_sessions_ended(fixture.root.path());
 }
 
 #[test]
