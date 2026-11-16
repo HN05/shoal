@@ -4,7 +4,7 @@ use crate::cli::{
     args::coordination::{
         CoordinationCommand, FilesCommand, MessagesCommand, QuestionAskArgs, QuestionsCommand,
     },
-    commands::{files, messages, priority, progress, questions, sleep, workspaces},
+    commands::{files, messages, priority, progress, questions, sleep, spaces},
     context::Context,
 };
 
@@ -158,7 +158,7 @@ pub(in crate::cli::commands) async fn run(
             summary,
         } => {
             if undo {
-                workspaces::undone(&ctx, space).await
+                spaces::undone(&ctx, space).await
             } else {
                 let done = shoal_protocol::assignments::Done {
                     cleanup,
@@ -169,7 +169,7 @@ pub(in crate::cli::commands) async fn run(
                 };
                 // Before anything is picked or stopped.
                 done.check()?;
-                workspaces::done(&ctx, space, done).await
+                spaces::done(&ctx, space, done).await
             }
         }
     }

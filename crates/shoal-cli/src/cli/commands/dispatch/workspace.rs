@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::cli::{
     args::workspace::WorkspaceCommand,
-    commands::{inbox, listing, log, rename, restore, spaces, workspaces},
+    commands::{inbox, listing, log, restore, spaces, workspaces},
     context::Context,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -25,7 +25,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: WorkspaceComman
             let filter = listing::ListFilter::resolve(&ctx, repository, status).await?;
             spaces::list(&ctx, &filter, chats).await
         }
-        WorkspaceCommand::Status { space, item } => workspaces::status(&ctx, space, item).await,
+        WorkspaceCommand::Status { space, item } => spaces::status(&ctx, space, item).await,
         WorkspaceCommand::Log(args) => log::run(&ctx, args).await,
         WorkspaceCommand::Cd { workspace } => workspaces::cd(&ctx, workspace).await,
         WorkspaceCommand::Edit { workspace, args } => workspaces::edit(&ctx, workspace, args).await,
@@ -33,16 +33,16 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: WorkspaceComman
             space,
             name: Some(name),
             request: false,
-        } => rename::rename(&ctx, space, name).await,
+        } => spaces::rename(&ctx, space, name).await,
         WorkspaceCommand::Rename {
             space: None,
             name: None,
             request: false,
-        } => rename::rename_picked(&ctx).await,
+        } => spaces::rename_picked(&ctx).await,
         // Otherwise only --request leaves out the name, and its single argument
         // takes the name's place.
         WorkspaceCommand::Rename { space, name, .. } => {
-            rename::request(
+            spaces::request_name(
                 &ctx,
                 name.map(|name| SpaceSelector::parse(&name))
                     .transpose()?

@@ -48,7 +48,6 @@ mod questions;
 mod queue;
 mod queued_agents;
 mod reactions;
-mod rename;
 mod repo_menu;
 mod repo_setup;
 mod repositories;

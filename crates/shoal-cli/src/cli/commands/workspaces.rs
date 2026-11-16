@@ -4,7 +4,6 @@ mod adopt;
 mod branch_rename;
 mod cd;
 mod changes;
-mod done;
 mod environment;
 mod merge;
 mod recovery;
@@ -12,10 +11,8 @@ mod refresh;
 mod removal;
 mod run;
 mod setup;
-mod status;
 mod unmerge;
 mod waiting;
-mod watch;
 
 pub(in crate::cli) use add::execute_add;
 pub(super) use add::{
@@ -26,17 +23,14 @@ pub(super) use adopt::adopt;
 pub(super) use branch_rename::rename_branch;
 pub(super) use cd::cd;
 pub(super) use changes::{conflicts, diff};
-pub(super) use done::{done, undone};
 pub(in crate::cli) use environment::agent_environment;
 pub(super) use merge::merge;
 pub(super) use refresh::refresh;
 pub(super) use removal::{ensure_batch_removable, leaving};
 pub(super) use run::{edit, exec};
 pub(super) use setup::{SetUp, follow_setup, run_post_setup, setup, setup_workspace, skip_setup};
-pub(super) use status::status;
 pub(super) use unmerge::unmerge;
 pub(super) use waiting::awaits_setup;
-pub(super) use watch::watch_items;
 
 /// Where the workspace's worktree is, for messages: `on branch <branch> at
 /// <path>`, or `at <commit> in <path>` with what a workspace at a commit was

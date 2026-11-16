@@ -20,7 +20,7 @@ const NAME_REQUEST: &str = "The user asks you to rename this space: name the wor
 
 /// Rename the space `space` selects, else the space this runs in or a
 /// picked one.
-pub(super) async fn rename(
+pub(in crate::cli::commands) async fn rename(
     ctx: &Context,
     space: Option<SpaceSelector>,
     name: String,
@@ -32,7 +32,7 @@ pub(super) async fn rename(
 }
 
 /// Rename a picked workspace or chat with what the user types next.
-pub(super) async fn rename_picked(ctx: &Context) -> Result<i32> {
+pub(in crate::cli::commands) async fn rename_picked(ctx: &Context) -> Result<i32> {
     let space = ui::pick_any_space(ctx).await?;
     let name = ask_name(ctx).await?;
     rename_space(ctx, space, name).await
@@ -106,8 +106,11 @@ async fn ask_name(ctx: &Context) -> Result<SpaceName> {
 /// runs in or a picked one, to choose its name, through the messages
 /// `shoal messages send` queues. Without an agent the message would wait
 /// unread, so that is refused.
-pub(super) async fn request(ctx: &Context, space: Option<SpaceSelector>) -> Result<i32> {
-    super::start::ensure_scope_token(ctx)?;
+pub(in crate::cli::commands) async fn request_name(
+    ctx: &Context,
+    space: Option<SpaceSelector>,
+) -> Result<i32> {
+    super::super::start::ensure_scope_token(ctx)?;
     let selector = chosen_space(ctx, space).await?;
     let space = (crate::client::workspaces::present_space(&ctx.paths, &selector).await?)
         .with_context(|| format!("no space {selector}"))?;
@@ -133,7 +136,7 @@ async fn chosen_space(ctx: &Context, space: Option<SpaceSelector>) -> Result<Spa
         let chats = crate::client::spaces::list(&ctx.paths)
             .await?
             .into_running_chats();
-        if let Some(chat) = super::sessions::checkout_chat(ctx, &chats).await? {
+        if let Some(chat) = super::super::sessions::checkout_chat(ctx, &chats).await? {
             return Ok(SpaceSelector::Id(chat.id));
         }
     }

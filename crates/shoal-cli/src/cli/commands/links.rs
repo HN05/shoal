@@ -2,7 +2,7 @@
 //! unlinking and watching them, and marking them ready.
 use anyhow::{Result, bail, ensure};
 
-use super::workspaces;
+use super::spaces;
 use crate::client::assignments;
 use crate::client::output::workspaces::Registered;
 use crate::{
@@ -203,7 +203,7 @@ pub(super) async fn watch(
     let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory).await?;
     let (context, repository) = watch_context(ctx, &space, repo.as_deref()).await?;
     let selection = resolve_kind(ctx, context, selection).await?;
-    workspaces::watch_items(ctx, space, selection, repository, timeout, resumed).await
+    spaces::watch_items(ctx, space, selection, repository, timeout, resumed).await
 }
 
 /// Where a watch in `space` reads its items, with the registered repository
