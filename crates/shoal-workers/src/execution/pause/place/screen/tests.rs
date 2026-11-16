@@ -27,6 +27,7 @@ fn the_screen_shows_the_stop_and_the_keys() {
                 && row.ends_with(" an update arrives for it")),
         "{rows:?}"
     );
+    assert!(rows.iter().any(|row| row.starts_with("Enter ")), "{rows:?}");
     assert!(
         rows.iter().any(|row| row.starts_with("Ctrl-C ")),
         "{rows:?}"
@@ -34,12 +35,21 @@ fn the_screen_shows_the_stop_and_the_keys() {
 }
 
 #[test]
-fn notes_show_above_the_keys() {
+fn notes_and_the_wake_show_above_the_keys() {
     let mut screen = screen();
     screen
         .notes
         .push("the restore also waits for pid 42".into());
-    let rows = rows(&screen);
-    let row = |text: &str| rows.iter().position(|row| row.contains(text)).unwrap();
-    assert!(row("pid 42") < row("Ctrl-C "), "{rows:?}");
+    screen.wake = Some(Wake::Refused("approval pending".into()));
+    let refused = rows(&screen);
+    let row = |text: &str| refused.iter().position(|row| row.contains(text)).unwrap();
+    let keys = row("Enter ");
+    assert!(row("pid 42") < keys, "{refused:?}");
+    assert!(row("approval pending") < keys, "{refused:?}");
+    screen.wake = Some(Wake::Waking);
+    let waking = rows(&screen);
+    assert!(
+        !waking.iter().any(|row| row.contains("approval pending")),
+        "{waking:?}"
+    );
 }

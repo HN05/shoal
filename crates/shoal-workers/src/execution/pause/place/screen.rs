@@ -1,5 +1,6 @@
 //! The status screen of an asleep agent's place: why the agent sleeps, when
-//! it resumes, what else its restore waits for, and the key that stops it.
+//! it resumes, what else its restore waits for, and the keys that wake or
+//! stop it.
 use std::io::Write;
 
 use crate::protocol::Protection;
@@ -14,6 +15,15 @@ pub(super) struct Screen {
     reason: String,
     resumes_when: String,
     notes: Vec<String>,
+    wake: Option<Wake>,
+}
+
+/// How waking the agent from its place went.
+pub(super) enum Wake {
+    /// The daemon starts its restore.
+    Waking,
+    /// The daemon refused it, saying why.
+    Refused(String),
 }
 
 impl Screen {
@@ -22,6 +32,7 @@ impl Screen {
             reason: protection.reason.clone(),
             resumes_when: protection.resumes_when.clone(),
             notes: Vec::new(),
+            wake: None,
         }
     }
 
@@ -37,6 +48,11 @@ impl Screen {
 
     pub(super) fn note(&mut self, line: String) {
         self.notes.push(line);
+        self.write("");
+    }
+
+    pub(super) fn wake(&mut self, wake: Wake) {
+        self.wake = Some(wake);
         self.write("");
     }
 
@@ -60,7 +76,18 @@ impl Screen {
             lines.push(String::new());
             lines.extend(self.notes.iter().cloned());
         }
-        lines.extend([String::new(), "Ctrl-C  Stop agent".to_owned()]);
+        match &self.wake {
+            Some(Wake::Waking) => lines.extend([String::new(), "Waking agent".to_owned()]),
+            Some(Wake::Refused(error)) => {
+                lines.extend([String::new(), format!("Cannot wake the agent: {error}")])
+            }
+            None => {}
+        }
+        lines.extend([
+            String::new(),
+            "Enter   Wake now".to_owned(),
+            "Ctrl-C  Stop agent".to_owned(),
+        ]);
         // The terminal's output settings may not turn a newline into a
         // carriage return too.
         lines.iter().map(|line| format!("{line}\r\n")).collect()

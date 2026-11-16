@@ -17,6 +17,8 @@ use tokio::io::unix::AsyncFd;
 /// A key that decides the wait.
 #[derive(Debug, PartialEq, Eq)]
 pub(in super::super) enum Key {
+    /// Enter: wake the agent now.
+    Wake,
     /// Ctrl-C, or Ctrl-\ as its quit signal did: stop waiting and leave the
     /// agent stopped.
     Stop,
@@ -98,6 +100,7 @@ impl Drop for Keys {
 /// sequences of keys such as arrows, decide nothing.
 fn key_in(input: &[u8]) -> Option<Key> {
     input.iter().find_map(|byte| match byte {
+        b'\r' | b'\n' => Some(Key::Wake),
         0x03 | 0x1c => Some(Key::Stop),
         _ => None,
     })

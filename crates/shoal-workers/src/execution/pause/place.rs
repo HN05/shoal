@@ -1,13 +1,13 @@
 //! The place an asleep agent's wrapper waits in for its restore: on a
 //! terminal it holds, a status screen saying why the agent sleeps and when
-//! it resumes, which reads the key that stops it; elsewhere, lines
+//! it resumes, which reads the keys that wake or stop it; elsewhere, lines
 //! on standard error.
 mod keys;
 mod screen;
 
 pub(super) use keys::Key;
 use keys::Keys;
-use screen::Screen;
+use screen::{Screen, Wake};
 
 use crate::protocol::Protection;
 
@@ -54,6 +54,22 @@ impl Place {
         match &mut self.0 {
             Shown::Terminal { screen, .. } => screen.note(line),
             Shown::Lines => eprintln!("shoal: {line}"),
+        }
+    }
+
+    /// Show that the agent wakes now.
+    pub(super) fn waking(&mut self) {
+        self.show_wake(Wake::Waking);
+    }
+
+    /// Show that the daemon refused to wake the agent with `error`.
+    pub(super) fn wake_refused(&mut self, error: &anyhow::Error) {
+        self.show_wake(Wake::Refused(format!("{error:#}")));
+    }
+
+    fn show_wake(&mut self, wake: Wake) {
+        if let Shown::Terminal { screen, .. } = &mut self.0 {
+            screen.wake(wake);
         }
     }
 }
