@@ -365,7 +365,6 @@ fn start_takes_an_optional_in_and_issue_and_refuses_flags_its_space_cannot_use()
         &["--chat"][..],
         &["--worktree"],
         &["--as-chat", "--fork"],
-        &["--session", "s1", "--fork"],
         &["--in", "4", "--base", "main"],
         &["--restore", "c1"],
     ] {

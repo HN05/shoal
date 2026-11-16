@@ -37,8 +37,6 @@ fn a_chats_start_parses_back_from_its_command_line() {
             model: Some("gpt".into()),
             effort: Some("high".into()),
         },
-        session: Some("s1".into()),
-        fork_session: true,
         handoff: Some("/tmp/shoal-chat.1".into()),
         args: ["--search", "-x"].map(OsString::from).to_vec(),
         ..Default::default()

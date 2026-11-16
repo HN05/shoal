@@ -56,7 +56,7 @@ fn options(narrowing: Narrowing) -> Options {
 }
 
 #[test]
-fn a_chat_started_elsewhere_parses_back_to_its_options_with_its_name_and_agent() {
+fn a_chat_started_elsewhere_parses_back_to_its_options_with_its_name_and_agent_and_no_session() {
     let repo = repository();
     let topic = Topic::repository(&repo, &crate::config::modes::ModeName::CHAT);
     let agent: Agent = "codex".parse().unwrap();
@@ -86,25 +86,12 @@ fn a_chat_started_elsewhere_parses_back_to_its_options_with_its_name_and_agent()
                 place: ChatPlace::Here,
                 name: Some("named".into()),
                 handoff: Some(handoff.to_owned()),
+                session: None,
+                fork: false,
                 ..options
             }
         );
     }
-}
-
-#[test]
-fn a_fork_without_a_session_starts_elsewhere_as_a_new_session() {
-    let repo = repository();
-    let topic = Topic::repository(&repo, &crate::config::modes::ModeName::CHAT);
-    let agent: Agent = "codex".parse().unwrap();
-    let options = Options {
-        session: None,
-        ..options(Narrowing::Recorded(Default::default()))
-    };
-    let named = options.in_new_place(&agent, &"named".into(), None);
-    let mut start = parsed_start(topic.relaunch.command_line(named));
-    let started = Options::taken_from(&mut start);
-    assert_eq!((started.session, started.fork), (None, false));
 }
 
 #[test]

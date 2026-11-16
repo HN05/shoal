@@ -243,14 +243,6 @@ pub struct StartArgs {
     pub creation: CreationArgs,
     #[command(flatten)]
     pub model: ModelArgs,
-    /// Agent session the chat continues, which shoal move import passes; it
-    /// starts a chat whatever the mode's kind.
-    #[arg(long, hide = true, conflicts_with_all = ["branch", "path", "base", "git_profile", "add_blocker", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"])]
-    pub session: Option<shoal_ids::agent_session_ids::AgentSessionId>,
-    /// Start from a fork of --session instead of continuing it, which shoal
-    /// move import passes for a copy.
-    #[arg(long, hide = true, requires = "session")]
-    pub fork_session: bool,
     /// Handoff of the starter that waits on this background place, which
     /// shoal start passes.
     #[arg(long, hide = true, requires = "here")]
@@ -298,10 +290,9 @@ impl StartArgs {
     }
 
     /// Whether the start continues a chat whatever its mode's kind: one the
-    /// place it opens in starts, or one a flag only a chat's start takes asks
-    /// for, such as a session it continues.
+    /// place it opens in starts, or one a starter waits on there.
     pub(in crate::cli) fn asks_chat(&self) -> bool {
-        self.as_chat || self.session.is_some() || self.handoff.is_some()
+        self.as_chat || self.handoff.is_some()
     }
 
     /// The flags these set that only a workspace takes and only this
@@ -346,8 +337,6 @@ impl StartArgs {
                     disposable,
                 },
             model: ModelArgs { model, effort },
-            session,
-            fork_session,
             handoff,
             args,
         } = self;
@@ -388,8 +377,6 @@ impl StartArgs {
         line.switch("disposable", *disposable);
         line.values("model", model);
         line.values("effort", effort);
-        line.values("session", session.as_ref().map(|session| session.as_str()));
-        line.switch("fork_session", *fork_session);
         line.values("handoff", handoff);
         line.trailing("args", args);
         line.into_args()

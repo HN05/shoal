@@ -36,8 +36,8 @@ pub(in crate::cli::commands) struct Options {
     pub model: ModelChoice,
     /// Arguments forwarded to the agent.
     pub args: Vec<OsString>,
-    /// The agent session the chat continues, such as one `shoal move
-    /// import` brought, instead of starting a new one.
+    /// The agent session the chat continues in this terminal, as a restore
+    /// does, instead of starting a new one.
     pub session: Option<AgentSessionId>,
     /// Whether the chat starts from a fork of `session`, which stays
     /// unchanged, instead of continuing it.
@@ -102,8 +102,8 @@ impl Options {
             name: args.name.take(),
             model: std::mem::take(&mut args.model).into(),
             args: std::mem::take(&mut args.args),
-            session: args.session.take(),
-            fork: args.fork_session,
+            session: None,
+            fork: false,
             handoff: args.handoff.take(),
             parent: args.parent.take(),
             narrowing: match args.recorded_narrowing.take() {
@@ -117,8 +117,8 @@ impl Options {
 
     /// `start` with these options, as [`Options::taken_from`] takes them
     /// again, except that a background place is written as beside this
-    /// terminal, which an agent's start takes for one, and a fork without a
-    /// session as none.
+    /// terminal, which an agent's start takes for one, and a session and its
+    /// fork as none: only a chat that runs here continues one.
     pub(super) fn into_start(self, start: StartArgs) -> StartArgs {
         let Self {
             agent,
@@ -126,8 +126,8 @@ impl Options {
             name,
             model: ModelChoice { model, effort },
             args,
-            session,
-            fork,
+            session: _,
+            fork: _,
             handoff,
             parent,
             narrowing,
@@ -135,17 +135,12 @@ impl Options {
             now,
         } = self;
         let (permissions, recorded_narrowing) = narrowing.written();
-        // A fork without a session, as a copy imported with new sessions
-        // asks, starts a new session, as `--fork-session` alone cannot say.
-        let fork_session = fork && session.is_some();
         StartArgs {
             agent,
             here: place == ChatPlace::Here,
             name,
             model: ModelArgs { model, effort },
             args,
-            session,
-            fork_session,
             handoff,
             parent,
             permissions,
