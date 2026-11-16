@@ -312,7 +312,10 @@ async fn target_has_changes(repo: &Path, head: &str, target: &str) -> Result<boo
         return Ok(true);
     }
     let target_tree = super::revision(repo, &format!("{target}^{{tree}}"), run).await?;
-    if trial_merge_tree(repo, head, target).await?.as_deref() == Some(target_tree.trim()) {
+    let merged = super::merge_tree::merged_tree(repo, target, head)
+        .await
+        .context("trial merge")?;
+    if merged.as_deref() == Some(target_tree.trim()) {
         return Ok(true);
     }
     // `git cherry` skips merge commits, whose conflict resolutions can carry
@@ -324,24 +327,6 @@ async fn target_has_changes(repo: &Path, head: &str, target: &str) -> Result<boo
     }
     let cherry = run(repo, &["cherry", target, head]).await?;
     Ok(cherry.lines().all(|line| line.starts_with('-')))
-}
-
-/// The tree a clean merge of `head` into `target` would record, or `None`
-/// when it conflicts. `git merge-tree` writes objects only.
-pub(crate) async fn trial_merge_tree(
-    repo: &Path,
-    head: &str,
-    target: &str,
-) -> Result<Option<String>> {
-    let mut command = super::isolated_command_without_submodules(repo);
-    command.args(["merge-tree", "--write-tree", "--no-messages", target, head]);
-    let output = super::bounded(command).capture().await;
-    if output.as_ref().ok().and_then(|output| output.status.code()) == Some(1) {
-        return Ok(None);
-    }
-    let stdout = crate::subprocess::checked_output("git merge-tree", output)
-        .context("trial merge; Git 2.38 or newer is required")?;
-    Ok(Some(stdout.trim().to_owned()))
 }
 
 /// Whether `rev` records `tree`, given with or without Git's newline.

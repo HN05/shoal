@@ -196,7 +196,10 @@ async fn squashed(repo: &Path, merged: &Merged<'_>, parents: &[CommitId]) -> Res
         return Ok(false);
     };
     let merge_commit = merged.merge_commit;
-    let merged_onto_parent = merged_tree(repo, parent.as_str(), merged.head.as_str()).await?;
+    let merged_onto_parent =
+        git::merge_tree::merged_tree(repo, parent.as_str(), merged.head.as_str())
+            .await
+            .context("merge the PR's head onto the base")?;
     if merged_onto_parent != Some(tree(repo, merge_commit).await?) {
         return Ok(false);
     }
@@ -211,24 +214,6 @@ async fn squashed(repo: &Path, merged: &Merged<'_>, parents: &[CommitId]) -> Res
 async fn tree(repo: &Path, commit: &CommitId) -> Result<String> {
     let tree = git::run(repo, &["rev-parse", &format!("{commit}^{{tree}}")]).await?;
     Ok(tree.trim().to_owned())
-}
-
-/// The tree of merging `theirs` into `ours`, or `None` when it conflicts.
-/// `git merge-tree` writes objects only, never the index, worktree or refs.
-async fn merged_tree(repo: &Path, ours: &str, theirs: &str) -> Result<Option<String>> {
-    let mut command = git::isolated_command_without_submodules(repo);
-    command.args(["merge-tree", "--write-tree", "--no-messages", ours, theirs]);
-    let output = git::bounded(command).capture().await?;
-    match output.status.code() {
-        Some(0) => {
-            let stdout = String::from_utf8(output.stdout).context("Git output is not UTF-8")?;
-            Ok(stdout.lines().next().map(str::to_owned))
-        }
-        Some(1) => Ok(None),
-        _ => crate::subprocess::checked_output("git merge-tree", Ok(output))
-            .context("merge the PR's head onto the base; Git 2.38 or newer is required")
-            .map(|_| None),
-    }
 }
 
 /// Fetch the PR's head from `origin` when it or the PR's commits are

@@ -63,7 +63,7 @@ pub async fn merge_has_own_changes(repo: &Path, commit: &str) -> Result<bool> {
     let [_, first, second] = parents.split_whitespace().collect::<Vec<_>>()[..] else {
         return Ok(true);
     };
-    let Some(merged) = git::status::trial_merge_tree(repo, second, first).await? else {
+    let Some(merged) = git::merge_tree::merged_tree(repo, first, second).await? else {
         return Ok(true);
     };
     let recorded = git_run(repo, &["rev-parse", &format!("{commit}^{{tree}}")]).await?;

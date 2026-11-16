@@ -11,6 +11,7 @@ pub mod existing_branch;
 pub mod fetch;
 pub mod files;
 pub mod ignored;
+mod merge_tree;
 pub(crate) mod predicates;
 pub use predicates::{has_commit, is_ancestor, ref_exists};
 pub(crate) mod queries;
