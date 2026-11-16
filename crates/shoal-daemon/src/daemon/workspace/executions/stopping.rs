@@ -2,6 +2,7 @@
 //! that stop a workspace's executions, connected or disconnected.
 use super::super::Manager;
 use super::Connections;
+use crate::daemon::log;
 use crate::{
     daemon::{
         space_processes::{Selection, WorktreeTies},
@@ -418,6 +419,13 @@ impl Manager {
             failure.map(|e| format!("{e:#}")).or(workspace.error),
         )
         .await?;
+        // The stopped agents' leases waited for the stop to end.
+        if let Err(error) = self.release_leases_of_ended_executions().await {
+            log!(
+                "leases of the agents stopped in {} not released: {error:#}",
+                workspace.name
+            );
+        }
         result
     }
 

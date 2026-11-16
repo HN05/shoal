@@ -493,6 +493,26 @@ impl Manager {
             .await
     }
 
+    /// Make the lease `name` of `pool` in `workspace` the user's.
+    pub(crate) async fn give_resource_lease_to_user(
+        &self,
+        workspace: &SpaceId,
+        pool: &str,
+        name: &str,
+    ) -> Result<()> {
+        let (workspace, pool, name) = (workspace.clone(), pool.to_owned(), name.to_owned());
+        self.store
+            .write(move |tx| {
+                tx.execute(
+                    "UPDATE resource_leases SET acquirer=?4,acquirer_execution=NULL
+                        WHERE workspace_id=?1 AND pool=?2 AND name=?3",
+                    params![workspace, pool, name, Acquirer::User.kind()],
+                )?;
+                Ok(())
+            })
+            .await
+    }
+
     pub(crate) async fn run_resource_release_hook(
         &self,
         workspace: &crate::model::Workspace,

@@ -629,6 +629,21 @@ impl Manager {
         Ok(())
     }
 
+    /// Make the simulator lease `name` of `workspace` the user's.
+    pub(crate) async fn give_simulator_lease_to_user(
+        &self,
+        workspace: &SpaceId,
+        name: &str,
+    ) -> Result<()> {
+        let _guard = self.gates.lock_simulators().await;
+        let leased = self.list_simulators(Some(workspace)).await?.into_iter();
+        if let Some(mut sim) = leased.into_iter().find(|s| s.is_leased_by(workspace, name)) {
+            sim.acquirer = Acquirer::User;
+            self.save_sim(&sim).await?;
+        }
+        Ok(())
+    }
+
     pub async fn remove_simulators(&self, owner: &SpaceId) -> Result<()> {
         let _guard = self.gates.lock_simulators().await;
         for mut sim in self.list_simulators(Some(owner)).await? {

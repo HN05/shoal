@@ -222,7 +222,7 @@ async fn the_users_acquire_keeps_an_agents_permit_past_its_exit() {
 }
 
 #[tokio::test]
-async fn a_failing_release_hook_keeps_the_permit_and_tells_the_user() {
+async fn a_failing_release_hook_keeps_the_permit_as_the_users_and_tells_the_user() {
     let config = format!("hooks.pre_resource_release = 'release.sh'\n{POOL}");
     let fixture = Fixture::new(&config).await;
     let hook = fixture.workspace.path.join("release.sh");
@@ -233,13 +233,13 @@ async fn a_failing_release_hook_keeps_the_permit_and_tells_the_user() {
     let (execution_id, caller) = fixture.agent().await;
     fixture.acquire("agent", Some(&caller)).await;
 
-    fixture
-        .manager
-        .end_test_execution(execution_id.clone())
-        .await;
+    fixture.manager.end_test_execution(execution_id).await;
+    // A later pass does not run the failing hook again.
+    (fixture.manager.release_leases_of_ended_executions())
+        .await
+        .unwrap();
 
-    let agent = Acquirer::Agent { execution_id };
-    assert_eq!(fixture.permits().await, [permit("agent", &agent)]);
+    assert_eq!(fixture.permits().await, [permit("agent", &Acquirer::User)]);
     let notices = fixture.manager.notifications(false, 10).await.unwrap();
     let failed: Vec<_> = (notices.iter())
         .filter(|notice| notice.kind == NotificationKind::ReleaseFailed)
@@ -263,7 +263,9 @@ async fn leases_of_executions_that_ended_unreleased_are_released() {
     let running = Acquirer::Agent { execution_id };
     fixture.lease_simulator("running", running).await;
 
-    fixture.manager.release_leases_of_ended_executions().await;
+    (fixture.manager.release_leases_of_ended_executions())
+        .await
+        .unwrap();
 
     assert_eq!(fixture.simulators().await, ["running"]);
 }
@@ -355,4 +357,28 @@ async fn a_demos_command_acquires_for_the_demo() {
 
     let demo = Acquirer::Demo { execution_id: demo };
     assert_eq!(fixture.permits().await, [permit("demo", &demo)]);
+}
+
+/// A lease whose agent ends while another lifecycle operation, such as a
+/// stop, holds its workspace is released once the workspace is ready again.
+#[tokio::test]
+async fn an_agent_ending_during_a_stop_releases_its_leases_once_the_stop_ends() {
+    let fixture = Fixture::new(POOL).await;
+    let (execution_id, caller) = fixture.agent().await;
+    fixture.acquire("agent", Some(&caller)).await;
+    let manager = &fixture.manager;
+    let stopping = crate::state::WorkspaceState::Stopping;
+    let reserved = (manager.reserve_lifecycle(&fixture.workspace.id, stopping))
+        .await
+        .unwrap();
+
+    manager.end_test_execution(execution_id.clone()).await;
+    let agent = Acquirer::Agent { execution_id };
+    assert_eq!(fixture.permits().await, [permit("agent", &agent)]);
+
+    (manager.set_state(&fixture.workspace.id, reserved, None))
+        .await
+        .unwrap();
+    manager.release_leases_of_ended_executions().await.unwrap();
+    assert_eq!(fixture.permits().await, []);
 }

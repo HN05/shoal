@@ -122,22 +122,18 @@ impl Manager {
         self.release_acquired(|acquirer| *acquirer == agent).await;
     }
 
-    /// Release the leases of executions whose end was recorded before
-    /// their leases were released, as when the daemon stopped in between.
-    pub(crate) async fn release_leases_of_ended_executions(&self) {
-        let recorded = match self.store.read(|db| recorded_executions(db)).await {
-            Ok(recorded) => recorded,
-            Err(error) => {
-                log!("leases of ended executions not released: {error:#}");
-                return;
-            }
-        };
+    /// Release the leases of executions whose end is recorded: those whose
+    /// workspace was in another lifecycle operation then, such as a stop,
+    /// and those the daemon stopped before releasing.
+    pub(crate) async fn release_leases_of_ended_executions(&self) -> Result<()> {
+        let recorded = self.store.read(|db| recorded_executions(db)).await?;
         let ended = |acquirer: &Acquirer| {
             acquirer
                 .execution()
                 .is_some_and(|id| !recorded.contains(id))
         };
         self.release_acquired(ended).await;
+        Ok(())
     }
 
     /// Release every lease whose acquirer `selects`, each through its
@@ -182,9 +178,10 @@ impl Manager {
             .collect())
     }
 
-    /// Release `lease` as `shoal release` does. A failed release keeps it
-    /// and tells the user; one in a workspace that is not ready stays for
-    /// the workspace's removal, which releases it.
+    /// Release `lease` as `shoal release` does. One in a workspace that is
+    /// not ready waits until it is, since a release cannot overlap another
+    /// lifecycle operation, or goes with its removal. A failed release
+    /// hands the lease to the user, so a failing hook is not retried.
     async fn release_acquired_lease(&self, lease: Acquired) {
         let workspace = match self.workspace_by_id(&lease.workspace).await {
             Ok(workspace) if workspace.state == WorkspaceState::Ready => workspace,
@@ -206,18 +203,30 @@ impl Manager {
             }
         };
         if let Err(error) = released {
-            self.report_failed_release(&workspace, &lease, &error).await;
+            self.hand_to_user(&workspace, &lease, &error).await;
         }
     }
 
-    async fn report_failed_release(
-        &self,
-        workspace: &Workspace,
-        lease: &Acquired,
-        error: &anyhow::Error,
-    ) {
+    /// Keep `lease`, whose release failed with `error`, as the user's, and
+    /// tell the user how to release it.
+    async fn hand_to_user(&self, workspace: &Workspace, lease: &Acquired, error: &anyhow::Error) {
+        let handed = match &lease.held {
+            Held::Simulator { name } => {
+                (self.give_simulator_lease_to_user(&workspace.id, name)).await
+            }
+            Held::Permit { pool, name } => {
+                (self.give_resource_lease_to_user(&workspace.id, pool, name)).await
+            }
+        };
+        if let Err(error) = handed {
+            log!(
+                "{} stays the {}'s: {error:#}",
+                lease.held,
+                lease.acquirer.kind()
+            );
+        }
         let message = format!(
-            "The {} the {} that acquired it left stays held: {error:#}; {} releases it",
+            "The {} the {} that acquired it left could not be released: {error:#}; it is yours now, and {} releases it",
             lease.held,
             lease.acquirer.kind(),
             lease.held.release_command(workspace.number),

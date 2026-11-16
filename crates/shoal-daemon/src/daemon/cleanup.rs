@@ -214,6 +214,10 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<(), SweepFa
         "ownership recheck",
         manager.recheck_startup_failures().await,
     );
+    step(
+        "ended executions' leases",
+        manager.release_leases_of_ended_executions().await,
+    );
     step("grace periods", manager.begin_grace_pass().await);
     step("branch observation", observe_branches(manager).await);
     step("completion cleanup", manager.sweep_completed().await);

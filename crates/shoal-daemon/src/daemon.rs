@@ -352,9 +352,12 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     let sessions = manager.cleanup_orphan_sessions();
     startup.step("cleaning up orphan sessions", sessions).await;
     let leases = manager.release_leases_of_ended_executions();
-    startup
+    if let Err(error) = startup
         .step("releasing ended executions' leases", leases)
-        .await;
+        .await
+    {
+        log!("{error:#}");
+    }
     Ok(manager)
 }
 

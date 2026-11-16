@@ -5829,14 +5829,14 @@ lease is acquired or its approval denied. `acquire repo` selects only `kind = "r
 A simulator, resource or repository lease records who acquired it. The user's,
 from an unscoped terminal, stays until `shoal release` or the workspace's
 removal. An agent's, acquired by the agent or a command it started, ends with
-the agent, and a [demo's](#demos) with the demo: once its execution exits or
-it is stopped, as by `shoal stop`, `shoal restart` or overload protection,
-Shoal releases the lease as `shoal release` does, so a simulator keeps its apps and data and a permit runs
-`hooks.pre_resource_release`. A failed release keeps the lease and records a
-`release_failed` notification naming the command that releases it. The user
-acquiring an agent's lease again makes it the user's; an agent acquiring the
-user's leaves it the user's. Ports, holds and secret grants keep their own
-rules.
+the agent, and a [demo's](#demos) with the demo: once its execution exits or it
+is stopped, as by `shoal stop`, `shoal restart` or overload protection, Shoal
+releases the lease as `shoal release` does, so a simulator keeps its apps and
+data and a permit runs `hooks.pre_resource_release`. A failed release keeps the
+lease as the user's and records a `release_failed` notification naming the
+command that releases it. The user acquiring an agent's lease again makes it the
+user's; an agent acquiring the user's leaves it the user's. Ports, holds and
+secret grants keep their own rules.
 
 Queued requests get capacity in arrival order, per pool and for simulators. While
 any are queued, every other request for new capacity is busy, even when capacity is
