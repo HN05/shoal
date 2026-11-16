@@ -1,8 +1,8 @@
-"""A build of Shoal in a sandbox directory: its own home, state
-directory, zmx, tmux and Zellij directories and Git config, without the
-caller's Shoal, Git, host or agent settings, so nothing reaches the user's own
-daemon or sessions. The home and the directories that hold sockets lie in a
-short directory under /tmp named after the sandbox, outside any checkout."""
+"""A build of Shoal in a sandbox directory: its own home, state, zmx, tmux,
+Zellij and temporary directories and Git config, without the caller's Shoal,
+Git, host or agent settings, so nothing reaches the user's own daemon or
+sessions. The home and the directories that hold sockets lie in a short
+directory under /tmp named after the sandbox, outside any checkout."""
 import hashlib
 import json
 import os
@@ -40,8 +40,9 @@ def build(profile="dev"):
 
 def outside_directory(sandbox):
     """The short directory for what the sandbox cannot hold itself, named after
-    it so a later run finds it: its state, zmx, tmux and Zellij directories,
-    which hold sockets, and its home. Socket paths hold about 100 bytes and zmx
+    it so a later run finds it: its state, zmx, tmux, Zellij and temporary
+    directories, which hold sockets, such as the one VHS's browser makes in
+    the temporary directory, and its home. Socket paths hold about 100 bytes and zmx
     fits session names into what its directory leaves, so a sandbox under a
     long path cannot hold them, and Shoal refuses workspaces inside a Git
     checkout, so a sandbox under target/ cannot hold the home they go in."""
@@ -55,13 +56,14 @@ def home(sandbox):
 
 def isolated(sandbox, identity):
     """The caller's environment without its Git, Shoal, host or agent settings,
-    with the sandbox's home, state, zmx, tmux and Zellij directories and Git
-    commits made as `identity`."""
+    with the sandbox's home, state, zmx, tmux, Zellij and temporary
+    directories and Git commits made as `identity`."""
     env = isolated_git.environment(home(sandbox), **identity)
     env = {name: value for name, value in env.items() if not name.startswith(LEAKING)}
     outside = outside_directory(sandbox)
     env.update(SHOAL_STATE_DIR=str(outside / "state"), ZMX_DIR=str(outside / "zmx"),
-               TMUX_TMPDIR=str(outside / "tmux"), ZELLIJ_SOCKET_DIR=str(outside / "zellij"))
+               TMUX_TMPDIR=str(outside / "tmux"), ZELLIJ_SOCKET_DIR=str(outside / "zellij"),
+               TMPDIR=str(outside / "tmp"))
     return env
 
 
@@ -73,12 +75,13 @@ def environment(sandbox, bin_dir):
 
 
 def prepare_directories(sandbox):
-    """Create the home and tmux directories `isolated` names, which their
-    programs expect to exist."""
+    """Create the home, tmux and temporary directories `isolated` names, which
+    their programs expect to exist."""
     outside = outside_directory(sandbox)
     outside.mkdir(mode=0o700)
     home(sandbox).mkdir()
     (outside / "tmux").mkdir()
+    (outside / "tmp").mkdir()
 
 
 def prepare_zmx_lock(sandbox):

@@ -7,9 +7,10 @@
 The tape lives in its own directory under target/, and the sandbox goes in that
 directory's `sandbox`, with `shoal` the development build and a daemon running
 for it, whose log is there, and a home and Git config of its own. The home and
-its state, zmx, tmux and Zellij directories, which hold sockets, go in a short
-directory under /tmp named after it, so their socket paths fit however long the
-tape's path is and the workspaces in the home lie outside any checkout. VHS runs
+its state, zmx, tmux, Zellij and temporary directories, which hold sockets, go
+in a short directory under /tmp named after it, so their socket paths, and the
+one VHS's browser makes, fit however long the tape's path or the caller's
+TMPDIR is and the workspaces in the home lie outside any checkout. VHS runs
 from the tape's directory with the sandbox's environment, so the tape needs no
 setup of its own and its Output paths are relative to that directory.
 

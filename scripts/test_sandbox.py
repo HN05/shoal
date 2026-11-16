@@ -15,10 +15,11 @@ class EnvironmentTests(unittest.TestCase):
                      "TMUX": "/tmp/tmux-501/default,1,0", "TMUX_PANE": "%0",
                      "ZELLIJ": "0", "ZELLIJ_SESSION_NAME": "work", "ZELLIJ_PANE_ID": "0",
                      "CODEX_HOME": "/real/codex", "GIT_DIR": "/repo/.git",
-                     "TERM": "xterm-256color"}
+                     "TMPDIR": "/a/deep/workspace/tmp", "TERM": "xterm-256color"}
         with patch.dict("os.environ", inherited, clear=True):
             env = sandbox.environment(Path("/sandbox"), Path("/sandbox/bin"))
-        for name in ("HOME", "SHOAL_STATE_DIR", "ZMX_DIR", "TMUX_TMPDIR", "ZELLIJ_SOCKET_DIR"):
+        for name in ("HOME", "SHOAL_STATE_DIR", "ZMX_DIR", "TMUX_TMPDIR", "ZELLIJ_SOCKET_DIR",
+                     "TMPDIR"):
             self.assertEqual(Path(env[name]).parent, sandbox.outside_directory(Path("/sandbox")))
         self.assertEqual(env["PATH"], "/sandbox/bin:/usr/bin")
         self.assertEqual(env["TERM"], "xterm-256color")
