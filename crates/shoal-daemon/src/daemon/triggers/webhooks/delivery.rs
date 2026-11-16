@@ -11,6 +11,7 @@ use tokio::sync::OwnedSemaphorePermit;
 use super::super::{Configured, firing::Firing};
 use crate::{
     daemon::{log, workspace::Manager},
+    protocol::ConfigTarget,
     time::UnixTime,
     triggers::{
         Source,
@@ -120,7 +121,10 @@ impl Manager {
     }
 
     /// Whether `request` signs `body` with the secret of `trigger`, whose
-    /// value its command fetches now and nothing keeps.
+    /// value its command fetches now and nothing keeps. A repository's
+    /// trigger takes its secret from that repository's local config alone,
+    /// which reaches no other repository's agents, and the global config's
+    /// from the global config, whose triggers' secrets reach no agent.
     async fn signature_verifies(
         &self,
         trigger: &Configured,
@@ -128,13 +132,20 @@ impl Manager {
         request: &WebhookRequest,
         body: &[u8],
     ) -> Result<bool> {
-        let secrets = match &trigger.repository {
-            Some(repository) => self.repository_settings(repository).await?.secrets.clone(),
-            None => self.config().global_settings()?.secrets,
+        let (secrets, file) = match &trigger.repository {
+            Some(repository) => {
+                let target = ConfigTarget::Repository(repository.clone().into());
+                let layers = self.config_layers_for(target).await?;
+                (layers.local_config.secrets, "the repository's local config")
+            }
+            None => (
+                self.config().global_settings()?.secrets,
+                "the global config",
+            ),
         };
         let secret = (secrets.get(&signed.secret)).with_context(|| {
             format!(
-                "the {} names secret {}, which [secrets] does not configure",
+                "the {} names secret {}, which {file} does not configure",
                 trigger.label(),
                 signed.secret
             )

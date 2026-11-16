@@ -182,6 +182,21 @@ async fn a_request_no_active_trigger_takes_is_refused_without_a_run() {
 }
 
 #[tokio::test]
+async fn a_repositorys_trigger_never_signs_with_a_global_secret() {
+    // Another repository's agents receive the global secret.
+    let local = LABELLED.replace("[secrets.HOOK]\ncommand = ['printf', 's3cret']\n", "");
+    let (_temp, manager, repo, address) = listening(&local).await;
+    configure(
+        &manager,
+        "[machine.webhooks]\nlisten = '127.0.0.1:0'\n[secrets.HOOK]\ncommand = ['printf', 's3cret']\n",
+    )
+    .await;
+
+    assert_eq!(deliver(address, "d-1", SECRET, ISSUE).await, 500);
+    assert!(runs(&manager, &repo, "labelled").await.is_empty());
+}
+
+#[tokio::test]
 async fn a_filtered_delivery_is_accepted_like_any_other() {
     let (_temp, manager, repo, address) = listening(LABELLED).await;
     let unlabelled = r#"{"issue":{"number":7,"title":"Typo","labels":[]}}"#;

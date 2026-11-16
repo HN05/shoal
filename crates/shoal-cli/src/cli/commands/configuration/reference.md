@@ -625,8 +625,11 @@ The `webhook` source fires for each request to its route on the
 HMAC-SHA256 of its body under that [secret](#secrets)'s value, in hex, where
 `signature` says: `forgejo` in `X-Forgejo-Signature`, `github` in
 `X-Hub-Signature-256` after `sha256=`, or `hmac-sha256` in the header
-`signature_header` names. A secret a webhook trigger signs with reaches no agent, as
-its environment or through a tool, so that no agent can sign a request.
+`signature_header` names. A repository's trigger takes its secret from that
+repository's local config, a global trigger from the global config, and the
+secret reaches no agent, as its environment or through a tool, so that no
+agent can sign a request. Without `secret`, any process that reaches the
+listener fires the trigger, this machine's agents included.
 Lengths of time, such as `every`, `catch_up` and `key_window`, are whole
 numbers each followed by `s`, `m`, `h`, `d` or `w`, largest first, as in
 `1h30m`. A firing missed while the daemon was stopped or the machine slept runs
