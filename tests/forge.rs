@@ -3344,7 +3344,7 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
         .to_owned();
     let method = json!({"list_items": {"workspace": fixture.id("topic"), "kind": "pr",
         "search": {"state": "closed", "labels": ["bug"], "author": "dev", "text": "crash",
-            "limit": 5}}});
+            "matching": "both", "limit": 5}}});
     let result = fixture.request_as(method, Some(&scope));
     assert_eq!(result["type"], "items", "{result}");
     assert_eq!(result["data"].as_array().unwrap().len(), 2);
