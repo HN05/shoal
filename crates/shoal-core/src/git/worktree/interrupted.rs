@@ -51,7 +51,7 @@ pub async fn restore(path: &Path, admin_dir: &Path) -> Result<bool> {
     };
     if off_runtime::is_dir(path).await? {
         ensure_registered_at(admin_dir, path).await?;
-        restore_link(path, link).await?;
+        super::restore_link(path, link).await?;
         ensure_linked_to(path, admin_dir).await?;
         restore_tracked_files(path).await?;
     }
@@ -89,19 +89,6 @@ async fn ensure_registered_at(admin_dir: &Path, path: &Path) -> Result<()> {
         admin_dir.display()
     );
     Ok(())
-}
-
-/// Write the `.git` link of the worktree at `path` back with `link` unless
-/// it is there.
-async fn restore_link(path: &Path, link: String) -> Result<()> {
-    let file = path.join(".git");
-    off_runtime::run(move || {
-        if !file.try_exists()? {
-            std::fs::write(&file, link).with_context(|| format!("restore {}", file.display()))?;
-        }
-        Ok(())
-    })
-    .await
 }
 
 /// Refuse a worktree at `path` whose `.git` link names another admin
