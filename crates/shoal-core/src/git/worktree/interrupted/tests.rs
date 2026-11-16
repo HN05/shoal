@@ -172,3 +172,16 @@ async fn a_stopped_removal_that_cannot_restore_says_so() {
     assert!(error.downcast_ref::<Unrestored>().is_some(), "{error:#}");
     assert!(began(&admin).await.unwrap());
 }
+
+/// A worktree whose marker cannot be written, as when its index is
+/// corrupt, is still removed by force, without one.
+#[tokio::test]
+async fn an_unmarked_worktree_is_still_removed() {
+    let root = tempfile::tempdir().unwrap();
+    let (repo, workspace, admin) = worktree(root.path()).await;
+    std::fs::write(admin.join("index"), "corrupt").unwrap();
+    super::super::remove(&repo, &workspace, FileRemoval::Force, BranchRemoval::Keep)
+        .await
+        .unwrap();
+    assert!(!workspace.exists());
+}

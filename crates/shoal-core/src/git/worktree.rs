@@ -115,7 +115,14 @@ async fn remove_worktree(repo: &Path, path: &Path, files: FileRemoval) -> Result
     }
     command.arg("--").arg(path);
     let link = link_text(path).await?;
-    let admin_dir = mark_removal(path, link.as_deref()).await?;
+    // Without a marker, a removal stopped partway leaves its deletions as
+    // removals did before markers, rather than not running at all.
+    let admin_dir = mark_removal(path, link.as_deref())
+        .await
+        .unwrap_or_else(|error| {
+            eprintln!("warning: removal of {} unmarked: {error:#}", path.display());
+            None
+        });
     if let Err(Unfinished { error, stopped }) = run_removal(command).await {
         let failed = || format!("remove the worktree at {}: {error:#}", path.display());
         // Once Git starts deleting files it forgets the worktree, whatever
