@@ -405,19 +405,9 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::LayeredConfig {
                 target: ConfigTarget::Space(workspace),
             } => Some(workspace),
-            // A space's agent chooses its own space's name.
-            WorkspaceMethod::RenameSpace { space, .. } => Some(
-                manager
-                    .own_workspace(
-                        caller,
-                        space,
-                        "scoped processes rename only their own space",
-                    )
-                    .await?,
-            ),
-            WorkspaceMethod::SpaceStatus { space } | WorkspaceMethod::SpaceSessions { space } => {
-                Some(space)
-            }
+            WorkspaceMethod::RenameSpace { space, .. }
+            | WorkspaceMethod::SpaceStatus { space }
+            | WorkspaceMethod::SpaceSessions { space } => Some(space),
             // The inbox lists them with the user's notifications.
             WorkspaceMethod::UntrackedWorktrees => {
                 let action = Action::new(PermissionKey::Notifications, "the untracked worktrees");

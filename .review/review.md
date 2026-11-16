@@ -192,7 +192,7 @@ instead of the PR delivery guidance below.
   governs each, as below. For the spaces their scope reaches but their own, scoped callers hold them, queue agents,
   which the daemon starts detached unless `start --here` runs one in the caller's terminal, and which hold their own space's scope, never the caller's, cancel and prioritize their queue
   entries, send agent messages,
-  answer questions, stop their executions and agents, confirming a stop Shoal cannot prove, restart their agents, convert them,
+  answer questions, stop their executions and agents, confirming a stop Shoal cannot prove, restart their agents, convert and rename them,
   queue restores of the agents, a workspace's or a chat's, whoever stopped them,
   which the daemon starts a chat's in the place it ran in, and forget stopped work; the nearest space above with an agent, of either kind, receives a child agent's messages,
   questions, completion and ready marks and its agent's exits and stops instead of the user,

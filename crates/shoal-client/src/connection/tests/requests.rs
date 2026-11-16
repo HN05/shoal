@@ -871,10 +871,11 @@ async fn a_scoped_start_takes_the_queue_entry_of_the_launch_it_starts_itself() {
 }
 
 #[tokio::test]
-async fn a_workspaces_agent_renames_only_its_own_space() {
+async fn a_workspaces_agent_renames_the_spaces_its_scope_reaches() {
     let daemon = TestDaemon::start().await;
     let app = daemon.connector();
     let parent = daemon.workspace("parent").await;
+    let outside = daemon.workspace("outside").await;
     let split = WorkspaceMethod::SplitWorkspace {
         workspace: SpaceSelector::id(&parent.id),
         name: "child".into(),
@@ -891,10 +892,16 @@ async fn a_workspaces_agent_renames_only_its_own_space() {
     assert_eq!(renamed.space.id(), &parent.id);
     assert_eq!(renamed.space.name(), "Login retries");
     assert_eq!(renamed.previous_name, "parent");
-    // A space below it keeps the name its own agent or the user gives it.
-    assert_eq!(code(rename(&child, "Other").await), ErrorCode::ScopeDenied);
+    let renamed = rename(&child, "Retry backoff").await.unwrap();
+    assert_eq!(renamed.space.id(), &child.id);
+    assert_eq!(renamed.previous_name, "child");
+    // A space outside its scope keeps its name.
     assert_eq!(
-        inspect(&app, child.id.as_str()).await.unwrap().name,
-        "child"
+        code(rename(&outside, "Other").await),
+        ErrorCode::ScopeDenied
+    );
+    assert_eq!(
+        inspect(&app, outside.id.as_str()).await.unwrap().name,
+        "outside"
     );
 }
