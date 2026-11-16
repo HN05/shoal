@@ -234,7 +234,7 @@ impl Command {
             Command::Workspace(WorkspaceCommand::Edit { .. }) => "edit".into(),
             Command::Space(SpaceCommand::Open { .. }) => "open".into(),
             Command::Changes(ChangesCommand::Diff { .. }) => "diff".into(),
-            Command::Workspace(WorkspaceCommand::Status { .. }) => "status".into(),
+            Command::Space(SpaceCommand::Status { .. }) => "status".into(),
             Command::Run {
                 name: None, args, ..
             } if !args.is_empty() => "run".into(),

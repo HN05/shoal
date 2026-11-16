@@ -94,7 +94,7 @@ use crate::{
         args::{
             integration::{IntegrationCommand, ShellCommand},
             repository::RepositoryCommand,
-            workspace::WorkspaceCommand,
+            space::SpaceCommand,
         },
         context::Context,
         entry::{Daemon, RunDaemon},
@@ -195,13 +195,13 @@ fn picker_start(ctx: &Context, command: Option<&Command>) -> Option<Option<menu:
     match command {
         None => Some(None),
         // Workspace processes, who cannot act on it, get the inbox printed.
-        Some(Command::Workspace(WorkspaceCommand::Inbox {
+        Some(Command::Space(SpaceCommand::Inbox {
             repository: None,
             print: false,
         })) if lists_interactively(ctx) && !env::inherits_scope(&ctx.paths.state) => {
             Some(Some(menu::View::Inbox))
         }
-        Some(Command::Workspace(WorkspaceCommand::List {
+        Some(Command::Space(SpaceCommand::List {
             chats: false,
             repository: None,
             status,

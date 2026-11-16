@@ -16,6 +16,7 @@ use crate::cli::{
         lifecycle::{LifecycleCommand, RmArgs, StopArgs},
         repository::{RepoCommand, RepositoryCommand},
         sessions::SessionsCommand,
+        space::SpaceCommand,
         workspace::WorkspaceCommand,
     },
     context::Context,
@@ -187,7 +188,7 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             target: Some(SpaceSelector::Id(space)),
             session: None,
         }),
-        Row::Failed(space) | Row::Blocked(space) => Command::Workspace(WorkspaceCommand::Status {
+        Row::Failed(space) | Row::Blocked(space) => Command::Space(SpaceCommand::Status {
             space: Some(space.to_string()),
             item: None,
         }),
@@ -213,7 +214,7 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
                     target: Some(SpaceSelector::Id(chat)),
                     session: None,
                 }),
-                None => Command::Workspace(WorkspaceCommand::Status {
+                None => Command::Space(SpaceCommand::Status {
                     space: Some(space.to_string()),
                     item: None,
                 }),
@@ -284,7 +285,7 @@ async fn workspace_command(
             confirmation: ConfirmationArgs::default(),
             wait: false,
         })),
-        Action::Status => Command::Workspace(WorkspaceCommand::Status {
+        Action::Status => Command::Space(SpaceCommand::Status {
             space: workspace.map(|workspace| workspace.to_string()),
             item: None,
         }),

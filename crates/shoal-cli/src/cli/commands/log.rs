@@ -6,7 +6,7 @@ use anyhow::Result;
 
 use crate::{
     cli::{
-        args::workspace::LogArgs,
+        args::space::LogArgs,
         context::Context,
         output::{Palette, Style},
         ui::{self, Fallback},
