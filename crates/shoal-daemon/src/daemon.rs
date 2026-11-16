@@ -138,7 +138,7 @@ pub async fn run(
     log!("shoal daemon listening on {}", paths.socket.display());
     let manager = start(&startup, &paths).await?;
     if managed {
-        manager.runners.run_jobs_apart_from_service().await;
+        crate::service::apart::start_apart_from_service().await;
         manager.refresh_service_definition().await;
     }
     manager.record_start().await;

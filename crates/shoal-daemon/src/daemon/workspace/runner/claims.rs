@@ -397,7 +397,6 @@ impl Manager {
             .map(|(name, value)| (name.as_str(), value.clone()))
             .collect();
         let wrapper = crate::execution::Wrapper {
-            launcher: self.runners.job_launcher(),
             env: &env,
             ..Default::default()
         };

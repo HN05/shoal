@@ -23,3 +23,29 @@ async fn detached_command_starts_the_worker_in_a_session_of_its_own() -> anyhow:
     assert_eq!(session, pid);
     Ok(())
 }
+
+/// The program and arguments `command` runs.
+fn argv(command: &tokio::process::Command) -> Vec<&std::ffi::OsStr> {
+    let command = command.as_std();
+    std::iter::once(command.get_program())
+        .chain(command.get_args())
+        .collect()
+}
+
+#[test]
+fn detached_command_starts_the_worker_directly_until_a_launcher_is_chosen() {
+    let command = detached_command(&["sleep".into(), "60".into()]);
+    assert_eq!(argv(&command), ["sleep", "60"]);
+}
+
+#[test]
+fn detached_command_starts_the_worker_through_the_chosen_launcher() {
+    // Nextest runs each test in a process of its own, so no other test
+    // starts through this launcher.
+    crate::service::apart::remember(vec!["systemd-run".into(), "--scope".into(), "--".into()]);
+    let command = detached_command(&["sleep".into(), "60".into()]);
+    assert_eq!(
+        argv(&command),
+        ["systemd-run", "--scope", "--", "sleep", "60"]
+    );
+}

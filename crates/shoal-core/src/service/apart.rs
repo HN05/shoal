@@ -5,7 +5,7 @@
 //! keeps the process out of it. launchd ends only the process group of a
 //! job whose program exited, which a process in a session of its own has
 //! already left.
-use std::ffi::OsString;
+use std::{ffi::OsString, sync::OnceLock};
 
 use super::control::{command, query};
 use crate::tools::Tool;
@@ -14,11 +14,35 @@ use crate::tools::Tool;
 /// otherwise expands `$` in a scope's arguments.
 const UNEXPANDED_ARGUMENTS: u32 = 254;
 
+/// The launcher [`start_apart_from_service`] found, unset until it runs.
+static LAUNCHER: OnceLock<Vec<OsString>> = OnceLock::new();
+
+/// Start every process this process starts in a session of its own apart
+/// from the systemd user service it runs as, from now on, as a daemon its
+/// service manager started does.
+pub async fn start_apart_from_service() {
+    remember(launcher().await);
+}
+
+/// Start processes through `launcher` from now on, unless a launcher was
+/// already chosen.
+pub(crate) fn remember(launcher: Vec<OsString>) {
+    let _ = LAUNCHER.set(launcher);
+}
+
+/// The command a process this process starts in a session of its own
+/// starts through; empty, which starts it directly, until
+/// [`start_apart_from_service`] runs, as in the CLI, and where it found no
+/// launcher.
+pub(crate) fn current() -> &'static [OsString] {
+    LAUNCHER.get().map_or(&[], Vec::as_slice)
+}
+
 /// The command that starts a program apart from the systemd user service
 /// this process runs as, in the same slice; empty where this process runs as
 /// no such service, where `systemd-run` would change the program's
 /// arguments, or where it cannot start a scope, as without a user bus.
-pub async fn launcher() -> Vec<OsString> {
+async fn launcher() -> Vec<OsString> {
     let Some(service) = std::fs::read_to_string("/proc/self/cgroup")
         .ok()
         .as_deref()

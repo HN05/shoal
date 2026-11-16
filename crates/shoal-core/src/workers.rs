@@ -204,11 +204,13 @@ pub fn shoal_argv(paths: &Paths) -> Result<Vec<OsString>> {
 }
 
 /// The command that starts the worker `argv` in a session of its own, apart
-/// from the process starting it and its terminal; the caller sets its
+/// from the process starting it and its terminal, and from the service this
+/// process runs as where [`crate::service::apart`] can; the caller sets its
 /// standard streams, environment and directory.
 pub fn detached_command(argv: &[OsString]) -> tokio::process::Command {
-    let mut command = tokio::process::Command::new(&argv[0]);
-    command.args(&argv[1..]);
+    let mut argv = crate::service::apart::current().iter().chain(argv);
+    let mut command = tokio::process::Command::new(argv.next().expect("a worker has a program"));
+    command.args(argv);
     // SAFETY: setsid detaches the forked child without allocating, before exec.
     unsafe {
         command.pre_exec(|| {

@@ -101,7 +101,6 @@ async fn launch_session(
     let wrapper = execution::Wrapper {
         clear: not_inherited,
         env: &env,
-        ..Default::default()
     };
     let launched = execution::launch_detached(
         &ctx.paths,

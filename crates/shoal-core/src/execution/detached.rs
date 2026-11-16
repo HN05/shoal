@@ -44,9 +44,6 @@ pub async fn launch_detached(
 /// How the wrapper of a detached execution starts.
 #[derive(Default)]
 pub struct Wrapper<'a> {
-    /// The command it starts through, such as one that starts it apart from
-    /// the service this process runs as; empty starts it directly.
-    pub launcher: Vec<OsString>,
     /// Inherited variables removed from its environment.
     pub clear: &'a [&'a str],
     /// Variables added to its environment.
@@ -133,8 +130,7 @@ impl DetachedCommand {
                 command: &command,
             },
         )?;
-        let argv: Vec<OsString> = wrapper.launcher.iter().cloned().chain(command).collect();
-        let child = spawn_detached_wrapper(&argv, file, wrapper)?;
+        let child = spawn_detached_wrapper(&command, file, wrapper)?;
         Ok(Self { log, child })
     }
 

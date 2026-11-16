@@ -159,7 +159,15 @@ state directory; Linux uses `journalctl --user -u shoal.service`.
 How the daemon exits decides what becomes of tracked agents and commands:
 
 - `shoal daemon restart`, `shoal daemon install` when it replaces an
-  incompatible daemon, an update, and a crash leave them running.
+  incompatible daemon, an update, a crash and a failed start leave them
+  running, and so does the service manager's stop of the service once the
+  daemon exited. launchd ends only the daemon's own process group, which every
+  worker the daemon starts in a session of its own has left. On Linux each
+  such worker, such as the wrapper of an agent or a CI job, runs with what it
+  starts in a transient systemd scope of its own in the service's slice, with
+  `OOMPolicy=continue`, where systemd 254 or later and a user bus start one
+  when the daemon starts; otherwise it runs in the service's control group,
+  which systemd's stop ends.
 - `shoal daemon stop` stops them, [chats'](#chats) agents included, as
   `shoal stop --all` does, so they stay down until `shoal restore`, then stops
   the daemon and names that `shoal restore` with the spaces it stopped. Unlike
@@ -3606,13 +3614,9 @@ environment, scope token, `TMPDIR` and `[env]`, but no agent secrets and no
 forge login besides the token the forge gives the job. Once the execution ends,
 however it ended, the workspace goes whatever it holds, with its permit; after
 a daemon restart, a job whose runner is gone goes the same way and the forge
-times it out. Where the daemon runs as a systemd user service, with systemd 254
-or later and a user bus that starts a scope when the daemon starts, each job's
-wrapper runs in a transient scope of its own in the service's slice, so that systemd's stop of the service, as once the daemon
-exited with a failure, leaves the job running for the next daemon, and with
-`OOMPolicy=continue`, so that the OOM killer ending one of its processes leaves
-the rest running; launchd
-ends only the daemon's own process group, which the wrapper has left.
+times it out. The service manager's stop of the service after the daemon
+exited leaves the job running for the next daemon, as it leaves
+[agents](#daemon-restarts).
 Protection never stops a running job; the workflow's
 `timeout-minutes` bounds it. `shoal stop` on the job's workspace, and `shoal ci
 cancel`, cancel the job's run on the forge, which cancels each of its jobs; the

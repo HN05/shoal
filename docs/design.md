@@ -543,6 +543,15 @@ file `shoal daemon install` wrote, and a definition in a system directory would
 need root and a distribution package. The unit and every scope Shoal starts set
 `OOMPolicy=continue`, so an OOM kill ends only the process it chose and the
 daemon's own death alone fails the service.
+Every process the daemon starts in a session of its own runs, with what it
+starts, in a transient systemd scope of its own in the service's slice, which
+`workers::detached_command` adds through the launcher the managed daemon finds
+at startup, so that systemd's stop of the service after the daemon exited or
+failed to start leaves agents, places and CI jobs running for the next daemon.
+`KillMode=process` is rejected: it would leave them in the stopped service's
+control group, which the next start reports as left over, sharing its memory
+accounting and OOM kills. A live daemon's SIGTERM still stops agents; where no
+scope can start, workers start directly.
 Managed daemons record their stable executable path before startup work and restart
 after a replacement, including one during startup, once daemon operations are idle
 and no setup or merge runs; commands reattach.
@@ -1327,8 +1336,8 @@ exits, at low CPU priority so that a build takes only the cores agents and the
 user leave idle. A job outlives the daemon, which only decides when it starts:
 a crash, a failed start, a restart and a signal, which the daemon cannot tell
 from a service stop, leave it running for the next daemon to take its wrapper
-back, and the wrapper runs apart from the daemon's service, in a systemd scope
-of its own, so the service manager's stop of the service leaves it running
+back, and its wrapper runs apart from the daemon's service, as every detached
+worker does, so the service manager's stop of the service leaves it running
 too. A job ends only on the forge's word, so stopping it, as `shoal daemon
 stop` and a system shutdown do, cancels its run there, as does its wrapper
 through the daemon, which keeps the forge's login, when a logout's or a
