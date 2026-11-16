@@ -5402,7 +5402,8 @@ details, under a heading for each date:
 - the space's creation, with its base and parent, its renames, the start
   of its removal and the removal with the cause, a removal that failed or
   stopped before it finished with the reason, and a workspace's restore;
-- its agent's starts, stops and exits, with the exit code;
+- its agent's starts, with what made the launch a start carries out,
+  `manual` for `shoal start`'s, its stops and exits, with the exit code;
 - its ready marks and their withdrawal, and `done` and its withdrawal;
 - the issues, PRs and CI runs it links and unlinks, the changes Shoal made to
   them, and their closing, merging and reopening on the forge;
@@ -5480,7 +5481,8 @@ a [chat](#chats) that opened it returned it to you. Earlier versions recorded
 under its own ID. `agent_started`, `agent_stopped` (Shoal or a stop request
 stopped it) and `agent_exited` (it exited on its own) events add `agent`
 with its `name`, `execution_id` and `exit_code`, null for a start or stop
-and when the wrapper reported none. `question_asked` and `question_answered`
+and when the wrapper reported none; a start that carries out a launch adds
+its `source`, `{"kind": "manual"}` or `{"kind": "trigger", "name": …}`. `question_asked` and `question_answered`
 events add `question` with its `number`, `question` and `answer`.
 `approval_requested` and `approval_decided` events add `approval` with its
 `number`, `target`, `subject` and `status`. `gate_decided` events add `gate`

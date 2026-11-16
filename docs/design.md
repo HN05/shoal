@@ -144,21 +144,32 @@ model only where the caller chose one; the daemon resolves the rest under the
 workspace's settings, `agent.default` for the agent, and the agent works on the
 start's issue unless the request gives it an issue or a task, so an app needs
 no configuration of its own to start one as the CLI does. `QueueAgent` queues
-the worker of an existing workspace the same way, on the workspace's issue,
-and `shoal start`'s detached start of such a worker sends a `Launch` that
-queues it so, once the daemon has resolved the blockers it names and the
-issues its forge records as blocking the workspace's issue.
-A new chat that runs detached, a scoped caller's, one started without a
-terminal or an app's, goes through `Launch`, which carries what `shoal start`
-takes and what made the launch: the daemon decides the mode, the kind of
-space and the repository the launch leaves out, as the start's own checks
-in `shoal-core` do, resolves its agent the same way, and its name, after its issue's title
-or where it runs, checks where it goes as recording it would, then runs a
-worker of its own that opens the background place, whose chat worker starts
-the chat there from the handoff it waits on, and answers once the chat runs
-its agent. The CLI keeps what attaches a terminal:
-a chat here or beside it, and an agent that runs its own way, such as Happy's,
-which starts in the caller's process for a chat as for a workspace. One `shoal_client` call sends the
+the worker of an existing workspace the same way, on the workspace's issue.
+Every start that does not run in the caller's terminal, a scoped caller's or
+one without a terminal, goes through one request, `Launch`, which carries
+what `shoal start` takes, as its command line gave it, and what made the
+launch: `manual` for `shoal start`, or the trigger whose firing makes it. The
+daemon decides what the launch leaves out with the steps `shoal-core` shares
+with the CLI's own start: the mode, the kind of space and the repository,
+which the launch names, its issue or link belongs to, or the checkout or
+worktree the start was made in has; and the branch a PR, a branch link, the
+typed name or earlier work on its issue settles. It then queues the worker of
+the workspace `--in` names, or of the one that has the branch, as
+`QueueAgent` does; opens and prepares a new workspace as `StartWorkspace`
+does, or queues the whole launch while what blocks it holds it; or starts a
+chat, a launch without a branch or issue included: it resolves the chat's
+agent, mode and name, after its issue's title or where it runs, checks where
+it goes as recording it would, then runs a worker of its own that opens the
+background place, whose chat worker starts the chat there from the handoff it
+waits on, and answers once the chat runs its agent. The queue entry of the
+launch's agent carries its source to the agent's start, which the journal
+records with it. The CLI parses the start, picks on a terminal what a picker
+picks there, adds what only its process knows, such as its directory, its
+environment and the session `--fork` forks, and what only its terminal can
+check, such as a host to place the agent in; it keeps what attaches a
+terminal: a start here or beside it, and an agent that runs its own way, such
+as Happy's, which starts in the caller's process for a chat as for a
+workspace. One `shoal_client` call sends the
 request and follows the preparation, returning the prepared workspace or the
 typed failure with the workspace as it left it, ready when only what follows
 setup failed. The CLI makes that call and keeps its prompt for a failed setup
