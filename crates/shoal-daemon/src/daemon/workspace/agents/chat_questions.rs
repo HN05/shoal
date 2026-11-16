@@ -1,33 +1,26 @@
 //! Questions an agent asks the user in its conversation: it marks the turn,
 //! and the turn's final message reaches the user's questions too, until the
-//! user answers there or replies in the conversation. A workspace's agent
-//! marks the turn of the execution it runs, and a chat's agent the chat's.
+//! user answers there or replies in the conversation. An agent marks the
+//! turn of the execution it runs as, a chat's as a workspace's.
 use anyhow::{Context, Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 
 use super::Manager;
-use crate::{
-    daemon::questions::{Turn, set_chat_mark},
-    model::{Chat, PresentSpace, Workspace},
-};
+use crate::{daemon::questions::set_chat_mark, model::PresentSpace};
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
-    /// Mark the current turn of the agent of the space `selector` names, a
-    /// chat's or the one `execution` runs in a workspace, as asking the user
-    /// in its conversation, which needs Shoal's hook that ends the agent's
-    /// turns.
+    /// Mark the current turn of the agent `execution` runs in the space
+    /// `selector` names as asking the user in its conversation, which needs
+    /// Shoal's hook that ends the agent's turns.
     pub(crate) async fn mark_chat_question(
         &self,
         selector: &SpaceSelector,
         execution: Option<&ExecutionId>,
     ) -> Result<()> {
-        let (turn, agent, settings) = match self.space(selector).await? {
-            PresentSpace::Workspace(workspace) => {
-                self.workspace_turn(&workspace, execution).await?
-            }
-            PresentSpace::Chat(chat) => self.chat_turn(&chat).await?,
-        };
+        let space = self.space(selector).await?;
+        let (turn, agent) = self.agent_turn(&space, execution).await?;
+        let settings = self.present_space_settings(&space).await?;
         ensure!(
             settings.integration(&agent).reports_turn_ends(),
             "agent {agent} has no Shoal hook that ends its turns; ask with shoal questions ask \"<decision>\" --recommend <answer>"
@@ -38,88 +31,60 @@ impl Manager {
         Ok(())
     }
 
-    /// The turn of the agent `execution` runs in `workspace`, with the agent
-    /// and the settings that say whether its turns end through Shoal's hook.
-    async fn workspace_turn(
+    /// The execution `execution` whose turn an agent of `space` marks, with
+    /// that agent, refusing an execution that runs no agent of the space.
+    async fn agent_turn(
         &self,
-        workspace: &Workspace,
+        space: &PresentSpace,
         execution: Option<&ExecutionId>,
-    ) -> Result<(Turn, crate::agent::Agent, crate::config::Effective)> {
+    ) -> Result<(ExecutionId, crate::agent::Agent)> {
         let refusal = || {
             format!(
-                "only an agent Shoal runs in workspace {} asks in its chat",
-                workspace.name
+                "only an agent Shoal runs in {} asks in its chat",
+                space.name()
             )
         };
         let execution = execution.with_context(refusal)?.to_owned();
         let agent = self
             .executions
             .with_agent(&execution, |agent| {
-                (agent.workspace_id == workspace.id).then(|| agent.name.clone())
+                (agent.workspace_id == *space.id()).then(|| agent.name.clone())
             })
             .await
             .flatten()
             .with_context(refusal)?;
-        let settings = self.workspace_settings(workspace).await?;
-        Ok((Turn::Execution(execution), agent, settings))
+        Ok((execution, agent))
     }
 
-    /// The turn of `chat`'s agent, with the agent and the settings of its
-    /// repository.
-    async fn chat_turn(
-        &self,
-        chat: &Chat,
-    ) -> Result<(Turn, crate::agent::Agent, crate::config::Effective)> {
-        let settings = self.chat_settings(chat).await?;
-        Ok((Turn::Chat(chat.id.clone()), chat.agent.clone(), settings))
-    }
-
-    /// Ask the user the question in `final_message` when the agent of the
-    /// space `selector` names, a chat's or the one `execution` runs, marked
-    /// the turn that ended as asking one. The agent's turn ends either way,
-    /// so a failure is only logged.
+    /// Ask the user the question in `final_message` when the agent
+    /// `execution` runs in the space `selector` names marked the turn that
+    /// ended as asking one. The agent's turn ends either way, so a failure
+    /// is only logged.
     pub(crate) async fn ask_marked_chat_question(
         &self,
         selector: &SpaceSelector,
         execution: Option<&ExecutionId>,
         final_message: Option<String>,
     ) {
-        let asked = async {
-            let Some(turn) = self.marked_turn(selector, execution).await? else {
-                return Ok(None);
-            };
-            self.ask_in_chat(selector, turn, final_message.as_deref())
-                .await
+        let Some(execution) = execution else {
+            return;
         };
+        let asked = self.ask_in_chat(selector, execution.to_owned(), final_message.as_deref());
         if let Err(error) = asked.await {
             crate::daemon::log!("question {selector} asked in its chat not recorded: {error:#}");
         }
     }
 
-    /// The user replied in the conversation of the agent of the space
-    /// `selector` names, a chat's or the one `execution` runs: close the
-    /// questions the space's agents asked in their conversations, and the
-    /// mark of a turn underway, and return the closed questions' numbers.
+    /// The user replied in the conversation of the agent `execution` runs in
+    /// the space `selector` names: close the questions the space's agents
+    /// asked in their conversations, and the mark of a turn underway, and
+    /// return the closed questions' numbers.
     pub(crate) async fn reply_in_chat(
         &self,
         selector: &SpaceSelector,
         execution: Option<&ExecutionId>,
     ) -> Result<Vec<crate::daemon::item_numbers::ItemNumber>> {
-        let turn = self.marked_turn(selector, execution).await?;
-        self.close_chat_questions(selector, turn).await
-    }
-
-    /// The turn that may carry a mark: the chat's for a chat, else the one
-    /// of the agent `execution` runs, if any.
-    async fn marked_turn(
-        &self,
-        selector: &SpaceSelector,
-        execution: Option<&ExecutionId>,
-    ) -> Result<Option<Turn>> {
-        Ok(match self.space(selector).await? {
-            PresentSpace::Chat(chat) => Some(Turn::Chat(chat.id)),
-            PresentSpace::Workspace(_) => execution.map(|id| Turn::Execution(id.to_owned())),
-        })
+        (self.close_chat_questions(selector, execution.cloned())).await
     }
 }
 

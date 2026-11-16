@@ -403,15 +403,18 @@ async fn a_chats_agent_asks_hears_the_answer_in_its_inbox_and_asks_in_its_conver
         .unwrap();
     assert!(manager.question(asked.number).await.is_err());
 
-    // The chat marks its own turn, which no execution tracks.
+    // The chat's agent marks the turn of the execution it runs as.
+    let execution = manager.workspace_executions(&chat.id).await.unwrap()[0]
+        .id
+        .clone();
     manager
-        .mark_chat_question(&SpaceSelector::id(&chat.id), None)
+        .mark_chat_question(&SpaceSelector::id(&chat.id), Some(&execution))
         .await
         .unwrap();
     manager
         .end_agent_turn(
             &SpaceSelector::id(&chat.id),
-            None,
+            Some(execution.clone()),
             None,
             ending("Which cache?"),
         )
@@ -422,20 +425,20 @@ async fn a_chats_agent_asks_hears_the_answer_in_its_inbox_and_asks_in_its_conver
     assert!(asked[0].in_chat);
     assert_eq!(asked[0].space, "planning");
     let closed = manager
-        .reply_in_chat(&SpaceSelector::id(&chat.id), None)
+        .reply_in_chat(&SpaceSelector::id(&chat.id), Some(&execution))
         .await
         .unwrap();
     assert_eq!(closed, [asked[0].number]);
 
     // An open question stays while the chat is stopped and goes with it.
     manager
-        .mark_chat_question(&SpaceSelector::id(&chat.id), None)
+        .mark_chat_question(&SpaceSelector::id(&chat.id), Some(&execution))
         .await
         .unwrap();
     manager
         .end_agent_turn(
             &SpaceSelector::id(&chat.id),
-            None,
+            Some(execution.clone()),
             None,
             ending("Which queue?"),
         )

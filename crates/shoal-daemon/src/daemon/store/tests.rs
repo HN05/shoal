@@ -603,6 +603,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 190 {
         db.execute_batch(include_str!("space_sessions.sql"))?;
     }
+    if version >= 191 {
+        db.execute_batch(include_str!("chat_turn_marks.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -1811,6 +1814,40 @@ fn migration_keeps_chat_sessions_where_every_space_keeps_them() -> Result<()> {
             r#"{"chat":{"agent":"claude"}}"#,
             r#"{"to":"workspace","execution":"agent","chat":{"agent":"claude"}}"#,
         ]
+    );
+    Ok(())
+}
+
+#[test]
+fn migration_moves_a_chats_turn_mark_to_its_agents_execution() -> Result<()> {
+    let mut db = historical_database(190)?;
+    db.execute_batch(
+        r#"BEGIN;
+         INSERT INTO chats(id,agent,started_at,asks_in_chat) VALUES ('asking','claude',1,1),
+             ('quiet','claude',1,0);
+         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('asking','chat','repo','asking'),
+             ('quiet','chat','repo','quiet');
+         COMMIT;
+         INSERT INTO executions(id,space_id,state,agent) VALUES
+             ('asking-agent','asking','running','claude'),
+             ('quiet-agent','quiet','running','claude'),
+             ('converted-agent','workspace','running','claude');
+         INSERT INTO space_conversions(space_id,record) VALUES ('workspace',
+             '{"to":"workspace","execution":"converted-agent","chat":{"asks_in_chat":1}}');"#,
+    )?;
+
+    migrate(&mut db)?;
+
+    let marked: Vec<String> = db
+        .prepare("SELECT id FROM executions WHERE asks_in_chat ORDER BY id")?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    assert_eq!(marked, ["asking-agent", "converted-agent"]);
+    let record: String =
+        db.query_row("SELECT record FROM space_conversions", [], |row| row.get(0))?;
+    assert_eq!(
+        record,
+        r#"{"to":"workspace","execution":"converted-agent","chat":{}}"#
     );
     Ok(())
 }

@@ -427,8 +427,9 @@ fn withdraw(
 enum Asker {
     /// A `questions ask` command, which states it.
     Command,
-    /// An agent, in its conversation, in the turn it marked.
-    Chat(Turn),
+    /// An agent, in its conversation, in the turn of the execution it runs
+    /// as, which it marked.
+    Chat(ExecutionId),
 }
 
 /// What recording a question did.
@@ -485,24 +486,16 @@ fn record(
     Ok(Recorded::New(question))
 }
 
-/// The turn of an agent: the current one of the agent an execution runs, or
-/// of a chat's agent, which no execution tracks.
-#[derive(Debug, Clone)]
-pub(crate) enum Turn {
-    Execution(ExecutionId),
-    Chat(SpaceId),
-}
-
-/// Mark or unmark `turn` as asking in the agent's conversation; whether that
-/// changed the mark.
-pub(crate) fn set_chat_mark(db: &Connection, turn: &Turn, marked: bool) -> Result<bool> {
-    let (table, id) = match turn {
-        Turn::Execution(id) => ("executions", id.as_str()),
-        Turn::Chat(id) => ("chats", id.as_str()),
-    };
+/// Mark or unmark the current turn of the agent `execution` runs as asking
+/// in the agent's conversation; whether that changed the mark.
+pub(crate) fn set_chat_mark(
+    db: &Connection,
+    execution: &ExecutionId,
+    marked: bool,
+) -> Result<bool> {
     let changed = db.execute(
-        &format!("UPDATE {table} SET asks_in_chat=?2 WHERE id=?1 AND asks_in_chat<>?2"),
-        params![id, marked],
+        "UPDATE executions SET asks_in_chat=?2 WHERE id=?1 AND asks_in_chat<>?2",
+        params![execution, marked],
     )?;
     Ok(changed > 0)
 }
@@ -596,12 +589,12 @@ impl Manager {
     }
 
     /// Record the question in its turn's final `message` when the agent
-    /// marked `turn` as asking in its conversation, consuming the mark, and
-    /// tell the user about it.
+    /// `turn` runs marked its turn as asking in its conversation, consuming
+    /// the mark, and tell the user about it.
     pub(crate) async fn ask_in_chat(
         &self,
         selector: &SpaceSelector,
-        turn: Turn,
+        turn: ExecutionId,
         message: Option<&str>,
     ) -> Result<Option<Question>> {
         let space = self.space(selector).await?;
@@ -777,11 +770,12 @@ impl Manager {
 
     /// Close the open questions the agents of the space `selector` names
     /// asked in their conversations, which the user replied to there, with
-    /// the mark of `turn`, and return their numbers.
+    /// the mark of the turn of the agent `turn` runs, and return their
+    /// numbers.
     pub(crate) async fn close_chat_questions(
         &self,
         selector: &SpaceSelector,
-        turn: Option<Turn>,
+        turn: Option<ExecutionId>,
     ) -> Result<Vec<ItemNumber>> {
         let space = self.space(selector).await?;
         let _gate = self.gates.lock_announcements().await;

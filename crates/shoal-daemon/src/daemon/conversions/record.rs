@@ -66,7 +66,6 @@ const CHAT_COLUMNS: &[&str] = &[
     "agent",
     "started_at",
     "origin",
-    "asks_in_chat",
     "workspace_id",
     "root_dir",
     "converted",
