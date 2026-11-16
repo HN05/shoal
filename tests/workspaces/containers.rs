@@ -113,7 +113,13 @@ fn a_failed_start_is_recorded_and_retried_by_the_next_acquire() {
     let failed = fixture.run(&["acquire", "containers", "--space", &space]);
     assert!(!failed.status.success(), "{}", printed(&failed));
     let listed = fixture.ok(&["leases", "containers", "--space", &space]);
-    assert_eq!(listed["projects"][0]["state"], "failed");
+    let project = listed["projects"][0].clone();
+    assert_eq!(project["state"], "failed");
+    // What a failed `up` left running is a lease that release stops.
+    let status = fixture.ok(&["status", &space]);
+    assert_eq!(status["cleanup_reason"]["reason"], "containers");
+    fixture.ok(&["release", "--space", &space]);
+    assert_eq!(commands(&fixture, &project["project"]), ["up", "stop"]);
 
     fs::remove_file(fixture.root.path().join("compose-fail")).unwrap();
     let started = fixture.ok(&["acquire", "containers", "--space", &space]);

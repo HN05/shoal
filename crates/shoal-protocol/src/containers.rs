@@ -47,16 +47,18 @@ states!(
         Running => "running",
         /// Stopped by a release, its volumes kept.
         Stopped => "stopped",
-        /// `compose up` failed; the record names why.
+        /// `compose up` failed, perhaps after some services started; the
+        /// record names why.
         Failed => "failed",
     }
 );
 
 impl ContainerState {
-    /// Whether the project may hold containers that run: a lease that keeps
-    /// the workspace and ends with its acquirer.
+    /// Whether the project may hold containers that run, as a failed `up`
+    /// may leave some: a lease that keeps the workspace and ends with its
+    /// acquirer.
     pub fn active(self) -> bool {
-        matches!(self, Self::Starting | Self::Running)
+        matches!(self, Self::Starting | Self::Running | Self::Failed)
     }
 }
 

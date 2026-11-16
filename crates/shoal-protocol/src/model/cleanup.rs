@@ -41,7 +41,7 @@ pub enum CleanupReason {
     RunningCommands,
     Permits,
     Simulators,
-    /// Its containers run.
+    /// Its containers may run: its project is not stopped.
     Containers,
     /// No agent of its own works there, as none has started in the
     /// workspace or the chat's stopped, and the agent of the coordinator
@@ -90,7 +90,7 @@ impl std::fmt::Display for CleanupReason {
             Self::RunningCommands => f.write_str("Tracked commands running"),
             Self::Permits => f.write_str("Resource permits held"),
             Self::Simulators => f.write_str("Simulator leases held"),
-            Self::Containers => f.write_str("Containers running"),
+            Self::Containers => f.write_str("Containers not stopped"),
             Self::ParentAgentRunning => f.write_str("Parent agent running"),
             Self::MissingDirectory => f.write_str("Directory missing"),
             Self::Dirty => f.write_str("Uncommitted or untracked changes"),
