@@ -282,13 +282,13 @@ pub async fn run(
     if let Some(requested) = &mut requested_exit {
         requested.ending_work();
     }
-    let stopped = manager.end_work(ending).await;
+    let mut stopped = manager.end_work(ending).await;
     manager.record_exit(ending, result.as_ref().err()).await;
     background.shutdown().await;
     // Aborting a run kills its process group; what it started elsewhere
     // carries its marker.
     manager.oneshot_runs.stop_all().await;
-    manager.stop_for_shutdown().await;
+    manager.stop_remaining_work(&mut stopped).await;
     if let Some(requested) = &mut requested_exit {
         requested.answer(&manager, &stopped).await;
     }

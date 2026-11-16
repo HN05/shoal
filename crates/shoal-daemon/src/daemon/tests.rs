@@ -116,6 +116,53 @@ async fn an_exit_answers_again_with_the_spaces_of_the_work_it_stopped() {
     }
 }
 
+/// A restart answers with the spaces of the work it cut off, which could
+/// not reattach, and none for older stopped work beside them.
+#[tokio::test]
+async fn a_restart_answers_with_the_spaces_of_the_work_it_cut_off() {
+    use crate::daemon::test_support;
+    let (_root, manager) = test_support::manager().await;
+    let (exit, mut requested) = tokio::sync::mpsc::channel(1);
+    let server = Server {
+        exit,
+        ..server(manager.clone())
+    };
+    let mut chats = Vec::new();
+    for name in ["cut-off", "earlier"] {
+        let chat = test_support::chat(&manager, name, "chat", None, None).await;
+        crate::execution::recovery::save_record(
+            &manager.paths,
+            &chat.id,
+            &format!("{name}-agent").into(),
+            &crate::execution::TrackedAgent::named("claude"),
+            None,
+            None,
+        )
+        .unwrap();
+        chats.push(chat);
+    }
+    let mut restart = async || {
+        let (_, mut client) = ask_exit(&server, None, "restart").await;
+        let mut exit = requested.try_recv().unwrap();
+        let mut stopped = manager.end_work(exit.ending).await;
+        manager.stop_remaining_work(&mut stopped).await;
+        exit.answer(&manager, &stopped).await;
+        read_response(&mut client).await
+    };
+    let exited = restart().await;
+    assert_eq!(exited["data"]["stopped_work"], false, "{exited}");
+    assert_eq!(exited["data"]["spaces"], serde_json::json!([]), "{exited}");
+    // A wrapper of a release before reattachment stops with the daemon.
+    (manager.executions).mark_unattachable(&"cut-off-agent".into(), &chats[0].id);
+    let exited = restart().await;
+    assert_eq!(exited["data"]["stopped_work"], true, "{exited}");
+    assert_eq!(
+        exited["data"]["spaces"],
+        serde_json::json!([chats[0].number]),
+        "{exited}"
+    );
+}
+
 /// Ask `server` to exit with `exit` as a service command of another
 /// release would, under `scope`: its reply and the connection, which hears
 /// the rest.

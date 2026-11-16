@@ -120,14 +120,16 @@ impl Executions {
     }
 
     /// Before the daemon exits, refuse new registrations and ask every
-    /// connected execution to stop for `request`.
-    pub(crate) async fn shut_down(&self, request: StopRequest) {
+    /// connected execution to stop for `request`, returning the spaces of
+    /// those that stop instead of reattaching.
+    pub(crate) async fn shut_down(&self, request: StopRequest) -> HashSet<SpaceId> {
         let connections = self.connections().await;
         self.closed.store(true, Ordering::Relaxed);
         self.shutting_down.store(true, Ordering::Relaxed);
         for id in connections.senders.keys() {
             let _ = connections.stop(id, &request).await;
         }
+        self.unattachable_spaces().into_iter().collect()
     }
 
     /// Set once shutdown starts asking executions to stop.

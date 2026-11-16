@@ -460,10 +460,11 @@ impl Manager {
     /// their wait for an agent's restore; the rest stop as `shoal stop` does, so a restart leaves resumable records
     /// instead of disconnected executions. Requests already accepted cannot
     /// register afterwards, and wrappers that miss the bound are left for the
-    /// startup audit.
-    pub async fn stop_for_shutdown(&self) {
+    /// startup audit. Returns the spaces of the executions that stopped.
+    pub async fn stop_for_shutdown(&self) -> HashSet<SpaceId> {
         let deadline = Instant::now() + timing::WORKSPACE_STOP_TIMEOUT;
-        self.executions
+        let stopping = self
+            .executions
             .shut_down(StopRequest {
                 reason: "the Shoal daemon shut down".into(),
                 save: Save::Everything,
@@ -472,6 +473,7 @@ impl Manager {
         while Instant::now() < deadline && self.executions.has_connections().await {
             sleep(timing::WORKSPACE_STOP_POLL_INTERVAL).await;
         }
+        stopping
     }
 
     pub(in crate::daemon::workspace) async fn stop_disconnected(

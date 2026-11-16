@@ -10,8 +10,9 @@ use super::{
     executions::{Save, StopRequest},
     shutdown_stop::{Shutdown, StoppedSpaces},
 };
-use crate::daemon::workspace::runner::JobStop;
+use crate::daemon::{log, workspace::runner::JobStop};
 use crate::protocol::{Exit, QueuedLaunches};
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 use std::collections::HashSet;
 
@@ -42,11 +43,11 @@ impl Manager {
     /// End running work as the daemon exits with `ending`, refusing new
     /// executions before the stop lists what runs, and return the spaces
     /// whose work it stopped. What still runs afterwards, such as work that
-    /// failed to stop, detaches or stops as [`Manager::stop_for_shutdown`]
+    /// failed to stop, detaches or stops as [`Manager::stop_remaining_work`]
     /// decides.
     pub(crate) async fn end_work(&self, ending: Ending) -> StoppedSpaces {
         match ending {
-            Ending::Detach => StoppedSpaces::default(),
+            Ending::Detach => StoppedSpaces::none(),
             Ending::Stop => {
                 self.executions.close().await;
                 self.stop_all_for_exit().await
@@ -54,6 +55,31 @@ impl Manager {
             Ending::Save => {
                 self.executions.close().await;
                 self.stop_for_shutdown_of(Shutdown::Daemon).await
+            }
+        }
+    }
+
+    /// Stop what still runs as [`Manager::stop_for_shutdown`] does, and
+    /// count the spaces of what it stopped, which could not reattach, among
+    /// those `stopped`.
+    pub(crate) async fn stop_remaining_work(&self, stopped: &mut StoppedSpaces) {
+        let cut_off = self.stop_for_shutdown().await;
+        self.count_stopped(stopped, cut_off).await;
+    }
+
+    /// Add the spaces `ids` to those `stopped`, each once; one that cannot
+    /// be read leaves work stopped where the answer cannot name it.
+    async fn count_stopped(&self, stopped: &mut StoppedSpaces, ids: HashSet<SpaceId>) {
+        for id in ids {
+            if stopped.spaces.iter().any(|space| space.id() == &id) {
+                continue;
+            }
+            match self.space(&SpaceSelector::id(&id)).await {
+                Ok(space) => stopped.spaces.push(space),
+                Err(error) => {
+                    log!("stop as the daemon exits: space {id} unavailable: {error:#}");
+                    stopped.every = false;
+                }
             }
         }
     }

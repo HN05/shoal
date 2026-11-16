@@ -30,6 +30,16 @@ pub(crate) struct StoppedSpaces {
     pub every: bool,
 }
 
+impl StoppedSpaces {
+    /// A stop that stopped no work anywhere.
+    pub(crate) fn none() -> Self {
+        Self {
+            spaces: Vec::new(),
+            every: true,
+        }
+    }
+}
+
 /// What shuts down, which the stop and the user's notifications name.
 #[derive(Clone, Copy)]
 pub(crate) enum Shutdown {
@@ -149,10 +159,7 @@ impl Manager {
             .filter(|space| !left.contains(space.id()))
             .collect();
         let results = join_all(targets.iter().map(|space| stop(space.id().clone()))).await;
-        let mut stopped = StoppedSpaces {
-            spaces: Vec::new(),
-            every: true,
-        };
+        let mut stopped = StoppedSpaces::none();
         for (space, result) in targets.into_iter().zip(results) {
             match result {
                 Ok(()) => stopped.spaces.push(space),
