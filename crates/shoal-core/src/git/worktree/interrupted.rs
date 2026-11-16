@@ -27,8 +27,9 @@ pub(super) async fn mark(admin_dir: &Path, link: String) -> Result<()> {
     .await
 }
 
-/// Forget that a removal began, once it ended having deleted nothing.
-pub(super) async fn unmark(admin_dir: &Path) -> Result<()> {
+/// Forget that a removal began: it ended having deleted nothing, or what
+/// it deleted is no longer told apart from later changes.
+pub async fn forget(admin_dir: &Path) -> Result<()> {
     let marker = admin_dir.join(MARKER);
     off_runtime::run(move || match std::fs::remove_file(&marker) {
         Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
@@ -54,7 +55,7 @@ pub async fn restore(path: &Path, admin_dir: &Path) -> Result<bool> {
         ensure_linked_to(path, admin_dir).await?;
         restore_tracked_files(path).await?;
     }
-    unmark(admin_dir).await?;
+    forget(admin_dir).await?;
     Ok(true)
 }
 

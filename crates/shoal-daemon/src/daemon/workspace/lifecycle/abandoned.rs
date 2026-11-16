@@ -71,7 +71,8 @@ impl Manager {
     /// that no marker outlives the startup to undo later deletions.
     pub(crate) async fn restore_interrupted_removals(&self) -> Result<()> {
         for workspace in self.list_workspaces().await? {
-            if let Err(error) = self.restore_interrupted_removal(&workspace).await {
+            let settled = self.settle_interrupted_removal(&workspace, workspace.state);
+            if let Err(error) = settled.await {
                 log!(
                     "files an interrupted removal of {} deleted not restored: {error:#}",
                     workspace.name

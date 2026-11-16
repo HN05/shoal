@@ -9,6 +9,7 @@ use crate::{
     model::{Completion, PresentSpace, SpaceRef},
     process::DirectoryUsers,
     removal::{IdleRestore, Inspection, InspectionPolicy, RemovalResult, UnsavedWork},
+    state::WorkspaceState,
 };
 use anyhow::{Context, Result, bail, ensure};
 use shoal_ids::space_ids::SpaceId;
@@ -252,7 +253,11 @@ impl Manager {
     ) -> Result<SpaceRemoval> {
         let reservation = self.reserve_space(id, removal).await?;
         let space = reservation.space.clone();
-        match self.remove_reserved(&space, removal, checked).await {
+        let replaced = reservation.replaced();
+        match self
+            .remove_reserved(&space, removal, replaced, checked)
+            .await
+        {
             Ok((children, worktree)) => {
                 self.forget_removed_space(&space).await;
                 // The chat a conversion makes keeps the space's temporary
@@ -287,15 +292,20 @@ impl Manager {
     /// record, or for a conversion replace it with the chat's. Checked again
     /// after the reservation, so a space restored meanwhile cannot go by an
     /// unattended removal; `checked` learns that the first checks passed.
+    /// `replaced` is the lifecycle state the reservation replaced.
     async fn remove_reserved(
         &self,
         space: &PresentSpace,
         removal: Removal<'_>,
+        replaced: Option<WorkspaceState>,
         checked: impl FnOnce(&PresentSpace) -> Result<()>,
     ) -> Result<(Vec<SpaceName>, Option<(WorktreeStage, WorktreeRemoval)>)> {
-        let worktree = match space.worktree() {
-            Some(workspace) => Some(self.begin_worktree_removal(workspace, removal).await?),
-            None => None,
+        let worktree = match (space.worktree(), replaced) {
+            (Some(workspace), Some(replaced)) => Some(
+                self.begin_worktree_removal(workspace, replaced, removal)
+                    .await?,
+            ),
+            _ => None,
         };
         let id = space.id();
         let cause = (worktree.as_ref()).map_or(removal.cause(), |stage| stage.cause(removal));

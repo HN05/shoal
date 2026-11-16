@@ -188,9 +188,9 @@ async fn unfinished_removal(
         return error.context(failed);
     };
     if !stopped {
-        return match interrupted::unmark(admin_dir).await {
+        return match interrupted::forget(admin_dir).await {
             Ok(()) => error.context(failed),
-            Err(unmark) => error.context(format!("{failed}; {unmark:#}")),
+            Err(forget) => error.context(format!("{failed}; {forget:#}")),
         };
     }
     match interrupted::restore(path, admin_dir).await {

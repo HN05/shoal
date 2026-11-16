@@ -24,7 +24,7 @@ use shoal_protocol::assignments::Done;
 use shoal_protocol::log::{LogEntry, LogFilter};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;
-use std::{fs, sync::Arc};
+use std::{fs, path::PathBuf, sync::Arc};
 
 pub(super) async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
     let (root, manager) = manager().await;
@@ -1583,18 +1583,32 @@ async fn removal_retains_a_kept_worktree_git_disowned() {
     );
 }
 
-/// A removal that stopped partway, its marker left as when the daemon
-/// stopped meanwhile, deleted tracked files and the `.git` link, which are
-/// nobody's work: the next removal puts them back, finds the worktree
-/// clean and removes it without consent to delete unsaved work.
-#[tokio::test]
-async fn removal_finishes_one_that_stopped_partway() {
-    let (_root, manager, workspace) = fixture().await;
+/// A workspace as a removal that stopped partway leaves it when it cannot
+/// put back what it deleted: its marker in the admin directory, a tracked
+/// file and the `.git` link deleted, and the workspace failed unless
+/// something readied it since. Returns the admin directory.
+async fn cut_short_removal(manager: &Manager, workspace: &Workspace, readied: bool) -> PathBuf {
     let link = fs::read_to_string(workspace.path.join(".git")).unwrap();
     let admin_dir = workspace.git_dir.clone().unwrap();
     fs::write(admin_dir.join("shoal-removal"), link).unwrap();
     fs::remove_file(workspace.path.join("tracked")).unwrap();
-    fs::remove_file(workspace.path.join(".git")).unwrap();
+    if !readied {
+        fs::remove_file(workspace.path.join(".git")).unwrap();
+        let error = Some("removal stopped when the daemon stopped".to_owned());
+        (manager.set_state(&workspace.id, WorkspaceState::Failed, error))
+            .await
+            .unwrap();
+    }
+    admin_dir
+}
+
+/// The tracked files and `.git` link a cut-short removal deleted are nobody's
+/// work: the next removal puts them back, finds the worktree clean and
+/// removes it without consent to delete unsaved work.
+#[tokio::test]
+async fn removal_finishes_one_that_stopped_partway() {
+    let (_root, manager, workspace) = fixture().await;
+    let admin_dir = cut_short_removal(&manager, &workspace, false).await;
     manager
         .remove_workspace(
             &SpaceSelector::id(&workspace.id),
@@ -1607,16 +1621,30 @@ async fn removal_finishes_one_that_stopped_partway() {
     assert!(!admin_dir.exists());
 }
 
-/// A removal the daemon's stop cut short gets its files back at startup,
+/// Once something readied the workspace, its deletions may be its agent's:
+/// the marker goes and they count as unsaved work.
+#[tokio::test]
+async fn a_readied_workspace_keeps_its_deletions() {
+    let (_root, manager, workspace) = fixture().await;
+    let admin_dir = cut_short_removal(&manager, &workspace, true).await;
+    manager
+        .remove_workspace(
+            &SpaceSelector::id(&workspace.id),
+            NOTHING.clone(),
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap_err();
+    assert!(!workspace.path.join("tracked").exists());
+    assert!(!admin_dir.join("shoal-removal").exists());
+}
+
+/// Startup puts back what a removal the daemon's stop cut short deleted,
 /// before anything readies the workspace or an agent works there.
 #[tokio::test]
 async fn startup_restores_what_a_cut_short_removal_deleted() {
     let (_root, manager, workspace) = fixture().await;
-    let link = fs::read_to_string(workspace.path.join(".git")).unwrap();
-    let admin_dir = workspace.git_dir.clone().unwrap();
-    fs::write(admin_dir.join("shoal-removal"), link).unwrap();
-    fs::remove_file(workspace.path.join("tracked")).unwrap();
-    fs::remove_file(workspace.path.join(".git")).unwrap();
+    let admin_dir = cut_short_removal(&manager, &workspace, false).await;
     manager.restore_interrupted_removals().await.unwrap();
     assert_eq!(git(&workspace.path, &["status", "--porcelain"]), "");
     assert!(!admin_dir.join("shoal-removal").exists());

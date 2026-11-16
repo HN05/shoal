@@ -12,13 +12,14 @@ use crate::{
     fsutil::off_runtime,
     git::{
         self,
-        worktree::{BranchRemoval, FileRemoval},
+        worktree::{BranchRemoval, FileRemoval, interrupted},
     },
     hooks::{self, Hook, HookKind},
     model::{PresentSpace, RemovedSpace, Workspace},
     removal::{
         self, BranchOutcome, IdleRestore, Inspection, InspectionPolicy, RemovalCheck, RemovalResult,
     },
+    state::WorkspaceState,
 };
 use anyhow::{Result, bail, ensure};
 use shoal_protocol::space_names::SpaceSelector;
@@ -166,12 +167,14 @@ impl Manager {
         self.inspect_removal(workspace, policy, executions).await
     }
 
-    /// Begin the worktree's part of `removal` of the reserved `workspace`:
-    /// put back what an earlier removal that stopped partway deleted, then
-    /// resolve the post-remove hook and Xcode data while its record exists.
+    /// Begin the worktree's part of `removal` of the reserved `workspace`,
+    /// which was `replaced` before: settle an earlier removal that stopped
+    /// partway, then resolve the post-remove hook and Xcode data while its
+    /// record exists.
     pub(in crate::daemon::workspace) async fn begin_worktree_removal(
         &self,
         workspace: &Workspace,
+        replaced: WorkspaceState,
         removal: Removal<'_>,
     ) -> Result<WorktreeStage> {
         let present = off_runtime::try_exists(&workspace.path).await?;
@@ -180,7 +183,7 @@ impl Manager {
         }
         let post_remove = if present {
             self.ensure_no_pending_rename(&workspace.id).await?;
-            self.restore_interrupted_removal(workspace).await?;
+            self.settle_interrupted_removal(workspace, replaced).await?;
             self.prepare_post_remove_hook(workspace).await?
         } else {
             None
@@ -193,20 +196,27 @@ impl Manager {
         })
     }
 
-    /// Put back the `.git` link and tracked files that an earlier removal of
-    /// `workspace`, stopped before Git finished, deleted and did not put
-    /// back itself, as when the daemon stopped meanwhile, so that its
-    /// inspection does not take them for unsaved work. Only the recorded
-    /// admin directory, marked as this workspace's, says that one began.
-    pub(in crate::daemon::workspace) async fn restore_interrupted_removal(
+    /// Settle an earlier removal of `workspace`, in lifecycle state `state`,
+    /// that stopped before Git finished and did not put back what it
+    /// deleted, as when the daemon stopped meanwhile. Such a removal leaves
+    /// the workspace failed, so that its `.git` link and tracked files come
+    /// back before an inspection takes their deletion for unsaved work. A
+    /// workspace something readied since has its marker dropped instead: the
+    /// deletions there may be its agent's. Only the recorded admin
+    /// directory, marked as this workspace's, says that a removal began.
+    pub(in crate::daemon::workspace) async fn settle_interrupted_removal(
         &self,
         workspace: &Workspace,
+        state: WorkspaceState,
     ) -> Result<()> {
         let Some(admin_dir) = &workspace.git_dir else {
             return Ok(());
         };
-        if !git::worktree::interrupted::began(admin_dir).await? {
+        if !interrupted::began(admin_dir).await? {
             return Ok(());
+        }
+        if state != WorkspaceState::Failed {
+            return interrupted::forget(admin_dir).await;
         }
         let (owned, id, recorded) = (
             admin_dir.clone(),
@@ -214,7 +224,7 @@ impl Manager {
             workspace.git_dir_id.clone(),
         );
         off_runtime::run(move || verify_owner(&owned, &id, recorded.as_deref())).await?;
-        if git::worktree::interrupted::restore(&workspace.path, admin_dir).await? {
+        if interrupted::restore(&workspace.path, admin_dir).await? {
             crate::daemon::log!(
                 "restored the files an interrupted removal of {} deleted",
                 workspace.name
@@ -224,14 +234,16 @@ impl Manager {
     }
 
     /// Whether a failed `removal` of `workspace` leaves it unable to be ready
-    /// again: its directory was deleted.
+    /// again: its directory was deleted, or a removal that stopped partway
+    /// could not put back what it deleted, which the next removal does.
     pub(in crate::daemon::workspace) async fn unready_after(
         &self,
         workspace: &Workspace,
         removal: Removal<'_>,
     ) -> bool {
-        matches!(removal, Removal::Deleted)
-            && !matches!(off_runtime::try_exists(&workspace.path).await, Ok(true))
+        let deleted = matches!(removal, Removal::Deleted)
+            && !matches!(off_runtime::try_exists(&workspace.path).await, Ok(true));
+        deleted || interrupted_removal_left(workspace).await
     }
 
     /// Inspect the worktree again and apply every check `removal` needs of it
@@ -588,6 +600,16 @@ impl Manager {
             workspace.name
         );
         Ok(())
+    }
+}
+
+/// Whether a removal of `workspace` that stopped partway left its marker,
+/// as when it could not put back what it deleted; a marker that cannot be
+/// read counts too.
+async fn interrupted_removal_left(workspace: &Workspace) -> bool {
+    match &workspace.git_dir {
+        Some(admin_dir) => !matches!(interrupted::began(admin_dir).await, Ok(false)),
+        None => false,
     }
 }
 

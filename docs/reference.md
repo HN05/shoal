@@ -3813,8 +3813,9 @@ activity instead. Ownership and removal policy are checked again after removal h
 and the branch decision uses that last inspection. Ignored files go; shared caches
 stay; Git hooks are disabled. A `git worktree remove` stopped partway, by its
 time limit or a signal, or by the daemon's stop, leaves the workspace with the
-tracked files it deleted checked out again, at once or when the daemon starts
-again, and the next removal continues with the ignored files left.
+tracked files it deleted checked out again, at once or, failed until then, when
+the daemon starts again or by the next removal, which continues with the ignored
+files left.
 Git protects other checkouts. Failed ancestry or exact-ref checks stop removal
 with the Git diagnostic, as they do branch selection and refresh; a missing ref
 is a negative answer. Shell integration returns to `<root_dir>/<repo>`.

@@ -71,6 +71,12 @@ struct WorktreeReservation {
 }
 
 impl SpaceReservation<'_> {
+    /// The lifecycle state the reservation replaced, for a space with a
+    /// worktree.
+    pub(crate) fn replaced(&self) -> Option<WorkspaceState> {
+        self.worktree.as_ref().map(|worktree| worktree.replaced)
+    }
+
     /// Give up the reservation once its removal deleted the space's record.
     pub(crate) fn finish(self) {
         if let Some(worktree) = &self.worktree {
