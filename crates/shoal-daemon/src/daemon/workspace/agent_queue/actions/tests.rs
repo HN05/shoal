@@ -202,6 +202,25 @@ async fn a_stopped_agent_restores_now_once_its_processes_stopped() {
 }
 
 #[tokio::test]
+async fn a_wake_from_the_agents_place_starts_its_restore_once_it_waits() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let workspace = create(&manager, &repo, "stopped").await;
+    let agents = stopped_agents(&manager, &[&workspace]).await;
+    let execution = &agents[0].0;
+    // Still stopping: the wake waits for the restore to wait.
+    assert!(!manager.wake_waiting_restore(execution).await.unwrap());
+    assert_eq!(waiting(&manager).await, ["stopped"]);
+
+    let restoring = await_restore(&manager, execution).await;
+    manager.dispatch_queue().await.unwrap();
+    assert_eq!(waiting(&manager).await, ["stopped"]);
+    assert!(manager.wake_waiting_restore(execution).await.unwrap());
+    assert_eq!(bounded(restoring).await.unwrap().unwrap(), Grant::Queue);
+}
+
+#[tokio::test]
 async fn cancelling_a_restore_leaves_its_agent_stopped() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;

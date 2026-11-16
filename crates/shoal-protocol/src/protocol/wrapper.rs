@@ -78,6 +78,10 @@ pub enum ExecutionEvent {
         exit_code: i32,
     },
     Paused,
+    /// The user woke the agent whose restore the wrapper waits for, in the
+    /// place it waits in: start that restore now, whatever the limits, as
+    /// `shoal queue start` does. Ignored while no restore of it waits.
+    Wake,
     /// The child exited and the wrapper starts another, as a demo's does,
     /// once the daemon answers [`Control::ChildReleased`].
     ChildExited,

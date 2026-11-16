@@ -230,22 +230,48 @@ async fn hand_over(manager: &Manager, execution_id: &ExecutionId) -> Result<Acti
     )))
 }
 
-/// Resolves when the wrapper finishes or a stop cancels the restore it waits for.
+/// Resolves when the wrapper finishes or a stop cancels the restore it waits
+/// for, starting that restore when the user wakes the agent meanwhile: at
+/// once, or once the agent's processes have stopped.
 async fn interrupted(
     manager: &Manager,
     execution_id: &ExecutionId,
     incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
     stop: &mut watch::Receiver<bool>,
 ) -> Result<Action> {
-    tokio::select! {
-        biased;
-        event = incoming.recv() => match event.context("execution disconnected")?? {
-            ExecutionEvent::Finished { exit_code } => Ok(Action::Finished(exit_code)),
-            _ => Err(anyhow::anyhow!("unexpected event while the agent waits for its restore")),
-        },
-        changed = stop.changed() => {
-            changed?;
-            Ok(Action::Stop(requested_cancel(manager, execution_id).await))
+    let mut woken = false;
+    loop {
+        tokio::select! {
+            biased;
+            event = incoming.recv() => match event.context("execution disconnected")?? {
+                ExecutionEvent::Finished { exit_code } => return Ok(Action::Finished(exit_code)),
+                ExecutionEvent::Wake => woken = !wake_restore(manager, execution_id).await,
+                _ => return Err(anyhow::anyhow!("unexpected event while the agent waits for its restore")),
+            },
+            changed = stop.changed() => {
+                changed?;
+                return Ok(Action::Stop(requested_cancel(manager, execution_id).await));
+            }
+            () = tokio::time::sleep(WAKE_RETRY_INTERVAL), if woken => {
+                woken = !wake_restore(manager, execution_id).await;
+            }
+        }
+    }
+}
+
+/// How soon a wake that came while the agent still stopped tries again.
+const WAKE_RETRY_INTERVAL: Duration = Duration::from_secs(1);
+
+/// Start the waiting restore of the agent `execution_id` ran, which the user
+/// woke in its place; its admission then resumes the wrapper. Whether the
+/// wake is settled: `false` while the agent still stops, which leaves it to
+/// try again, and a failure is logged.
+async fn wake_restore(manager: &Manager, execution_id: &ExecutionId) -> bool {
+    match manager.wake_waiting_restore(execution_id).await {
+        Ok(started) => started,
+        Err(error) => {
+            log!("agent restore not woken: {error:#}");
+            true
         }
     }
 }

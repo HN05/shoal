@@ -71,6 +71,27 @@ impl Manager {
             .map(Some)
     }
 
+    /// Start the waiting restore of `execution` now, regardless of the
+    /// limits, as its waiting wrapper asks when the user wakes the agent in
+    /// its place, or nothing once it starts or leaves the queue; `false`
+    /// while the agent still stops, before its restore waits for admission.
+    pub(crate) async fn wake_waiting_restore(&self, execution: &ExecutionId) -> Result<bool> {
+        let _gate = self.agent_queue.lock_admission().await;
+        if !self.agent_queue.restore_waiters().contains(execution) {
+            return Ok(false);
+        }
+        let entries = self.reachable_queue(None).await?;
+        let waiting = entries.into_iter().find(|entry| {
+            entry.kind == QueueKind::Restore
+                && entry.state == QueueState::Queued
+                && entry.execution.as_ref() == Some(execution)
+        });
+        if let Some(entry) = waiting {
+            self.start_waiting(entry, false).await?;
+        }
+        Ok(true)
+    }
+
     /// Start the waiting entry `selector` names now, regardless of the
     /// limits, or for `here` mark the launch it names starting for the
     /// caller, which starts it in its own process. A launch still waiting

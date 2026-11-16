@@ -416,6 +416,9 @@ async fn relay(
                 protocol::write(writer, &control).await?;
                 *unattachable = Some(operation);
             }
+            // A wake that crossed the restore it asks for, or reached a
+            // wrapper no restore waits for, has nothing left to start.
+            ExecutionEvent::Wake => {}
             ExecutionEvent::Register { origin } => {
                 // As for a start, a daemon update waits until the next child
                 // runs, since the wrapper cannot reattach before it does.
