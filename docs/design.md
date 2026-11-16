@@ -14,8 +14,10 @@ Agents cooperate with Shoal's scope and allocations. Shoal does not stop a
 hostile same-user process from bypassing them through Git, the filesystem, or
 direct resource access; filesystem restrictions are future work.
 
-Caller-specific integration stays outside the daemon core: Superlogical owns terminals;
-Macraft owns VM/container provisioning. Shoal does not provision tools, manage
+Caller-specific integration stays outside the daemon core: Superlogical owns
+terminals. Shoal runs a workspace's service containers beside it through the
+runtime's `compose`, a project per workspace, never parsing the Compose file;
+the agent and its tools stay on the host. Shoal does not provision tools, manage
 browsers or store conversations, and schedules work only on its own machine:
 its agent queue, which also admits registered repositories' CI jobs, and
 triggers, config that starts agents when an event source fires, such as a
@@ -3035,8 +3037,12 @@ the user, so a failing hook does not rerun on every sweep. The user's lease
 stays until released; the user's acquire takes an agent's lease over, never the
 reverse. A demo outlives the agent that starts it, so a simulator demo takes
 over the lease an agent acquired for it, and what a demo's command acquires is
-the demo's; both end with the demo. Ports, holds and secret grants keep their
-own lifetimes. User scripts own integrations
+the demo's; both end with the demo. A workspace's container project is such a
+lease: recorded with its runtime before any `compose` call, so Shoal only ever
+stops or removes a project it recorded, stopped on release with its volumes
+kept, and taken down by name in the shared removal path. One setup starts for
+the workspace's own agent stays the user's until that agent starts and takes
+it over. Ports, holds and secret grants keep their own lifetimes. User scripts own integrations
 with the underlying resources.
 
 Busy resource and simulator requests may queue. The daemon keeps queued lease names
@@ -3424,7 +3430,7 @@ request, like a PR's, so no response outgrows a protocol frame.
 
 Manual and automatic cleanup share one path: establish ownership, stop owned
 executions, saving an existing worktree's agent sessions but no commands, run
-removal hooks, remove owned simulators, take a checkpoint unless the workspace is disposable, remove the worktree, and release leases with the record. Failures retain what is
+removal hooks, take down owned containers and remove owned simulators, take a checkpoint unless the workspace is disposable, remove the worktree, and release leases with the record. Failures retain what is
 needed to retry. Git forgets a worktree once it starts deleting its files, so
 removal deletes what Git could not, and a later removal deletes what such a
 failure, or a checkout that failed, left of a disposable workspace without Git,

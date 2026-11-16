@@ -1,6 +1,6 @@
 ---
 name: shoal
-description: What Shoal's commands do, for agents in a Shoal workspace or chat and for sessions outside one — start and coordinate agents, open, change, watch and review issues and PRs, mark work ready, ask the user, hand back files, finish with `shoal done`, sync the default branch, split child workspaces, and reserve ports, simulators, resource permits and secrets.
+description: What Shoal's commands do, for agents in a Shoal workspace or chat and for sessions outside one — start and coordinate agents, open, change, watch and review issues and PRs, mark work ready, ask the user, hand back files, finish with `shoal done`, sync the default branch, split child workspaces, and reserve ports, simulators, containers, resource permits and secrets.
 ---
 
 # Shoal
@@ -684,8 +684,8 @@ suggestion, not a reservation; repeating the request with
 `--port <suggested_port>` reserves it. The returned `port` is the reserved one.
 New reservations do not change the environment of running commands.
 Reservations and leases outlive the command that made them. The simulator
-leases and resource permits an agent acquires end with the agent, when it
-exits or is stopped; the user's stay until released.
+leases, containers and resource permits an agent acquires end with the agent,
+when it exits or is stopped; the user's stay until released.
 
 ## Resource pools
 
@@ -724,6 +724,24 @@ reinstalls, and normal reuse keeps apps, data and settings. Exit 2 means
 capacity is busy. `--clean` erases the device, refuses while a lease is held,
 and records the reason and outcome in an audit trail. Only installed runtimes
 are supported.
+
+## Containers
+
+```sh
+shoal catalog containers
+shoal acquire containers [--reason "purpose"]
+shoal leases containers
+shoal release containers
+```
+
+Where the repository names a Compose file in `[containers]`, `acquire
+containers` reserves its named ports, starts the workspace's own Compose project
+and returns its services with the ports they published; repeating it returns
+the running project. Exit 2 means a port it reserves waits for approval or its
+preferred port is taken. `release containers` stops them, keeping their volumes
+and ports, and removing the workspace removes them with their volumes. With
+`start = "setup"` they start with setup, before the workspace is ready, and an
+agent starting there starts them when they are stopped. Chats have none.
 
 ## Secrets
 

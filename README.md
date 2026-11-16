@@ -59,7 +59,8 @@ Feature-specific tools are installed separately: `curl` for issues and PR
 watches, with a [token](crates/shoal-cli/src/cli/commands/configuration/reference.md#forges) for private repositories; the agent or
 command you want to run;
 and `happy` plus `curl` for Happy sessions. Simulator use requires macOS with
-Xcode, `xcrun simctl`, and an installed simulator runtime.
+Xcode, `xcrun simctl`, and an installed simulator runtime; containers require
+Docker or Podman with Compose.
 Service installation uses launchd on macOS or a systemd user session on Linux;
 without one, [run the daemon in the foreground](docs/reference.md#daemon).
 
@@ -390,6 +391,9 @@ shoal release port web
 
 shoal acquire sim --queue     # macOS; requires configured simulator profiles
 shoal release sim
+
+shoal acquire containers      # Requires a Compose file in [containers]
+shoal release containers
 
 shoal acquire resource signing --queue
 shoal release resource signing

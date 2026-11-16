@@ -43,6 +43,7 @@ Progress uses terminal stderr only and is suppressed with JSON output or `TERM=d
 - [Shell integration](#shell-navigation)
 - [Recovery](#recovery)
 - [Simulators](#simulators-macos)
+- [Containers](#containers)
 - [Resource pools](#cooperative-resource-pools)
 - [Agent skill](#agent-skill-outside-project-repositories)
 
@@ -5928,19 +5929,21 @@ with `withdrawn_at`.
 ### Leases
 
 `shoal acquire <kind>` reserves a port, simulator, resource permit, or related
-repository for the current workspace, or the one named by `--workspace`, or
-requests access to a [secret](#agent-secrets) that requires approval.
+repository for the current workspace, or the one named by `--workspace`, starts
+its [containers](#containers), or requests access to a
+[secret](#agent-secrets) that requires approval.
 Simulator, resource, and repository leases take `--name` (default `default`) to
 hold several, `--reason`, and `--queue` to wait, without a time limit, until the
 lease is acquired or its approval denied. `acquire repo` selects only `kind = "repo"` members.
 
-A simulator, resource or repository lease records who acquired it. The user's,
+A simulator, container, resource or repository lease records who acquired it. The user's,
 from an unscoped terminal, stays until `shoal release` or the workspace's
 removal. An agent's, acquired by the agent or a command it started, ends with
 the agent, and a [demo's](#demos) with the demo: once its execution exits or it
 is stopped, as by `shoal stop`, `shoal restart` or overload protection, Shoal
 releases the lease as `shoal release` does, so a simulator keeps its apps and
-data and a permit runs `hooks.pre_resource_release`. A failed release keeps the
+data, containers stop with their volumes kept and a permit runs
+`hooks.pre_resource_release`. A failed release keeps the
 lease as the user's and records a `release_failed` notification naming the
 command that releases it. The user acquiring an agent's lease again makes it the
 user's; an agent acquiring the user's leaves it the user's. Ports, holds and
@@ -5958,8 +5961,8 @@ holds, in order, and stops at the first failure. A kind narrows it to that kind,
 to its pool, and `--name` or a port name to one lease; selecting nothing fails.
 Holds are released separately.
 
-`shoal leases` shows every kind's leases, each simulator and resource lease
-with who acquired it: `user`, `agent` or `demo`; a kind shows
+`shoal leases` shows every kind's leases, each simulator, container and
+resource lease with who acquired it: `user`, `agent` or `demo`; a kind shows
 only that kind, with repositories listed apart from other resources, and `--all`
 covers every workspace. `shoal catalog` shows what each kind's leases draw from,
 its configuration and what the machine offers, for one workspace (`--workspace`,
@@ -6177,6 +6180,52 @@ user apps. History records workspace, execution, reason, outcome, device,
 planned resets, estimated app loss, and whether the erase completed, including
 busy and failed attempts; it survives removal and restarts, and scoped commands
 see only their own entries. Erasing devices outside Shoal bypasses this audit.
+
+## Containers
+
+A repository whose development needs services in containers, such as a
+database or a cache, names its Compose file in
+[`[containers]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#containers),
+and each workspace gets a Compose project of its own, so parallel workspaces
+never share or collide on them. The containers run beside the workspace: the
+agent and its tools stay on the host. Shoal never reads the file; it runs
+`docker compose` or `podman compose`, as
+[`[machine.containers]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#container-runtime)
+names, with a project name derived from the workspace ID. Chats have no
+containers, since they run nothing on this machine.
+
+```sh
+shoal acquire containers --reason "Postgres for the API tests"
+shoal leases containers             # The project, its services and their ports
+shoal catalog containers            # The configuration, and whether the runtime runs
+shoal release containers            # Stop them, keeping their volumes
+```
+
+`acquire containers` reserves the named ports `[containers] ports` lists, as
+`shoal acquire port` does, records the project, then runs `compose up --detach
+--wait` in the worktree with each port in its variable, so the file maps
+`"${SHOAL_PORT_DB}:5432"`. A port that waits for approval, or whose preferred
+port is taken, exits 2 with the port's request or suggestion, and nothing
+starts. It returns the services with the ports they published, as the
+runtime lists them; repeating it returns the running project. `release
+containers` runs `compose stop`, keeping the volumes and the port
+reservations, and the next acquire starts the same project again.
+
+With `start = "setup"`, setup starts the project after its command, before the
+workspace is ready; a failure fails setup, and `shoal setup` retries. The
+project is then the workspace's own agent's, once it starts, else whoever
+created the workspace's. An agent that starts in such a workspace while the
+project is stopped starts it first.
+
+The project is a [lease](#leases): an agent's stops when the agent does, the
+user's runs until released, and running containers keep the workspace from
+automatic removal. Removal runs `compose down --volumes --remove-orphans` by
+the project's name, after `hooks.pre_remove`, so a deleted worktree or a
+changed file still removes it; a failure keeps the workspace. Checkpoints keep
+no volume data: a restored workspace starts fresh containers. The record
+survives daemon restarts, during which the containers keep running, and Shoal
+never stops or removes a project it has no record of. Container CPU and memory
+count for the machine, not the workspace.
 
 ## Cooperative resource pools
 
