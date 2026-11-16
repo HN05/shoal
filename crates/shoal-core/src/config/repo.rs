@@ -8,6 +8,7 @@ use shoal_states::states;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 pub use shoal_protocol::config::repo::{ConfigLayer, ConflictPolicy, PortDefinition};
+pub use shoal_protocol::containers::ContainerStart;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -85,6 +86,8 @@ pub struct RepoConfig {
     pub resource_pools: BTreeMap<String, crate::resources::PoolConfig>,
     #[option(section)]
     pub simulators: SimulatorsConfig,
+    #[option(section)]
+    pub containers: ContainersConfig,
     #[option(section)]
     pub cleanup: CleanupConfig,
     #[option(section)]
@@ -452,6 +455,7 @@ impl RepoConfig {
         for &kind in crate::config::hooks::HookKind::ALL {
             kind.validate(kind.repository_command(self))?;
         }
+        self.containers.validate()?;
         self.cleanup.validate()?;
         self.messages.validate()?;
         self.gate.validate()?;
@@ -494,6 +498,38 @@ pub struct SimulatorsConfig {
     pub approval_lifetime: Option<shoal_protocol::approvals::Lifetime>,
     #[option(list)]
     pub preferred: Vec<String>,
+}
+
+/// The Compose project that runs a workspace's service containers.
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
+#[serde(default, deny_unknown_fields)]
+#[options(resolved = Containers)]
+pub struct ContainersConfig {
+    /// The Compose file, relative to the worktree root; unset gives the
+    /// repository's workspaces no containers.
+    pub compose: Option<String>,
+    /// Named ports reserved before the project starts, which it reads from
+    /// each port's variable.
+    #[option(list)]
+    pub ports: Vec<String>,
+    #[option(default = ContainerStart::default())]
+    pub start: Option<ContainerStart>,
+}
+
+impl ContainersConfig {
+    fn validate(&self) -> Result<()> {
+        if let Some(compose) = &self.compose {
+            ensure!(
+                inside_worktree(compose),
+                "containers.compose must be a relative path inside the worktree: {compose}"
+            );
+        }
+        for name in &self.ports {
+            crate::validate::lowercase_name("port", name)
+                .with_context(|| format!("invalid containers.ports entry: {name}"))?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, Options)]

@@ -97,6 +97,24 @@ fn seed_paths_stay_inside_the_worktree() {
 }
 
 #[test]
+fn the_compose_file_stays_inside_the_worktree_and_its_ports_are_port_names() {
+    let containers =
+        parse("[containers]\ncompose = 'dev/compose.yaml'\nports = ['db']\nstart = 'setup'\n")
+            .unwrap()
+            .containers;
+    assert_eq!(containers.compose.as_deref(), Some("dev/compose.yaml"));
+    assert_eq!(containers.start, Some(super::ContainerStart::Setup));
+    for text in [
+        "[containers]\ncompose = '/srv/compose.yaml'",
+        "[containers]\ncompose = '../compose.yaml'",
+        "[containers]\nports = ['DB']",
+        "[containers]\nstart = 'boot'",
+    ] {
+        assert!(parse(text).is_err(), "{text}");
+    }
+}
+
+#[test]
 fn sensitive_paths_are_relative_to_the_repository_root() {
     let conflicts = parse("[conflicts]\nsensitive = ['src/version.rs', 'migrations/**']\n")
         .unwrap()

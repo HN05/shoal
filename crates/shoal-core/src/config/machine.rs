@@ -51,6 +51,7 @@ pub struct Machine {
     pub git_profiles: crate::config::git_profiles::Git,
     pub simulators: crate::sim::SimConfig,
     pub webhooks: Webhooks,
+    pub containers: shoal_protocol::containers::ContainerMachine,
     /// The options of `[machine]` that take another's value.
     #[serde(skip)]
     pub same_as: same_as::References,

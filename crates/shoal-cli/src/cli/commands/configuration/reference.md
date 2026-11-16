@@ -271,6 +271,15 @@ the internet: put a tunnel or reverse proxy, such as Tailscale Funnel,
 cloudflared or Caddy, in front of it. See
 [webhooks](../../../../../../docs/reference.md#webhooks).
 
+### Container runtime
+
+```toml
+[machine.containers]
+runtime = "docker"      # Or "podman"; default: the first of them on PATH
+```
+
+The engine whose `compose` runs every workspace's [containers](#containers).
+
 ## Agents
 
 ### Agent
@@ -1066,6 +1075,23 @@ approval_lifetime = "lease"
 
 `preferred` orders the [simulator profiles](#simulators) `shoal acquire sim`
 tries, globally or per repository; flags override it.
+
+### Containers
+
+```toml
+[containers]
+compose = "compose.yaml"       # Relative to the worktree root
+ports = ["db", "cache"]        # Named ports reserved before the project starts
+start = "acquire"              # Or "setup"
+```
+
+`compose` gives each workspace its own Compose project from that file; without
+it the repository's workspaces have none. Each port in `ports` is reserved as
+`shoal acquire port` reserves it, so its `[ports.<name>]` table applies, and
+the project reads it from the port's variable, such as `${SHOAL_PORT_DB}`.
+`start = "setup"` starts the project with setup, before the workspace is
+ready, instead of on `shoal acquire containers`. See
+[containers](../../../../../../docs/reference.md#containers).
 
 ### Approvals
 

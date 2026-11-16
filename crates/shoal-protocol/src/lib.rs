@@ -11,6 +11,7 @@ pub mod chats;
 pub mod cleanup;
 pub mod config;
 pub mod connection;
+pub mod containers;
 pub mod demos;
 pub mod env;
 pub mod events;
