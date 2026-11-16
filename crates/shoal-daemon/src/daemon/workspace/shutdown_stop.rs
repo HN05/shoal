@@ -196,8 +196,8 @@ impl Manager {
 }
 
 /// Whether the space saved work only `shoal restore` continues: a command,
-/// or an agent whose restore is neither `queued` nor requested. A done
-/// space's requests wait for `shoal restore` to name it.
+/// or an agent or last session whose restore is neither `queued` nor
+/// requested. A done space's requests wait for `shoal restore` to name it.
 fn waits_for_resume(
     paths: &crate::paths::Paths,
     space: &PresentSpace,
@@ -213,9 +213,7 @@ fn waits_for_resume(
             .collect()
     };
     Ok(!saved.commands.is_empty()
-        || saved
-            .agents
-            .iter()
+        || (saved.agents.iter().chain(&saved.sessions))
             .any(|agent| !requested.contains(&agent.id) && !queued.contains(&agent.id)))
 }
 

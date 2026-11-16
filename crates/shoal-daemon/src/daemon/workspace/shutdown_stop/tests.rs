@@ -234,6 +234,16 @@ fn only_requested_or_queued_restores_continue_without_the_user() {
     assert!(waits_for_resume(&paths, &open, &none).unwrap());
     let queued = HashSet::from([ExecutionId::from("unattended")]);
     assert!(!waits_for_resume(&paths, &open, &queued).unwrap());
+    // A last session, as `shoal daemon stop` keeps a stopped agent, waits.
+    let kept = workspace(root.path(), "kept", false);
+    let state = paths.space_state(kept.id());
+    std::fs::create_dir_all(&state).unwrap();
+    std::fs::write(
+        state.join("kept.last-session.json"),
+        r#"{"agent":"claude"}"#,
+    )
+    .unwrap();
+    assert!(waits_for_resume(&paths, &kept, &none).unwrap());
 }
 
 #[test]
