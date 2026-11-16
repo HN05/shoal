@@ -18,6 +18,7 @@ pub mod proxies;
 pub mod repo;
 pub mod resolve;
 pub mod same_as;
+pub mod span;
 pub mod templates;
 #[cfg(test)]
 mod tests;
