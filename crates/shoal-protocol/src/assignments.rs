@@ -1,5 +1,4 @@
-//! A space's assignment: marking it done or ready for review, and
-//! forgetting the stopped work it leaves.
+//! A space's assignment: what marking it done records.
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 

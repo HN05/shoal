@@ -18,7 +18,6 @@ shoal-protocol.workspace = true
 shoal-schedule.workspace = true
 shoal-states.workspace = true
 tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "sync", "time"] }
-toml.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }
 
 [dev-dependencies]

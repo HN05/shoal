@@ -22,7 +22,8 @@ that waits on an approval it requested is not an error: it exits 2 with
 `code: "approval_pending"` or `"approval_denied"` on stdout. A Rust program
 reads every command's JSON, the error included, with the types of the
 [`shoal-client`](#apps) library's
-[`output`](../crates/shoal-client/src/output.rs) module.
+[`output`](../crates/shoal-client/src/output.rs) module and the
+`shoal-protocol` types they name.
 
 Human-readable output uses color when its destination is a terminal. Set a
 nonempty `NO_COLOR` or `TERM=dumb` to disable it. Redirected output and JSON
@@ -639,10 +640,12 @@ agent as `asleep`, and `status` adds a `Sleep` line; `--json` gives `sleep`,
 ### Apps
 
 Apps other than the CLI, such as Quay, use Shoal's protocol through the
-`shoal-client` library, from a git tag of a Shoal release, with no features:
+`shoal-client` library and the `shoal-protocol` types it carries, both from
+a git tag of a Shoal release, with no features:
 
 ```toml
 shoal-client = { git = "https://git.henriknordvik.com/HN05/shoal", tag = "<release tag>" }
+shoal-protocol = { git = "https://git.henriknordvik.com/HN05/shoal", tag = "<release tag>" }
 ```
 
 `shoal_client` holds every request the CLI makes, each a function of the
@@ -657,9 +660,11 @@ the daemon runs for a request, such as the setup and post-setup hook of a
 workspace `StartWorkspace` creates: its steps and its processes' output lines as
 they come, then its result or a typed failure such as `setup_failed` or
 `hook_failed`. It also holds the logic
-the CLI applies on its side: where a space's agent sessions keep their files
-on this machine, and in `views` what `shoal view` reads; `output` holds the types every command prints
-with `--json`.
+the CLI applies on its side, such as in `views` what `shoal view` reads;
+`output` holds the types only commands print with `--json`. `shoal_protocol`
+holds, at the same module paths, the requests and replies with the types they
+carry, and the logic over them that needs no connection, such as where a
+space's agent sessions keep their files on this machine.
 Without a scope token the caller is the user; with one, it is
 that workspace's agent, under the rules of its `shoal` commands. The library
 speaks only its own release's protocol: a daemon of another release refuses

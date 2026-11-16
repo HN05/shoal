@@ -1,5 +1,5 @@
-//! The agents running in a space: the state and turns their hooks report,
-//! the user's interrupts, and the sessions they run.
+//! What the daemon gives an agent running in a space: the login its Git
+//! sends, and what an app's session did with its first message.
 use serde::{Deserialize, Serialize};
 
 /// A login Git sends over HTTPS. Its `Debug` leaves out the password.
