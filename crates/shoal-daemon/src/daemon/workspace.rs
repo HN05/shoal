@@ -192,9 +192,9 @@ impl Manager {
             publications: Default::default(),
             agent_settles: Default::default(),
             store: Store::open(paths.database()).await?,
-            // Unit tests inject hosts and never discover or close the
-            // user's sessions.
-            session_hosts: if cfg!(test) {
+            // Tests inject hosts and never discover or close the user's
+            // sessions.
+            session_hosts: if crate::daemon::fake_workers::faked() {
                 Vec::new()
             } else {
                 crate::sessions::hosts()

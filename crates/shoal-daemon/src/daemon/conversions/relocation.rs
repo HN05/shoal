@@ -442,7 +442,6 @@ impl Manager {
 
 /// Continue the last session of the workspace `id` as `shoal restore` does,
 /// where its agent ran at `origin` or in a background place.
-#[cfg(not(test))]
 async fn restore_workspace(
     paths: &crate::paths::Paths,
     id: &SpaceId,
@@ -450,6 +449,12 @@ async fn restore_workspace(
 ) -> Result<()> {
     use anyhow::Context as _;
     use std::process::Stdio;
+
+    #[cfg(any(test, feature = "test-support"))]
+    if crate::daemon::fake_workers::faked() {
+        fake::restore(id);
+        return Ok(());
+    }
 
     let mut argv = crate::workers::shoal_argv(paths)?;
     argv.extend(["restore".into(), id.to_string().into()]);
@@ -471,16 +476,7 @@ async fn restore_workspace(
     Ok(())
 }
 
-/// Tests record the workspaces resumed instead of running this binary.
-#[cfg(test)]
-async fn restore_workspace(
-    _paths: &crate::paths::Paths,
-    id: &SpaceId,
-    _origin: Option<&Origin>,
-) -> Result<()> {
-    tests::RESUMED.lock().unwrap().push(id.clone());
-    Ok(())
-}
-
+#[cfg(any(test, feature = "test-support"))]
+mod fake;
 #[cfg(test)]
 pub(super) mod tests;

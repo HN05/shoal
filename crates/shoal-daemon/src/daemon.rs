@@ -20,7 +20,6 @@ pub mod events;
 mod execution_connection;
 mod execution_recovery;
 mod exit_wait;
-#[cfg(any(test, feature = "test-support"))]
 pub(crate) mod fake_workers;
 pub(crate) mod file_access;
 mod file_copies;

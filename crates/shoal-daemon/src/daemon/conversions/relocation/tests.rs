@@ -1,8 +1,4 @@
-use shoal_ids::space_ids::SpaceId;
-use std::sync::Mutex;
-
-/// The workspaces whose last session a relocation continued.
-pub(crate) static RESUMED: Mutex<Vec<SpaceId>> = Mutex::new(Vec::new());
+use super::fake::RESUMED;
 
 /// Notified once a relocation pass has listed the pending conversions.
 pub(crate) static LISTED: tokio::sync::Notify = tokio::sync::Notify::const_new();
