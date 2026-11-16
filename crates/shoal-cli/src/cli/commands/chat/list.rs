@@ -13,7 +13,8 @@ use crate::{
 
 /// `shoal list --chats`.
 pub(in crate::cli::commands) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
-    let chats = listed(ctx, filter).await?;
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
+    let chats = kept(spaces.into_chats(), filter);
     let rows = ui::workspace_tree_rows(
         &[],
         &chats,
@@ -30,12 +31,8 @@ pub(in crate::cli::commands) async fn list(ctx: &Context, filter: &ListFilter) -
     Ok(0)
 }
 
-/// The running and stopped chats `filter` keeps.
-pub(in crate::cli::commands) async fn listed(
-    ctx: &Context,
-    filter: &ListFilter,
-) -> Result<Vec<Chat>> {
-    let mut chats = crate::client::spaces::list(&ctx.paths).await?.into_chats();
+/// The chats among `chats`, running or stopped, that `filter` keeps.
+pub(in crate::cli::commands) fn kept(mut chats: Vec<Chat>, filter: &ListFilter) -> Vec<Chat> {
     chats.retain(|chat| filter.keeps_chat(chat));
-    Ok(chats)
+    chats
 }

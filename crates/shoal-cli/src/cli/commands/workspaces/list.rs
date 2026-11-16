@@ -7,16 +7,15 @@ use crate::cli::{
     output::{self, Palette},
     ui,
 };
+use crate::model::Space;
 
 pub(in crate::cli::commands) async fn list(
     ctx: &Context,
     filter: &listing::ListFilter,
 ) -> Result<i32> {
-    // Listing chats first ends finished ones, returning their workspaces to the user.
-    let chats = chat::listed(ctx, filter).await?;
-    let mut workspaces = crate::client::spaces::list(&ctx.paths)
-        .await?
-        .into_workspaces();
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
+    let chats = chat::kept(spaces.chats(), filter);
+    let mut workspaces = spaces.into_workspaces();
     let mut statuses = ui::Statuses {
         stopped: ui::stopped_workspaces(&ctx.paths).await,
         queued: queued_agents::entries(ctx).await?,
@@ -32,7 +31,10 @@ pub(in crate::cli::commands) async fn list(
         Palette::stdout(ctx.json),
         output::stdout_width(ctx.json),
     );
-    ctx.show(&workspaces, |_| {
+    let listed: Vec<Space> = (workspaces.into_iter().map(Space::from))
+        .chain(chats.into_iter().map(Space::from))
+        .collect();
+    ctx.show(&listed, |_| {
         for row in rows {
             outln!("{row}");
         }

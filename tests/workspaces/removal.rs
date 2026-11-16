@@ -66,6 +66,7 @@ fn cleanup_removes_idle_candidates_on_request() {
         .as_array()
         .unwrap()
         .iter()
+        .filter(|space| space["kind"] == "workspace")
         .map(|w| w["name"].clone())
         .collect();
     assert_eq!(names, ["dirty"]);

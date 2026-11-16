@@ -865,8 +865,15 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
         claude["projects"][checkout.to_str().unwrap()]["hasTrustDialogAccepted"],
         true
     );
-    // Chats are not workspace executions.
-    assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
+    // Chats are not workspace executions: the list has the chat alone.
+    let listed = fixture.ok(&["list"]);
+    let kinds: Vec<_> = listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|space| &space["kind"])
+        .collect();
+    assert_eq!(kinds, ["chat"], "{listed}");
 
     // Inside a session the agent runs in place, labelling that session, and
     // a later chat starts another one instead of reusing it.
@@ -1297,6 +1304,7 @@ run remove rm "$below" --yes --wait
     let chats = fixture.ok(&["list", "--chats"]);
     assert_eq!(chats[0]["name"], "renamed", "{chats}");
     let names: Vec<_> = (fixture.ok(&["list"]).as_array().unwrap().iter())
+        .filter(|space| space["kind"] == "workspace")
         .map(|workspace| workspace["name"].as_str().unwrap().to_owned())
         .collect();
     assert_eq!(names, ["outside"]);
@@ -1875,6 +1883,15 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
     assert_eq!(chat["workdir"]["workspace"]["name"], "worker", "{chats}");
     let id = chat["id"].as_str().unwrap();
     assert_eq!(fs::read_to_string(home.join("chat-id")).unwrap().trim(), id);
+    // The whole list names each space's kind and where it works: the
+    // chat in the worktree it does not own.
+    let listed = fixture.ok(&["list"]);
+    let spaces = listed.as_array().unwrap();
+    let kinds: Vec<_> = spaces.iter().map(|space| &space["kind"]).collect();
+    assert_eq!(kinds, ["workspace", "chat"], "{listed}");
+    for space in spaces {
+        assert_eq!(space["workdir"]["path"], spaces[0]["path"], "{listed}");
+    }
 
     // Workspace commands the chat runs act on the workspace, which its
     // scope reads but does not change.

@@ -855,7 +855,7 @@ where Enter shows one with `shoal view` and Ctrl-O opens it in the browser with
 opens Codex/T3 apps, or runs a shell command, Ctrl-O shows status, Ctrl-S stops,
 Ctrl-D deletes. Each action returns to your shell.
 `shoal list` with `-p`/`--print`, like a filter, `--json` or output that is not a terminal,
-prints the list instead: workspaces and running [chats](#chats), each chat with its
+prints the list instead: workspaces and [chats](#chats), each chat with its
 agent, and each agent waiting to start in a workspace the list has no row for,
 such as a new one, with its place in the queue and what it starts, each space followed by the spaces below it; `list --chats`
 lists only the chats. `list --repo <repository>`, with or without
@@ -976,7 +976,11 @@ which Shoal finds where the agent's tool keeps them and never reads. A session
 whose files are not on this machine, or of an agent whose tool Shoal does not
 know, has no `path` and no files, and one whose files could not be looked for
 says why in `error`; sessions the agents' hooks never reported, such as those
-before a `/clear`, are not listed. Workspace records from `list --json` and `status --json` include
+before a `/clear`, are not listed. Space records from `list --json` and `status --json` name
+their `kind`, `workspace` or `chat`, and where the space's agent works in `workdir`, with its
+`path` and its own `kind`: `worktree`, with the `workspace` that owns it, for a workspace and
+for a chat in a workspace's worktree, `checkout` for a chat in its repository's registered
+checkout, or `root_dir` for a chat without a repository. They include
 the assigned issues in `links.issues`, first assigned first, assigned PRs in
 `links.prs`, and items recorded as opened or related in `links.opened` and
 `links.related`, each item with `kind`, `url` and `title` when known; an acknowledgement without a PR URL leaves
@@ -1979,7 +1983,7 @@ starts its chat the same way. It runs in `root_dir`, with its `TMPDIR` in
 `root_dir`'s `.tmp`, and its settings come from the global config alone; a
 repository, `--repo`, `--issue` or `--in` is refused. The agent waits for you
 to speak first, as in any chat. `shoal list` and `--json` list it with a null
-`repository_id` and the `root_dir` it started in, where it resumes and keeps its
+`repository_id` and the `root_dir` it started in as its `workdir`, where it resumes and keeps its
 `TMPDIR` however `root_dir` changes later, and it is stopped, resumed and removed
 like any other chat; removing it first removes every space below it, in every
 repository.
