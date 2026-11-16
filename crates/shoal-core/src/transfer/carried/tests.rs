@@ -44,7 +44,7 @@ fn a_carried_chat_keeps_its_session_only_where_its_agent_continues_it() {
         "last_sessions": [{"execution": "c1", "agent": "claude", "session": "s1",
             "origin": {"host": "herdr", "place": "tab"}}],
         "cause": "manual", "removed_at": 1, "expires_at": 2,
-        "chat": {"agent": "claude", "mode": "chat"},
+        "chat": {"mode": "chat"},
     }))
     .unwrap();
     let carried = CarriedChat::of(None, Some("m1".into()), removed);
@@ -59,7 +59,7 @@ fn a_carried_chat_keeps_its_session_only_where_its_agent_continues_it() {
                 "workspace_id": "lead", "repository_id": null, "name": "lead",
                 "links": {"issues": [], "prs": []},
                 "cause": "manual", "removed_at": 1, "expires_at": 2,
-                "chat": {"agent": "claude", "mode": "chat"},
+                "chat": {"mode": "chat"},
             }))
             .unwrap(),
         },

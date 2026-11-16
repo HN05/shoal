@@ -161,7 +161,6 @@ async fn the_worktree_goes_with_a_checkpoint_and_the_space_stays_a_chat() {
         (workspace.number, &workspace.name)
     );
     assert!(!converted.running);
-    assert!(converted.converted);
     let status = converted.progress.and_then(|progress| progress.status);
     assert_eq!(status.as_deref(), Some("Merged"));
     let children: Vec<_> = converted.children.iter().map(|child| &child.id).collect();

@@ -811,7 +811,6 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     let started = chat_created(&fixture);
     assert_eq!(started["type"], "event");
     assert_eq!(started["repository_id"], id);
-    assert_eq!(started["agent"]["name"], "claude");
     assert_eq!(started["name"], CHAT_NAME);
     assert!(started["path"].is_null(), "{started}");
     let chat_id = started["space_id"].as_str().unwrap();
@@ -1004,7 +1003,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
     let listed = &chats[0];
     assert_eq!(
         [&listed["id"], &listed["name"], &listed["agent"]],
-        [chat, &started["name"], &started["agent"]["name"]]
+        [chat, &started["name"], &Value::from("claude")]
     );
     // The agent ran with its own temporary directory, which the listing names.
     let tmp_dir = fs::read_to_string(home.join("chat-tmpdir")).unwrap();

@@ -120,11 +120,8 @@ async fn a_chat_ends_into_a_package_that_continues_its_session() {
     let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
     let packaged = &import.manifest.space.record;
     assert_eq!(packaged.space_id, chat.id);
-    let kept = packaged.chat().expect("a chat's record");
-    assert_eq!(
-        (packaged.name.as_str(), kept.agent.name()),
-        ("plan-cache", "claude")
-    );
+    assert!(packaged.chat().is_some(), "a chat's record");
+    assert_eq!(packaged.name.as_str(), "plan-cache");
     assert!(import.bundle.is_none());
     let sessions = import.manifest.sessions.as_ref().unwrap();
     assert_eq!(

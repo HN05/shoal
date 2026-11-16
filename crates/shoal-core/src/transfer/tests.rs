@@ -78,7 +78,7 @@ fn a_chat_package_holds_its_removal_record_and_continues_its_session() {
         "cause": "manual",
         "removed_at": 1,
         "expires_at": 2,
-        "chat": {"agent": "claude", "mode": "plan"},
+        "chat": {"mode": "plan"},
     }))
     .unwrap();
     let mut manifest = Manifest {
@@ -93,9 +93,9 @@ fn a_chat_package_holds_its_removal_record_and_continues_its_session() {
         copy: None,
         chats: Vec::new(),
     };
-    assert_eq!(version(&manifest), 7);
+    assert_eq!(version(&manifest), 8);
     assert_eq!(serde_json::to_value(&manifest).unwrap()["kind"], "chat");
-    let bytes = export_bytes(&header(7), &manifest, &["abc"]);
+    let bytes = export_bytes(&header(8), &manifest, &["abc"]);
     let import = Import::read(&mut &bytes[..]).unwrap();
     assert!(import.bundle.is_none());
     // The record comes back whole, under its ID and below its parent, with
@@ -108,7 +108,7 @@ fn a_chat_package_holds_its_removal_record_and_continues_its_session() {
     assert_eq!(packaged.parent, record.parent);
     assert_eq!(packaged.links, record.links);
     let kept = packaged.chat().unwrap();
-    assert_eq!((kept.agent.name(), kept.mode.as_str()), ("claude", "plan"));
+    assert_eq!(kept.mode.as_str(), "plan");
     // Another machine continues the session its files carry, in the
     // record it imports.
     let sessions = import.manifest.sessions_on(Some("m2"), None);

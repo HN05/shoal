@@ -221,6 +221,7 @@ fn remove_schema_objects(db: &Connection) -> Result<()> {
     // One transaction syncs the whole removal once instead of every statement.
     let tx = db.unchecked_transaction()?;
     let db: &Connection = &tx;
+    db.execute_batch(include_str!("chat_agents_undo.sql"))?;
     db.execute_batch(include_str!("chat_places_undo.sql"))?;
     db.execute_batch(include_str!("chat_turn_marks_undo.sql"))?;
     db.execute_batch(include_str!("space_sessions_undo.sql"))?;
@@ -485,8 +486,8 @@ fn chat_events_reach_the_journal_under_the_chat() -> Result<()> {
     db.execute_batch(
         "BEGIN;
          INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-         INSERT INTO chats(id,agent,started_at)
-             VALUES ('c','claude',1);
+         INSERT INTO chats(id,started_at)
+             VALUES ('c',1);
          INSERT INTO spaces(id,kind,repository_id,name,mode)
              VALUES ('c','chat','repo','planner','chat');
          INSERT INTO space_review(space_id,url,kind) VALUES ('c','',NULL);
@@ -566,7 +567,7 @@ fn renames_questions_and_children_reach_their_spaces_logs() -> Result<()> {
          INSERT INTO spaces(id,kind,repository_id,name)
              VALUES ('child','workspace','repo','fix');
          INSERT INTO space_parents(space_id,parent_id) VALUES ('chat','parent');
-         INSERT INTO chats(id,agent,started_at) VALUES ('chat','claude',1);
+         INSERT INTO chats(id,started_at) VALUES ('chat',1);
          INSERT INTO spaces(id,kind,repository_id,name,mode)
              VALUES ('chat','chat','repo','helper','chat');
          UPDATE spaces SET name='Fix login' WHERE id='child';
@@ -742,7 +743,7 @@ fn the_journal_names_every_space_it_recorded_by_its_id_and_kind() -> Result<()> 
     db.execute_batch(
         "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
          BEGIN;
-         INSERT INTO chats(id,agent,started_at) VALUES ('d','codex',1);
+         INSERT INTO chats(id,started_at) VALUES ('d',1);
          INSERT INTO spaces(id,kind,repository_id,name) VALUES ('d','chat','repo','next');
          COMMIT;",
     )?;

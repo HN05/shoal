@@ -284,7 +284,7 @@ pub struct EventDetails {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub simulator: Option<SimulatorEvent>,
     /// The agent that started, stopped or exited, or that a chat was created
-    /// with.
+    /// with, which a chat's creation an earlier Shoal journaled names.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<AgentEvent>,
     /// The question asked or answered.

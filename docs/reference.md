@@ -5469,7 +5469,7 @@ of a change Shoal made to an issue or PR. `item_activity` events add an
 with the observed update's `kind` and `message`. `created` and `base_changed`
 events add `base_workspace` with the base's `id`, `name` and `branch`, or null,
 and `created` events add `base_ref`, the ref the workspace started from, both
-null for a chat, and a chat's `agent` with the `name` it started with.
+null for a chat.
 `created` and `parent_changed` events add `parent`, the space above the
 workspace with its `id`, `name`, `kind` and a workspace's `branch`, or null once
 a [chat](#chats) that opened it returned it to you. Earlier versions recorded

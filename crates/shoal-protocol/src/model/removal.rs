@@ -93,10 +93,10 @@ pub enum RemovedKind {
     Workspace(Box<KeptWorkspace>),
 }
 
-/// What a removal keeps of a chat only: how its agent ran, and where.
+/// What a removal keeps of a chat only: how its agent ran, and where; the
+/// record's agents and last sessions keep the agent itself.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KeptChat {
-    pub agent: crate::agent::Agent,
     /// The mode its agent ran in, which its restore keeps.
     pub mode: crate::config::modes::ModeName,
     /// The permissions `--permission` gave its agent.

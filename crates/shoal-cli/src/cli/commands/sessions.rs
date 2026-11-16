@@ -329,7 +329,7 @@ impl Target {
             Self::Workspace(inspection) => {
                 format!("{} has no agent sessions", inspection.workspace.name)
             }
-            Self::Chat(chat) => match agents::chat_place(&chat.agent) {
+            Self::Chat(chat) => match chat.agent.as_ref().and_then(agents::chat_place) {
                 Some(place) => {
                     format!("{} runs in {place}; it has no session to attach", chat.name)
                 }

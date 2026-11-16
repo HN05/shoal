@@ -255,7 +255,8 @@ async fn a_workspace_whose_agent_exited_still_becomes_a_chat_with_its_session() 
     manager.relocate_finished_turns().await.unwrap();
 
     let chat = manager.chat_by_id(&workspace.id).await.unwrap().unwrap();
-    assert!(chat.converted);
+    let last = LastSession::all(&manager.paths, &chat.id).unwrap();
+    assert!(last.iter().all(|last| last.converted), "{last:?}");
     let sessions = manager.reported_sessions(&chat.id).await.unwrap();
     let sessions: Vec<_> = (sessions.iter())
         .map(|reported| reported.session.as_str())

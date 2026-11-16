@@ -10,8 +10,8 @@ fn spaces(db: &Connection) -> Result<()> {
             VALUES ('first','/first','first','ready');
         INSERT INTO spaces(id,kind,repository_id,name,mode)
             VALUES ('chat','chat','repo','planning','chat');
-        INSERT INTO chats(id,agent,started_at)
-            VALUES ('chat','claude',1);",
+        INSERT INTO chats(id,started_at)
+            VALUES ('chat',1);",
     )?;
     Ok(())
 }

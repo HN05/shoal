@@ -37,10 +37,12 @@ use shoal_protocol::transcripts::Environments;
 /// version 1 importers would read as part of the bundle, 4 a workspace at
 /// a commit, which earlier importers would open on a branch, 5 a copy,
 /// which earlier importers would open as the space it copies, 6 the chats
-/// that go with the space, which earlier importers would leave out, and 7
-/// a chat as its removal record, which earlier importers would not read.
+/// that go with the space, which earlier importers would leave out, 7 a
+/// chat as its removal record, which earlier importers would not read, and
+/// 8 chats whose agents and last sessions alone name their agent, which
+/// earlier importers would fail to read.
 pub const FORMAT: &str = "shoal workspace";
-const VERSION: u32 = 7;
+const VERSION: u32 = 8;
 
 /// The lowest version whose chat packages this Shoal reads.
 const CHAT_VERSION: u32 = 7;
@@ -48,10 +50,10 @@ const CHAT_VERSION: u32 = 7;
 /// The version of the format that reads the package `manifest` describes.
 fn version(manifest: &Manifest) -> u32 {
     let Some(kept) = manifest.space.record.workspace() else {
-        return CHAT_VERSION;
+        return 8;
     };
     match () {
-        _ if !manifest.chats.is_empty() => 6,
+        _ if !manifest.chats.is_empty() => 8,
         _ if manifest.copy.is_some() => 5,
         _ if kept.at.is_some() => 4,
         _ if !manifest.session_files.is_empty() => 2,

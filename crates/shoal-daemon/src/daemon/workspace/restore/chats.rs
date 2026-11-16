@@ -93,7 +93,8 @@ fn restored_record(removed: &RemovedSpace, kept: &KeptChat) -> Chat {
         // A name an older Shoal recorded may be longer than one set now
         // allows.
         name: SpaceName::derive(removed.name.as_str(), "chat"),
-        agent: kept.agent.clone(),
+        // Its agent is the one the saved agents its restore puts back name.
+        agent: None,
         mode: kept.mode.clone(),
         narrowing: kept.narrowing,
         workspace: kept.workspace.clone(),
@@ -111,7 +112,6 @@ fn restored_record(removed: &RemovedSpace, kept: &KeptChat) -> Chat {
         asleep: None,
         parent: None,
         children: Vec::new(),
-        converted: false,
     }
 }
 

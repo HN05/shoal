@@ -27,7 +27,11 @@ pub struct Chat {
     pub repository_id: Option<RepositoryId>,
     /// The label people read, which other spaces may share.
     pub name: SpaceName,
-    pub agent: crate::agent::Agent,
+    /// Its agent: the one its execution runs, else the one it saved last,
+    /// else the one its queued launch starts; none once its saved sessions
+    /// were discarded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<crate::agent::Agent>,
     /// The mode its agent started in, which its restores keep.
     #[serde(default = "chat_mode")]
     pub mode: crate::config::modes::ModeName,
@@ -88,10 +92,6 @@ pub struct Chat {
     /// The spaces below it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<SpaceRef>,
-    /// A stopped chat that was a workspace, whose restored agent is told
-    /// what the space is now.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub converted: bool,
 }
 
 impl Chat {

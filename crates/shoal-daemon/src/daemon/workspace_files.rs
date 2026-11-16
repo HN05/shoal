@@ -241,10 +241,12 @@ impl Manager {
             return Attacher::User;
         };
         match self.chat(&SpaceSelector::id(chat)).await {
-            Ok(chat) if chat.running => Attacher::Chat {
-                agent: chat.agent,
-                chat: chat.id,
-            },
+            Ok(crate::model::Chat {
+                running: true,
+                agent: Some(agent),
+                id,
+                ..
+            }) => Attacher::Chat { agent, chat: id },
             Ok(_) => Attacher::User,
             Err(error) => {
                 if !matches!(Reason::of(&error), Some(Reason::NotFound)) {

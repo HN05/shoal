@@ -191,7 +191,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                 id: "c1".into(),
                 repository_id: Some("repo".into()),
                 name: "chat".into(),
-                agent: "codex".into(),
+                agent: Some("codex".into()),
                 workspace: None,
                 running: true,
                 started_at: UnixTime::from_seconds(0),
@@ -207,7 +207,6 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                 asleep: None,
                 parent: None,
                 children: Vec::new(),
-                converted: false,
             }])
         } else {
             assert!(matches!(
@@ -276,7 +275,7 @@ fn restore_completes_restorable_spaces() {
         id: name.into(),
         repository_id: Some("repo".into()),
         name: name.into(),
-        agent: "claude".into(),
+        agent: Some("claude".into()),
         workspace: None,
         started_at: UnixTime::from_seconds(0),
         tmp_dir: None,
@@ -292,7 +291,6 @@ fn restore_completes_restorable_spaces() {
         asleep: None,
         parent: None,
         children: Vec::new(),
-        converted: false,
     };
     let candidates = stopped_chat_candidates(vec![chat("talk", false), chat("running", true)]);
     let offered: Vec<_> = candidates

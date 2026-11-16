@@ -15,6 +15,7 @@ use super::{
 };
 use crate::protocol::operations::{Ended, Failure};
 use crate::{
+    agent::Agent,
     config::modes::ModeName,
     daemon::{
         log,
@@ -285,11 +286,11 @@ impl Manager {
     }
 
     /// Keep the session of the agent of the chat that became the workspace
-    /// `id`, whose row was `chat`, which runs as `execution`, as the
+    /// `id`, whose row was `chat`, which runs or ran as `execution`, as the
     /// workspace's last session under that execution, marked converted, in
     /// `mode`, then stop the agent where it ran, and forget the conversion
     /// and the scope the agent carried there. Returns where the agent ran in
-    /// a terminal host, while it ran.
+    /// a terminal host, when it ran in one.
     async fn hand_over(
         &self,
         id: &SpaceId,
@@ -297,44 +298,53 @@ impl Manager {
         chat: &ChatRow,
         execution: ExecutionId,
     ) -> Result<Option<Origin>> {
-        let agent = chat.agent()?;
-        let origin = self.execution_origin(id, &execution).await?;
-        let last = LastSession {
-            session: self.latest_session(id, &execution),
-            execution,
-            agent: agent.agent.clone(),
-            moved: false,
-            copied: None,
-            converted: true,
-            origin: origin.clone(),
-            stop: None,
-            model: Default::default(),
-            mode,
-            narrowing: agent.narrowing()?,
-        };
-        last.write(&self.paths, id)?;
+        let row = chat.agent()?;
+        let ran = self.converting_agent(id, &execution).await?;
+        if let Some((agent, origin)) = &ran {
+            let last = LastSession {
+                session: self.latest_session(id, &execution),
+                execution,
+                agent: agent.clone(),
+                moved: false,
+                copied: None,
+                converted: true,
+                origin: origin.clone(),
+                stop: None,
+                model: Default::default(),
+                mode,
+                narrowing: row.narrowing()?,
+            };
+            last.write(&self.paths, id)?;
+        }
         // The workspace runs nothing else before the agent moves there.
         let request = crate::daemon::workspace::StopRequest::conversion();
         (self.stop_space_agent_executions(id, &request)).await?;
-        let (space, token) = (id.to_owned(), agent.scope_token.clone());
+        let (space, token) = (id.to_owned(), row.scope_token.clone());
         self.store
             .write(move |tx| super::record::relocated_chat(tx, &space, token.as_ref()))
             .await?;
         self.signals.agent_changed();
-        Ok(origin)
+        Ok(ran.and_then(|(_, origin)| origin))
     }
 
-    /// Where the execution `execution` of the space `id` runs in a terminal
-    /// host, while it runs in one.
-    async fn execution_origin(
+    /// The agent that runs or ran as `execution` in the space `id`, with
+    /// where it ran in a terminal host: as its execution records it while
+    /// it runs, else as its last session kept it when it exited; none once
+    /// neither does.
+    async fn converting_agent(
         &self,
         id: &SpaceId,
         execution: &ExecutionId,
-    ) -> Result<Option<Origin>> {
+    ) -> Result<Option<(Agent, Option<Origin>)>> {
         let executions = self.workspace_executions(id).await?;
-        Ok((executions.into_iter())
-            .find(|recorded| recorded.id == *execution)
-            .and_then(|recorded| recorded.origin))
+        let running = (executions.into_iter()).find(|recorded| recorded.id == *execution);
+        if let Some(recorded) = running
+            && let Some(agent) = recorded.agent
+        {
+            return Ok(Some((agent, recorded.origin)));
+        }
+        let path = LastSession::path(&self.paths, id, execution);
+        Ok(LastSession::load(&path)?.map(|last| (last.agent, last.origin)))
     }
 
     /// Make the workspace `id` the stopped `chat` its agent carries on in:

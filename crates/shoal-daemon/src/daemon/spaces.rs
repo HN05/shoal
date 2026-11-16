@@ -67,5 +67,5 @@ mod removing;
 pub(crate) use removing::{Removing, Reservation};
 mod selection;
 pub(crate) use selection::selected;
-mod sessions;
+pub(crate) mod sessions;
 pub(crate) mod status;

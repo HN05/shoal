@@ -81,7 +81,7 @@ fn chat(
         id: "chat-id".into(),
         repository_id: repository_id.map(Into::into),
         name: "talk".into(),
-        agent: "codex".into(),
+        agent: Some("codex".into()),
         workspace: None,
         running: true,
         started_at: crate::time::UnixTime::from_seconds(0),
@@ -97,7 +97,6 @@ fn chat(
         asleep: None,
         parent: None,
         children: Vec::new(),
-        converted: false,
     }
 }
 

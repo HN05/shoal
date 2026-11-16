@@ -109,7 +109,8 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
         .unwrap();
 
     // The chat stops with its agent, waiting for `shoal restore` with its
-    // workspace and its name.
+    // workspace and its name; an agent that saved no session leaves it
+    // naming none.
     manager.end_executions(&ending.id).await;
     let worker = SpaceRef {
         id: workspace.id.clone(),
@@ -119,6 +120,7 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
     };
     let stopped = Chat {
         running: false,
+        agent: None,
         children: vec![worker],
         ..ending.clone()
     };

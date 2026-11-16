@@ -248,7 +248,10 @@ pub(super) fn confirm_ending(
     if !chats.is_empty() {
         action.push_str("\nEnds these chats here, stopping their agents:");
         for chat in &chats {
-            action.push_str(&format!("\n  {} ({})", chat.name, chat.agent));
+            match &chat.agent {
+                Some(agent) => action.push_str(&format!("\n  {} ({agent})", chat.name)),
+                None => action.push_str(&format!("\n  {}", chat.name)),
+            }
         }
     }
     if !held.is_empty() {

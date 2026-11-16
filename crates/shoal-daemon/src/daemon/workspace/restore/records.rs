@@ -115,7 +115,6 @@ impl Manager {
             expires_at,
             kind: RemovedKind::Chat {
                 chat: Box::new(KeptChat {
-                    agent: chat.agent,
                     mode: chat.mode,
                     narrowing: chat.narrowing,
                     workspace: chat.workspace,

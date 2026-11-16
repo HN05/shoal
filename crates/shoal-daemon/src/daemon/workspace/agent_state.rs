@@ -12,7 +12,7 @@ use super::Manager;
 use crate::{
     agents::hook_reports,
     execution::recovery,
-    model::{AgentStatus, Execution, PresentSpace},
+    model::{AgentStatus, Execution},
     process::{
         execution::Processes,
         identity::{AgentTrees, Scan},
@@ -411,19 +411,17 @@ impl Manager {
         }
     }
 
-    /// The AI tool of the agent in the space `selector` names, as the
-    /// space's settings resolve it: a chat's own agent, or the one
-    /// `execution` runs in a workspace.
+    /// The AI tool of the agent `execution` runs in the space `selector`
+    /// names, else of the space's agent, as the space's settings resolve it.
     async fn agent_tool(
         &self,
         selector: &SpaceSelector,
         execution: Option<&ExecutionId>,
     ) -> Option<crate::ai::Tool> {
         let space = self.space(selector).await.ok()?;
-        let agent = match (&space, execution) {
-            (PresentSpace::Chat(chat), _) => chat.agent.clone(),
-            (PresentSpace::Workspace(_), Some(execution)) => self.agent_name(execution).await?,
-            (PresentSpace::Workspace(_), None) => return None,
+        let agent = match execution {
+            Some(execution) => self.agent_name(execution).await?,
+            None => self.agent_of(space.id()).await.ok()??,
         };
         let mut tools = self.present_space_settings(&space).await.ok()?.tools;
         tools.remove(agent.name())

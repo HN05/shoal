@@ -33,10 +33,7 @@ async fn a_removed_chat_keeps_a_record_of_how_and_where_it_ran() {
     assert_eq!(record.cause, EventCause::Manual);
     assert!(record.expires_at > UnixTime::now());
     let kept = record.chat().expect("a chat's record");
-    assert_eq!(
-        (kept.agent.to_string(), kept.mode.to_string()),
-        ("claude".into(), "plan".into())
-    );
+    assert_eq!(kept.mode.as_str(), "plan");
     assert_eq!(kept.workspace, None);
     // A chat is no workspace to open, export or copy.
     assert!(manager.removed_workspaces().await.unwrap().is_empty());

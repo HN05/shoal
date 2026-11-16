@@ -101,7 +101,7 @@ impl Manager {
         let mut started =
             (self.begin_execution_placed(&selector, None, kind, None, request)).await?;
         let agent = crate::execution::TrackedAgent {
-            name: chat.agent.clone(),
+            name: chat.agent.clone().context("the chat names no agent")?,
             model: Default::default(),
             mode: chat.mode.clone(),
             narrowing: chat.narrowing,
@@ -240,7 +240,7 @@ impl Manager {
             number: SpaceNumber::default(),
             repository_id: (home.repository.as_ref()).map(|repository| repository.id.clone()),
             name,
-            agent,
+            agent: Some(agent),
             mode,
             narrowing,
             workspace,
@@ -258,7 +258,6 @@ impl Manager {
             asleep: None,
             parent: None,
             children: Vec::new(),
-            converted: false,
         };
         self.record_chat(chat, home, parent, priority, origin).await
     }
@@ -363,25 +362,54 @@ impl Manager {
         // A request's name reads as sent, so the rule applies here.
         let name = SpaceName::parse(&name)?;
         let owner = self.root_dir_owner();
-        let (old, renamed) = self
+        let (old, mut renamed) = self
             .store
             .write(move |tx| rename(tx, &owner, &chat, &name))
             .await?;
+        renamed.agent = self.agent_of(&renamed.id).await?;
         Ok(RenamedChat {
             chat: renamed,
             previous_name: old.name,
         })
     }
 
-    /// Running and stopped chats in start order.
+    /// Running and stopped chats in start order, each with its agent.
     pub async fn chats(&self) -> Result<Vec<Chat>> {
-        let owner = self.root_dir_owner();
-        self.store.run(move |db| recorded(db, &owner)).await
+        let recorded = self.recorded_chats().await?;
+        (recorded.into_iter())
+            .map(|(chat, stored)| self.with_agent(chat, stored))
+            .collect()
     }
 
-    /// The running or stopped chat with the ID `id`.
+    /// The running or stopped chat with the ID `id`, with its agent.
     pub(crate) async fn chat_by_id(&self, id: &SpaceId) -> Result<Option<Chat>> {
-        Ok(self.chats().await?.into_iter().find(|chat| chat.id == *id))
+        let recorded = self.recorded_chats().await?;
+        (recorded.into_iter())
+            .find(|(chat, _)| chat.id == *id)
+            .map(|(chat, stored)| self.with_agent(chat, stored))
+            .transpose()
+    }
+
+    /// The running and stopped chats in start order, each with what the
+    /// store records of its agent, read in one transaction.
+    async fn recorded_chats(&self) -> Result<Vec<(Chat, spaces::sessions::StoredAgents)>> {
+        let owner = self.root_dir_owner();
+        self.store
+            .read(move |tx| {
+                (recorded(tx, &owner)?.into_iter())
+                    .map(|chat| {
+                        let stored = spaces::sessions::stored_agents(tx, &chat.id)?;
+                        Ok((chat, stored))
+                    })
+                    .collect()
+            })
+            .await
+    }
+
+    /// `chat` with its agent, of which the store records `stored`.
+    fn with_agent(&self, chat: Chat, stored: spaces::sessions::StoredAgents) -> Result<Chat> {
+        let agent = self.agent_from(&chat.id, stored)?;
+        Ok(Chat { agent, ..chat })
     }
 
     /// The chats running or stopped in the worktree of the workspace `id`,
@@ -567,11 +595,9 @@ fn insert(
         workspace::set_parent(tx, &chat.id, Some(parent))?;
     }
     tx.execute(
-        "INSERT INTO chats(id,agent,started_at,workspace_id,root_dir)
-         VALUES (?1,?2,?3,?4,?5)",
+        "INSERT INTO chats(id,started_at,workspace_id,root_dir) VALUES (?1,?2,?3,?4)",
         params![
             chat.id,
-            chat.agent,
             chat.started_at,
             workspace,
             (chat.root_dir.as_deref()).map(|root| root.to_string_lossy().into_owned()),
@@ -658,16 +684,16 @@ fn rename(
 
 /// The running and stopped chats in start order, a chat without a
 /// repository with its temporary directory in the `root_dir` it started in,
-/// marked as `owner`'s, the daemon's state directory.
+/// marked as `owner`'s, the daemon's state directory, without their agents,
+/// which [`Manager::agent_of`] reads.
 fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
     db.prepare(
-        "SELECT chats.id,space.repository_id,space.name,chats.agent,
+        "SELECT chats.id,space.repository_id,space.name,
                     EXISTS (SELECT 1 FROM executions e WHERE e.space_id=chats.id) AS running,
                     chats.started_at,repositories.workspaces_dir,
                     space_completion.record AS completion,
                     workspaces.id AS workspace_id,home.name AS workspace_name,
-                    workspaces.branch,space.number,space.mode,chats.root_dir,space.narrowing,
-                    chats.converted
+                    workspaces.branch,space.number,space.mode,chats.root_dir,space.narrowing
              FROM chats JOIN spaces space ON space.id=chats.id
                 LEFT JOIN repositories ON repositories.id=space.repository_id
                 LEFT JOIN workspaces ON workspaces.id=chats.workspace_id
@@ -695,7 +721,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
             number: row.get("number")?,
             repository_id,
             name: row.get("name")?,
-            agent: row.get("agent")?,
+            agent: None,
             mode: row.get("mode")?,
             narrowing: store::json_column(row, "narrowing")?.unwrap_or_default(),
             workspace: match row.get::<_, Option<SpaceId>>("workspace_id")? {
@@ -723,7 +749,6 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
             asleep: None,
             parent: None,
             children: Vec::new(),
-            converted: row.get("converted")?,
         })
     })?
     .collect::<rusqlite::Result<Vec<Chat>>>()?

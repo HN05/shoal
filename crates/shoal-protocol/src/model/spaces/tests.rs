@@ -21,7 +21,7 @@ fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_number_or_id() {
         id: id.into(),
         repository_id: Some("repo".into()),
         name: name.into(),
-        agent: "claude".into(),
+        agent: Some("claude".into()),
         workspace: None,
         started_at: crate::time::UnixTime::EPOCH,
         tmp_dir: None,
@@ -37,7 +37,6 @@ fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_number_or_id() {
         asleep: None,
         parent: None,
         children: Vec::new(),
-        converted: false,
     };
     let spaces = Spaces {
         workspaces: vec![workspace],

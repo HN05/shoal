@@ -21,7 +21,7 @@ fn spaces() -> Spaces {
         id: id.into(),
         repository_id: Some("repo".into()),
         name: name.into(),
-        agent: "claude".into(),
+        agent: Some("claude".into()),
         workspace: None,
         started_at: UnixTime::from_seconds(0),
         tmp_dir: None,
@@ -37,7 +37,6 @@ fn spaces() -> Spaces {
         asleep: None,
         parent: None,
         children: Vec::new(),
-        converted: false,
     };
     Spaces {
         workspaces: vec![workspace],

@@ -147,7 +147,9 @@ fn render_chat(chat: &Chat, palette: Palette) {
         palette.paint(status.style(), status.label())
     );
     outln!("Number:        {}", chat.number);
-    outln!("Agent:         {}", chat.agent);
+    if let Some(agent) = &chat.agent {
+        outln!("Agent:         {agent}");
+    }
     outln!("Mode:          {}", chat.mode);
     if let Some(workspace) = &chat.workspace {
         outln!("Workspace:     {}", workspace.name);
