@@ -96,7 +96,7 @@ async fn files_from_outside_any_agent_are_the_users() {
         .unwrap()
         .try_into()
         .unwrap();
-    assert_eq!(added.attached_by, Some(Attacher::User));
+    assert_eq!(added.attached_by, Attacher::User);
     assert_eq!(
         serde_json::to_value(&added).unwrap()["attached_by"],
         serde_json::json!({"kind": "user"})
@@ -184,9 +184,7 @@ async fn an_agents_files_name_its_kind_and_session() {
         .unwrap();
     assert_eq!(files.len(), 2, "{files:?}");
     assert!(
-        files
-            .iter()
-            .all(|file| file.attached_by.as_ref() == Some(&attacher)),
+        files.iter().all(|file| file.attached_by == attacher),
         "{files:?}"
     );
 }
@@ -220,11 +218,11 @@ async fn results_name_the_agent_that_handed_them_back() {
     assert_eq!(result.source, FileSource::Result);
     assert_eq!(
         result.attached_by,
-        Some(Attacher::Agent {
+        Attacher::Agent {
             agent: "codex".into(),
             execution: caller.execution_id().unwrap().clone(),
             session: None,
-        })
+        }
     );
 }
 
@@ -1398,7 +1396,7 @@ async fn a_chats_agent_attaches_as_its_chat_while_it_runs() {
         )
         .await
         .unwrap();
-    assert_eq!(added[0].attached_by, Some(as_chat));
+    assert_eq!(added[0].attached_by, as_chat);
 
     manager.end_executions(&chat.id).await;
     assert_eq!(manager.attacher(Some(&caller)).await, Attacher::User);

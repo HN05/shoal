@@ -28,7 +28,7 @@ fn renamed_fields_take_their_new_names() -> Result<()> {
              VALUES ('w',NULL,0,'w',9,'{"agents":[{"record":{"agent":"claude","place":"w1:p2"}}],
                  "last_session":{"agent":"codex","place":{"host":"rex","place":"b"}}}');"#,
     )?;
-    migrate(&mut db)?;
+    migrate_to(&mut db, 204)?;
     let watch = record(&db, "pr_activity", "space_id='w'")?;
     assert_eq!(watch, json!({"own_change_at": 7}));
     let removed = record(&db, "removed_spaces", "space_id='w'")?;
@@ -39,5 +39,44 @@ fn renamed_fields_take_their_new_names() -> Result<()> {
             "last_sessions": [{"agent": "codex", "origin": {"host": "rex", "place": "b"}}],
         })
     );
+    Ok(())
+}
+
+#[test]
+fn fields_earlier_records_lacked_are_filled() -> Result<()> {
+    let mut db = before(205)?;
+    db.execute_batch(
+        r#"INSERT INTO simulators(id,record) VALUES ('sim','{"id":"sim"}');
+         INSERT INTO removed_spaces(space_id,repository_id,chat,name,expires_at,record)
+             VALUES ('w',NULL,0,'w',9,'{"agents":[{"record":{"agent":"claude"}}],
+                 "last_sessions":[{"agent":"codex","mode":"plan"}]}');
+         INSERT INTO space_files(space_id,space,source,name,path,bytes,created_at)
+             VALUES ('w','w','added','a.md','/repo/a.md',1,1);
+         INSERT INTO space_events(space_id,record) VALUES ('w',
+             '{"kind":"linked","space_id":"w","link":{"kind":"pr","url":"https://forge/o/r/pulls/2"}}');"#,
+    )?;
+    migrate(&mut db)?;
+    let simulator = record(&db, "simulators", "id='sim'")?;
+    assert_eq!(simulator["acquirer"], json!({"kind": "user"}));
+    let removed = record(&db, "removed_spaces", "space_id='w'")?;
+    assert_eq!(removed["agents"][0]["record"]["mode"], "worker");
+    let last = &removed["last_sessions"][0];
+    assert_eq!(last["mode"], "plan");
+    assert!(last["execution"].is_string(), "{last}");
+    let attacher: String =
+        db.query_row("SELECT attached_by FROM space_files", [], |row| row.get(0))?;
+    assert_eq!(attacher, r#"{"kind":"user"}"#);
+    let added = record(
+        &db,
+        "space_events",
+        "json_extract(record,'$.kind')='file_added'",
+    )?;
+    assert_eq!(added["file"]["attached_by"], json!({"kind": "user"}));
+    let linked = record(
+        &db,
+        "space_events",
+        "json_extract(record,'$.kind')='linked'",
+    )?;
+    assert_eq!(linked["link"]["relation"], "assigned");
     Ok(())
 }

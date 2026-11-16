@@ -154,7 +154,7 @@ async fn a_saved_command_keeps_idle_and_unmerged_workspaces_only() {
 async fn a_saved_agent_keeps_idle_and_unmerged_workspaces_only() {
     saved_work_keeps_idle_and_unmerged_workspaces_only(
         "saved.recovery.json",
-        r#"{"agent":"claude","stage":"stopped"}"#,
+        r#"{"agent":"claude","mode":"worker","stage":"stopped"}"#,
     )
     .await;
 }
@@ -211,7 +211,7 @@ async fn merged_cleanup_waits_for_grace_and_keeps_saved_agents_for_restore() {
         &ExecutionId::from("saved"),
     );
     fs::create_dir_all(f.manager.paths.space_state(&f.workspace.id)).unwrap();
-    let record = r#"{"agent":"claude","stage":"stopped","session":"kept-session","stop_reason":"memory pressure"}"#;
+    let record = r#"{"agent":"claude","mode":"worker","stage":"stopped","session":"kept-session","stop_reason":"memory pressure"}"#;
     fs::write(&path, record).unwrap();
     let saved = recovery::Record::load(&path).unwrap().unwrap();
     let queued = f
@@ -293,7 +293,11 @@ async fn saved_agents_do_not_hide_active_commands_from_merged_cleanup() {
         &ExecutionId::from("saved"),
     );
     fs::create_dir_all(f.manager.paths.space_state(&f.workspace.id)).unwrap();
-    fs::write(path, r#"{"agent":"claude","stage":"stopped"}"#).unwrap();
+    fs::write(
+        path,
+        r#"{"agent":"claude","mode":"worker","stage":"stopped"}"#,
+    )
+    .unwrap();
     let id = f.workspace.id.clone();
     f.manager
         .store

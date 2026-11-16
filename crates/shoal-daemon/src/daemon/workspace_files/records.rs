@@ -79,17 +79,9 @@ fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AttachedFile> {
         path: PathBuf::from(row.get::<_, String>(5)?),
         bytes: row.get::<_, i64>(6)?.try_into().unwrap_or_default(),
         created_at: row.get(7)?,
-        attached_by: row
-            .get::<_, Option<String>>(8)?
-            .map(|json| serde_json::from_str(&json))
-            .transpose()
-            .map_err(|error| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    8,
-                    rusqlite::types::Type::Text,
-                    error.into(),
-                )
-            })?,
+        attached_by: serde_json::from_str(&row.get::<_, String>(8)?).map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(8, rusqlite::types::Type::Text, error.into())
+        })?,
         expires_at: row.get(9)?,
     })
 }
@@ -107,17 +99,17 @@ fn space(row: &rusqlite::Row<'_>) -> rusqlite::Result<Space> {
 }
 
 /// Record the `copies` as attached to the space `space_id` from
-/// `source` by `attacher`, unknown when none, in the caller's transaction. A
+/// `source` by `attacher`, in the caller's transaction. A
 /// copy already recorded, as when the same files are sent again, keeps its
 /// record and takes any new title; none is recorded for a space that is gone.
 pub(crate) fn record(
     tx: &Connection,
     space_id: &SpaceId,
     source: FileSource,
-    attacher: Option<&Attacher>,
+    attacher: &Attacher,
     copies: &[Copy],
 ) -> Result<()> {
-    let attacher = attacher.map(serde_json::to_string).transpose()?;
+    let attacher = serde_json::to_string(attacher)?;
     for copy in copies {
         let name = copy
             .path
@@ -155,7 +147,7 @@ pub(super) fn record_all(
     attacher: &Attacher,
     copies: &[Copy],
 ) -> Result<Vec<AttachedFile>> {
-    record(tx, space_id, source, Some(attacher), copies)?;
+    record(tx, space_id, source, attacher, copies)?;
     let records = {
         let mut statement =
             tx.prepare(&format!("SELECT {COLUMNS} FROM space_files WHERE path=?1"))?;

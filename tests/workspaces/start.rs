@@ -2272,7 +2272,7 @@ fn stop_narrowed_agent(fixture: &Fixture, workspace: &Value) -> PathBuf {
     let record = state.join("stopped-agent.recovery.json");
     fs::write(
         &record,
-        r#"{"agent":"waiter","narrowing":{"push":"propose"}}"#,
+        r#"{"agent":"waiter","mode":"worker","narrowing":{"push":"propose"}}"#,
     )
     .unwrap();
     record
@@ -3453,7 +3453,7 @@ fn resume_now_without_a_terminal_has_the_daemon_start_its_restores() {
         fs::create_dir_all(&state).unwrap();
         fs::write(
             state.join(format!("{name}-agent.{record}.json")),
-            r#"{"agent":"waiter"}"#,
+            format!(r#"{{"execution":"{name}-agent","agent":"waiter","mode":"worker"}}"#),
         )
         .unwrap();
         paths.push(PathBuf::from(workspace["path"].as_str().unwrap()));
@@ -3488,7 +3488,7 @@ fn resume_without_a_terminal_or_host_is_refused_before_queuing() {
         .join(workspace["id"].as_str().unwrap());
     fs::create_dir_all(&state).unwrap();
     let record = state.join("stopped-agent.recovery.json");
-    fs::write(&record, r#"{"agent":"waiter"}"#).unwrap();
+    fs::write(&record, r#"{"agent":"waiter","mode":"worker"}"#).unwrap();
     let bin = fixture.root.path().join("no-host-bin");
     fs::create_dir(&bin).unwrap();
     let output = fixture
@@ -3534,7 +3534,7 @@ fn resume_queues_restores_that_start_as_agent_slots_free() {
         };
         fs::write(
             state.join(format!("{name}-agent.{kind}.json")),
-            r#"{"agent":"waiter"}"#,
+            format!(r#"{{"execution":"{name}-agent","agent":"waiter","mode":"worker"}}"#),
         )
         .unwrap();
         paths.push(PathBuf::from(workspace["path"].as_str().unwrap()));

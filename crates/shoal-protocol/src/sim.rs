@@ -140,7 +140,6 @@ pub struct Simulator {
     #[serde(default)]
     pub installed_apps: Option<usize>,
     /// Who holds the lease, the user for an idle device.
-    #[serde(default)]
     pub acquirer: crate::acquirers::Acquirer,
 }
 

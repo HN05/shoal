@@ -465,8 +465,6 @@ pub struct AgentStateEvent {
 pub struct LinkEvent {
     pub kind: crate::forge::items::link::LinkKind,
     pub url: String,
-    /// Absent from events recorded before relations existed, which were assignments.
-    #[serde(default)]
     pub relation: crate::model::Relation,
 }
 

@@ -71,6 +71,7 @@ async fn interrupted(
         "agent": "fixture",
         "stop_reason": "test memory pressure",
         "stage": stage,
+        "mode": "worker",
     });
     let path = record_path(&manager.paths, &workspace_id, &id);
     fs::create_dir_all(path.parent().unwrap()).unwrap();

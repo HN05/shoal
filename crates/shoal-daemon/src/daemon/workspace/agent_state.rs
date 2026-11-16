@@ -211,7 +211,7 @@ impl Manager {
     /// Keep the state execution `id` last reported in the recovery record it
     /// saved, before the state goes with the execution's record, judged by
     /// `scan` when its processes were scanned. A failure leaves the turn
-    /// unknown, as in records saved before turns were kept.
+    /// unknown.
     pub(crate) async fn keep_stopped_turn(&self, id: &ExecutionId, scan: Option<&Scan>) {
         let query = id.to_owned();
         let kept = async {

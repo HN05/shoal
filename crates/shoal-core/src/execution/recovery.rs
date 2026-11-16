@@ -26,7 +26,6 @@ use crate::{
     sessions::Origin,
     state::AgentState,
 };
-pub(crate) use shoal_protocol::executions::unnamed_execution;
 pub use shoal_protocol::executions::{Copied, LastSession, Record, Stage, Stop, StoppedAgent};
 pub use shoal_protocol::saved::{Saved, SavedCommand, SavedSession};
 
@@ -516,10 +515,7 @@ pub fn saves_agent(paths: &Paths, space_id: &SpaceId) -> Result<bool> {
         let Some(name) = name.to_str() else {
             continue;
         };
-        if name.ends_with(AGENT_SUFFIX)
-            || name.ends_with(LAST_SESSION_SUFFIX)
-            || name == UNNAMED_LAST_SESSION
-        {
+        if name.ends_with(AGENT_SUFFIX) || name.ends_with(LAST_SESSION_SUFFIX) {
             return Ok(true);
         }
     }
@@ -613,7 +609,6 @@ const REQUEST_SUFFIX: &str = ".restore-request.json";
 const COMMAND_SUFFIX: &str = ".command.json";
 const SESSION_SUFFIX: &str = ".session";
 const LAST_SESSION_SUFFIX: &str = ".last-session.json";
-const UNNAMED_LAST_SESSION: &str = "last-session.json";
 
 /// Whether `session` can name an agent session on a restore command line:
 /// letters, digits, `-` and `_`, never read as an option.
@@ -809,18 +804,6 @@ impl LastSessionExt for LastSession {
     }
 }
 
-/// Give a workspace's single last session from before workspaces kept one
-/// per agent a file of its own. A concurrent reader may already have.
-fn name_unnamed_session(paths: &Paths, space_id: &SpaceId) -> Result<()> {
-    let unnamed = paths.space_state(space_id).join(UNNAMED_LAST_SESSION);
-    let named = LastSession::path(paths, space_id, &unnamed_execution());
-    match std::fs::rename(unnamed, named) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error.into()),
-    }
-}
-
 /// A command `shoal stop` interrupted, reported by `shoal restore` instead of
 /// being rerun: replaying an arbitrary command is not known to be safe.
 #[derive(Debug, Serialize, Deserialize)]
@@ -864,7 +847,6 @@ pub trait SavedExt: Sized {
 impl SavedExt for Saved {
     fn load(paths: &Paths, space_id: &SpaceId) -> Result<Self> {
         let mut saved = Self::default();
-        name_unnamed_session(paths, space_id)?;
         let entries = match std::fs::read_dir(paths.space_state(space_id)) {
             Ok(entries) => entries,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(saved),

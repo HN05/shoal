@@ -122,15 +122,13 @@ pub struct Record {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub converted: bool,
     /// What the agent was doing when it stopped, as its hooks last reported
-    /// it. Unknown for agents without hooks and for records saved before
-    /// turns were kept.
+    /// it. Unknown for agents without hooks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub turn: Option<AgentState>,
     /// The model and effort the agent ran with, which its restore keeps.
     #[serde(default, flatten)]
     pub model: ModelChoice,
     /// The mode the agent started in, which its restore keeps.
-    #[serde(default = "default_mode")]
     pub mode: crate::config::modes::ModeName,
     /// The `--permission` narrowing it started with, which its restore
     /// keeps.
@@ -153,11 +151,6 @@ pub struct Copied {
     /// holds, which forks it so both go on.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub held_elsewhere: bool,
-}
-
-/// The mode of an agent recorded before modes existed.
-fn default_mode() -> crate::config::modes::ModeName {
-    crate::config::modes::ModeName::DEFAULT
 }
 
 /// Why and when Shoal stopped an agent, which its restore tells it.
@@ -188,8 +181,7 @@ pub struct StoppedAgent {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LastSession {
     /// The execution the agent ran as, which `--execution` selects. Its file
-    /// is named after it; one saved without it gets a new ID.
-    #[serde(default = "unnamed_execution")]
+    /// is named after it.
     pub execution: ExecutionId,
     pub agent: crate::agent::Agent,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -215,7 +207,6 @@ pub struct LastSession {
     #[serde(default, flatten)]
     pub model: ModelChoice,
     /// The mode the agent started in, which its restore keeps.
-    #[serde(default = "default_mode")]
     pub mode: crate::config::modes::ModeName,
     /// The `--permission` narrowing it started with, which its restore
     /// keeps.
@@ -224,11 +215,6 @@ pub struct LastSession {
         skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
     )]
     pub narrowing: crate::config::permissions::PermissionsConfig,
-}
-
-/// The key of a last session saved without its execution.
-pub fn unnamed_execution() -> ExecutionId {
-    ExecutionId::generate()
 }
 
 /// A space's retry of its agent's failed turn.

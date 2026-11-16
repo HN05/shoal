@@ -638,8 +638,10 @@ async fn an_agent_records_its_mode_with_its_execution_workspace_and_last_session
         serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
     assert_eq!(saved.mode, "plan");
     // One saved before modes started in the default mode.
-    let earlier: crate::execution::recovery::LastSession =
-        serde_json::from_value(serde_json::json!({"execution": "e", "agent": "claude"})).unwrap();
+    let earlier: crate::execution::recovery::LastSession = serde_json::from_value(
+        serde_json::json!({"execution": "e", "agent": "claude", "mode": "worker"}),
+    )
+    .unwrap();
     assert_eq!(earlier.mode, "worker");
 }
 

@@ -241,7 +241,7 @@ fn only_requested_or_queued_restores_continue_without_the_user() {
     std::fs::create_dir_all(&state).unwrap();
     std::fs::write(
         state.join("kept.last-session.json"),
-        r#"{"agent":"claude"}"#,
+        r#"{"agent":"claude","mode":"worker"}"#,
     )
     .unwrap();
     assert!(waits_for_resume(&paths, &kept, &none).unwrap());

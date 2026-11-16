@@ -167,13 +167,6 @@ shoal_states::states!(
     }
 );
 
-impl Default for Relation {
-    /// Links recorded before relations existed were assignments.
-    fn default() -> Self {
-        Self::Assigned
-    }
-}
-
 /// An issue, PR or CI run a space links, with its title when the linking
 /// caller knew it.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

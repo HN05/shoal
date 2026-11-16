@@ -337,7 +337,7 @@ fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
         fs::create_dir_all(&state).unwrap();
         fs::write(
             state.join(format!("{name}-agent.recovery.json")),
-            r#"{"agent":"claude"}"#,
+            r#"{"agent":"claude","mode":"worker"}"#,
         )
         .unwrap();
         let execution = format!("{name}-agent");
@@ -397,7 +397,7 @@ fn terminal_resume_of_one_agent_runs_in_a_detached_session_unless_focused() {
     let state = fixture.root.path().join("state/workspaces").join(&id);
     fs::create_dir_all(&state).unwrap();
     let record = state.join("single-agent.recovery.json");
-    fs::write(&record, r#"{"agent":"claude"}"#).unwrap();
+    fs::write(&record, r#"{"agent":"claude","mode":"worker"}"#).unwrap();
     let shell = fixture.root.path().join("bin/test-shell");
     install_test_script(&shell, "#!/bin/sh\necho \"$@\" >> \"$HOME/login-shells\"\n");
     let (output, transcript) = fixture.terminal_command(
@@ -433,7 +433,7 @@ fn terminal_resume_of_one_agent_runs_in_a_detached_session_unless_focused() {
     // Focused, the agent's session takes this terminal; its restore fails
     // as the detached one did, so only the zmx calls show the path taken.
     fs::remove_file(fixture.root.path().join("zmx-calls")).unwrap();
-    fs::write(&record, r#"{"agent":"claude"}"#).unwrap();
+    fs::write(&record, r#"{"agent":"claude","mode":"worker"}"#).unwrap();
     fixture.terminal_command(
         fixture
             .command()

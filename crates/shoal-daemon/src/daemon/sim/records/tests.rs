@@ -9,7 +9,7 @@ fn record(id: &str, current: Option<&str>, last: Option<&str>) -> Value {
         "id": id, "udid": null, "device": "phone", "runtime": "ios",
         "workspace_id": current, "last_workspace_id": last,
         "lease_name": "default", "reason": null, "state": "booting",
-        "last_used": 42, "error": null
+        "last_used": 42, "error": null, "acquirer": {"kind": "user"}
     })
 }
 

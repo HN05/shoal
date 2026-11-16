@@ -181,9 +181,7 @@ pub struct AttachedFile {
     pub path: PathBuf,
     pub bytes: u64,
     pub created_at: crate::time::UnixTime,
-    /// None for a file attached before Shoal recorded who attached it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub attached_by: Option<Attacher>,
+    pub attached_by: Attacher,
     /// When the file of a removed space is deleted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<crate::time::UnixTime>,

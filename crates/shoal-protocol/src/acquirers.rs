@@ -13,14 +13,12 @@ shoal_states::states!(
     }
 );
 
-/// Who acquired a lease. Leases recorded before acquirers were are the
-/// user's.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// Who acquired a lease.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Acquirer {
     /// An unscoped caller, whose lease stays until it is released or its
     /// workspace is removed.
-    #[default]
     User,
     /// The agent execution of a scoped caller, whose lease ends when the
     /// agent exits or is stopped.

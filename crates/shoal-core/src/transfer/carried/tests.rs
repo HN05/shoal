@@ -46,9 +46,9 @@ fn a_space_carries_the_chats_in_its_worktree_and_below_it_through_chats() {
 fn a_carried_chat_keeps_its_session_only_where_its_agent_continues_it() {
     let removed: RemovedSpace = serde_json::from_value(serde_json::json!({
         "workspace_id": "c1", "repository_id": "r1", "name": "reading",
-        "links": {"issues": [], "prs": []},
+        "links": {"issues": [], "prs": [], "opened": [], "related": []},
         "last_sessions": [{"execution": "c1", "agent": "claude", "session": "s1",
-            "origin": {"host": "herdr", "place": "tab"}}],
+            "origin": {"host": "herdr", "place": "tab"}, "mode": "chat"}],
         "cause": "manual", "removed_at": 1, "expires_at": 2,
         "chat": {"mode": "chat"},
     }))
@@ -63,7 +63,7 @@ fn a_carried_chat_keeps_its_session_only_where_its_agent_continues_it() {
             bundle: false,
             record: serde_json::from_value(serde_json::json!({
                 "workspace_id": "lead", "repository_id": null, "name": "lead",
-                "links": {"issues": [], "prs": []},
+                "links": {"issues": [], "prs": [], "opened": [], "related": []},
                 "cause": "manual", "removed_at": 1, "expires_at": 2,
                 "chat": {"mode": "chat"},
             }))

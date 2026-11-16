@@ -66,6 +66,7 @@ fn a_chat_package_holds_its_removal_record_and_continues_its_session() {
         "links": {
             "issues": [{"kind": "issue", "url": "https://forge.example/team/repo/issues/12", "title": "Plan the cache"}],
             "prs": [{"kind": "pr", "url": "https://forge.example/team/repo/pulls/14", "title": "Fix it"}],
+            "opened": [],
             "related": [{"kind": "issue", "url": "https://forge.example/team/repo/issues/9", "title": null}],
         },
         "last_sessions": [{"execution": "e1", "agent": "claude", "session": "s1", "mode": "plan"}],
@@ -211,7 +212,7 @@ fn manifest_with_sessions() -> Manifest {
         "base_ref": null,
         "base_commit": null,
         "branch": "topic",
-        "links": {"issues": [], "prs": []},
+        "links": {"issues": [], "prs": [], "opened": [], "related": []},
         "agents": [agent],
         "last_sessions": [last],
         "cause": "manual",

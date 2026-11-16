@@ -37,7 +37,7 @@ fn stop(manager: &Manager, id: &SpaceId, execution: &str, record: &str) {
     std::fs::write(path, record).unwrap();
 }
 
-const STOPPED: &str = r#"{"agent":"claude","stage":"stopped"}"#;
+const STOPPED: &str = r#"{"agent":"claude","mode":"worker","stage":"stopped"}"#;
 
 /// Save the record and restore request a signal stop leaves.
 fn signal_stop(manager: &Manager, id: &SpaceId, execution: &str) {
@@ -201,7 +201,7 @@ async fn signal_stops_queue_their_restore_once_the_execution_has_ended() {
 }
 
 /// The record of an agent stopped between turns.
-const IDLE: &str = r#"{"agent":"claude","stage":"stopped","turn":"idle"}"#;
+const IDLE: &str = r#"{"agent":"claude","mode":"worker","stage":"stopped","turn":"idle"}"#;
 
 /// The queued entry restoring `execution`.
 async fn entry(manager: &Manager, execution: &str) -> QueueEntry {

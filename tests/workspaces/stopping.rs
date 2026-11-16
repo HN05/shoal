@@ -334,7 +334,7 @@ fn resume_all_skips_the_agents_of_done_workspaces() {
         fs::create_dir_all(&state).unwrap();
         fs::write(
             state.join(format!("{name}-agent.recovery.json")),
-            r#"{"agent":"claude"}"#,
+            r#"{"agent":"claude","mode":"worker"}"#,
         )
         .unwrap();
     }
@@ -367,7 +367,7 @@ fn resuming_several_goes_on_after_one_fails() {
         fs::create_dir_all(&state).unwrap();
         fs::write(
             state.join(format!("{name}-agent.recovery.json")),
-            r#"{"agent":"claude"}"#,
+            r#"{"agent":"claude","mode":"worker"}"#,
         )
         .unwrap();
         if name == "broken" {
@@ -412,7 +412,7 @@ fn a_parent_forgets_only_the_stopped_work_of_its_children() {
         let state = fixture.root.path().join("state/workspaces").join(id);
         fs::create_dir_all(&state).unwrap();
         let record = state.join(format!("{name}-agent.recovery.json"));
-        fs::write(&record, r#"{"agent":"claude"}"#).unwrap();
+        fs::write(&record, r#"{"agent":"claude","mode":"worker"}"#).unwrap();
         record
     };
     let records = ["parent", "other", "child"].map(save_agent);
@@ -506,7 +506,7 @@ fn a_parent_stops_its_children_and_resumes_them_whoever_stopped_them() {
         fs::create_dir_all(&state).unwrap();
         fs::write(
             state.join(format!("{name}-agent.last-session.json")),
-            r#"{"agent":"waiter"}"#,
+            format!(r#"{{"execution":"{name}-agent","agent":"waiter","mode":"worker"}}"#),
         )
         .unwrap();
         PathBuf::from(workspace["path"].as_str().unwrap())
@@ -575,7 +575,7 @@ fn stopping_a_workspace_stops_the_workspaces_below_it() {
     fs::create_dir_all(&state).unwrap();
     fs::write(
         state.join("child-agent.recovery.json"),
-        r#"{"agent":"waiter"}"#,
+        r#"{"agent":"waiter","mode":"worker"}"#,
     )
     .unwrap();
     let path = PathBuf::from(child["path"].as_str().unwrap());

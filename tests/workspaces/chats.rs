@@ -179,7 +179,7 @@ fn a_resume_takes_saved_chats_and_workspaces_together() {
         fs::create_dir_all(&state).unwrap();
         fs::write(
             state.join("worker-agent.recovery.json"),
-            r#"{"agent":"claude"}"#,
+            r#"{"agent":"claude","mode":"worker"}"#,
         )
         .unwrap();
     };
@@ -241,7 +241,7 @@ fn restore_all_skips_a_done_chat_beside_a_stopped_workspace() {
     fs::create_dir_all(&state).unwrap();
     fs::write(
         state.join("worker-agent.recovery.json"),
-        r#"{"agent":"claude"}"#,
+        r#"{"agent":"claude","mode":"worker"}"#,
     )
     .unwrap();
     let mut stopped = Value::Null;

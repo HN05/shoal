@@ -30,7 +30,7 @@ fn resume_reconciles_a_quarantined_execution_from_a_saved_handoff() {
     fs::create_dir_all(&state).unwrap();
     fs::write(
         state.join(format!("{execution}.recovery.json")),
-        r#"{"agent":"claude"}"#,
+        r#"{"agent":"claude","mode":"worker"}"#,
     )
     .unwrap();
 
@@ -303,7 +303,8 @@ fn daemon_startup_quarantines_operations_and_retains_claims_across_restarts() {
     let simulator = serde_json::json!({
         "id": "simulator", "udid": null, "device": "type.Phone", "runtime": "runtime.iOS",
         "workspace_id": owner, "last_workspace_id": owner, "lease_name": "default",
-        "reason": null, "state": "creating", "last_used": 1, "error": null
+        "reason": null, "state": "creating", "last_used": 1, "error": null,
+        "acquirer": {"kind": "user"}
     });
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     for (state, workspace) in states.iter().zip(&workspaces) {

@@ -35,7 +35,7 @@ fn each_file_is_a_row_by_its_record_before_the_add_row() {
         path: "/repo/.attachments/results/id/key/0/report.md".into(),
         bytes: 960,
         created_at: UnixTime::from_seconds(0),
-        attached_by: None,
+        attached_by: shoal_protocol::files::Attacher::User,
         expires_at: None,
     };
     let rows = entries(std::slice::from_ref(&file));

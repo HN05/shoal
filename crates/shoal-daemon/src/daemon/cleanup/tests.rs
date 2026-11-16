@@ -1358,7 +1358,11 @@ fn save_agent(manager: &Manager, id: &shoal_ids::space_ids::SpaceId) -> std::pat
     let directory = manager.paths.space_state(id);
     std::fs::create_dir_all(&directory).unwrap();
     let record = directory.join("saved.recovery.json");
-    std::fs::write(&record, r#"{"agent":"claude","stage":"stopped"}"#).unwrap();
+    std::fs::write(
+        &record,
+        r#"{"agent":"claude","mode":"worker","stage":"stopped"}"#,
+    )
+    .unwrap();
     record
 }
 

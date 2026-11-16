@@ -25,8 +25,9 @@ async fn long_file_listings_go_in_pages() {
             for n in 0..1000 {
                 db.execute(
                     "INSERT INTO space_files
-                        (space_id,space,repository_id,source,name,path,bytes,created_at)
-                        VALUES (?1,'receiver',?2,'added','notes.md',?3,1,0)",
+                        (space_id,space,repository_id,source,name,path,bytes,created_at,
+                            attached_by)
+                        VALUES (?1,'receiver',?2,'added','notes.md',?3,1,0,'{\"kind\":\"user\"}')",
                     rusqlite::params![id, repository_id, format!("/attachments/{n:0>64}/notes.md")],
                 )?;
             }

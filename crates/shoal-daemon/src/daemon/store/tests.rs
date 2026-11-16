@@ -2234,8 +2234,10 @@ fn migrated_file_events_name_their_space_in_the_file() -> Result<()> {
     migrate(&mut db)?;
     // A file attached since names its space as the migrated event does.
     db.execute(
-        "INSERT INTO space_files(space_id,space,repository_id,source,name,path,bytes,created_at)
-            VALUES ('workspace','worker','repo','added','report.md','/report.md',1,2)",
+        r#"INSERT INTO space_files(space_id,space,repository_id,source,name,path,bytes,created_at,
+                attached_by)
+            VALUES ('workspace','worker','repo','added','report.md','/report.md',1,2,
+                '{"kind":"user"}')"#,
         [],
     )?;
 

@@ -1215,7 +1215,7 @@ async fn a_restored_agent_forks_the_session_another_space_holds() {
     fs::create_dir_all(&state).unwrap();
     fs::write(
         state.join("saved.recovery.json"),
-        r#"{"agent":"claude","stage":"stopped","session":"s1"}"#,
+        r#"{"agent":"claude","mode":"worker","stage":"stopped","session":"s1"}"#,
     )
     .unwrap();
     let selector = SpaceSelector::id(&workspace.id);

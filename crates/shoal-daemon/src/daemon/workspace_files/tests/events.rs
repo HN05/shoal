@@ -111,7 +111,7 @@ async fn every_route_records_one_added_event_per_file() {
     // The event's file is the record as `shoal files` lists it.
     assert_eq!(added.file, listed[2]);
     assert_eq!(added.file.title.as_deref(), Some("Crash log"));
-    assert_eq!(added.file.attached_by, Some(Attacher::User));
+    assert_eq!(added.file.attached_by, Attacher::User);
 
     let item = manager.space_events(None, 1000).await.unwrap();
     let line = item

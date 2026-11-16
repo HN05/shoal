@@ -402,8 +402,10 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
     );
 
     // It resumes the agent of any space it reaches.
-    let last: crate::execution::recovery::LastSession =
-        serde_json::from_value(serde_json::json!({"execution": "e1", "agent": "claude"})).unwrap();
+    let last: crate::execution::recovery::LastSession = serde_json::from_value(
+        serde_json::json!({"execution": "e1", "agent": "claude", "mode": "worker"}),
+    )
+    .unwrap();
     last.write(&manager.paths, &user.id).unwrap();
     let mut resume = QueueMethod::QueueRestore {
         workspace: SpaceSelector::id(&user.id),

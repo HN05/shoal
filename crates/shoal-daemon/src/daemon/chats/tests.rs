@@ -457,7 +457,7 @@ async fn a_removed_chat_takes_its_executions_restores_and_recovery_records() {
     std::fs::create_dir_all(&state).unwrap();
     std::fs::write(
         state.join("stopped.recovery.json"),
-        r#"{"agent":"claude","stage":"stopped"}"#,
+        r#"{"agent":"claude","mode":"worker","stage":"stopped"}"#,
     )
     .unwrap();
 

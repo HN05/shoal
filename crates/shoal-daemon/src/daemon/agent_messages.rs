@@ -85,7 +85,7 @@ impl Attached {
             Self::Kept(_) => Ok(()),
             Self::Copied(copies, attacher) => {
                 let source = workspace_files::FileSource::Message;
-                workspace_files::record(tx, id, source, Some(attacher), copies)
+                workspace_files::record(tx, id, source, attacher, copies)
             }
         }
     }

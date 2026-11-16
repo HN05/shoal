@@ -3,12 +3,8 @@ use crate::time::UnixTime;
 use shoal_ids::space_ids::SpaceId;
 
 #[test]
-fn legacy_records_remain_readable_and_pressure_handoffs_are_private() {
+fn pressure_handoffs_are_private() {
     use std::os::unix::fs::PermissionsExt;
-    let old: Record = serde_json::from_str(r#"{"agent":"codex"}"#).unwrap();
-    assert!(old.stop_reason.is_none());
-    assert_eq!(old.stage, None);
-    assert_eq!(old.turn, None);
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
     let path = save_record(
@@ -81,8 +77,8 @@ fn only_a_daemon_saved_stop_counts_as_undelivered() {
         &ExecutionId::from("execution"),
     );
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    // A record from before stages may be the wrapper's own.
-    std::fs::write(&path, r#"{"agent":"codex"}"#).unwrap();
+    // A record without a stage may be the wrapper's own.
+    std::fs::write(&path, r#"{"agent":"codex","mode":"worker"}"#).unwrap();
     assert!(
         !discard_undelivered(
             &paths,
@@ -186,9 +182,9 @@ fn saved_agents_carry_their_agent_stop_reason_and_turn() {
     };
     save(
         "busy",
-        r#"{"agent":"claude","stop_reason":"memory pressure"}"#,
+        r#"{"agent":"claude","stop_reason":"memory pressure","mode":"worker"}"#,
     );
-    save("idle", r#"{"agent":"codex","turn":"idle"}"#);
+    save("idle", r#"{"agent":"codex","turn":"idle","mode":"worker"}"#);
     let saved = Saved::load(&paths, &workspace).unwrap();
     let agents = (saved.agents.iter())
         .map(|agent| {
@@ -395,14 +391,15 @@ fn a_restore_request_sits_beside_the_record_until_forgotten() {
 }
 
 #[test]
-fn each_agent_keeps_a_last_session_and_a_single_earlier_one_gets_a_file() {
+fn each_agent_keeps_a_last_session() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
     let state = paths.space_state(&SpaceId::from("workspace"));
     std::fs::create_dir_all(&state).unwrap();
+    let earlier = ExecutionId::from("earlier");
     std::fs::write(
-        state.join("last-session.json"),
-        r#"{"agent":"codex","session":"earlier"}"#,
+        LastSession::path(&paths, &SpaceId::from("workspace"), &earlier),
+        r#"{"execution":"earlier","agent":"codex","session":"earlier","mode":"worker"}"#,
     )
     .unwrap();
     LastSession::save(
@@ -413,7 +410,6 @@ fn each_agent_keeps_a_last_session_and_a_single_earlier_one_gets_a_file() {
     )
     .unwrap();
     let mut saved = Saved::load(&paths, &SpaceId::from("workspace")).unwrap();
-    assert!(!state.join("last-session.json").exists());
     assert_eq!(saved.sessions.len(), 2);
     assert!(!saved.is_empty() && !saved.is_unfinished());
     assert!(!pending(&paths, &SpaceId::from("workspace")).unwrap());
@@ -565,7 +561,8 @@ fn a_restored_session_learns_why_and_when_it_stopped_and_what_the_stop_ended() {
 
 #[test]
 fn copied_records_keep_their_mark_where_they_move() {
-    let record: Record = serde_json::from_str(r#"{"agent":"claude","session":"s1"}"#).unwrap();
+    let record: Record =
+        serde_json::from_str(r#"{"agent":"claude","session":"s1","mode":"worker"}"#).unwrap();
     assert_eq!(record.copied, None);
     let copied = Record {
         copied: Some(Copied {

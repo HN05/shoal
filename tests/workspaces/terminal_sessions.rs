@@ -130,7 +130,7 @@ fn assert_failed_labelling_refuses_launches(
     );
     fs::create_dir_all(&state)?;
     let recovery = state.join("saved.recovery.json");
-    let saved = r#"{"agent":"claude","session":"previous-session"}"#;
+    let saved = r#"{"agent":"claude","mode":"worker","session":"previous-session"}"#;
     fs::write(&recovery, saved)?;
     install_test_script(
         fixture.root.path().join("bin/claude"),
@@ -425,7 +425,7 @@ fn a_resumed_session_ends_once_a_kept_completion_resolves_its_agent() -> anyhow:
     fs::create_dir_all(&state)?;
     fs::write(
         state.join("resumed-agent.recovery.json"),
-        r#"{"agent":"pi"}"#,
+        r#"{"agent":"pi","mode":"worker"}"#,
     )?;
     fixture.ok(&["restore", &fixture.id("resumed")]);
     // The watcher has the daemon close the session Shoal recorded creating.
