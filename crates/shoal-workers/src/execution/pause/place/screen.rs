@@ -22,8 +22,8 @@ pub(super) struct Screen {
 pub(super) enum Wake {
     /// The daemon starts its restore.
     Waking,
-    /// The daemon refused it, saying why.
-    Refused(String),
+    /// The wake could not reach the daemon, for this reason.
+    Unsent(String),
 }
 
 impl Screen {
@@ -78,9 +78,10 @@ impl Screen {
         }
         match &self.wake {
             Some(Wake::Waking) => lines.extend([String::new(), "Waking agent".to_owned()]),
-            Some(Wake::Refused(error)) => {
-                lines.extend([String::new(), format!("Cannot wake the agent: {error}")])
-            }
+            Some(Wake::Unsent(error)) => lines.extend([
+                String::new(),
+                format!("Cannot ask the daemon to wake the agent: {error}"),
+            ]),
             None => {}
         }
         lines.extend([

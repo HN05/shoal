@@ -62,9 +62,9 @@ impl Place {
         self.show_wake(Wake::Waking);
     }
 
-    /// Show that the daemon refused to wake the agent with `error`.
-    pub(super) fn wake_refused(&mut self, error: &anyhow::Error) {
-        self.show_wake(Wake::Refused(format!("{error:#}")));
+    /// Show that the wake could not reach the daemon because of `error`.
+    pub(super) fn wake_unsent(&mut self, error: &anyhow::Error) {
+        self.show_wake(Wake::Unsent(format!("{error:#}")));
     }
 
     fn show_wake(&mut self, wake: Wake) {

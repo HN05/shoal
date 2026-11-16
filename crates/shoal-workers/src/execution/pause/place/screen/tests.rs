@@ -39,10 +39,10 @@ fn the_screen_shows_its_notes_and_only_the_latest_wake() {
     screen
         .notes
         .push("the restore also waits for pid 42".into());
-    screen.wake = Some(Wake::Refused("the daemon is away".into()));
-    let refused = rows(&screen);
-    assert!(shows(&refused, "pid 42"), "{refused:?}");
-    assert!(shows(&refused, "the daemon is away"), "{refused:?}");
+    screen.wake = Some(Wake::Unsent("the daemon is away".into()));
+    let unsent = rows(&screen);
+    assert!(shows(&unsent, "pid 42"), "{unsent:?}");
+    assert!(shows(&unsent, "the daemon is away"), "{unsent:?}");
     screen.wake = Some(Wake::Waking);
     let waking = rows(&screen);
     assert!(shows(&waking, "pid 42"), "{waking:?}");

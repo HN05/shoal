@@ -440,7 +440,7 @@ pub(super) async fn wait(link: &mut Link, place: &mut Place) -> Result<Waited> {
 async fn wake_now(link: &mut Link, place: &mut Place) {
     place.waking();
     if let Err(error) = link.send(&ExecutionEvent::Wake).await {
-        place.wake_refused(&error);
+        place.wake_unsent(&error);
     }
 }
 
