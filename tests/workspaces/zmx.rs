@@ -657,6 +657,7 @@ fn zmx_agent_exit_resets_input_modes_for_the_calling_shell() {
 /// nothing running.
 pub(crate) struct SessionAgent<'a> {
     fixture: &'a Fixture,
+    /// The workspace's ID, which still selects it once a test renames it.
     workspace: String,
     agent: Child,
 }
@@ -667,7 +668,7 @@ impl Drop for SessionAgent<'_> {
         let _ = self
             .fixture
             .command()
-            .args(["stop", &self.fixture.id(&self.workspace)])
+            .args(["stop", &self.workspace])
             .output();
         if try_wait_for(|| self.agent.try_wait().ok().flatten()).is_none() {
             let _ = self.agent.kill();
@@ -691,18 +692,11 @@ pub(crate) fn agent_in_session<'a>(
         "#!/bin/sh\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
     );
     let errors = fixture.root.path().join(format!("agent-{session}.err"));
+    let id = fixture.id(workspace);
     let agent = fixture
         .command()
         .env("ZMX_SESSION", session)
-        .args([
-            "start",
-            "--in",
-            &fixture.id(workspace),
-            "--here",
-            "--now",
-            "--agent",
-            "claude",
-        ])
+        .args(["start", "--in", &id, "--here", "--now", "--agent", "claude"])
         .stdin(Stdio::null())
         .stdout(fs::File::create(errors.with_extension("out")).unwrap())
         .stderr(fs::File::create(&errors).unwrap())
@@ -710,10 +704,9 @@ pub(crate) fn agent_in_session<'a>(
         .unwrap();
     let mut agent = SessionAgent {
         fixture,
-        workspace: workspace.to_owned(),
+        workspace: id.clone(),
         agent,
     };
-    let id = fixture.ok(&["status", &fixture.id(workspace)])["workspace"]["id"].clone();
     wait_until("the agent listed in its session", || {
         if let Some(status) = agent.agent.try_wait().unwrap() {
             panic!(
