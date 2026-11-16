@@ -141,21 +141,39 @@ impl Manager {
             }
         };
         let layers = self.config_layers(&workspace.repository_id, file).await?;
-        let signing_secrets = match self
-            .checkout_signing_secrets(&workspace.repository_id)
-            .await
-        {
-            Ok(signing) => signing,
-            // Unread, the checkout's triggers could sign with any secret of
-            // the local config, the only ones a repository's trigger takes,
-            // so no agent receives those until it reads.
-            Err(_) => layers.local_config.secrets.keys().cloned().collect(),
-        };
+        let signing_secrets =
+            (self.withheld_signing_secrets(workspace, &layers.local_config)).await;
         Ok(ConfigLayers {
             rejected_worktree_file: rejected,
             signing_secrets,
             ..layers
         })
+    }
+
+    /// The secrets that `workspace`'s agents may not receive beyond those
+    /// its own layers' triggers sign with: those of the checkout file's
+    /// webhook triggers, which fire whatever the workspace's own file says.
+    /// While that file cannot be read, its triggers could sign with any
+    /// secret of the `local` config, the only ones a repository's trigger
+    /// takes, so none of those reaches an agent until it reads.
+    async fn withheld_signing_secrets(
+        &self,
+        workspace: &Workspace,
+        local: &RepoConfig,
+    ) -> BTreeSet<String> {
+        match self
+            .checkout_signing_secrets(&workspace.repository_id)
+            .await
+        {
+            Ok(signing) => signing,
+            Err(error) => {
+                crate::daemon::log!(
+                    "withholding the local config's secrets from {}'s agents: the checkout's triggers cannot be read: {error:#}",
+                    workspace.id
+                );
+                local.secrets.keys().cloned().collect()
+            }
+        }
     }
 
     /// The secrets the webhook triggers of `repository`'s checkout file sign
