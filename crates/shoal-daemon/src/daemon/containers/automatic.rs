@@ -38,6 +38,7 @@ impl Manager {
         let starter = Starter {
             acquirer,
             for_agent,
+            agent_start: false,
             reason: None,
         };
         let started = self.start_containers(&workspace, starter, caller).await;
@@ -51,8 +52,9 @@ impl Manager {
     }
 
     /// Start the containers of `selector`'s workspace for the agent
-    /// `caller` runs, as it starts: one set up for the workspace's agent
-    /// becomes its own, and one that does not run starts as its own.
+    /// `caller` runs, as it starts: one set up for the workspace's agent, or
+    /// held by an earlier agent whose release may still be pending, becomes
+    /// its own, and one that does not run starts as its own.
     pub async fn start_agent_containers(
         &self,
         selector: &SpaceSelector,
@@ -65,6 +67,7 @@ impl Manager {
         let starter = Starter {
             acquirer: self.acquirer(caller).await,
             for_agent: false,
+            agent_start: true,
             reason: None,
         };
         let started = self.start_containers(&workspace, starter, caller).await;

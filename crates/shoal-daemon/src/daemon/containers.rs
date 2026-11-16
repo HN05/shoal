@@ -67,6 +67,9 @@ pub(crate) struct Starter {
     pub(crate) acquirer: Acquirer,
     /// Setup started it for the workspace's own agent.
     pub(crate) for_agent: bool,
+    /// An agent's start, which takes over a project another agent holds,
+    /// whose release may not have run yet.
+    pub(crate) agent_start: bool,
     pub(crate) reason: Option<String>,
 }
 
@@ -133,6 +136,7 @@ impl Manager {
         let starter = Starter {
             acquirer: self.acquirer(caller).await,
             for_agent: false,
+            agent_start: false,
             reason,
         };
         self.start_containers(&workspace, starter, caller).await
@@ -227,22 +231,14 @@ impl Manager {
         Ok(Ok(()))
     }
 
-    /// The running project `recorded` acquired again by `starter`: one set
-    /// up for the workspace's agent, or started again for it, goes to
-    /// `starter`; otherwise the user's acquire makes it the user's. A reason
-    /// replaces its own.
+    /// The running project `recorded` acquired again by `starter`, held as
+    /// [`holder_after`] decides; a reason replaces its own.
     async fn renew_containers(
         &self,
         mut recorded: Recorded,
         starter: Starter,
     ) -> Result<ContainerProject> {
-        let (acquirer, for_agent) = match recorded.for_agent || starter.for_agent {
-            true => (starter.acquirer, starter.for_agent),
-            false => (
-                recorded.project.acquirer.renewed_by(&starter.acquirer),
-                false,
-            ),
-        };
+        let (acquirer, for_agent) = holder_after(&recorded, &starter);
         let reason = starter.reason.or(recorded.project.reason.clone());
         if (acquirer != recorded.project.acquirer)
             || (for_agent != recorded.for_agent)
@@ -392,6 +388,23 @@ impl Manager {
     }
 }
 
+/// Who holds the running project `recorded` once `starter` acquires it
+/// again, and whether for the workspace's agent: one set up for that agent,
+/// started again for it, or held by an earlier agent whose release may not
+/// have run when another agent starts, goes to `starter`; otherwise the
+/// user's acquire makes it the user's.
+fn holder_after(recorded: &Recorded, starter: &Starter) -> (Acquirer, bool) {
+    let held_by_agent = matches!(recorded.project.acquirer, Acquirer::Agent { .. });
+    let takes_over = starter.agent_start && held_by_agent;
+    match recorded.for_agent || starter.for_agent || takes_over {
+        true => (starter.acquirer.clone(), starter.for_agent),
+        false => (
+            recorded.project.acquirer.renewed_by(&starter.acquirer),
+            false,
+        ),
+    }
+}
+
 /// The Compose file `[containers] compose` names for `workspace`.
 fn configured_compose(workspace: &Workspace, compose: Option<String>) -> Result<String> {
     compose.with_context(|| {
@@ -434,3 +447,6 @@ fn ensure_ready(workspace: &Workspace) -> Result<()> {
     );
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;
