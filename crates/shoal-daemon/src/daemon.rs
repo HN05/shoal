@@ -329,6 +329,13 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     startup.step("learning forge hosts", hosts).await?;
     let audit = manager.audit_worktrees();
     startup.step("auditing worktrees", audit).await?;
+    let removals = manager.restore_interrupted_removals();
+    if let Err(error) = startup
+        .step("restoring files of interrupted removals", removals)
+        .await
+    {
+        log!("{error:#}");
+    }
     let reviews = manager.recover_reviews();
     if let Err(error) = startup
         .step("removing interrupted reviews' checkouts", reviews)

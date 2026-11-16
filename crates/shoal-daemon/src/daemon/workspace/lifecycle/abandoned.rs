@@ -1,7 +1,8 @@
 //! Removals that stop before they finish without retaining their
 //! workspace, as when the daemon stops or a removal's work ends early: the
 //! workspace leaves `removing` for `failed`, and its log says where its
-//! removal stopped, so `shoal rm` finishes it.
+//! removal stopped, so `shoal rm` finishes it; at startup, the files such a
+//! removal deleted of the worktree come back.
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::Result;
@@ -12,6 +13,7 @@ use crate::{
         events::{self, EventCause, EventKind},
         log,
         store::Store,
+        workspace::Manager,
     },
     state::WorkspaceState,
 };
@@ -60,6 +62,23 @@ impl Drop for Underway {
                 log!("removal of {id} left it removing: {error:#}");
             }
         });
+    }
+}
+
+impl Manager {
+    /// Put back what each removal the daemon's stop cut short deleted of a
+    /// worktree, before anything else uses or readies the workspace, so
+    /// that no marker outlives the startup to undo later deletions.
+    pub(crate) async fn restore_interrupted_removals(&self) -> Result<()> {
+        for workspace in self.list_workspaces().await? {
+            if let Err(error) = self.restore_interrupted_removal(&workspace).await {
+                log!(
+                    "files an interrupted removal of {} deleted not restored: {error:#}",
+                    workspace.name
+                );
+            }
+        }
+        Ok(())
     }
 }
 

@@ -1607,6 +1607,21 @@ async fn removal_finishes_one_that_stopped_partway() {
     assert!(!admin_dir.exists());
 }
 
+/// A removal the daemon's stop cut short gets its files back at startup,
+/// before anything readies the workspace or an agent works there.
+#[tokio::test]
+async fn startup_restores_what_a_cut_short_removal_deleted() {
+    let (_root, manager, workspace) = fixture().await;
+    let link = fs::read_to_string(workspace.path.join(".git")).unwrap();
+    let admin_dir = workspace.git_dir.clone().unwrap();
+    fs::write(admin_dir.join("shoal-removal"), link).unwrap();
+    fs::remove_file(workspace.path.join("tracked")).unwrap();
+    fs::remove_file(workspace.path.join(".git")).unwrap();
+    manager.restore_interrupted_removals().await.unwrap();
+    assert_eq!(git(&workspace.path, &["status", "--porcelain"]), "");
+    assert!(!admin_dir.join("shoal-removal").exists());
+}
+
 /// A workspace's life from creation to removal, with a removal hook that runs
 /// Git, which [`a_runners_repository_variables_reach_no_git_of_the_tests`]
 /// runs as the tests of a runner in another repository.
