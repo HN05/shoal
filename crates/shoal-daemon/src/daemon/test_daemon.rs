@@ -70,12 +70,10 @@ impl TestDaemon {
     }
 
     pub async fn scope_token(&self, workspace: &Workspace) -> ScopeToken {
-        let environment = self
-            .manager
-            .workspace_environment(&SpaceSelector::id(&workspace.id))
+        self.manager
+            .issue_scope(&SpaceSelector::id(&workspace.id))
             .await
-            .unwrap();
-        environment[crate::env::SCOPE_TOKEN].clone().into()
+            .unwrap()
     }
 
     pub async fn workspace(&self, name: &str) -> Workspace {

@@ -359,8 +359,11 @@ async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
     let mode = std::fs::metadata(&tmp_dir).unwrap().permissions().mode();
     assert_eq!(mode & 0o777, 0o700);
     assert_eq!(
-        crate::env::chat_environment(&chat, &"token".into(), &manager.paths)[crate::env::TMPDIR],
-        tmp_dir.as_os_str()
+        manager
+            .space_environment(&SpaceSelector::id(&chat.id))
+            .await
+            .unwrap()[crate::env::TMPDIR],
+        tmp_dir.to_str().unwrap()
     );
     std::fs::write(tmp_dir.join("scratch"), "garbage").unwrap();
 

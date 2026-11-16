@@ -8,9 +8,8 @@ use shoal_protocol::space_names::SpaceSelector;
 use crate::connection::{Daemon, request};
 use shoal_protocol::{
     model::{Chat, ChatHome},
-    protocol::{ChatMethod, ChatScope},
+    protocol::ChatMethod,
     repository::Selector,
-    scope_tokens::ScopeToken,
     sessions::Origin,
 };
 
@@ -81,13 +80,6 @@ pub async fn check_parent(
 pub async fn root(daemon: &impl Daemon) -> Result<std::path::PathBuf> {
     let root: shoal_protocol::protocol::ChatRoot = request(daemon, ChatMethod::ChatRoot).await?;
     Ok(root.path)
-}
-
-/// The scope token `chat`'s agent carries.
-pub async fn scope(daemon: &impl Daemon, chat: &Chat) -> Result<ScopeToken> {
-    let chat = SpaceSelector::id(&chat.id);
-    let scope: ChatScope = request(daemon, ChatMethod::ChatScope { chat }).await?;
-    Ok(scope.token)
 }
 
 /// Record `origin` as the place `chat`, recorded before its queued agent

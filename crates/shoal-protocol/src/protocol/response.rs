@@ -1,7 +1,7 @@
 //! The response envelope, its bodies and the errors they carry.
 use super::{
-    ChatScope, DaemonStatus, DownloadPiece, Exited, MAX_FRAME, ReviewPiece, VERSION, ViewPiece,
-    WokenTurn, Work, chats, frame_pages, operations,
+    DaemonStatus, DownloadPiece, Exited, MAX_FRAME, ReviewPiece, VERSION, ViewPiece, WokenTurn,
+    Work, chats, frame_pages, operations,
 };
 use crate::events::EventItem;
 use crate::model::{
@@ -204,7 +204,7 @@ response_bodies! {
     Triggers(Vec<crate::triggers::TriggerStatus>),
     Trigger(crate::triggers::TriggerStatus),
     TriggerFired(crate::triggers::Fired),
-    ScopeToken(ChatScope),
+    ScopeToken(crate::scope_tokens::ScopeToken),
     Granted(Option<crate::scope_tokens::ScopeToken>),
     Branches(Vec<crate::model::Branch>),
     OpenedWorkspace(crate::model::OpenedWorkspace),
@@ -250,7 +250,7 @@ response_bodies! {
     CiRun(crate::forge::ci::run_action::Run),
     CiRunJobs(Vec<crate::forge::ci::run_view::RunJob>),
     CiRuns(Vec<crate::forge::ci::run_action::Run>),
-    WorkspaceEnv(std::collections::BTreeMap<String, String>),
+    SpaceEnvironment(std::collections::BTreeMap<String, String>),
     Permissions(crate::config::permissions::Permissions),
     Cleanup(crate::cleanup::ManualCleanup),
     RemovedSpaces(Vec<crate::model::RemovedSpace>),

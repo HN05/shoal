@@ -2,13 +2,10 @@ use super::*;
 use crate::{
     daemon::{scope, test_support},
     protocol::{ExecutionMethod, NotificationMethod, Operation, WorkspaceMethod},
-    state::WorkspaceState,
 };
-use shoal_protocol::scope_tokens::ScopeToken;
-use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
-async fn exported_scopes_are_persistent_independent_and_untracked() {
+async fn issued_scopes_are_persistent_independent_and_untracked() {
     let (root, manager) = test_support::manager().await;
     let repo = test_support::repository(root.path(), "repo");
     let repo = manager
@@ -19,38 +16,36 @@ async fn exported_scopes_are_persistent_independent_and_untracked() {
         .create_workspace(&repo.id, "external".into(), None, None, None)
         .await
         .unwrap();
-    let first = manager
-        .workspace_environment(&SpaceSelector::id(&workspace.id))
+    let other = manager
+        .create_workspace(&repo.id, "other".into(), None, None, None)
         .await
         .unwrap();
-    let second = manager
-        .workspace_environment(&SpaceSelector::id(&workspace.id))
-        .await
-        .unwrap();
-    let token = &ScopeToken::from(first[env::SCOPE_TOKEN].clone());
-    let second = ScopeToken::from(second[env::SCOPE_TOKEN].clone());
+    let selector = SpaceSelector::id(&workspace.id);
+    let token = &manager.issue_scope(&selector).await.unwrap();
+    let second = manager.issue_scope(&selector).await.unwrap();
     assert_ne!(token, &second);
-    assert!(
-        manager
-            .inspect_workspace(&SpaceSelector::id(&workspace.id))
-            .await
-            .unwrap()
-            .executions
-            .is_empty()
-    );
-    assert!(!first.contains_key(env::EXECUTION_ID));
     let caller = manager.caller(token).await.unwrap().unwrap();
     assert_eq!(caller.space_id, workspace.id);
     assert!(caller.execution.is_none());
+    // It issues and reads for the spaces its scope reaches, and acts as no
+    // execution.
     for mut method in [
-        Operation::from(WorkspaceMethod::WorkspaceEnv {
-            workspace: SpaceSelector::id(&workspace.id),
+        Operation::from(WorkspaceMethod::IssueScope {
+            space: selector.clone(),
         }),
-        WorkspaceMethod::RevokeWorkspaceEnv {
-            workspace: SpaceSelector::id(&workspace.id),
-            token: token.clone(),
+        WorkspaceMethod::SpaceEnvironment {
+            space: selector.clone(),
         }
         .into(),
+    ] {
+        scope::authorize(&manager, Some(token), &mut method)
+            .await
+            .unwrap();
+    }
+    for mut method in [
+        Operation::from(WorkspaceMethod::IssueScope {
+            space: SpaceSelector::id(&other.id),
+        }),
         ExecutionMethod::CheckMerge.into(),
         NotificationMethod::ListNotifications {
             unread_only: true,
@@ -68,7 +63,7 @@ async fn exported_scopes_are_persistent_independent_and_untracked() {
     let restored = Manager::open(manager.paths.clone()).await.unwrap();
     assert!(restored.caller(token).await.unwrap().is_some());
     restored
-        .revoke_workspace_environment(&SpaceSelector::id(&workspace.id), token.clone())
+        .revoke_scope(&selector, token.clone())
         .await
         .unwrap();
     assert!(restored.caller(token).await.unwrap().is_none());
@@ -86,51 +81,32 @@ async fn exported_scopes_are_persistent_independent_and_untracked() {
 }
 
 #[tokio::test]
-async fn exporting_requires_ready_verified_worktree_without_minting_on_failure() {
+async fn a_chat_issues_tokens_apart_from_its_agents_which_none_revokes() {
     let (root, manager) = test_support::manager().await;
     let repo = test_support::repository(root.path(), "repo");
     let repo = manager
         .register_repository(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let workspace = manager
-        .create_workspace(&repo.id, "external".into(), None, None, None)
-        .await
-        .unwrap();
-    manager
-        .set_state(&workspace.id, WorkspaceState::Failed, None)
-        .await
-        .unwrap();
-    assert!(
-        manager
-            .workspace_environment(&SpaceSelector::id(&workspace.id))
-            .await
-            .is_err()
-    );
-    manager
-        .set_state(&workspace.id, WorkspaceState::Ready, None)
-        .await
-        .unwrap();
-    std::fs::rename(
-        workspace.path.join(".git"),
-        workspace.path.join(".git.saved"),
-    )
-    .unwrap();
-    assert!(
-        manager
-            .workspace_environment(&SpaceSelector::id(&workspace.id))
-            .await
-            .is_err()
-    );
+    let chat = test_support::chat(&manager, "talk", "chat", Some(&repo), None).await;
+    let agent = manager.chat_scope(&chat.id).await.unwrap();
+    let selector = SpaceSelector::id(&chat.id);
+    let issued = manager.issue_scope(&selector).await.unwrap();
     assert_eq!(
-        manager
-            .store
-            .run(
-                |db| Ok(db.query_row("SELECT count(*) FROM space_scopes", [], |r| r
-                    .get::<_, i64>(0))?)
-            )
-            .await
-            .unwrap(),
-        0
+        manager.caller(&issued).await.unwrap().unwrap().space_id,
+        chat.id
     );
+    assert_eq!(manager.chat_scope(&chat.id).await.unwrap(), agent);
+    manager
+        .revoke_scope(&selector, issued.clone())
+        .await
+        .unwrap();
+    assert!(manager.caller(&issued).await.unwrap().is_none());
+    assert!(
+        manager
+            .revoke_scope(&selector, agent.clone())
+            .await
+            .is_err()
+    );
+    assert!(manager.caller(&agent).await.unwrap().is_some());
 }

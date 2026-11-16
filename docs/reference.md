@@ -6132,19 +6132,19 @@ gets the CLI's scoped refusals even after the token is removed from its
 environment. Scope is cooperative and does not restrict direct filesystem or
 Git operations.
 
-`shoal internal env [workspace] --json` returns an object mapping environment variable names
-to strings, using the same workspace identity and current port exports as tracked
-executions, with a fresh `SHOAL_SCOPE_TOKEN` and no `SHOAL_EXECUTION_ID`.
-The [`[env]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#environment) variables join this exported environment as
+`shoal internal env [space] --json` returns an object mapping environment variable names
+to strings for a workspace or a chat: the same space identity as tracked
+executions, `SHOAL_STATE_DIR`, its `TMPDIR` and a fresh `SHOAL_SCOPE_TOKEN`, with
+no `SHOAL_EXECUTION_ID`. A workspace, whose worktree must be ready and verified,
+adds its worktree's variables and current port exports, and the
+[`[env]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#environment) variables join them as
 they join tracked executions and lifecycle hooks. `{workspace}` there is the
 last part of `{path}`, which never changes. Desktop handoffs may reuse an existing process and do
 not receive these variables.
-Only unscoped callers revoke tokens; a scoped process exports one for a
-space its scope reaches as its [`admin` permission](#permitted-actions)
-allows, and export requires a ready,
-verified worktree. Add the returned variables to the processes your app starts.
-Each exported token survives daemon restarts until `shoal internal env [workspace] --revoke
-<token>` or successful workspace removal; revoking one leaves other tokens valid.
+A scoped process exports and revokes tokens for any space its scope reaches.
+Add the returned variables to the processes your app starts.
+Each exported token survives daemon restarts until `shoal internal env [space] --revoke
+<token>` or the space's removal; revoking one leaves other tokens valid.
 Running processes retain their port snapshot. These processes are untracked, the
 token provides no cleanup protection, and removing the workspace stops them.
 

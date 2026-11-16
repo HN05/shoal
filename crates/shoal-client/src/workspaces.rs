@@ -303,31 +303,6 @@ pub async fn held_permissions(
     request(daemon, WorkspaceMethod::HeldPermissions { repository }).await
 }
 
-/// The environment `workspace`'s configuration gives its commands, as a
-/// shell sets it: a preset's directories go first on the configured PATH,
-/// or else on `inherited`.
-pub async fn environment(
-    daemon: &impl Daemon,
-    workspace: SpaceSelector,
-    inherited: Option<std::ffi::OsString>,
-) -> Result<BTreeMap<String, String>> {
-    let values = request(daemon, WorkspaceMethod::WorkspaceEnv { workspace }).await?;
-    shoal_protocol::env::export_configured(values, inherited)
-}
-
-/// Revoke the environment `token` handed out for `workspace`.
-pub async fn revoke_environment(
-    daemon: &impl Daemon,
-    workspace: SpaceSelector,
-    token: shoal_protocol::scope_tokens::ScopeToken,
-) -> Result<()> {
-    request(
-        daemon,
-        WorkspaceMethod::RevokeWorkspaceEnv { workspace, token },
-    )
-    .await
-}
-
 /// Keep where an agent of `workspace` keeps its configuration for the
 /// repository's removal.
 pub async fn keep_agent_environment(

@@ -19,9 +19,10 @@ pub enum InternalCommand {
         #[arg(long = "since")]
         after: Option<EventCursor>,
     },
-    /// Export the environment for processes started in a workspace.
+    /// Export the environment, with a new scope token, for processes
+    /// started in a space.
     Env {
-        workspace: Option<SpaceSelector>,
+        space: Option<SpaceSelector>,
         /// Revoke a previously exported scope token.
         #[arg(long)]
         revoke: Option<shoal_protocol::scope_tokens::ScopeToken>,

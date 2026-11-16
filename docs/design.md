@@ -1407,9 +1407,10 @@ records its own process identity in the state directory before it spawns the
 command, until the command exits, and the command's identity while it lives,
 because macOS hides the environments of its own platform binaries, such as
 shells; an exported environment is recognised only where an ancestor's
-environment is readable. Unscoped callers may export a ready, verified
-workspace's identity, current port variables and a fresh token through `internal env`.
-Exported tokens persist across restarts until explicitly revoked or the workspace
+environment is readable. `internal env` exports a space's identity, and for a
+workspace its ready, verified worktree's variables and current port variables,
+with a fresh token, for any space the caller's scope reaches.
+Exported tokens persist across restarts until explicitly revoked or the space
 is removed; they register no execution and do not prevent cleanup.
 
 Root help groups built-in commands by task; space maintenance commands such as

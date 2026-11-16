@@ -9,7 +9,6 @@ use crate::{
 };
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::progress::ProgressChange;
-use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;
 
@@ -190,10 +189,9 @@ async fn a_workspace_that_becomes_a_chat_keeps_only_the_chats_own_token() {
         .create_workspace(&repo.id, "fix-login".into(), None, None, None)
         .await
         .unwrap();
-    let exported = (manager.workspace_environment(&SpaceSelector::id(&workspace.id)))
+    let exported = (manager.issue_scope(&SpaceSelector::id(&workspace.id)))
         .await
         .unwrap();
-    let exported = ScopeToken::from(exported[crate::env::SCOPE_TOKEN].clone());
     let chat = ConvertedChat {
         agent: "claude".into(),
         execution: ExecutionId::generate(),

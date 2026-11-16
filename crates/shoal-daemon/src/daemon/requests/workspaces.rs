@@ -235,14 +235,15 @@ pub(super) async fn handle(
             let held = manager.space_permissions(&caller.space_id, repository.as_ref());
             Body::Permissions(held.await?)
         }
-        WorkspaceMethod::WorkspaceEnv { workspace } => {
-            Body::WorkspaceEnv(manager.workspace_environment(&workspace).await?)
+        WorkspaceMethod::IssueScope { space } => {
+            Body::ScopeToken(manager.issue_scope(&space).await?)
         }
-        WorkspaceMethod::RevokeWorkspaceEnv { workspace, token } => {
-            manager
-                .revoke_workspace_environment(&workspace, token)
-                .await?;
+        WorkspaceMethod::RevokeScope { space, token } => {
+            manager.revoke_scope(&space, token).await?;
             Body::Ok
+        }
+        WorkspaceMethod::SpaceEnvironment { space } => {
+            Body::SpaceEnvironment(manager.space_environment(&space).await?)
         }
         WorkspaceMethod::SpaceStatus { space } => {
             Body::SpaceStatus(Box::new(manager.space_status(&space).await?))
@@ -405,6 +406,11 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::SpaceStatus { space }
             | WorkspaceMethod::SpaceSessions { space }
             | WorkspaceMethod::PlaceOwnership { space, .. } => Some(space),
+            // A token for a space its scope reaches acts for no more than
+            // the caller's own.
+            WorkspaceMethod::IssueScope { space }
+            | WorkspaceMethod::RevokeScope { space, .. }
+            | WorkspaceMethod::SpaceEnvironment { space } => Some(space),
             // The inbox lists them with the user's notifications.
             WorkspaceMethod::UntrackedWorktrees => {
                 let action = Action::new(PermissionKey::Notifications, "the untracked worktrees");
@@ -413,11 +419,10 @@ impl Scoped for WorkspaceMethod {
             }
             WorkspaceMethod::ReopenWorkspace { .. }
             | WorkspaceMethod::AdoptWorkspace { .. }
-            | WorkspaceMethod::WorkspaceEnv { .. }
             | WorkspaceMethod::CopySpace { .. } => administer(manager, caller, self).await?,
-            WorkspaceMethod::RevokeWorkspaceEnv { .. }
-            | WorkspaceMethod::OwnedPlaces
-            | WorkspaceMethod::WatchSpaceEvents { .. } => return Err(denied()),
+            WorkspaceMethod::OwnedPlaces | WorkspaceMethod::WatchSpaceEvents { .. } => {
+                return Err(denied());
+            }
         })
     }
 }
@@ -452,8 +457,7 @@ async fn administer<'a>(
 /// The space `method`, which the `admin` permission governs, acts on.
 fn administered(method: &mut WorkspaceMethod) -> Option<&mut SpaceSelector> {
     match method {
-        WorkspaceMethod::ReopenWorkspace { workspace }
-        | WorkspaceMethod::WorkspaceEnv { workspace } => Some(workspace),
+        WorkspaceMethod::ReopenWorkspace { workspace } => Some(workspace),
         WorkspaceMethod::CopySpace { space, .. } => Some(space),
         _ => None,
     }

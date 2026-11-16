@@ -78,7 +78,7 @@ async fn moves_the_clone_and_workspaces_into_the_new_root() -> Result<()> {
     );
     manager.verify_worktree(&workspace).await?;
     let exported = manager
-        .workspace_environment(&SpaceSelector::id(&workspace.id))
+        .space_environment(&SpaceSelector::id(&workspace.id))
         .await?;
     let tmp_dir = directory.join(".tmp").join(&workspace.id);
     assert_eq!(exported[crate::env::TMPDIR], tmp_dir.to_string_lossy());

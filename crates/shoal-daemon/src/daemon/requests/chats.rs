@@ -68,12 +68,6 @@ pub(super) async fn handle(
         ChatMethod::ChatRoot => Body::ChatRoot(crate::protocol::ChatRoot {
             path: manager.prepare_chat_root().await?,
         }),
-        ChatMethod::ChatScope { chat } => {
-            let id = manager.chat(&chat).await?.id;
-            Body::ScopeToken(crate::protocol::ChatScope {
-                token: manager.chat_scope(&id).await?,
-            })
-        }
         ChatMethod::PlaceChat { chat, origin } => {
             manager.place_chat(&chat, origin).await?;
             Body::Ok
@@ -129,15 +123,6 @@ impl Scoped for ChatMethod {
                 manager.parent_below(caller, parent).await?;
                 None
             }
-            ChatMethod::ChatScope { chat } => Some(
-                manager
-                    .workspace_below(
-                        caller,
-                        chat,
-                        "scoped processes start only the chats below their own space",
-                    )
-                    .await?,
-            ),
             ChatMethod::PlaceChat { chat, .. } => Some(
                 manager
                     .workspace_below(

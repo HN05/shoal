@@ -562,7 +562,7 @@ async fn a_revoked_scope_token_ends_its_subscriptions() {
     snapshot(&mut subscription).await;
     daemon
         .manager
-        .revoke_workspace_environment(&SpaceSelector::id(&workspace.id), token.clone())
+        .revoke_scope(&SpaceSelector::id(&workspace.id), token.clone())
         .await
         .unwrap();
     let refused = Subscription::open(connector(), vec![Topic::Workspaces]).await;

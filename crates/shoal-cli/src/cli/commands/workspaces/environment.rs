@@ -1,45 +1,7 @@
-//! A workspace's `[env]` variables, as shown and as tracked commands and agents receive them.
+//! A workspace's `[env]` variables, as its agents receive them.
 use std::{collections::BTreeMap, ffi::OsString};
 
-use anyhow::Result;
-
-use crate::client::output::workspaces::Revoked;
-use crate::{
-    cli::{
-        context::Context,
-        output::Style,
-        ui::{self, Fallback},
-    },
-    model::Workspace,
-};
-use shoal_protocol::space_names::SpaceSelector;
-
-pub(in crate::cli::commands) async fn environment(
-    ctx: &Context,
-    workspace: Option<SpaceSelector>,
-    revoke: Option<shoal_protocol::scope_tokens::ScopeToken>,
-) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    if let Some(token) = revoke {
-        crate::client::workspaces::revoke_environment(&ctx.paths, workspace.clone(), token).await?;
-        ctx.emit_styled(
-            Style::Success,
-            "Workspace environment revoked",
-            Revoked { revoked: true },
-        )?;
-    } else {
-        let inherited = std::env::var_os("PATH");
-        let values =
-            crate::client::workspaces::environment(&ctx.paths, workspace.clone(), inherited)
-                .await?;
-        ctx.show(&values, |values| {
-            for (name, value) in values {
-                outln!("{name}={value}");
-            }
-        })?;
-    }
-    Ok(0)
-}
+use crate::{cli::context::Context, model::Workspace};
 
 /// The workspace's [`shoal_workers::settings::configured_environment`] for finding its agents' files,
 /// or none with a warning when it cannot be resolved.

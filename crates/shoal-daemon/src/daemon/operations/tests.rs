@@ -1,5 +1,4 @@
 use shoal_ids::execution_ids::ExecutionId;
-use shoal_protocol::scope_tokens::ScopeToken;
 use std::time::Duration;
 
 use super::{Entry, RETAIN, fake};
@@ -182,11 +181,10 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
     let repository = registered(root.path(), &manager).await;
     let own = workspace(&manager, &repository, "own").await;
     let other = workspace(&manager, &repository, "other").await;
-    let environment = manager
-        .workspace_environment(&SpaceSelector::id(&own.id))
+    let token = &manager
+        .issue_scope(&SpaceSelector::id(&own.id))
         .await
         .unwrap();
-    let token = &ScopeToken::from(environment[crate::env::SCOPE_TOKEN].clone());
     let caller = manager.caller(token).await.unwrap().unwrap();
     let id = manager
         .start_operation(setup(&own), None, Some(&caller))
@@ -198,7 +196,7 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
     let issued = worker.token.clone().unwrap();
     assert_ne!(&issued, token);
     manager
-        .revoke_workspace_environment(&SpaceSelector::id(&own.id), token.clone())
+        .revoke_scope(&SpaceSelector::id(&own.id), token.clone())
         .await
         .unwrap();
     let acting = manager.caller(&issued).await.unwrap().unwrap();

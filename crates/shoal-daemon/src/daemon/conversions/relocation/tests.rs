@@ -17,13 +17,15 @@ use crate::{
 use shoal_protocol::space_names::SpaceSelector;
 
 /// A chat of a new repository, whose agent `process` reported session
-/// `s1`, converted into a workspace on `fix-login`.
+/// `s1`, converted into a workspace on `fix-login`, with its agent's
+/// scope token and one the chat issued.
 async fn converted(
     root: &std::path::Path,
     manager: &std::sync::Arc<Manager>,
 ) -> (
     Workspace,
     ProcessGroup,
+    shoal_protocol::scope_tokens::ScopeToken,
     shoal_protocol::scope_tokens::ScopeToken,
 ) {
     let path = repository(root, "repo");
@@ -42,6 +44,7 @@ async fn converted(
     crate::daemon::test_support::report_session(manager, &talk.id, "s1").await;
     let talk = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
     let token = manager.chat_scope(&talk.id).await.unwrap();
+    let issued = manager.issue_scope(&selector).await.unwrap();
     let converting = Converting {
         chat: talk,
         mode: ModeName::PLAN,
@@ -50,13 +53,13 @@ async fn converted(
         .create_converted_workspace(converting, "fix-login".into(), None, Default::default())
         .await
         .unwrap();
-    (workspace, process, token)
+    (workspace, process, token, issued)
 }
 
 #[tokio::test]
 async fn the_agent_restarts_in_the_worktree_once_its_turn_ends() {
     let (root, manager) = manager().await;
-    let (workspace, mut process, token) = converted(root.path(), &manager).await;
+    let (workspace, mut process, token, issued) = converted(root.path(), &manager).await;
     let selector = SpaceSelector::id(&workspace.id);
     // The agent that converted its chat goes on in its turn, under its scope.
     assert!(manager.caller(&token).await.unwrap().is_some());
@@ -82,7 +85,10 @@ async fn the_agent_restarts_in_the_worktree_once_its_turn_ends() {
         Some("s1".into())
     );
     assert_eq!(last.mode, ModeName::PLAN);
+    // Neither the agent's token nor one the chat issued acts for the
+    // workspace it became.
     assert!(manager.caller(&token).await.unwrap().is_none());
+    assert!(manager.caller(&issued).await.unwrap().is_none());
     let id = workspace.id.clone();
     let pending = (manager.store)
         .run(move |db| crate::daemon::conversions::pending(db, &id))
@@ -94,7 +100,7 @@ async fn the_agent_restarts_in_the_worktree_once_its_turn_ends() {
 #[tokio::test]
 async fn a_converted_chats_token_acts_for_the_workspace_it_became() {
     let (root, manager) = manager().await;
-    let (workspace, _process, token) = converted(root.path(), &manager).await;
+    let (workspace, _process, token, _issued) = converted(root.path(), &manager).await;
     // As after a restart, before the agent's wrapper connects again.
     manager.executions.scopes().await.clear();
 
@@ -106,7 +112,7 @@ async fn a_converted_chats_token_acts_for_the_workspace_it_became() {
 #[tokio::test]
 async fn a_working_agent_finishes_its_turn_where_it_runs() {
     let (root, manager) = manager().await;
-    let (workspace, _process, token) = converted(root.path(), &manager).await;
+    let (workspace, _process, token, _issued) = converted(root.path(), &manager).await;
 
     manager.relocate_finished_turns().await.unwrap();
 
@@ -119,7 +125,7 @@ async fn a_working_agent_finishes_its_turn_where_it_runs() {
 #[tokio::test]
 async fn an_agent_waits_where_it_runs_while_the_workspaces_setup_failed() {
     let (root, manager) = manager().await;
-    let (workspace, _process, token) = converted(root.path(), &manager).await;
+    let (workspace, _process, token, _issued) = converted(root.path(), &manager).await;
     let id = workspace.id.clone();
     (manager.store)
         .run(move |db| {
@@ -142,7 +148,7 @@ async fn an_agent_waits_where_it_runs_while_the_workspaces_setup_failed() {
 #[tokio::test]
 async fn a_stop_of_the_workspace_keeps_the_converting_agents_session() {
     let (root, manager) = manager().await;
-    let (workspace, mut process, token) = converted(root.path(), &manager).await;
+    let (workspace, mut process, token, _issued) = converted(root.path(), &manager).await;
     let targets = (manager.stop_targets(crate::protocol::QueuedLaunches::Keep))
         .await
         .unwrap();
@@ -167,7 +173,7 @@ async fn a_stop_of_the_workspace_keeps_the_converting_agents_session() {
 #[tokio::test]
 async fn a_stop_while_the_workspace_is_set_up_stops_the_converting_agent() {
     let (root, manager) = manager().await;
-    let (workspace, mut process, _token) = converted(root.path(), &manager).await;
+    let (workspace, mut process, _token, _issued) = converted(root.path(), &manager).await;
     let id = workspace.id.clone();
     (manager.store)
         .run(move |db| {
@@ -195,7 +201,7 @@ async fn a_stop_while_the_workspace_is_set_up_stops_the_converting_agent() {
 #[tokio::test]
 async fn the_relocation_restarts_no_agent_a_stop_handed_over() {
     let (root, manager) = manager().await;
-    let (workspace, _process, _token) = converted(root.path(), &manager).await;
+    let (workspace, _process, _token, _issued) = converted(root.path(), &manager).await;
     let selector = SpaceSelector::id(&workspace.id);
     (manager.set_agent_state(&selector, AgentState::Idle, None, None))
         .await
@@ -381,7 +387,7 @@ async fn a_stop_while_the_relocation_waits_keeps_the_chat_down() {
 #[tokio::test]
 async fn the_hand_over_continues_the_session_reported_after_the_conversion() {
     let (root, manager) = manager().await;
-    let (workspace, mut process, _token) = converted(root.path(), &manager).await;
+    let (workspace, mut process, _token, _issued) = converted(root.path(), &manager).await;
     let selector = SpaceSelector::id(&workspace.id);
     let idle = AgentState::Idle;
 
@@ -488,7 +494,7 @@ async fn record_preparation(
 #[tokio::test]
 async fn the_agent_waits_for_its_workspaces_post_setup_hook() {
     let (root, manager) = manager().await;
-    let (workspace, _process, token) = converted(root.path(), &manager).await;
+    let (workspace, _process, token, _issued) = converted(root.path(), &manager).await;
     let (_operation, _worker) = record_preparation(&manager, &workspace).await;
     let selector = SpaceSelector::id(&workspace.id);
     (manager.set_agent_state(&selector, AgentState::Idle, None, None))
@@ -506,7 +512,7 @@ async fn the_agent_waits_for_its_workspaces_post_setup_hook() {
 async fn a_failed_post_setup_hook_stops_the_agent_for_shoal_resume() {
     use crate::protocol::operations::{Ended, Failure, Report};
     let (root, manager) = manager().await;
-    let (workspace, mut process, token) = converted(root.path(), &manager).await;
+    let (workspace, mut process, token, _issued) = converted(root.path(), &manager).await;
     let (operation, worker) = record_preparation(&manager, &workspace).await;
     let failed = Ended::Failed(Failure::HookFailed {
         message: "hook exited 1".into(),
@@ -539,7 +545,7 @@ async fn a_failed_post_setup_hook_stops_the_agent_for_shoal_resume() {
 #[tokio::test]
 async fn a_failed_hook_outlasts_its_operations_record() {
     let (root, manager) = manager().await;
-    let (workspace, mut process, _token) = converted(root.path(), &manager).await;
+    let (workspace, mut process, _token, _issued) = converted(root.path(), &manager).await;
     // An operation the daemon no longer follows, as after its retention or
     // a restart, whose end the conversion kept.
     let id = workspace.id.clone();
@@ -570,7 +576,7 @@ async fn a_failed_hook_outlasts_its_operations_record() {
 #[tokio::test]
 async fn a_preparation_end_reported_before_its_record_is_kept() {
     let (root, manager) = manager().await;
-    let (workspace, _process, _token) = converted(root.path(), &manager).await;
+    let (workspace, _process, _token, _issued) = converted(root.path(), &manager).await;
     let id = workspace.id.clone();
 
     let pending = (manager.store)

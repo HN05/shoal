@@ -1236,6 +1236,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
         vec!["leases", "port"],
         vec!["setup"],
         vec!["run", "--", support::shoal_binary(), "leases", "port"],
+        vec!["internal", "env"],
     ] {
         let output = scoped(&args);
         assert!(output.status.success(), "{args:?}: {}", printed(&output));
@@ -1251,12 +1252,11 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
         vec!["rm", "--wait", &fixture.id("other"), "--yes"],
         vec!["alerts"],
         vec!["status", &fixture.id("other")],
-        vec!["internal", "env"],
         vec!["internal", "env", &fixture.id("other")],
         vec![
             "internal",
             "env",
-            "external",
+            &fixture.id("other"),
             "--revoke",
             &values["SHOAL_SCOPE_TOKEN"],
         ],

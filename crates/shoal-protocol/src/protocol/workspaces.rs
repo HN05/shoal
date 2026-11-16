@@ -182,12 +182,20 @@ pub enum WorkspaceMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         repository: Option<crate::repository::Selector>,
     },
-    WorkspaceEnv {
-        workspace: SpaceSelector,
+    /// Issue a new scope token that acts for the space `space` until it is
+    /// revoked or the space is removed.
+    IssueScope {
+        space: SpaceSelector,
     },
-    RevokeWorkspaceEnv {
-        workspace: SpaceSelector,
+    /// Revoke `token`, which [`Self::IssueScope`] issued for `space`.
+    RevokeScope {
+        space: SpaceSelector,
         token: crate::scope_tokens::ScopeToken,
+    },
+    /// The variables a process of the space `space` runs with, without a
+    /// scope token.
+    SpaceEnvironment {
+        space: SpaceSelector,
     },
     /// The status of a workspace or chat, running or stopped.
     SpaceStatus {

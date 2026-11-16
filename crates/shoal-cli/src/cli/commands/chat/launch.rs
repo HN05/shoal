@@ -21,6 +21,7 @@ use crate::{
     model::{Chat, ChatHome},
 };
 use shoal_protocol::chats::BackgroundChat;
+use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 mod admission;
@@ -283,10 +284,15 @@ impl Launch {
     /// Run the recorded `chat`'s agent with `model_args` here under the
     /// execution wrapper, labelling this terminal as the chat's.
     async fn run_here(self, ctx: &Context, chat: &Chat, model_args: Vec<OsString>) -> Result<i32> {
-        act_in_chat_scope(ctx, chat).await?;
+        let scope = act_in_chat_scope(ctx, chat).await?;
         crate::chat_handoff::report_started(&chat.id);
-        let _hold = admission::hold_launch(ctx).await;
-        run_agent(ctx, chat, self.agent, self.chat, model_args, Vec::new()).await
+        let hold = admission::hold_launch(ctx).await;
+        let ran = run_agent(ctx, chat, self.agent, self.chat, model_args, Vec::new()).await;
+        drop(hold);
+        if let Some(token) = scope {
+            revoke_chat_scope(ctx, chat, token).await;
+        }
+        ran
     }
 }
 
@@ -299,15 +305,25 @@ async fn current_origin() -> Option<crate::sessions::Origin> {
     })
 }
 
-/// Make a scoped process, which starts `chat`, act in the chat's own scope
-/// before its starter, whose scope it may hold, learns that it runs and
-/// exits.
-async fn act_in_chat_scope(ctx: &Context, chat: &Chat) -> Result<()> {
-    if crate::env::is_scoped() {
-        let token = crate::client::chats::scope(&ctx.paths, chat).await?;
-        crate::env::act_in_chat_scope(token);
+/// Make a scoped process, which starts `chat`, act in a scope it issues for
+/// the chat before its starter, whose scope it may hold, learns that it
+/// runs and exits, returning that scope's token.
+async fn act_in_chat_scope(ctx: &Context, chat: &Chat) -> Result<Option<ScopeToken>> {
+    if !crate::env::is_scoped() {
+        return Ok(None);
     }
-    Ok(())
+    let space = SpaceSelector::id(&chat.id);
+    let token = crate::client::spaces::issue_scope(&ctx.paths, space).await?;
+    crate::env::act_in_chat_scope(token.clone());
+    Ok(Some(token))
+}
+
+/// Revoke `token`, the scope this process issued for `chat`, once the
+/// chat's agent exited. A token it cannot revoke goes with the chat, as
+/// when the chat's removal ended its agent.
+async fn revoke_chat_scope(ctx: &Context, chat: &Chat, token: ScopeToken) {
+    let space = SpaceSelector::id(&chat.id);
+    let _ = crate::client::spaces::revoke_scope(&ctx.paths, space, token).await;
 }
 
 /// Run the agent of the recorded `chat` as `launch` says, with

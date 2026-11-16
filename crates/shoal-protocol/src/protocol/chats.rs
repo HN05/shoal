@@ -55,9 +55,6 @@ pub enum ChatMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parent: Option<SpaceSelector>,
     },
-    /// The scope token the agent of the chat `chat`, by ID, carries, which
-    /// confines it to the chat and the spaces below it.
-    ChatScope { chat: SpaceSelector },
     /// Record `origin` as the place the chat `chat`, recorded before its
     /// queued agent started, now runs in, unless it has one: a place Shoal
     /// opened for it becomes the chat's, as for a chat recorded there.
@@ -68,12 +65,6 @@ pub enum ChatMethod {
     /// `root_dir`, where a chat without a repository runs, prepared as
     /// registering a repository prepares it.
     ChatRoot,
-}
-
-/// The scope token a chat's agent carries.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatScope {
-    pub token: crate::scope_tokens::ScopeToken,
 }
 
 /// The answer to [`ChatMethod::ChatRoot`].

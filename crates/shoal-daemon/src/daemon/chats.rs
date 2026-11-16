@@ -6,10 +6,11 @@
 //! chat lasts until it is removed.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
-use shoal_protocol::scope_tokens::ScopeToken;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context as _, Result, bail, ensure};
+#[cfg(any(test, feature = "test-support"))]
+use anyhow::Context as _;
+use anyhow::{Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{
@@ -517,7 +518,11 @@ impl Manager {
     }
 
     /// The scope token the agent of the chat `id` carries.
-    pub async fn chat_scope(&self, id: &SpaceId) -> Result<ScopeToken> {
+    #[cfg(any(test, feature = "test-support"))]
+    pub async fn chat_scope(
+        &self,
+        id: &SpaceId,
+    ) -> Result<shoal_protocol::scope_tokens::ScopeToken> {
         let id = id.to_owned();
         let token = (self.store)
             .run(move |db| crate::daemon::scope::tokens::agent_token(db, &id))

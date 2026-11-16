@@ -1259,6 +1259,8 @@ run() {{ name=$1; shift; "$shoal" "$@" </dev/null >"$HOME/$name.out" 2>"$HOME/$n
 run start --json start "$PWD" --branch below
 below=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$HOME/start.out")
 run stop stop --interrupt "$below"
+run env internal env "$below"
+run ownenv internal env
 run rename rename renamed
 run alerts alerts
 run repo repo add "$HOME"
@@ -1291,11 +1293,20 @@ run remove rm "$below" --yes --wait
         let error = fs::read_to_string(home.join(format!("{name}.err"))).unwrap();
         (code.trim().to_owned(), error)
     };
-    // It opens, stops and removes the workspaces below it and renames itself.
-    for allowed in ["start", "stop", "rename", "remove"] {
+    // It opens, stops and removes the workspaces below it, exports their
+    // environment and its own, and renames itself.
+    for allowed in ["start", "stop", "env", "ownenv", "rename", "remove"] {
         let (code, error) = status(allowed);
         assert_eq!(code, "0", "{allowed}: {error}");
     }
+    let exported = |name: &str| -> Value {
+        serde_json::from_str(&fs::read_to_string(home.join(format!("{name}.out"))).unwrap())
+            .unwrap()
+    };
+    let (below, own) = (exported("env"), exported("ownenv"));
+    assert!(below["SHOAL_WORKSPACE_PATH"].is_string(), "{below}");
+    assert!(own["SHOAL_SCOPE_TOKEN"].is_string(), "{own}");
+    assert!(own["SHOAL_WORKSPACE_PATH"].is_null(), "{own}");
     // It is refused what a workspace's agent is, and what lies outside it.
     for refused in ["alerts", "repo", "outside", "takeover"] {
         let (code, error) = status(refused);

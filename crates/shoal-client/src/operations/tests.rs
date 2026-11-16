@@ -78,7 +78,7 @@ async fn following_ends_once_the_followers_scope_token_is_revoked() {
     assert!(matches!(first, Followed::Event(_)), "{first:?}");
     daemon
         .manager
-        .revoke_workspace_environment(&SpaceSelector::id(&own.id), token)
+        .revoke_scope(&SpaceSelector::id(&own.id), token)
         .await
         .unwrap();
     worker.stdout("two").await;

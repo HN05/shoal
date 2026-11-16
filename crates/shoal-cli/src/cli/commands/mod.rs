@@ -23,6 +23,7 @@ mod copies;
 mod demo;
 mod dispatch;
 mod download;
+mod environment;
 mod events;
 mod files;
 mod holds;

@@ -274,10 +274,12 @@ pub fn execution_environment(
     ports: &[PortReservation],
     token: &ScopeToken,
 ) -> BTreeMap<String, OsString> {
-    match space.kind {
-        SpaceKind::Workspace => workspace_environment(space, paths, ports, token),
-        SpaceKind::Chat => BTreeMap::from([(SCOPE_TOKEN.into(), token.expose().into())]),
-    }
+    let mut values = match space.kind {
+        SpaceKind::Workspace => workspace_environment(space, paths, ports),
+        SpaceKind::Chat => BTreeMap::new(),
+    };
+    values.insert(SCOPE_TOKEN.into(), token.expose().into());
+    values
 }
 
 /// What a chat's processes leave out of this process's environment: a
@@ -299,37 +301,34 @@ pub fn not_chat_identity() -> Vec<OsString> {
     names
 }
 
-/// A chat agent's identity: its chat, the scope `token` that confines it
-/// to the chat and the spaces below it, and the state directory whose daemon
-/// recorded it, which the agent's own Shoal commands must reach; its
-/// temporary directory; and the agents' output default.
+/// The environment of the chat `chat` for a process Shoal does not track:
+/// the chat, the state directory whose daemon recorded it, which the
+/// process's Shoal commands must reach, and `tmp_dir`, its temporary
+/// directory.
 pub fn chat_environment(
-    chat: &crate::model::Chat,
-    token: &ScopeToken,
+    chat: &SpaceId,
+    tmp_dir: Option<&Path>,
     paths: &Paths,
 ) -> BTreeMap<String, OsString> {
     let mut values = BTreeMap::from([
-        (CHAT.into(), chat.id.clone().into()),
-        (SCOPE_TOKEN.into(), token.expose().into()),
+        (CHAT.into(), chat.clone().into()),
         (STATE_DIR.into(), paths.state.as_os_str().to_owned()),
     ]);
-    if let Some(directory) = &chat.tmp_dir {
+    if let Some(directory) = tmp_dir {
         values.insert(TMPDIR.into(), directory.as_os_str().to_owned());
     }
-    values.extend(agent_output().map(|(name, value)| (name.into(), value.into())));
     values
 }
 
-/// The workspace environment, without a tracked execution marker.
+/// The workspace environment, without a scope token or a tracked execution
+/// marker.
 pub fn workspace_environment(
     space: &ExecutionSpace,
     paths: &Paths,
     ports: &[PortReservation],
-    token: &ScopeToken,
 ) -> BTreeMap<String, OsString> {
     let mut values = workspace_identity(space, paths);
     values.insert(WORKSPACE_PATH.into(), space.path.as_os_str().to_owned());
-    values.insert(SCOPE_TOKEN.into(), token.expose().into());
     values.insert(
         RESERVED_PORT_ENV.into(),
         ports

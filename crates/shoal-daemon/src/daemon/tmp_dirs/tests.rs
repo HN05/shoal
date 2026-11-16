@@ -30,7 +30,7 @@ async fn a_workspace_has_its_own_tmpdir_until_it_is_removed() {
         .join(&workspace.id);
 
     let exported = manager
-        .workspace_environment(&SpaceSelector::id(&workspace.id))
+        .space_environment(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert_eq!(exported[env::TMPDIR], expected.to_str().unwrap());
@@ -90,7 +90,7 @@ async fn env_overrides_the_workspace_tmpdir() {
         .await
         .unwrap();
     let exported = manager
-        .workspace_environment(&SpaceSelector::id(&workspace.id))
+        .space_environment(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert_eq!(exported[env::TMPDIR], "/scratch");

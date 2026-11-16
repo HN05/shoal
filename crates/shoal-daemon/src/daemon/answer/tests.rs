@@ -5,7 +5,7 @@ use crate::protocol::MAX_FRAME;
 async fn an_oversized_reply_is_answered_with_an_error_saying_so() {
     let (mut writer, reader) = tokio::io::duplex(4 * MAX_FRAME);
     let env = [("VALUE".to_owned(), "x".repeat(MAX_FRAME))].into();
-    let error = reply(&mut writer, 7, Body::WorkspaceEnv(env))
+    let error = reply(&mut writer, 7, Body::SpaceEnvironment(env))
         .await
         .unwrap_err();
     assert!(error.is::<protocol::FrameTooLarge>(), "{error:#}");

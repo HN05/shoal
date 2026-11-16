@@ -204,10 +204,11 @@ instead of the PR delivery guidance below.
   starting, rerunning or cancelling CI runs of the default branch and of the branches of the workspaces their scope reaches, and reading the own repository's,
   GET requests to any repository's forge API, or other methods to the own repository's where
   their `api_writes` permission allows them, own-repository sync and
-  effective-configuration reads are allowed; only unscoped callers revoke
-  environment tokens, and exporting one is the `admin` permission's. Export requires a
-  ready, verified worktree; tokens persist across restart until revocation or
-  workspace removal, without execution tracking or cleanup protection.
+  effective-configuration reads are allowed, as are issuing and revoking scope
+  tokens and exporting the environment of any space their scope reaches. A
+  workspace's export requires a ready, verified worktree; tokens persist across
+  restart until revocation or the space's removal, without execution tracking or
+  cleanup protection, and a chat's agent's own token is never handed out.
   Notifications are read by the user, and by scoped callers only as their
   `notifications` permission allows, and never fail the
   operation they record; an agent message is the operation, so its failure is

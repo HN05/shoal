@@ -24,7 +24,6 @@ mod creation;
 mod daemon_exit;
 pub(crate) mod demos;
 mod diff;
-mod environment;
 pub(crate) mod executions;
 mod fast_forward;
 mod gates;

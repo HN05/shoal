@@ -30,7 +30,6 @@ pub(super) use cd::cd;
 pub(super) use changes::{conflicts, diff};
 pub(super) use done::{done, undone};
 pub(in crate::cli) use environment::agent_environment;
-pub(super) use environment::environment;
 pub(super) use list::list;
 pub(super) use merge::merge;
 pub(super) use refresh::refresh;

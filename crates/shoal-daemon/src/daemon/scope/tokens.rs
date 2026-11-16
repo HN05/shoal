@@ -93,6 +93,15 @@ pub(crate) fn revoke_agent(db: &Connection, id: &SpaceId, token: &ScopeToken) ->
     Ok(())
 }
 
+/// Revoke the tokens the space `id` issued, keeping its agent's.
+pub(crate) fn revoke_issued(db: &Connection, id: &SpaceId) -> Result<()> {
+    db.execute(
+        "DELETE FROM space_scopes WHERE space_id=?1 AND NOT agent",
+        [id],
+    )?;
+    Ok(())
+}
+
 /// Revoke every token of the space `id`.
 pub(crate) fn clear(db: &Connection, id: &SpaceId) -> Result<()> {
     db.execute("DELETE FROM space_scopes WHERE space_id=?1", [id])?;

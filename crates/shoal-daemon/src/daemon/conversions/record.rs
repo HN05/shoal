@@ -271,7 +271,8 @@ pub(crate) fn replace_chat(
 
 /// Forget the conversion of the chat that became the workspace `id`, whose
 /// agent, which carried the scope `token`, restarted there under a scope of
-/// its own.
+/// its own. The tokens the chat issued go too, as a workspace's exported
+/// environments go with its worktree when it becomes a chat.
 pub(crate) fn relocated_chat(
     tx: &Transaction<'_>,
     id: &SpaceId,
@@ -280,6 +281,7 @@ pub(crate) fn relocated_chat(
     if let Some(token) = token {
         tokens::revoke_agent(tx, id, token)?;
     }
+    tokens::revoke_issued(tx, id)?;
     forget(tx, id)
 }
 
