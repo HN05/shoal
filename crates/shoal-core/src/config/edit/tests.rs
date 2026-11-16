@@ -66,6 +66,20 @@ fn a_scoped_config_edit_sets_only_permissions_its_space_holds() {
     assert!(held(&[set("\"permissions\" . merge", "'direct'")]).is_err());
     assert!(held(&[set("modes.orchestrate.permissions.admin", "direct")]).is_err());
     assert!(held(&[set("modes.orchestrate.permissions", "{}")]).is_err());
+    // A trigger starts top-level spaces as the user, in any mode, so only a
+    // space holding triggers at direct changes one, within its permissions.
+    assert!(held(&[set("triggers.nightly.mode", "orchestrate")]).is_err());
+    assert!(held(&[set("triggers.nightly.task", "Check")]).is_err());
+    let settings = Config::from_toml("[permissions]\ntriggers = 'direct'")
+        .unwrap()
+        .resolve(&Default::default())
+        .unwrap();
+    let trusted = permissions::resolve(&settings, None).unwrap();
+    let trusted = |changes: &[Change]| ensure_permissions_held(changes, &trusted);
+    assert!(trusted(&[set("triggers.nightly.mode", "orchestrate")]).is_ok());
+    assert!(trusted(&[set("triggers.nightly.permission.merge", "propose")]).is_ok());
+    assert!(trusted(&[set("triggers.nightly.permission.merge", "direct")]).is_err());
+    assert!(trusted(&[set("triggers.nightly", "{ on = 'timer' }")]).is_err());
     let unset = Change {
         key: "permissions.push".into(),
         value: None,

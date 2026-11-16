@@ -51,17 +51,27 @@ pub fn edit(text: &str, key: &str, value: Option<&str>) -> Result<String> {
 }
 
 /// Refuse `changes` to a config file, made by a scoped process whose space
-/// holds `held`, where one sets a permission wider than it holds, or
-/// removes one or a table of them, which would give the value below it
-/// that the process cannot check it holds; it changes other keys freely.
-/// Keys and values read as [`edit`] reads them.
+/// holds `held`, where one sets a permission wider than it holds, a mode's
+/// or a trigger's, or removes one or a table of them, which would give the
+/// value below it that the process cannot check it holds, or changes a
+/// trigger without holding `triggers` at `direct`; it changes other keys
+/// freely. Keys and values read as [`edit`] reads them.
 pub fn ensure_permissions_held(changes: &[Change], held: &Permissions) -> Result<()> {
     for change in changes {
         let keys = Key::parse(&change.key).context("expected a TOML dotted key")?;
         let path: Vec<&str> = keys.iter().map(Key::get).collect();
+        if path.first() == Some(&"triggers") {
+            ensure_changes_triggers(&change.key, held)?;
+        }
         let key = match path.as_slice() {
-            ["permissions", key] | ["modes", _, "permissions", key] => *key,
-            ["permissions"] | ["modes"] | ["modes", _] | ["modes", _, "permissions"] => bail!(
+            ["permissions", key]
+            | ["modes", _, "permissions", key]
+            | ["triggers", _, "permission", key] => *key,
+            ["permissions"]
+            | ["modes" | "triggers"]
+            | ["modes" | "triggers", _]
+            | ["modes", _, "permissions"]
+            | ["triggers", _, "permission"] => bail!(
                 "{}: a scoped process sets permissions one key at a time",
                 change.key
             ),
@@ -91,6 +101,19 @@ pub fn ensure_permissions_held(changes: &[Change], held: &Permissions) -> Result
             held.cited(*key)
         );
     }
+    Ok(())
+}
+
+/// Refuse a change to the trigger `key` names by a scoped process whose
+/// space holds `held`, unless that holds `triggers` at `direct`: a trigger
+/// starts top-level spaces as the user, in whatever mode it names, beyond
+/// what the process's own space holds.
+fn ensure_changes_triggers(key: &str, held: &Permissions) -> Result<()> {
+    ensure!(
+        held.acting(PermissionKey::Triggers) == Acting::Direct,
+        "{key}: a trigger starts top-level spaces as the user, so a scoped process changes one only where its triggers permission is \"direct\": {}",
+        held.cited(PermissionKey::Triggers)
+    );
     Ok(())
 }
 

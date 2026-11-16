@@ -2490,7 +2490,10 @@ and taking it again asks again; an approved command's own requests take
 what the same key governs without asking again. `ci_approve` governs
 approving CI runs that wait for approval, and `pr_review` approving and
 requesting changes on PRs, bound to the PR's head commit and the review's
-text; `decide`, which is
+text; `triggers` governs pausing, resuming and running a
+[trigger](#triggers), bound to the trigger and the action, and a scoped
+process changes a trigger in config only where it is `"direct"`, since a
+trigger starts top-level spaces as you; `decide`, which is
 `"deny"` or `"direct"`, governs deciding the requests of the spaces below as
 you would; `notifications`, also `"deny"` or `"direct"`, governs reading, clearing and watching your
 notifications, Shoal's own log, and the untracked worktrees, cleanup errors

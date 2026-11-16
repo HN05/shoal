@@ -199,6 +199,8 @@ permission_keys! {
     ci_approve: CiApprove => "ci_approve", Acting;
     /// Approving and requesting changes on PRs.
     pr_review: PrReview => "pr_review", Acting;
+    /// Pausing, resuming and running triggers.
+    triggers: Triggers => "triggers", Acting;
 }
 
 /// Refuse `value` of `key` where it is wider than `held`.
@@ -233,6 +235,7 @@ impl PermissionsConfig {
         decide: Some(Allowed::Deny),
         ci_approve: Some(Acting::Propose),
         pr_review: Some(Acting::Propose),
+        triggers: Some(Acting::Propose),
     };
 
     /// The defaults of a mode that coordinates rather than edits: it opens

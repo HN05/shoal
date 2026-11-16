@@ -465,6 +465,7 @@ notifications = "deny"                # "deny" or "direct"
 decide = "deny"                       # "deny" or "direct"
 ci_approve = "propose"                # "deny", "propose" or "direct"
 pr_review = "propose"                 # "deny", "propose" or "direct"
+triggers = "propose"                  # "deny", "propose" or "direct"
 ```
 
 Permissions say what agents may do: `"direct"` at once, `"gate"` after the
@@ -481,12 +482,13 @@ user holds, `notifications` reading your notifications, Shoal's own log and
 the inbox's daemon-wide problems, `decide` deciding the approval requests of
 the spaces below as you would, `ci_approve` approving CI runs that wait for
 approval, `pr_review` approving and requesting changes on PRs, as the host's
-[`review_token`](#forges), and `admin` the rest of administering Shoal: changing its
+[`review_token`](#forges), `triggers` pausing, resuming and running
+[triggers](#triggers), and `admin` the rest of administering Shoal: changing its
 config, registering, renaming and removing repositories and their local
 config and kept branches, `shoal cleanup`, `shoal setup --skip`,
 `shoal contribute`, adopting worktrees, and restoring, copying and moving
 workspaces. An agent sets a permission in config only to a value its space
-holds, and leaves replacing the config and `config setup` and `repo setup`
+holds, changes a trigger only where its `triggers` is `"direct"`, and leaves replacing the config and `config setup` and `repo setup`
 to you.
 
 `[permissions]` and `[modes.<name>.permissions]` take the same keys. A mode's
