@@ -15,8 +15,8 @@ fn workspace(name: &str) -> Workspace {
     )
 }
 
-fn spaces<const N: usize>(workspaces: [Workspace; N]) -> Vec<PresentSpace> {
-    workspaces.map(PresentSpace::Workspace).into()
+fn spaces<const N: usize>(workspaces: [Workspace; N]) -> Vec<Space> {
+    workspaces.map(Space::from).into()
 }
 
 fn running(workspace: &Workspace, agent: Option<&str>, restorable: bool) -> RunningAgent {
@@ -45,7 +45,7 @@ fn reporting(workspace: &Workspace, state: Option<AgentState>) -> RunningAgent {
 fn restarted(plan: &Plan) -> Vec<&str> {
     plan.restarts
         .iter()
-        .map(|restart| restart.space.name().as_str())
+        .map(|restart| restart.space.name.as_str())
         .collect()
 }
 
@@ -269,9 +269,9 @@ fn a_rerun_skips_what_any_run_of_a_pending_restart_restarted() {
 }
 
 /// The chat `name`, whose ID is its name.
-fn chat(name: &str) -> PresentSpace {
-    PresentSpace::Chat(
-        serde_json::from_value(serde_json::json!({
+fn chat(name: &str) -> Space {
+    Space::from(
+        serde_json::from_value::<shoal_protocol::model::Chat>(serde_json::json!({
             "workdir": {"kind": "checkout", "path": "/repo"},
             "id": name,
             "repository_id": "repository",
@@ -311,11 +311,7 @@ fn chats_restart_beside_workspace_agents() {
         chat_agent("quiet", false),
     ];
     let selection = || Selection {
-        spaces: vec![
-            PresentSpace::Workspace(api.clone()),
-            chat("talk"),
-            chat("quiet"),
-        ],
+        spaces: vec![Space::from(api.clone()), chat("talk"), chat("quiet")],
         agents: agents.clone(),
         named: false,
     };

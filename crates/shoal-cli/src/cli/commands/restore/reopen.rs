@@ -14,7 +14,7 @@ use crate::{
         output::{Palette, Style},
         shell, terminal,
     },
-    model::{PresentSpace, RemovedSpace, RestoredChat, RestoredSpace, RestoredWorkspace},
+    model::{RemovedSpace, RestoredChat, RestoredSpace, RestoredWorkspace, Space},
     state::WorkspaceState,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -84,8 +84,8 @@ pub(in crate::cli::commands) async fn run_post_setup(
     ctx: &Context,
     reopened: &Reopened,
 ) -> Result<()> {
-    match reopened.space.worktree() {
-        Some(workspace) => super::super::workspaces::run_post_setup(ctx, workspace).await,
+    match reopened.space.to_workspace() {
+        Some(workspace) => super::super::workspaces::run_post_setup(ctx, &workspace).await,
         None => Ok(()),
     }
 }
@@ -110,7 +110,7 @@ async fn reopened_chat(ctx: &Context, restored: RestoredChat) -> Result<Reopened
     }
     Ok(Reopened {
         agents_saved: !(removed.agents.is_empty() && removed.last_sessions.is_empty()),
-        space: PresentSpace::Chat(chat),
+        space: Space::from(chat),
         removed,
         warnings,
         queued: None,
@@ -125,7 +125,7 @@ impl Reopening {
     pub(super) fn of(reopened: &[Reopened]) -> Self {
         let names = reopened
             .iter()
-            .map(|opened| format!("{} as {}", opened.space.name(), opened.space.number()))
+            .map(|opened| format!("{} as {}", opened.space.name, opened.space.number))
             .collect::<Vec<_>>();
         Self((!names.is_empty()).then(|| names.join(", ")))
     }
@@ -202,20 +202,20 @@ impl ReopenedExt for Reopened {
             0 => String::new(),
             1 => format!(
                 "; shoal restore {} restores its stopped agent",
-                space.number()
+                space.number
             ),
             _ => format!(
                 "; shoal restore {} restores its stopped agents",
-                space.number()
+                space.number
             ),
         };
-        let location = match space.worktree() {
-            Some(workspace) => super::super::workspaces::location_phrase(workspace),
-            None => format!("as chat {}", space.number()),
+        let location = match space.to_workspace() {
+            Some(workspace) => super::super::workspaces::location_phrase(&workspace),
+            None => format!("as chat {}", space.number),
         };
         format!(
             "{action} {} {location}{files}{agents}",
-            Palette::stdout(ctx.json).paint(Style::Heading, space.name()),
+            Palette::stdout(ctx.json).paint(Style::Heading, &space.name),
         )
     }
 
@@ -224,7 +224,7 @@ impl ReopenedExt for Reopened {
         if executions.is_empty() {
             return;
         }
-        let stopped = Stopped::from([(self.space.id().clone(), executions)]);
+        let stopped = Stopped::from([(self.space.id.clone(), executions)]);
         match super::agents::queue::queue_stopped(ctx, &stopped).await {
             Ok(queued) => {
                 self.queued = Some(queued);
@@ -232,7 +232,7 @@ impl ReopenedExt for Reopened {
             }
             Err(error) => eprintln!(
                 "warning: cannot queue the stopped agents; shoal restore {} restores them: {error:#}",
-                self.space.number()
+                self.space.number
             ),
         }
     }
@@ -278,7 +278,7 @@ pub(in crate::cli::commands) async fn prepare_reopened(
     }
     Ok(Some(Reopened {
         agents_saved: !(removed.agents.is_empty() && removed.last_sessions.is_empty()),
-        space: PresentSpace::Workspace(workspace),
+        space: Space::from(workspace),
         removed,
         warnings,
         queued: None,

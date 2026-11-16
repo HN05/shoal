@@ -9,7 +9,7 @@ use crate::{
     cli::{
         args::lifecycle::StopArgs, commands::queued_agents, context::Context, output::Style, ui,
     },
-    model::{PresentSpace, StoppedSpace},
+    model::{Space, StoppedSpace},
     protocol::{ErrorCode, QueuedLaunches, RemoteError, UntrackedProcesses},
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -54,15 +54,15 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
 }
 
 /// Stop `space`, reporting it alone.
-async fn stop_one(ctx: &Context, space: &PresentSpace, yes: bool) -> Result<i32> {
-    let selector = SpaceSelector::id(space.id());
+async fn stop_one(ctx: &Context, space: &Space, yes: bool) -> Result<i32> {
+    let selector = SpaceSelector::id(&space.id);
     let launches = QueuedLaunches::Cancel;
     let stopped = stop(ctx, &selector, yes, launches, other_processes_stop()).await?;
     if let Some(run) = &stopped.cancelled_run {
         // The job runs until its runner stops it, and its workspace goes then.
         ctx.emit_styled(
             Style::Success,
-            &cancelled_run_message(space.name(), run),
+            &cancelled_run_message(&space.name, run),
             SpaceStopped {
                 stopped: false,
                 saved: false,
@@ -79,9 +79,9 @@ async fn stop_one(ctx: &Context, space: &PresentSpace, yes: bool) -> Result<i32>
         saved,
         ..
     } = stopped;
-    let mut message = match space {
-        PresentSpace::Workspace(_) => "Workspace processes stopped".to_owned(),
-        PresentSpace::Chat(_) => "Chat processes stopped".to_owned(),
+    let mut message = match space.kind() {
+        crate::model::SpaceKind::Workspace => "Workspace processes stopped".to_owned(),
+        crate::model::SpaceKind::Chat => "Chat processes stopped".to_owned(),
     };
     if processes > 0 {
         message = format!("{message}. Stopped {}", other_processes(processes));
@@ -90,7 +90,7 @@ async fn stop_one(ctx: &Context, space: &PresentSpace, yes: bool) -> Result<i32>
         message = format!("{message}. {}", removed_launches(cancelled.len()));
     }
     if saved {
-        message = format!("{message}. {}", continue_hint(&space.number().to_string()));
+        message = format!("{message}. {}", continue_hint(&space.number.to_string()));
     }
     ctx.emit_styled(
         Style::Success,

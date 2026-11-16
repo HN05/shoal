@@ -150,7 +150,7 @@ async fn a_sleep_lasts_through_its_turn_and_a_wait_for_the_user() {
     report(&manager, &workspace.id, AgentState::Waiting).await;
     report(&manager, &workspace.id, AgentState::Working).await;
     report(&manager, &workspace.id, AgentState::Idle).await;
-    let recorded = manager.space(&selector).await.unwrap().sleep();
+    let recorded = manager.space(&selector).await.unwrap().sleep;
     assert_eq!(recorded, Some(Sleep::Turn));
 }
 

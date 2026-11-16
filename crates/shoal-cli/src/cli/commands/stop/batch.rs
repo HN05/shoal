@@ -5,7 +5,7 @@ use futures_util::future::join_all;
 use crate::client::output::agents::{CancelledRun, StoppedSpaces};
 use crate::{
     cli::{context::Context, ui},
-    model::{PresentSpace, QueueEntry},
+    model::{QueueEntry, Space},
     protocol::QueuedLaunches,
 };
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
@@ -48,7 +48,7 @@ pub(super) async fn stop_all(ctx: &Context) -> Result<i32> {
 /// continue them passes `shoal restore`; empty, it names each one.
 pub(super) async fn stop_each(
     ctx: &Context,
-    spaces: &[PresentSpace],
+    spaces: &[Space],
     restore: &str,
     acknowledge_unproven: bool,
 ) -> Result<i32> {
@@ -60,12 +60,12 @@ pub(super) async fn stop_each(
     let mut restorable = Vec::new();
     let mut removed = Vec::new();
     for (space, result) in spaces.iter().zip(results) {
-        let name = space.name();
+        let name = &space.name;
         match result {
             Ok(stop) => {
                 let message = stop.message(name);
                 if stop.saved() {
-                    restorable.push(space.number().to_string());
+                    restorable.push(space.number.to_string());
                 }
                 let outcome = match stop {
                     Stop::CancelledRun(run) => Outcome::Cancelled(CancelledRun {
@@ -107,10 +107,10 @@ pub(super) async fn stop_each(
 /// Stop the agents and commands of `space`, cancelling the launches
 /// waiting to start in it, then its untracked processes; a CI job's
 /// workspace has its run cancelled instead.
-async fn stop(ctx: &Context, space: &PresentSpace, acknowledge_unproven: bool) -> Result<Stop> {
+async fn stop(ctx: &Context, space: &Space, acknowledge_unproven: bool) -> Result<Stop> {
     let stopped = stop_confirming(
         ctx,
-        &SpaceSelector::id(space.id()),
+        &SpaceSelector::id(&space.id),
         QueuedLaunches::Cancel,
         other_processes_stop(),
         |_| Ok(acknowledge_unproven),

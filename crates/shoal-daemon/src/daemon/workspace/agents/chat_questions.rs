@@ -6,7 +6,7 @@ use anyhow::{Context, Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 
 use super::Manager;
-use crate::{daemon::questions::set_chat_mark, model::PresentSpace};
+use crate::{daemon::questions::set_chat_mark, model::Space};
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
@@ -35,20 +35,20 @@ impl Manager {
     /// that agent, refusing an execution that runs no agent of the space.
     async fn agent_turn(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         execution: Option<&ExecutionId>,
     ) -> Result<(ExecutionId, crate::agent::Agent)> {
         let refusal = || {
             format!(
                 "only an agent Shoal runs in {} asks in its chat",
-                space.name()
+                space.name
             )
         };
         let execution = execution.with_context(refusal)?.to_owned();
         let agent = self
             .executions
             .with_agent(&execution, |agent| {
-                (agent.workspace_id == *space.id()).then(|| agent.name.clone())
+                (agent.workspace_id == space.id).then(|| agent.name.clone())
             })
             .await
             .flatten()

@@ -22,7 +22,7 @@ use super::Start;
 use crate::{
     daemon::workspace::{Manager, agents},
     execution::recovery,
-    model::{Asleep, PresentSpace, QueueEntry},
+    model::{Asleep, QueueEntry, Space},
     paths::Paths,
     state::{QueueKind, QueueState},
 };
@@ -38,11 +38,11 @@ struct Target {
 }
 
 impl Target {
-    fn of(space: &PresentSpace) -> Self {
+    fn of(space: &Space) -> Self {
         Self {
-            id: space.id().clone(),
-            repository: space.repository_id().cloned(),
-            name: space.name().to_string(),
+            id: space.id.clone(),
+            repository: space.repository_id.as_ref().cloned(),
+            name: space.name.to_string(),
         }
     }
 }
@@ -346,7 +346,7 @@ impl Manager {
         now: bool,
     ) -> Result<QueueEntry> {
         let space = self.space(space).await?;
-        let id = space.id().clone();
+        let id = space.id.clone();
         // Read before the restored agent reads its messages.
         self.tell_still_blocked(&id).await;
         let entry = (self.record_stopped_restore(&space, execution, env, now)).await?;
@@ -360,13 +360,13 @@ impl Manager {
     /// starting it at once when `now`, and return its entry.
     async fn record_stopped_restore(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         execution: &ExecutionId,
         env: BTreeMap<String, String>,
         now: bool,
     ) -> Result<QueueEntry> {
-        let agent = stopped_agent(&self.paths, space.id(), execution)?
-            .with_context(|| format!("{} has no stopped agent {execution}", space.name()))?;
+        let agent = stopped_agent(&self.paths, &space.id, execution)?
+            .with_context(|| format!("{} has no stopped agent {execution}", space.name))?;
         let restore = Restore::new(Target::of(space), execution, &agent, &env, None)?;
         // Read the entry before dispatch can start it and its agent take it.
         let _gate = self.agent_queue.lock_admission().await;
@@ -389,19 +389,19 @@ impl Manager {
     /// agent ran. Requires the queue gate.
     pub(crate) async fn admit_stopped_restore(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         execution: &ExecutionId,
         id: QueueEntryId,
     ) -> Result<Start> {
-        let path = recovery::record_path(&self.paths, space.id(), execution);
+        let path = recovery::record_path(&self.paths, &space.id, execution);
         let record = recovery::Record::load(&path)?
-            .with_context(|| format!("{} has no stopped agent {execution}", space.name()))?;
+            .with_context(|| format!("{} has no stopped agent {execution}", space.name))?;
         let env = crate::terminal::detached_start_environment(record.origin.as_ref());
         let restore =
             Restore::new(Target::of(space), execution, &record.agent, &env, None)?.starting(id);
         let start = Start {
             id: restore.id.clone(),
-            name: space.name().clone(),
+            name: space.name.clone(),
             env,
         };
         self.store.write(move |tx| insert(tx, &restore)).await?;
@@ -416,12 +416,12 @@ impl Manager {
     /// is queued; otherwise its record stays for `shoal restore`.
     pub async fn queue_failed_restore(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         agent: &crate::agent::Agent,
         execution: &ExecutionId,
         code: i32,
     ) -> bool {
-        let path = recovery::record_path(&self.paths, space.id(), execution);
+        let path = recovery::record_path(&self.paths, &space.id, execution);
         let Some(record) = recovery::Record::load(&path).ok().flatten() else {
             return false;
         };
@@ -443,7 +443,7 @@ impl Manager {
             );
             return false;
         }
-        self.notify_space(space.name(), space.id(),
+        self.notify_space(&space.name, &space.id,
             crate::daemon::notifications::NotificationKind::AgentExited,
             format!(
                 "Restore of {agent} failed with exit code {code}; its restore waits in the agent queue"

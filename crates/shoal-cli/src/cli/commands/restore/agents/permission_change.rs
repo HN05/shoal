@@ -9,7 +9,7 @@ use super::super::targets::Selected;
 use super::setups::FailedSetup;
 use crate::{
     cli::context::Context, config::permissions::PermissionChange, execution::recovery::Saved,
-    model::PresentSpace, protocol::SavedAgent,
+    model::Space, protocol::SavedAgent,
 };
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
@@ -27,7 +27,7 @@ pub(super) async fn check(
         .context("--permission changes the permissions of the spaces a restore names")?;
     for selector in selectors {
         let space = super::present_space(ctx, selector).await?;
-        let repository = space.repository_id().map(|id| id.as_str().into());
+        let repository = space.repository_id.as_ref().map(|id| id.as_str().into());
         crate::cli::commands::permissions::ensure_held(ctx, repository, &change.set).await?;
     }
     for setup in selected
@@ -48,13 +48,13 @@ pub(super) async fn check(
 /// changes none when it refuses one.
 pub(super) async fn apply(
     ctx: &Context,
-    stopped: &[(PresentSpace, Saved)],
+    stopped: &[(Space, Saved)],
     setups: &[FailedSetup],
     change: Option<&PermissionChange>,
 ) -> Result<()> {
     let agents = stopped.iter().flat_map(|(space, saved)| {
         (saved.agents.iter().chain(&saved.sessions)).map(|saved| SavedAgent {
-            workspace: SpaceSelector::id(space.id()),
+            workspace: SpaceSelector::id(&space.id),
             execution: saved.id.clone(),
         })
     });
@@ -71,12 +71,12 @@ pub(super) async fn apply(
 /// [`apply`] for the agent or last session `execution` of `space`.
 pub(super) async fn apply_one(
     ctx: &Context,
-    space: &PresentSpace,
+    space: &Space,
     execution: &ExecutionId,
     change: Option<&PermissionChange>,
 ) -> Result<()> {
     let agent = SavedAgent {
-        workspace: SpaceSelector::id(space.id()),
+        workspace: SpaceSelector::id(&space.id),
         execution: execution.clone(),
     };
     let targets = PermissionTargets {

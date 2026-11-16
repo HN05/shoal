@@ -2,7 +2,7 @@ use super::*;
 use crate::client::restarts::Progress as _;
 use crate::{
     cli::context::Context,
-    model::{PresentSpace, Workspace},
+    model::{Space, Workspace},
     paths::Paths,
     sessions::{HostName, Origin},
     state::WorkspaceState,
@@ -30,7 +30,7 @@ fn restart(name: &str) -> Restart {
             stopped: None,
             restarted_from: Vec::new(),
         },
-        space: PresentSpace::Workspace(workspace),
+        space: Space::from(workspace),
         joins: None,
     }
 }

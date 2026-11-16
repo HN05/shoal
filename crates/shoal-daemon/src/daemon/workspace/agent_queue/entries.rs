@@ -3,6 +3,7 @@
 //! failure.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::model::ByKind;
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, Result, bail, ensure};
@@ -15,7 +16,7 @@ use super::{
 };
 use crate::{
     daemon::{notifications::NotificationKind, scope::Caller, workspace::Manager},
-    model::{PresentSpace, QueueAdmission, QueueEntry, QueueRequest, QueuedPlan, Workspace},
+    model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan, Workspace},
     state::{QueueKind, QueueState},
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
@@ -206,7 +207,7 @@ impl Manager {
             .collect();
         for (id, parent) in named {
             if let Ok(parent) = self.space(&parent).await {
-                parents.insert(id, parent.id().clone());
+                parents.insert(id, parent.id.clone());
             }
         }
         Ok(parents)
@@ -355,10 +356,10 @@ impl Manager {
     /// [`Self::attach_chat`] does.
     pub async fn queue_attach(&self, id: &QueueEntryId, space: &SpaceSelector) -> Result<()> {
         let space = self.space(space).await?;
-        let space_id = space.id().clone();
-        match space {
-            PresentSpace::Workspace(workspace) => self.attach_workspace(id, workspace).await,
-            PresentSpace::Chat(chat) => self.attach_chat(id, &chat.id).await,
+        let space_id = space.id.clone();
+        match space.by_kind() {
+            ByKind::Workspace(workspace) => self.attach_workspace(id, workspace).await,
+            ByKind::Chat(chat) => self.attach_chat(id, &chat.id).await,
         }?;
         // Its queued agent works its issues.
         self.agent_settles.request(&space_id);

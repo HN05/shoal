@@ -8,7 +8,7 @@ use anyhow::Result;
 use crate::{
     cli::{context::Context, terminal},
     config::Effective,
-    model::PresentSpace,
+    model::Space,
 };
 
 /// Run Shoal with `args`, a restore of the agent of `space`, in the
@@ -17,14 +17,12 @@ use crate::{
 pub(super) async fn run_in_background(
     ctx: &Context,
     settings: &Effective,
-    space: &PresentSpace,
+    space: &Space,
     args: &[OsString],
 ) -> Result<Option<&'static str>> {
-    match space {
-        PresentSpace::Workspace(workspace) => {
-            terminal::run_in_background(ctx, settings, workspace, args).await
-        }
-        PresentSpace::Chat(_) => {
+    match space.to_workspace() {
+        Some(workspace) => terminal::run_in_background(ctx, settings, &workspace, args).await,
+        None => {
             let paths = &ctx.paths;
             shoal_workers::places::queued::restore_chat(paths, settings, space, args).await?;
             Ok(Some("a background place"))

@@ -154,7 +154,7 @@ impl Manager {
             let space = self.space_by_id(&id).await?;
             sleepers.push(Sleeper {
                 candidate,
-                repository: space.repository_id().cloned(),
+                repository: space.repository_id.as_ref().cloned(),
                 holds_slot: !space.done(),
                 priority,
                 free,

@@ -65,13 +65,14 @@ fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_number_or_id() {
         running,
         ..chat(id)
     };
-    let spaces = Spaces {
-        workspaces: vec![worker],
-        chats: vec![chat("c1", 1, "talk", true), chat("c2", 2, "saved", false)],
-    };
+    let spaces = Spaces(vec![
+        worker.into(),
+        chat("c1", 1, "talk", true).into(),
+        chat("c2", 2, "saved", false).into(),
+    ]);
     let found = |selector: &str| {
         let space = spaces.find(&SpaceSelector::from(selector));
-        space.map(|space| space.name().to_owned())
+        space.map(|space| space.name.to_owned())
     };
     assert_eq!(found("w1").as_deref(), Some("worker"));
     assert_eq!(found("worker"), None);
@@ -102,17 +103,13 @@ fn the_spaces_below_a_space_include_those_below_them() {
             ..chat(id)
         }
     };
-    let spaces = Spaces {
-        workspaces: vec![
-            workspace("opened", vec![space("planning", SpaceKind::Chat)]),
-            workspace("grandchild", Vec::new()),
-            workspace("other", Vec::new()),
-        ],
-        chats: vec![
-            chat("talk", vec![space("opened", SpaceKind::Workspace)]),
-            chat("planning", vec![space("grandchild", SpaceKind::Workspace)]),
-        ],
-    };
+    let spaces = Spaces(vec![
+        workspace("opened", vec![space("planning", SpaceKind::Chat)]).into(),
+        workspace("grandchild", Vec::new()).into(),
+        workspace("other", Vec::new()).into(),
+        chat("talk", vec![space("opened", SpaceKind::Workspace)]).into(),
+        chat("planning", vec![space("grandchild", SpaceKind::Workspace)]).into(),
+    ]);
     let below: Vec<SpaceId> = (spaces.below(&SpaceId::from("talk")).into_iter())
         .map(|space| space.id)
         .collect();

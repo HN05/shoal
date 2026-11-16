@@ -139,7 +139,7 @@ async fn a_scope_stops_every_space_it_reaches_but_its_own() {
     let stopped = async |caller: &Caller| {
         let below = manager.spaces_below(Some(caller), spaces.clone()).await;
         let mut names: Vec<String> = (below.unwrap().iter())
-            .map(|space| space.name().to_string())
+            .map(|space| space.name.to_string())
             .collect();
         names.sort();
         names

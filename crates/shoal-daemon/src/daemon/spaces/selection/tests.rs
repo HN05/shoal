@@ -33,8 +33,8 @@ async fn a_number_selects_a_workspace_or_a_chat_and_a_command_takes_its_kind() {
             .space(&manager.named("talk").await)
             .await
             .unwrap()
-            .id(),
-        &chat.id
+            .id,
+        chat.id
     );
 
     let refused = manager.workspace(&number(chat.number)).await.unwrap_err();

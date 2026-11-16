@@ -2,12 +2,13 @@
 //! that would lose work or cut its own output off, and the confirmation
 //! ending the spaces needs.
 use anyhow::{Result, ensure};
+use shoal_protocol::model::ByKind;
 
 use super::Output;
 use crate::client::transcripts;
 use crate::{
     cli::{context::Context, ui},
-    model::{Chat, PresentSpace, SpaceHold, SpaceKind, SpaceRef, Spaces},
+    model::{Chat, Space, SpaceHold, SpaceKind, SpaceRef, Spaces},
     removal::{RemovalCheck, UnsavedWork},
 };
 use shoal_ids::space_ids::SpaceId;
@@ -105,21 +106,21 @@ impl Checked {
 /// do, refusing an export that would lose work or cut its own output off.
 pub(super) async fn check_export(
     ctx: &Context,
-    space: PresentSpace,
+    space: Space,
     output: &Output,
     spaces: &Spaces,
 ) -> Result<Checked> {
-    let carried = carried_chats(spaces, space.id());
+    let carried = carried_chats(spaces, &space.id);
     for chat in &carried {
         ensure_not_running_in(chat)?;
     }
-    let (space, taken) = match space {
-        PresentSpace::Workspace(workspace) => {
+    let (space, taken) = match space.by_kind() {
+        ByKind::Workspace(workspace) => {
             let check = check_workspace_export(ctx, &workspace.id, output).await?;
             let taken = check.children.clone();
             (Ending::Workspace(check), taken)
         }
-        PresentSpace::Chat(chat) => {
+        ByKind::Chat(chat) => {
             let taken = spaces.taken_with(&chat.id);
             (Ending::Chat(check_chat_export(ctx, chat).await?), taken)
         }
@@ -134,8 +135,9 @@ pub(super) async fn check_export(
 /// The chats among `spaces` that go with the space `id`, each after its
 /// parent among them.
 fn carried_chats(spaces: &Spaces, id: &SpaceId) -> Vec<Chat> {
-    (crate::transfer::carried_chats(&spaces.chats, id).iter())
-        .filter_map(|id| spaces.chats.iter().find(|chat| chat.id == *id))
+    let chats = spaces.chats();
+    (crate::transfer::carried_chats(&chats, id).iter())
+        .filter_map(|id| chats.iter().find(|chat| chat.id == *id))
         .cloned()
         .collect()
 }
@@ -200,15 +202,16 @@ async fn check_workspace_export(
 /// The `spaces` an export of them all ends one by one: those that do not go
 /// with another of them, which its export ends, each after the spaces below
 /// it that its removal would otherwise take.
-pub(super) fn exported_alone(spaces: &[PresentSpace], tree: &Spaces) -> Vec<PresentSpace> {
+pub(super) fn exported_alone(spaces: &[Space], tree: &Spaces) -> Vec<Space> {
+    let chats = tree.chats();
     let carried: Vec<SpaceId> = (spaces.iter())
-        .flat_map(|space| crate::transfer::carried_chats(&tree.chats, space.id()))
+        .flat_map(|space| crate::transfer::carried_chats(&chats, &space.id))
         .collect();
-    let mut alone: Vec<PresentSpace> = (spaces.iter())
-        .filter(|space| !carried.contains(space.id()))
+    let mut alone: Vec<Space> = (spaces.iter())
+        .filter(|space| !carried.contains(&space.id))
         .cloned()
         .collect();
-    alone.sort_by_key(|space| tree.taken_with(space.id()).len());
+    alone.sort_by_key(|space| tree.taken_with(&space.id).len());
     alone
 }
 

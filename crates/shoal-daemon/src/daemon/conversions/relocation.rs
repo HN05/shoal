@@ -415,7 +415,7 @@ impl Manager {
             .space(&shoal_protocol::space_names::SpaceSelector::id(id))
             .await
         {
-            Ok(space) => (space.name().clone(), space.number()),
+            Ok(space) => (space.name.clone(), space.number),
             Err(_) => return,
         };
         let message = match pending {

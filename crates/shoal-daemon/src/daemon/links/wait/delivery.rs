@@ -15,7 +15,7 @@ use crate::{
         items::link::{LinkKind, Selection},
         updates::Update,
     },
-    model::{PresentSpace, SpaceRef},
+    model::{Space, SpaceRef},
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceSelector;
@@ -48,11 +48,11 @@ impl Manager {
             .await?;
         // The space's hooks deliver what a watch would, so the newest of them
         // takes it.
-        let wait = self.waits.start(space.id());
+        let wait = self.waits.start(&space.id);
         // Subscribe before reading, so a message queued in between still wakes.
         let mut queued = self.signals.watch_messages();
         let mut background = self.signals.watch_item_updates();
-        let unread = self.unread_messages(space.id()).await?;
+        let unread = self.unread_messages(&space.id).await?;
         let mut messages = unread.messages;
         if !unread.wakes {
             // A cancelled poll leaves its deliveries pending for the newer wait.
@@ -69,7 +69,7 @@ impl Manager {
                     }
                     return with_unread_messages(updates, unread);
                 }
-                next = self.next_agent_messages(space.id(), &mut queued) => messages = next?,
+                next = self.next_agent_messages(&space.id, &mut queued) => messages = next?,
                 () = wait.superseded.notified() => return Ok(Updates::superseded()),
             }
         }
@@ -93,8 +93,8 @@ impl Manager {
     /// updates.
     pub async fn wait_space_updates(&self, selector: &SpaceSelector) -> Result<Updates> {
         let space = self.space(selector).await?;
-        let log = WakeWaitLog::start(space.name());
-        let selector = SpaceSelector::id(space.id());
+        let log = WakeWaitLog::start(&space.name);
+        let selector = SpaceSelector::id(&space.id);
         let updates = self
             .wait_items(&selector, &Selection::default(), None, None)
             .await;
@@ -111,7 +111,7 @@ impl Manager {
     /// so while one runs the updates wait for a later delivery.
     pub async fn agent_updates(&self, selector: &SpaceSelector) -> Result<Updates> {
         let space = self.space(selector).await?;
-        let id = space.id().clone();
+        let id = space.id.clone();
         let delivery = self.waits.start(&id);
         let messages = self.deliverable_messages(&space).await?;
         // The messages, then the leftovers, share the response with the
@@ -148,12 +148,12 @@ impl Manager {
     /// gates of the space and its `children`.
     pub(super) async fn gated_agent_updates(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         children: &[SpaceRef],
         kind: Option<LinkKind>,
         reserved: usize,
     ) -> Result<Vec<Update>> {
-        let mut batch = own_batch(space.id(), self.queued_updates(space, kind).await?);
+        let mut batch = own_batch(&space.id, self.queued_updates(space, kind).await?);
         batch.extend(self.delegated_pending(children, kind).await?);
         self.fit_response(batch, reserved).await
     }
@@ -163,11 +163,11 @@ impl Manager {
     /// the space and the spaces below it whose activity it receives.
     pub(super) async fn queued_activity(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         kind: Option<LinkKind>,
     ) -> Result<Vec<Update>> {
-        let children = self.delegated_spaces(space.id()).await?;
-        let _gate = self.gates.lock_prs(receiving(space.id(), &children)).await;
+        let children = self.delegated_spaces(&space.id).await?;
+        let _gate = self.gates.lock_prs(receiving(&space.id, &children)).await;
         self.gated_agent_updates(space, &children, kind, 0).await
     }
 
@@ -210,10 +210,10 @@ impl Manager {
     /// when it has one.
     pub(super) async fn queued_updates(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         kind: Option<LinkKind>,
     ) -> Result<Vec<Update>> {
-        let id = space.id().clone();
+        let id = space.id.clone();
         let items = self
             .store
             .run(move |db| followed_items(db, &id, kind))
@@ -226,7 +226,7 @@ impl Manager {
             .map(|url| url.to_string())
             .chain(branch.map(String::from))
             .collect::<Vec<_>>();
-        self.pending_activity(space.id(), &keys).await
+        self.pending_activity(&space.id, &keys).await
     }
 
     /// The unread messages once one that wakes an idle agent is queued.

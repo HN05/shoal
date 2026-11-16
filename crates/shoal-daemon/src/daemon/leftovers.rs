@@ -13,7 +13,6 @@ use anyhow::Result;
 use crate::{
     daemon::{space_processes::WorktreeTies, workspace::Manager},
     fsutil::off_runtime,
-    model::PresentSpace,
     process::{
         described,
         identity::{
@@ -133,11 +132,11 @@ impl Manager {
         let mut spaces = Vec::new();
         for workspace in self.list_workspaces().await? {
             let ties = WorktreeTies::when(off_runtime::is_dir(&workspace.path).await?);
-            let workspace = PresentSpace::Workspace(workspace);
+            let workspace = crate::model::Space::from(workspace);
             spaces.push(self.space_ties(&workspace, ties).await?);
         }
         for chat in self.chats().await? {
-            let chat = PresentSpace::Chat(chat);
+            let chat = crate::model::Space::from(chat);
             spaces.push(self.space_ties(&chat, WorktreeTies::None).await?);
         }
         Ok(spaces)
@@ -152,7 +151,7 @@ impl Manager {
     ) -> Result<()> {
         if !pids.is_empty() {
             let space = self.space(selector).await?;
-            self.leftovers.delivered(space.id(), pids);
+            self.leftovers.delivered(&space.id, pids);
         }
         Ok(())
     }

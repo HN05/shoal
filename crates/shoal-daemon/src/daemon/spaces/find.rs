@@ -8,7 +8,7 @@ use crate::{
         ForgeRepo,
         items::{link::LinkKind, reference::ItemInput},
     },
-    model::{PresentSpace, Relation, SpaceTarget},
+    model::{Relation, Space, SpaceTarget},
 };
 
 impl Manager {
@@ -19,17 +19,17 @@ impl Manager {
         &self,
         target: &SpaceTarget,
         within: Option<Vec<SpaceId>>,
-    ) -> Result<Vec<PresentSpace>> {
+    ) -> Result<Vec<Space>> {
         let ids = match target {
             SpaceTarget::Item { kind, input } => self.linking_spaces(*kind, input, within).await?,
             SpaceTarget::Resource { name } => self.holding_workspaces(name, within).await?,
         };
         let workspaces = self.list_workspaces().await?;
-        let workspaces = workspaces.into_iter().map(PresentSpace::Workspace);
-        let chats = self.chats().await?.into_iter().map(PresentSpace::Chat);
+        let workspaces = workspaces.into_iter().map(Space::from);
+        let chats = self.chats().await?.into_iter().map(Space::from);
         Ok(workspaces
             .chain(chats)
-            .filter(|space| ids.iter().any(|id| id == space.id()))
+            .filter(|space: &Space| ids.contains(&space.id))
             .collect())
     }
 

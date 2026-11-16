@@ -7,7 +7,7 @@ use anyhow::Result;
 use super::{delivery::receiving, poll::POLL_INTERVAL};
 use crate::{
     daemon::workspace::Manager,
-    model::{AgentStatus, PresentSpace},
+    model::{AgentStatus, Space},
     time::UnixTime,
 };
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
@@ -59,7 +59,7 @@ impl Manager {
         loop {
             // One reading decides both whether messages are due and when
             // held ones settle, which no signal announces.
-            let unread = self.unread_messages(space.id()).await?;
+            let unread = self.unread_messages(&space.id).await?;
             let hold = self.message_hold(&space, &unread.messages).await?;
             let messages_due = wake_messages_due(unread.wakes, hold, phase);
             if self
@@ -87,7 +87,7 @@ impl Manager {
     /// as in a hook delivery.
     pub(crate) async fn updates_waiting(&self, selector: &SpaceSelector) -> Result<bool> {
         let space = self.space(selector).await?;
-        if self.unread_messages(space.id()).await?.wakes {
+        if self.unread_messages(&space.id).await?.wakes {
             return Ok(true);
         }
         self.updates_deliverable(&space).await
@@ -97,9 +97,9 @@ impl Manager {
     /// `space`. None count while cleanup or an item change holds the PR
     /// gates of the spaces whose activity it receives, rather than waiting
     /// for them for minutes.
-    async fn updates_deliverable(&self, space: &PresentSpace) -> Result<bool> {
-        let children = self.delegated_spaces(space.id()).await?;
-        let Some(_gate) = self.gates.try_lock_prs(receiving(space.id(), &children)) else {
+    async fn updates_deliverable(&self, space: &Space) -> Result<bool> {
+        let children = self.delegated_spaces(&space.id).await?;
+        let Some(_gate) = self.gates.try_lock_prs(receiving(&space.id, &children)) else {
             return Ok(false);
         };
         Ok(!self
@@ -122,8 +122,8 @@ impl Manager {
 
     /// Whether updates are queued for the agent of `space`, read without
     /// the PR gates.
-    async fn updates_recorded(&self, space: &PresentSpace) -> Result<bool> {
-        let children = self.delegated_spaces(space.id()).await?;
+    async fn updates_recorded(&self, space: &Space) -> Result<bool> {
+        let children = self.delegated_spaces(&space.id).await?;
         Ok(!self.queued_updates(space, None).await?.is_empty()
             || !self.delegated_pending(&children, None).await?.is_empty())
     }
@@ -132,11 +132,7 @@ impl Manager {
     /// arming a wake waits for them to be deliverable: once prompted, the
     /// agent stays due while they are recorded, so a gate cleanup takes
     /// meanwhile cannot end that wait and prompt it again.
-    pub(super) async fn wake_updates_due(
-        &self,
-        space: &PresentSpace,
-        phase: WakePhase,
-    ) -> Result<bool> {
+    pub(super) async fn wake_updates_due(&self, space: &Space, phase: WakePhase) -> Result<bool> {
         match phase {
             WakePhase::Arming => self.updates_deliverable(space).await,
             WakePhase::Prompted => self.updates_recorded(space).await,
@@ -148,12 +144,12 @@ impl Manager {
     /// the hook of the agent the `hooked` execution runs cannot wake it.
     pub(super) async fn agent_wake_due(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         hooked: Option<&ExecutionId>,
         messages_due: bool,
         phase: WakePhase,
     ) -> Result<bool> {
-        if !self.wakeable(space.id(), hooked).await? {
+        if !self.wakeable(&space.id, hooked).await? {
             return Ok(false);
         }
         Ok(messages_due || self.wake_updates_due(space, phase).await?)

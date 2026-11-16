@@ -16,8 +16,8 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     config::hooks::HookKind,
     model::{
-        Blocker, ConflictCheck, DiffBase, Inspection, MergePreview, OwnedPlace, PresentSpace,
-        Refreshed, RenamedSpace, SpacePlaces, SpaceStatus, SpaceTarget, Spaces, UntrackedWorktree,
+        Blocker, ConflictCheck, DiffBase, Inspection, MergePreview, OwnedPlace, Refreshed,
+        RenamedSpace, Space, SpacePlaces, SpaceStatus, SpaceTarget, Spaces, UntrackedWorktree,
         Workspace,
     },
     protocol::{CommitStart, ConfigTarget, CreationOptions, RepositoryLayers, WorkspaceMethod},
@@ -37,17 +37,16 @@ pub async fn list(daemon: &impl Daemon) -> Result<Vec<Workspace>> {
 
 /// The workspaces and chats, running or stopped, visible to this caller.
 pub async fn spaces(daemon: &impl Daemon) -> Result<Spaces> {
-    Ok(Spaces {
-        workspaces: list(daemon).await?,
-        chats: chats::recorded(daemon).await?,
-    })
+    let workspaces = list(daemon).await?.into_iter().map(Space::from);
+    let chats = chats::recorded(daemon).await?.into_iter().map(Space::from);
+    Ok(workspaces.chain(chats).collect())
 }
 
 /// The workspace or chat `selector` names, by number, ID or name.
 pub async fn present_space(
     daemon: &impl Daemon,
     selector: &SpaceSelector,
-) -> Result<Option<PresentSpace>> {
+) -> Result<Option<Space>> {
     Ok(spaces(daemon).await?.find(selector))
 }
 
@@ -218,7 +217,7 @@ pub async fn refresh(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<R
 }
 
 /// The spaces `target` selects.
-pub async fn find_spaces(daemon: &impl Daemon, target: SpaceTarget) -> Result<Vec<PresentSpace>> {
+pub async fn find_spaces(daemon: &impl Daemon, target: SpaceTarget) -> Result<Vec<Space>> {
     request(daemon, WorkspaceMethod::FindSpaces { target }).await
 }
 

@@ -6,17 +6,17 @@ use shoal_ids::space_ids::SpaceId;
 use super::{workspace::Manager, workspace_files::Attacher};
 use crate::{
     config::Effective,
-    model::{Completion, PresentSpace, SpaceKind},
+    model::{Completion, Space, SpaceKind},
 };
 use shoal_protocol::{assignments::Done, space_names::SpaceSelector};
 
 impl Manager {
     /// The settings of `space`: a workspace's own, or a chat's
     /// repository's.
-    pub(crate) async fn present_space_settings(&self, space: &PresentSpace) -> Result<Effective> {
-        match space {
-            PresentSpace::Workspace(workspace) => self.workspace_settings(workspace).await,
-            PresentSpace::Chat(chat) => self.chat_settings(chat).await,
+    pub(crate) async fn present_space_settings(&self, space: &Space) -> Result<Effective> {
+        match space.to_workspace() {
+            Some(workspace) => self.workspace_settings(&workspace).await,
+            None => self.space_settings_in(space.repository_id.as_ref()).await,
         }
     }
 
@@ -28,22 +28,22 @@ impl Manager {
         done: Done,
         attacher: &Attacher,
     ) -> Result<Completion> {
-        match self.space(selector).await? {
-            PresentSpace::Workspace(workspace) => {
-                (self.mark_done(&SpaceSelector::id(&workspace.id), done, attacher)).await
+        let space = self.space(selector).await?;
+        match space.kind() {
+            SpaceKind::Workspace => {
+                (self.mark_done(&SpaceSelector::id(&space.id), done, attacher)).await
             }
-            PresentSpace::Chat(chat) => self.mark_chat_done(&chat.id, done, attacher).await,
+            SpaceKind::Chat => self.mark_chat_done(&space.id, done, attacher).await,
         }
     }
 
     /// Withdraw the completion the workspace or chat `selector`
     /// names recorded.
     pub async fn undo_space_done(&self, selector: &SpaceSelector) -> Result<Completion> {
-        match self.space(selector).await? {
-            PresentSpace::Workspace(workspace) => {
-                self.undo_done(&SpaceSelector::id(&workspace.id)).await
-            }
-            PresentSpace::Chat(chat) => self.undo_chat_done(&chat.id).await,
+        let space = self.space(selector).await?;
+        match space.kind() {
+            SpaceKind::Workspace => self.undo_done(&SpaceSelector::id(&space.id)).await,
+            SpaceKind::Chat => self.undo_chat_done(&space.id).await,
         }
     }
 }

@@ -39,7 +39,7 @@ pub(in crate::cli::commands) async fn status(
     let spaces = crate::client::workspaces::find_spaces(&ctx.paths, target).await?;
     let mut statuses = Vec::new();
     for space in spaces {
-        statuses.push(status_view(ctx, SpaceSelector::id(space.id())).await?);
+        statuses.push(status_view(ctx, SpaceSelector::id(&space.id)).await?);
     }
     ctx.show(&statuses, |statuses| {
         for (index, status) in statuses.iter().enumerate() {

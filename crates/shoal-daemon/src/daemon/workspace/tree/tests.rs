@@ -592,13 +592,13 @@ async fn children_never_keep_their_parent_and_go_with_it() {
     std::fs::write(child.path.join("draft.txt"), "draft").unwrap();
     assert!(matches!(
         manager
-            .cleanup_reason(&crate::model::PresentSpace::Workspace(parent.clone()))
+            .cleanup_reason(&crate::model::Space::from(parent.clone()))
             .await,
         CleanupReason::Idle { .. }
     ));
     assert_eq!(
         manager
-            .cleanup_reason(&crate::model::PresentSpace::Workspace(child.clone()))
+            .cleanup_reason(&crate::model::Space::from(child.clone()))
             .await,
         CleanupReason::Held
     );
@@ -788,15 +788,15 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
             .find_spaces(target, Some(subtree.clone()))
             .await
             .unwrap();
-        let found: Vec<_> = found.iter().map(|space| space.id()).collect();
+        let found: Vec<_> = found.iter().map(|space| &space.id).collect();
         assert_eq!(found, [child.id.as_str()], "{target:?}");
         // Unscoped, the chat links the items too, but holds no lease.
         let everywhere = manager.find_spaces(target, None).await.unwrap();
         let (workspaces, chats): (Vec<_>, Vec<_>) = everywhere
             .iter()
-            .partition(|space| matches!(space, crate::model::PresentSpace::Workspace(_)));
+            .partition(|space| space.worktree().is_some());
         assert_eq!(workspaces.len(), 2, "{target:?}");
-        let chats: Vec<_> = chats.iter().map(|space| space.id()).collect();
+        let chats: Vec<_> = chats.iter().map(|space| &space.id).collect();
         let linked = matches!(target, crate::model::SpaceTarget::Item { .. });
         let expected: Vec<_> = linked.then_some(chat.id.as_str()).into_iter().collect();
         assert_eq!(chats, expected, "{target:?}");

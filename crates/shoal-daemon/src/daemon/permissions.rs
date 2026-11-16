@@ -12,7 +12,7 @@ use crate::{
         permissions::{self, PermissionChange, Permissions, PermissionsConfig, SpaceMode},
     },
     daemon::{scope::Caller, workspace::Manager},
-    model::{Chat, PresentSpace, SpaceKind, Workspace},
+    model::{Space, SpaceKind, Workspace},
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
@@ -80,7 +80,7 @@ impl Manager {
     pub(crate) async fn ensure_change_held(
         &self,
         giver: Option<&SpaceId>,
-        space: &PresentSpace,
+        space: &Space,
         change: &PermissionChange,
         repository: Option<&RepositoryId>,
     ) -> Result<()> {
@@ -109,23 +109,10 @@ impl Manager {
         if giver.is_none() {
             return Ok(());
         }
-        let (space, recorded) = match self.space(space).await? {
-            PresentSpace::Workspace(workspace) => {
-                let recorded = workspace.narrowing;
-                let mode = Some(mode.clone());
-                (
-                    PresentSpace::Workspace(Workspace { mode, ..workspace }),
-                    recorded,
-                )
-            }
-            PresentSpace::Chat(chat) => {
-                let recorded = chat.narrowing;
-                let mode = Some(mode.clone());
-                (PresentSpace::Chat(Chat { mode, ..chat }), recorded)
-            }
-        };
-        let change = PermissionChange::between(&recorded, given);
-        let repository = space.repository_id().cloned();
+        let mut space = self.space(space).await?;
+        space.mode = Some(mode.clone());
+        let change = PermissionChange::between(&space.narrowing, given);
+        let repository = space.repository_id.clone();
         (self.ensure_change_held(giver, &space, &change, repository.as_ref())).await
     }
 
@@ -144,7 +131,7 @@ impl Manager {
             kind: SpaceKind::Workspace,
             repository: true,
         };
-        let space = PresentSpace::Workspace(workspace);
+        let space = Space::from(workspace);
         let config = self.config();
         let agent = Some((mode, narrowing));
         (self.permissions_below_parent(&config, &space, agent, Some(&repository))).await
@@ -156,11 +143,11 @@ impl Manager {
     async fn permissions_below_parent(
         &self,
         config: &Config,
-        space: &PresentSpace,
+        space: &Space,
         agent: Option<RecordedAgent<'_>>,
         repository: Option<&RepositoryId>,
     ) -> Result<Permissions> {
-        let parent = (self.parent_permissions(config, space.id(), repository)).await?;
+        let parent = (self.parent_permissions(config, &space.id, repository)).await?;
         (self.agent_permissions(config, space, agent, parent, repository)).await
     }
 
@@ -189,7 +176,7 @@ impl Manager {
     async fn agent_permissions(
         &self,
         config: &Config,
-        space: &PresentSpace,
+        space: &Space,
         agent: Option<RecordedAgent<'_>>,
         parent: Option<Permissions>,
         repository: Option<&RepositoryId>,
@@ -197,7 +184,7 @@ impl Manager {
         let settings = self.mode_settings(config, space, repository).await?;
         let (mode, given) = agent.unzip();
         let permissions = permissions::resolve(&settings, mode)
-            .with_context(|| format!("the permissions of {}", space.name()))?;
+            .with_context(|| format!("the permissions of {}", space.name))?;
         let permissions = match parent {
             Some(parent) => permissions.below(&parent),
             None => permissions,
@@ -211,17 +198,15 @@ impl Manager {
     async fn mode_settings(
         &self,
         config: &Config,
-        space: &PresentSpace,
+        space: &Space,
         repository: Option<&RepositoryId>,
     ) -> Result<crate::config::Effective> {
-        match space {
-            PresentSpace::Workspace(workspace) => {
-                self.workspace_settings_from(config, workspace).await
-            }
-            PresentSpace::Chat(chat) => match chat.repository_id.as_ref().or(repository) {
-                Some(repository) => self.repository_settings_from(config, repository).await,
-                None => config.resolve(&Default::default()),
-            },
+        if let Some(workspace) = space.to_workspace() {
+            return self.workspace_settings_from(config, &workspace).await;
+        }
+        match space.repository_id.as_ref().or(repository) {
+            Some(repository) => self.repository_settings_from(config, repository).await,
+            None => config.resolve(&Default::default()),
         }
     }
 }
@@ -231,12 +216,8 @@ type RecordedAgent<'a> = (SpaceMode<'a>, PermissionsConfig);
 
 /// The mode and narrowing the agent of `space` started with; none for a
 /// workspace that has had no agent.
-fn recorded_agent(space: &PresentSpace) -> Option<RecordedAgent<'_>> {
-    let narrowing = match space {
-        PresentSpace::Workspace(workspace) => workspace.narrowing,
-        PresentSpace::Chat(chat) => chat.narrowing,
-    };
-    Some((space.mode()?, narrowing))
+fn recorded_agent(space: &Space) -> Option<RecordedAgent<'_>> {
+    Some((space.space_mode()?, space.narrowing))
 }
 
 mod actions;

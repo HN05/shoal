@@ -11,7 +11,7 @@ use shoal_ids::space_ids::SpaceId;
 use crate::client::output::agents::{Agent, Continued, Interrupted};
 use crate::{
     cli::{agents, context::Context, terminal, ui},
-    model::{PresentSpace, RunningAgent},
+    model::{RunningAgent, Space},
     protocol::ConfigTarget,
     sessions::Origin,
     state::AgentState,
@@ -58,7 +58,7 @@ struct Interruption {
 
 /// The running turns of the agents in `spaces`, refusing them all when
 /// Shoal cannot interrupt one.
-async fn running_turns(ctx: &Context, spaces: &[PresentSpace]) -> Result<Vec<Interruption>> {
+async fn running_turns(ctx: &Context, spaces: &[Space]) -> Result<Vec<Interruption>> {
     let mut interruptions = Vec::new();
     for space in spaces {
         let agents = agents_in(ctx, space).await?;
@@ -173,8 +173,8 @@ fn runs_turn(state: Option<AgentState>) -> bool {
 }
 
 /// The connected agents of `space`.
-async fn agents_in(ctx: &Context, space: &PresentSpace) -> Result<Vec<RunningAgent>> {
-    crate::client::agents::running(&ctx.paths, SpaceSelector::id(space.id())).await
+async fn agents_in(ctx: &Context, space: &Space) -> Result<Vec<RunningAgent>> {
+    crate::client::agents::running(&ctx.paths, SpaceSelector::id(&space.id)).await
 }
 
 /// `agent`'s name, or a stand-in for one whose wrapper is gone.
@@ -195,18 +195,18 @@ struct Target {
 
 impl Target {
     /// `agent` of `space`, refusing one that runs in no terminal host.
-    fn of(space: &PresentSpace, agent: RunningAgent) -> Result<Self> {
+    fn of(space: &Space, agent: RunningAgent) -> Result<Self> {
         let place = agent.origin.with_context(|| {
             format!(
                 "{} in {} runs in no terminal session Shoal can type into",
                 name(agent.agent.as_ref()),
-                space.name()
+                space.name
             )
         })?;
         Ok(Self {
-            space: space.name().clone(),
+            space: space.name.clone(),
             agent: agent.agent,
-            space_id: space.id().clone(),
+            space_id: space.id.clone(),
             execution: agent.execution,
             place,
         })

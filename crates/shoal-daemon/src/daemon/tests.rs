@@ -95,7 +95,7 @@ async fn an_exit_answers_again_with_the_spaces_of_the_work_it_stopped() {
         chats.push(chat);
     }
     let number = chats[0].number;
-    let spaces = vec![crate::model::PresentSpace::Chat(chats.remove(0))];
+    let spaces = vec![crate::model::Space::from(chats.remove(0))];
     for every in [true, false] {
         let (_, mut client) = ask_exit(&server, None, "stop").await;
         let stopped = StoppedSpaces {

@@ -1,5 +1,6 @@
 //! Removing spaces after checking what each loses.
 use anyhow::{Result, ensure};
+use shoal_protocol::model::ByKind;
 
 use super::removal::{ensure_batch_removable, leaving};
 use crate::client::output::workspaces::{BackgroundRemoval, Removals, Removed};
@@ -11,7 +12,7 @@ use crate::{
         output::Style,
         ui,
     },
-    model::{Chat, PresentSpace, SpaceKind, SpaceRef, Spaces},
+    model::{Chat, SpaceKind, SpaceRef, Spaces},
     removal::{RemovalCheck, RemovalResult, UnsavedWork},
 };
 use shoal_ids::space_ids::SpaceId;
@@ -55,8 +56,8 @@ fn named_chats(spaces: &Spaces, names: Vec<SpaceSelector>) -> (Vec<Chat>, Vec<Sp
     let mut chats: Vec<Chat> = Vec::new();
     let mut others = Vec::new();
     for name in names {
-        match spaces.find(&name) {
-            Some(PresentSpace::Chat(chat)) => {
+        match spaces.find(&name).map(crate::model::Space::by_kind) {
+            Some(ByKind::Chat(chat)) => {
                 if !chats.iter().any(|named| named.id == chat.id) {
                     chats.push(chat);
                 }

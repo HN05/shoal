@@ -1,6 +1,7 @@
 //! Recording a space's work as done, and withdrawing that.
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::model::ByKind;
 
 use crate::client::assignments;
 use crate::client::output::workspaces::Withdrawn;
@@ -9,7 +10,7 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
-    model::{Completion, PresentSpace},
+    model::Completion,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -18,8 +19,11 @@ use shoal_protocol::space_names::SpaceSelector;
 async fn selected(ctx: &Context, space: Option<SpaceSelector>) -> Result<Selected> {
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     Ok(
-        match crate::client::workspaces::present_space(&ctx.paths, &space).await? {
-            Some(PresentSpace::Chat(chat)) => Selected::Chat(chat.id),
+        match crate::client::workspaces::present_space(&ctx.paths, &space)
+            .await?
+            .map(crate::model::Space::by_kind)
+        {
+            Some(ByKind::Chat(chat)) => Selected::Chat(chat.id),
             _ => Selected::Workspace(space),
         },
     )

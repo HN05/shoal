@@ -503,10 +503,10 @@ async fn ready_outcomes_too_large_for_a_frame_arrive_in_pages() {
 /// The spaces a lookup finds arrive in pages when they outgrow a frame.
 #[tokio::test]
 async fn found_spaces_too_large_for_a_frame_arrive_in_pages() {
-    use crate::{model::PresentSpace, state::WorkspaceState};
-    let spaces: Vec<PresentSpace> = (0..1000)
+    use crate::{model::Space, state::WorkspaceState};
+    let spaces: Vec<Space> = (0..1000)
         .map(|n| {
-            PresentSpace::Workspace(Workspace::new_record(
+            Space::from(Workspace::new_record(
                 "repo".into(),
                 format!("workspace-{n}").as_str().into(),
                 format!("/work/workspace-{n}").into(),
@@ -525,9 +525,9 @@ async fn found_spaces_too_large_for_a_frame_arrive_in_pages() {
     }
     let mut reader = tokio::io::BufReader::new(wire.as_slice());
     let joined = read_response(&mut reader).await.unwrap();
-    let joined = Vec::<PresentSpace>::try_from(joined.body).unwrap();
-    let ids = |spaces: &[PresentSpace]| -> Vec<SpaceId> {
-        spaces.iter().map(|space| space.id().clone()).collect()
+    let joined = Vec::<Space>::try_from(joined.body).unwrap();
+    let ids = |spaces: &[Space]| -> Vec<SpaceId> {
+        spaces.iter().map(|space| space.id.clone()).collect()
     };
     assert_eq!(ids(&joined), ids(&spaces));
 }

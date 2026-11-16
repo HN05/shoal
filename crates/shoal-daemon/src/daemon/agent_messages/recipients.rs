@@ -9,7 +9,7 @@ use crate::{
         workspace::Manager,
         workspace_files::{Attacher, NewFile},
     },
-    model::{Chat, PresentSpace, Workspace},
+    model::{Chat, Space, SpaceKind, Workspace},
     repository::Selector,
     state::WorkspaceState,
 };
@@ -84,7 +84,7 @@ impl Manager {
         repository: Option<&Selector>,
         below: Option<&SpaceId>,
         sender_chat: Option<&SpaceId>,
-    ) -> Result<Vec<(PresentSpace, Reader)>> {
+    ) -> Result<Vec<(Space, Reader)>> {
         let repository = match repository {
             Some(repository) => Some(self.repository(repository.clone()).await?.id),
             None => None,
@@ -100,8 +100,8 @@ impl Manager {
             }
         };
         let agents = self.agents().await?;
-        Ok((workspaces.into_iter().map(PresentSpace::Workspace))
-            .chain(chats.into_iter().map(PresentSpace::Chat))
+        Ok((workspaces.into_iter().map(Space::from))
+            .chain(chats.into_iter().map(Space::from))
             .map(|space| {
                 let reader = self.reader(&agents, &space);
                 (space, reader)
@@ -156,21 +156,20 @@ impl Manager {
     /// `agents`: a chat always has an agent, which runs until it stops; a
     /// workspace's agent runs connected, or is reattaching, stopped, queued
     /// or waiting for its restore, or the workspace has none.
-    fn reader(&self, agents: &WorkspaceAgents, space: &PresentSpace) -> Reader {
-        match space {
-            PresentSpace::Workspace(workspace) if agents.running.contains(&workspace.id) => {
-                Reader::Now
-            }
-            PresentSpace::Workspace(workspace)
-                if agents.recorded.contains(&workspace.id)
-                    || agents.queued.contains(&workspace.id)
-                    || self.has_saved_agent(&workspace.id) =>
+    fn reader(&self, agents: &WorkspaceAgents, space: &Space) -> Reader {
+        let id = &space.id;
+        match space.kind() {
+            SpaceKind::Workspace if agents.running.contains(id) => Reader::Now,
+            SpaceKind::Workspace
+                if agents.recorded.contains(id)
+                    || agents.queued.contains(id)
+                    || self.has_saved_agent(id) =>
             {
                 Reader::OnStart
             }
-            PresentSpace::Workspace(_) => Reader::Nobody,
-            PresentSpace::Chat(chat) if chat.running => Reader::Now,
-            PresentSpace::Chat(_) => Reader::OnStart,
+            SpaceKind::Workspace => Reader::Nobody,
+            SpaceKind::Chat if space.running => Reader::Now,
+            SpaceKind::Chat => Reader::OnStart,
         }
     }
 }
@@ -214,17 +213,15 @@ enum Outcome<'a> {
 
 impl Outcome<'_> {
     /// Add `space` to the list among its kind's.
-    fn space(self, space: &PresentSpace) {
+    fn space(self, space: &Space) {
         let recipient = recipient(space);
-        match (self, space) {
-            (Self::Reached(spaces), PresentSpace::Workspace(_)) => {
-                spaces.workspaces.push(recipient)
-            }
-            (Self::Reached(spaces), PresentSpace::Chat(_)) => spaces.chats.push(recipient),
-            (Self::Refused(refused, error), PresentSpace::Workspace(_)) => {
+        match (self, space.kind()) {
+            (Self::Reached(spaces), SpaceKind::Workspace) => spaces.workspaces.push(recipient),
+            (Self::Reached(spaces), SpaceKind::Chat) => spaces.chats.push(recipient),
+            (Self::Refused(refused, error), SpaceKind::Workspace) => {
                 refused.workspaces.push(refusal(recipient, error))
             }
-            (Self::Refused(refused, error), PresentSpace::Chat(_)) => {
+            (Self::Refused(refused, error), SpaceKind::Chat) => {
                 refused.chats.push(refusal(recipient, error))
             }
         }
@@ -232,11 +229,11 @@ impl Outcome<'_> {
 }
 
 /// `space` as a message's result names it.
-fn recipient(space: &PresentSpace) -> Recipient {
+fn recipient(space: &Space) -> Recipient {
     Recipient {
-        number: space.number(),
-        id: space.id().clone(),
-        name: space.name().clone(),
+        number: space.number,
+        id: space.id.clone(),
+        name: space.name.clone(),
     }
 }
 

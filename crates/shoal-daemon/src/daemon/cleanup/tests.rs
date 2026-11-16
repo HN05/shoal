@@ -1,6 +1,6 @@
 use super::*;
 use crate::daemon::{notifications::NotificationKind, workspace_files::Attacher};
-use crate::model::PresentSpace;
+use crate::model::Space;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::assignments::Done;
 use shoal_protocol::space_names::SpaceSelector;
@@ -308,7 +308,7 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
         .unwrap();
     let reason = || async {
         manager
-            .cleanup_reason(&crate::model::PresentSpace::Workspace(workspace.clone()))
+            .cleanup_reason(&crate::model::Space::from(workspace.clone()))
             .await
     };
     assert_eq!(reason().await, CleanupReason::Idle { minutes: 10 });
@@ -885,7 +885,7 @@ async fn git_state_is_inspected_when_the_idle_timer_starts_and_expires() {
     assert!(!timers.idle.contains_key(&workspace.id));
     assert_eq!(
         manager
-            .cleanup_reason(&crate::model::PresentSpace::Workspace(workspace.clone()))
+            .cleanup_reason(&crate::model::Space::from(workspace.clone()))
             .await,
         CleanupReason::Unpushed { commits: 1 }
     );
@@ -1314,7 +1314,7 @@ async fn automatic_cleanup_leaves_a_chat_restored_since_its_snapshot_running() {
         .begin_agent_execution(chat.id.as_str())
         .await
         .unwrap();
-    let space = PresentSpace::Chat(manager.chat_by_id(&chat.id).await.unwrap().unwrap());
+    let space = Space::from(manager.chat_by_id(&chat.id).await.unwrap().unwrap());
     let removed = manager.remove_unused(&space, snapshot, EventCause::Manual);
     assert!(removed.await.is_err());
     let kept = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
@@ -1549,7 +1549,7 @@ async fn a_link_made_while_idle_cleanup_starts_keeps_the_chat_and_its_workspaces
     let gate = manager.gates.lock_prs([&chat.id]).await;
     let removal = tokio::spawn({
         let (manager, stopped) = (manager.clone(), stopped.clone());
-        let stopped = PresentSpace::Chat(stopped);
+        let stopped = Space::from(stopped);
         async move { (manager.remove_unused(&stopped, snapshot, EventCause::Idle)).await }
     });
     // ...and records the issue before it lets the removal go on.
@@ -1586,7 +1586,7 @@ async fn a_chat_in_a_workspace_keeps_it_while_it_runs_and_from_idle_cleanup_whil
         .unwrap();
     let reason = || async {
         manager
-            .cleanup_reason(&crate::model::PresentSpace::Workspace(workspace.clone()))
+            .cleanup_reason(&crate::model::Space::from(workspace.clone()))
             .await
     };
     let merged = || async { manager.merged_snapshot(&workspace.id).await.unwrap() };
@@ -1638,7 +1638,7 @@ async fn requested_cleanup_removes_a_merged_workspace_whose_config_the_format_re
     git(&checkout, &["commit", "-m", "New config"]);
 
     let reason = manager
-        .cleanup_reason(&crate::model::PresentSpace::Workspace(workspace.clone()))
+        .cleanup_reason(&crate::model::Space::from(workspace.clone()))
         .await;
     assert!(matches!(reason, CleanupReason::Idle { .. }), "{reason:?}");
     let all = Selection {

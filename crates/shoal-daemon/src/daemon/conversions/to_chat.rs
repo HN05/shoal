@@ -2,12 +2,13 @@
 //! agent's turn end carries out, which removes the worktree and restarts the
 //! agent in the repository's checkout.
 use anyhow::{Context as _, Result, bail, ensure};
+use shoal_protocol::model::ByKind;
 
 use super::record::ConvertedChat;
 use crate::{
     config::modes::ModeName,
     daemon::workspace::Manager,
-    model::{HoldPlacer, PresentSpace, Workspace},
+    model::{HoldPlacer, Workspace},
     removal::InspectionPolicy,
     state::WorkspaceState,
 };
@@ -109,9 +110,9 @@ impl Manager {
     /// cannot become one now: one the user holds, another builds on, whose
     /// unsaved files no checkpoint can keep.
     async fn convertible_workspace(&self, selector: &SpaceSelector) -> Result<Workspace> {
-        let workspace = match self.space(selector).await? {
-            PresentSpace::Workspace(workspace) => workspace,
-            PresentSpace::Chat(chat) => bail!("{} is a chat already", chat.name),
+        let workspace = match self.space(selector).await?.by_kind() {
+            ByKind::Workspace(workspace) => workspace,
+            ByKind::Chat(chat) => bail!("{} is a chat already", chat.name),
         };
         self.ensure_not_converting(&workspace.id, &workspace.name)
             .await?;

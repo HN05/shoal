@@ -4,6 +4,7 @@
 //! completes.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::model::ByKind;
 use shoal_refs::BranchName;
 use std::path::Path;
 
@@ -14,7 +15,7 @@ use crate::{
     config::Effective,
     daemon::{store, workspace::Manager},
     forge::ForgeRepo,
-    model::{Chat, PresentSpace, Repository, Workspace},
+    model::{Chat, Repository, Space, Workspace},
     protocol::ItemContext,
 };
 use shoal_forge::RepoRequests;
@@ -140,10 +141,10 @@ impl Manager {
 
     /// `space` as the space whose items a request links, which may have
     /// been removed meanwhile.
-    pub(crate) async fn link_space_of(&self, space: PresentSpace) -> Result<LinkSpace> {
-        Ok(match space {
-            PresentSpace::Workspace(workspace) => LinkSpace::Workspace(Box::new(workspace)),
-            PresentSpace::Chat(chat) => {
+    pub(crate) async fn link_space_of(&self, space: Space) -> Result<LinkSpace> {
+        Ok(match space.by_kind() {
+            ByKind::Workspace(workspace) => LinkSpace::Workspace(Box::new(workspace)),
+            ByKind::Chat(chat) => {
                 let checkout = self.chat_own_checkout(&chat).await?;
                 LinkSpace::Chat { chat, checkout }
             }

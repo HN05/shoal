@@ -67,7 +67,7 @@ async fn space_ids(ctx: &Context, selectors: &[SpaceSelector]) -> Result<Vec<Str
             let space = spaces
                 .find(selector)
                 .with_context(|| format!("no space {selector}"))?;
-            Ok(space.id().to_string())
+            Ok(space.id.to_string())
         })
         .collect()
 }

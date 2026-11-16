@@ -773,7 +773,7 @@ async fn questions_asked_after_done_retain_completion_and_pr_cleanup() {
     // A question asked after a sweep checked for one still stops its removal.
     manager
         .remove_completed(
-            &PresentSpace::Workspace(workspace.clone()),
+            &Space::from(workspace.clone()),
             &completion,
             EventCause::Completion,
         )
@@ -1053,7 +1053,7 @@ async fn a_parents_completion_takes_its_unheld_children_whatever_their_work() {
         .unwrap();
     assert_eq!(
         manager
-            .cleanup_reason(&crate::model::PresentSpace::Workspace(dirty.clone()))
+            .cleanup_reason(&crate::model::Space::from(dirty.clone()))
             .await,
         CleanupReason::AncestorCompleted {
             workspace: "finished".into()
@@ -1061,7 +1061,7 @@ async fn a_parents_completion_takes_its_unheld_children_whatever_their_work() {
     );
     assert_eq!(
         manager
-            .cleanup_reason(&crate::model::PresentSpace::Workspace(held.clone()))
+            .cleanup_reason(&crate::model::Space::from(held.clone()))
             .await,
         CleanupReason::Held
     );
@@ -1201,7 +1201,7 @@ async fn children_stay_while_their_parents_completion_does_not_stand() {
     assert!(child.path.exists());
     assert!(matches!(
         manager
-            .cleanup_reason(&crate::model::PresentSpace::Workspace(child.clone()))
+            .cleanup_reason(&crate::model::Space::from(child.clone()))
             .await,
         CleanupReason::Idle { .. }
     ));
@@ -1314,7 +1314,7 @@ async fn a_worker_opened_outside_its_done_chat_after_the_sweep_chose_it_stays() 
     // The user opens it outside the chat before the removal reserves it.
     manager.assign_parent(&worker.id, None).await.unwrap();
     manager
-        .remove_under_completed(&PresentSpace::Workspace(worker.clone()), &ancestor)
+        .remove_under_completed(&Space::from(worker.clone()), &ancestor)
         .await
         .unwrap_err();
     assert!(manager.workspace_by_id(&worker.id).await.is_ok());
@@ -1376,7 +1376,7 @@ async fn a_removal_under_a_done_chat_keeps_the_chats_workspaces_below_it() {
     manager.assign_parent(&root.id, None).await.unwrap_err();
     // ...and the removal takes that hold itself, so another one waits.
     manager
-        .remove_under_completed(&PresentSpace::Workspace(split.clone()), &ancestor)
+        .remove_under_completed(&Space::from(split.clone()), &ancestor)
         .await
         .unwrap_err();
     assert!(manager.workspace_by_id(&split.id).await.is_ok());

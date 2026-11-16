@@ -20,7 +20,7 @@ impl Manager {
         ended: &WakeEnd,
     ) -> Result<()> {
         let space = self.space(selector).await?;
-        let name = space.name();
+        let name = &space.name;
         match ended {
             WakeEnd::AgentExited => log!("wake hook of {name} ended: its agent exited"),
             WakeEnd::AgentUnknown => {

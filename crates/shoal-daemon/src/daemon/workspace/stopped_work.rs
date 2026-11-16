@@ -35,7 +35,7 @@ impl Manager {
     /// What the existing space `selector` names saved for `shoal restore`.
     pub(crate) async fn saved_work(&self, selector: &SpaceSelector) -> Result<Saved> {
         let space = self.space(selector).await?;
-        Saved::load(&self.paths, space.id())
+        Saved::load(&self.paths, &space.id)
     }
 
     /// What each workspace and chat visible within `owner`'s reach, or every
@@ -89,15 +89,14 @@ impl Manager {
         selector: &SpaceSelector,
     ) -> Result<()> {
         let space = self.space(selector).await?;
-        let executions = self.workspace_executions(space.id()).await?;
-        let mut saved = Saved::load(&self.paths, space.id())?;
+        let executions = self.workspace_executions(&space.id).await?;
+        let mut saved = Saved::load(&self.paths, &space.id)?;
         saved.retain_unattended();
         for recovery::SavedSession { id, path, .. } in saved.agents {
             if executions.iter().any(|execution| execution.id == id) {
                 continue;
             }
-            if let Err(error) = recovery::keep_as_last_session(&self.paths, space.id(), &id, &path)
-            {
+            if let Err(error) = recovery::keep_as_last_session(&self.paths, &space.id, &id, &path) {
                 crate::daemon::log!("stopped agent {id} not kept as a last session: {error:#}");
             }
         }
@@ -112,7 +111,7 @@ impl Manager {
         execution: Option<ExecutionId>,
     ) -> Result<Forgotten> {
         let space = self.space(selector).await?;
-        let mut saved = Saved::load(&self.paths, space.id())?;
+        let mut saved = Saved::load(&self.paths, &space.id)?;
         if let Some(execution) = &execution {
             saved.retain_execution(execution, false);
         }
@@ -121,13 +120,13 @@ impl Manager {
             "no stopped agents or commands for this {}",
             space.kind()
         );
-        let executions = self.workspace_executions(space.id()).await?;
+        let executions = self.workspace_executions(&space.id).await?;
         let active = |id: &ExecutionId| executions.iter().any(|e| e.id == *id);
         let executions = recovery::forget_saved(&saved, active)?;
         // The saved sessions are files, so no stored change announces it.
         self.signals.agent_changed();
         Ok(Forgotten {
-            space: space.name().clone(),
+            space: space.name.clone(),
             executions,
         })
     }
@@ -172,7 +171,7 @@ impl Manager {
     ) -> Result<crate::model::QueueEntry> {
         let workspace = self.workspace(selector).await?;
         let repository = workspace.repository_id.clone();
-        let space = crate::model::PresentSpace::Workspace(workspace.clone());
+        let space = crate::model::Space::from(workspace.clone());
         (self.ensure_change_held(giver, &space, change, repository.as_ref())).await?;
         let launch = self.launch_awaiting_setup(&workspace.id).await?;
         launch.with_context(|| format!("no agent waits for the setup of {}", workspace.name))
@@ -189,14 +188,14 @@ impl Manager {
         giver: Option<&SpaceId>,
     ) -> Result<Saved> {
         let (space, execution) = (self.space(&agent.workspace).await?, &agent.execution);
-        let repository = space.repository_id().cloned();
+        let repository = space.repository_id.as_ref().cloned();
         (self.ensure_change_held(giver, &space, change, repository.as_ref())).await?;
-        let mut saved = Saved::load(&self.paths, space.id())?;
+        let mut saved = Saved::load(&self.paths, &space.id)?;
         saved.retain_execution(execution, false);
         ensure!(
             !(saved.agents.is_empty() && saved.sessions.is_empty()),
             "{} has no stopped agent {execution}",
-            space.name()
+            space.name
         );
         Ok(saved)
     }

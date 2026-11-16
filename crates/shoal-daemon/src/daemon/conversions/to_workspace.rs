@@ -4,6 +4,7 @@
 use crate::daemon::links::issue::{Assigner, AssignerOf};
 use crate::forge::items::reference::ItemInput;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::model::ByKind;
 use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::{Context as _, Result, bail, ensure};
@@ -14,7 +15,7 @@ use crate::{
     daemon::{
         links::issue::OpenIssue, operations::starts::Preparing, scope::Caller, workspace::Manager,
     },
-    model::{Chat, OpenedWorkspace, PresentSpace},
+    model::{Chat, OpenedWorkspace},
     protocol::{CreationOptions, operations::StartedWorkspace},
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -110,9 +111,9 @@ impl Manager {
     /// The chat `selector` names, refusing a workspace and a chat that
     /// cannot become one.
     async fn convertible_chat(&self, selector: &SpaceSelector) -> Result<Chat> {
-        let chat = match self.space(selector).await? {
-            PresentSpace::Chat(chat) => chat,
-            PresentSpace::Workspace(workspace) => {
+        let chat = match self.space(selector).await?.by_kind() {
+            ByKind::Chat(chat) => chat,
+            ByKind::Workspace(workspace) => {
                 bail!("{} is a workspace already", workspace.name)
             }
         };

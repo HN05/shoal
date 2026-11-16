@@ -5,7 +5,7 @@ use super::super::{
 };
 use super::{SpaceKind, SpaceRef};
 use crate::config::modes::ModeName;
-use crate::config::permissions::PermissionsConfig;
+use crate::config::permissions::{PermissionsConfig, SpaceMode};
 use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
 use shoal_ids::repository_ids::RepositoryId;
@@ -83,6 +83,16 @@ pub struct Space<P = SpacePart> {
 pub enum SpacePart {
     Workspace(Worktree),
     Chat(ChatPart),
+}
+
+/// A space taken apart by its kind, which [`Space::by_kind`] gives.
+#[allow(
+    clippy::large_enum_variant,
+    reason = "a space's record, of which a caller holds a few"
+)]
+pub enum ByKind {
+    Workspace(Workspace),
+    Chat(Chat),
 }
 
 /// Where a space's agent works, which the daemon finds when it reads the
@@ -209,10 +219,55 @@ impl Space {
         }
     }
 
+    /// A copy of the workspace it is, for a caller that holds it only by
+    /// reference.
+    pub fn to_workspace(&self) -> Option<Workspace> {
+        self.clone().into_workspace().ok()
+    }
+
+    /// The reference other records give to it.
+    pub fn space_ref(&self) -> SpaceRef {
+        SpaceRef {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            kind: self.kind(),
+            branch: self.worktree().and_then(|worktree| worktree.branch.clone()),
+        }
+    }
+
+    /// The mode its agent started in, with what its kind and repository
+    /// tell of it; none for a workspace that has had no agent.
+    pub fn space_mode(&self) -> Option<SpaceMode<'_>> {
+        (self.mode.as_ref()).map(|name| SpaceMode {
+            name,
+            kind: self.kind(),
+            repository: self.repository_id.is_some(),
+        })
+    }
+
+    /// Whether `shoal done` recorded that its work is finished.
+    pub fn done(&self) -> bool {
+        match &self.part {
+            SpacePart::Workspace(worktree) => worktree.done,
+            SpacePart::Chat(chat) => chat.completion.is_some(),
+        }
+    }
+
     pub fn kind(&self) -> SpaceKind {
         match &self.part {
             SpacePart::Workspace(_) => SpaceKind::Workspace,
             SpacePart::Chat(_) => SpaceKind::Chat,
+        }
+    }
+
+    /// The space as the workspace or the chat it is, for a caller that
+    /// handles each kind its own way.
+    pub fn by_kind(self) -> ByKind {
+        match self.with_part(()) {
+            (space, SpacePart::Workspace(worktree)) => {
+                ByKind::Workspace(space.with_part(worktree).0)
+            }
+            (space, SpacePart::Chat(chat)) => ByKind::Chat(space.with_part(chat).0),
         }
     }
 

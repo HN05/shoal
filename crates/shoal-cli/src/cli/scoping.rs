@@ -2,7 +2,7 @@
 //! inherits a space's scope, as the CLI reads it from its environment.
 use std::path::Path;
 
-use crate::model::{PresentSpace, Spaces};
+use crate::model::{Space, Spaces};
 
 /// Whether a command runs unscoped, in the user's own terminal, or scoped,
 /// in a process that inherits a space's scope.
@@ -29,24 +29,17 @@ impl Scoping {
     /// together: every one unscoped, and scoped those its scope reaches but
     /// its own, since a chat also sees the workspace it runs in, which it
     /// only reads.
-    pub fn reached_below(self, spaces: Spaces) -> Vec<PresentSpace> {
-        let workspaces = spaces
-            .workspaces
-            .iter()
-            .cloned()
-            .map(PresentSpace::Workspace);
-        let chats = spaces.chats.iter().cloned().map(PresentSpace::Chat);
-        let every = workspaces.chain(chats);
+    pub fn reached_below(self, spaces: Spaces) -> Vec<Space> {
         if self == Self::Unscoped {
-            return every.collect();
+            return spaces.0;
         }
         let own = crate::env::own_space();
-        let home = (spaces.chats.iter())
-            .find(|chat| own.as_ref() == Some(&chat.id))
-            .and_then(|chat| chat.workdir.workspace())
+        let home = (spaces.iter())
+            .find(|space| own.as_ref() == Some(&space.id))
+            .and_then(|space| space.workdir.workspace())
             .map(|workspace| workspace.id.clone());
-        every
-            .filter(|space| Some(space.id()) != own.as_ref() && Some(space.id()) != home.as_ref())
+        (spaces.0.into_iter())
+            .filter(|space| Some(&space.id) != own.as_ref() && Some(&space.id) != home.as_ref())
             .collect()
     }
 

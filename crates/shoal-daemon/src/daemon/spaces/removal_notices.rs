@@ -9,7 +9,7 @@ use crate::{
         notifications::{About, NotificationKind},
         workspace::Manager,
     },
-    model::{PresentSpace, SpaceKind, SpaceRef, Workspace},
+    model::{Space, SpaceKind, SpaceRef, Workspace},
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceName;
@@ -37,12 +37,12 @@ impl<'a> From<&'a Workspace> for Announced<'a> {
     }
 }
 
-impl<'a> From<&'a PresentSpace> for Announced<'a> {
-    fn from(space: &'a PresentSpace) -> Self {
+impl<'a> From<&'a Space> for Announced<'a> {
+    fn from(space: &'a Space) -> Self {
         Self {
-            kind: space.space_kind(),
-            id: space.id(),
-            name: space.name(),
+            kind: space.kind(),
+            id: &space.id,
+            name: &space.name,
             worktree: space.worktree().is_some(),
         }
     }

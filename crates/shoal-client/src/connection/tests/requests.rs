@@ -889,11 +889,11 @@ async fn a_workspaces_agent_renames_the_spaces_its_scope_reaches() {
     };
 
     let renamed = rename(&parent, "Login retries").await.unwrap();
-    assert_eq!(renamed.space.id(), &parent.id);
-    assert_eq!(renamed.space.name(), "Login retries");
+    assert_eq!(&renamed.space.id, &parent.id);
+    assert_eq!(&renamed.space.name, "Login retries");
     assert_eq!(renamed.previous_name, "parent");
     let renamed = rename(&child, "Retry backoff").await.unwrap();
-    assert_eq!(renamed.space.id(), &child.id);
+    assert_eq!(&renamed.space.id, &child.id);
     assert_eq!(renamed.previous_name, "child");
     // A space outside its scope keeps its name.
     assert_eq!(

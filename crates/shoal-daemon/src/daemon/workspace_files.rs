@@ -5,6 +5,7 @@
 //! them.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::model::ByKind;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, ensure};
@@ -13,7 +14,7 @@ use tokio::sync::OwnedMutexGuard;
 use crate::refusal::Reason;
 use crate::{
     daemon::{scope::Caller, workspace::Manager},
-    model::{Chat, HandedBack, PresentSpace, Repository, Workspace},
+    model::{Chat, HandedBack, Repository, Workspace},
     state::WorkspaceState,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -116,11 +117,11 @@ impl From<Workspace> for Space {
     }
 }
 
-impl From<PresentSpace> for Space {
-    fn from(space: PresentSpace) -> Self {
-        match space {
-            PresentSpace::Workspace(workspace) => workspace.into(),
-            PresentSpace::Chat(chat) => chat.into(),
+impl From<crate::model::Space> for Space {
+    fn from(space: crate::model::Space) -> Self {
+        match space.by_kind() {
+            ByKind::Workspace(workspace) => workspace.into(),
+            ByKind::Chat(chat) => chat.into(),
         }
     }
 }

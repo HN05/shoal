@@ -308,7 +308,7 @@ async fn its_starting_commit_counts_as_kept_and_later_commits_do_not() {
     assert!(check.safe() && check.unsaved_work().is_empty(), "{check:?}");
     assert!(matches!(
         manager
-            .cleanup_reason(&crate::model::PresentSpace::Workspace(workspace.clone()))
+            .cleanup_reason(&crate::model::Space::from(workspace.clone()))
             .await,
         crate::model::CleanupReason::Idle { .. }
     ));

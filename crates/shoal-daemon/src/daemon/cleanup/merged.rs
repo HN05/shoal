@@ -22,7 +22,7 @@ use crate::{
         spaces::removal_notices::Cleanup,
         workspace::{Manager, not_ready},
     },
-    model::PresentSpace,
+    model::Space,
     process::DirectoryUsers,
     time::UnixTime,
 };
@@ -66,8 +66,8 @@ impl State {
         self.changed.insert(id.to_owned(), changed.min(now));
     }
 
-    fn forget_removed(&mut self, spaces: &[PresentSpace]) {
-        let present = |id: &SpaceId| spaces.iter().any(|space| space.id() == id);
+    fn forget_removed(&mut self, spaces: &[Space]) {
+        let present = |id: &SpaceId| spaces.iter().any(|space| &space.id == id);
         self.retained.retain(|id, _| present(id));
         self.changed.retain(|id, _| present(id));
     }
@@ -96,7 +96,7 @@ async fn sweep_at(
             continue;
         }
         if let Err(error) = sweep_space(manager, state, &space, now, users).await {
-            failed.push(space.id(), space.name(), &error);
+            failed.push(&space.id, &space.name, &error);
         }
     }
     failed.into_result()
@@ -105,7 +105,7 @@ async fn sweep_at(
 async fn sweep_space(
     manager: &Manager,
     state: &mut State,
-    space: &PresentSpace,
+    space: &Space,
     now: UnixTime,
     users: &DirectoryUsers,
 ) -> Result<()> {
@@ -116,12 +116,12 @@ async fn sweep_space(
     match &removal {
         Ok(false) => return Ok(()),
         Ok(true) => {
-            state.retained.remove(space.id());
+            state.retained.remove(&space.id);
         }
         Err(_) => {
             state
                 .retained
-                .insert(space.id().clone(), (snapshot.signals, Instant::now()));
+                .insert(space.id.clone(), (snapshot.signals, Instant::now()));
         }
     }
     (manager.announce_removal(space, Cleanup::Merged, &removal)).await
@@ -134,18 +134,18 @@ async fn sweep_space(
 async fn idle_candidate(
     manager: &Manager,
     state: &mut State,
-    space: &PresentSpace,
+    space: &Space,
     now: UnixTime,
     users: &DirectoryUsers,
 ) -> Result<Option<Snapshot>> {
     let Some(deadline) = idle_deadline(manager, space, now).await? else {
         return Ok(None);
     };
-    if state.changed_after(space.id(), deadline) {
+    if state.changed_after(&space.id, deadline) {
         return Ok(None);
     }
-    if let Some(workspace) = space.worktree()
-        && !manager.default_branch_fresh(workspace.repository()).await
+    if let Some(repository) = space.worktree().and(space.repository_id.as_ref())
+        && !manager.default_branch_fresh(repository).await
     {
         return Ok(None);
     }
@@ -153,11 +153,11 @@ async fn idle_candidate(
     let Some(signals) = signals.await? else {
         return Ok(None);
     };
-    if state.waits(space.id(), signals) {
+    if state.waits(&space.id, signals) {
         return Ok(None);
     }
     let tree = walk(space).await?;
-    state.remember_change(space.id(), tree.changed, now);
+    state.remember_change(&space.id, tree.changed, now);
     let snapshot = Snapshot {
         rule: Rule::Merged,
         signals,
@@ -170,7 +170,7 @@ async fn idle_candidate(
 /// when merged cleanup is disabled for it or its last use already keeps it.
 async fn idle_deadline(
     manager: &Manager,
-    space: &PresentSpace,
+    space: &Space,
     now: UnixTime,
 ) -> Result<Option<UnixTime>> {
     let settings = manager.present_space_settings(space).await?;
@@ -184,7 +184,7 @@ async fn idle_deadline(
 
 /// One walk of the files of `space`, whose worktree's newest change also
 /// covers its Git state; none for a space without one.
-async fn walk(space: &PresentSpace) -> Result<Tree> {
+async fn walk(space: &Space) -> Result<Tree> {
     let Some(workspace) = space.worktree() else {
         return Ok(Tree::EMPTY);
     };

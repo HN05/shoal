@@ -49,7 +49,7 @@ impl Manager {
             let mut checked = Some(checked);
             let mut workspace = None;
             let removed = manager.remove_space_checked(&id, removal, |space| {
-                workspace = Some(space.worktree().context("no longer a workspace")?.clone());
+                workspace = Some(space.to_workspace().context("no longer a workspace")?);
                 if let (Some(checked), Some(workspace)) = (checked.take(), &workspace) {
                     let _ = checked.send(Ok(workspace.clone()));
                 }

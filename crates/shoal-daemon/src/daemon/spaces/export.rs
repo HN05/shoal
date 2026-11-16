@@ -6,14 +6,14 @@ use crate::execution::recovery::LastSessionExt;
 use crate::transfer::ManifestExt;
 use anyhow::{Context, Result, ensure};
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::model::ByKind;
 
 use crate::{
     config::Effective,
     daemon::{events::EventCause, workspace::Manager},
     execution::recovery::{LastSession, StoppedAgent},
     model::{
-        Chat, Checkpoint, KeptWorkspace, PresentSpace, RemovedKind, RemovedSpace, Repository,
-        Workspace,
+        Chat, Checkpoint, KeptWorkspace, RemovedKind, RemovedSpace, Repository, Space, Workspace,
     },
     paths::Paths,
     removal::{InspectionPolicy, RemovalResult, UnsavedWork},
@@ -59,8 +59,8 @@ impl Manager {
         file: std::path::PathBuf,
     ) -> Result<ExportedSpace> {
         crate::daemon::access::ensure_writable(crate::transfer::directory(&file)).await?;
-        let ended = match self.space(selector).await {
-            Ok(PresentSpace::Chat(chat)) => self.end_chat_for_export(chat, &unsaved).await?,
+        let ended = match self.space(selector).await.map(Space::by_kind) {
+            Ok(ByKind::Chat(chat)) => self.end_chat_for_export(chat, &unsaved).await?,
             _ => {
                 self.remove_for_export(selector, unsaved, inspection)
                     .await?
@@ -81,11 +81,9 @@ impl Manager {
         file: std::path::PathBuf,
     ) -> Result<ExportedSpace> {
         crate::daemon::access::ensure_writable(crate::transfer::directory(&file)).await?;
-        let copied = match self.running_space(selector).await? {
-            PresentSpace::Workspace(workspace) => {
-                self.copy_workspace(workspace, checkpoint).await?
-            }
-            PresentSpace::Chat(chat) => {
+        let copied = match self.running_space(selector).await?.by_kind() {
+            ByKind::Workspace(workspace) => self.copy_workspace(workspace, checkpoint).await?,
+            ByKind::Chat(chat) => {
                 ensure!(
                     checkpoint.is_none(),
                     "chat {} has no checkpoints; export a copy of it without --checkpoint",

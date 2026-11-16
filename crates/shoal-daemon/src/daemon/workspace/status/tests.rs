@@ -54,7 +54,7 @@ async fn status_reports_git_checks_that_stall_as_unavailable() {
     assert!(status.diff.is_none());
     assert!(status.changed_on_both_sides.is_none());
     assert!(status.diff_error.is_some());
-    let space = crate::model::PresentSpace::Workspace(workspace.clone());
+    let space = crate::model::Space::from(workspace.clone());
     let reason = manager.cleanup_reason(&space).await;
     assert!(
         matches!(reason, crate::model::CleanupReason::InspectionFailed { .. }),

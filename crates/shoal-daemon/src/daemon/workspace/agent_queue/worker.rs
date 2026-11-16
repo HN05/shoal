@@ -55,13 +55,13 @@ impl Manager {
     ) -> Result<tokio::sync::MutexGuard<'_, ()>> {
         let gate = self.agent_queue.lock_admission().await;
         let space = self.space(space).await?;
-        let id = space.id().clone();
+        let id = space.id.clone();
         if self
             .store
             .read(move |tx| super::store::queues_launch_in(tx, &id))
             .await?
         {
-            let space = space.number();
+            let space = space.number;
             bail!(HasAgent(format!(
                 "workspace {space} has an agent waiting in the agent queue, which takes its place; `shoal queue` lists it"
             )));

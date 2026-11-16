@@ -242,7 +242,7 @@ response_bodies! {
     AgentSession(crate::model::AgentSession),
     SpaceStatus(Box<SpaceStatus>),
     SpaceSessions(crate::transcripts::SpaceSessions),
-    Spaces(Vec<crate::model::PresentSpace>),
+    Spaces(Vec<crate::model::Space>),
     SelectedItems(crate::model::Selected),
     MergedPull(crate::forge::items::revert::MergedPull),
     CheckLog(crate::forge::ci::checks::CheckLog),

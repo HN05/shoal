@@ -131,12 +131,8 @@ impl Manager {
         selector: &shoal_protocol::space_names::SpaceSelector,
     ) -> Result<()> {
         let space = self.space(selector).await?;
-        let start = format!(
-            "{starting} the agent of {} ({}) now",
-            space.name(),
-            space.id()
-        );
-        let repository = space.repository_id().cloned();
+        let start = format!("{starting} the agent of {} ({}) now", space.name, space.id);
+        let repository = space.repository_id.as_ref().cloned();
         self.authorize_beyond_limits(caller, start, repository)
             .await
     }
@@ -147,7 +143,7 @@ impl Manager {
         &self,
         selector: &shoal_protocol::space_names::SpaceSelector,
     ) -> Result<Option<RepositoryId>> {
-        Ok(self.space(selector).await?.repository_id().cloned())
+        Ok(self.space(selector).await?.repository_id.as_ref().cloned())
     }
 
     /// Let `caller` send `request`, which the `admin` permission governs,

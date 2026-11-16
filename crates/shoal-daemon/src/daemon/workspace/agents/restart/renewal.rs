@@ -13,7 +13,7 @@ use super::{Agent, Manager, Restarts};
 use crate::{
     config::permissions::PermissionChange,
     daemon::workspace::agent_queue::Start,
-    model::{PresentSpace, RunningAgent},
+    model::{RunningAgent, Space},
     sessions::Origin,
 };
 
@@ -159,7 +159,7 @@ impl Manager {
     /// the record for `shoal restore`; one a stop cancelled starts nothing.
     pub(crate) async fn restart_in_new_wrapper(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         execution: &ExecutionId,
         finished: bool,
     ) {

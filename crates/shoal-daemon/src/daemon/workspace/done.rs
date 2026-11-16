@@ -13,7 +13,7 @@ use crate::{
         questions, spaces::removal_notices::Cleanup, store, workspace_files::Attacher,
     },
     hooks::{self, Hook, HookKind},
-    model::{Completion, HandedBack, PresentSpace, Workspace},
+    model::{Completion, HandedBack, Space, Workspace},
 };
 use shoal_protocol::{assignments::Done, space_names::SpaceSelector};
 
@@ -249,14 +249,14 @@ impl Manager {
         let mut failed = crate::daemon::cleanup::SpaceFailures::default();
         for listed in self.present_spaces().await? {
             if let Err(error) = self.sweep_completed_space(&listed).await {
-                failed.push(listed.id(), listed.name(), &error);
+                failed.push(&listed.id, &listed.name, &error);
             }
         }
         failed.into_result()
     }
 
     /// Remove `listed` for its own completion or a completed ancestor's.
-    async fn sweep_completed_space(&self, listed: &PresentSpace) -> Result<()> {
+    async fn sweep_completed_space(&self, listed: &Space) -> Result<()> {
         if let Some(workspace) = listed.worktree()
             && self.sweep_skips(&workspace.path).await
         {
@@ -264,16 +264,16 @@ impl Manager {
         }
         // An ancestor's completion that takes the space changes under the
         // ancestor's gate, so that one is held too.
-        let gated = self.completed_ancestor(listed.id()).await?;
-        let gates = std::iter::once(listed.id()).chain(gated.as_ref().map(|a| &a.id));
+        let gated = self.completed_ancestor(&listed.id).await?;
+        let gates = std::iter::once(&listed.id).chain(gated.as_ref().map(|a| &a.id));
         let _guard = self.gates.lock_prs(gates).await;
-        let Some(space) = self.find_space(listed.id()).await? else {
+        let Some(space) = self.find_space(&listed.id).await? else {
             return Ok(());
         };
         if space.worktree().and_then(super::not_ready).is_some() {
             return Ok(());
         }
-        if let Some(ancestor) = self.completed_ancestor(space.id()).await? {
+        if let Some(ancestor) = self.completed_ancestor(&space.id).await? {
             // Another ancestor's completion waits for the next sweep, which
             // holds its gate.
             if gated.is_some_and(|gated| gated.id == ancestor.id) {
@@ -287,24 +287,24 @@ impl Manager {
         }
         (self.announce_removal(&space, Cleanup::Completion, &removal)).await?;
         if let Err(error) = &removal {
-            self.record_completion_error(space.id(), error).await?;
+            self.record_completion_error(&space.id, error).await?;
         }
         Ok(())
     }
 
-    async fn cleanup_completed(&self, space: &PresentSpace) -> Result<bool> {
-        let Some(completion) = self.completion(space.id()).await? else {
+    async fn cleanup_completed(&self, space: &Space) -> Result<bool> {
+        let Some(completion) = self.completion(&space.id).await? else {
             return Ok(false);
         };
-        if !completion.cleanup || self.keep_reason(space.id()).await?.is_some() {
+        if !completion.cleanup || self.keep_reason(&space.id).await?.is_some() {
             return Ok(false);
         }
         // A pre-existing PR registration keeps its own merge requirements
         // where the space has a worktree, whose branch the PR carries.
-        if space.worktree().is_some() && self.pr_registration(space.id()).await?.is_some() {
+        if space.worktree().is_some() && self.pr_registration(&space.id).await?.is_some() {
             return Ok(false);
         }
-        let cause = self.completion_cause(space.id()).await?;
+        let cause = self.completion_cause(&space.id).await?;
         self.remove_completed(space, &completion, cause).await
     }
 
@@ -313,11 +313,11 @@ impl Manager {
     /// first under the same completion.
     async fn sweep_under_completed(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         ancestor: &CompletedAncestor,
     ) -> Result<()> {
-        if !self.children(space.id()).await?.is_empty()
-            || self.keep_reason(space.id()).await?.is_some()
+        if !self.children(&space.id).await?.is_empty()
+            || self.keep_reason(&space.id).await?.is_some()
         {
             return Ok(());
         }

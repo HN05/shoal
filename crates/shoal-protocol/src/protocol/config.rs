@@ -24,8 +24,8 @@ impl ConfigTarget {
     }
 
     /// The config of `space`: a workspace's own, or a chat's.
-    pub fn space(space: &crate::model::PresentSpace) -> Self {
-        Self::Space(crate::space_names::SpaceSelector::id(space.id()))
+    pub fn space(space: &crate::model::Space) -> Self {
+        Self::Space(crate::space_names::SpaceSelector::id(&space.id))
     }
 }
 

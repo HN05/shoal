@@ -20,7 +20,7 @@ fn a_stopped_command_reruns_in_its_workspace_by_number() {
     };
     let argv = ["npm".to_owned(), "test".to_owned()];
     assert_eq!(
-        rerun(&crate::model::PresentSpace::Workspace(workspace), &argv),
+        rerun(&Space::from(workspace), &argv),
         "shoal run --workspace 7 -- npm test"
     );
 }

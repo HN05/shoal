@@ -3,6 +3,7 @@
 //! the agent works on.
 use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
+use shoal_protocol::model::ByKind;
 use shoal_protocol::space_names::SpaceSelector;
 
 use crate::{
@@ -11,7 +12,7 @@ use crate::{
         link::{LinkKind, Selection},
         reference::ItemInput,
     },
-    model::{Blocker, PresentSpace},
+    model::Blocker,
     protocol::ItemContext,
 };
 
@@ -92,11 +93,11 @@ impl Manager {
             return Ok(ItemContext::Checkout(repository.clone()));
         };
         let own = SpaceSelector::id(&caller.space_id);
-        Ok(match self.space(&own).await? {
-            PresentSpace::Workspace(workspace) if workspace.repository() == repository => {
+        Ok(match self.space(&own).await?.by_kind() {
+            ByKind::Workspace(workspace) if workspace.repository() == repository => {
                 ItemContext::Workspace(own)
             }
-            PresentSpace::Chat(chat) if chat.repository_id.as_ref() == Some(repository) => {
+            ByKind::Chat(chat) if chat.repository_id.as_ref() == Some(repository) => {
                 ItemContext::Chat(own)
             }
             _ => ItemContext::Checkout(repository.clone()),

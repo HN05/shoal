@@ -84,7 +84,7 @@ pub(in crate::daemon) async fn confine_target(
     reads: bool,
 ) -> Result<()> {
     let space = manager.space(target).await?;
-    let id = space.id().to_owned();
+    let id = space.id.to_owned();
     if !manager.reaches(caller, &id).await? {
         let home = manager.chat_home(&caller.space_id).await?;
         ensure!(home.as_ref() == Some(&id), "{}", outside_scope(&space));

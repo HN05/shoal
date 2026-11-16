@@ -2,11 +2,8 @@
 //! `shoal restore`.
 use anyhow::{Result, ensure};
 
+use crate::cli::{context::Context, ui};
 use crate::client::output::agents::StoppedProcesses;
-use crate::{
-    cli::{context::Context, ui},
-    model::PresentSpace,
-};
 use shoal_protocol::processes::{Selection, Stopped};
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -50,10 +47,8 @@ pub(in crate::cli::commands) async fn processes(
 async fn ensure_spaces(ctx: &Context, selectors: &[SpaceSelector]) -> Result<()> {
     let spaces = super::resolve(ctx, selectors.to_vec(), false).await?;
     let stopped: Vec<_> = (spaces.iter())
-        .filter_map(|space| match space {
-            PresentSpace::Chat(chat) if !chat.running => Some(chat.name.as_str()),
-            _ => None,
-        })
+        .filter(|space| space.worktree().is_none() && !space.running)
+        .map(|space| space.name.as_str())
         .collect();
     ensure!(
         stopped.is_empty(),
@@ -61,7 +56,7 @@ async fn ensure_spaces(ctx: &Context, selectors: &[SpaceSelector]) -> Result<()>
         stopped.join(", ")
     );
     let workspaces: Vec<_> = (spaces.into_iter())
-        .filter(|space| matches!(space, PresentSpace::Workspace(_)))
+        .filter(|space| space.worktree().is_some())
         .collect();
     super::check_each(ctx, &workspaces).await
 }

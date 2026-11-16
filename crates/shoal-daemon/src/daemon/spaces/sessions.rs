@@ -24,7 +24,7 @@ impl Manager {
     /// its repository's agents ran with.
     pub async fn space_sessions(&self, selector: &SpaceSelector) -> Result<SpaceSessions> {
         let space = self.space(selector).await?;
-        let sessions = self.reported_sessions(space.id()).await?;
+        let sessions = self.reported_sessions(&space.id).await?;
         let settings = self.present_space_settings(&space).await?;
         let integrations = sessions
             .iter()
@@ -38,7 +38,7 @@ impl Manager {
         Ok(SpaceSessions {
             sessions,
             integrations,
-            environments: match space.repository_id() {
+            environments: match space.repository_id.as_ref() {
                 Some(repository) => self.agent_environments(repository).await?,
                 None => Vec::new(),
             },

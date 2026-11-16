@@ -8,7 +8,7 @@ use anyhow::Result;
 use rusqlite::Connection;
 
 use super::{agent_messages, log, workspace::Manager};
-use crate::{daemon::workspace::agent_state, model::PresentSpace, time::UnixTime};
+use crate::{daemon::workspace::agent_state, model::Space, time::UnixTime};
 use shoal_ids::space_ids::SpaceId;
 
 pub(crate) mod sleep;
@@ -69,7 +69,7 @@ impl Manager {
     ) -> Result<()> {
         let id = &idle.space;
         let space = self.space_by_id(id).await?;
-        if space.done() || space.sleep().is_some() {
+        if space.done() || space.sleep.is_some() {
             return Ok(());
         }
         let Some(minutes) = self.idle_wake_minutes(&space).await? else {
@@ -95,8 +95,8 @@ impl Manager {
     /// How many minutes the agent of `space` may stay idle before Shoal
     /// wakes it, as its mode sets; none when it never does or the space has
     /// had no agent.
-    pub(crate) async fn idle_wake_minutes(&self, space: &PresentSpace) -> Result<Option<u64>> {
-        let Some(mode) = space.mode() else {
+    pub(crate) async fn idle_wake_minutes(&self, space: &Space) -> Result<Option<u64>> {
+        let Some(mode) = space.space_mode() else {
             return Ok(None);
         };
         Ok(self

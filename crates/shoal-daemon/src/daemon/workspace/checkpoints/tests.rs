@@ -1,4 +1,4 @@
-use crate::model::PresentSpace;
+use crate::model::Space;
 use std::{fs, sync::Arc};
 
 use super::*;
@@ -187,7 +187,7 @@ async fn an_agent_exit_leaves_a_checkpoint_only_once_its_processes_are_proven_st
     };
     f.manager
         .post_agent_exit(
-            &PresentSpace::Workspace(f.workspace.clone()),
+            &Space::from(f.workspace.clone()),
             &"claude".into(),
             Some(0),
             false,
@@ -196,7 +196,7 @@ async fn an_agent_exit_leaves_a_checkpoint_only_once_its_processes_are_proven_st
     assert_eq!(count().await, 0);
     f.manager
         .post_agent_exit(
-            &PresentSpace::Workspace(f.workspace.clone()),
+            &Space::from(f.workspace.clone()),
             &"claude".into(),
             Some(0),
             true,

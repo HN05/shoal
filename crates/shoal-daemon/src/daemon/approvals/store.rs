@@ -14,7 +14,7 @@ use crate::{
         notifications::{self, NotificationKind},
         workspace::Manager,
     },
-    model::PresentSpace,
+    model::Space,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -265,18 +265,14 @@ pub(super) fn close(
 }
 
 /// The space's request `number`, as the agent names it to withdraw.
-fn own_request(
-    db: &Connection,
-    space: &PresentSpace,
-    number: ItemNumber,
-) -> Result<ApprovalRequest> {
+fn own_request(db: &Connection, space: &Space, number: ItemNumber) -> Result<ApprovalRequest> {
     by_number(db, number)?
-        .filter(|request| request.space_id == *space.id())
+        .filter(|request| request.space_id == space.id)
         .with_context(|| {
             format!(
                 "{} {} has no approval request {number}",
                 space.kind(),
-                space.name()
+                space.name
             )
         })
 }
@@ -455,7 +451,7 @@ impl Manager {
         number: ItemNumber,
     ) -> Result<ApprovalRequest> {
         let space = self.space(selector).await?;
-        let space_id = space.id().to_owned();
+        let space_id = space.id.to_owned();
         let selected = self
             .store
             .run(move |db| own_request(db, &space, number))
@@ -510,7 +506,7 @@ impl Manager {
         selector: Option<&SpaceSelector>,
     ) -> Result<Vec<ApprovalRequest>> {
         let space = match selector {
-            Some(selector) => Some(self.space(selector).await?.id().clone()),
+            Some(selector) => Some(self.space(selector).await?.id.clone()),
             None => None,
         };
         self.store

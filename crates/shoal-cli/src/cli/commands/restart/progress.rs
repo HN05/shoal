@@ -45,7 +45,7 @@ impl<'a> Progress<'a> {
                 .iter()
                 .map(|restart| {
                     let execution = restart.agent.execution.clone();
-                    let space = (restart.space.number(), restart.space.name().clone());
+                    let space = (restart.space.number, restart.space.name.clone());
                     (execution, space)
                 })
                 .collect(),
@@ -121,7 +121,7 @@ impl restarts::Progress for Progress<'_> {
     /// runs in now when it runs again.
     fn ended(&mut self, restart: &Restart, result: Result<Option<Origin>>) {
         let position = self.next();
-        let name = restart.space.name();
+        let name = &restart.space.name;
         match result {
             Ok(place) => self.report.done(
                 self.ctx,

@@ -64,7 +64,7 @@ impl Manager {
     pub async fn sleep(&self, selector: &SpaceSelector, sleep: Option<Sleep>) -> Result<Slept> {
         let space = self.space(selector).await?;
         let idle_wake_minutes = self.idle_wake_minutes(&space).await?;
-        let id = space.id().to_owned();
+        let id = space.id.to_owned();
         let sleep = (self.store)
             .write(move |tx| {
                 set(tx, &id, sleep)?;
@@ -76,7 +76,7 @@ impl Manager {
             .await?;
         self.agent_queue.wake();
         Ok(Slept {
-            space: space.name().to_owned(),
+            space: space.name.to_owned(),
             sleep,
             idle_wake_minutes,
         })

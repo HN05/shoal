@@ -5,7 +5,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceName;
 
 use super::super::Manager;
-use crate::model::PresentSpace;
+use crate::model::Space;
 
 /// A space above another whose completion with cleanup stands.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,21 +43,21 @@ impl Manager {
     /// stall holds it no longer than file access may take.
     pub(in crate::daemon::workspace) async fn completion_stands(
         &self,
-        space: &PresentSpace,
+        space: &Space,
     ) -> Result<bool> {
-        let Some(completion) = self.completion(space.id()).await? else {
+        let Some(completion) = self.completion(&space.id).await? else {
             return Ok(false);
         };
         if !completion.cleanup {
             return Ok(false);
         }
-        let Some(workspace) = space.worktree() else {
+        let Some(workspace) = space.to_workspace() else {
             return Ok(true);
         };
         if self.file_access.stalled(&workspace.path).is_some() {
             return Ok(false);
         }
-        let head = crate::daemon::links::pr::current_head(workspace);
+        let head = crate::daemon::links::pr::current_head(&workspace);
         Ok((self.check_access(&workspace.path, head).await)
             .is_ok_and(|head| head == completion.head))
     }

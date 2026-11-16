@@ -9,7 +9,7 @@ use shoal_ids::space_ids::SpaceId;
 use super::{Manager, cancel};
 use crate::{
     daemon::notifications::NotificationKind,
-    model::PresentSpace,
+    model::Space,
     state::{AgentState, TurnFailure},
 };
 
@@ -90,13 +90,13 @@ impl Manager {
     /// ended one normally.
     pub(super) async fn leave_failed_turn(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         execution: &ExecutionId,
         agent: &crate::agent::Agent,
         failure: TurnFailure,
         reason: Unretried,
     ) -> Result<()> {
-        let (id, execution) = (space.id().clone(), execution.to_owned());
+        let (id, execution) = (space.id.clone(), execution.to_owned());
         if self
             .store
             .write(move |tx| record(tx, &id, &execution))
@@ -104,8 +104,8 @@ impl Manager {
         {
             let message = reason.message(agent, failure);
             self.notify_space(
-                space.name(),
-                space.id(),
+                &space.name,
+                &space.id,
                 NotificationKind::TurnFailed,
                 message,
             )

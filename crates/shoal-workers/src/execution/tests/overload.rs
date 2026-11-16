@@ -1,7 +1,7 @@
 //! The execution wrapper under a daemon's overload protection: it stops,
 //! saves and restores the agents it runs as the daemon asks.
 use crate::client::connection::CommandPaths;
-use crate::model::PresentSpace;
+use crate::model::Space;
 use crate::paths::StateFiles;
 use crate::test_support::install_test_script;
 use anyhow::Result;
@@ -1352,7 +1352,7 @@ async fn an_automatic_restore_in_a_new_wrapper_keeps_the_completion() {
     assert!(
         manager
             .queue_failed_restore(
-                &PresentSpace::Workspace(workspace.clone()),
+                &Space::from(workspace.clone()),
                 &"fixture".into(),
                 &execution,
                 1

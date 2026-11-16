@@ -2,12 +2,13 @@
 //! a registered checkout, where a chat runs its agent and where the
 //! user names a registered repository to act in without a workspace.
 use anyhow::{Result, ensure};
+use shoal_protocol::model::ByKind;
 
 use crate::{
     cli::{context::Context, ui},
     env,
     forge::{ForgeRepo, items::reference::ItemInput},
-    model::{PresentSpace, Repository},
+    model::Repository,
     protocol::ItemContext,
     repository::{self, NotRegistered},
 };
@@ -67,9 +68,12 @@ pub(in crate::cli::commands) async fn space_context(
     space: SpaceSelector,
 ) -> Result<ItemContext> {
     Ok(
-        match crate::client::workspaces::present_space(&ctx.paths, &space).await? {
-            Some(PresentSpace::Chat(chat)) => ItemContext::Chat(SpaceSelector::id(&chat.id)),
-            Some(PresentSpace::Workspace(workspace)) => {
+        match crate::client::workspaces::present_space(&ctx.paths, &space)
+            .await?
+            .map(crate::model::Space::by_kind)
+        {
+            Some(ByKind::Chat(chat)) => ItemContext::Chat(SpaceSelector::id(&chat.id)),
+            Some(ByKind::Workspace(workspace)) => {
                 ItemContext::Workspace(SpaceSelector::id(&workspace.id))
             }
             None => ItemContext::Workspace(space),
@@ -145,7 +149,7 @@ async fn in_chat_outside_repositories(ctx: &Context) -> Result<bool> {
     };
     let space =
         crate::client::workspaces::present_space(&ctx.paths, &SpaceSelector::id(&chat)).await?;
-    Ok(matches!(space, Some(PresentSpace::Chat(chat)) if chat.repository_id.is_none()))
+    Ok(space.is_some_and(|space| space.worktree().is_none() && space.repository_id.is_none()))
 }
 
 /// The checkout of the registered repository `repo` names, where the user's

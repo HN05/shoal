@@ -4,6 +4,7 @@ use crate::execution::recovery::LastSessionExt;
 use rusqlite::OptionalExtension;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::model::ByKind;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use std::{
     collections::{HashMap, HashSet},
@@ -275,14 +276,14 @@ impl Manager {
     /// no one: the user saw it end.
     pub(crate) async fn notify_agent_exit(
         &self,
-        space: &crate::model::PresentSpace,
+        space: &crate::model::Space,
         agent: &crate::agent::Agent,
         exit_code: Option<i32>,
         complete: bool,
         overload: Option<(&ExecutionId, &str)>,
     ) {
         let clean = overload.is_none() && complete && exit_code.is_some();
-        if clean && space.space_kind() == crate::model::SpaceKind::Chat {
+        if clean && space.kind() == crate::model::SpaceKind::Chat {
             return;
         }
         let message = if let Some((execution_id, reason)) = overload {
@@ -292,14 +293,14 @@ impl Manager {
             );
             let recovery = if crate::execution::recovery::record_path(
                 &self.paths,
-                space.id(),
+                &space.id,
                 execution_id,
             )
             .is_file()
             {
                 format!(
                     "restore with shoal restore {} --execution {execution_id}",
-                    space.number()
+                    space.number
                 )
             } else {
                 "recovery record unavailable; inspect the workspace and relaunch the agent's saved session".into()
@@ -318,17 +319,17 @@ impl Manager {
                 Some(code) if complete => format!("{agent} exited with code {code}"),
                 Some(code) => format!(
                     "{agent} exited with code {code}, leaving processes behind; stop them with shoal stop {}",
-                    space.number()
+                    space.number
                 ),
                 None => format!(
                     "{agent} disconnected without reporting; stop what remains of it with shoal stop {}",
-                    space.number()
+                    space.number
                 ),
             }
         };
         self.notify_space(
-            space.name(),
-            space.id(),
+            &space.name,
+            &space.id,
             NotificationKind::AgentExited,
             message,
         )
@@ -385,13 +386,13 @@ impl Manager {
     /// looks at the space again.
     pub(crate) async fn post_agent_exit(
         &self,
-        space: &crate::model::PresentSpace,
+        space: &crate::model::Space,
         agent: &crate::agent::Agent,
         exit_code: Option<i32>,
         complete: bool,
     ) {
-        if let Some(workspace) = space.worktree() {
-            self.after_worktree_agent(workspace, agent, exit_code, complete)
+        if let Some(workspace) = space.to_workspace() {
+            self.after_worktree_agent(&workspace, agent, exit_code, complete)
                 .await;
         }
         // A completion or forge transition may have happened while the agent
@@ -811,8 +812,8 @@ impl Manager {
     /// is ready and still the recorded worktree, so a replaced one never
     /// receives the agent, and a chat's directory is there.
     pub(crate) async fn verify_restore_space(&self, id: &SpaceId) -> anyhow::Result<()> {
-        match self.space(&SpaceSelector::id(id)).await? {
-            crate::model::PresentSpace::Workspace(workspace) => {
+        match self.space(&SpaceSelector::id(id)).await?.by_kind() {
+            ByKind::Workspace(workspace) => {
                 self.verify_worktree(&workspace).await?;
                 anyhow::ensure!(
                     workspace.state == crate::state::WorkspaceState::Ready,
@@ -820,7 +821,7 @@ impl Manager {
                 );
                 Ok(())
             }
-            crate::model::PresentSpace::Chat(chat) => self.chat_path(&chat).await.map(drop),
+            ByKind::Chat(chat) => self.chat_path(&chat).await.map(drop),
         }
     }
 

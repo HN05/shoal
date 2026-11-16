@@ -101,7 +101,7 @@ impl Manager {
         selector: &SpaceSelector,
         mut origin: Origin,
     ) -> Result<()> {
-        let id = self.space(selector).await?.id().clone();
+        let id = self.space(selector).await?.id.clone();
         anyhow::ensure!(
             origin.place.is_some(),
             "a {} place needs its ID to be recorded",
@@ -156,7 +156,7 @@ impl Manager {
     /// agents, and the places Shoal created for it, a workspace's or a
     /// chat's.
     pub(crate) async fn space_places(&self, selector: &SpaceSelector) -> Result<SpacePlaces> {
-        let id = self.space(selector).await?.id().clone();
+        let id = self.space(selector).await?.id.clone();
         let executions = self.workspace_executions(&id).await?;
         let places = self.owned_places(Some(id)).await?;
         Ok(SpacePlaces {

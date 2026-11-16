@@ -2,6 +2,7 @@
 //! the space's records, the directory where its repository keeps its
 //! workspaces, which the agent may also work in, and the diff base its
 //! configured command names.
+use shoal_protocol::model::ByKind;
 use std::{
     ffi::{OsStr, OsString},
     path::PathBuf,
@@ -18,7 +19,7 @@ use crate::{
         Effective,
         named_commands::{Commands, uses_diff_base},
     },
-    model::{PresentSpace, Workspace},
+    model::Workspace,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -28,14 +29,15 @@ pub async fn records(paths: &CommandPaths, selector: &SpaceSelector) -> Result<H
     match spaces
         .find(selector)
         .with_context(|| format!("no space {selector}"))?
+        .by_kind()
     {
-        PresentSpace::Workspace(workspace) => Ok(HomeRecords::Workspace(workspace)),
-        PresentSpace::Chat(chat) => {
+        ByKind::Workspace(workspace) => Ok(HomeRecords::Workspace(workspace)),
+        ByKind::Chat(chat) => {
             let workspace = chat
                 .workdir
                 .workspace()
                 .and_then(|workspace| spaces.find(&SpaceSelector::id(&workspace.id)))
-                .and_then(|space| space.worktree().cloned());
+                .and_then(|space| space.to_workspace());
             let repository = match &chat.repository_id {
                 Some(id) => Some(
                     (crate::client::repositories::list(paths).await?.into_iter())

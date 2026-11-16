@@ -15,7 +15,7 @@ use crate::{
         notifications::{About, NotificationKind},
     },
     execution::recovery::{self, Saved, SavedExt as _},
-    model::PresentSpace,
+    model::Space,
     protocol::QueuedLaunches,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -23,7 +23,7 @@ use shoal_protocol::space_names::SpaceSelector;
 /// The spaces a stop of every running space stopped.
 #[derive(Default)]
 pub(crate) struct StoppedSpaces {
-    pub spaces: Vec<PresentSpace>,
+    pub spaces: Vec<Space>,
     /// Whether it stopped every running space's work there; otherwise work
     /// may also stop elsewhere, as the daemon's last stop of what still
     /// runs as it exits saves it.
@@ -155,10 +155,10 @@ impl Manager {
                 return StoppedSpaces::default();
             }
         };
-        let targets: Vec<PresentSpace> = (targets.into_iter())
-            .filter(|space| !left.contains(space.id()))
+        let targets: Vec<Space> = (targets.into_iter())
+            .filter(|space| !left.contains(&space.id))
             .collect();
-        let results = join_all(targets.iter().map(|space| stop(space.id().clone()))).await;
+        let results = join_all(targets.iter().map(|space| stop(space.id.clone()))).await;
         let mut stopped = StoppedSpaces::none();
         for (space, result) in targets.into_iter().zip(results) {
             match result {
@@ -172,10 +172,10 @@ impl Manager {
         stopped
     }
 
-    async fn notify_stop_failed(&self, moment: &str, space: &PresentSpace, error: &anyhow::Error) {
-        log!("stop {moment}: {} not stopped: {error:#}", space.name());
+    async fn notify_stop_failed(&self, moment: &str, space: &Space, error: &anyhow::Error) {
+        log!("stop {moment}: {} not stopped: {error:#}", &space.name);
         self.notify_about(
-            About::space(space.name(), space.id()),
+            About::space(&space.name, &space.id),
             NotificationKind::StopFailed,
             format!("Could not stop tracked executions {moment}: {error:#}"),
         )
@@ -183,7 +183,7 @@ impl Manager {
     }
 
     /// Tell the user what the stop of `stopped` saved and how it continues.
-    async fn notify_shutdown_stop(&self, shutdown: Shutdown, stopped: &[PresentSpace]) {
+    async fn notify_shutdown_stop(&self, shutdown: Shutdown, stopped: &[Space]) {
         if stopped.is_empty() {
             return;
         }
@@ -202,10 +202,7 @@ impl Manager {
 
     /// Those of the `stopped` spaces whose saved work only `shoal restore`
     /// continues; one whose saved work is unreadable counts.
-    pub(crate) async fn awaiting_restore<'a>(
-        &self,
-        stopped: &'a [PresentSpace],
-    ) -> Vec<&'a PresentSpace> {
+    pub(crate) async fn awaiting_restore<'a>(&self, stopped: &'a [Space]) -> Vec<&'a Space> {
         let queued = self
             .queued_stopped_restores()
             .await
@@ -218,7 +215,7 @@ impl Manager {
                 waits_for_resume(&self.paths, space, &queued).unwrap_or_else(|error| {
                     log!(
                         "shutdown stop: stopped work of {} unreadable: {error:#}",
-                        space.name()
+                        &space.name
                     );
                     true
                 })
@@ -232,14 +229,14 @@ impl Manager {
 /// requested. A done space's requests wait for `shoal restore` to name it.
 fn waits_for_resume(
     paths: &crate::paths::Paths,
-    space: &PresentSpace,
+    space: &Space,
     queued: &HashSet<ExecutionId>,
 ) -> Result<bool> {
-    let saved = Saved::load(paths, space.id())?;
+    let saved = Saved::load(paths, &space.id)?;
     let requested: HashSet<ExecutionId> = if space.done() {
         HashSet::new()
     } else {
-        recovery::restore_requests(paths, space.id())?
+        recovery::restore_requests(paths, &space.id)?
             .into_iter()
             .map(|(execution, _)| execution)
             .collect()
@@ -251,18 +248,14 @@ fn waits_for_resume(
 
 /// How the work of the `waiting` spaces continues. `shoal restore --all`
 /// skips done spaces, so they are named.
-fn continuation(waiting: &[&PresentSpace]) -> String {
-    let (done, open): (Vec<&PresentSpace>, Vec<&PresentSpace>) =
-        waiting.iter().partition(|space| space.done());
+fn continuation(waiting: &[&Space]) -> String {
+    let (done, open): (Vec<&Space>, Vec<&Space>) = waiting.iter().partition(|space| space.done());
     let mut commands = Vec::new();
     if !open.is_empty() {
         commands.push("shoal restore --all".to_owned());
     }
     if !done.is_empty() {
-        let numbers: Vec<String> = done
-            .iter()
-            .map(|space| space.number().to_string())
-            .collect();
+        let numbers: Vec<String> = done.iter().map(|space| space.number.to_string()).collect();
         commands.push(format!("shoal restore {}", numbers.join(" ")));
     }
     if commands.is_empty() {

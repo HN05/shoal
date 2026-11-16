@@ -1,12 +1,11 @@
 //! Spaces of either kind: the spaces a caller sees and references to them.
-use super::{Chat, SpaceLinks, Workspace};
+use super::{Chat, Workspace};
 
 mod record;
 use crate::space_names::{SpaceName, SpaceSelector};
-pub use record::{Space, SpacePart, Workdir};
+pub use record::{ByKind, Space, SpacePart, Workdir};
 use serde::{Deserialize, Serialize};
-use shoal_ids::repository_ids::RepositoryId;
-use shoal_ids::space_ids::{SpaceId, SpaceNumber};
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::BranchName;
 
 /// Another space a record refers to, with its current name, and its branch
@@ -39,7 +38,7 @@ impl SpaceKind {
 /// the places shown for it may still show.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenamedSpace {
-    pub space: PresentSpace,
+    pub space: Space,
     pub previous_name: SpaceName,
 }
 
@@ -56,216 +55,77 @@ pub enum SpaceTarget {
     Resource { name: String },
 }
 
-/// A space as it exists: a workspace or a chat, running or stopped, which
-/// share one namespace of IDs and names. JSON gives its record, which names
-/// its `kind`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-#[allow(
-    clippy::large_enum_variant,
-    reason = "a lookup's result, read once by the request that made it"
-)]
-pub enum PresentSpace {
-    Workspace(Workspace),
-    Chat(Chat),
-}
-
-impl PresentSpace {
-    pub fn id(&self) -> &SpaceId {
-        match self {
-            Self::Workspace(workspace) => &workspace.id,
-            Self::Chat(chat) => &chat.id,
-        }
-    }
-
-    pub fn name(&self) -> &SpaceName {
-        match self {
-            Self::Workspace(workspace) => &workspace.name,
-            Self::Chat(chat) => &chat.name,
-        }
-    }
-
-    pub fn number(&self) -> SpaceNumber {
-        match self {
-            Self::Workspace(workspace) => workspace.number,
-            Self::Chat(chat) => chat.number,
-        }
-    }
-
-    /// Its number with its name, as text that names it does.
-    pub fn label(&self) -> String {
-        crate::space_names::label(self.number(), self.name())
-    }
-
-    /// Its repository; none for a chat without one.
-    pub fn repository_id(&self) -> Option<&RepositoryId> {
-        match self {
-            Self::Workspace(workspace) => Some(workspace.repository()),
-            Self::Chat(chat) => chat.repository_id.as_ref(),
-        }
-    }
-
-    /// The issues, PRs and CI runs it links.
-    pub fn links(&self) -> &SpaceLinks {
-        match self {
-            Self::Workspace(workspace) => &workspace.links,
-            Self::Chat(chat) => &chat.links,
-        }
-    }
-
-    /// What keeps it from cleanup until released.
-    pub fn holds(&self) -> &[crate::model::SpaceHold] {
-        match self {
-            Self::Workspace(workspace) => &workspace.holds,
-            Self::Chat(chat) => &chat.holds,
-        }
-    }
-
-    pub fn into_links(self) -> SpaceLinks {
-        match self {
-            Self::Workspace(workspace) => workspace.links,
-            Self::Chat(chat) => chat.links,
-        }
-    }
-
-    /// The `root_dir` a chat without a repository started in, which holds
-    /// its temporary directory; none for a space with a repository.
-    pub fn root_dir(&self) -> Option<&std::path::Path> {
-        match self {
-            Self::Workspace(_) => None,
-            Self::Chat(chat) => chat.workdir.root_dir(),
-        }
-    }
-
-    /// Its worktree, which only a workspace has: the workspace's record.
-    pub fn worktree(&self) -> Option<&Workspace> {
-        match self {
-            Self::Workspace(workspace) => Some(workspace),
-            Self::Chat(_) => None,
-        }
-    }
-
-    /// The mode its agent started in; none for a workspace that has had no
-    /// agent.
-    pub fn mode(&self) -> Option<crate::config::permissions::SpaceMode<'_>> {
-        match self {
-            Self::Workspace(workspace) => {
-                (workspace.mode.as_ref()).map(|name| crate::config::permissions::SpaceMode {
-                    name,
-                    kind: SpaceKind::Workspace,
-                    repository: true,
-                })
-            }
-            Self::Chat(chat) => {
-                (chat.mode.as_ref()).map(|name| crate::config::permissions::SpaceMode {
-                    name,
-                    kind: SpaceKind::Chat,
-                    repository: chat.repository_id.is_some(),
-                })
-            }
-        }
-    }
-
-    /// Whether `shoal done` recorded that its work is finished.
-    pub fn done(&self) -> bool {
-        match self {
-            Self::Workspace(workspace) => workspace.done,
-            Self::Chat(chat) => chat.completion.is_some(),
-        }
-    }
-
-    /// How long its agent sleeps.
-    pub fn sleep(&self) -> Option<crate::state::Sleep> {
-        match self {
-            Self::Workspace(workspace) => workspace.sleep,
-            Self::Chat(chat) => chat.sleep,
-        }
-    }
-
-    /// What user-facing text calls it: `workspace` or `chat`.
-    pub fn kind(&self) -> &'static str {
-        self.space_kind().as_str()
-    }
-
-    pub fn space_kind(&self) -> SpaceKind {
-        match self {
-            Self::Workspace(_) => SpaceKind::Workspace,
-            Self::Chat(_) => SpaceKind::Chat,
-        }
-    }
-}
-
-/// How messages name a space: its number, then its name, as in
-/// `3 (fix-login)`.
-impl std::fmt::Display for PresentSpace {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} ({})", self.number(), self.name())
-    }
-}
-
-/// The spaces a caller sees: its workspaces, and its chats, running or
-/// stopped.
+/// The spaces a caller sees, workspaces and chats, running or stopped.
 #[derive(Debug, Clone, Default)]
-pub struct Spaces {
-    pub workspaces: Vec<Workspace>,
-    pub chats: Vec<Chat>,
+pub struct Spaces(pub Vec<Space>);
+
+impl std::ops::Deref for Spaces {
+    type Target = [Space];
+
+    fn deref(&self) -> &[Space] {
+        &self.0
+    }
+}
+
+impl FromIterator<Space> for Spaces {
+    fn from_iter<I: IntoIterator<Item = Space>>(spaces: I) -> Self {
+        Self(spaces.into_iter().collect())
+    }
 }
 
 impl Spaces {
-    /// The space `selector` names, by number, ID or name.
-    pub fn find(&self, selector: &SpaceSelector) -> Option<PresentSpace> {
-        let workspace = (self.workspaces.iter())
-            .find(|workspace| selector.selects(&workspace.id, workspace.number));
-        if let Some(workspace) = workspace {
-            return Some(PresentSpace::Workspace(workspace.clone()));
-        }
-        self.chats
-            .iter()
-            .find(|chat| selector.selects(&chat.id, chat.number))
-            .map(|chat| PresentSpace::Chat(chat.clone()))
+    /// The space `selector` names, by number or ID.
+    pub fn find(&self, selector: &SpaceSelector) -> Option<Space> {
+        (self.iter())
+            .find(|space| selector.selects(&space.id, space.number))
+            .cloned()
+    }
+
+    /// The workspaces among them.
+    pub fn workspaces(&self) -> Vec<Workspace> {
+        (self.iter().cloned())
+            .filter_map(|space| space.into_workspace().ok())
+            .collect()
+    }
+
+    /// The chats among them.
+    pub fn chats(&self) -> Vec<Chat> {
+        (self.iter().cloned())
+            .filter_map(|space| space.into_chat().ok())
+            .collect()
+    }
+
+    /// The spaces right below the space `id`.
+    fn children(&self, id: &SpaceId) -> Vec<SpaceRef> {
+        (self.iter().find(|space| space.id == *id))
+            .map(|space| space.children.clone())
+            .unwrap_or_default()
     }
 
     /// The spaces below the space `id`, nearest first.
     pub fn below(&self, id: &SpaceId) -> Vec<SpaceRef> {
-        let children = |id: &SpaceId| {
-            let workspace = self.workspaces.iter().find(|workspace| workspace.id == *id);
-            let chat = self.chats.iter().find(|chat| chat.id == *id);
-            (workspace.map(|workspace| workspace.children.clone()))
-                .or_else(|| chat.map(|chat| chat.children.clone()))
-                .unwrap_or_default()
-        };
-        let mut below = children(id);
+        let mut below = self.children(id);
         let mut next = 0;
         while let Some(space) = below.get(next) {
             let id = space.id.clone();
-            below.extend(children(&id));
+            below.extend(self.children(&id));
             next += 1;
         }
         below
     }
 
     /// Every space a removal of the space `id` takes before it, nearest
-    /// first: the spaces below it, and the chats in the worktree of each
-    /// workspace among them and of `id` itself.
+    /// first: the spaces below it, and the other spaces that work in the
+    /// worktree of each workspace among them and of `id` itself.
     pub fn taken_with(&self, id: &SpaceId) -> Vec<SpaceRef> {
         let first = |id: &SpaceId| -> Vec<SpaceRef> {
-            let mut resident: Vec<SpaceRef> = (self.chats.iter())
-                .filter(|chat| (chat.workdir.workspace()).is_some_and(|w| w.id == *id))
-                .map(|chat| SpaceRef {
-                    id: chat.id.clone(),
-                    name: chat.name.clone(),
-                    kind: SpaceKind::Chat,
-                    branch: None,
-                })
+            let mut resident: Vec<SpaceRef> = (self.iter())
+                .filter(|space| space.id != *id)
+                .filter(|space| (space.workdir.workspace()).is_some_and(|w| w.id == *id))
+                .map(Space::space_ref)
                 .collect();
             resident.sort_by(|a, b| a.name.cmp(&b.name));
-            let workspace = self.workspaces.iter().find(|workspace| workspace.id == *id);
-            let chat = self.chats.iter().find(|chat| chat.id == *id);
-            resident.extend(
-                (workspace.map(|workspace| workspace.children.clone()))
-                    .or_else(|| chat.map(|chat| chat.children.clone()))
-                    .unwrap_or_default(),
-            );
+            resident.extend(self.children(id));
             resident
         };
         let mut taken = first(id);

@@ -8,8 +8,7 @@ use crate::client::output::restore::{
     ForgottenWork, Queued, Reopened, SetUp, StartedRestores, StoppedCommands,
 };
 use crate::{
-    cli::context::Context, execution::recovery::SavedCommand, model::PresentSpace,
-    state::QueueState,
+    cli::context::Context, execution::recovery::SavedCommand, model::Space, state::QueueState,
 };
 use shoal_ids::execution_ids::ExecutionId;
 
@@ -121,7 +120,7 @@ pub(super) fn started(
     output: &StartedRestores,
     in_wrappers: usize,
     place: Option<&str>,
-    listed: &[(&PresentSpace, &ExecutionId)],
+    listed: &[(&Space, &ExecutionId)],
 ) -> Result<()> {
     ctx.show(output, |output| {
         reopened_lines(ctx, &output.reopened);
@@ -139,7 +138,7 @@ pub(super) fn started(
             outln!("Restore each agent in its own terminal:");
         }
         for (space, id) in listed {
-            let number = space.number().to_string();
+            let number = space.number.to_string();
             let words = [
                 "shoal",
                 "restore",
@@ -168,7 +167,7 @@ pub(super) fn forgotten(ctx: &Context, forgotten: &ForgottenWork, names: &[&str]
 
 /// List the stopped `commands` of `space`, which no agent receives, in text
 /// output.
-pub(super) fn stopped_commands(ctx: &Context, space: &PresentSpace, commands: &[SavedCommand]) {
+pub(super) fn stopped_commands(ctx: &Context, space: &Space, commands: &[SavedCommand]) {
     if !commands.is_empty() && !ctx.json {
         outln!("{}", command_list(space, commands));
     }
@@ -206,13 +205,13 @@ pub(super) fn starting_copied(agent: impl Display, forked: bool) {
 
 /// List `workspace`'s stopped `commands`, which the restored agent was not
 /// told about.
-pub(super) fn commands_not_told(space: &PresentSpace, commands: &[SavedCommand]) {
+pub(super) fn commands_not_told(space: &Space, commands: &[SavedCommand]) {
     eprintln!("{}", command_list(space, commands));
 }
 
 /// The stopped `commands` of `workspace`, each as the command that reruns
 /// it there.
-fn command_list(space: &PresentSpace, commands: &[SavedCommand]) -> String {
+fn command_list(space: &Space, commands: &[SavedCommand]) -> String {
     let mut text = format!("Stopped commands in {}, not restarted:", space.label());
     for command in commands {
         text.push_str(&format!("\n  {}", rerun(space, &command.argv)));
@@ -222,8 +221,8 @@ fn command_list(space: &PresentSpace, commands: &[SavedCommand]) -> String {
 
 /// The command that runs `argv` in `space` again, selecting it by its
 /// number, since names select nothing.
-fn rerun(space: &PresentSpace, argv: &[String]) -> String {
-    let number = space.number().to_string();
+fn rerun(space: &Space, argv: &[String]) -> String {
+    let number = space.number.to_string();
     let mut words = vec!["shoal", "run", "--workspace", &number, "--"];
     words.extend(argv.iter().map(String::as_str));
     crate::shell::quote(&words)

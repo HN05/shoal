@@ -14,7 +14,7 @@ use super::{
 };
 use crate::{
     demos::{Launch, Progress, Running},
-    model::{Execution, PresentSpace},
+    model::Execution,
     process::identity as process,
 };
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
@@ -24,10 +24,13 @@ impl Manager {
     /// those of every workspace.
     pub async fn demos(&self, selector: Option<&SpaceSelector>) -> Result<Vec<Running>> {
         let workspace = match selector {
-            Some(selector) => match self.space(selector).await? {
-                PresentSpace::Workspace(workspace) => Some(workspace.id),
-                PresentSpace::Chat(_) => return Ok(Vec::new()),
-            },
+            Some(selector) => {
+                let space = self.space(selector).await?;
+                if space.worktree().is_none() {
+                    return Ok(Vec::new());
+                }
+                Some(space.id)
+            }
             None => None,
         };
         self.store.run(move |db| list(db, workspace.as_ref())).await

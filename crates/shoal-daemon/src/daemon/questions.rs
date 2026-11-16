@@ -23,7 +23,7 @@ use crate::{
         workspace::Manager,
         workspace_files::{self, Attacher, FileSource, NewFile, SentFile, sent_files},
     },
-    model::PresentSpace,
+    model::Space,
 };
 pub(crate) use shoal_protocol::questions::{Ask, Listing, Question, QuestionStatus};
 use status::{OPEN, StatusColumns};
@@ -397,16 +397,16 @@ pub(crate) fn close_open(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<Vec
 /// Close the space's open question `number` as withdrawn by its agent.
 fn withdraw(
     tx: &Transaction<'_>,
-    space: &PresentSpace,
+    space: &Space,
     number: ItemNumber,
     shown: Option<&Question>,
 ) -> Result<Question> {
     let mut question = by_number(tx, number)?
-        .filter(|question| question.space_id == *space.id())
+        .filter(|question| question.space_id == space.id)
         .ok_or_else(|| {
             Refusal::new(
                 Reason::NotFound,
-                format!("{} has no question {number}", space.name()),
+                format!("{} has no question {number}", space.name),
             )
         })?;
     question.ensure_open()?;
@@ -453,7 +453,7 @@ struct Asking {
 /// the mark, also for a repeated question.
 fn record(
     tx: &Transaction<'_>,
-    space: &PresentSpace,
+    space: &Space,
     asking: &Asking,
     asker: &Asker,
     removing: &crate::daemon::spaces::Removing,
@@ -462,14 +462,12 @@ fn record(
     // A space reserved for removal takes no question its cleanup checks have
     // not seen. A chat's reservation precedes the removal's next read here,
     // on the store's one thread, so the removal sees any question before it.
-    match space {
-        PresentSpace::Workspace(workspace) => {
-            crate::daemon::store::require_ready(tx, &workspace.id)?
-        }
-        PresentSpace::Chat(chat) => ensure!(
-            !removing.reserved(&chat.id),
+    match space.kind() {
+        crate::model::SpaceKind::Workspace => crate::daemon::store::require_ready(tx, &space.id)?,
+        crate::model::SpaceKind::Chat => ensure!(
+            !removing.reserved(&space.id),
             "chat {} is being removed",
-            chat.name
+            space.name
         ),
     }
     if let Asker::Chat(turn) = asker
@@ -477,11 +475,11 @@ fn record(
     {
         return Ok(Recorded::Unmarked);
     }
-    if let Some(question) = repeated(tx, space.id(), ask, files)? {
+    if let Some(question) = repeated(tx, &space.id, ask, files)? {
         return Ok(Recorded::Repeated(question));
     }
     let in_chat = matches!(asker, Asker::Chat(_));
-    let number = insert(tx, space.id(), ask, files, in_chat)?;
+    let number = insert(tx, &space.id, ask, files, in_chat)?;
     let question = by_number(tx, number)?.context("recorded question is missing")?;
     Ok(Recorded::New(question))
 }
@@ -610,7 +608,7 @@ impl Manager {
     /// asker whose turn has no mark.
     async fn record_question(
         &self,
-        space: PresentSpace,
+        space: Space,
         asking: Asking,
         asker: Asker,
     ) -> Result<Option<Question>> {
@@ -668,7 +666,7 @@ impl Manager {
     /// The ID of the workspace or chat `selector` names, whose questions a
     /// listing keeps: a stopped chat keeps its open questions too.
     async fn asking_space(&self, selector: &SpaceSelector) -> Result<SpaceId> {
-        Ok(self.space(selector).await?.id().clone())
+        Ok(self.space(selector).await?.id.clone())
     }
 
     /// Every open question, oldest first, which subscription snapshots page.
@@ -785,7 +783,7 @@ impl Manager {
                 if let Some(turn) = &turn {
                     set_chat_mark(tx, turn, false)?;
                 }
-                let closed = close_in_chat(tx, space.id())?;
+                let closed = close_in_chat(tx, &space.id)?;
                 Ok(closed)
             })
             .await?;
@@ -817,7 +815,7 @@ impl Manager {
     ) -> Result<Question> {
         let space = self.space(selector).await?;
         let number = ItemNumber {
-            space: space.number(),
+            space: space.number,
             item,
         };
         // Subscribe before reading, so an answer in between still wakes.
@@ -827,11 +825,11 @@ impl Manager {
                 .store
                 .run(move |db| by_number(db, number))
                 .await?
-                .filter(|question| question.space_id == *space.id() && question.ask == *ask)
+                .filter(|question| question.space_id == space.id && question.ask == *ask)
                 .with_context(|| {
                     format!(
                         "{} has no question {number} awaiting delivery; a delivered answer removes its question",
-                        space.name()
+                        space.name
                     )
                 })?;
             if let QuestionStatus::Answered { .. } = question.status {

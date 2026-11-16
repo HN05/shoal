@@ -11,7 +11,7 @@ use crate::{
         output::{Palette, Style},
         ui,
     },
-    model::{HoldPlacer, PresentSpace, SpaceHold},
+    model::{HoldPlacer, SpaceHold},
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -59,17 +59,13 @@ pub(super) async fn release(
 pub(super) async fn list(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
     let Some(space) = ui::select_space_filter(ctx, scope).await? else {
         let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
-        let spaces: Vec<PresentSpace> = (spaces.workspaces.into_iter())
-            .map(PresentSpace::Workspace)
-            .chain(spaces.chats.into_iter().map(PresentSpace::Chat))
-            .collect();
-        ctx.show(&spaces, |spaces| {
+        ctx.show(&spaces.0, |spaces| {
             for space in spaces {
                 outln!(
                     "{}",
-                    Palette::stdout(ctx.json).paint(Style::Heading, space.name())
+                    Palette::stdout(ctx.json).paint(Style::Heading, &space.name)
                 );
-                render(space.holds());
+                render(&space.holds);
             }
         })?;
         return Ok(0);

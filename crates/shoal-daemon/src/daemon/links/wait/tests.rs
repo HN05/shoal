@@ -1,4 +1,4 @@
-use crate::model::PresentSpace;
+use crate::model::Space;
 use shoal_refs::BranchName;
 use std::{
     sync::{Arc, LazyLock},
@@ -1438,7 +1438,7 @@ async fn a_hooked_agent_is_due_a_wake_once_no_wait_has_run_for_a_while() {
     let due = async || {
         manager
             .agent_wake_due(
-                &PresentSpace::Workspace(workspace.clone()),
+                &Space::from(workspace.clone()),
                 Some(&ExecutionId::from("e1")),
                 true,
                 WakePhase::Arming,
@@ -2653,7 +2653,7 @@ async fn sensitive_files_changed_on_both_sides_are_reported_beside_a_linked_pr()
     let polled = manager.poll_space_item_activity(&space).await;
     assert!(polled.is_err(), "the PR lookup fails");
     let queued = manager
-        .queued_updates(&PresentSpace::Workspace(linked.clone()), None)
+        .queued_updates(&Space::from(linked.clone()), None)
         .await
         .unwrap();
     assert_eq!(queued.len(), 1);
@@ -2701,7 +2701,7 @@ async fn a_stalled_worktree_fails_the_background_branch_check_at_once() {
     let polled = manager.poll_space_item_activity(&space).await;
     assert!(polled.is_err(), "the PR lookup fails");
     let queued = manager
-        .queued_updates(&PresentSpace::Workspace(workspace.clone()), None)
+        .queued_updates(&Space::from(workspace.clone()), None)
         .await
         .unwrap();
     let stall = queued.iter().find(|update| {
@@ -3067,7 +3067,7 @@ async fn a_held_gate_delays_a_wake_but_keeps_an_issued_one_due() {
         .await
         .unwrap();
     let held = manager.gates.lock_prs([&workspace.id]).await;
-    let space = PresentSpace::Workspace(workspace);
+    let space = Space::from(workspace);
     assert!(
         !manager
             .wake_updates_due(&space, WakePhase::Arming)

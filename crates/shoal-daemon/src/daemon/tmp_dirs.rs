@@ -9,7 +9,7 @@ use rusqlite::Connection;
 
 use crate::{
     daemon::{log, workspace::Manager},
-    model::{PresentSpace, Repository},
+    model::{Repository, Space},
     tmp_dirs::Layout,
 };
 
@@ -29,20 +29,20 @@ impl Manager {
     }
 
     /// The layout that keeps the temporary directory of `space`.
-    pub(crate) async fn space_tmp_layout(&self, space: &PresentSpace) -> Result<Option<Layout>> {
-        let repository = match space.repository_id() {
+    pub(crate) async fn space_tmp_layout(&self, space: &Space) -> Result<Option<Layout>> {
+        let repository = match space.repository_id.as_ref() {
             Some(id) => Some(self.repository(id).await?),
             None => None,
         };
-        Ok(self.tmp_layout(repository.as_ref(), space.root_dir()))
+        Ok(self.tmp_layout(repository.as_ref(), space.workdir.root_dir()))
     }
 
     /// Delete the temporary directory of `space` once its record is gone.
-    pub(crate) async fn delete_tmp_dir(&self, space: &PresentSpace) -> Result<()> {
+    pub(crate) async fn delete_tmp_dir(&self, space: &Space) -> Result<()> {
         let Some(layout) = self.space_tmp_layout(space).await? else {
             return Ok(());
         };
-        remove(layout, vec![space.id().to_owned()]).await
+        remove(layout, vec![space.id.to_owned()]).await
     }
 
     /// Delete every temporary directory that belongs to no workspace or chat

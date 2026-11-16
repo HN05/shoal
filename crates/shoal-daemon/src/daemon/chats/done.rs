@@ -15,7 +15,7 @@ use crate::{
         },
         workspace_files::Attacher,
     },
-    model::{Chat, Completion, PresentSpace},
+    model::{Chat, Completion},
 };
 use shoal_protocol::assignments::Done;
 
@@ -39,7 +39,7 @@ impl Manager {
         let _guard = self.gates.lock_prs([&chat.id]).await;
         let settings = self.chat_settings(&chat).await?;
         let head = self.chat_head(&chat).await?;
-        let space = PresentSpace::Chat(chat.clone()).into();
+        let space = chat.clone().into();
         let results = self.keep_results(&space, done.results, attacher).await?;
         let completion = Completion {
             head: head.into(),

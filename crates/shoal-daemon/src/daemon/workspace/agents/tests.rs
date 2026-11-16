@@ -7,7 +7,7 @@ use crate::daemon::{
 };
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
-use crate::model::PresentSpace;
+use crate::model::Space;
 use futures_util::FutureExt;
 use shoal_protocol::assignments::Done;
 use shoal_protocol::space_names::SpaceSelector;
@@ -40,7 +40,7 @@ async fn agent_exit_hook_reports_disconnects_and_skips_removing_workspaces() {
     let cleanup_woken = manager.signals.cleanup_woken();
     manager
         .notify_agent_exit(
-            &PresentSpace::Workspace(workspace.clone()),
+            &Space::from(workspace.clone()),
             &"helper".into(),
             None,
             false,
@@ -49,7 +49,7 @@ async fn agent_exit_hook_reports_disconnects_and_skips_removing_workspaces() {
         .await;
     manager
         .post_agent_exit(
-            &PresentSpace::Workspace(workspace.clone()),
+            &Space::from(workspace.clone()),
             &"helper".into(),
             None,
             false,
@@ -67,7 +67,7 @@ async fn agent_exit_hook_reports_disconnects_and_skips_removing_workspaces() {
         .unwrap();
     manager
         .notify_agent_exit(
-            &PresentSpace::Workspace(workspace.clone()),
+            &Space::from(workspace.clone()),
             &"helper".into(),
             Some(143),
             true,
@@ -76,7 +76,7 @@ async fn agent_exit_hook_reports_disconnects_and_skips_removing_workspaces() {
         .await;
     manager
         .post_agent_exit(
-            &PresentSpace::Workspace(workspace.clone()),
+            &Space::from(workspace.clone()),
             &"helper".into(),
             Some(143),
             true,
@@ -130,7 +130,7 @@ async fn agent_exit_wakes_cleanup_for_completed_workspace() {
     assert!(complete);
     manager
         .post_agent_exit(
-            &PresentSpace::Workspace(workspace.clone()),
+            &Space::from(workspace.clone()),
             &"helper".into(),
             Some(0),
             complete,
@@ -213,7 +213,7 @@ async fn overload_notifications_explain_recovery_policy_and_missing_records() {
         );
         manager
             .notify_agent_exit(
-                &PresentSpace::Workspace(workspace.clone()),
+                &Space::from(workspace.clone()),
                 &"codex".into(),
                 Some(143),
                 false,

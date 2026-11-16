@@ -485,7 +485,8 @@ async fn current_workspace_or_chat(
 ) -> Result<SpaceSelector> {
     let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
     let below = spaces.below(&chat);
-    let current = current_workspace(&spaces.workspaces)?.filter(|workspace| match which {
+    let workspaces = spaces.workspaces();
+    let current = current_workspace(&workspaces)?.filter(|workspace| match which {
         Workspaces::Below => below.iter().any(|space| space.id == workspace.id),
         Workspaces::Any => true,
     });

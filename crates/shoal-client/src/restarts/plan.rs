@@ -4,13 +4,13 @@ use anyhow::Result;
 
 use crate::{connection::Daemon, output::agents::Skipped};
 use shoal_protocol::{
-    model::{PendingRestart, PresentSpace, RunningAgent},
+    model::{PendingRestart, RunningAgent, Space},
     state::AgentState,
 };
 
 /// The selected spaces and the agents that run there.
 pub struct Selection {
-    pub spaces: Vec<PresentSpace>,
+    pub spaces: Vec<Space>,
     pub agents: Vec<RunningAgent>,
     /// The spaces were named, so one without an agent is reported.
     pub named: bool,
@@ -27,7 +27,7 @@ pub struct Plan {
 /// One agent to restart.
 pub struct Restart {
     /// The workspace or chat it runs in.
-    pub space: PresentSpace,
+    pub space: Space,
     pub agent: RunningAgent,
     /// The restart in progress when the run selected it, which the run
     /// waits for instead of starting another, even once it ends.
@@ -45,7 +45,7 @@ impl Restart {
     /// The agent, skipped for `reason`.
     pub fn skipped(self, reason: impl Into<String>) -> Skipped {
         Skipped {
-            space: self.space.name().clone(),
+            space: self.space.name.clone(),
             agent: self.agent.agent,
             reason: reason.into(),
         }
@@ -68,7 +68,7 @@ impl Selection {
             let (stopped, agents): (Vec<_>, Vec<_>) = self
                 .agents
                 .iter()
-                .filter(|running| running.space_id == *space.id())
+                .filter(|running| running.space_id == space.id)
                 .filter(|running| {
                     agent.is_none() || running.agent.is_none() || running.agent.as_ref() == agent
                 })
@@ -76,15 +76,15 @@ impl Selection {
                 .partition(|running| running.stopped.is_some());
             if agents.is_empty() && self.named {
                 plan.skipped.push(Skipped {
-                    space: space.name().clone(),
+                    space: space.name.clone(),
                     agent: agent.cloned(),
-                    reason: absent_reason(&space.number().to_string(), agent, &stopped),
+                    reason: absent_reason(&space.number.to_string(), agent, &stopped),
                 });
             }
             for running in agents {
                 match skip_reason(&space, &running) {
                     Some(reason) => plan.skipped.push(Skipped {
-                        space: space.name().clone(),
+                        space: space.name.clone(),
                         agent: running.agent,
                         reason,
                     }),
@@ -178,8 +178,8 @@ pub(super) fn stopped_reason(space: &str, running: &RunningAgent) -> Option<Stri
 }
 
 /// Why `running` cannot restart in place, if it cannot.
-pub(super) fn skip_reason(space: &PresentSpace, running: &RunningAgent) -> Option<String> {
-    let manual = format!("use shoal stop {0} and shoal restore {0}", space.number());
+pub(super) fn skip_reason(space: &Space, running: &RunningAgent) -> Option<String> {
+    let manual = format!("use shoal stop {0} and shoal restore {0}", space.number);
     match &running.agent {
         None => Some(format!(
             "execution {} is disconnected; {manual}",

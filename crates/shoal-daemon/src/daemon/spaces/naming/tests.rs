@@ -1,5 +1,4 @@
 use crate::daemon::test_support::{manager, repository};
-use crate::model::PresentSpace;
 use shoal_refs::BranchName;
 
 #[tokio::test]
@@ -23,7 +22,7 @@ async fn a_name_is_cleaned_up_kept_on_the_record_and_returned_with_the_previous_
         )
         .await
         .unwrap();
-    let PresentSpace::Workspace(renamed_workspace) = &renamed.space else {
+    let Some(renamed_workspace) = renamed.space.to_workspace() else {
         panic!("renamed a chat");
     };
     assert_eq!(renamed_workspace.name, "Plan: summary with shoal done");

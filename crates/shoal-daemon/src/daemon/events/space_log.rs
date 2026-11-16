@@ -111,7 +111,7 @@ impl Manager {
     /// removed one whose events the journal keeps.
     async fn log_space(&self, selector: &SpaceSelector) -> Result<SpaceId> {
         let error = match self.space(selector).await {
-            Ok(space) => return Ok(space.id().clone()),
+            Ok(space) => return Ok(space.id.clone()),
             Err(error) => error,
         };
         let removed = match selector.given_id().cloned() {

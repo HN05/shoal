@@ -13,7 +13,7 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
-    model::PresentSpace,
+    model::Space,
     transfer::ExportedSpace,
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
@@ -58,7 +58,7 @@ pub(in super::super) async fn export_all_copies(
 /// going on after one fails, since a copy removes nothing.
 async fn copy_into(
     ctx: &Context,
-    spaces: &[PresentSpace],
+    spaces: &[Space],
     directory: PathBuf,
     checkpoint: Option<CheckpointNumber>,
 ) -> Result<i32> {
@@ -67,7 +67,7 @@ async fn copy_into(
     let mut report = DirectoryReport::new(&directory, true);
     for space in spaces {
         let copied = copy_one(ctx, &directory, space, checkpoint).await;
-        report.add(ctx, (space.name(), space.id()), copied);
+        report.add(ctx, (&space.name, &space.id), copied);
     }
     report.finish(ctx)
 }
@@ -77,17 +77,11 @@ async fn copy_into(
 async fn copy_one(
     ctx: &Context,
     directory: &ExportDirectory,
-    space: &PresentSpace,
+    space: &Space,
     checkpoint: Option<CheckpointNumber>,
 ) -> Result<ExportedSpace> {
-    let output = Output::reserve(&directory.file(space.id()))?;
-    copy(
-        ctx,
-        SpaceSelector::id(space.id()),
-        checkpoint,
-        output.file(),
-    )
-    .await
+    let output = Output::reserve(&directory.file(&space.id))?;
+    copy(ctx, SpaceSelector::id(&space.id), checkpoint, output.file()).await
 }
 
 /// Refuse `--checkpoint` for `count` spaces other than one, since its

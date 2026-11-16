@@ -355,7 +355,7 @@ fn require_queuing_space(
 
 /// The restore of a stopped agent whose wrapper waits for it.
 pub(super) struct WaitingRestore {
-    pub space: crate::model::PresentSpace,
+    pub space: crate::model::Space,
     pub execution: ExecutionId,
     pub agent: crate::agent::Agent,
 }
@@ -376,12 +376,12 @@ pub(super) fn record_waiting_restore(
         params![
             QueueEntryId::generate(),
             QueueKind::Restore,
-            space.repository_id(),
-            space.name(),
+            space.repository_id.as_ref(),
+            &space.name,
             restore.agent,
             QueueState::Queued,
             now,
-            space.id(),
+            &space.id,
             restore.execution,
         ],
     )?;

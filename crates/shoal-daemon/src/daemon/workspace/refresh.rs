@@ -3,12 +3,13 @@
 //! fast-forward, a copy's follows its source's HEAD, and work of its own is
 //! refused, never carried over.
 use anyhow::{Context, Result, bail, ensure};
+use shoal_protocol::model::ByKind;
 
 use super::{Manager, copies::Source};
 use crate::{
     daemon::{log, scope::Caller},
     git,
-    model::{PresentSpace, Refreshed, Repository, Workspace},
+    model::{Refreshed, Repository, Workspace},
     state::WorkspaceState,
 };
 use shoal_ids::execution_ids::ExecutionId;
@@ -29,9 +30,9 @@ impl Manager {
         selector: &SpaceSelector,
         caller: Option<&Caller>,
     ) -> Result<Refreshed> {
-        let workspace = match self.space(selector).await? {
-            PresentSpace::Workspace(workspace) => workspace,
-            PresentSpace::Chat(_) => bail!("a chat has no worktree to refresh"),
+        let workspace = match self.space(selector).await?.by_kind() {
+            ByKind::Workspace(workspace) => workspace,
+            ByKind::Chat(_) => bail!("a chat has no worktree to refresh"),
         };
         let target = self.refresh_target(&workspace, caller).await?;
         if matches!(target, Target::DefaultBranch) {

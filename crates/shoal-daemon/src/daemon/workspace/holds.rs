@@ -18,7 +18,7 @@ use crate::{
         scope::Caller,
         store,
     },
-    model::{HoldPlacer, PresentSpace, SpaceHold},
+    model::{HoldPlacer, Space, SpaceHold},
     validate,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -51,7 +51,7 @@ impl Manager {
         validate::reason("hold", reason.as_deref())?;
         let space = self.space(selector).await?;
         let _guard = self.hold_guard(&space).await?;
-        let id = space.id().clone();
+        let id = space.id.clone();
         let removing = self.space_removals.clone();
         let hold = (self.store)
             .write(move |tx| {
@@ -59,16 +59,16 @@ impl Manager {
                 place(tx, &id, &name, reason.as_deref(), placed_by, authority)
             })
             .await?;
-        self.touch(space.id()).await;
+        self.touch(&space.id).await;
         Ok(hold)
     }
 
     /// What placing a hold on `space` holds meanwhile: no resource hook runs
     /// in the worktree of a workspace, which must still be its own.
-    async fn hold_guard(&self, space: &PresentSpace) -> Result<ResourceGuard> {
-        let guard = (self.gates).resource_guard(space.id(), GuardMode::Shared)?;
-        if let Some(workspace) = space.worktree() {
-            self.verify_worktree(workspace).await?;
+    async fn hold_guard(&self, space: &Space) -> Result<ResourceGuard> {
+        let guard = (self.gates).resource_guard(&space.id, GuardMode::Shared)?;
+        if let Some(workspace) = space.to_workspace() {
+            self.verify_worktree(&workspace).await?;
         }
         Ok(guard)
     }
@@ -84,9 +84,9 @@ impl Manager {
     ) -> Result<Allocation<SpaceHold>> {
         validate::name("hold", &name)?;
         let space = self.space(selector).await?;
-        let id = space.id();
+        let id = &space.id;
         // Acquiring returns the held one, with every check acquisition makes.
-        if space.holds().iter().any(|hold| hold.name == name) {
+        if space.holds.iter().any(|hold| hold.name == name) {
             return Ok(Allocation::Granted(
                 self.place_hold(
                     &SpaceSelector::id(id),
@@ -128,7 +128,7 @@ impl Manager {
                 .await?,
             ),
         };
-        (self.notify_allocation((space.name(), id), &outcome, "")).await;
+        (self.notify_allocation((&space.name, id), &outcome, "")).await;
         Ok(outcome)
     }
 
@@ -157,11 +157,11 @@ impl Manager {
     ) -> Result<()> {
         validate::name("hold", &name)?;
         let space = self.space(selector).await?;
-        let id = space.id().clone();
+        let id = space.id.clone();
         self.store
             .write(move |tx| release(tx, &id, &name, released_by))
             .await?;
-        self.touch(space.id()).await;
+        self.touch(&space.id).await;
         self.signals.wake_cleanup();
         Ok(())
     }
@@ -178,7 +178,7 @@ impl Manager {
             return self.release_hold(selector, name, HoldPlacer::User).await;
         };
         let space = self.space(selector).await?;
-        let users = (space.holds().iter())
+        let users = (space.holds.iter())
             .any(|hold| hold.name == name && hold.placed_by == HoldPlacer::User);
         if !users {
             return self.release_hold(selector, name, HoldPlacer::Agent).await;
@@ -186,11 +186,10 @@ impl Manager {
         // A name may repeat, so the space's ID binds the approval.
         let release = format!(
             "release the user's hold {name} on {} ({})",
-            space.name(),
-            space.id()
+            space.name, space.id
         );
         let action = Action {
-            repository: space.repository_id().cloned(),
+            repository: space.repository_id.as_ref().cloned(),
             ..Action::new(PermissionKey::UserHolds, release)
         };
         self.authorize_action(Some(caller), action).await?;
@@ -198,7 +197,7 @@ impl Manager {
     }
 
     pub async fn holds(&self, selector: &SpaceSelector) -> Result<Vec<SpaceHold>> {
-        Ok(self.space(selector).await?.holds().to_vec())
+        Ok(self.space(selector).await?.holds.to_vec())
     }
 
     /// Whether the user placed a hold on the space `id`.

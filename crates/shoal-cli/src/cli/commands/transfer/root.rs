@@ -268,7 +268,7 @@ fn plan(moves: &RepositoryMoves, spaces: &Spaces) -> String {
     }
     for execution in &moves.executions {
         let space = spaces.find(&SpaceSelector::id(&execution.space_id));
-        let workspace = (space.as_ref()).map_or(execution.space_id.as_str(), |space| space.name());
+        let workspace = (space.as_ref()).map_or(execution.space_id.as_str(), |space| &space.name);
         let what = execution
             .agent
             .as_ref()

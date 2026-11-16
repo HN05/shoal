@@ -42,10 +42,11 @@ fn spaces() -> Spaces {
             completion: None,
         },
     };
-    Spaces {
-        workspaces: vec![workspace],
-        chats: vec![chat("c1", 1, "running", true), chat("c2", 2, "talk", false)],
-    }
+    Spaces(vec![
+        workspace.into(),
+        chat("c1", 1, "running", true).into(),
+        chat("c2", 2, "talk", false).into(),
+    ])
 }
 
 #[test]

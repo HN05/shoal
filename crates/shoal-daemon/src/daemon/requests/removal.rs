@@ -1,4 +1,5 @@
 //! The daemon's answers to [`RemovalMethod`] requests, and who may send them.
+use shoal_protocol::model::ByKind;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -10,7 +11,7 @@ use super::super::{
     workspace::Manager,
 };
 use crate::{
-    model::{PresentSpace, StoppedSpace},
+    model::StoppedSpace,
     process::identity,
     protocol::{Body, QueuedLaunches, RemovalMethod, UntrackedProcesses},
     removal::InspectionPolicy,
@@ -76,7 +77,7 @@ pub(super) async fn handle(
         }
         RemovalMethod::CheckStop { space } => {
             // A chat has no lifecycle state that refuses a stop.
-            if let PresentSpace::Workspace(workspace) = manager.space(&space).await? {
+            if let ByKind::Workspace(workspace) = manager.space(&space).await?.by_kind() {
                 manager.check_lifecycle(&workspace.id).await?
             }
             Body::Ok

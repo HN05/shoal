@@ -10,7 +10,7 @@ use crate::{
     cli::{context::Context, ui},
     config::permissions::PermissionChange,
     execution::recovery::Saved,
-    model::{PresentSpace, QueueEntry},
+    model::{QueueEntry, Space},
     protocol::ConfigTarget,
     terminal,
 };
@@ -110,7 +110,7 @@ async fn stopped_agents(
     ctx: &Context,
     selector: SpaceSelector,
     execution: Option<&ExecutionId>,
-) -> Result<(PresentSpace, Saved)> {
+) -> Result<(Space, Saved)> {
     let space = super::present_space(ctx, &selector).await?;
     let mut saved = unattended(ctx, &space).await?;
     if let Some(execution) = execution {
@@ -119,7 +119,7 @@ async fn stopped_agents(
     ensure!(
         !(saved.agents.is_empty() && saved.sessions.is_empty()),
         "{} has no stopped agent to restore",
-        space.name()
+        space.name
     );
     Ok((space, saved))
 }
@@ -127,7 +127,7 @@ async fn stopped_agents(
 /// The stopped agents and last sessions of every space this process's
 /// scope reaches but its own that wait in no wrapper, as restore `--all`
 /// finds them.
-async fn stopped_in_reach(ctx: &Context) -> Result<Vec<(PresentSpace, Saved)>> {
+async fn stopped_in_reach(ctx: &Context) -> Result<Vec<(Space, Saved)>> {
     let mut stopped = super::saved::stopped(ctx, &Selected::default(), false).await?;
     for (_, saved) in &mut stopped {
         keep_unattended(saved);
@@ -138,7 +138,7 @@ async fn stopped_in_reach(ctx: &Context) -> Result<Vec<(PresentSpace, Saved)>> {
 
 /// The stopped agents and last sessions of `space` that wait in no wrapper,
 /// which a scoped process queues.
-async fn unattended(ctx: &Context, space: &PresentSpace) -> Result<Saved> {
+async fn unattended(ctx: &Context, space: &Space) -> Result<Saved> {
     let mut saved = saved(ctx, space).await?;
     keep_unattended(&mut saved);
     Ok(saved)
@@ -185,17 +185,14 @@ pub(super) async fn queue_space(
 }
 
 /// What `workspace` saved.
-async fn saved(ctx: &Context, space: &PresentSpace) -> Result<Saved> {
-    crate::client::saved::read(&ctx.paths, SpaceSelector::id(space.id())).await
+async fn saved(ctx: &Context, space: &Space) -> Result<Saved> {
+    crate::client::saved::read(&ctx.paths, SpaceSelector::id(&space.id)).await
 }
 
 /// Refuse, before any is queued, the restores of `stopped` agents that the
 /// daemon would start from the background when no host can take them there;
 /// a waiting wrapper restores its agent where it stopped.
-pub(super) async fn ensure_daemon_starts(
-    ctx: &Context,
-    stopped: &[(PresentSpace, Saved)],
-) -> Result<()> {
+pub(super) async fn ensure_daemon_starts(ctx: &Context, stopped: &[(Space, Saved)]) -> Result<()> {
     for (space, saved) in stopped {
         ensure_daemon_starts_in(ctx, space, saved).await?;
     }
@@ -207,18 +204,18 @@ pub(super) async fn ensure_daemon_starts(
 /// there.
 pub(super) async fn ensure_daemon_starts_in(
     ctx: &Context,
-    space: &PresentSpace,
+    space: &Space,
     saved: &Saved,
 ) -> Result<()> {
     if !saved.restores_outside_wrappers() {
         return Ok(());
     }
-    let target = ConfigTarget::Space(SpaceSelector::id(space.id()));
+    let target = ConfigTarget::Space(SpaceSelector::id(&space.id));
     let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
     crate::terminal::queued::ensure_background(&settings).with_context(|| {
         format!(
             "cannot restore the agents of {} in the background; pass --focus to restore one here",
-            space.name()
+            space.name
         )
     })
 }
@@ -230,7 +227,7 @@ pub(super) async fn ensure_daemon_starts_in(
 /// reports already.
 pub(super) async fn queue_all(
     ctx: &Context,
-    stopped: Vec<(PresentSpace, Saved)>,
+    stopped: Vec<(Space, Saved)>,
     resumed: Queued,
     now: bool,
 ) -> Result<i32> {
@@ -249,11 +246,7 @@ pub(super) async fn queue_all(
 /// starting each at once when `now`, and report the commands of workspaces
 /// without one that restores outside a waiting wrapper, going on after one
 /// fails, which it reports.
-pub(super) async fn queue_each(
-    ctx: &Context,
-    stopped: Vec<(PresentSpace, Saved)>,
-    now: bool,
-) -> Queued {
+pub(super) async fn queue_each(ctx: &Context, stopped: Vec<(Space, Saved)>, now: bool) -> Queued {
     let mut queued = Vec::new();
     let mut commands = Vec::new();
     let mut failed = Vec::new();
@@ -262,13 +255,13 @@ pub(super) async fn queue_each(
             let _claims = commands::claim(&mut saved.commands);
             match commands::report(ctx, &space, &saved.commands) {
                 Ok(report) => commands.push(report),
-                Err(error) => failed.push(ui::failure(ctx, "restore", space.name(), &error)),
+                Err(error) => failed.push(ui::failure(ctx, "restore", &space.name, &error)),
             }
         }
         for saved in saved.agents.iter().chain(&saved.sessions) {
             match queue(ctx, &space, &saved.id, now).await {
                 Ok(entry) => queued.push(entry),
-                Err(error) => failed.push(ui::failure(ctx, "restore", space.name(), &error)),
+                Err(error) => failed.push(ui::failure(ctx, "restore", &space.name, &error)),
             }
         }
     }
@@ -285,19 +278,19 @@ pub(super) async fn queue_each(
 /// ended, starting it at once when `now`.
 pub(super) async fn queue(
     ctx: &Context,
-    space: &PresentSpace,
+    space: &Space,
     execution: &ExecutionId,
     now: bool,
 ) -> Result<QueueEntry> {
-    if let PresentSpace::Workspace(workspace) = space {
-        let selector = SpaceSelector::id(&workspace.id);
+    if space.worktree().is_some() {
+        let selector = SpaceSelector::id(&space.id);
         let inspection = crate::client::workspaces::inspect(&ctx.paths, selector).await?;
         stale::reconcile(ctx, &inspection, Some(execution)).await?;
     }
     let execution = execution.to_owned();
     crate::client::queue::restore(
         &ctx.paths,
-        SpaceSelector::id(space.id()),
+        SpaceSelector::id(&space.id),
         execution,
         terminal::start_environment(),
         now,

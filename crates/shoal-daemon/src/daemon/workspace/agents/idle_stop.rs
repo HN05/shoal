@@ -117,7 +117,7 @@ impl Manager {
         {
             return Ok(chosen(protection, Some(now)));
         }
-        if self.space_by_id(id).await?.sleep().is_some()
+        if self.space_by_id(id).await?.sleep.is_some()
             && let Some(free) = self.sleep_cost(id, &candidate.turn, now).await?
         {
             return Ok(chosen(Protection::slept(), free.cache_expired_at(now)));

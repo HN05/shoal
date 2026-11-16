@@ -17,7 +17,7 @@ use crate::{
         workspace::Manager,
     },
     forge::items::link::{ItemKind, Selection},
-    model::{PresentSpace, Repository},
+    model::{Repository, Space},
     protocol::ItemContext,
 };
 use shoal_forge::conventions;
@@ -71,7 +71,7 @@ impl Manager {
     pub(super) async fn gate_case(&self, request: &ApprovalRequest) -> Result<Case> {
         let space = self.space_by_id(&request.space_id).await?;
         let repository_id = (request.repository_id.as_ref())
-            .or(space.repository_id())
+            .or(space.repository_id.as_ref())
             .context("the request names no registered repository")?
             .clone();
         let repository = self.repository(&repository_id).await?;
@@ -89,16 +89,16 @@ impl Manager {
         let opening = prompt::opening(
             &rules,
             &prompt::Space {
-                number: space.number(),
-                name: space.name().as_str(),
+                number: space.number,
+                name: space.name.as_str(),
                 kind: &space.label(),
-                mode: space.mode().map(|mode| mode.name.as_str()),
+                mode: space.space_mode().map(|mode| mode.name.as_str()),
                 branch: branch.map(|branch| branch.as_str()),
                 items: &items,
             },
         );
         let base = match workspace {
-            Some(workspace) => (self.diff_base(&SpaceSelector::id(&workspace.id)).await)
+            Some(_) => (self.diff_base(&SpaceSelector::id(&space.id)).await)
                 .map(|base| base.commit)
                 .ok(),
             None => None,
@@ -125,11 +125,11 @@ impl Manager {
 
     /// The space's linked issues and PRs as the opening lists them; a failed
     /// lookup leaves them out.
-    async fn gate_items(&self, space: &PresentSpace) -> Vec<String> {
-        let selector = SpaceSelector::id(space.id());
-        let context = match space {
-            PresentSpace::Workspace(_) => ItemContext::Workspace(selector),
-            PresentSpace::Chat(_) => ItemContext::Chat(selector),
+    async fn gate_items(&self, space: &Space) -> Vec<String> {
+        let selector = SpaceSelector::id(&space.id);
+        let context = match space.kind() {
+            crate::model::SpaceKind::Workspace => ItemContext::Workspace(selector),
+            crate::model::SpaceKind::Chat => ItemContext::Chat(selector),
         };
         let selection = Selection {
             kind: None,
@@ -138,7 +138,7 @@ impl Manager {
         let viewed = match self.view_items(&context, &selection, false, None).await {
             Ok(viewed) => viewed,
             Err(error) => {
-                log!("the gate's view of {}: {error:#}", space.name());
+                log!("the gate's view of {}: {error:#}", &space.name);
                 return Vec::new();
             }
         };

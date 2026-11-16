@@ -18,7 +18,7 @@ use self::unretried::Unretried;
 use super::Manager;
 use crate::{
     daemon::{agent_messages, log, store},
-    model::PresentSpace,
+    model::Space,
     state::{AgentState, TurnFailure},
     time::UnixTime,
 };
@@ -384,7 +384,7 @@ impl Manager {
                 .leave_failed_turn(&space, execution, &agent, failure, reason)
                 .await;
         }
-        let (id, execution) = (space.id().clone(), execution.to_owned());
+        let (id, execution) = (space.id.clone(), execution.to_owned());
         let (now, spread) = (UnixTime::now(), spread());
         self.store
             .write(move |tx| record_failure(tx, &id, &execution, failure, now, spread))
@@ -412,7 +412,7 @@ impl Manager {
     }
 
     /// Whether the AI tool `agent` names has `retry` on in `space`.
-    async fn retries(&self, space: &PresentSpace, agent: &crate::agent::Agent) -> bool {
+    async fn retries(&self, space: &Space, agent: &crate::agent::Agent) -> bool {
         self.present_space_settings(space)
             .await
             .is_ok_and(|settings| {

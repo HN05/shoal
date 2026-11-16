@@ -42,9 +42,9 @@ impl Manager {
     ) -> Result<Prioritized> {
         let space = self.space(selector).await?;
         self.given_priority(caller, Some(priority)).await?;
-        self.give_priority(space.id(), Some(priority)).await?;
+        self.give_priority(&space.id, Some(priority)).await?;
         Ok(Prioritized {
-            space: space.name().to_owned(),
+            space: space.name.to_owned(),
             priority,
         })
     }

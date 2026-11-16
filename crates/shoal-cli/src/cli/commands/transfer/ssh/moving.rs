@@ -12,7 +12,7 @@ use crate::client::output::{restore::Reopened, transfer::Moves};
 use crate::transfer::ExportedSpace;
 use crate::{
     cli::{context::Context, ui},
-    model::PresentSpace,
+    model::Space,
     removal::UnsavedWork,
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
@@ -27,13 +27,13 @@ use std::collections::BTreeSet;
 pub(super) async fn move_spaces(
     ctx: &Context,
     remote: &Remote,
-    spaces: &[PresentSpace],
+    spaces: &[Space],
     yes: bool,
 ) -> Result<i32> {
     let staging = tempfile::tempdir()?;
     let directory = ExportDirectory::create(staging.path().to_owned())?;
     let heading = match spaces {
-        [space] => format!("Move {} to {}", space.name(), remote.host),
+        [space] => format!("Move {} to {}", space.name, remote.host),
         _ => format!("Move {} spaces to {}", spaces.len(), remote.host),
     };
     let operation = ("move", "move");

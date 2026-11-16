@@ -9,7 +9,7 @@ use crate::{
         store,
     },
     fsutil::off_runtime,
-    model::{Execution, PresentSpace, QueueEntry, StoppedSpace, Workspace},
+    model::{Execution, QueueEntry, Space, StoppedSpace, Workspace},
     process::identity::{self as process, Identity},
     protocol::{QueuedLaunches, timing},
     state::{ExecutionState, WorkspaceState},
@@ -17,6 +17,7 @@ use crate::{
 use anyhow::{Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::model::ByKind;
 use shoal_protocol::space_names::SpaceSelector;
 use std::collections::HashSet;
 use tokio::time::{Instant, sleep};
@@ -247,7 +248,7 @@ impl Manager {
     /// queue and their agents meanwhile, and executions are read before
     /// requests, which an agent a signal stops saves before its execution
     /// ends.
-    pub async fn stop_targets(&self, launches: QueuedLaunches) -> Result<Vec<PresentSpace>> {
+    pub async fn stop_targets(&self, launches: QueuedLaunches) -> Result<Vec<Space>> {
         let _gate = self.agent_queue.lock_admission().await;
         let mut targets = self.store.run(|db| running_workspaces(db)).await?;
         let converting = self.store.run(|db| converting_workspaces(db)).await?;
@@ -264,8 +265,8 @@ impl Manager {
             (stoppable || converting.contains(&workspace.id)) && targets.contains(&workspace.id)
         });
         let chats = (self.chats().await?.into_iter()).filter(|chat| targets.contains(&chat.id));
-        Ok((workspaces.map(PresentSpace::Workspace))
-            .chain(chats.map(PresentSpace::Chat))
+        Ok((workspaces.map(Space::from))
+            .chain(chats.map(Space::from))
             .collect())
     }
 
@@ -371,11 +372,11 @@ impl Manager {
             policy,
             keep,
         };
-        match self.space(selector).await? {
-            PresentSpace::Workspace(workspace) => {
+        match self.space(selector).await?.by_kind() {
+            ByKind::Workspace(workspace) => {
                 self.stop_workspace_executions(workspace, stopping).await
             }
-            PresentSpace::Chat(chat) => self.stop_and_keep(&chat.id, stopping).await,
+            ByKind::Chat(chat) => self.stop_and_keep(&chat.id, stopping).await,
         }
     }
 
@@ -562,13 +563,13 @@ impl Manager {
     /// `ties` says once the directory is verified to be its worktree still.
     pub(in crate::daemon::workspace) async fn stop_removed_processes(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         ties: WorktreeTies,
     ) -> Result<()> {
-        if let Some(workspace) = space.worktree()
+        if let Some(workspace) = space.to_workspace()
             && ties != WorktreeTies::None
         {
-            self.verify_removed_worktree(workspace).await?;
+            self.verify_removed_worktree(&workspace).await?;
         }
         let space = self.space_ties(space, ties).await?;
         self.stop_untracked(space, Selection::Processes, None)

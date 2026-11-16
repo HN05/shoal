@@ -80,14 +80,14 @@ pub(super) async fn register(
     // that waits for such commands holds new ones back, except the setup or
     // merge of an operation it already waits for.
     if !reattach
-        && !manager.operation_runs_in(target.id())
+        && !manager.operation_runs_in(&target.id)
         && let Err(exiting) = manager.gates.admit()
     {
         return Err(Box::new(Body::error(exiting.code(), &exiting)));
     }
     let tracks_agent = kind == ExecutionKind::Command && agent.is_some();
-    if let (true, Some(workspace)) = (tracks_agent, target.worktree()) {
-        Manager::ensure_holds_agents(workspace).map_err(refused)?;
+    if let (true, Some(workspace)) = (tracks_agent, target.to_workspace()) {
+        Manager::ensure_holds_agents(&workspace).map_err(refused)?;
     }
     let giver = caller.as_ref().map(|caller| &caller.space_id);
     if let Some(agent) = &agent {
@@ -148,15 +148,15 @@ pub(super) async fn register(
             .track_agent(
                 &plan.id,
                 agent,
-                space.id(),
-                space.name(),
+                &space.id,
+                &space.name,
                 recover,
                 std::time::Duration::ZERO,
             )
             .await;
         if let Some(entry) = takes_entry {
             manager.continue_restart(entry, &plan.id).await;
-            source = manager.consume_queue_entry(entry, space.id()).await;
+            source = manager.consume_queue_entry(entry, &space.id).await;
         }
     }
     drop(reserved);
@@ -202,7 +202,7 @@ pub(super) async fn cancel(manager: &Manager, execution: Connected) -> Result<()
         "{} execution {} in {} was not delivered: its wrapper left before the daemon registered it",
         execution.kind,
         execution.id,
-        execution.space.name()
+        &execution.space.name
     );
     manager
         .cancel_execution(&execution.id, execution.kind)

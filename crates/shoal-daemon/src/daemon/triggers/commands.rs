@@ -12,7 +12,6 @@ use super::{Configured, firing::Firing, state};
 use crate::{
     config::permissions::PermissionKey,
     daemon::{permissions::Action, scope::Caller, workspace::Manager},
-    model::PresentSpace,
     protocol::ItemContext,
     time::UnixTime,
 };
@@ -139,14 +138,8 @@ impl Manager {
                 Some(self.repository(repository).await?.id)
             }
             Some(ItemContext::Workspace(space) | ItemContext::Chat(space)) => {
-                let space = self
-                    .space(&space)
-                    .await
-                    .context("find the space to act in")?;
-                match space {
-                    PresentSpace::Workspace(workspace) => workspace.repository_id,
-                    PresentSpace::Chat(chat) => chat.repository_id,
-                }
+                let space = self.space(&space).await;
+                space.context("find the space to act in")?.repository_id
             }
         })
     }

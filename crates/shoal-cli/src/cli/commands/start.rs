@@ -83,10 +83,7 @@ async fn space_id(ctx: &Context, selector: &SpaceSelector) -> Result<SpaceId> {
     let space = crate::client::workspaces::spaces(&ctx.paths)
         .await?
         .find(selector);
-    Ok(space
-        .with_context(|| format!("no space {selector}"))?
-        .id()
-        .clone())
+    Ok(space.with_context(|| format!("no space {selector}"))?.id)
 }
 
 /// Where a start goes, and in which mode.

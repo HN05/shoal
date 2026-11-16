@@ -344,7 +344,8 @@ impl Manager {
         Ok(match named {
             Some(repository) => Some(repository.clone()),
             None => (self.space_by_id(&request.space_id).await?)
-                .repository_id()
+                .repository_id
+                .as_ref()
                 .cloned(),
         })
     }
@@ -477,12 +478,12 @@ impl Manager {
             format_args!("approval request {number}"),
         )?;
         ensure!(
-            request.decider.as_ref() == Some(space.id()),
+            request.decider.as_ref() == Some(&space.id),
             "approval request {number} is not {}'s to decide",
-            space.name()
+            space.name
         );
         let _gate = self.gates.lock_announcements().await;
-        let routed = self.route_approval(&request, Some(space.id())).await?;
+        let routed = self.route_approval(&request, Some(&space.id)).await?;
         self.announce_approval(&routed).await;
         // A decider that could not be told gave the request to the user. Its
         // key, unlike its number, never names another request.

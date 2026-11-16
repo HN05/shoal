@@ -7,21 +7,19 @@ use shoal_ids::space_ids::SpaceId;
 
 use crate::{
     daemon::workspace::Manager,
-    model::{Chat, PresentSpace, SpaceKind, Workspace},
+    model::{Chat, Space, SpaceKind, Workspace},
     refusal::{Reason, Refusal},
 };
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// The workspace or chat, running or stopped, `selector` names.
-    pub(crate) async fn space(&self, selector: &SpaceSelector) -> Result<PresentSpace> {
+    pub(crate) async fn space(&self, selector: &SpaceSelector) -> Result<Space> {
         let owned = selector.clone();
         let found = self.store.run(move |db| selected(db, &owned)).await?;
         let space = match found {
-            Some((SpaceKind::Workspace, id)) => {
-                Some(PresentSpace::Workspace(self.workspace_by_id(&id).await?))
-            }
-            Some((SpaceKind::Chat, id)) => self.chat_by_id(&id).await?.map(PresentSpace::Chat),
+            Some((SpaceKind::Workspace, id)) => Some(Space::from(self.workspace_by_id(&id).await?)),
+            Some((SpaceKind::Chat, id)) => self.chat_by_id(&id).await?.map(Space::from),
             None => None,
         };
         space.ok_or_else(|| Refusal::new(Reason::NotFound, format!("no space {selector}")).into())
@@ -29,27 +27,25 @@ impl Manager {
 
     /// Every space: the workspaces in listing order, then the chats in
     /// start order.
-    pub(crate) async fn present_spaces(&self) -> Result<Vec<PresentSpace>> {
+    pub(crate) async fn present_spaces(&self) -> Result<Vec<Space>> {
         let workspaces = self.list_workspaces().await?;
         let chats = self.chats().await?;
-        Ok((workspaces.into_iter().map(PresentSpace::Workspace))
-            .chain(chats.into_iter().map(PresentSpace::Chat))
+        Ok((workspaces.into_iter().map(Space::from))
+            .chain(chats.into_iter().map(Space::from))
             .collect())
     }
 
     /// The workspace or chat, running or stopped, with the ID `id`, while
     /// it exists.
-    pub(crate) async fn find_space(&self, id: &SpaceId) -> Result<Option<PresentSpace>> {
+    pub(crate) async fn find_space(&self, id: &SpaceId) -> Result<Option<Space>> {
         let owned = id.to_owned();
         let kind = self
             .store
             .run(move |db| super::space_kind(db, &owned))
             .await?;
         Ok(match kind {
-            Some(SpaceKind::Workspace) => {
-                self.find_workspace(id).await?.map(PresentSpace::Workspace)
-            }
-            Some(SpaceKind::Chat) => self.chat_by_id(id).await?.map(PresentSpace::Chat),
+            Some(SpaceKind::Workspace) => self.find_workspace(id).await?.map(Space::from),
+            Some(SpaceKind::Chat) => self.chat_by_id(id).await?.map(Space::from),
             None => None,
         })
     }
@@ -60,18 +56,18 @@ impl Manager {
         selector: Option<&SpaceSelector>,
     ) -> Result<Option<SpaceId>> {
         Ok(match selector {
-            Some(selector) => Some(self.space(selector).await?.id().clone()),
+            Some(selector) => Some(self.space(selector).await?.id.clone()),
             None => None,
         })
     }
 
     /// The workspace or chat, running or stopped, with the ID `id`.
-    pub(crate) async fn space_by_id(&self, id: &SpaceId) -> Result<PresentSpace> {
+    pub(crate) async fn space_by_id(&self, id: &SpaceId) -> Result<Space> {
         if let Some(workspace) = self.find_workspace(id).await? {
-            return Ok(PresentSpace::Workspace(workspace));
+            return Ok(Space::from(workspace));
         }
         let chat = self.chat_by_id(id).await?;
-        chat.map(PresentSpace::Chat)
+        chat.map(Space::from)
             .ok_or_else(|| Refusal::new(Reason::NotFound, format!("no space {id}")).into())
     }
 
@@ -87,24 +83,20 @@ impl Manager {
 
     /// The workspace `selector` names, refusing a chat.
     pub async fn workspace(&self, selector: &SpaceSelector) -> Result<Workspace> {
-        match self.space(selector).await? {
-            PresentSpace::Workspace(workspace) => Ok(workspace),
-            chat => Err(other_kind(&chat, SpaceKind::Workspace)),
-        }
+        (self.space(selector).await?.into_workspace())
+            .map_err(|chat| other_kind(&chat, SpaceKind::Workspace))
     }
 
     /// The chat, running or stopped, `selector` names, refusing a
     /// workspace.
     pub(crate) async fn chat(&self, selector: &SpaceSelector) -> Result<Chat> {
-        match self.space(selector).await? {
-            PresentSpace::Chat(chat) => Ok(chat),
-            workspace => Err(other_kind(&workspace, SpaceKind::Chat)),
-        }
+        (self.space(selector).await?.into_chat())
+            .map_err(|workspace| other_kind(&workspace, SpaceKind::Chat))
     }
 }
 
 /// The refusal of `space` to a request that needs a space of kind `needed`.
-fn other_kind(space: &PresentSpace, needed: SpaceKind) -> anyhow::Error {
+fn other_kind(space: &Space, needed: SpaceKind) -> anyhow::Error {
     let message = format!(
         "space {space} is a {}; this command needs a {}",
         space.kind(),

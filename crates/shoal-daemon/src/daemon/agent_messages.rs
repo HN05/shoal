@@ -16,7 +16,7 @@ use crate::{
         workspace::Manager,
         workspace_files::{self, Attacher, NewFile, layout::Copy},
     },
-    model::PresentSpace,
+    model::Space,
 };
 pub(crate) use shoal_protocol::agent_messages::AgentMessage;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
@@ -111,7 +111,7 @@ impl Manager {
     /// the message. An identical unread message is not repeated.
     async fn send_to(
         &self,
-        space: PresentSpace,
+        space: Space,
         message: String,
         attachments: Vec<NewFile>,
         attacher: &Attacher,
@@ -119,7 +119,7 @@ impl Manager {
         if !message.is_empty() || attachments.is_empty() {
             crate::validate::agent_message(&message)?;
         }
-        let id = space.id().clone();
+        let id = space.id.clone();
         if attachments.is_empty() {
             return self.queue_agent_message(&id, message).await;
         }
@@ -195,7 +195,7 @@ impl Manager {
     /// They stay unread until delivered.
     pub async fn agent_messages(&self, selector: &SpaceSelector) -> Result<Vec<AgentMessage>> {
         let space = self.space(selector).await?;
-        Ok(self.unread_messages(space.id()).await?.messages)
+        Ok(self.unread_messages(&space.id).await?.messages)
     }
 
     /// The unread messages of the space `id`, oldest first, and whether one
@@ -230,7 +230,7 @@ impl Manager {
         selector: &SpaceSelector,
         ids: Vec<i64>,
     ) -> Result<()> {
-        let space = self.space(selector).await?.id().clone();
+        let space = self.space(selector).await?.id.clone();
         self.store
             .write(move |tx| {
                 for id in ids {

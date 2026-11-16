@@ -11,7 +11,7 @@ use crate::{
     cli::{commands::turns::Continuation, context::Context, ui},
     config::permissions::PermissionChange,
     execution::recovery::Saved,
-    model::PresentSpace,
+    model::Space,
 };
 use anyhow::{Context as _, Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
@@ -228,7 +228,7 @@ async fn select_reopened(
     reopened: &mut [Reopened],
 ) -> Result<()> {
     for opened in reopened.iter_mut().filter(|opened| opened.agents_saved) {
-        let space = SpaceSelector::id(opened.space.id());
+        let space = SpaceSelector::id(&opened.space.id);
         if crate::client::saved::read(&ctx.paths, space.clone())
             .await?
             .is_empty()
@@ -368,18 +368,18 @@ async fn restore_each(
 /// among the `failed`, since its reopening stands.
 async fn daemon_startable(
     ctx: &Context,
-    stopped: Vec<(PresentSpace, Saved)>,
+    stopped: Vec<(Space, Saved)>,
     reopened: &mut [Reopened],
     failed: &mut Vec<Failure>,
-) -> Result<Vec<(PresentSpace, Saved)>> {
+) -> Result<Vec<(Space, Saved)>> {
     let mut startable = Vec::new();
     for (space, saved) in stopped {
         let starts = queue::ensure_daemon_starts_in(ctx, &space, &saved).await;
-        let opened = (reopened.iter_mut()).find(|opened| opened.space.id() == space.id());
+        let opened = (reopened.iter_mut()).find(|opened| opened.space.id == space.id);
         match (starts, opened) {
             (Err(error), Some(opened)) => {
                 opened.agents_saved = true;
-                failed.push(ui::failure(ctx, "restore", space.name(), &error));
+                failed.push(ui::failure(ctx, "restore", &space.name, &error));
             }
             (starts, _) => {
                 starts?;
@@ -401,7 +401,7 @@ async fn set_up(ctx: &Context, selected: &Selected, mut restored: Queued, now: b
 }
 
 /// The space `selector` names, a workspace or a chat.
-async fn present_space(ctx: &Context, selector: &SpaceSelector) -> Result<PresentSpace> {
+async fn present_space(ctx: &Context, selector: &SpaceSelector) -> Result<Space> {
     let space = crate::client::workspaces::present_space(&ctx.paths, selector).await?;
     space.with_context(|| format!("no space {selector}"))
 }

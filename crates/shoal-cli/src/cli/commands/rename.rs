@@ -53,9 +53,9 @@ async fn rename_space(ctx: &Context, space: SpaceSelector, name: SpaceName) -> R
     ctx.show(&renamed.space, |space| {
         outln!(
             "Renamed space {} {} to {}",
-            space.number(),
+            space.number,
             renamed.previous_name,
-            space.name()
+            &space.name
         )
     })?;
     Ok(0)
@@ -70,7 +70,7 @@ async fn relabel(ctx: &Context, renamed: &RenamedSpace) -> Result<()> {
         previous_name,
     } = renamed;
     let places =
-        crate::client::workspaces::places(&ctx.paths, SpaceSelector::id(space.id())).await?;
+        crate::client::workspaces::places(&ctx.paths, SpaceSelector::id(&space.id)).await?;
     let shown = shown_places(places);
     let settings = shoal_workers::settings::of(&ctx.paths, ConfigTarget::space(space)).await?;
     let labels = terminal::Renamed::new(ctx, space, previous_name);
@@ -112,13 +112,13 @@ pub(super) async fn request(ctx: &Context, space: Option<SpaceSelector>) -> Resu
     let selector = chosen_space(ctx, space).await?;
     let space = (crate::client::workspaces::present_space(&ctx.paths, &selector).await?)
         .with_context(|| format!("no space {selector}"))?;
-    let selector = SpaceSelector::id(space.id());
+    let selector = SpaceSelector::id(&space.id);
     let agents = crate::client::agents::running(&ctx.paths, selector.clone()).await?;
     ensure!(
         !agents.is_empty(),
         "{} has no running agent to ask; set its name with shoal rename {} <NAME>",
         space.label(),
-        space.number()
+        space.number
     );
     crate::client::agent_messages::send(
         &ctx.paths,

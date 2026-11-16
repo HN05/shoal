@@ -18,7 +18,7 @@ use rusqlite::Connection;
 use super::Manager;
 use crate::{
     daemon::workspace_files::HomeKey,
-    model::{PresentSpace, RemovedSpace, Repository},
+    model::{RemovedSpace, Repository, Space},
     shoal_dirs::{Contents, ShoalDir, remove_dir},
     transfer::{CarriedSessionFile, SessionFile, SessionSource},
 };
@@ -82,7 +82,7 @@ impl Manager {
     pub async fn drop_restored_sessions(&self, space: &SpaceSelector) -> Result<()> {
         let space = self.space(space).await?;
         let home = self.present_home(&space).await?;
-        self.discard_sessions_in(&home, space.id()).await
+        self.discard_sessions_in(&home, &space.id).await
     }
 
     /// The session files kept for `removed`, which the space restoring it
@@ -103,14 +103,14 @@ impl Manager {
     /// The session files kept for `space` that its restore's caller did not
     /// put in place, for its removal record. An unreadable list is not worth
     /// keeping the space for.
-    pub(crate) async fn unplaced_sessions(&self, space: &PresentSpace) -> Vec<SessionFile> {
+    pub(crate) async fn unplaced_sessions(&self, space: &Space) -> Vec<SessionFile> {
         let Ok(home) = self.present_home(space).await else {
             return Vec::new();
         };
         let Some(layout) = self.sessions_layout(&home) else {
             return Vec::new();
         };
-        let id = space.id().clone();
+        let id = space.id.clone();
         match tokio::task::spawn_blocking(move || layout.listed(&id)).await {
             Ok(Ok(listed)) => listed,
             _ => Vec::new(),
@@ -160,15 +160,8 @@ impl Manager {
     }
 
     /// The home that keeps the session files of `space`.
-    async fn present_home(&self, space: &PresentSpace) -> Result<HomeKey> {
-        match space {
-            PresentSpace::Workspace(workspace) => {
-                self.home_of(workspace.repository_id.as_ref(), None).await
-            }
-            PresentSpace::Chat(chat) => {
-                (self.home_of(chat.repository_id.as_ref(), chat.workdir.root_dir())).await
-            }
-        }
+    async fn present_home(&self, space: &Space) -> Result<HomeKey> {
+        (self.home_of(space.repository_id.as_ref(), space.workdir.root_dir())).await
     }
 
     /// The kept session files of `home`; registrations from before the

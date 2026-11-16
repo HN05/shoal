@@ -9,7 +9,7 @@ use anyhow::{Result, ensure};
 use crate::{
     daemon::{events::StoppedProcess, leftovers::COMMAND_LIMIT, store, workspace::Manager},
     fsutil::off_runtime,
-    model::{PresentSpace, Workspace},
+    model::Workspace,
     process::{
         described,
         identity::{
@@ -68,17 +68,17 @@ impl Manager {
         requester: Option<Identity>,
     ) -> Result<Stopped> {
         let space = self.space(selector).await?;
-        let stopped = match &space {
-            PresentSpace::Workspace(workspace) => {
-                (self.stop_workspace_untracked(workspace, selection, requester)).await?
+        let stopped = match space.to_workspace() {
+            Some(workspace) => {
+                (self.stop_workspace_untracked(&workspace, selection, requester)).await?
             }
-            PresentSpace::Chat(_) => {
+            None => {
                 let ties = self.space_ties(&space, WorktreeTies::None).await?;
                 self.stop_untracked(ties, selection, requester).await?
             }
         };
         Ok(Stopped {
-            space: space.name().clone(),
+            space: space.name.clone(),
             processes: stopped.len(),
         })
     }
@@ -99,7 +99,7 @@ impl Manager {
         let stopped = async {
             let verified = off_runtime::is_dir(&workspace.path).await?
                 && self.verify_worktree(workspace).await.is_ok();
-            let space = PresentSpace::Workspace(workspace.clone());
+            let space = crate::model::Space::from(workspace.clone());
             let space = self
                 .space_ties(&space, WorktreeTies::when(verified))
                 .await?;
@@ -116,7 +116,7 @@ impl Manager {
     /// one, as `ties` says, which the caller verified is the space's.
     pub(crate) async fn space_ties(
         &self,
-        space: &PresentSpace,
+        space: &crate::model::Space,
         ties: WorktreeTies,
     ) -> Result<Space> {
         let worktree = space.worktree().map(|workspace| workspace.path.clone());
@@ -125,9 +125,9 @@ impl Manager {
             .into_iter()
             .collect();
         let layout = self.space_tmp_layout(space).await?;
-        directories.extend(layout.and_then(|layout| layout.existing(space.id())));
+        directories.extend(layout.and_then(|layout| layout.existing(&space.id)));
         Ok(Space {
-            id: space.id().to_owned(),
+            id: space.id.to_owned(),
             directories,
             programs: worktree.filter(|_| ties != WorktreeTies::None),
         })

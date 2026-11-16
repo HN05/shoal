@@ -186,7 +186,7 @@ impl Manager {
         let host = self.workspace(workspace).await?;
         let parent = self.space(parent).await?;
         ensure!(
-            *parent.id() != host.id,
+            parent.id != host.id,
             "a chat in the worktree of {} cannot go below it; name another --parent",
             host.name
         );

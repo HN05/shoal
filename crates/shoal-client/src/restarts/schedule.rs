@@ -12,7 +12,7 @@ use crate::{agents, connection::Daemon, output::agents::Skipped, saved};
 use shoal_protocol::{
     config::permissions::PermissionChange,
     executions::STAGGER,
-    model::{PresentSpace, RunningAgent},
+    model::{RunningAgent, Space},
     protocol::{ErrorCode, RemoteError},
     sessions::Origin,
     space_names::{SpaceName, SpaceSelector},
@@ -102,16 +102,12 @@ impl Restart {
 /// `error`, of the failed restart of `space`'s agent, naming how to restore
 /// the agent when the space saved stopped work for that. The daemon's error
 /// stays its cause, which callers can inspect.
-async fn with_restore(
-    daemon: &impl Daemon,
-    space: &PresentSpace,
-    error: anyhow::Error,
-) -> anyhow::Error {
-    let saved = saved::read(daemon, SpaceSelector::id(space.id())).await;
+async fn with_restore(daemon: &impl Daemon, space: &Space, error: anyhow::Error) -> anyhow::Error {
+    let saved = saved::read(daemon, SpaceSelector::id(&space.id)).await;
     match saved.is_ok_and(|saved| saved.is_restorable()) {
         true => error.context(format!(
             "the agent stays stopped; restore it with shoal restore {}",
-            space.number()
+            space.number
         )),
         false => error,
     }
@@ -194,7 +190,7 @@ fn tell_waiting(progress: &mut impl Progress, restarts: &[Restart]) -> bool {
     let names: Vec<_> = restarts
         .iter()
         .filter(|restart| !restart.ready())
-        .map(|restart| restart.space.name())
+        .map(|restart| &restart.space.name)
         .collect();
     if !names.is_empty() {
         progress.waiting(&names);
@@ -245,7 +241,7 @@ fn refresh(restarts: &mut Vec<Restart>, running: &[RunningAgent], run: &str) -> 
             continue;
         };
         let restarted = restart.joins.is_none() && current.restarted_by.iter().any(|by| by == run);
-        let reason = stopped_reason(&restart.space.number().to_string(), current)
+        let reason = stopped_reason(&restart.space.number.to_string(), current)
             .or_else(|| skip_reason(&restart.space, current));
         match reason {
             Some(reason) => ended.push(restart.skipped(reason)),

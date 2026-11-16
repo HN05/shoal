@@ -14,8 +14,8 @@ use crate::{
     demos::Launch,
     hooks::HookKind,
     model::{
-        CopiedFrom, CopyIgnored, Execution, ExecutionPlan, MergePlan, PortReservation,
-        PresentSpace, Repository, UnmergePlan, Workspace,
+        CopiedFrom, CopyIgnored, Execution, ExecutionPlan, MergePlan, PortReservation, Repository,
+        Space, UnmergePlan, Workspace,
     },
     process::{
         execution::Processes,
@@ -28,6 +28,7 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, Transaction, params};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::model::ByKind;
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::SpaceSelector;
 use std::{
@@ -51,7 +52,7 @@ pub use stopping::{Save, StopRequest, UnprovenStop};
 /// A restored connection for a wrapper whose command kept running.
 #[derive(Debug)]
 pub(crate) struct ReattachedExecution {
-    pub space: PresentSpace,
+    pub space: Space,
     pub stop: watch::Receiver<bool>,
 }
 
@@ -60,7 +61,7 @@ pub(crate) struct ReattachedExecution {
 pub struct StartedExecution {
     pub plan: ExecutionPlan,
     /// The space it runs in, as the registration read it.
-    pub space: PresentSpace,
+    pub space: Space,
     pub stop: watch::Receiver<bool>,
     pub _git_guard: Option<OwnedMutexGuard<()>>,
 }
@@ -127,7 +128,7 @@ impl ProcessDirectories {
 
 struct RegisteredExecution {
     id: ExecutionId,
-    space: PresentSpace,
+    space: Space,
     plan_space: crate::model::ExecutionSpace,
     scope_token: ScopeToken,
     ports: Vec<PortReservation>,
@@ -476,10 +477,10 @@ impl Manager {
         pre_setup: Option<&Path>,
     ) -> Result<()> {
         // Only a workspace's setup has a pre-setup hook.
-        let (Some(command), PresentSpace::Workspace(workspace)) = (pre_setup, &registered.space)
-        else {
+        let (Some(command), Some(workspace)) = (pre_setup, registered.space.to_workspace()) else {
             return Ok(());
         };
+        let workspace = &workspace;
         if let Err(error) = async {
             crate::hooks::run_detached(
                 crate::hooks::Hook::PreSetup,
@@ -520,8 +521,8 @@ impl Manager {
                 "execution wrapper is no longer alive"
             );
         }
-        let preparation = match self.space(selector).await? {
-            PresentSpace::Workspace(workspace) => {
+        let preparation = match self.space(selector).await?.by_kind() {
+            ByKind::Workspace(workspace) => {
                 // Its temporary directory goes in the repository's directory.
                 self.reserve_repository_directory(workspace.repository())
                     .await?;
@@ -532,7 +533,7 @@ impl Manager {
             }
             // A chat runs only its agent, which its registration checks, with
             // nothing to prepare.
-            PresentSpace::Chat(chat) => (chat.id, PreparedExecution::default()),
+            ByKind::Chat(chat) => (chat.id, PreparedExecution::default()),
         };
         Ok(preparation)
     }
@@ -785,7 +786,7 @@ impl Manager {
             .connect(
                 &request.execution,
                 ExecutionKind::Command,
-                space.id(),
+                &space.id,
                 request.scope_token.clone(),
                 agent_execution,
                 request.awaiting_restore.is_some(),
@@ -810,8 +811,8 @@ impl Manager {
             self.track_agent(
                 &request.execution,
                 &agent,
-                space.id(),
-                space.name(),
+                &space.id,
+                &space.name,
                 request.recover,
                 Duration::from_millis(request.running_ms),
             )
@@ -821,7 +822,7 @@ impl Manager {
                     .await;
             }
         }
-        self.touch(space.id()).await;
+        self.touch(&space.id).await;
         Ok(ReattachedExecution { space, stop })
     }
 
@@ -868,11 +869,11 @@ impl Manager {
 
     /// A reattaching wrapper still runs its command, so a stop the previous
     /// daemon saved but never delivered no longer describes the agent.
-    fn discard_undelivered_stop(&self, space: &PresentSpace, execution: &ExecutionId) {
-        match crate::execution::recovery::discard_undelivered(&self.paths, space.id(), execution) {
+    fn discard_undelivered_stop(&self, space: &Space, execution: &ExecutionId) {
+        match crate::execution::recovery::discard_undelivered(&self.paths, &space.id, execution) {
             Ok(true) => log!(
                 "discarded an undelivered stop for execution {execution} in {}",
-                space.name()
+                &space.name
             ),
             Ok(false) => {}
             Err(error) => {

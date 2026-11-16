@@ -18,7 +18,7 @@ use std::{collections::HashMap, path::Path};
 
 /// Why cleanup leaves `workspace` alone whatever else it finds: its worktree
 /// is not ready, as while it is set up or removed.
-pub(crate) fn not_ready(workspace: &Workspace) -> Option<CleanupReason> {
+pub(crate) fn not_ready(workspace: &crate::model::Worktree) -> Option<CleanupReason> {
     (workspace.state != WorkspaceState::Ready).then_some(CleanupReason::NotReady {
         state: workspace.state,
     })

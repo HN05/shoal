@@ -1,6 +1,7 @@
 //! Resuming one space's stopped agent or last session, a workspace's or a
 //! chat's, in this terminal or where it stopped or in the background.
 use anyhow::{Context as _, Result, ensure};
+use shoal_protocol::model::ByKind;
 use std::path::PathBuf;
 
 use super::{commands, permission_change, picker, queue, reports, sessions, stale};
@@ -12,7 +13,7 @@ use crate::{
     execution::recovery::{
         Copied, LastSession, Recovery, Saved, SavedCommand, claim_last_session, claim_record,
     },
-    model::{PresentSpace, Workspace},
+    model::{Space, Workspace},
     protocol::ConfigTarget,
 };
 use shoal_ids::execution_ids::ExecutionId;
@@ -31,7 +32,7 @@ pub(super) async fn run(
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
     let space = super::present_space(ctx, &space).await?;
-    let mut saved = crate::client::saved::read(&ctx.paths, SpaceSelector::id(space.id())).await?;
+    let mut saved = crate::client::saved::read(&ctx.paths, SpaceSelector::id(&space.id)).await?;
     if let Some(execution) = &execution {
         saved.retain_execution(execution, true);
     }
@@ -86,13 +87,13 @@ pub(super) async fn run(
 /// proves it; a chat's agent registers only while none of it runs.
 async fn active_executions(
     ctx: &Context,
-    space: &PresentSpace,
+    space: &Space,
     selected: Option<&ExecutionId>,
 ) -> Result<Vec<ExecutionId>> {
-    let PresentSpace::Workspace(workspace) = space else {
+    if space.worktree().is_none() {
         return Ok(Vec::new());
-    };
-    let selector = SpaceSelector::id(&workspace.id);
+    }
+    let selector = SpaceSelector::id(&space.id);
     let inspection = crate::client::workspaces::inspect(&ctx.paths, selector.clone()).await?;
     stale::reconcile(ctx, &inspection, selected).await?;
     let inspection = crate::client::workspaces::inspect(&ctx.paths, selector).await?;
@@ -105,7 +106,7 @@ async fn active_executions(
 /// the background, making `change` when given.
 pub(super) async fn continue_last_session(
     ctx: &Context,
-    space: &PresentSpace,
+    space: &Space,
     saved: Saved,
     here: bool,
     change: Option<&PermissionChange>,
@@ -131,7 +132,7 @@ pub(super) async fn continue_last_session(
 /// consumes their records once it runs.
 async fn restore(
     ctx: &Context,
-    space: &PresentSpace,
+    space: &Space,
     session: LastSession,
     path: PathBuf,
     commands: Vec<SavedCommand>,
@@ -139,21 +140,20 @@ async fn restore(
     let handoff = commands::handoff(&commands);
     let mut records = vec![path];
     let changed = session.converted || session.copied.is_some() || session.moved;
-    match (space, changed) {
-        (PresentSpace::Workspace(workspace), true) => {
-            records.extend(commands.into_iter().map(|command| command.path));
-            return start_changed(ctx, workspace, session, handoff.as_deref(), records).await;
-        }
-        // A chat changes by a workspace becoming it, or by its restore while
-        // another space holds its session.
-        (PresentSpace::Chat(chat), true) => {
-            records.extend(commands.into_iter().map(|command| command.path));
-            let start = crate::cli::commands::chat::start_changed(ctx, chat, &session, records);
-            return start.await;
-        }
-        (_, false) => {}
+    if changed {
+        records.extend(commands.into_iter().map(|command| command.path));
+        return match space.clone().by_kind() {
+            ByKind::Workspace(workspace) => {
+                start_changed(ctx, &workspace, session, handoff.as_deref(), records).await
+            }
+            // A chat changes by a workspace becoming it, or by its restore
+            // while another space holds its session.
+            ByKind::Chat(chat) => {
+                crate::cli::commands::chat::start_changed(ctx, &chat, &session, records).await
+            }
+        };
     }
-    let selector = SpaceSelector::id(space.id());
+    let selector = SpaceSelector::id(&space.id);
     let home = shoal_workers::homes::records(&ctx.paths, &selector).await?;
     let restored = Restored {
         agent: &session.agent,
@@ -312,7 +312,7 @@ async fn start_told(
 /// runs.
 async fn launch(
     ctx: &Context,
-    space: &PresentSpace,
+    space: &Space,
     recovery: Recovery,
     records: Vec<PathBuf>,
 ) -> Result<i32> {
@@ -329,25 +329,25 @@ async fn launch(
         );
     }
     let agent = recovery.tracked();
-    let owner = match space {
+    let owner = match space.to_workspace() {
         // A host that runs agents in places of its own runs a workspace's
         // there; a chat runs where its resume runs, as its start does.
-        PresentSpace::Workspace(workspace) => {
+        Some(workspace) => {
             let target = ConfigTarget::Space(SpaceSelector::id(&workspace.id));
             let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
             let command = &recovery.command;
-            let ran = terminal::run_agent(ctx, &settings, workspace, &agent, &records, command);
+            let ran = terminal::run_agent(ctx, &settings, &workspace, &agent, &records, command);
             if let Some(code) = ran.await? {
                 return Ok(code);
             }
-            crate::terminal::Owner::Workspace(&workspace.id)
+            crate::terminal::Owner::Workspace(&space.id)
         }
-        PresentSpace::Chat(chat) => crate::terminal::Owner::Chat(&chat.id),
+        None => crate::terminal::Owner::Chat(&space.id),
     };
     terminal::label_current(&ctx.paths, owner).await?;
     shoal_workers::execution::run_recovery(
         &ctx.paths,
-        SpaceSelector::id(space.id()),
+        SpaceSelector::id(&space.id),
         recovery.command,
         agent,
         records,

@@ -7,7 +7,7 @@ use shoal_ids::space_ids::SpaceId;
 use super::Caller;
 use crate::{
     daemon::{store, workspace::Manager},
-    model::PresentSpace,
+    model::Space,
 };
 
 impl Manager {
@@ -62,10 +62,10 @@ impl Manager {
     pub(in crate::daemon) async fn ensure_reaches(
         &self,
         caller: &Caller,
-        space: &PresentSpace,
+        space: &Space,
     ) -> Result<()> {
         ensure!(
-            self.reaches(caller, space.id()).await?,
+            self.reaches(caller, &space.id).await?,
             "{}",
             outside_scope(space)
         );
@@ -86,6 +86,6 @@ impl Manager {
 }
 
 /// Why a scoped caller is refused `space`, which its scope does not reach.
-pub(in crate::daemon) fn outside_scope(space: &PresentSpace) -> String {
+pub(in crate::daemon) fn outside_scope(space: &Space) -> String {
     format!("space {} is outside this space's scope", space.label())
 }

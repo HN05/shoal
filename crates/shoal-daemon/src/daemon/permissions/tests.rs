@@ -240,14 +240,14 @@ async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
         set: recorded,
         dropped: Vec::new(),
     };
-    let talk = crate::model::PresentSpace::Chat(talk);
+    let talk = crate::model::Space::from(talk);
     let restarted = manager.ensure_change_held(giver, &talk, &change, Some(&repo.id));
     assert!(restarted.await.is_err());
     // The user gives any.
     let registered = manager.ensure_agent_held(None, &child, &WORKER, &wider);
     registered.await.unwrap();
     manager
-        .ensure_agent_held(None, &SpaceSelector::id(talk.id()), &CHAT, &wider)
+        .ensure_agent_held(None, &SpaceSelector::id(&talk.id), &CHAT, &wider)
         .await
         .unwrap();
     let restarted = manager.ensure_change_held(None, &talk, &change, Some(&repo.id));
@@ -266,7 +266,7 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
     give(&manager, &parent.id, &["push=direct"]).await;
     give(&manager, &child.id, &["push=propose"]).await;
     let child = manager.workspace_by_id(&child.id).await.unwrap();
-    let space = crate::model::PresentSpace::Workspace(child);
+    let space: crate::model::Space = child.into();
     let dropped = |assignment: &str| {
         crate::config::permissions::PermissionChange::assigned(assignment).unwrap()
     };
@@ -294,7 +294,7 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
     give(&manager, &talk.id, &["push=propose"]).await;
     let talk = manager.chat_by_id(&talk.id).await.unwrap().unwrap();
     let none = crate::config::permissions::PermissionsConfig::default();
-    let (giver, child) = (Some(&top.id), SpaceSelector::id(space.id()));
+    let (giver, child) = (Some(&top.id), SpaceSelector::id(&space.id));
     let registered = manager.ensure_agent_held(giver, &child, &WORKER, &none);
     assert!(registered.await.is_err());
     assert!(

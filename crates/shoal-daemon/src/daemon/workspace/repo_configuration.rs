@@ -9,11 +9,12 @@ use crate::{
     },
     fsutil::off_runtime,
     hooks::{HookDirectory, HookKind},
-    model::{LocalConfigEdit, PresentSpace, Workspace},
+    model::{LocalConfigEdit, Workspace},
     protocol::ConfigTarget,
 };
 use anyhow::{Context, Result};
 use shoal_ids::repository_ids::RepositoryId;
+use shoal_protocol::model::ByKind;
 use shoal_protocol::space_names::SpaceSelector;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -192,9 +193,9 @@ impl Manager {
     pub async fn config_layers_for(&self, target: ConfigTarget) -> Result<ConfigLayers> {
         match target {
             ConfigTarget::Global => Ok(ConfigLayers::default()),
-            ConfigTarget::Space(selector) => match self.space(&selector).await? {
-                PresentSpace::Workspace(workspace) => self.workspace_layers(&workspace).await,
-                PresentSpace::Chat(chat) => match chat.repository_id {
+            ConfigTarget::Space(selector) => match self.space(&selector).await?.by_kind() {
+                ByKind::Workspace(workspace) => self.workspace_layers(&workspace).await,
+                ByKind::Chat(chat) => match chat.repository_id {
                     Some(id) => self.checkout_layers(id.into()).await,
                     None => Ok(ConfigLayers::default()),
                 },

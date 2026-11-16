@@ -8,7 +8,7 @@ use super::Prepared;
 use crate::{
     daemon::{events::EventCause, workspace::Manager},
     execution::recovery::{self, Copied, Record, StoppedAgent},
-    model::{Chat, Execution, PresentSpace, Workspace},
+    model::{Chat, Execution, Space, Workspace},
     time::UnixTime,
     transfer::Manifest,
 };
@@ -19,7 +19,7 @@ use shoal_protocol::space_names::SpaceSelector;
 impl Manager {
     /// The workspace or running chat `selector` names, refusing a removed
     /// space, which runs nothing to keep.
-    pub(super) async fn running_space(&self, selector: &SpaceSelector) -> Result<PresentSpace> {
+    pub(super) async fn running_space(&self, selector: &SpaceSelector) -> Result<Space> {
         let error = match self.space(selector).await {
             Ok(space) => return Ok(space),
             Err(error) => error,

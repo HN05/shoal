@@ -103,19 +103,21 @@ fn a_batch_ends_the_chats_that_go_with_a_space_with_it_and_spaces_below_first() 
             below("child", SpaceKind::Chat),
         ],
     );
-    let tree = Spaces {
-        workspaces: vec![worker.clone(), split.clone()],
-        chats: vec![child.clone(), chat("talk", None)],
-    };
+    let tree = Spaces(vec![
+        worker.clone().into(),
+        split.clone().into(),
+        child.clone().into(),
+        chat("talk", None).into(),
+    ]);
     let batch = [
-        PresentSpace::Workspace(worker),
-        PresentSpace::Chat(child),
-        PresentSpace::Workspace(split),
-        PresentSpace::Chat(chat("talk", None)),
+        worker.into(),
+        child.into(),
+        split.into(),
+        chat("talk", None).into(),
     ];
 
     let alone = exported_alone(&batch, &tree);
 
-    let ids: Vec<&str> = alone.iter().map(|space| space.id().as_str()).collect();
+    let ids: Vec<&str> = alone.iter().map(|space| space.id.as_str()).collect();
     assert_eq!(ids, ["split", "talk", "worker"]);
 }

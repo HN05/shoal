@@ -14,7 +14,7 @@ use crate::{
         questions::Question, workspace::Manager,
     },
     model::{
-        Chat, ChatQueueRequest, PresentSpace, QueueEntry, QueueRequest, Repository, RunningAgent,
+        Chat, ChatQueueRequest, QueueEntry, QueueRequest, Repository, RunningAgent, Space,
         SpaceTarget,
     },
     protocol::{ChatStart, operations::WorkspaceStart},
@@ -39,7 +39,7 @@ impl Manager {
             Some(named) => {
                 let space = self.space(named).await?;
                 self.ensure_reaches(caller, &space).await?;
-                space.id().to_owned()
+                space.id.to_owned()
             }
             None => caller.space_id.clone(),
         };
@@ -96,7 +96,7 @@ impl Manager {
         caller: &Caller,
     ) -> Result<Option<RepositoryId>> {
         let space = self.space_by_id(&caller.space_id).await?;
-        Ok(space.repository_id().cloned())
+        Ok(space.repository_id.as_ref().cloned())
     }
 
     /// The spaces `target` finds among those `caller` may see: the ones its
@@ -106,7 +106,7 @@ impl Manager {
         &self,
         target: &SpaceTarget,
         caller: Option<&Caller>,
-    ) -> Result<Vec<PresentSpace>> {
+    ) -> Result<Vec<Space>> {
         let mut within = self.reached_spaces(caller).await?;
         if let (Some(within), Some(caller)) = (&mut within, caller) {
             within.extend(self.chat_home(&caller.space_id).await?);
@@ -122,10 +122,7 @@ impl Manager {
         space: &'a mut SpaceSelector,
         refusal: &str,
     ) -> Result<&'a mut SpaceSelector> {
-        ensure!(
-            self.space(space).await?.id() == &caller.space_id,
-            "{refusal}"
-        );
+        ensure!(self.space(space).await?.id == caller.space_id, "{refusal}");
         Ok(space)
     }
 
@@ -138,10 +135,7 @@ impl Manager {
         space: &'a mut SpaceSelector,
         refusal: &str,
     ) -> Result<&'a mut SpaceSelector> {
-        ensure!(
-            self.space(space).await?.id() != &caller.space_id,
-            "{refusal}"
-        );
+        ensure!(self.space(space).await?.id != caller.space_id, "{refusal}");
         Ok(space)
     }
 
@@ -187,17 +181,13 @@ impl Manager {
     ) -> Result<&'a mut SpaceSelector> {
         let workspace = self.workspace_below(caller, workspace, refusal).await?;
         let space = self.space(workspace).await?;
-        if !self.user_holds_below(space.id()).await? {
+        if !self.user_holds_below(&space.id).await? {
             return Ok(workspace);
         }
         // A name may repeat, so the space's ID binds the approval.
-        let removal = format!(
-            "remove {} ({}), which the user holds",
-            space.name(),
-            space.id()
-        );
+        let removal = format!("remove {} ({}), which the user holds", space.name, space.id);
         let action = Action {
-            repository: space.repository_id().cloned(),
+            repository: space.repository_id.as_ref().cloned(),
             ..Action::new(PermissionKey::UserHolds, removal)
         };
         match takes {
@@ -267,11 +257,11 @@ impl Manager {
     pub(in crate::daemon) async fn spaces_below(
         &self,
         caller: Option<&Caller>,
-        mut spaces: Vec<PresentSpace>,
-    ) -> Result<Vec<PresentSpace>> {
+        mut spaces: Vec<Space>,
+    ) -> Result<Vec<Space>> {
         if let Some(caller) = caller {
             let below = self.below_in_reach(caller).await?;
-            spaces.retain(|space| below(space.id()));
+            spaces.retain(|space| below(&space.id));
         }
         Ok(spaces)
     }
@@ -373,7 +363,7 @@ impl Manager {
             .with_context(|| format!("queue entry {id} is outside this space's scope"))?;
         let own = match start {
             WorkspaceStart::Workspace(workspace) => {
-                entry.opens.as_ref() == Some(self.space(workspace).await?.id())
+                entry.opens.as_ref() == Some(&self.space(workspace).await?.id)
             }
             _ => entry.opens.is_none() && entry.queued_by.as_ref() == Some(&caller.space_id),
         };
@@ -429,7 +419,7 @@ impl Manager {
             .await?;
         let space = self.space(workspace).await?;
         self.ensure_reaches(caller, &space).await?;
-        *workspace = SpaceSelector::id(space.id());
+        *workspace = SpaceSelector::id(&space.id);
         Ok(())
     }
 

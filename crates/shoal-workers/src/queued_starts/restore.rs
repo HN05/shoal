@@ -7,7 +7,7 @@ use anyhow::{Context as _, Result};
 
 use crate::{
     client::connection::CommandPaths,
-    model::{PresentSpace, QueueEntry},
+    model::{QueueEntry, Space},
     places::queued,
     protocol::ConfigTarget,
     sessions::Origin,
@@ -32,11 +32,9 @@ pub(super) async fn start(paths: &CommandPaths, entry: &QueueEntry) -> Result<()
     {
         return Ok(());
     }
-    match &space {
-        PresentSpace::Workspace(workspace) => {
-            queued::restore_in_background(paths, &settings, workspace, &args).await
-        }
-        PresentSpace::Chat(_) => queued::restore_chat(paths, &settings, &space, &args).await,
+    match space.to_workspace() {
+        Some(workspace) => queued::restore_in_background(paths, &settings, &workspace, &args).await,
+        None => queued::restore_chat(paths, &settings, &space, &args).await,
     }
 }
 
@@ -55,14 +53,10 @@ async fn stopped_place(
 
 /// The `shoal` arguments that restore `execution`, the stopped agent of
 /// `space`, for the admitted `entry`, whose slot it takes over.
-fn restore_args(
-    space: &PresentSpace,
-    execution: &ExecutionId,
-    entry: &QueueEntry,
-) -> [OsString; 7] {
+fn restore_args(space: &Space, execution: &ExecutionId, entry: &QueueEntry) -> [OsString; 7] {
     [
         "restore",
-        space.id().as_str(),
+        space.id.as_str(),
         "--execution",
         execution.as_str(),
         "--focus",

@@ -1353,7 +1353,7 @@ async fn a_removal_moves_results_up_in_the_transaction_that_deletes_it() {
     // The daemon stops right after the middle workspace's removal commits.
     manager
         .delete_space_record(
-            &crate::model::PresentSpace::Workspace(middle.clone()),
+            &crate::model::Space::from(middle.clone()),
             EventCause::Manual,
         )
         .await
@@ -1438,13 +1438,13 @@ async fn idle_cleanup_takes_a_disposable_workspace_whatever_it_holds() {
     }
     assert!(matches!(
         manager
-            .cleanup_reason(&crate::model::PresentSpace::Workspace(disposable.clone()))
+            .cleanup_reason(&crate::model::Space::from(disposable.clone()))
             .await,
         CleanupReason::Idle { .. }
     ));
     assert!(!matches!(
         manager
-            .cleanup_reason(&crate::model::PresentSpace::Workspace(kept.clone()))
+            .cleanup_reason(&crate::model::Space::from(kept.clone()))
             .await,
         CleanupReason::Idle { .. }
     ));

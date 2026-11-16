@@ -254,7 +254,7 @@ async fn import_one(
         reopened.queue_agents(ctx).await;
     }
     let message = reopened.message(ctx, "Imported");
-    let name = reopened.space.name().clone();
+    let name = reopened.space.name.clone();
     report.imported(ctx, message, reopened);
     if let Err(error) = post_setup {
         let error = error.context(format!("imported {name}, but its hooks.post_setup failed"));

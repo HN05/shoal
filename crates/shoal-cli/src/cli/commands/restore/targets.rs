@@ -8,7 +8,7 @@ use super::agents::setups::FailedSetup;
 use crate::client::output::restore::{Restorable, StoppedWorkspace};
 use crate::{
     cli::{args::SpaceTargets, context::Context, ui},
-    model::{Chat, PresentSpace, RemovedSpace, Spaces},
+    model::{Chat, RemovedSpace, Space, Spaces},
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -32,9 +32,9 @@ pub(super) fn resolve(
     removed: &[RemovedSpace],
     selector: SpaceSelector,
 ) -> Target {
-    match spaces.find(&selector) {
-        Some(PresentSpace::Chat(chat)) if chat.running => Target::Running(Box::new(chat)),
-        Some(space) => Target::Space(SpaceSelector::id(space.id())),
+    match spaces.find(&selector).map(crate::model::Space::into_chat) {
+        Some(Ok(chat)) if chat.running => Target::Running(Box::new(chat)),
+        Some(Ok(Space { id, .. }) | Err(Space { id, .. })) => Target::Space(SpaceSelector::id(&id)),
         None => match (removed.iter()).find(|space| selector.given_id() == Some(&space.space_id)) {
             Some(space) => Target::Removed(Box::new(space.clone())),
             None => Target::Space(selector),
@@ -144,11 +144,8 @@ impl Selected {
 /// The stopped chats among `spaces`, which a picker offers beside the
 /// workspaces.
 fn stopped_chats(spaces: &Spaces) -> Vec<Chat> {
-    spaces
-        .chats
-        .iter()
+    (spaces.chats().into_iter())
         .filter(|chat| !chat.running)
-        .cloned()
         .collect()
 }
 
@@ -195,10 +192,9 @@ async fn list(
     removed: Vec<RemovedSpace>,
 ) -> Result<()> {
     let summaries = ui::saved_summaries(&ctx.paths).await;
-    let mut stopped: Vec<_> = (spaces.workspaces.iter())
+    let mut stopped: Vec<_> = (spaces.workspaces().into_iter())
         .filter_map(|workspace| {
             let saved = summaries.get(&workspace.id)?.clone();
-            let workspace = workspace.clone();
             Some(StoppedWorkspace { workspace, saved })
         })
         .collect();

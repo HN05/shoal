@@ -316,8 +316,8 @@ impl Inbox {
     async fn named(ctx: &Context, space: &SpaceSelector) -> Result<Self> {
         match crate::client::workspaces::present_space(&ctx.paths, space).await? {
             Some(space) => Ok(Self {
-                kind: space.kind(),
-                space: SpaceSelector::id(space.id()),
+                kind: space.kind().as_str(),
+                space: SpaceSelector::id(&space.id),
             }),
             None => bail!("no workspace or running chat {space}"),
         }

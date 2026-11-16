@@ -16,7 +16,7 @@ impl Manager {
     pub(crate) async fn space_agents(&self, selector: &SpaceSelector) -> Result<Vec<RunningAgent>> {
         let space = self.space(selector).await?;
         Ok((self.running_agents().await?.into_iter())
-            .filter(|agent| agent.space_id == *space.id() && agent.agent.is_some())
+            .filter(|agent| agent.space_id == space.id && agent.agent.is_some())
             .collect())
     }
 
@@ -30,15 +30,15 @@ impl Manager {
     ) -> Result<AgentStatus> {
         let space = self.space(selector).await?;
         let runs_here = (self.executions)
-            .with_agent(&execution, |agent| agent.workspace_id == *space.id())
+            .with_agent(&execution, |agent| agent.workspace_id == space.id)
             .await
             == Some(true);
         ensure!(
             runs_here,
             "no connected agent of {} runs execution {execution}",
-            space.name()
+            space.name
         );
-        (self.end_interrupted_turn(&SpaceSelector::id(space.id()), Some(execution))).await
+        (self.end_interrupted_turn(&SpaceSelector::id(&space.id), Some(execution))).await
     }
 
     /// Whether the agent of `execution` idles after an interrupt ended its

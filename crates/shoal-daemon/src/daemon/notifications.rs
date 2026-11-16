@@ -272,8 +272,8 @@ impl Manager {
         crate::validate::message(&message)?;
         workspace_files::check_sent(&attachments)?;
         let space = self.space(selector).await?;
-        let about = About::space(space.name(), space.id());
-        let id = space.id().clone();
+        let about = About::space(&space.name, &space.id);
+        let id = space.id.clone();
         let (kind, text) = (NotificationKind::AgentMessage, message.clone());
         let notification = (self.send_with_files(
             &space.into(),
@@ -292,7 +292,7 @@ impl Manager {
     /// the user name their sender.
     async fn space_about(&self, selector: &SpaceSelector) -> Result<About> {
         let space = self.space(selector).await?;
-        Ok(About::space(space.name(), space.id()))
+        Ok(About::space(&space.name, &space.id))
     }
 
     /// Tell the user that a turn-state report of the space's agent failed

@@ -16,7 +16,7 @@ use crate::{
         link::{ItemKind, LinkKind, Selection},
         reference::{ItemInput, ItemRef},
     },
-    model::PresentSpace,
+    model::Space,
     repository,
 };
 use shoal_forge::updates::Snapshot;
@@ -55,11 +55,11 @@ impl Manager {
     /// repositories, the one the item's URL names, or else `named`.
     pub(super) async fn watched_repository(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         selection: &Selection,
         named: Option<&RepositoryId>,
     ) -> Result<Option<RepositoryId>> {
-        if space.repository_id().is_some() {
+        if space.repository_id.as_ref().is_some() {
             ensure!(
                 named.is_none(),
                 "only a chat without a repository names the repository of an item it watches"
@@ -78,7 +78,7 @@ impl Manager {
                 format!(
                     "chat {} has no repository of its own; name the item's repository with \
                      --repo or select the item by its URL",
-                    space.name()
+                    &space.name
                 )
             })?;
             return Ok(Some(named.clone()));

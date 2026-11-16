@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use shoal_ids::space_ids::SpaceId;
 
 use super::{notifications::NotificationKind, workspace::Manager};
-use crate::model::PresentSpace;
+use crate::model::Space;
 use crate::time::UnixTime;
 use shoal_protocol::progress;
 use shoal_protocol::{
@@ -297,7 +297,7 @@ impl Manager {
         validate(&change)?;
         let space = self.space(selector).await?;
         let change = self.looked_up(&space, change).await?;
-        let id = space.id().to_owned();
+        let id = space.id.to_owned();
         let now = UnixTime::now();
         let query = id.clone();
         let (was_blocked, changed, progress) = (self.store)
@@ -322,7 +322,7 @@ impl Manager {
     /// Tell the coordinator of `space`, or the user without one, that the
     /// space became blocked, naming what blocks it, unless `progress` leaves
     /// it unblocked: a step blocker while other work remains tells no one.
-    async fn notify_blocked(&self, space: &PresentSpace, progress: &Progress) {
+    async fn notify_blocked(&self, space: &Space, progress: &Progress) {
         if !progress.blocked() {
             return;
         }
@@ -331,12 +331,12 @@ impl Manager {
             .collect();
         let message = format!(
             "Space {} ({}) is blocked by {}",
-            space.number(),
-            space.name(),
+            space.number,
+            space.name,
             blockers.join("; ")
         );
         let kind = NotificationKind::SpaceBlocked;
-        (self.notify_space(space.name(), space.id(), kind, message)).await;
+        (self.notify_space(&space.name, &space.id, kind, message)).await;
     }
 
     /// Whether the space `id` is blocked.
@@ -348,7 +348,7 @@ impl Manager {
 
     /// The progress of the space `selector` names.
     pub async fn space_progress(&self, selector: &SpaceSelector) -> Result<Option<Progress>> {
-        let id = self.space(selector).await?.id().to_owned();
+        let id = self.space(selector).await?.id.to_owned();
         self.store.read(move |db| current(db, &id)).await
     }
 }

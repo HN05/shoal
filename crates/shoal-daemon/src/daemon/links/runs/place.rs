@@ -185,7 +185,7 @@ impl Manager {
         let Some(named) = self.named_run_forge(input).await? else {
             return Ok(());
         };
-        if self.space(selector).await?.repository_id().is_none() {
+        if self.space(selector).await?.repository_id.as_ref().is_none() {
             return Ok(());
         }
         let space = self.link_space(selector).await?;

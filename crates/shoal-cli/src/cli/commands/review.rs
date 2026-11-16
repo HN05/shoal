@@ -8,7 +8,7 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
-    model::{Chat, PresentSpace},
+    model::Chat,
     reviews::{Review, ReviewTarget},
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -75,12 +75,11 @@ enum Space {
 /// runs in, else one the user picks.
 async fn select(ctx: &Context, space: Option<SpaceSelector>) -> Result<Space> {
     let selected = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    Ok(
-        match crate::client::workspaces::present_space(&ctx.paths, &selected).await? {
-            Some(PresentSpace::Chat(chat)) => Space::Chat(Box::new(chat)),
-            _ => Space::Workspace(selected),
-        },
-    )
+    let found = crate::client::workspaces::present_space(&ctx.paths, &selected).await?;
+    Ok(match found.map(crate::model::Space::into_chat) {
+        Some(Ok(chat)) => Space::Chat(Box::new(chat)),
+        _ => Space::Workspace(selected),
+    })
 }
 
 /// The running chat `space` names, else the chat this runs in when `space`
@@ -93,12 +92,8 @@ async fn chat(ctx: &Context, space: Option<&SpaceSelector>) -> Result<Option<Cha
         }
         None => return Ok(None),
     };
-    Ok(
-        match crate::client::workspaces::present_space(&ctx.paths, &named).await? {
-            Some(PresentSpace::Chat(chat)) => Some(chat),
-            _ => None,
-        },
-    )
+    let found = crate::client::workspaces::present_space(&ctx.paths, &named).await?;
+    Ok(found.and_then(|space| space.into_chat().ok()))
 }
 
 /// A chat's reviews: those of its linked PRs, which run in the workspaces

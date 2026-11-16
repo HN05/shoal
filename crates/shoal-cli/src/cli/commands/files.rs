@@ -2,6 +2,7 @@
 //! terminal opens a picker over them; `add` attaches more without a message
 //! and `rm` deletes them. Under a chat's agent they act on its chat.
 use anyhow::{Result, ensure};
+use shoal_protocol::model::ByKind;
 
 use crate::cli::{
     args::WorkspaceScope,
@@ -9,7 +10,6 @@ use crate::cli::{
     output::{Palette, Style},
     ui::{self, Fallback},
 };
-use crate::model::PresentSpace;
 use shoal_protocol::files::{AttachedFile, FileSource};
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -152,13 +152,15 @@ async fn confirmation(ctx: &Context, space: Option<&SpaceSelector>) -> Result<Op
 /// running chat, that `selector` names.
 async fn running_space(ctx: &Context, selector: &SpaceSelector) -> Result<Option<String>> {
     let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
-    Ok(match spaces.find(selector) {
-        Some(PresentSpace::Workspace(workspace)) => {
-            workspace.running.then(|| workspace.name.to_string())
-        }
-        Some(PresentSpace::Chat(chat)) => chat.running.then(|| chat.name.into()),
-        None => None,
-    })
+    Ok(
+        match spaces.find(selector).map(crate::model::Space::by_kind) {
+            Some(ByKind::Workspace(workspace)) => {
+                workspace.running.then(|| workspace.name.to_string())
+            }
+            Some(ByKind::Chat(chat)) => chat.running.then(|| chat.name.into()),
+            None => None,
+        },
+    )
 }
 
 /// The file's name, title, size, how it came, when, read at `now`, when a

@@ -280,11 +280,11 @@ impl Manager {
         let space = self.space(selector).await?;
         // A report a hook still sends, made later, may be recorded already
         // without a mark yet, as across a daemon restart.
-        let sending = hook_reports::sending(&self.paths, space.id())?;
+        let sending = hook_reports::sending(&self.paths, &space.id)?;
         if sending.is_some_and(|sending| sending > made) {
             return Ok(false);
         }
-        self.latest_report(space.id(), made).await
+        self.latest_report(&space.id, made).await
     }
 
     /// The state recorded for the space `selector` names, or `state`, as a
@@ -294,7 +294,7 @@ impl Manager {
         selector: &SpaceSelector,
         state: AgentState,
     ) -> Result<AgentStatus> {
-        let id = self.space(selector).await?.id().to_owned();
+        let id = self.space(selector).await?.id.to_owned();
         let recorded = self.store.run(move |db| get(db, &id)).await?;
         Ok(recorded.unwrap_or_else(|| unrecorded(state, UnixTime::now())))
     }
@@ -307,7 +307,7 @@ impl Manager {
         selector: &SpaceSelector,
     ) -> Result<tokio::sync::OwnedMutexGuard<()>> {
         let space = self.space(selector).await?;
-        Ok(self.report_times.order(space.id()).await)
+        Ok(self.report_times.order(&space.id).await)
     }
 
     /// Record that the agent reporting from `execution` ended a turn and is
@@ -421,7 +421,7 @@ impl Manager {
         let space = self.space(selector).await.ok()?;
         let agent = match execution {
             Some(execution) => self.agent_name(execution).await?,
-            None => self.agent_of(space.id()).await.ok()??,
+            None => self.agent_of(&space.id).await.ok()??,
         };
         let mut tools = self.present_space_settings(&space).await.ok()?.tools;
         tools.remove(agent.name())
@@ -458,13 +458,13 @@ impl Manager {
     ) -> Result<Option<AgentStatus>> {
         let space = self.space(selector).await?;
         if let Some(session) = session {
-            self.record_agent_session(space.id(), execution.as_ref(), session)?;
+            self.record_agent_session(&space.id, execution.as_ref(), session)?;
         }
         let made = made.unwrap_or_else(SystemTime::now);
         // A late turn's prompt cache, too, lives from when the turn ended.
         let at = UnixTime::from_system_time(made);
         let report = Report {
-            space: space.id().to_owned(),
+            space: space.id.to_owned(),
             state,
             execution,
             at,
@@ -474,7 +474,7 @@ impl Manager {
             woken: ending.woken,
         };
         let saved = self.store.write(move |tx| save(tx, &report)).await?;
-        self.report_times.arrived(space.id(), made);
+        self.report_times.arrived(&space.id, made);
         let Some((status, changed)) = saved else {
             return Ok(None);
         };

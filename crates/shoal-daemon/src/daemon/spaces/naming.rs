@@ -18,7 +18,7 @@ impl Manager {
     ) -> Result<RenamedSpace> {
         // A request's name reads as sent, so the rule applies here.
         let name = SpaceName::parse(name)?;
-        let id = self.space(selector).await?.id().clone();
+        let id = self.space(selector).await?.id.clone();
         let owned = id.clone();
         let previous_name = (self.store)
             .write(move |tx| store_name(tx, &owned, &name))

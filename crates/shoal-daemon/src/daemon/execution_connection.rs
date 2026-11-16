@@ -26,7 +26,7 @@ use super::{
 };
 use crate::{
     execution::TrackedAgent,
-    model::PresentSpace,
+    model::Space,
     process::identity::Identity,
     protocol::{self, Body, Control, ErrorCode, ExecutionEvent, Protection, Reattach, Response},
 };
@@ -56,7 +56,7 @@ pub(super) struct ExecutionContext {
 struct Connected {
     id: ExecutionId,
     kind: ExecutionKind,
-    space: PresentSpace,
+    space: Space,
     agent: Option<TrackedAgent>,
     recover: bool,
     /// The wrapper keeps its command running when the daemon shuts down.
@@ -362,7 +362,7 @@ async fn relay(
                 // while claimed: the wrapper consumes it only once this
                 // start is acknowledged.
                 if let Some(claim) = restored_record.take() {
-                    execution_recovery::discard_handoff(manager, space.id(), execution_id);
+                    execution_recovery::discard_handoff(manager, &space.id, execution_id);
                     drop(claim);
                 }
                 let resumed_here = std::mem::take(resuming);
@@ -375,18 +375,18 @@ async fn relay(
                     .await?;
                 if let Some(tracked) = agent {
                     if !restored {
-                        manager.forget_last_sessions(space.id());
+                        manager.forget_last_sessions(&space.id);
                     } else if !resumed_here && *unqueued {
                         // A restore the agent queue starts withdrew it when queued
                         // if `shoal restore` asked for it.
-                        manager.reopen_for_resume(space.id()).await;
+                        manager.reopen_for_resume(&space.id).await;
                     }
                     manager.agent_started(execution_id).await;
                     let started = AgentEvent {
                         source: source.take(),
                         ..agent_event(tracked, execution_id, None)
                     };
-                    (manager.record_agent(space.id(), EventKind::AgentStarted, started)).await;
+                    (manager.record_agent(&space.id, EventKind::AgentStarted, started)).await;
                 }
                 protocol::write(writer, &Control::Started).await?;
             }
@@ -403,7 +403,7 @@ async fn relay(
                     None => manager.gates.owned_operation().await,
                 };
                 // A refusal stops the demo instead of letting it run again.
-                let control = match manager.release_exited_child(execution_id, space.id()).await {
+                let control = match manager.release_exited_child(execution_id, &space.id).await {
                     Ok(()) => Control::ChildReleased,
                     Err(error) => {
                         sent_stop = true;
@@ -430,7 +430,7 @@ async fn relay(
                     origin: *origin,
                     agent: agent.is_some(),
                 });
-                let control = register_again(manager, execution_id, space.id(), place).await;
+                let control = register_again(manager, execution_id, &space.id, place).await;
                 sent_stop |= matches!(control, Control::Stop { .. });
                 protocol::write(writer, &control).await?;
                 *unattachable = Some(operation);
@@ -439,13 +439,13 @@ async fn relay(
                 *handoff_claimed = true;
                 if let Some(tracked) = agent {
                     let stopped = agent_event(tracked, execution_id, None);
-                    (manager.record_agent(space.id(), EventKind::AgentStopped, stopped)).await;
+                    (manager.record_agent(&space.id, EventKind::AgentStopped, stopped)).await;
                 }
                 // A wrapper whose own session ended saves its agent unasked,
                 // which stops the agent as a requested pause does.
                 sent_stop = true;
                 if !recovering {
-                    execution_recovery::stop_survivors(manager, execution_id, space.id()).await;
+                    execution_recovery::stop_survivors(manager, execution_id, &space.id).await;
                     continue;
                 }
                 use execution_recovery::{Action, Resumed};
@@ -462,7 +462,7 @@ async fn relay(
                 match execution_recovery::pause(
                     manager,
                     execution_id,
-                    space.id(),
+                    &space.id,
                     incoming,
                     stop,
                     wrapper,
@@ -706,11 +706,11 @@ async fn finish(
     {
         let exited = started && !stopped && failed_restore.is_none();
         manager
-            .end_agent_session(space.id(), agent, &execution_id, exited)
+            .end_agent_session(&space.id, agent, &execution_id, exited)
             .await;
     }
     if (overload_reason.is_some() || restarting) && !handoff_claimed && complete {
-        execution_recovery::discard_handoff(manager, space.id(), &execution_id);
+        execution_recovery::discard_handoff(manager, &space.id, &execution_id);
         overload_reason = None;
     }
     let requeued = if let Some(agent) = &agent
@@ -729,7 +729,7 @@ async fn finish(
             false => (EventKind::AgentExited, code),
         };
         let ended = agent_event(agent, &execution_id, code);
-        manager.record_agent(space.id(), kind, ended).await;
+        manager.record_agent(&space.id, kind, ended).await;
         manager
             .notify_agent_exit(
                 &space,

@@ -9,7 +9,7 @@ use crate::client::output::restore::{RestoredAgent, StartedRestores};
 use crate::{
     cli::{context::Context, terminal, ui},
     execution::recovery::{Saved, SavedSession},
-    model::PresentSpace,
+    model::Space,
     protocol::ConfigTarget,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -23,7 +23,7 @@ use shoal_protocol::space_names::SpaceSelector;
 /// turns or failures, and the others are listed for their own terminals.
 pub(super) async fn run_all(
     ctx: &Context,
-    stopped: Vec<(PresentSpace, Saved)>,
+    stopped: Vec<(Space, Saved)>,
     mut resumed: StartedRestores,
 ) -> Result<i32> {
     let mut sessions = Vec::new();
@@ -33,7 +33,7 @@ pub(super) async fn run_all(
             match commands::report(ctx, &space, &saved.commands) {
                 Ok(report) => resumed.commands.push(report),
                 Err(error) => {
-                    let failure = ui::failure(ctx, "restore", space.name(), &error);
+                    let failure = ui::failure(ctx, "restore", &space.name, &error);
                     resumed.failed.push(failure);
                 }
             }
@@ -60,7 +60,7 @@ pub(super) async fn run_all(
 /// Reports them with what `output` holds already.
 pub(super) async fn start_sessions(
     ctx: &Context,
-    sessions: Vec<(PresentSpace, SavedSession)>,
+    sessions: Vec<(Space, SavedSession)>,
     single: bool,
     mut output: StartedRestores,
 ) -> Result<i32> {
@@ -73,14 +73,14 @@ pub(super) async fn start_sessions(
             Ok(Started::Here) => {
                 // Boxed, since `run` calls back into this function.
                 let id = Some(id.clone());
-                let selector = SpaceSelector::id(space.id());
+                let selector = SpaceSelector::id(&space.id);
                 return Box::pin(super::space::run(ctx, selector, id, true, None)).await;
             }
             Ok(Started::Elsewhere { reused, place }) => (reused, place),
             Ok(Started::InWrapper) => {
                 in_wrappers += 1;
                 output.agents.push(RestoredAgent {
-                    workspace: space.name().clone(),
+                    workspace: space.name.clone(),
                     execution: id.clone(),
                     background: false,
                     reused: true,
@@ -88,7 +88,7 @@ pub(super) async fn start_sessions(
                 continue;
             }
             Err(error) => {
-                let failure = ui::failure(ctx, "restore", space.name(), &error);
+                let failure = ui::failure(ctx, "restore", &space.name, &error);
                 output.failed.push(failure);
                 continue;
             }
@@ -98,7 +98,7 @@ pub(super) async fn start_sessions(
             listed.push((space, id));
         }
         output.agents.push(RestoredAgent {
-            workspace: space.name().clone(),
+            workspace: space.name.clone(),
             execution: id.clone(),
             background: started.is_some(),
             reused,
@@ -129,7 +129,7 @@ enum Started {
 /// possible, `single` resumes the only one in this terminal.
 async fn start_session(
     ctx: &Context,
-    space: &PresentSpace,
+    space: &Space,
     session: &SavedSession,
     single: bool,
 ) -> Result<Started> {
@@ -137,11 +137,11 @@ async fn start_session(
         queue::queue(ctx, space, &session.id, true).await?;
         return Ok(Started::InWrapper);
     }
-    let target = ConfigTarget::Space(SpaceSelector::id(space.id()));
+    let target = ConfigTarget::Space(SpaceSelector::id(&space.id));
     let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
     let args = [
         "restore",
-        space.id().as_str(),
+        space.id.as_str(),
         "--execution",
         session.id.as_str(),
         "--focus",

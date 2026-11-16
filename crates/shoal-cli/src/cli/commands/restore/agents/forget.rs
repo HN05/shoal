@@ -8,7 +8,7 @@ use crate::client::output::restore::{ForgottenWork, Reopened};
 use crate::{
     cli::{context::Context, ui},
     execution::recovery::Saved,
-    model::PresentSpace,
+    model::Space,
 };
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
@@ -34,7 +34,7 @@ pub(super) async fn forget_work(
 /// fails, and report it with the workspaces `reopened` for the restore.
 pub(super) async fn forget_each(
     ctx: &Context,
-    stopped: &[(PresentSpace, Saved)],
+    stopped: &[(Space, Saved)],
     reopened: Vec<Reopened>,
 ) -> Result<i32> {
     let mut failed = Vec::new();
@@ -44,9 +44,9 @@ pub(super) async fn forget_each(
         match forget_saved(ctx, space, saved).await {
             Ok(executions) => {
                 ids.extend(executions);
-                names.push(space.name().as_str());
+                names.push(space.name.as_str());
             }
-            Err(error) => failed.push(ui::failure(ctx, "forget", space.name(), &error)),
+            Err(error) => failed.push(ui::failure(ctx, "forget", &space.name, &error)),
         }
     }
     let forgotten = ForgottenWork {
@@ -60,14 +60,10 @@ pub(super) async fn forget_each(
 
 /// Forget the stopped records of `space` each by itself, leaving agents a
 /// wrapper waits to restore, and return the executions forgotten.
-async fn forget_saved(
-    ctx: &Context,
-    space: &PresentSpace,
-    saved: &Saved,
-) -> Result<Vec<ExecutionId>> {
+async fn forget_saved(ctx: &Context, space: &Space, saved: &Saved) -> Result<Vec<ExecutionId>> {
     let mut ids = Vec::new();
     for execution in saved.execution_ids() {
-        let selector = SpaceSelector::id(space.id());
+        let selector = SpaceSelector::id(&space.id);
         let forgotten =
             assignments::forget_stopped_work(&ctx.paths, selector, Some(execution)).await?;
         ids.extend(forgotten.executions);

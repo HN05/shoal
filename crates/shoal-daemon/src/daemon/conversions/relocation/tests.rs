@@ -146,7 +146,7 @@ async fn a_stop_of_the_workspace_keeps_the_converting_agents_session() {
     let targets = (manager.stop_targets(crate::protocol::QueuedLaunches::Keep))
         .await
         .unwrap();
-    assert!(targets.iter().any(|target| *target.id() == workspace.id));
+    assert!(targets.iter().any(|target| target.id == workspace.id));
 
     let selector = SpaceSelector::id(&workspace.id);
     let keep = crate::protocol::QueuedLaunches::Keep;
@@ -179,7 +179,7 @@ async fn a_stop_while_the_workspace_is_set_up_stops_the_converting_agent() {
     let targets = (manager.stop_targets(crate::protocol::QueuedLaunches::Keep))
         .await
         .unwrap();
-    assert!(targets.iter().any(|target| *target.id() == workspace.id));
+    assert!(targets.iter().any(|target| target.id == workspace.id));
 
     let selector = SpaceSelector::id(&workspace.id);
     let keep = crate::protocol::QueuedLaunches::Keep;

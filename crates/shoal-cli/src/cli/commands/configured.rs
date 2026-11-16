@@ -145,12 +145,11 @@ async fn selected_workspace<'a>(
         true => SpaceSelector::Id(recent::previous(ctx).await?),
         false => selector,
     };
-    let spaces = shoal_protocol::model::Spaces {
-        workspaces: workspaces.to_vec(),
-        chats: Vec::new(),
-    };
+    let spaces: shoal_protocol::model::Spaces = (workspaces.iter().cloned())
+        .map(shoal_protocol::model::Space::from)
+        .collect();
     let found = spaces.find(&selector);
-    Ok(found.and_then(|space| workspaces.iter().find(|known| known.id == *space.id())))
+    Ok(found.and_then(|space| workspaces.iter().find(|known| known.id == space.id)))
 }
 
 /// The workspace of the current directory, else the caller's scope.

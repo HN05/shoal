@@ -180,7 +180,7 @@ impl Manager {
             return Ok(false);
         }
         let space = self.space_by_id(&request.space_id).await?;
-        let repository = (request.repository_id.as_ref()).or(space.repository_id());
+        let repository = (request.repository_id.as_ref()).or(space.repository_id.as_ref());
         let permissions = self
             .space_permissions(&request.space_id, repository)
             .await?;

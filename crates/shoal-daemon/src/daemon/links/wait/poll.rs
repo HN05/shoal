@@ -19,7 +19,7 @@ use crate::{
         items::link::{LinkKind, Selection},
         updates::Update,
     },
-    model::PresentSpace,
+    model::Space,
     time::UnixTime,
 };
 use shoal_forge::{
@@ -44,14 +44,14 @@ impl Manager {
     /// queued for it and the spaces below it of the selected kind.
     pub(super) async fn poll_space_activity(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         selection: &Selection,
         repository: Option<&RepositoryId>,
     ) -> Result<Vec<Update>> {
-        match (space.repository_id(), &selection.input) {
+        match (space.repository_id.as_ref(), &selection.input) {
             (None, None) => self.queued_kind_activity(space, selection.kind).await,
             _ => {
-                self.poll_item_activity(space.id(), selection, repository)
+                self.poll_item_activity(&space.id, selection, repository)
                     .await
             }
         }
@@ -62,10 +62,10 @@ impl Manager {
     /// none of them links as a watch of a space's own items does.
     async fn queued_kind_activity(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         kind: Option<LinkKind>,
     ) -> Result<Vec<Update>> {
-        self.ensure_links_kind(space.id(), kind).await?;
+        self.ensure_links_kind(&space.id, kind).await?;
         self.queued_activity(space, kind).await
     }
 

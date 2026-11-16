@@ -81,9 +81,9 @@ async fn ensure_change_fits(
         ensure!(
             restart.joins.is_none(),
             "{} restarts already; restart it with --permission once it runs",
-            restart.space.name()
+            restart.space.name
         );
-        let repository = restart.space.repository_id().map(Into::into);
+        let repository = restart.space.repository_id.as_ref().map(Into::into);
         super::permissions::ensure_held(ctx, repository, &change.set).await?;
     }
     Ok(())

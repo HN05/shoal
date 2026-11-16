@@ -8,7 +8,7 @@ use super::super::{
 use super::Retention;
 use crate::{
     daemon::cleanup::{Rule, Snapshot, Tree, signals},
-    model::{CleanupReason, PresentSpace},
+    model::{CleanupReason, Space},
     process,
     removal::IdleRestore,
 };
@@ -71,11 +71,11 @@ impl Manager {
     /// stopped.
     async fn recorded_candidate(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         rule: Rule,
         cancelled: &[IdleRestore],
     ) -> Result<Result<SpaceAgent, CleanupReason>> {
-        let id = space.id();
+        let id = &space.id;
         if let Some(retention) = self.keep_reason(id).await? {
             return Ok(Err(retention.into()));
         }
@@ -101,7 +101,7 @@ impl Manager {
     /// worktree, whose processes are read from `users`.
     async fn idle_signals(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         cancelled: &[IdleRestore],
         users: &process::DirectoryUsers,
     ) -> Result<Result<u64, CleanupReason>> {
@@ -112,8 +112,8 @@ impl Manager {
             Ok(agent) => agent,
             Err(reason) => return Ok(Err(reason)),
         };
-        let head = match space.worktree() {
-            Some(workspace) => match self.idle_worktree(workspace, cancelled, users).await? {
+        let head = match space.to_workspace() {
+            Some(workspace) => match self.idle_worktree(&workspace, cancelled, users).await? {
                 Ok(head) => Some(head),
                 Err(reason) => return Ok(Err(reason)),
             },
@@ -129,7 +129,7 @@ impl Manager {
     /// and unused.
     async fn merged_signals(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         cancelled: &[IdleRestore],
         users: &process::DirectoryUsers,
     ) -> Result<Option<u64>> {
@@ -139,8 +139,8 @@ impl Manager {
         else {
             return Ok(None);
         };
-        let head = match space.worktree() {
-            Some(workspace) => match self.merged_worktree(workspace, cancelled, users).await? {
+        let head = match space.to_workspace() {
+            Some(workspace) => match self.merged_worktree(&workspace, cancelled, users).await? {
                 Some(head) => Some(head),
                 None => return Ok(None),
             },
@@ -152,15 +152,15 @@ impl Manager {
     /// What `space` records that cleanup compares on every pass: its
     /// activity, when its `agent` last stopped, and its worktree's `head`,
     /// so a restore and a new stop between two passes start over.
-    fn signals_of(&self, space: &PresentSpace, agent: SpaceAgent, head: Option<&str>) -> u64 {
-        signals(self.usage.activity(space.id()), agent.stopped_at, head)
+    fn signals_of(&self, space: &Space, agent: SpaceAgent, head: Option<&str>) -> u64 {
+        signals(self.usage.activity(&space.id), agent.stopped_at, head)
     }
 
     /// The signals of `space` as a candidate of `rule`, or `None` when it is
     /// not one, with the processes in its worktree read from `users`.
     pub(crate) async fn candidate_signals(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         rule: Rule,
         cancelled: &[IdleRestore],
         users: &process::DirectoryUsers,
@@ -176,7 +176,7 @@ impl Manager {
     /// walk.
     pub(crate) async fn candidate_snapshot(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         rule: Rule,
         cancelled: &[IdleRestore],
         users: &process::DirectoryUsers,
@@ -195,9 +195,9 @@ impl Manager {
     }
 
     /// One walk of the files of `space`: its worktree's, or none.
-    pub(crate) async fn tree_of(&self, space: &PresentSpace) -> Result<Tree> {
-        match space.worktree() {
-            Some(workspace) => self.walk_worktree(workspace).await,
+    pub(crate) async fn tree_of(&self, space: &Space) -> Result<Tree> {
+        match space.to_workspace() {
+            Some(workspace) => self.walk_worktree(&workspace).await,
             None => Ok(Tree::EMPTY),
         }
     }
@@ -206,7 +206,7 @@ impl Manager {
     /// not one, with the processes in its worktree read from `users`.
     pub(crate) async fn idle_candidacy(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         users: &process::DirectoryUsers,
     ) -> Result<Result<Snapshot, CleanupReason>> {
         let signals = match self.idle_signals(space, &[], users).await? {
@@ -227,14 +227,14 @@ impl Manager {
     /// when it expires, which fail or differ after any change to them.
     pub(crate) async fn idle_timer_signals(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         users: &process::DirectoryUsers,
     ) -> Result<Option<u64>> {
         let Ok(agent) = self.recorded_candidate(space, Rule::Idle, &[]).await? else {
             return Ok(None);
         };
-        let head = match space.worktree() {
-            Some(workspace) => match self.idle_timer_worktree(workspace, users).await? {
+        let head = match space.to_workspace() {
+            Some(workspace) => match self.idle_timer_worktree(&workspace, users).await? {
                 Some(head) => Some(head),
                 None => return Ok(None),
             },
@@ -245,17 +245,14 @@ impl Manager {
 
     /// When `space` was last used: the later of its recorded activity and
     /// its agent's last stop, or `None` while neither is recorded.
-    pub(crate) async fn last_used(
-        &self,
-        space: &PresentSpace,
-    ) -> Result<Option<crate::time::UnixTime>> {
+    pub(crate) async fn last_used(&self, space: &Space) -> Result<Option<crate::time::UnixTime>> {
         let stopped_at = self.space_agent(space, &[]).await?.stopped_at;
-        Ok(self.active_at(space.id()).await?.max(stopped_at))
+        Ok(self.active_at(&space.id).await?.max(stopped_at))
     }
 
     /// Why automatic cleanup keeps `space`, or its idle delay when nothing
     /// does; a failed inspection is reported as the reason.
-    pub(crate) async fn cleanup_reason(&self, space: &PresentSpace) -> CleanupReason {
+    pub(crate) async fn cleanup_reason(&self, space: &Space) -> CleanupReason {
         self.inspect_cleanup(space)
             .await
             .unwrap_or_else(|error| CleanupReason::InspectionFailed {
@@ -263,7 +260,7 @@ impl Manager {
             })
     }
 
-    async fn inspect_cleanup(&self, space: &PresentSpace) -> Result<CleanupReason> {
+    async fn inspect_cleanup(&self, space: &Space) -> Result<CleanupReason> {
         if let Some(reason) = space.worktree().and_then(super::worktree::not_ready) {
             return Ok(reason);
         }

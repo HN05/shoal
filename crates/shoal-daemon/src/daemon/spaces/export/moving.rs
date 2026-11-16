@@ -2,6 +2,7 @@
 //! daemon stops the space's agents, saving their sessions, and writes its
 //! package while the space stays, then ends it through the export's removal
 //! once the caller reports that import, unless it changed meanwhile.
+use shoal_protocol::model::ByKind;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, ensure};
@@ -11,7 +12,7 @@ use crate::transfer::ManifestExt;
 use crate::{
     daemon::workspace::{Manager, StopRequest},
     execution::recovery,
-    model::{Chat, Checkpoint, PresentSpace, Workspace},
+    model::{Chat, Checkpoint, Space, Workspace},
     removal::{InspectionPolicy, RemovalResult, UnsavedWork},
     transfer::{ExportedSpace, Manifest},
 };
@@ -30,9 +31,9 @@ impl Manager {
         file: PathBuf,
     ) -> Result<ExportedSpace> {
         crate::daemon::access::ensure_writable(crate::transfer::directory(&file)).await?;
-        let prepared = match self.running_space(selector).await? {
-            PresentSpace::Workspace(workspace) => self.prepare_moving_workspace(workspace).await?,
-            PresentSpace::Chat(chat) => self.prepare_moving_chat(chat).await?,
+        let prepared = match self.running_space(selector).await?.by_kind() {
+            ByKind::Workspace(workspace) => self.prepare_moving_workspace(workspace).await?,
+            ByKind::Chat(chat) => self.prepare_moving_chat(chat).await?,
         };
         self.write_prepared(prepared, file).await
     }
@@ -49,9 +50,9 @@ impl Manager {
         unsaved: UnsavedWork,
         exported: Option<CheckpointNumber>,
     ) -> Result<Option<RemovalResult>> {
-        let workspace = match self.space(selector).await? {
-            PresentSpace::Workspace(workspace) => workspace,
-            PresentSpace::Chat(chat) => {
+        let workspace = match self.space(selector).await?.by_kind() {
+            ByKind::Workspace(workspace) => workspace,
+            ByKind::Chat(chat) => {
                 let taking = self.chat_taking(&chat.id, &unsaved).await?;
                 self.hand_over_assignees(&chat.id).await?;
                 (self.remove_chat(&SpaceSelector::id(&chat.id), Some(taking))).await?;
@@ -95,7 +96,7 @@ impl Manager {
         let agents = recovery::stopped_agents(&self.paths, &workspace.id)?;
         let mut record = packaged_record(&self.paths, &workspace, checkpoint, agents);
         let repo = self.repository(workspace.repository()).await?;
-        let present = PresentSpace::Workspace(workspace.clone());
+        let present = Space::from(workspace.clone());
         record.session_files = self.unplaced_sessions(&present).await;
         let kept_sessions = self.kept_session_sources(&record).await;
         let mut manifest = Manifest::of(Some(&repo), record).await?;

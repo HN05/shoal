@@ -1,27 +1,25 @@
 //! What each key of the picker does: the command a key and the row it
 //! chose become.
 use anyhow::{Context as _, Result, ensure};
+use shoal_protocol::model::ByKind;
 
 use super::{Choice, View, execute::execute_command, linked::view_command, rows::Row};
 use crate::cli::commands::{approvals, service};
-use crate::{
-    cli::{
-        Command,
-        args::{
-            ConfirmationArgs, SpaceTargets,
-            changes::ChangesCommand,
-            coordination::{CoordinationCommand, QuestionsArgs},
-            create::{CreateCommand, StartArgs},
-            items::{ItemArgs, ItemWord, ItemsCommand, ViewArgs},
-            lifecycle::{LifecycleCommand, RmArgs, StopArgs},
-            repository::{RepoCommand, RepositoryCommand},
-            sessions::SessionsCommand,
-            workspace::WorkspaceCommand,
-        },
-        context::Context,
-        ui::Key,
+use crate::cli::{
+    Command,
+    args::{
+        ConfirmationArgs, SpaceTargets,
+        changes::ChangesCommand,
+        coordination::{CoordinationCommand, QuestionsArgs},
+        create::{CreateCommand, StartArgs},
+        items::{ItemArgs, ItemWord, ItemsCommand, ViewArgs},
+        lifecycle::{LifecycleCommand, RmArgs, StopArgs},
+        repository::{RepoCommand, RepositoryCommand},
+        sessions::SessionsCommand,
+        workspace::WorkspaceCommand,
     },
-    model::PresentSpace,
+    context::Context,
+    ui::Key,
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
@@ -129,8 +127,11 @@ async fn chat_id(ctx: &Context, space: Option<&SpaceSelector>) -> Result<Option<
         return Ok(None);
     };
     Ok(
-        match crate::client::workspaces::present_space(&ctx.paths, space).await? {
-            Some(PresentSpace::Chat(chat)) => Some(chat.id),
+        match crate::client::workspaces::present_space(&ctx.paths, space)
+            .await?
+            .map(crate::model::Space::by_kind)
+        {
+            Some(ByKind::Chat(chat)) => Some(chat.id),
             _ => None,
         },
     )

@@ -1,5 +1,6 @@
 //! Viewing one of the issues and PRs a space links.
 use anyhow::{Context as _, Result, ensure};
+use shoal_protocol::model::ByKind;
 
 use crate::{
     cli::{
@@ -9,7 +10,7 @@ use crate::{
         ui,
     },
     env,
-    model::{LinkedItem, PresentSpace},
+    model::LinkedItem,
     refusal::{Reason, Refusal},
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -46,23 +47,23 @@ async fn linked_items(
     space: &SpaceSelector,
 ) -> Result<(Vec<LinkedItem>, &'static str)> {
     let unknown = || Refusal::new(Reason::NotFound, format!("no space {space}"));
-    let (links, path, kind) =
-        match crate::client::workspaces::present_space(&ctx.paths, space).await? {
-            Some(PresentSpace::Workspace(workspace)) => {
-                (workspace.links, workspace.part.path, "workspace")
-            }
-            Some(PresentSpace::Chat(chat)) if chat.repository_id.is_none() => {
-                return Ok((Vec::new(), "chat"));
-            }
-            Some(PresentSpace::Chat(chat)) => {
-                let repos = crate::client::repositories::list(&ctx.paths).await?;
-                let checkout = (repos.into_iter())
-                    .find(|repo| Some(&repo.id) == chat.repository_id.as_ref())
-                    .ok_or_else(unknown)?;
-                (chat.links, checkout.path, "chat")
-            }
-            None => return Err(unknown().into()),
-        };
+    let (links, path, kind) = match (crate::client::workspaces::present_space(&ctx.paths, space)
+        .await?)
+        .map(crate::model::Space::by_kind)
+    {
+        Some(ByKind::Workspace(workspace)) => (workspace.links, workspace.part.path, "workspace"),
+        Some(ByKind::Chat(chat)) if chat.repository_id.is_none() => {
+            return Ok((Vec::new(), "chat"));
+        }
+        Some(ByKind::Chat(chat)) => {
+            let repos = crate::client::repositories::list(&ctx.paths).await?;
+            let checkout = (repos.into_iter())
+                .find(|repo| Some(&repo.id) == chat.repository_id.as_ref())
+                .ok_or_else(unknown)?;
+            (chat.links, checkout.path, "chat")
+        }
+        None => return Err(unknown().into()),
+    };
     let items = links.items();
     if items.is_empty() {
         return Ok((items, kind));

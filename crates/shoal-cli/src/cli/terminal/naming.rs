@@ -9,7 +9,7 @@ use tokio::sync::OnceCell;
 use crate::{
     cli::context::Context,
     config::Effective,
-    model::{PresentSpace, Workspace},
+    model::{Space, Workspace},
     sessions::{HostName, Origin},
     terminal::{Configured, Options, PlaceName, Places},
 };
@@ -28,17 +28,13 @@ pub(in crate::cli) struct Labels {
 /// when a host first needs it.
 pub(in crate::cli) struct Renamed<'a> {
     ctx: &'a Context,
-    space: &'a PresentSpace,
+    space: &'a Space,
     previous: &'a str,
     name: OnceCell<Option<PlaceName>>,
 }
 
 impl<'a> Renamed<'a> {
-    pub(in crate::cli) fn new(
-        ctx: &'a Context,
-        space: &'a PresentSpace,
-        previous: &'a str,
-    ) -> Self {
+    pub(in crate::cli) fn new(ctx: &'a Context, space: &'a Space, previous: &'a str) -> Self {
         Self {
             ctx,
             space,
@@ -52,15 +48,15 @@ impl<'a> Renamed<'a> {
     /// to fill one in, the labels are the names; without the lookup a
     /// template's places keep their labels.
     pub(in crate::cli) async fn labels(&self, options: &Options) -> Labels {
-        let (Some(workspace), Some(template)) = (self.space.worktree(), &options.name_template)
+        let (Some(workspace), Some(template)) = (self.space.to_workspace(), &options.name_template)
         else {
             return Labels {
-                new: self.space.name().to_string(),
+                new: self.space.name.to_string(),
                 expected: self.previous.to_owned(),
             };
         };
         let branch = workspace.branch_or_name();
-        let Some(name) = self.name(workspace).await else {
+        let Some(name) = self.name(&workspace).await else {
             return Labels {
                 new: branch.to_owned(),
                 expected: branch.to_owned(),

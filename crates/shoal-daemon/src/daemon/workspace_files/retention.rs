@@ -31,16 +31,13 @@ impl Manager {
     /// When the files of `space` that outlive it expire if it is removed
     /// now: after its `cleanup.restore.retention_days`, or the global
     /// setting's when its own cannot be read.
-    pub(crate) async fn removed_files_expiry(
-        &self,
-        space: &crate::model::PresentSpace,
-    ) -> UnixTime {
+    pub(crate) async fn removed_files_expiry(&self, space: &crate::model::Space) -> UnixTime {
         let settings = match self.present_space_settings(space).await {
             Ok(settings) => Ok(settings),
             Err(error) => {
                 log!(
                     "files of {} kept by the global retention: {error:#}",
-                    space.id()
+                    &space.id
                 );
                 self.config().resolve(&Default::default())
             }

@@ -5,7 +5,7 @@ use shoal_protocol::space_names::SpaceName;
 
 use crate::output::{agents::Agent, batch::Failure, outputs};
 use shoal_protocol::{
-    model::{Chat, PresentSpace, QueueEntry, RemovedSpace, Workspace},
+    model::{Chat, QueueEntry, RemovedSpace, Space, Workspace},
     saved::SavedSummary,
 };
 
@@ -86,7 +86,7 @@ pub struct Queued {
 /// workspace set up.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Reopened {
-    pub space: PresentSpace,
+    pub space: Space,
     pub removed: RemovedSpace,
     pub warnings: Vec<String>,
     /// Its stopped agents stay saved for a later `shoal restore`.

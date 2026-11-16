@@ -244,7 +244,7 @@ impl Manager {
         cause: JobStop,
     ) -> Result<Option<String>> {
         let space = self.space(selector).await?;
-        let Some(job) = self.workspace_claim(space.id()).await? else {
+        let Some(job) = self.workspace_claim(&space.id).await? else {
             return Ok(None);
         };
         Ok(Some(self.cancel_for_stop(&job, cause).await?.to_string()))

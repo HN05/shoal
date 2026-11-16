@@ -182,7 +182,7 @@ async fn suspending_waits_for_an_admission_pass_in_progress() {
     assert!(queue.suspended());
 }
 
-fn workspace(root: &std::path::Path, name: &str, done: bool) -> PresentSpace {
+fn workspace(root: &std::path::Path, name: &str, done: bool) -> Space {
     let mut workspace = crate::model::Workspace::new_record(
         "repo".into(),
         name.into(),
@@ -192,7 +192,7 @@ fn workspace(root: &std::path::Path, name: &str, done: bool) -> PresentSpace {
     );
     workspace.done = done;
     workspace.number = if done { 7 } else { 3 }.into();
-    PresentSpace::Workspace(workspace)
+    Space::from(workspace)
 }
 
 #[test]
@@ -204,7 +204,7 @@ fn only_requested_or_queued_restores_continue_without_the_user() {
     assert!(!waits_for_resume(&paths, &open, &none).unwrap());
     recovery::save_record(
         &paths,
-        open.id(),
+        &open.id,
         &ExecutionId::from("requested"),
         &crate::execution::TrackedAgent::named("claude"),
         None,
@@ -212,19 +212,19 @@ fn only_requested_or_queued_restores_continue_without_the_user() {
     )
     .unwrap();
     let request = paths
-        .space_state(open.id())
+        .space_state(&open.id)
         .join("requested.restore-request.json");
     std::fs::write(&request, "{}").unwrap();
     assert!(!waits_for_resume(&paths, &open, &none).unwrap());
     // A done workspace's request waits for `shoal restore` to name it.
     let mut done = open.clone();
-    if let PresentSpace::Workspace(workspace) = &mut done {
-        workspace.done = true;
+    if let crate::model::SpacePart::Workspace(worktree) = &mut done.part {
+        worktree.done = true;
     }
     assert!(waits_for_resume(&paths, &done, &none).unwrap());
     recovery::save_record(
         &paths,
-        open.id(),
+        &open.id,
         &ExecutionId::from("unattended"),
         &crate::execution::TrackedAgent::named("claude"),
         None,
@@ -236,7 +236,7 @@ fn only_requested_or_queued_restores_continue_without_the_user() {
     assert!(!waits_for_resume(&paths, &open, &queued).unwrap());
     // A last session, as `shoal daemon stop` keeps a stopped agent, waits.
     let kept = workspace(root.path(), "kept", false);
-    let state = paths.space_state(kept.id());
+    let state = paths.space_state(&kept.id);
     std::fs::create_dir_all(&state).unwrap();
     std::fs::write(
         state.join("kept.last-session.json"),

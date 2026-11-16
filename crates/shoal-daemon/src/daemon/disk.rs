@@ -28,7 +28,7 @@ use crate::daemon::log;
 use crate::{
     caches::Layout,
     config::overload::Disk,
-    model::{PresentSpace, Repository, Workspace},
+    model::{Repository, Space, Workspace},
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -288,7 +288,7 @@ async fn free_space(
         {
             continue;
         }
-        let space = PresentSpace::Workspace(workspace.clone());
+        let space = Space::from(workspace.clone());
         let snapshot = match super::cleanup::candidate(manager, &space, &users).await {
             Ok(Some(snapshot)) => snapshot,
             Ok(None) => continue,

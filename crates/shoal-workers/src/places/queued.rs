@@ -10,7 +10,7 @@ use crate::{
     agents::HomeRecords,
     client::connection::CommandPaths,
     config::Effective,
-    model::{PresentSpace, Repository, Workspace},
+    model::{Repository, Space, Workspace},
     start_plan::AddPlan,
     terminal::{
         Beside, Configured, Places, chat_place_env, open_add, open_in_background, place_env,
@@ -135,16 +135,16 @@ pub async fn start_chat(
 pub async fn restore_chat(
     paths: &CommandPaths,
     settings: &Effective,
-    space: &PresentSpace,
+    space: &Space,
     args: &[OsString],
 ) -> Result<()> {
-    let records = crate::homes::records(paths, &SpaceSelector::id(space.id())).await?;
+    let records = crate::homes::records(paths, &SpaceSelector::id(&space.id)).await?;
     let home = records.home()?;
     let repository = match &records {
         HomeRecords::Chat { repository, .. } => repository.as_ref(),
         HomeRecords::Workspace(_) => None,
     };
-    let name = space.name().as_str();
+    let name = space.name.as_str();
     let argv = shoal_command(paths, args)?;
     start_chat(paths, settings, repository, home.path(), name, argv, true).await?;
     Ok(())

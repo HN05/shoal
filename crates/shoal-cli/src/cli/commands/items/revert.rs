@@ -4,6 +4,7 @@
 use anyhow::{Context as _, Result};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::model::ByKind;
 
 use super::{
     content::read_content,
@@ -26,7 +27,7 @@ use crate::{
         items::{create::PullOptions, revert::MergedPull},
     },
     git::revert::{self as git_revert, Merge, Merged, Reverted},
-    model::{Chat, PresentSpace, Workspace},
+    model::{Chat, Workspace},
     protocol::{ItemContext, operations::WorkspaceStart},
     removal::UnsavedWork,
     repository::Selector,
@@ -91,8 +92,11 @@ enum Reverting {
 impl Reverting {
     /// The workspace or running chat `space` names.
     async fn of(ctx: &Context, space: SpaceSelector) -> Result<Self> {
-        match crate::client::workspaces::present_space(&ctx.paths, &space).await? {
-            Some(PresentSpace::Chat(chat)) => Ok(Self::Chat(chat)),
+        match crate::client::workspaces::present_space(&ctx.paths, &space)
+            .await?
+            .map(crate::model::Space::by_kind)
+        {
+            Some(ByKind::Chat(chat)) => Ok(Self::Chat(chat)),
             _ => {
                 let workspace =
                     crate::client::workspaces::verify(&ctx.paths, space.clone(), false).await?;

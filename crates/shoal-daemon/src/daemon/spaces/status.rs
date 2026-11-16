@@ -1,6 +1,7 @@
 //! A space's status: the workspace's worktree status or the chat, with the
 //! state of the items it links and what awaits the user.
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::model::ByKind;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
@@ -16,7 +17,7 @@ use crate::{
         workspace_files,
     },
     forge::{ForgeRepo, items::reference::ItemRef, review::status::PrStatus},
-    model::{Attention, Completion, IssueStatus, PresentSpace, SpaceDetail, SpaceStatus},
+    model::{Attention, Completion, IssueStatus, Space, SpaceDetail, SpaceStatus},
     repository,
 };
 use shoal_forge::{RepoRequests, account::Account, items::issue::IssueRequests};
@@ -44,7 +45,7 @@ impl Manager {
             Err(error) => (None, Some(format!("{error:#}"))),
         };
         let cleanup_reason = self.cleanup_reason(&space).await;
-        let cleanup_at = self.cleanup_at(space.id()).await?;
+        let cleanup_at = self.cleanup_at(&space.id).await?;
         let (space, records, origin) = self.space_detail(space).await?;
         let (prs, issue_states) = self.linked_states(&origin, &records).await;
         let attention = self.attention(&space).await?;
@@ -72,27 +73,23 @@ impl Manager {
 
     /// The effective permissions of `space` in its own repository, or for a
     /// chat without one in the global config.
-    async fn status_permissions(&self, space: &PresentSpace) -> Result<Permissions> {
-        let repository = match space {
-            PresentSpace::Workspace(workspace) => workspace.repository_id.as_ref(),
-            PresentSpace::Chat(chat) => chat.repository_id.as_ref(),
-        };
-        self.space_permissions(space.id(), repository).await
+    async fn status_permissions(&self, space: &Space) -> Result<Permissions> {
+        (self.space_permissions(&space.id, space.repository_id.as_ref())).await
     }
 
     /// What the status of `space` shows for its kind, what it records about
     /// its links and work, and the directory whose origin names its forge:
     /// the workspace's worktree or the chat's checkout.
-    async fn space_detail(&self, space: PresentSpace) -> Result<(SpaceDetail, Records, PathBuf)> {
-        Ok(match space {
-            PresentSpace::Workspace(workspace) => {
+    async fn space_detail(&self, space: Space) -> Result<(SpaceDetail, Records, PathBuf)> {
+        Ok(match space.by_kind() {
+            ByKind::Workspace(workspace) => {
                 let (status, records) = self
                     .worktree_status(&SpaceSelector::id(&workspace.id))
                     .await?;
                 let path = status.workspace.path.clone();
                 (SpaceDetail::Workspace(Box::new(status)), records, path)
             }
-            PresentSpace::Chat(chat) => {
+            ByKind::Chat(chat) => {
                 let records = self.chat_records(&chat.id, chat.completion.clone()).await?;
                 let checkout = self.chat_checkout_path(&chat).await?;
                 let chat = Box::new(chat);

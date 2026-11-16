@@ -5,7 +5,7 @@ use crate::{
         events::{EventCause, EventItem, EventKind},
         test_support::{chat_process, ended, manager, repository},
     },
-    model::{PresentSpace, SpaceKind, SpaceRef},
+    model::{SpaceKind, SpaceRef},
 };
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;
@@ -298,7 +298,7 @@ async fn a_renamed_chat_keeps_its_files() {
 
     let rename = async |chat: &str, name: &str| {
         let renamed = (manager.rename_space(&SpaceSelector::Id(chat.into()), &name.into())).await?;
-        let PresentSpace::Chat(chat) = renamed.space else {
+        let Ok(chat) = renamed.space.into_chat() else {
             panic!("renamed a workspace");
         };
         anyhow::Ok((chat, renamed.previous_name))

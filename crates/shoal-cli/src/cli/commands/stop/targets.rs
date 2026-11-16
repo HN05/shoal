@@ -1,7 +1,7 @@
 //! Which spaces a stop takes, and refusing them before any stops.
 use anyhow::{Context as _, Result, ensure};
 
-use crate::{cli::context::Context, model::PresentSpace};
+use crate::{cli::context::Context, model::Space};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// The spaces, workspaces or chats, that `selectors` name, each once, and
@@ -11,18 +11,18 @@ pub(in crate::cli::commands) async fn resolve(
     ctx: &Context,
     selectors: Vec<SpaceSelector>,
     children: bool,
-) -> Result<Vec<PresentSpace>> {
+) -> Result<Vec<Space>> {
     let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
-    let mut found: Vec<PresentSpace> = Vec::new();
+    let mut found: Vec<Space> = Vec::new();
     for selector in selectors {
         let space = (spaces.find(&selector)).with_context(|| format!("no space {selector}"))?;
         let below = match children {
-            true => spaces.below(space.id()),
+            true => spaces.below(&space.id),
             false => Vec::new(),
         };
         let below = (below.iter()).filter_map(|below| spaces.find(&SpaceSelector::id(&below.id)));
         for space in std::iter::once(space).chain(below) {
-            if !found.iter().any(|known| known.id() == space.id()) {
+            if !found.iter().any(|known| known.id == space.id) {
                 found.push(space);
             }
         }
@@ -34,24 +34,24 @@ pub(in crate::cli::commands) async fn resolve(
 /// `selected` includes its own space in. The daemon refuses each space not
 /// below the caller's, which needs the scope token; refusing its own here,
 /// before any stops, keeps the stop from taking the spaces below it alone.
-pub(in crate::cli::commands) fn ensure_below(selected: &[PresentSpace]) -> Result<()> {
+pub(in crate::cli::commands) fn ensure_below(selected: &[Space]) -> Result<()> {
     const REFUSAL: &str =
         "scoped processes stop only the spaces below theirs; finish their own with shoal done";
     let own = crate::env::own_space().context(REFUSAL)?;
     ensure!(crate::env::is_scoped(), "{REFUSAL}");
-    ensure!(selected.iter().all(|space| *space.id() != own), "{REFUSAL}");
+    ensure!(selected.iter().all(|space| space.id != own), "{REFUSAL}");
     Ok(())
 }
 
 /// Refuse `spaces` all before any stops when stopping one would be refused
 /// now, as while another lifecycle operation or a resource hook runs in a
 /// workspace, or a restart in a chat.
-pub(super) async fn check_each(ctx: &Context, spaces: &[PresentSpace]) -> Result<()> {
+pub(super) async fn check_each(ctx: &Context, spaces: &[Space]) -> Result<()> {
     let mut refusals = Vec::new();
     for space in spaces {
-        let checked = crate::client::stopping::check(&ctx.paths, SpaceSelector::id(space.id()));
+        let checked = crate::client::stopping::check(&ctx.paths, SpaceSelector::id(&space.id));
         if let Err(error) = checked.await {
-            refusals.push(format!("{}: {error:#}", space.name()));
+            refusals.push(format!("{}: {error:#}", space.name));
         }
     }
     ensure!(

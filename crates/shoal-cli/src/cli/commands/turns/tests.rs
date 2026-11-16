@@ -19,9 +19,9 @@ fn agent(origin: Option<Origin>) -> RunningAgent {
     }
 }
 
-fn workspace() -> PresentSpace {
-    PresentSpace::Workspace(
-        serde_json::from_value(json!({
+fn workspace() -> Space {
+    Space::from(
+        serde_json::from_value::<crate::model::Workspace>(json!({
             "workdir": {"kind": "worktree", "path": "/work/fix", "workspace": {"id": "w1", "name": "fix", "branch": "fix"}},
             "id": "w1",
             "repository_id": "r1",

@@ -71,7 +71,7 @@ impl Manager {
     /// be read leaves work stopped where the answer cannot name it.
     async fn count_stopped(&self, stopped: &mut StoppedSpaces, ids: HashSet<SpaceId>) {
         for id in ids {
-            if stopped.spaces.iter().any(|space| space.id() == &id) {
+            if stopped.spaces.iter().any(|space| space.id == id) {
                 continue;
             }
             match self.space(&SpaceSelector::id(&id)).await {

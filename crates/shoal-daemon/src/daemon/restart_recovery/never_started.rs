@@ -8,7 +8,7 @@ use anyhow::Result;
 use super::{Manager, Pending, Waiting};
 use crate::{
     daemon::log,
-    model::{Execution, PresentSpace},
+    model::{Execution, Space},
     process::{
         execution::Processes,
         identity::{self as process, Identity},
@@ -19,7 +19,7 @@ use shoal_ids::execution_ids::ExecutionId;
 /// An unknown execution of `space` that never started its command, whose
 /// recorded `wrapper` decides it.
 pub(super) struct Unstarted {
-    space: PresentSpace,
+    space: Space,
     execution: Execution,
     wrapper: Identity,
 }
@@ -40,7 +40,7 @@ impl Unstarted {
     /// child nor a process group is recorded, since a command whose child
     /// exited before its identity was read still leaves its group, and a
     /// wrapper is, which proves whether it ended.
-    pub(super) fn of(space: PresentSpace, execution: Execution) -> Option<Self> {
+    pub(super) fn of(space: Space, execution: Execution) -> Option<Self> {
         if execution.child.is_some() || execution.group_id.is_some() {
             return None;
         }
@@ -102,7 +102,7 @@ impl Manager {
         log!(
             "forgot execution {} in {}, which never started its command",
             unstarted.execution.id,
-            unstarted.space.name()
+            &unstarted.space.name
         );
         // The execution no longer takes an agent slot.
         self.agent_queue.wake();

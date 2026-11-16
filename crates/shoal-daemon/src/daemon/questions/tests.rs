@@ -431,7 +431,7 @@ async fn open_questions_keep_the_workspace_and_removal_deletes_them() {
         .unwrap();
     assert_eq!(
         manager
-            .cleanup_reason(&crate::model::PresentSpace::Workspace(workspace.clone()))
+            .cleanup_reason(&crate::model::Space::from(workspace.clone()))
             .await,
         CleanupReason::Question
     );
@@ -441,7 +441,7 @@ async fn open_questions_keep_the_workspace_and_removal_deletes_them() {
         .unwrap();
     assert_eq!(
         manager
-            .cleanup_reason(&crate::model::PresentSpace::Workspace(workspace.clone()))
+            .cleanup_reason(&crate::model::Space::from(workspace.clone()))
             .await,
         CleanupReason::Idle { minutes: 10 }
     );
@@ -737,7 +737,7 @@ async fn done_closes_open_questions_for_good() {
     assert!(manager.questions(None).await.unwrap().questions.is_empty());
     assert_ne!(
         manager
-            .cleanup_reason(&crate::model::PresentSpace::Workspace(workspace.clone()))
+            .cleanup_reason(&crate::model::Space::from(workspace.clone()))
             .await,
         CleanupReason::Question
     );
@@ -886,7 +886,7 @@ async fn withdrawing_closes_a_question_and_takes_back_its_unread_notification() 
     assert!(manager.questions(None).await.unwrap().questions.is_empty());
     assert_ne!(
         manager
-            .cleanup_reason(&crate::model::PresentSpace::Workspace(workspace.clone()))
+            .cleanup_reason(&crate::model::Space::from(workspace.clone()))
             .await,
         CleanupReason::Question
     );

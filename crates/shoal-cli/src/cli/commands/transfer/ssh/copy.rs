@@ -8,7 +8,7 @@ use super::{super::export, Remote, arrived, summary};
 use crate::client::output::{restore::Reopened, transfer::Copies};
 use crate::{
     cli::{context::Context, ui},
-    model::PresentSpace,
+    model::Space,
 };
 
 /// Copy each of `spaces` to `remote`, the workspace at its checkpoint
@@ -18,17 +18,17 @@ use crate::{
 pub(super) async fn copy_spaces(
     ctx: &Context,
     remote: &Remote,
-    spaces: &[PresentSpace],
+    spaces: &[Space],
     checkpoint: Option<CheckpointNumber>,
 ) -> Result<i32> {
     let staging = tempfile::tempdir()?;
     let directory = export::ExportDirectory::create(staging.path().to_owned())?;
     let mut report = ui::Report::new("copy");
     for space in spaces {
-        let name = space.name();
+        let name = &space.name;
         match copy_one(ctx, remote, &directory, space, checkpoint).await {
             Ok(imported) => {
-                let copy = imported.space.name().as_str();
+                let copy = imported.space.name.as_str();
                 let message = copied_message(name, copy, &arrived(&remote.host, &imported));
                 report.done(ctx, &message, imported)
             }
@@ -45,11 +45,11 @@ async fn copy_one(
     ctx: &Context,
     remote: &Remote,
     directory: &export::ExportDirectory,
-    space: &PresentSpace,
+    space: &Space,
     checkpoint: Option<CheckpointNumber>,
 ) -> Result<Reopened> {
-    let file = directory.file(space.id());
-    export::copy::copy(ctx, SpaceSelector::id(space.id()), checkpoint, file.clone()).await?;
+    let file = directory.file(&space.id);
+    export::copy::copy(ctx, SpaceSelector::id(&space.id), checkpoint, file.clone()).await?;
     Ok(remote.import(&file).await?)
 }
 

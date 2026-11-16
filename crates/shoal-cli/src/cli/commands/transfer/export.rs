@@ -15,7 +15,7 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
-    model::PresentSpace,
+    model::Space,
     removal::{RemovalResult, UnsavedWork},
     transfer::ExportedSpace,
 };
@@ -87,7 +87,7 @@ pub(super) async fn export_all(
 pub(super) async fn selected_spaces(
     ctx: &Context,
     names: Vec<SpaceSelector>,
-) -> Result<Vec<PresentSpace>> {
+) -> Result<Vec<Space>> {
     let mut spaces = Vec::new();
     for selector in ui::select_spaces(ctx, names, true).await? {
         let space = crate::client::workspaces::present_space(&ctx.paths, &selector)
@@ -102,7 +102,7 @@ pub(super) async fn selected_spaces(
 /// exported, so a space that cannot be leaves every other one in place.
 async fn export_into(
     ctx: &Context,
-    spaces: &[PresentSpace],
+    spaces: &[Space],
     directory: PathBuf,
     yes: bool,
 ) -> Result<i32> {
@@ -224,7 +224,7 @@ async fn export_removed(
 /// lets it end.
 async fn export_space(
     ctx: &Context,
-    space: PresentSpace,
+    space: Space,
     yes: bool,
     output: &Output,
 ) -> Result<ExportedSpace> {
@@ -280,10 +280,7 @@ pub(super) fn warn(exported: &ExportedSpace) {
 }
 
 /// The spaces of `repository`: its workspaces and running chats.
-pub(super) async fn repository_spaces(
-    ctx: &Context,
-    repository: String,
-) -> Result<Vec<PresentSpace>> {
+pub(super) async fn repository_spaces(ctx: &Context, repository: String) -> Result<Vec<Space>> {
     let repositories = crate::client::repositories::list(&ctx.paths).await?;
     let repo =
         crate::repository::select(&repositories, ui::repository_selector(repository)?).await?;
@@ -291,19 +288,19 @@ pub(super) async fn repository_spaces(
         .await?
         .into_iter()
         .filter(|workspace| workspace.repository() == &repo.id)
-        .map(PresentSpace::Workspace);
+        .map(Space::from);
     let chats = crate::client::chats::list(&ctx.paths)
         .await?
         .into_iter()
         .filter(|chat| chat.repository_id.as_ref() == Some(&repo.id))
-        .map(PresentSpace::Chat);
-    let mut spaces: Vec<PresentSpace> = workspaces.chain(chats).collect();
+        .map(Space::from);
+    let mut spaces: Vec<Space> = workspaces.chain(chats).collect();
     ensure!(
         !spaces.is_empty(),
         "{} has no spaces to export",
         crate::repository::name(repo)
     );
-    spaces.sort_by(|a, b| a.name().cmp(b.name()));
+    spaces.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(spaces)
 }
 
@@ -341,7 +338,7 @@ impl PlannedExport {
 /// each space goes after the spaces below it.
 pub(super) async fn check_exports(
     ctx: &Context,
-    spaces: &[PresentSpace],
+    spaces: &[Space],
     directory: &ExportDirectory,
     yes: bool,
     heading: &str,
@@ -351,7 +348,7 @@ pub(super) async fn check_exports(
     let spaces = exported_alone(spaces, &tree);
     let mut planned = Vec::new();
     let mut refusals = Vec::new();
-    let exported: Vec<&SpaceId> = spaces.iter().map(PresentSpace::id).collect();
+    let exported: Vec<&SpaceId> = spaces.iter().map(|space| &space.id).collect();
     for space in &spaces {
         let export = async {
             let export = plan_export(ctx, space, directory, operation, &tree).await?;
@@ -360,7 +357,7 @@ pub(super) async fn check_exports(
         };
         match export.await {
             Ok(export) => planned.push(export),
-            Err(error) => refusals.push(format!("{}: {error:#}", space.name())),
+            Err(error) => refusals.push(format!("{}: {error:#}", space.name)),
         }
     }
     ensure!(
@@ -378,12 +375,12 @@ pub(super) async fn check_exports(
 /// among the spaces `tree` shows.
 async fn plan_export(
     ctx: &Context,
-    space: &PresentSpace,
+    space: &Space,
     directory: &ExportDirectory,
     operation: Operation,
     tree: &crate::model::Spaces,
 ) -> Result<PlannedExport> {
-    let output = Output::reserve(&directory.file(space.id()))?;
+    let output = Output::reserve(&directory.file(&space.id))?;
     let check = check_export(ctx, space.clone(), &output, tree).await?;
     if let Ending::Workspace(check) = &check.space {
         super::super::workspaces::ensure_batch_removable(ctx, check, operation).await?;

@@ -15,7 +15,7 @@ use crate::{
         worktree::{BranchRemoval, FileRemoval, interrupted},
     },
     hooks::{self, Hook, HookKind},
-    model::{PresentSpace, RemovedSpace, Workspace},
+    model::{RemovedSpace, Space, Workspace},
     removal::{
         self, BranchOutcome, IdleRestore, Inspection, InspectionPolicy, RemovalCheck, RemovalResult,
     },
@@ -420,7 +420,7 @@ impl Manager {
         }
         if let Some(hook) = worktree.post_remove {
             outcome.hook_error = self.run_post_remove_hook(workspace, &hook).await;
-            let space = PresentSpace::Workspace(workspace.clone());
+            let space = Space::from(workspace.clone());
             if let Err(error) = self
                 .stop_removed_processes(&space, WorktreeTies::None)
                 .await

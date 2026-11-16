@@ -65,7 +65,7 @@ impl Manager {
         let Some(caller) = caller else {
             return Ok(());
         };
-        let space = crate::model::PresentSpace::Workspace(workspace.clone());
+        let space = crate::model::Space::from(workspace.clone());
         self.ensure_reaches(caller, &space).await
     }
 

@@ -138,7 +138,7 @@ outputs!(
     shoal_protocol::model::ReviewMark,
     shoal_protocol::model::SyncedRepository,
     shoal_protocol::model::Workspace,
-    shoal_protocol::model::PresentSpace,
+    shoal_protocol::model::Space,
     shoal_protocol::model::SpaceHold,
     shoal_protocol::agent_messages::Reached,
     shoal_protocol::chats::BackgroundChat,

@@ -57,7 +57,7 @@ async fn a_retained_chat_records_its_cleanup_as_the_cause() {
     let chat = crate::daemon::test_support::chat(&manager, "notes", "chat", None, None).await;
 
     let removal: Result<bool> = Err(anyhow::anyhow!("agent running"));
-    let space = PresentSpace::Chat(chat);
+    let space: Space = chat.into();
     (manager.announce_removal(&space, Cleanup::Idle, &removal))
         .await
         .unwrap();

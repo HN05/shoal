@@ -7,7 +7,7 @@ use std::time::Duration;
 use anyhow::Result;
 
 use super::AgentMessage;
-use crate::{daemon::workspace::Manager, model::PresentSpace, time::UnixTime};
+use crate::{daemon::workspace::Manager, model::Space, time::UnixTime};
 
 mod clock;
 pub(crate) use clock::SettleClock;
@@ -35,7 +35,7 @@ impl Manager {
     /// `None` once they have settled.
     pub(crate) async fn message_hold(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         messages: &[AgentMessage],
     ) -> Result<Option<Duration>> {
         if messages.is_empty() {
@@ -50,23 +50,20 @@ impl Manager {
     /// them to.
     pub(crate) async fn settled_messages(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         mut messages: Vec<AgentMessage>,
     ) -> Result<Vec<AgentMessage>> {
         while let Some(hold) = self.message_hold(space, &messages).await? {
             self.settle_clock.sleep(hold).await;
-            messages = self.unread_messages(space.id()).await?.messages;
+            messages = self.unread_messages(&space.id).await?.messages;
         }
         Ok(messages)
     }
 
     /// The unread messages of `space` that have settled: all of them, or
     /// none while they wait for more.
-    pub(crate) async fn deliverable_messages(
-        &self,
-        space: &PresentSpace,
-    ) -> Result<Vec<AgentMessage>> {
-        let messages = self.unread_messages(space.id()).await?.messages;
+    pub(crate) async fn deliverable_messages(&self, space: &Space) -> Result<Vec<AgentMessage>> {
+        let messages = self.unread_messages(&space.id).await?.messages;
         if self.message_hold(space, &messages).await?.is_some() {
             return Ok(Vec::new());
         }
@@ -76,7 +73,7 @@ impl Manager {
     /// The settle window of `space`. A configuration that does not resolve
     /// holds nothing, since messages are how the user reaches the agent to
     /// fix it.
-    async fn settle_window(&self, space: &PresentSpace) -> Duration {
+    async fn settle_window(&self, space: &Space) -> Duration {
         match self.present_space_settings(space).await {
             Ok(settings) => Duration::from_secs(settings.messages.settle_seconds),
             Err(error) => {

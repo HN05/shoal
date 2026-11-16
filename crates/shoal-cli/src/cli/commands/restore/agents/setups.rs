@@ -2,6 +2,7 @@
 //! setup, after which the agent waiting in the queue for it starts: as the
 //! queue admits it, at once for `--now`, or in this terminal for `--focus`.
 use anyhow::{Context as _, Result};
+use shoal_protocol::model::ByKind;
 
 use super::super::targets::Selected;
 use super::permission_change;
@@ -13,7 +14,7 @@ use crate::{
         ui,
     },
     config::permissions::PermissionChange,
-    model::{PresentSpace, QueueEntry, Workspace},
+    model::{QueueEntry, Workspace},
     state::{QueueKind, QueueState},
 };
 
@@ -36,7 +37,7 @@ pub(in crate::cli::commands::restore) async fn take_failed(
     };
     let (mut failed, mut rest) = (Vec::new(), Vec::new());
     for selector in selectors {
-        if let PresentSpace::Workspace(_) = super::present_space(ctx, &selector).await? {
+        if let ByKind::Workspace(_) = super::present_space(ctx, &selector).await?.by_kind() {
             let inspection =
                 crate::client::workspaces::inspect(&ctx.paths, selector.clone()).await?;
             if workspaces::awaits_setup(&inspection) {

@@ -6,7 +6,7 @@ use super::worktree::{WorktreeRemoval, WorktreeStage};
 use super::{Removal, Stage};
 use crate::{
     daemon::{cleanup::Snapshot, events::EventCause, space_processes::WorktreeTies},
-    model::{Completion, PresentSpace, SpaceRef},
+    model::{Completion, Space, SpaceRef},
     process::DirectoryUsers,
     removal::{IdleRestore, Inspection, InspectionPolicy, RemovalResult, UnsavedWork},
     state::WorkspaceState,
@@ -145,18 +145,18 @@ impl Manager {
     /// and the user's request do not wait for; `Ok(false)` while it runs.
     pub(crate) async fn remove_unused(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         snapshot: Snapshot,
         cause: EventCause,
     ) -> Result<bool> {
         // Under the PR gate link changes take, so no link appears while the
         // spaces below it go.
-        let _gate = self.gates.lock_prs([space.id()]).await;
+        let _gate = self.gates.lock_prs([&space.id]).await;
         (self.remove_after_grace(space, Removal::Automatic { snapshot, cause })).await
     }
 
     pub async fn remove_merged(&self, selector: &SpaceSelector, head: &CommitId) -> Result<bool> {
-        let space = PresentSpace::Workspace(self.workspace(selector).await?);
+        let space = Space::from(self.workspace(selector).await?);
         self.remove_after_grace(
             &space,
             Removal::Merged {
@@ -170,7 +170,7 @@ impl Manager {
     /// recorded, once its grace period ends; `Ok(false)` while it runs.
     pub(in crate::daemon::workspace) async fn remove_completed(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         completion: &Completion,
         cause: EventCause,
     ) -> Result<bool> {
@@ -186,7 +186,7 @@ impl Manager {
     /// stands, once its grace period ends; `Ok(false)` while it runs.
     pub(in crate::daemon::workspace) async fn remove_under_completed(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         ancestor: &CompletedAncestor,
     ) -> Result<bool> {
         // The sweep holds the PR gates of the space and the ancestor; the
@@ -204,29 +204,29 @@ impl Manager {
     }
 
     /// Remove `space` for `removal` unless its grace period still runs.
-    async fn remove_after_grace(&self, space: &PresentSpace, removal: Removal<'_>) -> Result<bool> {
+    async fn remove_after_grace(&self, space: &Space, removal: Removal<'_>) -> Result<bool> {
         if self.grace_running(space, removal).await? {
             return Ok(false);
         }
-        self.remove_space(space.id(), removal).await.map(|_| true)
+        self.remove_space(&space.id, removal).await.map(|_| true)
     }
 
     /// The first attempt that passes removal's initial checks starts the
     /// grace period, so it never runs while the space could not go. A
     /// failing check fails the attempt: removal would check again, and pass
     /// without any grace period once the work had changed in between.
-    async fn grace_running(&self, space: &PresentSpace, removal: Removal<'_>) -> Result<bool> {
+    async fn grace_running(&self, space: &Space, removal: Removal<'_>) -> Result<bool> {
         if !removal.waits_for_grace() {
             return Ok(false);
         }
-        self.check_space_removal(space.id(), removal, Stage::Initial, &[])
+        self.check_space_removal(&space.id, removal, Stage::Initial, &[])
             .await?;
-        if let Some(workspace) = space.worktree() {
-            let checked = self.check_worktree(workspace, removal, Stage::Initial, &[]);
+        if let Some(workspace) = space.to_workspace() {
+            let checked = self.check_worktree(&workspace, removal, Stage::Initial, &[]);
             self.check_access(&workspace.path, checked).await?;
         }
         let grace = self.present_space_settings(space).await?.cleanup.grace();
-        let cleanup_at = self.claim_grace(space.id(), grace).await?;
+        let cleanup_at = self.claim_grace(&space.id, grace).await?;
         Ok(crate::time::UnixTime::now() < cleanup_at)
     }
 
@@ -249,7 +249,7 @@ impl Manager {
         &self,
         id: &SpaceId,
         removal: Removal<'_>,
-        checked: impl FnOnce(&PresentSpace) -> Result<()> + Send,
+        checked: impl FnOnce(&Space) -> Result<()> + Send,
     ) -> Result<SpaceRemoval> {
         let reservation = self.reserve_space(id, removal).await?;
         let space = reservation.space.clone();
@@ -276,10 +276,10 @@ impl Manager {
                 Ok(SpaceRemoval { children, worktree })
             }
             Err(error) => {
-                let (unready, error) = match (space.worktree(), replaced) {
+                let (unready, error) = match (space.to_workspace(), replaced) {
                     (Some(workspace), Some(replaced)) => {
                         let failed =
-                            self.failed_worktree_removal(workspace, replaced, removal, error);
+                            self.failed_worktree_removal(&workspace, replaced, removal, error);
                         failed.await
                     }
                     (_, _) => (false, error),
@@ -299,22 +299,22 @@ impl Manager {
     /// `replaced` is the lifecycle state the reservation replaced.
     async fn remove_reserved(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         removal: Removal<'_>,
         replaced: Option<WorkspaceState>,
-        checked: impl FnOnce(&PresentSpace) -> Result<()>,
+        checked: impl FnOnce(&Space) -> Result<()>,
     ) -> Result<(Vec<SpaceName>, Option<(WorktreeStage, WorktreeRemoval)>)> {
-        let worktree = match space.worktree() {
+        let worktree = match space.to_workspace() {
             Some(workspace) => {
                 let replaced = replaced.context("the reservation holds no worktree")?;
                 Some(
-                    self.begin_worktree_removal(workspace, replaced, removal)
+                    self.begin_worktree_removal(&workspace, replaced, removal)
                         .await?,
                 )
             }
             None => None,
         };
-        let id = space.id();
+        let id = &space.id;
         let cause = (worktree.as_ref()).map_or(removal.cause(), |stage| stage.cause(removal));
         // A conversion's own event records what became of the space.
         if !removal.converts() {
@@ -333,7 +333,7 @@ impl Manager {
         self.check_space_and_worktree(id, removal, Stage::AfterStop, worktree.as_ref(), &cancelled)
             .await?;
         let below = self.taken_with(id, removal).await?;
-        let children = self.remove_children(space.name(), below, removal).await?;
+        let children = self.remove_children(&space.name, below, removal).await?;
         if let Some(worktree) = &worktree {
             self.run_removal_hooks(worktree).await?;
         }
@@ -361,11 +361,11 @@ impl Manager {
     /// with the chat's.
     async fn end_space_record(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         removal: Removal<'_>,
         cause: EventCause,
     ) -> Result<()> {
-        let id = space.id();
+        let id = &space.id;
         if let Removal::Converted { chat } = removal {
             let released = self.commit_conversion(id, chat).await?;
             self.ask_user_about(&released).await;
@@ -391,7 +391,7 @@ impl Manager {
     /// record as an existing worktree's.
     async fn stop_for_removal(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         removal: Removal<'_>,
         worktree: Option<&WorktreeStage>,
     ) -> Result<()> {
@@ -458,7 +458,7 @@ impl Manager {
         }
         if matches!(stage, Stage::Initial) {
             let below = self.taken_with(id, removal).await?;
-            ensure_confirmed(space.name(), &below, removal)?;
+            ensure_confirmed(&space.name, &below, removal)?;
             self.ensure_none_stalled_below(below, removal).await?;
         }
         // Only a worktree runs removal hooks.
@@ -535,9 +535,9 @@ impl Manager {
             // A space without a worktree has no directory of its own; those
             // below it may.
             if let Some(space) = self.find_space(&child.id).await?
-                && let Some(workspace) = space.worktree()
+                && let Some(workspace) = space.to_workspace()
             {
-                self.ensure_worktree_answers(workspace)?;
+                self.ensure_worktree_answers(&workspace)?;
             }
             pending.extend(self.taken_first(&child.id).await?);
         }

@@ -26,7 +26,7 @@ use crate::{
         workspace::{Manager, not_ready},
     },
     fsutil::off_runtime,
-    model::{CleanupReason, PresentSpace, Workspace},
+    model::{CleanupReason, Space, Workspace},
     process::DirectoryUsers,
     state::WorkspaceState,
     time::UnixTime,
@@ -284,11 +284,11 @@ async fn sweep_idle(manager: &Manager, timers: &mut Timers, users: &DirectoryUse
     let spaces = manager.present_spaces().await?;
     timers
         .idle
-        .retain(|id, _| spaces.iter().any(|space| space.id() == id));
+        .retain(|id, _| spaces.iter().any(|space| &space.id == id));
     let mut failed = SpaceFailures::default();
     for space in spaces {
         if let Err(error) = sweep_space(manager, timers, &space, users).await {
-            failed.push(space.id(), space.name(), &error);
+            failed.push(&space.id, &space.name, &error);
         }
     }
     failed.into_result()
@@ -299,7 +299,7 @@ async fn sweep_idle(manager: &Manager, timers: &mut Timers, users: &DirectoryUse
 async fn sweep_space(
     manager: &Manager,
     timers: &mut Timers,
-    space: &PresentSpace,
+    space: &Space,
     users: &DirectoryUsers,
 ) -> Result<()> {
     if let Some(workspace) = space.worktree() {
@@ -307,47 +307,49 @@ async fn sweep_space(
         if manager.sweep_skips(&workspace.path).await {
             return Ok(());
         }
-        if deleted(workspace).await? {
+        if deleted(workspace).await?
+            && let Some(workspace) = space.to_workspace()
+        {
             timers.idle.remove(&workspace.id);
-            remove_deleted(manager, workspace).await;
+            remove_deleted(manager, &workspace).await;
             return Ok(());
         }
     }
     let observed = observe(manager, space, users).await;
     let Ok(Some((delay, signals))) = observed else {
-        timers.idle.remove(space.id());
+        timers.idle.remove(&space.id);
         return observed.map(drop);
     };
     // Each pass compares only the signals; a worktree's Git state is
     // inspected and its files walked when the timer starts and again when
     // it expires.
     let now = Instant::now();
-    let started = match timers.expired(space.id(), signals, now, delay) {
+    let started = match timers.expired(&space.id, signals, now, delay) {
         Expiry::Running => return Ok(()),
         Expiry::Restart => None,
         Expiry::Expired(snapshot) => Some(snapshot),
     };
     let snapshot = candidate(manager, space, users).await;
     let Ok(Some(snapshot)) = snapshot else {
-        timers.idle.remove(space.id());
+        timers.idle.remove(&space.id);
         return snapshot.map(drop);
     };
     if started != Some(snapshot) {
-        timers.start(space.id(), snapshot, now);
+        timers.start(&space.id, snapshot, now);
         return Ok(());
     }
     let removal = (manager.remove_unused(space, snapshot, EventCause::Idle)).await;
     if matches!(removal, Ok(false)) {
         return Ok(());
     }
-    timers.idle.remove(space.id());
+    timers.idle.remove(&space.id);
     (manager.announce_removal(space, Cleanup::Idle, &removal)).await
 }
 
 /// Whether the worktree of `workspace` was deleted: only one that existed
 /// (identity recorded) can have been, and a failed creation keeps its
 /// error until removed explicitly.
-async fn deleted(workspace: &Workspace) -> Result<bool> {
+async fn deleted(workspace: &crate::model::Worktree) -> Result<bool> {
     Ok(matches!(
         workspace.state,
         WorkspaceState::Ready | WorkspaceState::Failed
@@ -357,7 +359,7 @@ async fn deleted(workspace: &Workspace) -> Result<bool> {
 
 /// The idle delay of `space`, or `None` when idle cleanup is disabled for
 /// it or its worktree is not ready.
-async fn idle_delay(manager: &Manager, space: &PresentSpace) -> Result<Option<Duration>> {
+async fn idle_delay(manager: &Manager, space: &Space) -> Result<Option<Duration>> {
     if space.worktree().and_then(not_ready).is_some() {
         return Ok(None);
     }
@@ -370,7 +372,7 @@ async fn idle_delay(manager: &Manager, space: &PresentSpace) -> Result<Option<Du
 /// disabled.
 async fn observe(
     manager: &Manager,
-    space: &PresentSpace,
+    space: &Space,
     users: &DirectoryUsers,
 ) -> Result<Option<(Duration, u64)>> {
     let Some(delay) = idle_delay(manager, space).await? else {
@@ -384,7 +386,7 @@ async fn observe(
 /// its worktree read from `users`.
 pub(super) async fn candidate(
     manager: &Manager,
-    space: &PresentSpace,
+    space: &Space,
     users: &DirectoryUsers,
 ) -> Result<Option<Snapshot>> {
     if idle_delay(manager, space).await?.is_none() {
@@ -489,7 +491,7 @@ pub async fn on_request(
 
 /// The spaces and repositories a cleanup request can reach.
 struct Targets {
-    spaces: Vec<PresentSpace>,
+    spaces: Vec<Space>,
     repositories: Vec<crate::model::Repository>,
 }
 
@@ -503,7 +505,7 @@ impl Targets {
         };
         let within = |id: &RepositoryId| repository.as_ref().is_none_or(|only| only == id);
         // A chat without a repository is in none of them.
-        let space_within = |space: &PresentSpace| match space.repository_id() {
+        let space_within = |space: &Space| match space.repository_id.as_ref() {
             Some(id) => within(id),
             None => repository.is_none(),
         };
@@ -518,7 +520,7 @@ impl Targets {
                 .filter(|repo| within(&repo.id))
                 .collect(),
         };
-        let spaces = (targets.spaces.iter()).map(|space| ("", space.id().as_str()));
+        let spaces = (targets.spaces.iter()).map(|space| ("", space.id.as_str()));
         selection.spaces.ensure_known(spaces)?;
         selection.caches.ensure_known(
             targets
@@ -567,13 +569,13 @@ async fn empty_caches_on_request(
 async fn remove_on_request(
     manager: &Manager,
     report: &mut ManualCleanup,
-    spaces: Vec<PresentSpace>,
+    spaces: Vec<Space>,
     pick: &Pick,
 ) -> Result<()> {
     let named = matches!(pick, Pick::Only(_));
     for space in spaces {
-        let name = space.name().clone();
-        if !pick.covers_space(space.id()) {
+        let name = space.name.clone();
+        if !pick.covers_space(&space.id) {
             continue;
         }
         if let Some(reason) = space.worktree().and_then(not_ready) {
@@ -594,17 +596,17 @@ async fn remove_on_request(
         };
         if report.dry_run {
             report.removed.push(name.into());
-            report.removed_ids.push(space.id().clone());
+            report.removed_ids.push(space.id.clone());
             continue;
         }
         match (manager.remove_unused(&space, snapshot, EventCause::Manual)).await {
             Ok(_) => {
                 log!("manual cleanup removed {name}");
                 report.removed.push(name.into());
-                report.removed_ids.push(space.id().clone());
+                report.removed_ids.push(space.id.clone());
             }
             Err(error) => {
-                (manager.record_retained(space.id(), EventCause::Manual, &error)).await?;
+                (manager.record_retained(&space.id, EventCause::Manual, &error)).await?;
                 log!("manual cleanup retained {name}: {error:#}");
                 report.retain(name, &error);
             }
@@ -618,15 +620,15 @@ async fn remove_on_request(
 /// branch.
 async fn requested_candidacy(
     manager: &Manager,
-    space: &PresentSpace,
+    space: &Space,
 ) -> Result<Result<Snapshot, CleanupReason>> {
     let users = DirectoryUsers::default();
     let reason = match manager.idle_candidacy(space, &users).await? {
         Ok(snapshot) => return Ok(Ok(snapshot)),
         Err(reason) => reason,
     };
-    if let Some(workspace) = space.worktree()
-        && !manager.default_branch_fresh(workspace.repository()).await
+    if let Some(repository) = space.worktree().and(space.repository_id.as_ref())
+        && !manager.default_branch_fresh(repository).await
     {
         return Ok(Err(reason));
     }

@@ -1,6 +1,6 @@
 use super::*;
 use shoal_protocol::{
-    model::{PendingRestart, PresentSpace, Workspace},
+    model::{PendingRestart, Space, Workspace},
     state::{AgentState, WorkspaceState},
 };
 
@@ -30,7 +30,7 @@ fn a_joined_restart_stays_joined_once_it_ends() {
         restarted_from: Vec::new(),
     };
     let mut restarts = vec![Restart {
-        space: PresentSpace::Workspace(workspace),
+        space: Space::from(workspace),
         agent: agent.clone(),
         joins: agent.restart.clone(),
     }];
@@ -75,7 +75,7 @@ fn an_agent_another_command_of_the_run_restarted_is_skipped() {
         restarted_from: Vec::new(),
     };
     let mut restarts = vec![Restart {
-        space: PresentSpace::Workspace(workspace),
+        space: Space::from(workspace),
         agent: agent.clone(),
         joins: None,
     }];
@@ -114,7 +114,7 @@ fn an_agent_protection_stopped_while_the_run_waited_is_skipped() {
     };
     let number = workspace.number;
     let mut restarts = vec![Restart {
-        space: PresentSpace::Workspace(workspace),
+        space: Space::from(workspace),
         agent: agent.clone(),
         joins: None,
     }];
@@ -170,7 +170,7 @@ async fn a_failed_restart_names_the_resume_and_keeps_the_daemons_error() {
         code: ErrorCode::ScopeDenied,
         message: "refused".into(),
     };
-    let space = shoal_protocol::model::PresentSpace::Workspace(workspace.clone());
+    let space: shoal_protocol::model::Space = workspace.clone().into();
     let error = with_restore(&paths, &space, refused.into()).await;
     server.await.unwrap();
     assert!(format!("{error:#}").contains(&format!("shoal restore {}", workspace.number)));

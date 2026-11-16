@@ -6,6 +6,7 @@ use anyhow::{Context as _, Result, ensure};
 use rusqlite::Transaction;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::model::ByKind;
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::SpaceSelector;
 use std::{collections::BTreeMap, ffi::OsString, path::PathBuf};
@@ -15,7 +16,7 @@ use crate::{
     config::Effective,
     daemon::{scope::tokens, store, workspace::Manager},
     fsutil::off_runtime,
-    model::{Chat, ExecutionSpace, PortReservation, PresentSpace, Repository, Workspace},
+    model::{Chat, ExecutionSpace, PortReservation, Repository, Space, Workspace},
 };
 
 /// The space an execution registers in, read and checked for its plan.
@@ -53,8 +54,8 @@ impl Manager {
     /// is there. Running there counts as the space's activity.
     pub(super) async fn execution_home(&self, id: &SpaceId) -> Result<Home> {
         let space = (self.find_space(id).await?).with_context(|| format!("no space {id}"))?;
-        let home = match space {
-            PresentSpace::Workspace(workspace) => {
+        let home = match space.by_kind() {
+            ByKind::Workspace(workspace) => {
                 ensure!(
                     off_runtime::is_dir(&workspace.path).await?,
                     "workspace directory is missing"
@@ -68,7 +69,7 @@ impl Manager {
                     settings,
                 }
             }
-            PresentSpace::Chat(chat) => {
+            ByKind::Chat(chat) => {
                 let path = self.chat_path(&chat).await?;
                 ensure!(
                     self.check_access(&path, off_runtime::is_dir(&path)).await?,
@@ -93,14 +94,8 @@ impl Manager {
     /// The directory the agents of `space` run in, which tells their
     /// processes apart: a workspace's worktree, or a chat's directory,
     /// whether or not a chat could run in the worktree there now.
-    pub(crate) async fn space_directory(&self, space: &PresentSpace) -> Result<PathBuf> {
-        match space {
-            PresentSpace::Workspace(workspace) => Ok(workspace.path.clone()),
-            PresentSpace::Chat(chat) => match chat.workdir.workspace() {
-                Some(workspace) => Ok(self.workspace_by_id(&workspace.id).await?.part.path),
-                None => self.chat_checkout_path(chat).await,
-            },
-        }
+    pub(crate) async fn space_directory(&self, space: &Space) -> Result<PathBuf> {
+        Ok(space.workdir.path().to_owned())
     }
 
     /// The directory the agent of `chat` runs in: the worktree of the
@@ -139,10 +134,10 @@ impl Home {
     }
 
     /// The space as the execution's connection keeps it.
-    pub(super) fn into_space(self) -> PresentSpace {
+    pub(super) fn into_space(self) -> Space {
         match self {
-            Self::Workspace { workspace, .. } => PresentSpace::Workspace(workspace),
-            Self::Chat { chat, .. } => PresentSpace::Chat(chat),
+            Self::Workspace { workspace, .. } => Space::from(workspace),
+            Self::Chat { chat, .. } => Space::from(chat),
         }
     }
 

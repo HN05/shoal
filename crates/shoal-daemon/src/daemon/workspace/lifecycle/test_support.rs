@@ -7,7 +7,7 @@ use crate::{
         cleanup::{Rule, Snapshot},
         events::EventCause,
     },
-    model::{CleanupReason, PresentSpace},
+    model::{CleanupReason, Space},
     process::DirectoryUsers,
     removal::RemovalResult,
 };
@@ -16,7 +16,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
-    async fn present(&self, id: &SpaceId) -> Result<PresentSpace> {
+    async fn present(&self, id: &SpaceId) -> Result<Space> {
         (self.find_space(id).await?).with_context(|| format!("no space {id}"))
     }
 

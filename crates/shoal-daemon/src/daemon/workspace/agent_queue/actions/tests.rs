@@ -62,7 +62,7 @@ async fn a_stop_cancels_the_launches_waiting_to_open_its_workspace() {
             .await
             .unwrap()
             .into_iter()
-            .map(|space| space.id().clone())
+            .map(|space| space.id.clone())
             .collect::<Vec<_>>()
     };
     assert_eq!(

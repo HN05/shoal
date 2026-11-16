@@ -13,7 +13,7 @@ use crate::{
             reference::{ItemInput, ItemRef},
         },
     },
-    model::{Blocker, PresentSpace},
+    model::{Blocker, Space},
     state::BlockerKind,
 };
 use shoal_protocol::{
@@ -24,11 +24,7 @@ use shoal_protocol::{
 impl Manager {
     /// `change` to the progress of `space`, with the blocker it names looked
     /// up.
-    pub(super) async fn looked_up(
-        &self,
-        space: &PresentSpace,
-        change: ProgressChange,
-    ) -> Result<Change> {
+    pub(super) async fn looked_up(&self, space: &Space, change: ProgressChange) -> Result<Change> {
         Ok(match change {
             ProgressChange::AddBlocker {
                 blocker,
@@ -49,16 +45,16 @@ impl Manager {
     /// `blocker` of `space`, blocking it for `reason`.
     async fn recorded_blocker(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         blocker: Blocker,
         reason: String,
     ) -> Result<RecordedBlocker> {
         let (kind, target, name) = match blocker {
             Blocker::Space(selector) => {
                 let blocking = self.space(&SpaceSelector::parse(&selector)?).await?;
-                ensure!(blocking.id() != space.id(), "a space cannot block itself");
-                let id = blocking.id().to_string();
-                (BlockerKind::Space, id, blocking.name().to_string())
+                ensure!(blocking.id != space.id, "a space cannot block itself");
+                let id = blocking.id.to_string();
+                (BlockerKind::Space, id, blocking.name.to_string())
             }
             Blocker::Issue(input) => {
                 let url = self.issue_url(space, &input).await?.to_string();
@@ -79,7 +75,7 @@ impl Manager {
     /// The blockers of `space` that `blocker` names: by what it says, and by
     /// what that looks up to when it still does, as a removed space no
     /// longer does, which its ID still names.
-    async fn named_blocker(&self, space: &PresentSpace, blocker: Blocker) -> Named {
+    async fn named_blocker(&self, space: &Space, blocker: Blocker) -> Named {
         let (kind, input) = match &blocker {
             Blocker::Space(input) => (BlockerKind::Space, input.clone()),
             Blocker::Issue(input) => (BlockerKind::Issue, input.to_string()),
@@ -96,12 +92,12 @@ impl Manager {
 
     /// The issue `input` names: its URL, or its number in the repository
     /// of `space`.
-    async fn issue_url(&self, space: &PresentSpace, input: &ItemInput) -> Result<ItemRef> {
+    async fn issue_url(&self, space: &Space, input: &ItemInput) -> Result<ItemRef> {
         let number = match input {
             ItemInput::Url(issue) => return Ok(issue.clone()),
             ItemInput::Number(number) => *number,
         };
-        let repository = (space.repository_id())
+        let repository = (space.repository_id.as_ref())
             .context("a space without a repository names an issue by its URL")?;
         let repository = self
             .repository(&crate::repository::Selector::from(repository))

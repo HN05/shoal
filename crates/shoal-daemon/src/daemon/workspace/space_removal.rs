@@ -25,7 +25,7 @@ use crate::{
         spaces, workspace_files,
     },
     fsutil::off_runtime,
-    model::{PresentSpace, Workspace},
+    model::{Space, Workspace},
     removal::IdleRestore,
     state::{QueueKind, QueueState, WorkspaceState},
     time::UnixTime,
@@ -56,7 +56,7 @@ pub(crate) struct SpaceAgent {
 /// restores its agent or gives it new children meanwhile.
 pub(crate) struct SpaceReservation<'a> {
     /// The space as recorded once reserved.
-    pub(crate) space: PresentSpace,
+    pub(crate) space: Space,
     _removal: spaces::Reservation<'a>,
     worktree: Option<WorktreeReservation>,
 }
@@ -91,15 +91,15 @@ impl Manager {
     /// stopped. A running agent is use, a workspace's as a chat's.
     pub(crate) async fn space_agent(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         cancelled: &[IdleRestore],
     ) -> Result<SpaceAgent> {
-        let id = space.id();
+        let id = &space.id;
         let mut saved = self.saved_agent(id, cancelled).await?;
         // A saved chat in its worktree comes back there, as a saved agent
         // does.
-        if let Some(workspace) = space.worktree() {
-            for chat in self.chats_in(&workspace.id).await? {
+        if space.worktree().is_some() {
+            for chat in self.chats_in(&space.id).await? {
                 saved = saved || self.saved_agent(&chat.id, cancelled).await?;
             }
         }
@@ -164,11 +164,11 @@ impl Manager {
     /// and `request` say, and refuse while any of them runs on.
     pub(in crate::daemon::workspace) async fn stop_space_agent(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         policy: StopPolicy,
         request: &StopRequest,
     ) -> Result<()> {
-        self.stop_executions(space.id(), policy, request).await
+        self.stop_executions(&space.id, policy, request).await
     }
 
     /// Reserve the space `id` for `removal`, then its worktree, where it has
@@ -187,8 +187,8 @@ impl Manager {
             "the space has holds, which are the user's; ask the user to remove it"
         );
         let space = (self.find_space(id).await?).with_context(|| format!("no space {id}"))?;
-        let worktree = match space.worktree() {
-            Some(workspace) => Some(self.reserve_worktree(workspace, removal).await?),
+        let worktree = match space.to_workspace() {
+            Some(workspace) => Some(self.reserve_worktree(&workspace, removal).await?),
             None => None,
         };
         // Read again, as the reservations keep it from here on.
@@ -246,7 +246,7 @@ impl Manager {
         cause: events::EventCause,
         error: &anyhow::Error,
     ) -> Result<()> {
-        let id = reservation.space.id();
+        let id = &reservation.space.id;
         let Some(worktree) = reservation.worktree else {
             return self.record_retained(id, cause, error).await;
         };
@@ -266,11 +266,11 @@ impl Manager {
     /// retention period. The forge assignments only it kept go.
     pub(crate) async fn delete_space_record(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         cause: events::EventCause,
     ) -> Result<()> {
         let expires_at = self.removed_files_expiry(space).await;
-        let id = space.id().to_owned();
+        let id = space.id.to_owned();
         let deleted = (self.store)
             .write(move |tx| delete_record(tx, &id, cause, expires_at))
             .await?;
@@ -287,7 +287,7 @@ impl Manager {
     /// no agent here works them. Each failure notifies.
     async fn release_removed_assignees(
         &self,
-        space: &PresentSpace,
+        space: &Space,
         dropped: Vec<Dropped>,
         issues: &[ItemRef],
     ) {
@@ -296,34 +296,34 @@ impl Manager {
             Ok(linked) => warnings.extend(self.settle_issue_agents(&linked, issues).await),
             Err(error) => crate::daemon::log!(
                 "agent assignees of removed {} not settled: {error:#}",
-                space.name()
+                &space.name
             ),
         }
         for warning in warnings {
             let kind = NotificationKind::UnassignFailed;
-            (self.notify_space(space.name(), space.id(), kind, warning)).await;
+            (self.notify_space(&space.name, &space.id, kind, warning)).await;
         }
     }
 
     /// Forget what `space` kept outside its record once that is deleted or,
     /// for a workspace, converted: the places it opened, its agents'
     /// recovery records and session logs, and a workspace's state.
-    pub(crate) async fn forget_removed_space(&self, space: &PresentSpace) {
-        self.close_space_places(space.id(), space.name()).await;
-        self.report_times.forget(space.id());
-        if let PresentSpace::Workspace(workspace) = space {
-            self.forget_workspace(&workspace.id).await;
+    pub(crate) async fn forget_removed_space(&self, space: &Space) {
+        self.close_space_places(&space.id, &space.name).await;
+        self.report_times.forget(&space.id);
+        if space.worktree().is_some() {
+            self.forget_workspace(&space.id).await;
         }
-        self.delete_session_logs(space.id());
+        self.delete_session_logs(&space.id);
     }
 
     /// Delete the temporary directory of the removed `space`. A failure is
     /// logged, since the removal already happened.
-    pub(crate) async fn delete_removed_tmp_dir(&self, space: &PresentSpace) {
+    pub(crate) async fn delete_removed_tmp_dir(&self, space: &Space) {
         if let Err(error) = self.delete_tmp_dir(space).await {
             crate::daemon::log!(
                 "temporary directory of {} not deleted: {error:#}",
-                space.name()
+                &space.name
             );
         }
     }
