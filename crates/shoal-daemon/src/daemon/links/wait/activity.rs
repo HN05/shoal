@@ -34,11 +34,7 @@ impl Manager {
         let _guard = self.gates.lock_prs([id]).await;
         // Checked before recording, so a change that starts later comes
         // after the poll's read, and one that ended was recorded first.
-        let changing = (observations.iter())
-            .map(|(url, _)| url)
-            .filter(|url| self.gates.issue_assignees_changing(url))
-            .cloned()
-            .collect();
+        let changing = self.assignees_changing(&observations);
         let poll = Poll {
             selection: selection.clone(),
             report,
@@ -50,6 +46,16 @@ impl Manager {
         self.store
             .write(move |tx| record_observations(tx, &id, observations, &poll, &agents))
             .await
+    }
+
+    /// The URLs of the `observations` whose assignees Shoal is changing
+    /// on its own.
+    fn assignees_changing(&self, observations: &[(String, Snapshot)]) -> Vec<String> {
+        (observations.iter())
+            .map(|(url, _)| url)
+            .filter(|url| self.gates.issue_assignees_changing(url))
+            .cloned()
+            .collect()
     }
 
     pub(super) async fn pending_activity(
