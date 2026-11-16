@@ -126,10 +126,10 @@ async fn end_moved(
 ) -> Result<()> {
     let removal = match &checked.space {
         Ending::Workspace(check) => {
-            let space = SpaceSelector::id(&check.workspace.id);
+            let space = SpaceSelector::id(&check.space.id);
             let unsaved = UnsavedWork::confirming(check);
             let ended = crate::client::transfer::end_moved(&ctx.paths, space, unsaved, checkpoint);
-            super::super::super::workspaces::leaving(ctx, &check.workspace, ended).await?
+            super::super::super::workspaces::leaving(ctx, &check.space, ended).await?
         }
         Ending::Chat(chat) => {
             let space = SpaceSelector::id(&chat.id);

@@ -904,7 +904,7 @@ fn removal_of_several_workspaces_confirms_once_and_checks_all_first() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|removal| removal["workspace"].as_str().unwrap())
+        .map(|removal| removal["space"].as_str().unwrap())
         .collect();
     assert_eq!(removed_names, ["third", "fourth"]);
     assert_eq!(removed["failed"], serde_json::json!([]));

@@ -129,27 +129,19 @@ impl WorktreeStage {
 }
 
 impl Manager {
-    /// What removing the workspace at the user's request would do, with the
-    /// spaces it takes first, deepest first, and its changed files and whether
-    /// removal archives them when `include_changes` is set and it has any.
-    pub async fn check_manual_removal(
+    /// What removing the worktree of `workspace` at a request would discard,
+    /// with its changed files and whether removal archives them when
+    /// `include_changes` is set and it has any.
+    pub(in crate::daemon::workspace) async fn check_manual_worktree(
         &self,
-        selector: &SpaceSelector,
+        workspace: &Workspace,
         include_changes: bool,
     ) -> Result<RemovalCheck> {
-        let mut check = self
-            .check_removal(selector, InspectionPolicy::GitOnly)
-            .await?
+        let selector = SpaceSelector::id(&workspace.id);
+        let mut check = (self
+            .check_removal(&selector, InspectionPolicy::GitOnly)
+            .await?)
             .check;
-        check.children = self.spaces_taken_with(&check.workspace.id).await?;
-        check.children.reverse();
-        for child in &check.children {
-            if let Some(workspace) = self.find_workspace(&child.id).await?
-                && workspace.disposable
-            {
-                check.disposable_children.push(child.id.clone());
-            }
-        }
         if include_changes && check.dirty {
             removal::load_changed_files(&mut check).await?;
             check.unsaved_files_archived = self.archives_unsaved_files(&check.workspace).await?;

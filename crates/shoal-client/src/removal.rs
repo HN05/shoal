@@ -1,7 +1,7 @@
-//! What removing a workspace would discard, whether the caller lets it, and
+//! What removing a space would discard, whether the caller lets it, and
 //! what the removal did.
 use anyhow::{Context as _, Result};
-use shoal_protocol::removal::{RemovalCheck, RemovalResult, UnsavedWork};
+use shoal_protocol::removal::{RemovalResult, SpaceRemovalCheck, UnsavedWork};
 
 use crate::connection::{Daemon, pages, request};
 use shoal_protocol::space_names::SpaceSelector;
@@ -11,42 +11,36 @@ use shoal_protocol::{
     protocol::RemovalMethod,
 };
 
-/// What removing `workspace` would discard, with its changes when
-/// `include_changes`.
+/// What removing the workspace or chat `space` would do, with its
+/// worktree's changes when `include_changes`.
 pub async fn check(
     daemon: &impl Daemon,
-    workspace: SpaceSelector,
+    space: SpaceSelector,
     include_changes: bool,
-) -> Result<RemovalCheck> {
+) -> Result<SpaceRemovalCheck> {
     let method = RemovalMethod::CheckRemoval {
-        workspace,
+        space,
         include_changes,
     };
-    request(daemon, method).await
+    let check: Box<SpaceRemovalCheck> = request(daemon, method).await?;
+    Ok(*check)
 }
 
-/// Remove `workspace`, deleting only the `unsaved` work the caller saw.
+/// Remove the workspace or chat `space`, stopping its agent, deleting only
+/// the `unsaved` work the caller saw.
 pub async fn remove(
     daemon: &impl Daemon,
-    workspace: SpaceSelector,
+    space: SpaceSelector,
     unsaved: UnsavedWork,
 ) -> Result<RemovalResult> {
-    request(
-        daemon,
-        RemovalMethod::RemoveWorkspace { workspace, unsaved },
-    )
-    .await
+    request(daemon, RemovalMethod::RemoveSpace { space, unsaved }).await
 }
 
-/// Start removing `workspace`, returning once nothing but a change made
+/// Start removing `space`, returning once nothing but a change made
 /// meanwhile or a step that fails can keep it; a later failure reaches
 /// the caller's agent, or else the user's notifications.
-pub async fn start(
-    daemon: &impl Daemon,
-    workspace: SpaceSelector,
-    unsaved: UnsavedWork,
-) -> Result<()> {
-    request(daemon, RemovalMethod::StartRemoval { workspace, unsaved }).await
+pub async fn start(daemon: &impl Daemon, space: SpaceSelector, unsaved: UnsavedWork) -> Result<()> {
+    request(daemon, RemovalMethod::StartRemoval { space, unsaved }).await
 }
 
 /// Remove what `selection` selects that nothing keeps, or with `dry_run`

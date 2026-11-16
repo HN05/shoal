@@ -3810,20 +3810,20 @@ Removing the repository deletes `.tmp`.
 
 ### Remove a workspace
 
-`shoal rm` returns once Shoal has reserved the workspace and checked that it can
-go: a refusal, such as unsaved work it was not told to delete, a hold or another
-operation under way, fails the command and leaves the workspace as it was.
-Stopping its commands, its hooks, the checkpoint and deleting the worktree then go
-on in the background, and `--json` reports `background` with the spaces it takes
-first instead of what it did. A failure from then on keeps the workspace and
+`shoal rm` removes a workspace or a chat the same way. It returns once Shoal has
+reserved the space and checked that it can go: a refusal, such as unsaved work it
+was not told to delete, a hold or another operation under way, fails the command
+and leaves the space as it was. Stopping its agent and commands, removing the
+spaces below it, its hooks, the checkpoint and deleting the worktree then go on
+in the background, and `--json` reports `background` with the spaces it takes
+first instead of what it did. A failure from then on keeps the space and
 arrives as a `removal_failed` notification, or for an agent's removal as a message
 to that agent, saying why; `shoal rm` tries again. Deleting the worktree fails
 once it has run for ten minutes, and closing a zmx session once it has run for
 30 seconds. A removal that stopped before it finished, because the daemon
 stopped or its work ended early, leaves the workspace `failed`, its log saying
 so, and `shoal rm` finishes it. `--wait`
-returns only once the workspace is removed and reports the branch it kept.
-Removing a chat always waits.
+returns only once the space is removed and reports the branch it kept.
 
 Removal deletes the workspace's branch when a remote-tracking branch or the
 default branch has every one of its commits, including squash and rebase merges

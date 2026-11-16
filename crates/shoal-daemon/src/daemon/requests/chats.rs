@@ -10,7 +10,6 @@ use super::super::{
     workspace::Manager,
 };
 use crate::protocol::{Body, ChatMethod};
-use crate::removal::{InspectionPolicy, UnsavedWork};
 use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn handle(
@@ -53,17 +52,6 @@ pub(super) async fn handle(
                     .start_new_chat(repository, workspace.as_ref(), new)
                     .await?,
             )
-        }
-        ChatMethod::RemoveChat { chat, children } => {
-            let chat = manager.chat(&chat).await?;
-            let unsaved = children.map_or_else(Default::default, UnsavedWork::taking);
-            let selector = SpaceSelector::id(&chat.id);
-            let removed =
-                (manager.remove_selected(&selector, unsaved, InspectionPolicy::GitOnly)).await?;
-            Body::RemovedChat(shoal_protocol::chats::RemovedChat {
-                chat,
-                children: removed.children,
-            })
         }
         ChatMethod::CheckChatParent {
             repository,
@@ -156,16 +144,6 @@ impl Scoped for ChatMethod {
                         caller,
                         chat,
                         "scoped processes place only the chats below their own space",
-                    )
-                    .await?,
-            ),
-            ChatMethod::RemoveChat { chat, .. } => Some(
-                manager
-                    .unheld_workspace_below(
-                        caller,
-                        chat,
-                        "scoped processes remove only the chats below their own space",
-                        true,
                     )
                     .await?,
             ),

@@ -1308,7 +1308,7 @@ fn a_removed_chat_moves_from_its_removal_record() {
     let mut id = String::new();
     talk_until(&fixture, |_, chats| {
         id = chats[0]["id"].as_str().unwrap().to_owned();
-        fixture.ok(&["rm", &id, "--yes"]);
+        fixture.ok(&["rm", "--wait", &id, "--yes"]);
     });
     let file = fixture.root.path().join("talk.shoal");
     let file = file.to_str().unwrap();
@@ -1323,7 +1323,7 @@ fn a_removed_chat_moves_from_its_removal_record() {
     assert_eq!(removed[0]["workspace_id"], id.as_str(), "{removed}");
     // The record stays here, so the import elsewhere opens the chat again.
     fixture.ok(&["restore", &id, "--forget"]);
-    fixture.ok(&["rm", &id, "--yes"]);
+    fixture.ok(&["rm", "--wait", &id, "--yes"]);
     import_continues_the_chat(&fixture, file, &id);
 }
 

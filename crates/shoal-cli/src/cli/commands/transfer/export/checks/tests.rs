@@ -43,10 +43,12 @@ fn space(id: &str, name: &str, kind: SpaceKind) -> SpaceRef {
 
 /// The export check of `workspace`, whose removal takes `taken` first.
 fn checked(workspace: crate::model::Workspace, taken: Vec<SpaceRef>) -> Checked {
-    let check: RemovalCheck = serde_json::from_value(serde_json::json!({
+    let worktree = serde_json::json!({
         "workspace": workspace, "running_commands": 0, "processes": [], "dirty": false,
         "unpushed_commits": 0, "branch": "worker", "matches_default_branch": true,
-        "children": taken,
+    });
+    let check: SpaceRemovalCheck = serde_json::from_value(serde_json::json!({
+        "space": workspace, "worktree": worktree, "children": taken,
     }))
     .unwrap();
     Checked {

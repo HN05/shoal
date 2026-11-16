@@ -300,8 +300,8 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
         .await
         .unwrap();
     // An agent hold leaves the parent's agent free to remove the child.
-    let mut remove = crate::protocol::RemovalMethod::RemoveWorkspace {
-        workspace: SpaceSelector::id(&child.id),
+    let mut remove = crate::protocol::RemovalMethod::RemoveSpace {
+        space: SpaceSelector::id(&child.id),
         unsaved: Default::default(),
     };
     scope::authorize(&manager, Some(&"parent".into()), &mut remove)

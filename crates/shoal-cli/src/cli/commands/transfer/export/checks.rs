@@ -1,7 +1,7 @@
 //! What ending a space for its export would do, the refusals of an export
 //! that would lose work or cut its own output off, and the confirmation
 //! ending the spaces needs.
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 use shoal_protocol::model::ByKind;
 
 use super::Output;
@@ -9,7 +9,7 @@ use crate::client::transcripts;
 use crate::{
     cli::{context::Context, ui},
     model::{Chat, Space, SpaceHold, SpaceKind, SpaceRef, Spaces},
-    removal::{RemovalCheck, UnsavedWork},
+    removal::{SpaceRemovalCheck, UnsavedWork},
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
@@ -30,21 +30,21 @@ pub(in super::super) struct Checked {
     reason = "one per exported space, moved into its planned export"
 )]
 pub(in super::super) enum Ending {
-    Workspace(RemovalCheck),
+    Workspace(SpaceRemovalCheck),
     Chat(Chat),
 }
 
 impl Checked {
     pub(super) fn name(&self) -> &shoal_protocol::space_names::SpaceName {
         match &self.space {
-            Ending::Workspace(check) => &check.workspace.name,
+            Ending::Workspace(check) => &check.space.name,
             Ending::Chat(chat) => &chat.name,
         }
     }
 
     pub(in super::super) fn id(&self) -> &shoal_ids::space_ids::SpaceId {
         match &self.space {
-            Ending::Workspace(check) => &check.workspace.id,
+            Ending::Workspace(check) => &check.space.id,
             Ending::Chat(chat) => &chat.id,
         }
     }
@@ -52,7 +52,7 @@ impl Checked {
     /// The space with its kind, as a confirmation names it.
     pub(super) fn label(&self) -> String {
         match &self.space {
-            Ending::Workspace(check) => format!("workspace {}", check.workspace.name),
+            Ending::Workspace(check) => format!("workspace {}", check.space.name),
             Ending::Chat(chat) => format!("chat {}", chat.name),
         }
     }
@@ -61,11 +61,7 @@ impl Checked {
     /// ending them here releases.
     fn holds(&self) -> impl Iterator<Item = (&SpaceId, &SpaceName, &[SpaceHold])> {
         let own = match &self.space {
-            Ending::Workspace(check) => (
-                &check.workspace.id,
-                &check.workspace.name,
-                &check.workspace.holds,
-            ),
+            Ending::Workspace(check) => (&check.space.id, &check.space.name, &check.space.holds),
             Ending::Chat(chat) => (&chat.id, &chat.name, &chat.holds),
         };
         let carried = (self.carried.iter()).map(|chat| (&chat.id, &chat.name, &chat.holds));
@@ -172,27 +168,28 @@ async fn check_workspace_export(
     ctx: &Context,
     workspace: &SpaceId,
     output: &Output,
-) -> Result<RemovalCheck> {
+) -> Result<SpaceRemovalCheck> {
     let check =
         crate::client::removal::check(&ctx.paths, SpaceSelector::id(workspace), true).await?;
+    let worktree = (check.worktree.as_ref()).context("the workspace has no worktree")?;
     // Its removal keeps no record, which the package is built from.
     ensure!(
-        !check.workspace.disposable,
+        !worktree.workspace.disposable,
         "workspace {} is disposable, so its removal keeps nothing to export",
-        check.workspace.name
+        check.space.name
     );
     ensure!(
-        !check.dirty || check.unsaved_files_archived,
+        !worktree.dirty || worktree.unsaved_files_archived,
         "a checkpoint cannot keep the uncommitted files (they are too large, or include a repository or a changed submodule); commit or remove them before exporting"
     );
     match output.destination() {
         Some(destination) => ensure!(
-            !check.workspace.contains(destination),
+            !worktree.workspace.contains(destination),
             "{} is inside the workspace the export removes; write it elsewhere",
             destination.display()
         ),
         None => ensure!(
-            !crate::cli::terminal::closes_with(&ctx.paths, &check.workspace.id).await?,
+            !crate::cli::terminal::closes_with(&ctx.paths, &check.space.id).await?,
             "this terminal closes when the export removes the workspace, ending the stream; export to a file with -o, or from another terminal"
         ),
     }

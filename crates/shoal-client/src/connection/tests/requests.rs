@@ -21,7 +21,7 @@ use shoal_protocol::protocol::{
     operations::{OperationSpec, StartedWorkspace, WorkspaceStart},
 };
 use shoal_protocol::questions::{Ask, Question};
-use shoal_protocol::removal::{RemovalCheck, RemovalResult, UnsavedWork};
+use shoal_protocol::removal::{RemovalResult, SpaceRemovalCheck, UnsavedWork};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;
 
@@ -114,8 +114,8 @@ async fn removal_refuses_unsaved_work_unless_the_app_confirms_it() {
     let workspace = daemon.workspace("dirty").await;
     std::fs::write(workspace.path.join("draft"), "unsaved\n").unwrap();
     let app = daemon.connector();
-    let remove = |unsaved| RemovalMethod::RemoveWorkspace {
-        workspace: SpaceSelector::id(&workspace.id),
+    let remove = |unsaved| RemovalMethod::RemoveSpace {
+        space: SpaceSelector::id(&workspace.id),
         unsaved,
     };
     assert_eq!(
@@ -123,10 +123,10 @@ async fn removal_refuses_unsaved_work_unless_the_app_confirms_it() {
         ErrorCode::UnsavedWork
     );
     let check = RemovalMethod::CheckRemoval {
-        workspace: SpaceSelector::id(&workspace.id),
+        space: SpaceSelector::id(&workspace.id),
         include_changes: false,
     };
-    let check: RemovalCheck = connection::request(&app, check).await.unwrap();
+    let check: Box<SpaceRemovalCheck> = connection::request(&app, check).await.unwrap();
     let confirmed = remove(UnsavedWork::confirming(&check));
     let removal: RemovalResult = connection::request(&app, confirmed).await.unwrap();
     assert_eq!(

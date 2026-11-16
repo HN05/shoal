@@ -1,8 +1,6 @@
 //! Chats: starting, restoring and handing over their agents, their
-//! parents and scope, listing them and removing them.
+//! parents and scope, and listing them.
 use anyhow::Result;
-use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::chats::RemovedChat;
 
 use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
@@ -97,22 +95,4 @@ pub async fn scope(daemon: &impl Daemon, chat: &Chat) -> Result<ScopeToken> {
 pub async fn place(daemon: &impl Daemon, chat: &Chat, origin: Origin) -> Result<()> {
     let chat = SpaceSelector::id(&chat.id);
     request(daemon, ChatMethod::PlaceChat { chat, origin }).await
-}
-
-/// Remove the chat `chat`, by ID or name, stopping its agent: first the
-/// spaces below it, of which `children`, when given, are the IDs the caller
-/// saw and the only ones it takes.
-pub async fn remove(
-    daemon: &impl Daemon,
-    chat: &SpaceId,
-    children: Option<Vec<SpaceId>>,
-) -> Result<RemovedChat> {
-    request(
-        daemon,
-        ChatMethod::RemoveChat {
-            chat: SpaceSelector::id(chat),
-            children,
-        },
-    )
-    .await
 }

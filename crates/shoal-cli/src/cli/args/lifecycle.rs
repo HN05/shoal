@@ -119,7 +119,7 @@ pub struct RmArgs {
     pub space: Vec<SpaceSelector>,
     #[command(flatten)]
     pub confirmation: ConfirmationArgs,
-    /// Wait until each workspace is removed, reporting the branches kept.
+    /// Wait until each space is removed, reporting the branches kept.
     #[arg(long)]
     pub wait: bool,
 }

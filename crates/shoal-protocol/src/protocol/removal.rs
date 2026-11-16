@@ -31,8 +31,7 @@ pub enum UntrackedProcesses {
     Keep,
 }
 
-/// Requests that stop spaces, and remove, clean up, export and restore
-/// workspaces.
+/// Requests that stop, remove, clean up, export and restore spaces.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RemovalMethod {
@@ -63,20 +62,24 @@ pub enum RemovalMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         requester: Option<u32>,
     },
+    /// What removing the workspace or chat `space` would do, with its
+    /// worktree's changed files when `include_changes`.
     CheckRemoval {
-        workspace: SpaceSelector,
+        space: SpaceSelector,
         #[serde(default)]
         include_changes: bool,
     },
-    RemoveWorkspace {
-        workspace: SpaceSelector,
+    /// Remove the workspace or chat `space`, stopping its agent, first the
+    /// spaces below it, deleting only the `unsaved` work the caller saw.
+    RemoveSpace {
+        space: SpaceSelector,
         unsaved: UnsavedWork,
     },
-    /// Remove `workspace` as `RemoveWorkspace` does, answering once removal
-    /// has reserved it and passed the checks it makes before changing
-    /// anything, while the rest goes on in the background.
+    /// Remove `space` as `RemoveSpace` does, answering once removal has
+    /// reserved it and passed the checks it makes before changing anything,
+    /// while the rest goes on in the background.
     StartRemoval {
-        workspace: SpaceSelector,
+        space: SpaceSelector,
         unsaved: UnsavedWork,
     },
     /// Remove idle and merged cleanup candidates without waiting for their

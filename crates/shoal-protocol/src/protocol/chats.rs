@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use shoal_ids::space_ids::SpaceId;
 
 use crate::space_names::SpaceName;
 use crate::space_names::SpaceSelector;
@@ -44,14 +43,6 @@ pub enum ChatMethod {
         /// process's start would be.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         queue_entry: Option<shoal_ids::queue_entry_ids::QueueEntryId>,
-    },
-    /// Remove the chat `chat`, by ID or name, stopping its agent: first
-    /// the spaces below it, of which `children`, when given, are the IDs the
-    /// caller saw and the only ones it takes.
-    RemoveChat {
-        chat: SpaceSelector,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        children: Option<Vec<SpaceId>>,
     },
     /// Refuse a `parent` a new chat in `repository`, or without one, in the
     /// worktree of `workspace` when given, could not go below.

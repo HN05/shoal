@@ -239,7 +239,7 @@ async fn export_space(
 async fn export_checked(ctx: &Context, check: &Checked, output: &Output) -> Result<ExportedSpace> {
     let exported = match &check.space {
         Ending::Workspace(check) => {
-            let space = check.workspace.id.clone();
+            let space = check.space.id.clone();
             let unsaved = UnsavedWork::confirming(check);
             let exported = crate::client::transfer::export(
                 &ctx.paths,
@@ -247,7 +247,7 @@ async fn export_checked(ctx: &Context, check: &Checked, output: &Output) -> Resu
                 unsaved,
                 output.file(),
             );
-            super::super::workspaces::leaving(ctx, &check.workspace, exported).await?
+            super::super::workspaces::leaving(ctx, &check.space, exported).await?
         }
         Ending::Chat(chat) => {
             crate::client::transfer::export(

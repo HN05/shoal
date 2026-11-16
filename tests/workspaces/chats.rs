@@ -191,7 +191,7 @@ fn a_resume_takes_saved_chats_and_workspaces_together() {
         assert!(forgotten.contains(&"worker-agent".into()), "{forgotten:?}");
         let chats = fixture.ok(&["list", "--chats"]);
         assert_eq!(chats[0]["running"], false, "{chats}");
-        fixture.ok(&["rm", chat, "--yes"]);
+        fixture.ok(&["rm", "--wait", chat, "--yes"]);
     };
     let chat = save_chat(&mut fixture);
     let worker = fixture.add("worker");
@@ -1066,7 +1066,9 @@ fn removing_a_chat_removes_the_workspaces_below_it_and_stops_its_agent() {
     // Removing the chat asks first, naming what it takes.
     let (output, prompt) = fixture.interactive(&["rm", "--wait", &fixture.id("planning")], "n\n");
     assert!(!output.status.success(), "{prompt}");
-    assert!(prompt.contains("opened, reading, below"), "{prompt}");
+    for name in ["opened", "reading", "below"] {
+        assert!(prompt.contains(name), "{name}: {prompt}");
+    }
 
     // Naming the resident chat too removes it once, with the chat above it.
     let removed = fixture.ok(&[
@@ -1077,11 +1079,11 @@ fn removing_a_chat_removes_the_workspaces_below_it_and_stops_its_agent() {
         "--yes",
     ]);
     assert_eq!(removed["failed"], serde_json::json!([]), "{removed}");
-    let chats = removed["chats"].as_array().unwrap();
-    assert_eq!(chats.len(), 1, "{removed}");
-    assert_eq!(chats[0]["chat"]["id"], chat.as_str(), "{removed}");
+    let spaces = removed["removed"].as_array().unwrap();
+    assert_eq!(spaces.len(), 1, "{removed}");
+    assert_eq!(spaces[0]["space"], "planning", "{removed}");
     assert_eq!(
-        chats[0]["children"],
+        spaces[0]["children"],
         serde_json::json!(["reading", "below", "opened"])
     );
     assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
@@ -1963,10 +1965,7 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
 
     let (no, prompt) = fixture.interactive(&["rm", "--wait", &fixture.id("worker")], "n\n");
     assert!(!no.status.success());
-    assert!(
-        prompt.contains("chats in it first: worker chat"),
-        "{prompt}"
-    );
+    assert!(prompt.contains("each back: worker chat"), "{prompt}");
     let removed = fixture.run(&["rm", "--wait", &fixture.id("worker"), "--yes"]);
     assert!(removed.status.success(), "{}", printed(&removed));
     assert_eq!(fixture.ok(&["list", "--chats"]), serde_json::json!([]));

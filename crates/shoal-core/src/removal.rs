@@ -5,7 +5,7 @@ use shoal_refs::BranchName;
 
 use crate::{fsutil::off_runtime, git, model::Workspace, process};
 pub use shoal_protocol::removal::{
-    BranchOutcome, NOTHING, RemovalCheck, RemovalResult, UnsavedWork,
+    BranchOutcome, NOTHING, RemovalCheck, RemovalResult, SpaceRemovalCheck, UnsavedWork,
 };
 use std::path::Path;
 
@@ -122,8 +122,6 @@ pub async fn inspect(
         check: RemovalCheck {
             workspace,
             running_commands,
-            children: vec![],
-            disposable_children: vec![],
             processes: vec![],
             dirty: false,
             starting_files: false,

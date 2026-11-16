@@ -544,7 +544,7 @@ async fn consent_covers_only_the_unsaved_work_it_saw() {
     let (_root, manager, workspace) = fixture().await;
     fs::write(workspace.path.join("draft"), "draft\n").unwrap();
     let check = manager
-        .check_removal(&SpaceSelector::id(&workspace.id), InspectionPolicy::GitOnly)
+        .check_manual_removal(&SpaceSelector::id(&workspace.id), false)
         .await
         .unwrap();
     let files_only = UnsavedWork::confirming(&check);
@@ -564,7 +564,7 @@ async fn consent_covers_only_the_unsaved_work_it_saw() {
     assert!(workspace.path.join("draft").exists());
 
     let check = manager
-        .check_removal(&SpaceSelector::id(&workspace.id), InspectionPolicy::GitOnly)
+        .check_manual_removal(&SpaceSelector::id(&workspace.id), false)
         .await
         .unwrap();
     manager
@@ -1394,7 +1394,7 @@ async fn a_clean_confirmation_naming_children_removes_clean_only() {
     // Files appearing after the final inspection are not the caller's to
     // delete, so only unsaved work it confirmed forces removal.
     let check = crate::removal::Inspection {
-        check,
+        check: check.worktree.unwrap(),
         default_branch: None,
         idle_restores: vec![],
     };

@@ -1,4 +1,4 @@
-//! Chats as the daemon starts and removes them for a client.
+//! Chats as the daemon starts them for a client.
 use crate::agents::Delivery;
 use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
@@ -18,15 +18,6 @@ pub struct BackgroundChat {
     pub repository: Option<RepositoryId>,
     /// Where it runs and how to reach it, as the host that runs it says.
     pub place: String,
-}
-
-/// A removed chat.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RemovedChat {
-    pub chat: crate::model::Chat,
-    /// The spaces below it removed first, each after those below it.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub children: Vec<SpaceName>,
 }
 
 /// A new chat recorded at once whose agent waits in the agent queue.

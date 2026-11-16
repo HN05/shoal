@@ -116,7 +116,9 @@ impl Launch {
         let chat = self.record_new(ctx, None).await?;
         let attached = queue::attach(&ctx.paths, entry.id.clone(), SpaceSelector::id(&chat.id));
         if let Err(error) = attached.await {
-            let removed = crate::client::chats::remove(&ctx.paths, &chat.id, Some(Vec::new()));
+            let unsaved = crate::removal::UnsavedWork::taking(Vec::new());
+            let removed =
+                crate::client::removal::remove(&ctx.paths, SpaceSelector::id(&chat.id), unsaved);
             if let Err(removal) = removed.await {
                 eprintln!(
                     "shoal: chat {} stays without its agent: {removal:#}",

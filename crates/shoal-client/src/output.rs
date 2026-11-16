@@ -144,7 +144,6 @@ outputs!(
     shoal_protocol::chats::BackgroundChat,
     shoal_protocol::chats::DetachedChat,
     shoal_protocol::chats::QueuedChat,
-    shoal_protocol::chats::RemovedChat,
     shoal_protocol::chats::StartedChat,
     shoal_protocol::config::options::Entry,
     shoal_protocol::service::Definition,

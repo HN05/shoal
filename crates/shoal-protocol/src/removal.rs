@@ -1,11 +1,11 @@
-//! What removing a workspace would discard, whether the caller lets it, and
+//! What removing a space would discard, whether the caller lets it, and
 //! what the removal did.
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use shoal_ids::space_ids::SpaceId;
 use shoal_refs::{BranchName, CommitId};
 
-use crate::model::Workspace;
+use crate::model::{Space, SpaceRef, Workspace};
 
 #[cfg(test)]
 mod tests;
@@ -52,10 +52,20 @@ pub struct RemovalCheck {
     /// the worktree, while removal keeps the branch.
     #[serde(default)]
     pub starting_commits: bool,
+}
+
+/// What removing a space at a request would do.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SpaceRemovalCheck {
+    pub space: Space,
+    /// What removing its worktree would discard; none for a space without
+    /// one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worktree: Option<RemovalCheck>,
     /// The spaces below it, which removal takes first, each after those
-    /// below it; filled in for a manual removal's check.
+    /// below it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub children: Vec<crate::model::SpaceRef>,
+    pub children: Vec<SpaceRef>,
     /// The IDs of the `children` that are disposable, which removal takes
     /// without asking.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -110,23 +120,22 @@ impl UnsavedWork {
         }
     }
 
-    /// Consent to delete the unsaved work `check` shows.
-    pub fn confirming(check: &RemovalCheck) -> Self {
+    /// Consent to delete the unsaved work `check` shows, with the spaces
+    /// below it.
+    pub fn confirming(check: &SpaceRemovalCheck) -> Self {
+        let children = (check.children.iter()).map(|child| child.id.clone());
+        let Some(worktree) = &check.worktree else {
+            return Self::taking(children.collect());
+        };
         Self::Confirmed {
-            files: check.dirty,
-            detached_head: check.head.clone().filter(|_| check.detached_commits() > 0),
-            files_restorable: check.dirty && check.unsaved_files_archived,
-            children: Some(
-                check
-                    .children
-                    .iter()
-                    .map(|child| child.id.clone())
-                    .collect(),
-            ),
+            files: worktree.dirty,
+            detached_head: (worktree.head.clone()).filter(|_| worktree.detached_commits() > 0),
+            files_restorable: worktree.dirty && worktree.unsaved_files_archived,
+            children: Some(children.collect()),
         }
     }
 
-    /// The IDs of the workspaces below it the caller saw and lets removal
+    /// The IDs of the spaces below it the caller saw and lets removal
     /// take, or `None` when it may take any.
     pub fn children(&self) -> Option<&[SpaceId]> {
         match self {
@@ -202,6 +211,8 @@ impl BranchOutcome {
     }
 }
 
+/// What removing a space did; a space without a worktree has no branch, which
+/// the removal did not attempt to delete.
 #[derive(Debug, Clone, Deserialize)]
 pub struct RemovalResult {
     pub removed: bool,
@@ -209,8 +220,8 @@ pub struct RemovalResult {
     pub branch_outcome: BranchOutcome,
     /// Removal succeeded, but its best-effort post hook failed.
     pub hook_error: Option<String>,
-    /// The workspaces below it the removal took first, each after those
-    /// below it.
+    /// The spaces below it the removal took first, each after those below
+    /// it.
     #[serde(default)]
     pub children: Vec<crate::space_names::SpaceName>,
 }

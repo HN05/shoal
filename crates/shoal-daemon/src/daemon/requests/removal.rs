@@ -24,7 +24,7 @@ use shoal_protocol::space_names::SpaceSelector;
 fn changes_lifecycle(method: &RemovalMethod) -> bool {
     match method {
         RemovalMethod::StopSpace { .. }
-        | RemovalMethod::RemoveWorkspace { .. }
+        | RemovalMethod::RemoveSpace { .. }
         | RemovalMethod::StartRemoval { .. }
         | RemovalMethod::RestoreSpace { .. }
         | RemovalMethod::ExportSpace { .. }
@@ -92,29 +92,22 @@ pub(super) async fn handle(
                 .await?,
         ),
         RemovalMethod::CheckRemoval {
-            workspace,
+            space,
             include_changes,
-        } => Body::RemovalCheck(
+        } => Body::RemovalCheck(Box::new(
             manager
-                .check_manual_removal(&workspace, include_changes)
+                .check_manual_removal(&space, include_changes)
                 .await?,
-        ),
-        RemovalMethod::RemoveWorkspace { workspace, unsaved } => {
+        )),
+        RemovalMethod::RemoveSpace { space, unsaved } => {
+            let inspection = InspectionPolicy::GitOnly;
             Body::RemovalResult(match caller {
-                Some(_) => {
-                    manager
-                        .remove_unheld(&workspace, unsaved, InspectionPolicy::GitOnly)
-                        .await?
-                }
-                None => {
-                    manager
-                        .remove_selected(&workspace, unsaved, InspectionPolicy::GitOnly)
-                        .await?
-                }
+                Some(_) => manager.remove_unheld(&space, unsaved, inspection).await?,
+                None => manager.remove_selected(&space, unsaved, inspection).await?,
             })
         }
-        RemovalMethod::StartRemoval { workspace, unsaved } => {
-            manager.start_removal(&workspace, unsaved, caller).await?;
+        RemovalMethod::StartRemoval { space, unsaved } => {
+            manager.start_removal(&space, unsaved, caller).await?;
             Body::Ok
         }
         RemovalMethod::Cleanup { dry_run, selection } => {
@@ -194,17 +187,17 @@ impl Scoped for RemovalMethod {
         manager: &Manager,
         caller: &Caller,
     ) -> Result<Option<&mut SpaceSelector>> {
-        const REFUSAL: &str = "workspace processes remove only the workspaces split from theirs; finish their own with shoal done";
+        const REFUSAL: &str = "scoped processes remove only the spaces below their own; finish their own with shoal done";
         match self {
             // The check asks for the user's holds too, so a batch refuses
             // before removing any.
-            RemovalMethod::CheckRemoval { workspace, .. } => manager
-                .unheld_workspace_below(caller, workspace, REFUSAL, false)
+            RemovalMethod::CheckRemoval { space, .. } => manager
+                .unheld_workspace_below(caller, space, REFUSAL, false)
                 .await
                 .map(Some),
-            RemovalMethod::RemoveWorkspace { workspace, .. }
-            | RemovalMethod::StartRemoval { workspace, .. } => manager
-                .unheld_workspace_below(caller, workspace, REFUSAL, true)
+            RemovalMethod::RemoveSpace { space, .. }
+            | RemovalMethod::StartRemoval { space, .. } => manager
+                .unheld_workspace_below(caller, space, REFUSAL, true)
                 .await
                 .map(Some),
             // Its answer confines the spaces to those below the caller's.

@@ -5,7 +5,6 @@
 //! daemon records it while its agent runs.
 //! Every start makes a new chat, focused as its mode says.
 mod issue;
-pub(super) mod removal;
 
 mod agent;
 mod launch;

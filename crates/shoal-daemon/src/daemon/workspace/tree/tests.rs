@@ -302,12 +302,12 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
             },
         )
         .await;
-    let check = |workspace: &str| RemovalMethod::CheckRemoval {
-        workspace: workspace.into(),
+    let check = |space: &str| RemovalMethod::CheckRemoval {
+        space: space.into(),
         include_changes: false,
     };
-    let remove = |workspace: &str| RemovalMethod::RemoveWorkspace {
-        workspace: workspace.into(),
+    let remove = |space: &str| RemovalMethod::RemoveSpace {
+        space: space.into(),
         unsaved: UnsavedWork::default(),
     };
     for (target, allowed) in [

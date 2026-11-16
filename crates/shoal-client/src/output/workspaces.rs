@@ -10,12 +10,12 @@ use shoal_protocol::{
     removal::RemovalResult,
 };
 
-/// A removed workspace, or one being removed, and the holds it had.
+/// A removed space, or one being removed, and the holds it had.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Removed {
-    /// The workspace's name, which a removal of several reports.
+    /// The space's name, which a removal of several reports.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workspace: Option<SpaceName>,
+    pub space: Option<SpaceName>,
     /// What the removal did, once it finished.
     #[serde(flatten)]
     pub removal: Option<RemovalResult>,
@@ -47,8 +47,6 @@ pub struct BackgroundRemoval {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Removals {
     pub removed: Vec<Removed>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub chats: Vec<shoal_protocol::chats::RemovedChat>,
     pub failed: Vec<Failure>,
 }
 

@@ -11,7 +11,8 @@ use crate::{
     model::{Completion, Space, SpaceRef},
     process::DirectoryUsers,
     removal::{
-        BranchOutcome, IdleRestore, Inspection, InspectionPolicy, RemovalResult, UnsavedWork,
+        BranchOutcome, IdleRestore, Inspection, InspectionPolicy, RemovalResult, SpaceRemovalCheck,
+        UnsavedWork,
     },
     state::WorkspaceState,
 };
@@ -121,6 +122,47 @@ impl Manager {
             taking: None,
         };
         self.remove_requested(selector, removal).await
+    }
+
+    /// What removing the space `selector` names at a request would do: the
+    /// spaces it takes first, deepest first, and what removing its worktree,
+    /// where it has one, would discard, with the changed files when
+    /// `include_changes`.
+    pub async fn check_manual_removal(
+        &self,
+        selector: &SpaceSelector,
+        include_changes: bool,
+    ) -> Result<SpaceRemovalCheck> {
+        let space = self.space(selector).await?;
+        let worktree = match space.to_workspace() {
+            Some(workspace) => Some(
+                self.check_manual_worktree(&workspace, include_changes)
+                    .await?,
+            ),
+            None => None,
+        };
+        let mut children = self.spaces_taken_with(&space.id).await?;
+        children.reverse();
+        let disposable_children = self.disposable_among(&children).await?;
+        Ok(SpaceRemovalCheck {
+            space,
+            worktree,
+            children,
+            disposable_children,
+        })
+    }
+
+    /// The IDs of the disposable workspaces among `spaces`.
+    async fn disposable_among(&self, spaces: &[SpaceRef]) -> Result<Vec<SpaceId>> {
+        let mut disposable = Vec::new();
+        for space in spaces {
+            if let Some(workspace) = self.find_workspace(&space.id).await?
+                && workspace.disposable
+            {
+                disposable.push(space.id.clone());
+            }
+        }
+        Ok(disposable)
     }
 
     async fn remove_requested(

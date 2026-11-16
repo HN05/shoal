@@ -10,7 +10,7 @@ use crate::model::{
 };
 use crate::notifications::Notification;
 use crate::recovery::Report;
-use crate::removal::{RemovalCheck, RemovalResult};
+use crate::removal::{RemovalResult, SpaceRemovalCheck};
 use crate::resources::{Overview, ResourceLease};
 use crate::sim::{AuditEntry, Simulator, SimulatorCatalog};
 use anyhow::Result;
@@ -200,7 +200,6 @@ response_bodies! {
     Reached(crate::agent_messages::Reached),
     Chat(crate::model::Chat),
     RenamedSpace(crate::model::RenamedSpace),
-    RemovedChat(crate::chats::RemovedChat),
     Launched(crate::launches::Launched),
     Triggers(Vec<crate::triggers::TriggerStatus>),
     Trigger(crate::triggers::TriggerStatus),
@@ -269,7 +268,7 @@ response_bodies! {
     Refreshed(crate::model::Refreshed),
     Reconciled(Vec<Report>),
     Execution(ExecutionPlan),
-    RemovalCheck(RemovalCheck),
+    RemovalCheck(Box<SpaceRemovalCheck>),
     RemovalResult(RemovalResult),
     StoppedProcesses(crate::processes::Stopped),
     ExportedSpace(crate::transfer::ExportedSpace),
