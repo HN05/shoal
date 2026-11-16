@@ -106,6 +106,18 @@ fn a_limit_of_its_own_holds_back_only_the_requests_it_counts() {
 }
 
 #[test]
+fn a_pause_refusing_a_request_with_a_limit_of_its_own_holds_back_every_request() {
+    let memory = Memory::default();
+    let now = UnixTime::from_seconds(1_800_000_000);
+    let mut paused = response(&[("retry-after", "30")]);
+    paused.status = 403;
+    let refused = memory.observe_limit("forge.example", Some("search"), &paused, now);
+    assert_eq!(refused.map_err(|limited| limited.limit), Err(None));
+    let held = memory.check_limit("forge.example", None, now);
+    assert_eq!(held.map_err(|limited| limited.limit), Err(None));
+}
+
+#[test]
 fn the_least_recently_used_read_is_forgotten_first() {
     let memory = Memory::default();
     let validated = response(&[("etag", "\"1\"")]);

@@ -62,7 +62,11 @@ pub fn rate_limited(error: &anyhow::Error) -> Option<&RateLimited> {
 /// What `response` says about the forge's limit at `now`.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Limit {
-    /// The forge refused the request and accepts another at the time given.
+    /// The forge refused the request and every other of the account until
+    /// the time given, as a `Retry-After` or a refusal without a reset says.
+    Paused(UnixTime),
+    /// The forge refused the request, having spent the count it belongs to,
+    /// and accepts another counted the same way at the time given.
     Refused(UnixTime),
     /// The request was the last one before the limit resets at the time given.
     Exhausted(UnixTime),
@@ -71,7 +75,7 @@ pub(crate) enum Limit {
 impl Limit {
     pub fn until(&self) -> UnixTime {
         match self {
-            Self::Refused(until) | Self::Exhausted(until) => *until,
+            Self::Paused(until) | Self::Refused(until) | Self::Exhausted(until) => *until,
         }
     }
 }
@@ -105,8 +109,11 @@ pub(crate) fn limit(response: &impl Headed, now: UnixTime) -> Option<Limit> {
     let refused = response.status() == 429
         || (response.status() == 403 && (retry_after.is_some() || remaining == Some(0)));
     if refused {
-        let until = retry_after.or(reset).unwrap_or(now + DEFAULT_WAIT);
-        return Some(Limit::Refused(bounded(until)));
+        return Some(match (retry_after, reset) {
+            (None, Some(reset)) if remaining == Some(0) => Limit::Refused(bounded(reset)),
+            (Some(until), _) | (None, Some(until)) => Limit::Paused(bounded(until)),
+            (None, None) => Limit::Paused(bounded(now + DEFAULT_WAIT)),
+        });
     }
     (remaining == Some(0))
         .then_some(reset)

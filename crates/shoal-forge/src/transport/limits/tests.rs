@@ -17,7 +17,7 @@ fn refusals_wait_for_retry_after_then_the_reset_then_a_minute() {
     let now = UnixTime::from_seconds(1_800_000_000);
     assert_eq!(
         limit(&response(429, &[("retry-after", "30")]), now),
-        Some(Limit::Refused(now + Duration::from_secs(30)))
+        Some(Limit::Paused(now + Duration::from_secs(30)))
     );
     let github = [
         ("x-ratelimit-remaining", "0"),
@@ -35,11 +35,18 @@ fn refusals_wait_for_retry_after_then_the_reset_then_a_minute() {
     );
     assert_eq!(
         limit(&response(429, &[]), now),
-        Some(Limit::Refused(now + DEFAULT_WAIT))
+        Some(Limit::Paused(now + DEFAULT_WAIT))
     );
     assert_eq!(
         limit(&response(429, &[("retry-after", "999999")]), now),
-        Some(Limit::Refused(now + MAX_WAIT))
+        Some(Limit::Paused(now + MAX_WAIT))
+    );
+    // GitHub's secondary limit pauses the account even while a count
+    // is spent.
+    let secondary = [("retry-after", "30"), github[0], github[1]];
+    assert_eq!(
+        limit(&response(403, &secondary), now),
+        Some(Limit::Paused(now + Duration::from_secs(30)))
     );
 }
 

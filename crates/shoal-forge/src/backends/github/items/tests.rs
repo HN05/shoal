@@ -112,6 +112,7 @@ async fn matching_both_ways_takes_the_keyword_matches_while_meaning_is_rate_limi
         let headers = [
             "x-ratelimit-resource: semantic_search",
             "x-ratelimit-remaining: 0",
+            "x-ratelimit-reset: 60",
         ];
         let headers = headers.map(str::to_owned).to_vec();
         (

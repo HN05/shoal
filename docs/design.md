@@ -2423,7 +2423,8 @@ error message or a flag, that keyword search finds, so `both` adds its matches
 to the keyword ones, and gives the keyword ones alone under the stricter rate
 limit GitHub keeps for it. A forge's rate limit for some requests, such as
 GitHub's for searches, holds back only those requests, never the watches and
-reads the others serve. `shoal forge api` passes any request under
+reads the others serve; a pause the forge puts on the whole account, such as a
+`Retry-After`, holds back every request. `shoal forge api` passes any request under
 the repository's forge API root through the daemon the same way, for reads no
 command models. The daemon
 cannot tell what another method changes, so a scoped caller sends only GET

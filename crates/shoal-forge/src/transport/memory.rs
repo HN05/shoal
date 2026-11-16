@@ -70,9 +70,10 @@ impl Memory {
         Ok(())
     }
 
-    /// Record the limit `response` from `host` reports at `now` for the
-    /// requests that count against `limit`, and refuse the response when
-    /// the forge refused the request.
+    /// Record the limit `response` from `host` reports at `now`: for the
+    /// requests that count against `limit`, or for all of them when the
+    /// forge pauses the account. Refuse the response when the forge refused
+    /// the request.
     pub(crate) fn observe_limit(
         &self,
         host: &str,
@@ -83,9 +84,13 @@ impl Memory {
         let Some(reported) = reported_limit(response, now) else {
             return Ok(());
         };
+        let limit = match reported {
+            Limit::Paused(_) => None,
+            Limit::Refused(_) | Limit::Exhausted(_) => limit,
+        };
         (self.lock().limits).insert((host.to_owned(), limit), reported.until());
         match reported {
-            Limit::Refused(until) => Err(RateLimited {
+            Limit::Paused(until) | Limit::Refused(until) => Err(RateLimited {
                 host: host.to_owned(),
                 limit,
                 until,
