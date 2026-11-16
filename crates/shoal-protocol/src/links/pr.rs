@@ -23,10 +23,9 @@ pub enum RegistrationKind {
     Acknowledgement { head: CommitId },
 }
 
-/// Preserve legacy single-watch records while extending watch sets and completion.
+/// A registration as stored: the watched URLs, or the acknowledged head.
 #[derive(Serialize, Deserialize)]
 struct RegistrationRecord {
-    url: Option<ItemRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     urls: Option<Vec<ItemRef>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -39,12 +38,8 @@ impl TryFrom<RegistrationRecord> for Registration {
     type Error = anyhow::Error;
 
     fn try_from(record: RegistrationRecord) -> Result<Self> {
-        let kind = match (record.url, record.urls, record.head, record.merged_head) {
-            (Some(url), None, None, merged_head) => RegistrationKind::Watch {
-                urls: vec![url],
-                merged_head,
-            },
-            (None, Some(urls), None, merged_head) => {
+        let kind = match (record.urls, record.head, record.merged_head) {
+            (Some(urls), None, merged_head) => {
                 ensure!(
                     !urls.is_empty()
                         && urls.iter().collect::<std::collections::HashSet<_>>().len()
@@ -53,9 +48,9 @@ impl TryFrom<RegistrationRecord> for Registration {
                 );
                 RegistrationKind::Watch { urls, merged_head }
             }
-            (None, None, Some(head), None) => RegistrationKind::Acknowledgement { head },
+            (None, Some(head), None) => RegistrationKind::Acknowledgement { head },
             _ => anyhow::bail!(
-                "invalid PR cleanup registration: expected exactly one of url or head, or a watch URL list"
+                "invalid PR cleanup registration: expected exactly one of a watch URL list or head"
             ),
         };
         Ok(Self {
@@ -68,22 +63,14 @@ impl TryFrom<RegistrationRecord> for Registration {
 impl From<Registration> for RegistrationRecord {
     fn from(registration: Registration) -> Self {
         let mut record = Self {
-            url: None,
             urls: None,
             head: None,
             merged_head: None,
             error: registration.error,
         };
         match registration.kind {
-            RegistrationKind::Watch {
-                mut urls,
-                merged_head,
-            } => {
-                if urls.len() == 1 {
-                    record.url = urls.pop();
-                } else {
-                    record.urls = Some(urls);
-                }
+            RegistrationKind::Watch { urls, merged_head } => {
+                record.urls = Some(urls);
                 record.merged_head = merged_head;
             }
             RegistrationKind::Acknowledgement { head } => record.head = Some(head),

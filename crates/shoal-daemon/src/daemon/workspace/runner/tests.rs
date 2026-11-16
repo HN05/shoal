@@ -787,7 +787,7 @@ async fn watch_pull(manager: &Manager, space: &SpaceId, url: Option<String>) {
             match url {
                 Some(url) => db.execute(
                     "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
-                    rusqlite::params![space, json!({"url": url}).to_string()],
+                    rusqlite::params![space, json!({"urls": [url]}).to_string()],
                 )?,
                 None => db.execute("DELETE FROM pr_cleanup WHERE space_id=?1", [space])?,
             };

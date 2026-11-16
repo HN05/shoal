@@ -1167,7 +1167,7 @@ async fn deleted_parent_cleanup_keeps_a_parent_whose_child_elsewhere_stalled() {
 async fn pr_cleanup_skips_a_base_whose_stacked_workspace_elsewhere_stalled() {
     let (_temp, manager, base, stacked) = split_across_directories(true).await;
     let id = base.id.clone();
-    let registration = serde_json::json!({ "url": "https://example.invalid/o/r/pulls/1" });
+    let registration = serde_json::json!({ "urls": ["https://example.invalid/o/r/pulls/1"] });
     manager
         .store
         .run(move |db| {

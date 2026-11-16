@@ -183,7 +183,7 @@ async fn agent_messages_end_a_watch_before_item_activity() {
 }
 
 fn snapshot(message: &str) -> Snapshot {
-    serde_json::from_value(json!({"comments": {"one": message}, "checks": {}, "conflict": null, "state": "open", "errors": {}})).unwrap()
+    serde_json::from_value(json!({"comments": {"one": {"fingerprint": message}}, "checks": {}, "conflict": null, "state": "open", "errors": {}})).unwrap()
 }
 
 async fn register_watch(manager: &Manager, id: &SpaceId, url: &str) {
@@ -1619,6 +1619,9 @@ async fn own_changes_are_not_reported_back_to_the_workspace() {
         .unwrap();
     register_watch(&manager, &workspace.id, PR.as_str()).await;
     let observe = |comments: Value, state: &str| {
+        let comments: serde_json::Map<_, _> = (comments.as_object().into_iter().flatten())
+            .map(|(key, fingerprint)| (key.clone(), json!({"fingerprint": fingerprint})))
+            .collect();
         let snapshot = serde_json::from_value(json!({"comments": comments, "checks": {},
                 "conflict": null, "state": state, "errors": {}}))
         .unwrap();
@@ -1650,8 +1653,10 @@ async fn own_changes_are_not_reported_back_to_the_workspace() {
         .unwrap();
     // A poll that read the item before the agent closed it records its
     // comments, but not its stale state.
-    let stale = serde_json::from_value(json!({"comments": {"discussion:1": "theirs"},
-            "checks": {}, "conflict": null, "state": "open", "errors": {}}))
+    let stale = serde_json::from_value(
+        json!({"comments": {"discussion:1": {"fingerprint": "theirs"}},
+            "checks": {}, "conflict": null, "state": "open", "errors": {}}),
+    )
     .unwrap();
     let all = Selection::default();
     let report = BranchReport::Conflicts;

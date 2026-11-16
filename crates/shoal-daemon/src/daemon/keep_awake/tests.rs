@@ -13,7 +13,7 @@ async fn watch_pr(manager: &Manager, workspace: &crate::model::Workspace) {
         .run(move |db| {
             db.execute(
                 "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
-                rusqlite::params![id, r#"{"url":"https://example.com/o/r/pulls/1"}"#],
+                rusqlite::params![id, r#"{"urls":["https://example.com/o/r/pulls/1"]}"#],
             )?;
             Ok(())
         })

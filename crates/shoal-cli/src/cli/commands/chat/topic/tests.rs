@@ -164,6 +164,8 @@ fn a_chat_that_was_a_workspace_is_told_so_in_the_place_it_opens() {
         "issues": [{"kind": "issue", "url": "https://forge.example/team/repo/issues/7",
             "title": "Fix the login"}],
         "prs": [],
+        "opened": [],
+        "related": [],
     }))
     .unwrap();
     let topic = Topic {

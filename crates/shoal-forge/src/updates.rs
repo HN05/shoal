@@ -54,7 +54,6 @@ pub struct Snapshot {
     /// snapshots saved before kinds were recorded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) kind: Option<SnapshotKind>,
-    #[serde(deserialize_with = "comments::saved")]
     pub(crate) comments: BTreeMap<String, Entry>,
     pub(crate) checks: BTreeMap<String, Check>,
     /// The PR's head commit, which its checks run on; `None` for an issue.

@@ -242,24 +242,6 @@ fn comment_updates_count_changes_by_kind_and_author() {
 }
 
 #[test]
-fn comments_saved_without_authors_match_the_same_comments_with_them() {
-    let saved: Snapshot = serde_json::from_value(json!({
-        "comments": {"discussion:1": "hi", "discussion:2": "bye"},
-        "checks": {}, "conflict": null, "state": "open", "errors": {},
-    }))
-    .unwrap();
-    let mut next = Snapshot::of(SnapshotKind::Pr, Some(SnapshotState::Open));
-    next.record_comments(
-        DISCUSSION,
-        Ok(vec![("1".into(), Entry::new("hi".into(), "alice".into()))]),
-    );
-    let message = &saved.changes(&next, "pr")[0].message;
-    assert!(message.starts_with("1 deleted comment;"), "{message}");
-    let stored: Snapshot = serde_json::from_str(&serde_json::to_string(&next).unwrap()).unwrap();
-    assert_eq!(stored.comments, next.comments);
-}
-
-#[test]
 fn snapshots_saved_without_a_kind_report_the_next_observations_state() {
     let saved = |state: &str| -> Snapshot {
         serde_json::from_value(json!({
@@ -330,7 +312,7 @@ fn checks_saved_in_forge_casings_match_the_same_checks() {
 }
 
 #[test]
-fn saved_combined_verdicts_match_the_same_verdicts_by_reviewer() {
+fn reviewers_who_share_a_name_change_their_verdicts_one_at_a_time() {
     let verdicts = |pairs: &[(&str, &str)]| {
         let mut snapshot = Snapshot::of(SnapshotKind::Pr, Some(SnapshotState::Open));
         let pairs = pairs
@@ -339,18 +321,11 @@ fn saved_combined_verdicts_match_the_same_verdicts_by_reviewer() {
         snapshot.record_comments("reviews", Ok(verdict_entries(pairs)));
         snapshot
     };
-    let saved: Snapshot = serde_json::from_value(json!({
-        "comments": {"reviews:verdicts": "bob:Approved\nalice:ChangesRequested\nbob:Approved\n"},
-        "checks": {}, "conflict": null, "state": "open", "errors": {},
-    }))
-    .unwrap();
     let both = verdicts(&[
         ("alice", "ChangesRequested"),
         ("bob", "Approved"),
         ("bob", "Approved"),
     ]);
-    assert!(saved.changes(&both, "pr").is_empty());
-    // Reviewers who share a name still change their entry one at a time.
     let withdrawn = verdicts(&[("alice", "ChangesRequested"), ("bob", "Approved")]);
     let message = &both.changes(&withdrawn, "pr")[0].message;
     assert!(

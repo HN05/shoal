@@ -1817,7 +1817,7 @@ async fn scoped_merge_approval_binds_and_describes_its_push() {
                 "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
                 [
                     id.as_str(),
-                    r#"{"url":"https://forge.example/team/app/pulls/12"}"#,
+                    r#"{"urls":["https://forge.example/team/app/pulls/12"]}"#,
                 ],
             )?;
             Ok(())

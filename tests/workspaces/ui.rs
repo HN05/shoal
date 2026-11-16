@@ -463,7 +463,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
         rusqlite::params![
             workspace["id"].as_str().unwrap(),
             serde_json::json!({
-                "url": "https://forge.example/team/repo/pulls/7",
+                "urls": ["https://forge.example/team/repo/pulls/7"],
                 "head": null,
                 "error": null
             })
@@ -518,7 +518,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
     assert_eq!(status["resources"].as_array().unwrap().len(), 2);
     assert_eq!(status["simulators"], serde_json::json!([]));
     assert_eq!(
-        status["pr_cleanup"]["url"],
+        status["pr_cleanup"]["urls"][0],
         "https://forge.example/team/repo/pulls/7"
     );
     // The busy signing permit notified about the waiter, not this workspace.

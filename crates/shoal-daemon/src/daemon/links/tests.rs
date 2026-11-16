@@ -266,14 +266,6 @@ async fn a_moved_worktree_takes_no_recorded_relations() {
     );
 }
 
-#[test]
-fn link_events_from_before_relations_were_assignments() {
-    let link: LinkEvent =
-        serde_json::from_str(r#"{"kind":"pr","url":"https://forge.example/team/repo/pulls/7"}"#)
-            .unwrap();
-    assert_eq!(link.relation, Relation::Assigned);
-}
-
 /// A server for the Forgejo repository `team/repo` that shows each issue and
 /// PR but number 9, titled by its kind and number.
 fn titled_items() -> shoal_forge::test_support::Server {

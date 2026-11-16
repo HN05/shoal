@@ -67,6 +67,78 @@ fn default_mode() -> Value {
     json!(shoal_protocol::config::modes::ModeName::DEFAULT)
 }
 
+/// Removal records list their assigned issues and PRs as items, where
+/// earlier ones held one issue with its title beside the list and their PRs'
+/// bare URLs; PR registrations list their watched URLs, where earlier ones
+/// named a single PR; and snapshots keep a comment's author beside its
+/// fingerprint, and each reviewer's verdicts apart.
+pub(super) fn listed_items(db: &Connection) -> Result<()> {
+    rewrite(db, "removed_spaces", |removed| {
+        if let Some(links) = removed.get_mut("links").and_then(Value::as_object_mut) {
+            listed_links(links);
+        }
+    })?;
+    rewrite(db, "pr_cleanup", |registration| {
+        if let Some(url) = registration.remove("url").filter(|url| !url.is_null()) {
+            (registration.entry("urls")).or_insert_with(|| Value::Array(vec![url]));
+        }
+    })?;
+    for table in ["pr_activity", "space_item_activity"] {
+        rewrite(db, table, |snapshot| {
+            if let Some(comments) = snapshot.get_mut("comments").and_then(Value::as_object_mut) {
+                authored_comments(comments);
+            }
+        })?;
+    }
+    Ok(())
+}
+
+/// `links` with its single issue first among its issues and each PR an
+/// item.
+fn listed_links(links: &mut Map<String, Value>) {
+    let title = links.remove("issue_title").unwrap_or(Value::Null);
+    let earlier = (links.remove("issue").filter(|url| !url.is_null()))
+        .map(|url| json!({"kind": "issue", "url": url, "title": title}));
+    for key in ["issues", "prs", "opened", "related"] {
+        filled(links, key, || json!([]));
+    }
+    if let Some(Value::Array(issues)) = links.get_mut("issues") {
+        issues.splice(0..0, earlier);
+    }
+    if let Some(Value::Array(prs)) = links.get_mut("prs") {
+        for pr in prs.iter_mut().filter(|pr| pr.is_string()) {
+            *pr = json!({"kind": "pr", "url": pr.take()});
+        }
+    }
+}
+
+/// The key under which earlier snapshots kept every reviewer's verdict as
+/// one entry, a `reviewer:verdict` line each.
+const COMBINED_VERDICTS: &str = "reviews:verdicts";
+
+/// `comments` with each bare fingerprint an entry of an unknown author,
+/// and combined verdicts an entry for each reviewer with theirs, sorted.
+fn authored_comments(comments: &mut Map<String, Value>) {
+    for entry in comments.values_mut().filter(|entry| entry.is_string()) {
+        *entry = json!({"fingerprint": entry.take()});
+    }
+    let Some(combined) = comments.remove(COMBINED_VERDICTS) else {
+        return;
+    };
+    let lines = combined["fingerprint"].as_str().unwrap_or_default().lines();
+    let mut by_reviewer = std::collections::BTreeMap::<&str, Vec<&str>>::new();
+    for (reviewer, verdict) in lines.filter_map(|line| line.rsplit_once(':')) {
+        by_reviewer.entry(reviewer).or_default().push(verdict);
+    }
+    for (reviewer, mut verdicts) in by_reviewer {
+        verdicts.sort();
+        comments.insert(
+            format!("reviews:verdict:{reviewer}"),
+            json!({"fingerprint": verdicts.join(","), "author": reviewer}),
+        );
+    }
+}
+
 /// Rewrite every record of `table` with `change`, writing back those it
 /// changed.
 fn rewrite(db: &Connection, table: &str, change: impl Fn(&mut Map<String, Value>)) -> Result<()> {

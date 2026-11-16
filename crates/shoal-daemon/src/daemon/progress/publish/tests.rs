@@ -141,7 +141,7 @@ impl Assigned {
         let url = ItemRef::numbered(&forge, LinkKind::Pr, 12)
             .unwrap()
             .to_string();
-        let (id, registration) = (workspace.id.clone(), serde_json::json!({ "url": url }));
+        let (id, registration) = (workspace.id.clone(), serde_json::json!({ "urls": [url] }));
         manager
             .store
             .run(move |db| {

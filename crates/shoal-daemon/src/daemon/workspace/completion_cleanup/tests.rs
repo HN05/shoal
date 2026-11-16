@@ -346,7 +346,7 @@ async fn issue_and_watch_completion_wait_for_explicit_done() {
     let (_root, manager, workspace) = fixture().await;
     let id = workspace.id.clone();
     let record = serde_json::json!({
-        "url": "https://github.com/team/repo/pull/1",
+        "urls": ["https://github.com/team/repo/pull/1"],
         "head": null,
         "error": null,
     })

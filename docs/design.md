@@ -3690,7 +3690,7 @@ worktree on other branches. PRs are looked up only once the assignment is done, 
 confirmation proceeds to cleanup. The confirmed
 HEAD persists so restart cannot query the same watch set again. Persisted manual
 acknowledgement binds to exactly the recorded HEAD. Registrations distinguish watches from
-acknowledgements; legacy single-watch records retain their stored and JSON shape.
+acknowledgements.
 Ambiguous records and conflicting actions are rejected. Own-workspace `watch`
 polls linked issue and PR activity independently of cleanup, with kind filters
 or an explicit item that does not change associations. It reports comments or

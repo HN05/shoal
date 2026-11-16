@@ -47,7 +47,7 @@ async fn review_events(manager: &Manager) -> Vec<(String, Option<String>)> {
 /// Link the `pr`, and the `issue` if given, to the space `id`.
 async fn link(manager: &Manager, id: &str, pr: &str, issue: Option<&str>) {
     let id = id.to_owned();
-    let registration = serde_json::json!({ "url": pr });
+    let registration = serde_json::json!({ "urls": [pr] });
     let issue = issue.map(str::to_owned);
     manager
         .store

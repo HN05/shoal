@@ -7,7 +7,6 @@ use crate::forge::items::{link::LinkKind, reference::ItemRef};
 /// Canonical issue and pull-request links associated with a space, a
 /// workspace or chat.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(from = "LinksFields")]
 pub struct SpaceLinks {
     /// The assigned issues in the order they were assigned, each with its
     /// title when the linking caller knew it.
@@ -43,58 +42,6 @@ pub struct IssueAssignee {
     pub url: ItemRef,
     pub account: Assigner,
     pub added: bool,
-}
-
-/// How [`SpaceLinks`] reads: removal records and move packages of earlier
-/// releases hold one assigned issue and its title in place of the list, and
-/// their assigned PRs' URLs without titles.
-#[derive(Deserialize)]
-struct LinksFields {
-    #[serde(default)]
-    issues: Vec<LinkedItem>,
-    #[serde(default)]
-    issue: Option<ItemRef>,
-    #[serde(default)]
-    issue_title: Option<String>,
-    prs: Vec<PrField>,
-    #[serde(default)]
-    opened: Vec<LinkedItem>,
-    #[serde(default)]
-    related: Vec<LinkedItem>,
-    #[serde(default)]
-    assignees: Vec<IssueAssignee>,
-}
-
-impl From<LinksFields> for SpaceLinks {
-    fn from(fields: LinksFields) -> Self {
-        let title = fields.issue_title;
-        let earlier = fields.issue.map(|url| LinkedItem { url, title });
-        Self {
-            issues: earlier.into_iter().chain(fields.issues).collect(),
-            prs: fields.prs.into_iter().map(PrField::into_item).collect(),
-            opened: fields.opened,
-            related: fields.related,
-            assignees: fields.assignees,
-        }
-    }
-}
-
-/// An assigned PR as [`SpaceLinks`] reads it: an item, or the bare URL an
-/// earlier release recorded.
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum PrField {
-    Item(LinkedItem),
-    Url(ItemRef),
-}
-
-impl PrField {
-    fn into_item(self) -> LinkedItem {
-        match self {
-            Self::Item(item) => item,
-            Self::Url(url) => LinkedItem { url, title: None },
-        }
-    }
 }
 
 impl SpaceLinks {

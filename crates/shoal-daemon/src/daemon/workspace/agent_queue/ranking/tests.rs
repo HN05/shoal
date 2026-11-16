@@ -582,7 +582,7 @@ async fn assign_labelled(
                 params![id, issue_url],
             )?;
             db.execute(
-                "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,json_object('url',?2))",
+                "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,json_object('urls',json_array(?2)))",
                 params![id, pr_url],
             )?;
             for (url, record) in records {

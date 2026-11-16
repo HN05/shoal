@@ -80,3 +80,51 @@ fn fields_earlier_records_lacked_are_filled() -> Result<()> {
     assert_eq!(linked["link"]["relation"], "assigned");
     Ok(())
 }
+
+#[test]
+fn earlier_links_registrations_and_snapshots_take_the_current_shape() -> Result<()> {
+    let mut db = before(206)?;
+    db.execute_batch(
+        r#"INSERT INTO removed_spaces(space_id,repository_id,chat,name,expires_at,record)
+             VALUES ('w',NULL,0,'w',9,'{"links":{"issue":"https://forge/o/r/issues/1",
+                 "issue_title":"Fix it","issues":[{"kind":"issue",
+                 "url":"https://forge/o/r/issues/2"}],"prs":["https://forge/o/r/pulls/3"]}}');
+         INSERT INTO pr_cleanup(space_id,record)
+             VALUES ('w','{"url":"https://forge/o/r/pulls/3","head":null,"error":null}');
+         INSERT INTO pr_activity(space_id,url,record) VALUES ('w','https://forge/o/r/pulls/3',
+             '{"comments":{"discussion:1":"hi",
+                 "reviews:verdicts":"bob:Approved\nalice:ChangesRequested\nbob:Commented\n"}}');"#,
+    )?;
+    migrate(&mut db)?;
+    let removed = record(&db, "removed_spaces", "space_id='w'")?;
+    assert_eq!(
+        removed["links"],
+        json!({
+            "issues": [
+                {"kind": "issue", "url": "https://forge/o/r/issues/1", "title": "Fix it"},
+                {"kind": "issue", "url": "https://forge/o/r/issues/2"},
+            ],
+            "prs": [{"kind": "pr", "url": "https://forge/o/r/pulls/3"}],
+            "opened": [],
+            "related": [],
+        })
+    );
+    let links: shoal_protocol::model::SpaceLinks =
+        serde_json::from_value(removed["links"].clone())?;
+    assert_eq!(links.issue_title(), Some("Fix it"));
+    let registration = record(&db, "pr_cleanup", "space_id='w'")?;
+    assert_eq!(
+        registration,
+        json!({"urls": ["https://forge/o/r/pulls/3"], "head": null, "error": null})
+    );
+    let watch = record(&db, "pr_activity", "space_id='w'")?;
+    assert_eq!(
+        watch["comments"],
+        json!({
+            "discussion:1": {"fingerprint": "hi"},
+            "reviews:verdict:alice": {"fingerprint": "ChangesRequested", "author": "alice"},
+            "reviews:verdict:bob": {"fingerprint": "Approved,Commented", "author": "bob"},
+        })
+    );
+    Ok(())
+}

@@ -507,7 +507,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy(cleanup: b
         "assigned",
     ]);
     assert_eq!(
-        fixture.ok(&["status", &fixture.id("multi")])["pr_cleanup"]["url"],
+        fixture.ok(&["status", &fixture.id("multi")])["pr_cleanup"]["urls"][0],
         "https://github.com/team/project/pull/1"
     );
     fixture.ok(&[

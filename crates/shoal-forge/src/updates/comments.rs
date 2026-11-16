@@ -2,48 +2,15 @@
 //! changed among them.
 use std::collections::BTreeMap;
 
-use serde::{Deserialize, Deserializer, Serialize};
-
-/// The key under which older snapshots kept every reviewer's verdict as one
-/// entry, a `reviewer:verdict` line each.
-const COMBINED_VERDICTS: &str = "reviews:verdicts";
+use serde::{Deserialize, Serialize};
 
 /// A comment or review as a snapshot records it: what changes when it is
 /// edited, dismissed or answered, and who wrote it.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(from = "Stored")]
 pub struct Entry {
     pub(crate) fingerprint: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub(crate) author: String,
-}
-
-/// An entry as saved, including the bare fingerprint of snapshots saved
-/// before authors were recorded.
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum Stored {
-    Fingerprint(String),
-    Entry {
-        fingerprint: String,
-        #[serde(default)]
-        author: String,
-    },
-}
-
-impl From<Stored> for Entry {
-    fn from(stored: Stored) -> Self {
-        match stored {
-            Stored::Fingerprint(fingerprint) => Self::from(fingerprint),
-            Stored::Entry {
-                fingerprint,
-                author,
-            } => Self {
-                fingerprint,
-                author,
-            },
-        }
-    }
 }
 
 /// An entry whose author is unknown.
@@ -93,26 +60,6 @@ pub(crate) fn verdict_entries(
             (format!("verdict:{reviewer}"), entry)
         })
         .collect()
-}
-
-/// The comments of a saved snapshot, splitting the combined verdicts of
-/// older snapshots into the entries `verdict_entries` records for them.
-pub(crate) fn saved<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<BTreeMap<String, Entry>, D::Error> {
-    let mut comments = BTreeMap::<String, Entry>::deserialize(deserializer)?;
-    if let Some(combined) = comments.remove(COMBINED_VERDICTS) {
-        let verdicts = combined.fingerprint.lines().filter_map(|line| {
-            let (reviewer, verdict) = line.rsplit_once(':')?;
-            Some((reviewer.to_owned(), verdict.to_owned()))
-        });
-        comments.extend(
-            verdict_entries(verdicts)
-                .into_iter()
-                .map(|(key, entry)| (format!("reviews:{key}"), entry)),
-        );
-    }
-    Ok(comments)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

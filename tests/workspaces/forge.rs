@@ -673,7 +673,7 @@ fn pr_cleanup_can_be_disabled_independently() {
 }
 
 #[test]
-fn legacy_pr_registrations_survive_disabled_cleanup_and_clear_after_restart() {
+fn persisted_pr_registrations_survive_disabled_cleanup_and_clear_after_restart() {
     let mut fixture = Fixture::with_config(Some(
         "[cleanup.pr]\nenabled=false\n[cleanup.auto]\nenabled=false\n",
     ));
@@ -684,9 +684,9 @@ fn legacy_pr_registrations_survive_disabled_cleanup_and_clear_after_restart() {
             &["rev-parse", "HEAD"],
         );
         let record = if name == "watch" {
-            serde_json::json!({"url": "https://forge.example/team/repo/pulls/7", "head": null, "error": "previous lookup failure"})
+            serde_json::json!({"urls": ["https://forge.example/team/repo/pulls/7"], "head": null, "error": "previous lookup failure"})
         } else {
-            serde_json::json!({"url": null, "head": head.trim(), "error": null})
+            serde_json::json!({"head": head.trim(), "error": null})
         };
         let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
         db.execute(
@@ -733,8 +733,8 @@ fn invalid_persisted_pr_registration_retains_workspace_and_can_be_cleared() {
     let workspace = fixture.add("invalid");
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     for record in [
-        serde_json::json!({"url": null, "head": null, "error": null}),
-        serde_json::json!({"url": "https://forge.example/team/repo/pulls/7", "head": "abc123", "error": null}),
+        serde_json::json!({"head": null, "error": null}),
+        serde_json::json!({"urls": ["https://forge.example/team/repo/pulls/7"], "head": "abc123", "error": null}),
     ] {
         db.execute(
             "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
@@ -897,7 +897,7 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
     ]);
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["status", &fixture.id("watch")])["pr_cleanup"]["url"],
+        fixture.ok(&["status", &fixture.id("watch")])["pr_cleanup"]["urls"][0],
         "https://github.com/team/repo/pull/56"
     );
     // Watched PRs are looked up once the assignment is done.
@@ -1270,7 +1270,7 @@ fn unified_items_link_filter_and_watch_explicit_targets_without_completion() {
     let inspection = fixture.ok(&["status", &fixture.id("items")]);
     assert_eq!(inspection["issues"], serde_json::json!([]));
     assert_eq!(
-        inspection["pr_cleanup"]["url"],
+        inspection["pr_cleanup"]["urls"][0],
         "https://github.com/team/project/pull/7"
     );
     write_issue(&fixture, 2, "unlinked issue");

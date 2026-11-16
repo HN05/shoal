@@ -264,7 +264,7 @@ instead of the PR delivery guidance below.
   lists as `[conflicts] sensitive` that a branch and its target both changed are
   reported apart from conflicts, beside a linked PR too; `pr merge` and `merge`
   read only the recorded check and ask, never block.
-  Registration variants preserve existing stored and JSON shapes and reject ambiguous
+  Registration variants reject ambiguous
   records and conflicting actions without blocking other workspaces' cleanup;
   manual acknowledgements bind to exactly the recorded HEAD. Completion cleanup
   requires preserved commits without a PR registration, honors existing merge

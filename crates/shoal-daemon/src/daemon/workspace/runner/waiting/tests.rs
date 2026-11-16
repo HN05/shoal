@@ -117,7 +117,7 @@ async fn waiting_jobs_join_the_queue_linked_to_their_workspace_until_the_forge_d
             )?;
             db.execute(
                 "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
-                params![pull_id, json!({"url": url}).to_string()],
+                params![pull_id, json!({"urls": [url]}).to_string()],
             )?;
             Ok(())
         })
@@ -319,7 +319,7 @@ async fn a_waiting_job_serves_the_workspace_that_links_its_pr_after_it_queued() 
         .run(move |db| {
             db.execute(
                 "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
-                params![pull_id, json!({"url": url}).to_string()],
+                params![pull_id, json!({"urls": [url]}).to_string()],
             )?;
             Ok(())
         })

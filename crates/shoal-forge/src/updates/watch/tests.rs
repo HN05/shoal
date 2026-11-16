@@ -4,10 +4,24 @@ use super::*;
 use shoal_forge_types::updates::SnapshotState;
 use shoal_forge_types::updates::UpdateKind;
 
+/// A snapshot of a PR in `state` whose comments have the fingerprints
+/// `comments` holds.
 fn snapshot(comments: Value, state: &str) -> Snapshot {
-    serde_json::from_value(json!({"kind": "pr", "comments": comments, "checks": {},
-            "conflict": null, "state": state, "errors": {}}))
+    serde_json::from_value(
+        json!({"kind": "pr", "comments": entries(comments), "checks": {},
+            "conflict": null, "state": state, "errors": {}}),
+    )
     .unwrap()
+}
+
+/// Each fingerprint of `comments` as an entry without an author.
+fn entries(comments: Value) -> Value {
+    let entries = comments.as_object().into_iter().flatten();
+    Value::Object(
+        entries
+            .map(|(key, fingerprint)| (key.clone(), json!({"fingerprint": fingerprint})))
+            .collect(),
+    )
 }
 
 #[test]
