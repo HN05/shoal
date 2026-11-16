@@ -527,6 +527,41 @@ async fn restore_refuses_a_branch_that_moved_away_or_is_in_use() {
 }
 
 #[tokio::test]
+async fn restore_reopens_the_branch_of_a_workspace_removed_with_a_detached_head() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    fs::write(workspace.path.join("work"), "work\n").unwrap();
+    commit(&workspace.path, "work");
+    // As during a rebase, HEAD is off the branch when the removal comes.
+    git(&workspace.path, &["checkout", "--detach"]);
+    manager
+        .remove_selected(
+            &SpaceSelector::id(&workspace.id),
+            UnsavedWork::All,
+            InspectionPolicy::IncludeDirectoryProcesses,
+        )
+        .await
+        .unwrap();
+
+    let restored = manager
+        .restore_workspace(&manager.named("topic").await)
+        .await
+        .unwrap();
+    assert_eq!(
+        restored.opened.workspace.branch().map(BranchName::as_str),
+        Some("topic")
+    );
+}
+
+#[tokio::test]
 async fn a_removal_record_keeps_links_made_until_removal_starts() {
     use crate::{forge::items::link::LinkKind, model::Relation};
     let (root, manager) = manager().await;

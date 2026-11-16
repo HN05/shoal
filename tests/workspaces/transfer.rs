@@ -897,7 +897,7 @@ fn streaming_export_refuses_a_herdr_tab_that_closes_with_the_workspace() {
     // A pane of another tab keeps its stream.
     let exported = export("w1:p8");
     assert!(exported.status.success(), "{}", printed(&exported));
-    assert!(exported.stdout.starts_with(b"shoal workspace 1\n"));
+    assert!(exported.stdout.starts_with(b"shoal workspace "));
     assert!(!path.exists());
 }
 

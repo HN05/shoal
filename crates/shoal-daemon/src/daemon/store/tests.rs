@@ -635,6 +635,9 @@ fn historical_database(version: i64) -> Result<Connection> {
         workspace_heads(&db)?;
         db.execute_batch("PRAGMA foreign_keys=ON;")?;
     }
+    if version >= 201 {
+        db.execute_batch(include_str!("removed_workspace_heads.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -2133,6 +2136,39 @@ fn migrated_workspaces_hold_one_of_a_branch_and_a_starting_commit() -> Result<()
     ] {
         assert!(db.execute(broken, []).is_err(), "{broken}");
     }
+    Ok(())
+}
+
+#[test]
+fn migrated_removal_records_name_the_branch_their_restore_opens() -> Result<()> {
+    let mut db = historical_database(200)?;
+    db.execute_batch(
+        r#"INSERT INTO removed_spaces(space_id,repository_id,chat,name,expires_at,record) VALUES
+            ('topic','repo',0,'topic',9,'{"checkpoint":{"branch":"topic","head":"aaaaaaaaa"}}'),
+            ('detached','repo',0,'detached',9,'{"checkpoint":{"branch":null,"head":"bbbbbbbbb"}}'),
+            ('at','repo',0,'at',9,'{"checkpoint":{"branch":null,"head":"ccccccccc"},"at":{"commit":"ccccccccc"}}'),
+            ('chat','repo',1,'chat',9,'{"chat":{"mode":"chat"}}');"#,
+    )?;
+
+    migrate(&mut db)?;
+
+    let branches: Vec<(String, Option<String>)> = db
+        .prepare(
+            "SELECT space_id,json_extract(record,'$.branch') FROM removed_spaces ORDER BY space_id",
+        )?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    let branch = |id: &str, branch: Option<&str>| (id.to_owned(), branch.map(str::to_owned));
+    assert_eq!(
+        branches,
+        [
+            branch("at", None),
+            branch("chat", None),
+            // A detached HEAD restores on the branch restore named it.
+            branch("detached", Some("bbbbbbb")),
+            branch("topic", Some("topic")),
+        ]
+    );
     Ok(())
 }
 

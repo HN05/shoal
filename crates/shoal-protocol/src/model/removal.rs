@@ -1,6 +1,6 @@
 //! Removed spaces and what removal leaves: kept branches and worktrees
 //! no workspace owns.
-use super::{Checkpoint, OpenedWorkspace, SpaceLinks, SpaceRef, StartingCommit};
+use super::{Checkpoint, Head, OpenedWorkspace, SpaceLinks, SpaceRef};
 use crate::space_names::SpaceName;
 use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
@@ -121,10 +121,11 @@ pub struct KeptWorkspace {
     pub checkpoint: Checkpoint,
     pub base_ref: Option<String>,
     pub base_commit: Option<CommitId>,
-    /// Where it started, for a workspace at a commit, which restore opens
+    /// Its branch, which restore opens whatever HEAD the checkpoint found,
+    /// or where a workspace at a commit started, which restore opens
     /// without a branch.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub at: Option<StartingCommit>,
+    #[serde(flatten)]
+    pub head: Head,
     /// Whether it was created without setup, which its restore skips too.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub setup_skipped: bool,

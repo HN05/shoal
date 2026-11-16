@@ -15,7 +15,7 @@ use super::commits::NewRecord;
 use crate::daemon::scope::Caller;
 use crate::{
     git,
-    model::{OpenedWorkspace, RemovedSpace, RestoredSpace, RestoredWorkspace},
+    model::{Head, OpenedWorkspace, RemovedSpace, RestoredSpace, RestoredWorkspace},
     transfer::CarriedSessionFile,
 };
 use shoal_protocol::space_names::SpaceName;
@@ -157,12 +157,14 @@ impl Manager {
             head: checkpoint.head.to_string().into(),
             snapshot: checkpoint.commit.to_string().into(),
         });
-        let opened = match kept.at.clone() {
-            Some(at) => OpenedWorkspace {
+        let opened = match kept.head.clone() {
+            Head::Commit(at) => OpenedWorkspace {
                 workspace: (self.restore_commit_workspace(&removed, new, at, files)).await?,
                 reused: false,
             },
-            None => self.restore_branch_workspace(&removed, new, files).await?,
+            Head::Branch(branch) => {
+                (self.restore_branch_workspace(&removed, branch, new, files)).await?
+            }
         };
         let id = &opened.workspace.id;
         warnings.extend(self.relink_space(id, &removed.links, caller).await);
@@ -309,14 +311,15 @@ impl Manager {
     }
 
     /// Open the removed workspace `removed` again as `new` places it, on its
-    /// branch at the removed HEAD, with `files` from its checkpoint.
+    /// `branch` at the removed HEAD, with `files` from its checkpoint.
     async fn restore_branch_workspace(
         &self,
         removed: &RemovedSpace,
+        branch: BranchName,
         new: NewRecord,
         files: Option<RestoredFiles>,
     ) -> Result<OpenedWorkspace> {
-        let branch = self.restore_branch(removed).await?;
+        self.restore_branch(removed, &branch).await?;
         let base = self.restore_base(removed).await?;
         let new = super::NewWorkspace {
             options: crate::protocol::CreationOptions {
@@ -343,25 +346,22 @@ impl Manager {
         Ok(opened)
     }
 
-    /// The branch to open: one at the removed HEAD, or at a later commit when
-    /// nothing unsaved has to be applied, created at HEAD when it was deleted.
-    async fn restore_branch(&self, removed: &RemovedSpace) -> Result<BranchName> {
+    /// Ready `branch` to open: at the removed HEAD, or at a later commit
+    /// when nothing unsaved has to be applied, created at HEAD when it was
+    /// deleted.
+    async fn restore_branch(&self, removed: &RemovedSpace, branch: &BranchName) -> Result<()> {
         let (repo, _guard) = self.lock_repository(removed.repository()?).await?;
         let checkpoint = &removed.kept_workspace()?.checkpoint;
-        // A detached HEAD reopens on a branch named after its short commit,
-        // since nothing is built from the workspace's name.
         let head = checkpoint.head.as_str();
-        let branch = (checkpoint.branch.clone())
-            .unwrap_or_else(|| BranchName::from(checkpoint.head.abbreviated(7)));
         if let Some(workspace) = self.list_workspaces().await?.into_iter().find(|workspace| {
-            workspace.repository() == &repo.id && workspace.branch() == Some(&branch)
+            workspace.repository() == &repo.id && workspace.branch() == Some(branch)
         }) {
             bail!("workspace {} already uses branch {branch}", workspace.name);
         }
-        let local = git::local_ref(&branch);
+        let local = git::local_ref(branch);
         if !git::ref_exists(&repo.path, &local, git::isolated_command).await? {
-            git::branch::create(&repo.path, &branch, head).await?;
-            return Ok(branch);
+            git::branch::create(&repo.path, branch, head).await?;
+            return Ok(());
         }
         let tip = git::verify_revision(
             &repo.path,
@@ -381,7 +381,7 @@ impl Manager {
             "branch {branch} moved past the removed HEAD; open it with shoal new and apply the unsaved files with git cherry-pick --no-commit {}",
             checkpoint.commit
         );
-        Ok(branch)
+        Ok(())
     }
 
     /// The recorded base, so diffs and the stack link come back: its ref

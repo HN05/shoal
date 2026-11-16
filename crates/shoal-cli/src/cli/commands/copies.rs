@@ -68,8 +68,8 @@ async fn removed(
         .into_iter()
         .find(|removed| selector.given_id() == Some(&removed.space_id))
         .with_context(|| format!("no workspace or removed workspace {selector}"))?;
-    let branch = removed.kept_workspace()?.checkpoint.branch.clone();
+    let head = &removed.kept_workspace()?.head;
+    let named = (head.branch()).map_or_else(|| removed.name.to_string(), ToString::to_string);
     let repository = removed.repository()?.clone();
-    let named = (branch.map(String::from)).unwrap_or(removed.name.into());
     Ok((removed.space_id, repository, named))
 }

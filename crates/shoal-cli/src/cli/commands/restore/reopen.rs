@@ -6,7 +6,6 @@ use std::collections::BTreeSet;
 use anyhow::{Context as _, Result};
 
 use super::agents::queue::Stopped;
-use super::checkpoints::branch_label;
 use crate::client::output::restore::{Queued, Reopened};
 use crate::{
     cli::{
@@ -14,7 +13,7 @@ use crate::{
         output::{Palette, Style},
         shell, terminal,
     },
-    model::{RemovedSpace, RestoredChat, RestoredSpace, RestoredWorkspace, Space},
+    model::{Head, RemovedSpace, RestoredChat, RestoredSpace, RestoredWorkspace, Space},
     state::WorkspaceState,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -285,8 +284,8 @@ pub(in crate::cli::commands) async fn prepare_reopened(
     }))
 }
 
-/// One aligned line per removed space: its name, a workspace's branch, when
-/// and why it was removed, and the number of the checkpoint a workspace's
+/// One aligned line per removed space: its name, the branch or commit a
+/// workspace's restore opens, when and why it was removed, and the number of the checkpoint a workspace's
 /// removal took.
 pub(super) fn removed_lines(removed: &[RemovedSpace]) -> Vec<String> {
     let width = removed
@@ -299,7 +298,10 @@ pub(super) fn removed_lines(removed: &[RemovedSpace]) -> Vec<String> {
         .map(|space| {
             let (branch, checkpoint) = match space.workspace() {
                 Some(kept) => (
-                    format!("  {}", branch_label(kept.checkpoint.branch.as_ref())),
+                    match &kept.head {
+                        Head::Branch(branch) => format!("  {branch}"),
+                        Head::Commit(at) => format!("  at {}", at.label()),
+                    },
                     format!(", checkpoint {}", kept.checkpoint.number),
                 ),
                 None => Default::default(),

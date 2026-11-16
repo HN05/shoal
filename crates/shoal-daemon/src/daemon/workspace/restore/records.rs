@@ -64,7 +64,7 @@ impl Manager {
                 checkpoint,
                 base_ref: workspace.base_ref.clone(),
                 base_commit: workspace.base_commit.clone(),
-                at: workspace.at().cloned(),
+                head: workspace.head.clone(),
                 setup_skipped: workspace.setup_skipped,
             })),
         };

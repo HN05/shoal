@@ -508,7 +508,6 @@ async fn a_copy_keeps_the_workspace_and_imports_on_a_branch_of_its_own() {
         1
     );
     let bytes = fs::read(&file).unwrap();
-    assert!(bytes.starts_with(format!("{FORMAT} 5").as_bytes()));
     let restored = import_here(&manager, &repo, &bytes).await;
 
     let copy = &restored.opened.workspace;

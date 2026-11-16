@@ -10,7 +10,7 @@ use crate::daemon::workspace::Manager;
 use crate::refusal::{Reason, Refusal};
 use crate::{
     git,
-    model::{RemovedKind, RemovedSpace, Repository, RestoredSpace},
+    model::{Head, RemovedKind, RemovedSpace, Repository, RestoredSpace},
     time::UnixTime,
     transfer::{CarriedSessionFile, SpaceImport},
 };
@@ -220,16 +220,17 @@ impl Manager {
         mut removed: RemovedSpace,
     ) -> Result<RemovedSpace> {
         let id = removed.space_id.clone();
-        let checkpoint = &mut removed.kept_workspace_mut()?.checkpoint;
-        checkpoint.workspace_id = id;
-        let name = match &checkpoint.branch {
-            Some(branch) => {
+        let kept = removed.kept_workspace_mut()?;
+        kept.checkpoint.workspace_id = id;
+        let name = match kept.head.clone() {
+            Head::Branch(branch) => {
                 let branch = self.copy_branch(repo, branch.as_str()).await?;
-                git::branch::create(&repo.path, &branch, checkpoint.head.as_str()).await?;
-                checkpoint.branch = Some(branch.as_str().into());
+                git::branch::create(&repo.path, &branch, kept.checkpoint.head.as_str()).await?;
+                kept.checkpoint.branch = Some(branch.as_str().into());
+                kept.head = Head::Branch(branch.clone());
                 SpaceName::derive(branch.as_str(), "workspace")
             }
-            None => removed.name.clone(),
+            Head::Commit(_) => removed.name.clone(),
         };
         Ok(RemovedSpace {
             name,

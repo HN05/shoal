@@ -33,31 +33,25 @@ use shoal_protocol::transcripts::Environments;
 
 /// The first line of a package names its format and the version of it,
 /// the lowest that reads the package, so an older Shoal imports what it
-/// can: 1 holds a workspace, 2 a workspace with session files, which
-/// version 1 importers would read as part of the bundle, 4 a workspace at
-/// a commit, which earlier importers would open on a branch, 5 a copy,
-/// which earlier importers would open as the space it copies, 6 the chats
-/// that go with the space, which earlier importers would leave out, 7 a
-/// chat as its removal record, which earlier importers would not read, and
-/// 8 chats whose agents and last sessions alone name their agent, which
-/// earlier importers would fail to read.
+/// can: 7 a chat as its removal record, which earlier importers would not
+/// read, 8 chats whose agents and last sessions alone name their agent,
+/// which earlier importers would fail to read, and 9 a workspace that
+/// holds its branch or starting commit in one value, which earlier
+/// importers would restore on the branch its checkpoint names.
 pub const FORMAT: &str = "shoal workspace";
-const VERSION: u32 = 8;
+const VERSION: u32 = 9;
 
 /// The lowest version whose chat packages this Shoal reads.
 const CHAT_VERSION: u32 = 7;
 
+/// The lowest version whose workspace packages this Shoal reads.
+const WORKSPACE_VERSION: u32 = 9;
+
 /// The version of the format that reads the package `manifest` describes.
 fn version(manifest: &Manifest) -> u32 {
-    let Some(kept) = manifest.space.record.workspace() else {
-        return 8;
-    };
-    match () {
-        _ if !manifest.chats.is_empty() => 8,
-        _ if manifest.copy.is_some() => 5,
-        _ if kept.at.is_some() => 4,
-        _ if !manifest.session_files.is_empty() => 2,
-        _ => 1,
+    match manifest.space.record.workspace() {
+        Some(_) => WORKSPACE_VERSION,
+        None => 8,
     }
 }
 
@@ -466,15 +460,17 @@ impl Import {
         input.read_line(&mut line)?;
         let manifest: serde_json::Value =
             serde_json::from_str(&line).context("read the export's manifest")?;
+        // Earlier versions name no kind; their manifests hold a workspace.
+        let (kind, lowest) = match manifest.get("kind").is_some_and(|kind| kind == "chat") {
+            true => ("chat", CHAT_VERSION),
+            false => ("workspace", WORKSPACE_VERSION),
+        };
         ensure!(
-            version >= CHAT_VERSION || manifest.get("kind").is_none_or(|kind| kind != "chat"),
-            "the export holds a chat an earlier Shoal packaged, which this one cannot import; export it again with this Shoal"
+            version >= lowest,
+            "the export holds a {kind} an earlier Shoal packaged, which this one cannot import; export it again with this Shoal"
         );
-        let mut manifest: Manifest =
+        let manifest: Manifest =
             serde_json::from_value(manifest).context("read the export's manifest")?;
-        if version == 1 {
-            manifest.session_files.clear();
-        }
         let sessions = manifest
             .session_files
             .iter()

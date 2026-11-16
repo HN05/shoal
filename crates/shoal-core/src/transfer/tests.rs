@@ -19,44 +19,46 @@ fn header(version: u32) -> String {
 }
 
 #[test]
-fn a_workspace_package_keeps_the_version_earlier_shoals_read() {
-    let mut manifest = manifest_with_sessions();
-    assert_eq!(version(&manifest), 1);
-    manifest.session_files = vec![session_file("p/s1.jsonl", 1)];
-    assert_eq!(version(&manifest), 2);
-    // A workspace at a commit needs an importer that opens it without a
-    // branch; one before it refuses the package.
+fn a_workspace_package_keeps_its_branch_or_starting_commit() {
+    let manifest = manifest_with_sessions();
     let mut at_commit = manifest.clone();
-    at_commit.space.record.kept_workspace_mut().unwrap().at = Some(crate::model::StartingCommit {
-        commit: "abc".into(),
-        made_for: None,
-    });
-    assert_eq!(version(&at_commit), 4);
-    // A copy needs an importer that opens it as a new space; one before it
-    // would open the space it copies.
-    let copy = Manifest {
-        copy: Some(Copied::default()),
-        ..manifest.clone()
-    };
-    assert_eq!(version(&copy), 5);
-    // Earlier versions name no kind; their manifests hold a workspace.
-    let mut value = serde_json::to_value(&manifest).unwrap();
-    assert_eq!(value["kind"], "workspace");
-    value.as_object_mut().unwrap().remove("kind");
-    let bytes = format!("{}\n{value}\nx", header(2)).into_bytes();
-    let import = Import::read(&mut &bytes[..]).unwrap();
-    assert_eq!(import.manifest.space.record.name, "topic");
-    assert_eq!(import.sessions.len(), 1);
+    at_commit.space.record.kept_workspace_mut().unwrap().head =
+        crate::model::Head::Commit(crate::model::StartingCommit {
+            commit: "abc".into(),
+            made_for: None,
+        });
+    for manifest in [manifest, at_commit] {
+        let bytes = export_bytes(&header(version(&manifest)), &manifest, &[]);
+        let import = Import::read(&mut &bytes[..]).unwrap();
+        let kept = import.manifest.space.record.kept_workspace().unwrap();
+        assert_eq!(
+            kept.head,
+            manifest.space.record.kept_workspace().unwrap().head
+        );
+    }
 }
 
 #[test]
-fn an_earlier_package_imports_under_the_name_it_holds() {
+fn a_workspace_package_an_earlier_shoal_wrote_is_refused() {
+    let mut value = serde_json::to_value(manifest_with_sessions()).unwrap();
+    // Earlier versions name no kind; their manifests hold a workspace.
+    value.as_object_mut().unwrap().remove("kind");
+    let bytes = format!("{}\n{value}\n", header(8)).into_bytes();
+    let refused = Import::read(&mut &bytes[..]).err().expect("refused");
+    assert!(
+        format!("{refused:#}").contains("earlier Shoal"),
+        "{refused:#}"
+    );
+}
+
+#[test]
+fn a_package_imports_under_the_name_it_holds() {
     let manifest = manifest_with_sessions();
     let mut value = serde_json::to_value(&manifest).unwrap();
     // A name an earlier rule refused, and one longer than a set name may be.
     for name in ["123", &"x".repeat(64)] {
         value["workspace"]["name"] = name.into();
-        let bytes = format!("{}\n{value}\n", header(2)).into_bytes();
+        let bytes = format!("{}\n{value}\n", header(version(&manifest))).into_bytes();
         let import = Import::read(&mut &bytes[..]).unwrap();
         assert_eq!(import.manifest.space.record.name, name);
     }
@@ -155,7 +157,8 @@ fn session_file(path: &str, size: u64) -> SessionFile {
 fn import_reads_session_files_and_refuses_paths_outside_their_directory() {
     let mut manifest = manifest_with_sessions();
     manifest.session_files = vec![session_file("p/s1.jsonl", 3), session_file("p/s1/a", 2)];
-    let bytes = export_bytes(&header(2), &manifest, &["abc", "de"]);
+    let current = header(version(&manifest));
+    let bytes = export_bytes(&current, &manifest, &["abc", "de"]);
     let import = Import::read(&mut &bytes[..]).unwrap();
     let read: Vec<_> = import
         .sessions
@@ -172,17 +175,13 @@ fn import_reads_session_files_and_refuses_paths_outside_their_directory() {
             ("p/s1/a".to_owned(), "de".to_owned())
         ]
     );
-    let short = export_bytes(&header(2), &manifest, &["abc", "d"]);
+    let short = export_bytes(&current, &manifest, &["abc", "d"]);
     assert!(Import::read(&mut &short[..]).is_err());
     for path in ["../escape", "/absolute"] {
         manifest.session_files = vec![session_file(path, 1)];
-        let bytes = export_bytes(&header(2), &manifest, &["x"]);
+        let bytes = export_bytes(&current, &manifest, &["x"]);
         assert!(Import::read(&mut &bytes[..]).is_err(), "{path}");
     }
-    // A version 1 export has no session files, whatever its manifest says.
-    manifest.session_files = vec![session_file("p/s1.jsonl", 1)];
-    let bytes = export_bytes(&header(1), &manifest, &[]);
-    assert!(Import::read(&mut &bytes[..]).unwrap().sessions.is_empty());
 }
 
 /// An export's manifest with one stopped agent and a last session, both with
@@ -232,6 +231,7 @@ fn manifest_with_sessions() -> Manifest {
         },
         "base_ref": null,
         "base_commit": null,
+        "branch": "topic",
         "links": {"issues": [], "prs": []},
         "agents": [agent],
         // Earlier removal records kept a single last session.

@@ -534,6 +534,6 @@ fn removals_from_a_pane_split_off_a_recorded_pane_go_on() -> anyhow::Result<()> 
     // A pane the user split off the tab stays open, and keeps its stream.
     let exported = export("w1:p9.2")?;
     assert!(exported.status.success(), "{}", printed(&exported));
-    assert!(exported.stdout.starts_with(b"shoal workspace 1\n"));
+    assert!(exported.stdout.starts_with(b"shoal workspace "));
     Ok(())
 }

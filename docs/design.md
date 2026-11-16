@@ -3522,9 +3522,10 @@ records it as removed here and restores it as `shoal restore` does, under its
 ID and below its parent where that is here, as it does each chat the package
 carries; only recording it differs by kind. An imported space's agents, a
 chat's as a workspace's, stay stopped unless the import queues their restores.
-Each package uses the lowest format version that reads it, so older importers
-still read workspace packages and refuse a chat's as newer; a chat package
-from before chats moved as their removal records is refused.
+Each package uses the lowest format version that reads it, so an older importer
+refuses as newer what it would misread; a chat package from before chats moved
+as their removal records, and a workspace package from before the record held
+the workspace's branch or starting commit, are refused.
 Moving a workspace is a removal there and a restore here:
 export writes the removal record and a Git bundle of its checkpoint from the
 daemon, which outlives a terminal closing with the workspace and checks the
@@ -3540,8 +3541,7 @@ with its issue links but not its PRs or CI runs, and every copied agent, a
 chat's included, starts from a fork of its session under a new ID, so the
 original conversation never changes, even on the same machine. A copy of an
 earlier checkpoint carries sessions newer than its files, which export, import
-and the forked agents are told. Copies use a format version of their own, so an
-older importer refuses one rather than opening the space it copies. The bundle leaves out the default
+and the forked agents are told. The bundle leaves out the default
 remote's default branch, which the importer fetches when it lacks the commit the
 bundle builds on, since that branch only advances. Repositories match by origin.
 Exporting every workspace of a repository checks each one before removing any, so
