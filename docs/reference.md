@@ -472,9 +472,9 @@ and resume commands through `{prompt}`. Otherwise, and when no agent was
 stopped, restore prints them as `shoal run` commands. Either way they are reported once.
 Several spaces, each with stopped work or a last session, or `--all` for every
 space whose assignment is not done, restore together and report commands without an agent,
-skipping agents whose wrapper still waits to restore them; a done workspace's
-agent restores only when its workspace is named. Restoring it says the work is
-not finished, so it withdraws the workspace's completion, as `shoal done
+skipping agents whose wrapper still waits to restore them; a done space's
+agent restores only when its space is named. Restoring it says the work is
+not finished, so it withdraws the space's completion, as `shoal done
 --undo` does, and a later protection stop restores the agent; Shoal's own
 restores and restarts keep the completion.
 `--now` starts the agents at once regardless of the limits; with several stopped
