@@ -205,3 +205,21 @@ fn a_chat_restored_beside_a_session_another_space_holds_is_told_it_was_restored(
     let converted = told(topic().changed(true, Some(held), &repo.path));
     assert!(converted.contains("converted"), "{converted}");
 }
+
+/// A chat's prompt becomes what its agent starts on, unless its issue
+/// already gives it a subject.
+#[test]
+fn a_chat_starts_on_its_prompt_unless_an_issue_gives_it_one() {
+    let repo = repository();
+    let topic = || Topic::repository(&repo, &"chat".into());
+    let prompt = || Some("Set up the repository".to_owned());
+    let text = |topic: Topic| topic.subject.map(|subject| subject.text);
+
+    assert_eq!(text(topic().told(prompt())), prompt());
+    assert_eq!(text(topic().told(None)), None);
+    let on_issue = Topic {
+        subject: Some(templates::Subject::told("Issue #7".into())),
+        ..topic()
+    };
+    assert_eq!(text(on_issue.told(prompt())), Some("Issue #7".into()));
+}

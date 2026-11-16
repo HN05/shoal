@@ -141,6 +141,13 @@ impl Topic {
         }
     }
 
+    /// This topic started on `prompt`, the agent's first message, when it
+    /// starts on nothing else, as a workspace's agent starts on its own.
+    pub(in crate::cli::commands) fn told(self, prompt: Option<String>) -> Self {
+        let subject = (self.subject).or_else(|| prompt.map(templates::Subject::told));
+        Self { subject, ..self }
+    }
+
     /// Where the chat about this topic in `repo` runs.
     pub(super) fn home<'a>(&'a self, repo: &'a ChatRepository) -> ChatHome<'a> {
         repo.home(self.workspace.as_ref())

@@ -19,11 +19,13 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// What a chat starts as: its mode, and the issue it starts on, if any,
-/// where `Some(None)` asks for one.
+/// What a chat starts as: its mode, the issue it starts on, if any, where
+/// `Some(None)` asks for one, and its agent's first message when no issue
+/// gives it one.
 pub(in crate::cli::commands) struct Subject {
     pub mode: ui::ModeChoice,
     pub issue: Option<Option<ItemInput>>,
+    pub prompt: Option<String>,
 }
 
 /// Start a chat about the repository `repository` names, else the issue's,
@@ -51,6 +53,7 @@ pub(in crate::cli::commands) async fn start(
         options.check_given(ctx, Some(repo.id.as_str())).await?;
         let topic = Topic::repository(&repo, &mode);
         let topic = on_issue(ctx, &repo, &settings, topic, subject.issue).await?;
+        let topic = topic.told(subject.prompt);
         begin(
             ctx,
             ChatRepository::Registered(repo),
@@ -107,6 +110,7 @@ async fn start_resolved(ctx: &Context, resolved: ChatStart) -> Result<i32> {
         model,
         narrowing,
         issue,
+        prompt,
         args,
         priority,
         env: _,
@@ -130,6 +134,7 @@ async fn start_resolved(ctx: &Context, resolved: ChatStart) -> Result<i32> {
     let subject = Subject {
         mode: ui::ModeChoice::Named(mode.clone()),
         issue: issue.map(Some),
+        prompt,
     };
     match (workspace, repository) {
         (Some(workspace), _) => start_in_workspace(ctx, Some(workspace), subject, options).await,
@@ -137,7 +142,7 @@ async fn start_resolved(ctx: &Context, resolved: ChatStart) -> Result<i32> {
             start(ctx, Some(repository.value().to_owned()), subject, options).await
         }
         (None, None) => {
-            let topic = Topic::outside_repositories(&mode);
+            let topic = Topic::outside_repositories(&mode).told(subject.prompt);
             start_outside_repositories(ctx, topic, options).await
         }
     }
@@ -173,6 +178,7 @@ pub(in crate::cli::commands) async fn start_in_workspace(
         options.check_given(ctx, Some(repo.id.as_str())).await?;
         let topic = Topic::workspace(workspace, &mode);
         let topic = on_issue(ctx, &repo, &settings, topic, subject.issue).await?;
+        let topic = topic.told(subject.prompt);
         begin(
             ctx,
             ChatRepository::Registered(repo),

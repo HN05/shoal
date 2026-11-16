@@ -111,6 +111,9 @@ pub struct ChatStart {
     /// The issue it starts on, by number or URL, which it is linked to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issue: Option<crate::forge::items::reference::ItemInput>,
+    /// Its agent's first message when no issue gives it one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
     /// Arguments passed on to its agent, such as its task.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub args: Vec<String>,

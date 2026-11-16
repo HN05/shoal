@@ -71,6 +71,7 @@ impl Manager {
             model: launch.model,
             narrowing: launch.permissions,
             issue,
+            prompt: launch.prompt,
             args: launch.task,
             priority: launch.priority,
             env: launch.env,
@@ -138,15 +139,11 @@ impl Manager {
 }
 
 /// Refuse what only a workspace's agent starts with: a repository's
-/// setup, which works on its setup branch, and a prompt in place of a task.
+/// setup, which works on its setup branch.
 fn ensure_chat_takes(launch: &Launch) -> Result<()> {
     ensure!(
         !launch.repository_setup,
         "a repository's setup starts in a workspace on its setup branch"
-    );
-    ensure!(
-        launch.prompt.is_none(),
-        "a chat's agent starts on its task or issue; pass the prompt as its task"
     );
     Ok(())
 }
@@ -166,3 +163,6 @@ fn named_issue(issue: Option<IssueChoice>, mode: &ModeName) -> Result<Option<Ite
         None => Ok(None),
     }
 }
+
+#[cfg(test)]
+mod tests;

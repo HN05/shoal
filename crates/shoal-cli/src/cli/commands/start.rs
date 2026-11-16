@@ -524,7 +524,11 @@ async fn in_chat_with(
         args.in_workspace.is_some(),
     )?;
     let issue = issue.map(|issue| issue.named().cloned());
-    let subject = chat::Subject { mode, issue };
+    let subject = chat::Subject {
+        mode,
+        issue,
+        prompt: None,
+    };
     match args.in_workspace {
         Some(workspace) => chat::start_in_workspace(ctx, workspace, subject, options).await,
         None => chat::start(ctx, repository, subject, options).await,
