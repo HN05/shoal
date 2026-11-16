@@ -313,6 +313,7 @@ fn the_workspaces_agent_takes_over_the_project_setup_started_for_it() {
     wait_until("the agent's containers stop", || state() == "stopped");
     let again = fixture.run(&["start", "--in", &space, "--here", "--agent", "claude"]);
     assert!(again.status.success(), "{}", printed(&again));
+    wait_until("the agent's containers stop again", || state() == "stopped");
     assert_eq!(
         commands(&fixture, &project["project"]),
         ["up", "stop", "up", "stop"]
