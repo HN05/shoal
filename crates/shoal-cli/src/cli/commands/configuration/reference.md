@@ -258,6 +258,19 @@ approval_lifetime = "lease"
 See [simulators](../../../../../../docs/reference.md#simulators-macos) and
 [simulator preferences](#simulator-preferences).
 
+### Webhooks
+
+```toml
+[machine.webhooks]
+listen = "127.0.0.1:7473"   # No listener without it
+```
+
+`listen` is the address on which the daemon serves the routes of
+[webhook triggers](#triggers), and nothing else. Shoal does not expose it to
+the internet: put a tunnel or reverse proxy, such as Tailscale Funnel,
+cloudflared or Caddy, in front of it. See
+[webhooks](../../../../../../docs/reference.md#webhooks).
+
 ## Agents
 
 ### Agent
@@ -584,6 +597,16 @@ overlap = "skip"                  # Or "queue" or "parallel"
 filter = [{ path = "trigger", equals = "triage" }]
 key = "{{ scheduled_at }}"
 key_window = "10m"
+
+[triggers.labelled]
+on = "webhook"
+secret = "FORGEJO_HOOK"           # A [secrets] entry; none accepts any request
+signature = "forgejo"             # Or "github", or "hmac-sha256" with signature_header
+issue = "{{ payload.issue.number }}"
+filter = [
+  { path = "headers.x-forgejo-event", equals = "issues" },
+  { path = "payload.issue.labels[].name", equals = "agent" },
+]
 ```
 
 A trigger starts an agent when its source fires, as `shoal start` would. A
@@ -597,6 +620,12 @@ and the global file's never reach a repository's. Names follow port names.
 
 `on` names the source. The `timer` source fires `every` interval after its last
 firing, or `at` each time of day, as `HH:MM`, on `days`, from `mon` to `sun`.
+The `webhook` source fires for each request to its route on the
+[webhook listener](#webhooks). With `secret`, a request must carry the
+HMAC-SHA256 of its body under that [secret](#secrets)'s value, in hex, where
+`signature` says: `forgejo` in `X-Forgejo-Signature`, `github` in
+`X-Hub-Signature-256` after `sha256=`, or `hmac-sha256` in the header
+`signature_header` names.
 Lengths of time, such as `every`, `catch_up` and `key_window`, are whole
 numbers each followed by `s`, `m`, `h`, `d` or `w`, largest first, as in
 `1h30m`. A firing missed while the daemon was stopped or the machine slept runs
@@ -610,14 +639,18 @@ The launch takes the keys of `shoal start`'s flags, `agent`, `mode`, `model`,
 document, such as `{{ payload.labels.0.name }}`, a string or number as text and
 an object or array as JSON. A timer's input has `scheduled_at`, `fired_at` and
 `previous_at`, the last firing or, before the first, when Shoal first read the
-trigger, as RFC 3339 times in its time zone, and `trigger`, its name.
+trigger, as RFC 3339 times in its time zone, and `trigger`, its name. A
+webhook's has `payload`, the JSON body or a form-encoded body's fields,
+`body`, its text, `headers`, with names lowercased, `query`, `received_at` and
+`trigger`.
 
 `overlap` decides a firing that would start a new space while the space of the
 trigger's last run still has its agent running or queued. `filter` lists
 conditions on the input, each a `path` with one of `equals`, `not_equals`,
 `in`, `starts_with` or `exists`; `[]` after a key, as in `payload.labels[].name`,
 matches when any element does. `key` names what a firing is about, whose repeat
-within `key_window` does not run. See
+within `key_window` does not run; a webhook without one takes its
+`X-Forgejo-Delivery`, `X-Gitea-Delivery` or `X-GitHub-Delivery` header. See
 [triggers](../../../../../../docs/reference.md#triggers).
 
 ## Terminal

@@ -11,6 +11,8 @@ states!(
     SourceKind: Variants {
         /// Clock times or an interval.
         Timer => "timer",
+        /// HTTP requests to the daemon's webhook listener.
+        Webhook => "webhook",
     }
 );
 
@@ -85,4 +87,28 @@ pub struct TriggerStatus {
     pub next_at: Option<UnixTime>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_run: Option<TriggerRun>,
+}
+
+/// An HTTP request to a webhook trigger, or the sample `shoal trigger run`
+/// gives one.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WebhookRequest {
+    /// Its headers in the order sent, a repeated one once per value.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub headers: Vec<(String, String)>,
+    /// Its query parameters, decoded, in the order sent.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub query: Vec<(String, String)>,
+    /// Its body as text.
+    #[serde(default)]
+    pub body: String,
+}
+
+impl WebhookRequest {
+    /// The first value of the header `name`, whatever its case.
+    pub fn header(&self, name: &str) -> Option<&str> {
+        (self.headers.iter())
+            .find(|(header, _)| header.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.as_str())
+    }
 }

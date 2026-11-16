@@ -107,7 +107,9 @@ impl Manager {
             .read(move |tx| state::last_run(tx, &scope, &name))
             .await?;
         let source = &trigger.trigger.source;
-        let next_at = (!state.paused).then(|| source.next(state.counted_from, state.last_fired_at));
+        let next_at = (!state.paused)
+            .then(|| source.next(state.counted_from, state.last_fired_at))
+            .flatten();
         Ok(TriggerStatus {
             name: trigger.name.clone(),
             repository: trigger.repository.clone(),

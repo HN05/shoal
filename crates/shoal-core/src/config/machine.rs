@@ -50,9 +50,19 @@ pub struct Machine {
     /// Named Git settings a repository or agent selects.
     pub git_profiles: crate::config::git_profiles::Git,
     pub simulators: crate::sim::SimConfig,
+    pub webhooks: Webhooks,
     /// The options of `[machine]` that take another's value.
     #[serde(skip)]
     pub same_as: same_as::References,
+}
+
+/// The daemon's HTTP listener for webhook triggers.
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Webhooks {
+    /// The address it listens on; none without it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub listen: Option<std::net::SocketAddr>,
 }
 
 impl Machine {

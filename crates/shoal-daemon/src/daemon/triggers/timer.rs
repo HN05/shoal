@@ -49,6 +49,8 @@ impl Manager {
             }
             let fired = match &trigger.trigger.source {
                 Source::Timer(timer) => self.fire_due(&trigger, timer, now).await,
+                // The webhook listener fires them as requests arrive.
+                Source::Webhook(_) => Ok(None),
             };
             match fired {
                 Ok(Some(time)) => next = Some(next.map_or(time, |next| next.min(time))),
