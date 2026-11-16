@@ -84,7 +84,7 @@ async fn conflicts_compare_committed_head_with_the_default_or_named_branch() {
         .unwrap();
     assert_eq!(
         Some(check.target.as_str()),
-        base.branch.as_ref().map(BranchName::as_str)
+        base.branch().map(BranchName::as_str)
     );
     assert_eq!(
         check.target_commit,

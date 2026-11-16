@@ -118,10 +118,7 @@ impl Manager {
         let parent = launch.parent.is_some() && !forks_parent;
         let issue = launch.issue.is_some();
         if let Some(flag) = crate::launches::workspace::new_space_flag(creation, issue, parent) {
-            let branch = workspace
-                .branch
-                .as_ref()
-                .map_or("", |branch| branch.as_str());
+            let branch = workspace.branch().map_or("", |branch| branch.as_str());
             anyhow::bail!(
                 "{flag} applies to a new workspace, and workspace {} already has branch {branch}; the start goes into it as --in does",
                 workspace.number

@@ -285,7 +285,7 @@ impl<'a> From<&'a Workspace> for AgentWorkspace<'a> {
     fn from(workspace: &'a Workspace) -> Self {
         Self {
             name: &workspace.name,
-            branch: workspace.branch.as_ref().map(BranchName::as_str),
+            branch: workspace.branch().map(BranchName::as_str),
         }
     }
 }

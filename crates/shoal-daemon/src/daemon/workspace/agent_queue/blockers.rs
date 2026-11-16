@@ -348,7 +348,7 @@ impl Manager {
         // Only a workspace on a branch records completions.
         let (Some(completion), Some(branch)) = (
             self.completion(&workspace.id).await?,
-            workspace.branch.clone(),
+            workspace.branch().cloned(),
         ) else {
             return Ok(Progress::Waiting(workspace.name.into()));
         };

@@ -286,5 +286,5 @@ fn start_branch(workspace: &Workspace) -> Option<&str> {
             .as_deref()?
             .strip_prefix(git::LOCAL_REFS)?,
     };
-    (workspace.branch.as_ref().map(BranchName::as_str) != Some(branch)).then_some(branch)
+    (workspace.branch().map(BranchName::as_str) != Some(branch)).then_some(branch)
 }

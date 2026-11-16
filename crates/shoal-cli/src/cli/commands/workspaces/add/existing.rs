@@ -113,8 +113,7 @@ pub(super) async fn start_on_branch(
             "{flag} applies to a new workspace, and workspace {} already has branch {}; the start goes into it as --in does",
             workspace.number,
             workspace
-                .branch
-                .as_ref()
+                .branch()
                 .map(BranchName::as_str)
                 .unwrap_or_default()
         );
@@ -149,7 +148,7 @@ fn worker_plan(
     AddPlan {
         repository: (workspace.repository()).into(),
         creation: Creation {
-            existing: workspace.branch.clone().map(String::from),
+            existing: workspace.branch().map(ToString::to_string),
             options: CreationOptions {
                 name: Some(workspace.name.clone()),
                 ..Default::default()

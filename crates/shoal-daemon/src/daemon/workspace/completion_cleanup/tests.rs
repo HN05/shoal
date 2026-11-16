@@ -510,7 +510,7 @@ async fn completion_cleans_up_commits_the_start_branch_took_unchanged() {
     commit(&base.path, "base-work");
     cherry_pick(
         &base.path,
-        workspace.branch.as_ref().map(BranchName::as_str).unwrap(),
+        workspace.branch().map(BranchName::as_str).unwrap(),
     );
     // The idle rule counts the commits as kept as well.
     assert!(
@@ -656,7 +656,7 @@ async fn stacked_fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace, Works
         .create_workspace(
             base.repository(),
             "part".into(),
-            base.branch.clone().map(String::from),
+            base.branch().map(ToString::to_string),
             None,
             None,
         )

@@ -17,7 +17,7 @@ async fn a_scope_reaches_the_default_branch_and_its_workspaces_branches() {
     let other = create("other").await.unwrap();
     let child = workspace_below(&manager, &repo, "child", &worker.id, None).await;
     let master = chat(&manager, "master", "orchestrate", None, None).await;
-    let branch = |workspace: &crate::model::Workspace| workspace.branch.clone().unwrap();
+    let branch = |workspace: &crate::model::Workspace| workspace.branch().cloned().unwrap();
     let (child, other) = (branch(&child), branch(&other));
     let reaches = async |space: &shoal_ids::space_ids::SpaceId, branch: &str| {
         let caller = Caller {

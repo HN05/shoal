@@ -54,7 +54,7 @@ impl Manager {
         {
             ensure!(
                 workspace.repository() == &repo.id
-                    && workspace.branch.as_ref().map(BranchName::as_str) == Some(branch.as_str()),
+                    && workspace.branch().map(BranchName::as_str) == Some(branch.as_str()),
                 "worktree no longer matches its recorded repository or branch"
             );
             self.reopen_owned_workspace(&workspace, Some(branch.as_str()))

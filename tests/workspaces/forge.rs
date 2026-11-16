@@ -2518,5 +2518,8 @@ fn an_apps_workspace_linking_a_pr_takes_its_title_without_a_name() {
         .unwrap();
 
     assert_eq!(started.workspace.name, "PR 7");
-    assert_eq!(started.workspace.branch, Some("app-pr".into()));
+    assert_eq!(
+        started.workspace.branch().map(|b| b.as_str()),
+        Some("app-pr")
+    );
 }

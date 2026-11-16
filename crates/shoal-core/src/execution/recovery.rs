@@ -150,11 +150,7 @@ pub fn converted_subject(
     let mut prompt = format!(
         "Shoal converted this chat into a workspace. You now work in its worktree at {} on branch {}.",
         workspace.path.display(),
-        workspace
-            .branch
-            .as_ref()
-            .map(BranchName::as_str)
-            .unwrap_or("-"),
+        workspace.branch().map(BranchName::as_str).unwrap_or("-"),
     );
     prompt.push_str(if forked {
         " This conversation continues the chat's."

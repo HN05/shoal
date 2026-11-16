@@ -357,7 +357,7 @@ async fn push_current(workspace: &Workspace, request: &ApprovalRequest) -> Resul
     let Some(push) = request.pending_push() else {
         return Ok(false);
     };
-    let Some(branch) = workspace.branch.as_ref().map(BranchName::as_str) else {
+    let Some(branch) = workspace.branch().map(BranchName::as_str) else {
         return Ok(false);
     };
     if let Some(pull) = request.proposed_pull()
@@ -377,7 +377,7 @@ async fn push_current(workspace: &Workspace, request: &ApprovalRequest) -> Resul
 /// upstream, as `git push --set-upstream` would have, when it has none.
 /// Failure only logs; the push is done.
 async fn track_pushed_branch(workspace: &Workspace, push: &PushSpecification) {
-    let Some(branch) = &workspace.branch else {
+    let Some(branch) = workspace.branch() else {
         return;
     };
     if push.commit.is_none() || push.destination != git::local_ref(branch) {

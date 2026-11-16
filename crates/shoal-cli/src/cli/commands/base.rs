@@ -77,7 +77,7 @@ async fn pick(ctx: &Context, selector: &SpaceSelector) -> Result<String> {
         .iter()
         .filter(|w| w.repository_id == workspace.repository_id && w.id != workspace.id)
         // A stack builds on its base's branch.
-        .filter(|w| w.branch.is_some())
+        .filter(|w| w.branch().is_some())
         .cloned()
         .collect();
     ensure!(

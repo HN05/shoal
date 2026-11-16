@@ -433,9 +433,9 @@ fn own_edits(action: &Action, edited: Edited) -> Edited {
 /// Refuse a PR whose head is not the workspace branch.
 fn ensure_branch_head(workspace: &Workspace, item: &Item) -> Result<()> {
     anyhow::ensure!(
-        item.pr.as_ref().is_some_and(
-            |pr| workspace.branch.as_ref().map(BranchName::as_str) == Some(pr.head.as_str())
-        ),
+        item.pr
+            .as_ref()
+            .is_some_and(|pr| workspace.branch().map(BranchName::as_str) == Some(pr.head.as_str())),
         "{} does not have the workspace branch as its head",
         item.url
     );
@@ -576,7 +576,7 @@ impl Manager {
     /// that its review gate refuses; checked before anything is pushed.
     pub(crate) async fn check_pr_review_gate(&self, selector: &SpaceSelector) -> Result<()> {
         let workspace = self.workspace(selector).await?;
-        let Some(branch) = workspace.branch.clone() else {
+        let Some(branch) = workspace.branch().cloned() else {
             return Ok(());
         };
         if !self

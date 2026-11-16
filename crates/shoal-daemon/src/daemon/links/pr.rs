@@ -550,7 +550,7 @@ pub(crate) async fn current_head(workspace: &Workspace) -> Result<CommitId> {
     let (head, branch) = git::head_and_branch(&workspace.path)
         .await
         .context("cannot check the workspace's branch")?;
-    match &workspace.branch {
+    match workspace.branch() {
         Some(recorded) => ensure!(
             branch.is_some_and(|branch| branch == *recorded),
             "workspace is not on its recorded branch"

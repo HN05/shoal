@@ -797,7 +797,7 @@ async fn pull_current(
     account: &Account,
     proposed: &PullSpecification,
 ) -> Result<bool> {
-    let Some(branch) = workspace.branch.clone() else {
+    let Some(branch) = workspace.branch().cloned() else {
         return Ok(false);
     };
     if proposed.pull.head != branch || super::pr::current_head(workspace).await? != proposed.commit
@@ -841,7 +841,7 @@ async fn proposed_from(space: &LinkSpace) -> Result<(Option<String>, Option<Stri
     };
     let commit = crate::git::revision(&workspace.path, "HEAD", crate::git::run).await?;
     Ok((
-        workspace.branch.clone().map(String::from),
+        workspace.branch().map(ToString::to_string),
         Some(commit.trim().to_owned()),
     ))
 }

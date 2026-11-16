@@ -347,12 +347,7 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
     let path = &restored.opened.workspace.path;
     assert!(!restored.opened.reused);
     assert_eq!(
-        restored
-            .opened
-            .workspace
-            .branch
-            .as_ref()
-            .map(BranchName::as_str),
+        restored.opened.workspace.branch().map(BranchName::as_str),
         Some("topic")
     );
     assert_eq!(git(path, &["rev-parse", "HEAD"]), head);

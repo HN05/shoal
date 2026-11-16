@@ -44,7 +44,7 @@ impl Manager {
             Some(workspace) => (
                 workspace.id.clone(),
                 workspace.repository().clone(),
-                (workspace.part.branch).map_or_else(|| workspace.name.to_string(), String::from),
+                workspace.branch_or_name().to_owned(),
             ),
             None if launch.checkpoint.is_some() => self.removed_copy(&selector, caller).await?,
             None => anyhow::bail!("no workspace {selector}"),

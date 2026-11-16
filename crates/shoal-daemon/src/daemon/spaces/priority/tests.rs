@@ -211,7 +211,7 @@ async fn a_reopened_workspace_keeps_its_priority_unless_one_is_asked_for() {
         granted: None,
         read_only: false,
     };
-    let branch = child.workspace.branch.clone().unwrap();
+    let branch = child.workspace.branch().cloned().unwrap();
     let reopened = manager
         .start_workspace(
             (&repo.id).into(),

@@ -57,7 +57,7 @@ async fn a_chat_becomes_a_workspace_under_its_id_number_name_and_parent() {
         (&talk.id, talk.number, &talk.name)
     );
     assert_eq!(
-        workspace.branch.as_ref().map(BranchName::as_str),
+        workspace.branch().map(BranchName::as_str),
         Some("fix-login")
     );
     assert!(
@@ -219,10 +219,7 @@ async fn a_remote_branch_named_with_its_remote_opens_as_that_branch() {
         .await
         .unwrap();
 
-    assert_eq!(
-        workspace.branch.as_ref().map(BranchName::as_str),
-        Some("topic")
-    );
+    assert_eq!(workspace.branch().map(BranchName::as_str), Some("topic"));
 }
 
 #[tokio::test]
@@ -266,7 +263,7 @@ async fn a_new_branch_whose_namespace_a_branch_blocks_is_allocated_as_any() {
         .unwrap();
 
     assert_eq!(
-        workspace.branch.as_ref().map(BranchName::as_str),
+        workspace.branch().map(BranchName::as_str),
         Some("feature-2/login")
     );
 }

@@ -51,7 +51,7 @@ async fn a_workspace_at_a_commit_has_no_branch_and_is_named_after_its_start() {
     let at_main = create(&manager, &repo.id, None, CommitStart::Revision(None))
         .await
         .unwrap();
-    assert_eq!(at_main.branch, None);
+    assert_eq!(at_main.branch(), None);
     assert_eq!(at_main.state, WorkspaceState::Ready);
     assert_eq!(at_main.name, format!("main at {}", &main[..7]));
     assert_eq!(at_main.directory_name(), format!("main-{}", &main[..7]));
@@ -362,7 +362,7 @@ async fn a_removed_workspace_at_a_commit_is_restored_without_a_branch() {
         .await
         .unwrap();
     let reopened = restored.opened.workspace;
-    assert_eq!(reopened.branch, None);
+    assert_eq!(reopened.branch(), None);
     assert_eq!(reopened.at, workspace.at);
     assert_eq!(reopened.name, "Try the cache");
     assert_eq!(reopened.path.file_name(), workspace.path.file_name());
@@ -905,7 +905,7 @@ async fn a_restored_workspace_at_a_commit_cuts_a_name_an_older_shoal_recorded() 
     let restored = manager.restore_workspace(&selector).await.unwrap();
 
     let reopened = restored.opened.workspace;
-    assert_eq!(reopened.branch, None);
+    assert_eq!(reopened.branch(), None);
     assert_eq!(
         reopened.name,
         shoal_protocol::space_names::SpaceName::derive(&legacy, "workspace")

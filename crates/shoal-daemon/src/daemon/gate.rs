@@ -232,9 +232,7 @@ impl Manager {
         let Ok(space) = self.space_by_id(&request.space_id).await else {
             return self.pass_on_unjudged(&request).await;
         };
-        let branch = space
-            .worktree()
-            .and_then(|workspace| workspace.branch.as_ref());
+        let branch = space.worktree().and_then(|workspace| workspace.branch());
         let subject = subject::Subject::of(&request, branch).key();
         // Taken before anything slow, so a session's requests keep their order.
         let session = (self.gate.session(&request.space_id, &subject).lock_owned()).await;

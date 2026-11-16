@@ -133,7 +133,7 @@ impl Manager {
                 .await?
                 .into_iter()
                 .filter(|workspace| workspace.repository() == &repo.id)
-                .filter_map(|workspace| workspace.part.branch),
+                .filter_map(|workspace| workspace.part.branch().cloned()),
         );
         Ok(taken)
     }
@@ -428,11 +428,8 @@ impl Manager {
         };
         let branch = match self.open_target(&repo, selector, options).await? {
             OpenTarget::Reopen(workspace) => {
-                self.reopen_owned_workspace(
-                    &workspace,
-                    workspace.branch.as_ref().map(BranchName::as_str),
-                )
-                .await?;
+                self.reopen_owned_workspace(&workspace, workspace.branch().map(BranchName::as_str))
+                    .await?;
                 return Ok(OpenedWorkspace {
                     workspace: *workspace,
                     reused: true,
@@ -473,7 +470,7 @@ impl Manager {
             .list_workspaces()
             .await?
             .into_iter()
-            .find(|w| w.repository() == &repo.id && w.branch.as_ref() == Some(&branch.name))
+            .find(|w| w.repository() == &repo.id && w.branch() == Some(&branch.name))
         else {
             ensure_not_checked_out(&repo.path, &branch.name).await?;
             return Ok(OpenTarget::Create(branch));

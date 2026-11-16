@@ -264,7 +264,7 @@ async fn pull_request(
         .into_iter()
         .find(|workspace| {
             workspace.repository() == &repo.id
-                && workspace.branch.as_ref().map(BranchName::as_str) == Some(pull.head.as_str())
+                && workspace.branch().map(BranchName::as_str) == Some(pull.head.as_str())
         });
     let workspace = match owner {
         Some(workspace) => {
@@ -320,8 +320,7 @@ async fn pull_request(
                 .into_iter()
                 .find(|workspace| {
                     workspace.repository() == &repo.id
-                        && workspace.branch.as_ref().map(BranchName::as_str)
-                            == Some(pull.head.as_str())
+                        && workspace.branch().map(BranchName::as_str) == Some(pull.head.as_str())
                 })
                 .context("the opened PR workspace is missing")?
                 .id

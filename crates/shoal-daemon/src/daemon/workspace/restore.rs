@@ -354,7 +354,7 @@ impl Manager {
         let branch = (checkpoint.branch.clone())
             .unwrap_or_else(|| BranchName::from(checkpoint.head.abbreviated(7)));
         if let Some(workspace) = self.list_workspaces().await?.into_iter().find(|workspace| {
-            workspace.repository() == &repo.id && workspace.branch.as_ref() == Some(&branch)
+            workspace.repository() == &repo.id && workspace.branch() == Some(&branch)
         }) {
             bail!("workspace {} already uses branch {branch}", workspace.name);
         }

@@ -71,6 +71,11 @@ impl Worktree {
     pub fn directory_name(&self) -> &str {
         directory_name(&self.path)
     }
+
+    /// Its branch; `None` for a workspace at a commit.
+    pub fn branch(&self) -> Option<&BranchName> {
+        self.branch.as_ref()
+    }
 }
 
 /// The CPU and memory a workspace's processes use, from the daemon's latest
@@ -263,22 +268,20 @@ impl Workspace {
         WorkspaceRef {
             id: self.id.clone(),
             name: self.name.clone(),
-            branch: self.branch.clone(),
+            branch: self.branch().cloned(),
         }
     }
 
     /// Its branch, refusing a workspace at a commit for `action`, which
     /// needs one.
     pub fn require_branch(&self, action: &str) -> anyhow::Result<&BranchName> {
-        self.branch
-            .as_ref()
-            .ok_or_else(|| no_branch(&self.name, action))
+        self.branch().ok_or_else(|| no_branch(&self.name, action))
     }
 
     /// What names its work where a branch would: its branch, or the name
     /// of a workspace at a commit.
     pub fn branch_or_name(&self) -> &str {
-        self.branch.as_ref().map_or(&self.name, BranchName::as_str)
+        self.branch().map_or(&self.name, BranchName::as_str)
     }
 
     /// True when `path` (canonical) lies inside this worktree.

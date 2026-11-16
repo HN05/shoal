@@ -52,7 +52,7 @@ pub fn render_configured_environment<P: Part>(
         Some(worktree) => workspace_fields(
             worktree.directory_name(),
             &worktree.path,
-            worktree.branch.as_ref().map(BranchName::as_str),
+            worktree.branch().map(BranchName::as_str),
             repository_name,
         ),
         None => vec![

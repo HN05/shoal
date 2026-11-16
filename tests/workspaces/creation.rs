@@ -2136,7 +2136,10 @@ fn an_apps_workspace_on_an_issue_takes_its_title_without_a_name() {
         .unwrap();
 
     assert_eq!(started.workspace.name, "Issue");
-    assert_eq!(started.workspace.branch, Some("app-work".into()));
+    assert_eq!(
+        started.workspace.branch().map(|b| b.as_str()),
+        Some("app-work")
+    );
 }
 
 /// An app creates workspaces through `shoal_client` and follows their

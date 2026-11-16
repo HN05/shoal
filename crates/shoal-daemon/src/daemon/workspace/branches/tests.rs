@@ -95,11 +95,11 @@ impl Fixture {
 async fn names_suffix_only_conflicts_and_serialize_concurrent_adds() {
     let f = Fixture::new().await;
     assert_eq!(
-        f.add("plain").await.branch.as_ref().map(BranchName::as_str),
+        f.add("plain").await.branch().map(BranchName::as_str),
         Some("plain")
     );
     assert_eq!(
-        f.add("HEAD").await.branch.as_ref().map(BranchName::as_str),
+        f.add("HEAD").await.branch().map(BranchName::as_str),
         Some("HEAD-2")
     );
     git(&f.repo, &["branch", "feature"]);
@@ -111,12 +111,12 @@ async fn names_suffix_only_conflicts_and_serialize_concurrent_adds() {
     git(&f.repo, &["branch", "feature-4/nested"]);
     let workspace = f.add("feature").await;
     assert_eq!(
-        workspace.branch.as_ref().map(BranchName::as_str),
+        workspace.branch().map(BranchName::as_str),
         Some("feature-5")
     );
     assert_eq!(workspace.path.file_name().unwrap(), "feature");
     assert_eq!(
-        f.add("main").await.branch.as_ref().map(BranchName::as_str),
+        f.add("main").await.branch().map(BranchName::as_str),
         Some("main-2")
     );
     // Unpushed work keeps the branch, and with it the suffix.
@@ -131,16 +131,12 @@ async fn names_suffix_only_conflicts_and_serialize_concurrent_adds() {
         .await
         .unwrap();
     assert_eq!(
-        f.add("feature")
-            .await
-            .branch
-            .as_ref()
-            .map(BranchName::as_str),
+        f.add("feature").await.branch().map(BranchName::as_str),
         Some("feature-6")
     );
     git(&f.repo, &["branch", "concurrent"]);
     let (first, second) = tokio::join!(f.add("concurrent"), f.add("concurrent-2"));
-    assert_ne!(first.branch, second.branch);
+    assert_ne!(first.branch(), second.branch());
 }
 
 #[tokio::test]
@@ -158,8 +154,7 @@ async fn a_typed_name_is_refused_rather_than_suffixed() {
         typed("free")
             .await
             .unwrap()
-            .branch
-            .as_ref()
+            .branch()
             .map(BranchName::as_str),
         Some("free")
     );
@@ -332,7 +327,7 @@ async fn nested_branch_conflicts_suffix_the_blocked_component() {
     assert_eq!(workspace.name, "henrik/topic");
     assert_eq!(workspace.directory_name(), "henrik-topic");
     assert_eq!(
-        workspace.branch.as_ref().map(BranchName::as_str),
+        workspace.branch().map(BranchName::as_str),
         Some("henrik-3/topic-3")
     );
     assert_eq!(
@@ -343,8 +338,7 @@ async fn nested_branch_conflicts_suffix_the_blocked_component() {
     assert_eq!(
         f.add("henrik-3/other")
             .await
-            .branch
-            .as_ref()
+            .branch()
             .map(BranchName::as_str),
         Some("henrik-3/other")
     );
@@ -509,7 +503,7 @@ async fn check_branch_compatibility(cases: &[(String, String, bool)]) {
             name.clone()
         };
         assert_eq!(
-            allocated.branch.as_ref().map(BranchName::as_str),
+            allocated.branch().map(BranchName::as_str),
             Some(expected.as_str())
         );
         assert_eq!(allocated.name, SpaceName::derive(name, "workspace"));
@@ -544,7 +538,7 @@ async fn check_branch_compatibility(cases: &[(String, String, bool)]) {
         } else {
             let workspace = opened.unwrap().workspace;
             assert_eq!(
-                workspace.branch.as_ref().map(BranchName::as_str),
+                workspace.branch().map(BranchName::as_str),
                 Some(name.as_str())
             );
             assert_eq!(workspace.name, SpaceName::derive(name, "workspace"));
@@ -656,7 +650,7 @@ async fn existing_branch_opens_without_suffix_and_reuses_owned_workspace() {
         .unwrap();
     assert!(!opened.reused);
     assert_eq!(
-        opened.workspace.branch.as_ref().map(BranchName::as_str),
+        opened.workspace.branch().map(BranchName::as_str),
         Some("coworker/topic")
     );
     assert_eq!(opened.workspace.name, "coworker/topic");
@@ -750,7 +744,7 @@ async fn existing_branch_refuses_other_checkouts_and_takes_a_free_directory() {
         .await
         .unwrap();
     assert_eq!(
-        main.workspace.branch.as_ref().map(BranchName::as_str),
+        main.workspace.branch().map(BranchName::as_str),
         Some("main")
     );
     f.manager
@@ -979,7 +973,7 @@ async fn existing_remote_branch_discovers_fetches_and_tracks_new_heads() {
         .await
         .unwrap();
     assert_eq!(
-        opened.workspace.branch.as_ref().map(BranchName::as_str),
+        opened.workspace.branch().map(BranchName::as_str),
         Some("coworker/topic")
     );
     assert_eq!(
@@ -2226,10 +2220,7 @@ async fn copy_adoption_records_ownership_and_finishes_ready() {
         .await
         .unwrap();
 
-    assert_eq!(
-        copied.branch.as_ref().map(BranchName::as_str),
-        Some("source-2")
-    );
+    assert_eq!(copied.branch().map(BranchName::as_str), Some("source-2"));
     assert_eq!(copied.state, crate::state::WorkspaceState::Ready);
     assert_eq!(
         fs::read_to_string(copied.path.join("copied")).unwrap(),

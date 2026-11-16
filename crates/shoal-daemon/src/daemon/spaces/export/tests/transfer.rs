@@ -216,12 +216,7 @@ async fn import_opens_the_exported_branch_with_its_files_and_agents() {
     let path = &restored.opened.workspace.path;
     assert!(path.starts_with(target_repo.path.parent().unwrap()));
     assert_eq!(
-        restored
-            .opened
-            .workspace
-            .branch
-            .as_ref()
-            .map(BranchName::as_str),
+        restored.opened.workspace.branch().map(BranchName::as_str),
         Some("topic")
     );
     assert_eq!(git(path, &["rev-parse", "HEAD"]), head);
@@ -518,10 +513,7 @@ async fn a_copy_keeps_the_workspace_and_imports_on_a_branch_of_its_own() {
 
     let copy = &restored.opened.workspace;
     assert_ne!(copy.id, workspace.id);
-    assert_eq!(
-        copy.branch.as_ref().map(BranchName::as_str),
-        Some("topic-2")
-    );
+    assert_eq!(copy.branch().map(BranchName::as_str), Some("topic-2"));
     assert_eq!(git(&copy.path, &["rev-parse", "HEAD"]), head);
     assert_eq!(
         fs::read_to_string(copy.path.join("scratch")).unwrap(),
@@ -638,7 +630,7 @@ async fn concurrent_imports_of_a_copy_take_branches_of_their_own() {
         import_here(&manager, &repo, &bytes)
     );
     let mut branches =
-        [first, second].map(|restored| restored.opened.workspace.part.branch.unwrap());
+        [first, second].map(|restored| restored.opened.workspace.branch().cloned().unwrap());
     branches.sort();
     assert_eq!(branches, ["topic-2", "topic-3"]);
 }

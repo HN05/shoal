@@ -62,7 +62,7 @@ impl Manager {
         let Some(branch) = outcome
             .branch
             .clone()
-            .filter(|branch| workspace.branch.as_ref() == Some(branch))
+            .filter(|branch| workspace.branch() == Some(branch))
             .filter(|_| !outcome.branch_outcome.is_deleted())
         else {
             return Ok(());
@@ -316,7 +316,7 @@ impl Manager {
             .await?
             .into_iter()
             .filter(|workspace| workspace.repository() == repository_id)
-            .filter_map(|workspace| workspace.part.branch)
+            .filter_map(|workspace| workspace.part.branch().cloned())
             .collect())
     }
 }

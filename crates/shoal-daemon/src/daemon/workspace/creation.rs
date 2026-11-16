@@ -114,10 +114,7 @@ impl Manager {
             (None, Some(selector)) => match self.open_target(&repo, selector, options).await? {
                 branches::OpenTarget::Reopen(workspace) => {
                     return self
-                        .check_reopen(
-                            &workspace,
-                            workspace.branch.as_ref().map(BranchName::as_str),
-                        )
+                        .check_reopen(&workspace, workspace.branch().map(BranchName::as_str))
                         .await;
                 }
                 branches::OpenTarget::Create(branch) => {
@@ -334,7 +331,7 @@ impl Manager {
                 store::ensure_branch_available(
                     tx,
                     record.repository(),
-                    record.branch.as_ref().map(BranchName::as_str),
+                    record.branch().map(BranchName::as_str),
                     replaced,
                 )?;
                 store::ensure_path_unrecorded(tx, &record.path)?;
@@ -376,7 +373,7 @@ impl Manager {
                     params![
                         record.id,
                         record.path.to_str(),
-                        record.branch,
+                        record.branch().cloned(),
                         record.state,
                         record.git_dir.as_ref().and_then(|p| p.to_str().map(str::to_owned)),
                         record.git_dir_id,

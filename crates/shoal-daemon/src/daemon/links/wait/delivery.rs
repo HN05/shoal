@@ -220,7 +220,7 @@ impl Manager {
             .await?;
         let branch = (space.worktree())
             .filter(|_| kind.is_none())
-            .and_then(|workspace| workspace.branch.clone());
+            .and_then(|workspace| workspace.branch().cloned());
         let keys = items
             .into_iter()
             .map(|url| url.to_string())

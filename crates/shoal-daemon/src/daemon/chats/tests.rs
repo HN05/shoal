@@ -117,7 +117,7 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
         id: workspace.id.clone(),
         name: workspace.name.clone(),
         kind: SpaceKind::Workspace,
-        branch: workspace.branch.clone(),
+        branch: workspace.branch().cloned(),
     };
     let stopped = Chat {
         running: false,
@@ -265,7 +265,7 @@ async fn chats_and_workspaces_may_share_a_name() {
     assert_eq!(
         (
             renamed.name.as_str(),
-            renamed.branch.as_ref().map(BranchName::as_str)
+            renamed.branch().map(BranchName::as_str)
         ),
         ("worker", Some("renamed"))
     );
@@ -782,7 +782,7 @@ async fn a_chat_in_a_workspace_names_it_and_runs_only_while_its_worktree_is_ther
     let named = Some(WorkspaceRef {
         id: workspace.id.clone(),
         name: workspace.name.clone(),
-        branch: workspace.branch.clone(),
+        branch: workspace.branch().cloned(),
     });
     assert_eq!(
         (&chat.repository_id, chat.workdir.workspace()),

@@ -17,7 +17,7 @@ fn tree_rows_list_children_below_their_parent() {
         id: w.id.clone(),
         name: w.name.clone(),
         kind: crate::model::SpaceKind::Workspace,
-        branch: w.branch.clone(),
+        branch: w.branch().cloned(),
     };
     workspaces[0].parent = Some(reference(&workspaces[3]));
     workspaces[1].parent = Some(reference(&workspaces[0]));
@@ -87,7 +87,7 @@ fn spaces_under_one_parent_list_by_status_then_number() {
         id: parent.id.clone(),
         name: parent.name.clone(),
         kind: crate::model::SpaceKind::Workspace,
-        branch: parent.branch.clone(),
+        branch: parent.branch().cloned(),
     });
     let mut workspaces = vec![
         numbered("idle", 3, false),

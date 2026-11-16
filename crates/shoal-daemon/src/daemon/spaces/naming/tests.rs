@@ -30,7 +30,7 @@ async fn a_name_is_cleaned_up_kept_on_the_record_and_returned_with_the_previous_
     // Nothing built from the name moves.
     assert_eq!(renamed_workspace.path, workspace.path);
     assert_eq!(
-        renamed_workspace.branch.as_ref().map(BranchName::as_str),
+        renamed_workspace.branch().map(BranchName::as_str),
         Some("topic")
     );
     assert_eq!(

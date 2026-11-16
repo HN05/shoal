@@ -480,12 +480,7 @@ async fn a_replaced_checkout_is_not_reviewed() {
             "add",
             "-q",
             path,
-            fixture
-                .workspace
-                .branch
-                .as_ref()
-                .map(BranchName::as_str)
-                .unwrap(),
+            fixture.workspace.branch().map(BranchName::as_str).unwrap(),
         ],
     );
     let review = fixture.review().await;

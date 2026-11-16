@@ -412,7 +412,7 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
     assert_eq!(workspace.name, "rust");
     assert_eq!(workspace.directory_name(), "ci-rust-4");
     assert_eq!(workspace.repository(), &fixture.repository);
-    assert_eq!(workspace.branch, None);
+    assert_eq!(workspace.branch(), None);
     assert_eq!(workspace.at.as_ref().unwrap().commit, fixture.head);
     assert!(workspace.disposable && workspace.setup_skipped);
 

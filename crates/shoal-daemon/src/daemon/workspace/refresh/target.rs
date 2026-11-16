@@ -74,7 +74,7 @@ impl Manager {
             return self.copy_target(workspace, copied, caller).await;
         }
         let repo = self.repository(workspace.repository()).await?;
-        match (&workspace.branch, &workspace.at) {
+        match (workspace.branch(), &workspace.at) {
             (Some(branch), _) => branch_target(&repo, workspace, branch).await,
             (None, Some(at)) => match &at.made_for {
                 Some(MadeFor::Pr(number)) => self.pr_head(workspace, *number, caller).await,

@@ -78,10 +78,7 @@ async fn a_launch_opens_a_new_workspace_and_prepares_it() {
     let Launched::Workspace(started) = launched else {
         panic!("expected a workspace: {launched:?}");
     };
-    assert_eq!(
-        started.workspace.branch.as_ref().map(|b| b.as_str()),
-        Some("new")
-    );
+    assert_eq!(started.workspace.branch().map(|b| b.as_str()), Some("new"));
     let worker = fake::take(&started.operation);
     let OperationSpec::Prepare { steps, .. } = worker.order.spec.clone() else {
         panic!("expected a preparation: {:?}", worker.order);

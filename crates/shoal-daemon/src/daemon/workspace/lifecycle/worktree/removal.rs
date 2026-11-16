@@ -583,7 +583,7 @@ impl Manager {
         }
         Ok(WorktreeRemoval {
             removed: true,
-            branch: workspace.branch.clone(),
+            branch: workspace.branch().cloned(),
             branch_outcome: BranchOutcome::Retained,
             hook_error: None,
         })
@@ -657,8 +657,8 @@ pub(in crate::daemon::workspace) fn removal_options(
     check: &Inspection,
     removal: Removal<'_>,
 ) -> (FileRemoval, BranchRemoval) {
-    let own_branch = check.workspace.branch.is_some()
-        && (!check.workspace.disposable || check.branch == check.workspace.branch);
+    let own_branch = check.workspace.branch().is_some()
+        && (!check.workspace.disposable || check.branch.as_ref() == check.workspace.branch());
     let branch = if own_branch
         && !removal.converts()
         && check.branch_preserved()

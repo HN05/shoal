@@ -44,10 +44,7 @@ impl Manager {
         let workspaces = self.list_workspaces_within(root.as_ref()).await?;
         let reached = workspaces.iter().any(|workspace| {
             workspace.repository() == repository
-                && workspace
-                    .branch
-                    .as_ref()
-                    .is_some_and(|own| own.as_str() == branch)
+                && workspace.branch().is_some_and(|own| own.as_str() == branch)
         });
         if reached {
             return Ok(true);

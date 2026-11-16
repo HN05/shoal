@@ -105,7 +105,7 @@ pub async fn pull_creation(
     }
     let owned = reads.workspaces().await?.iter().any(|workspace| {
         workspace.repository() == &repo.id
-            && workspace.branch.as_ref().map(BranchName::as_str) == Some(pull.head.as_str())
+            && workspace.branch().map(BranchName::as_str) == Some(pull.head.as_str())
     });
     if owned {
         creation.existing = Some(pull.head.into());
@@ -196,7 +196,7 @@ pub async fn settle(
     taken.extend(
         workspaces
             .into_iter()
-            .filter_map(|workspace| workspace.part.branch),
+            .filter_map(|workspace| workspace.branch().cloned()),
     );
     ensure!(
         git::repo::allocate_branch(&name, &taken) == name,
@@ -273,9 +273,10 @@ pub async fn issue_creation(
         return Ok(creation);
     }
     let local = BranchName::from(name.as_str());
-    if let Some(workspace) = workspaces.into_iter().find(|workspace| {
-        workspace.repository() == &repo.id && workspace.branch.as_ref() == Some(&local)
-    }) {
+    if let Some(workspace) = workspaces
+        .into_iter()
+        .find(|workspace| workspace.repository() == &repo.id && workspace.branch() == Some(&local))
+    {
         ensure_reopens(&workspace)?;
     } else if git::ref_exists(&repo.path, &git::local_ref(&local), git::isolated_command).await? {
         git::existing_branch::ensure_not_checked_out(&repo.path, &local).await?;
@@ -353,7 +354,7 @@ pub async fn reopened_workspace(
     Ok((reads.workspaces().await?.into_iter())
         .find(|workspace| {
             workspace.repository() == &repo.id
-                && workspace.branch.as_ref().map(BranchName::as_str) == Some(&branch)
+                && workspace.branch().map(BranchName::as_str) == Some(&branch)
         })
         .map(|workspace| workspace.id))
 }

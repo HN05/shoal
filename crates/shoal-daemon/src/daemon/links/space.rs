@@ -86,7 +86,7 @@ impl LinkSpace {
     /// The branch whose merge conflicts a workspace's watch reports; a chat
     /// works on none.
     pub(crate) fn branch(&self) -> Option<&str> {
-        (self.worktree()).and_then(|worktree| worktree.branch.as_ref().map(BranchName::as_str))
+        (self.worktree()).and_then(|worktree| worktree.branch().map(BranchName::as_str))
     }
 
     /// Where an item request of the space runs: the workspace, or the

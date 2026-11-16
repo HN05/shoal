@@ -507,8 +507,7 @@ impl Manager {
             &templates::ReviewFields {
                 workspace: workspace.directory_name(),
                 branch: workspace
-                    .branch
-                    .as_ref()
+                    .branch()
                     .map(BranchName::as_str)
                     .unwrap_or_default(),
                 path: &checkout.to_string_lossy(),

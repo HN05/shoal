@@ -567,7 +567,7 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
                 "--format=%(refname)",
                 &format!(
                     "refs/heads/{}",
-                    workspace.branch.as_ref().map(BranchName::as_str).unwrap()
+                    workspace.branch().map(BranchName::as_str).unwrap()
                 )
             ],
         )

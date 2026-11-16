@@ -12,7 +12,7 @@ fn reference(workspace: &crate::model::Workspace) -> WorkspaceRef {
     WorkspaceRef {
         id: workspace.id.clone(),
         name: workspace.name.clone(),
-        branch: workspace.branch.clone(),
+        branch: workspace.branch().cloned(),
     }
 }
 

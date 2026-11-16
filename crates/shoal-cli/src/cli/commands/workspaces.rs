@@ -47,7 +47,7 @@ pub(super) use watch::watch_items;
 /// made for.
 pub(super) fn location_phrase(workspace: &crate::model::Workspace) -> String {
     let path = workspace.path.display();
-    match (&workspace.branch, &workspace.at) {
+    match (workspace.branch(), &workspace.at) {
         (Some(branch), _) => format!("on branch {branch} at {path}"),
         (None, Some(at)) => format!("at {} in {path}", at.label()),
         (None, None) => format!("at a commit in {path}"),

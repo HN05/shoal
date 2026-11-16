@@ -60,7 +60,7 @@ pub(super) async fn start(
     let session = Session {
         paths: &ctx.paths,
         directory: &workspace.path,
-        branch: workspace.branch.as_ref().map(BranchName::as_str),
+        branch: workspace.branch().map(BranchName::as_str),
         prompt,
         args,
     };

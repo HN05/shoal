@@ -231,8 +231,7 @@ pub fn on_branch<'a>(
     remote: Option<&(String, BranchName)>,
 ) -> Option<&'a Workspace> {
     let local = remote.map_or(name, |(_, branch)| branch.as_str());
-    (workspaces.iter())
-        .find(|workspace| workspace.branch.as_ref().map(BranchName::as_str) == Some(local))
+    (workspaces.iter()).find(|workspace| workspace.branch().map(BranchName::as_str) == Some(local))
 }
 
 /// Refuse a repository or issue the launch names for `mode`, which starts a

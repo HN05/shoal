@@ -278,7 +278,9 @@ impl Space {
             id: self.id.clone(),
             name: self.name.clone(),
             kind: self.kind(),
-            branch: self.worktree().and_then(|worktree| worktree.branch.clone()),
+            branch: self
+                .worktree()
+                .and_then(|worktree| worktree.branch().cloned()),
         }
     }
 

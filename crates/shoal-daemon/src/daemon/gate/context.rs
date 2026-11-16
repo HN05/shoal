@@ -83,7 +83,7 @@ impl Manager {
         let rules = settings.gate.rules(&governing(request));
         let opened_with = serde_json::json!([agent.name(), rules.instructions, rules.escalate]);
         let workspace = space.worktree();
-        let branch = workspace.and_then(|workspace| workspace.branch.as_ref());
+        let branch = workspace.and_then(|workspace| workspace.branch());
         let subject = Subject::of(request, branch);
         let items = self.gate_items(&space).await;
         let opening = prompt::opening(

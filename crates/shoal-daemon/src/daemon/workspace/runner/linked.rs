@@ -140,7 +140,7 @@ impl Spaces {
                 own.find(|workspace| links_pull(forge, &workspace.links, *number))
             }
             Trigger::Branch(branch) => own.find(|workspace| {
-                workspace.branch.as_ref().map(BranchName::as_str) == Some(branch.as_str())
+                workspace.branch().map(BranchName::as_str) == Some(branch.as_str())
             }),
             Trigger::Other => None,
         }

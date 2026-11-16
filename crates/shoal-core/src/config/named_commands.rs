@@ -61,8 +61,7 @@ pub fn workspace_fields<'a>(
             "{branch}",
             OsStr::new(
                 workspace
-                    .branch
-                    .as_ref()
+                    .branch()
                     .map(BranchName::as_str)
                     .unwrap_or_default(),
             ),

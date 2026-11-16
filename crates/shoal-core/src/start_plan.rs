@@ -282,7 +282,7 @@ impl AddPlan {
         Ok(Self {
             repository: workspace.repository().into(),
             creation: Creation {
-                existing: workspace.branch.clone().map(String::from),
+                existing: workspace.branch().map(ToString::to_string),
                 ..Default::default()
             },
             place_name: None,
@@ -307,7 +307,7 @@ impl AddPlan {
     /// creating anything: the workspace it names, or without one the branch
     /// it opens, local or as a remote's.
     pub fn opens(&self, workspace: &Workspace) -> bool {
-        let (Some(branch), Some(existing)) = (&workspace.branch, &self.creation.existing) else {
+        let (Some(branch), Some(existing)) = (workspace.branch(), &self.creation.existing) else {
             return false;
         };
         let names_branch = existing == branch

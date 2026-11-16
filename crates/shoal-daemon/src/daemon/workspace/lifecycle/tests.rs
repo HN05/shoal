@@ -1086,11 +1086,11 @@ async fn branch_removal_uses_the_inspected_default_branch() {
     for (inspected_default, later_default, delete) in [
         (
             "main",
-            workspace.branch.as_ref().map(BranchName::as_str).unwrap(),
+            workspace.branch().map(BranchName::as_str).unwrap(),
             true,
         ),
         (
-            workspace.branch.as_ref().map(BranchName::as_str).unwrap(),
+            workspace.branch().map(BranchName::as_str).unwrap(),
             "main",
             false,
         ),

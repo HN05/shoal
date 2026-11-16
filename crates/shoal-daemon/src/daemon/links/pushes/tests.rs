@@ -144,7 +144,7 @@ async fn a_pr_proposal_that_pushes_takes_the_place_of_its_push_request() {
     );
     let pull = NewPull {
         title: "Fix".into(),
-        head: workspace.branch.clone().unwrap(),
+        head: workspace.branch().cloned().unwrap(),
         ..NewPull::default()
     };
     let commit = push.commit.clone().unwrap();

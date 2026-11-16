@@ -417,7 +417,7 @@ impl Manager {
         git_profile: Option<&str>,
     ) -> Result<Configured> {
         let path = &workspace.path;
-        git::copy::add_worktree(&repo.path, path, workspace.branch.as_ref(), head.as_str()).await?;
+        git::copy::add_worktree(&repo.path, path, workspace.branch(), head.as_str()).await?;
         // Recorded before the files are cloned, so a restart can verify and
         // remove the worktree.
         self.record_worktree_identity(workspace).await?;
@@ -442,7 +442,7 @@ impl Manager {
         files: &RestoredFiles,
         git_profile: Option<&str>,
     ) -> Result<Configured> {
-        match &workspace.branch {
+        match workspace.branch() {
             Some(branch) => {
                 let head = Some(files.head.as_str());
                 git::worktree::add(&repo.path, &workspace.path, branch, head).await?
@@ -488,7 +488,7 @@ fn live_source(workspace: Workspace, head: CommitId, files: SourceFiles) -> Sour
         repository_id: workspace.repository().clone(),
         workspace_id: workspace.id,
         name: workspace.name.into(),
-        branch: workspace.part.branch,
+        branch: workspace.part.branch().cloned(),
         base_ref: workspace.part.base_ref,
         base_commit: workspace.part.base_commit,
         base_branch: (workspace.part.base_workspace.and_then(|base| base.branch)),

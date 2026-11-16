@@ -23,7 +23,7 @@ fn space(workspace: &Workspace) -> SpaceRef {
         id: workspace.id.clone(),
         name: workspace.name.clone(),
         kind: SpaceKind::Workspace,
-        branch: workspace.branch.clone(),
+        branch: workspace.branch().cloned(),
     }
 }
 
@@ -31,7 +31,7 @@ fn reference(workspace: &Workspace) -> WorkspaceRef {
     WorkspaceRef {
         id: workspace.id.clone(),
         name: workspace.name.clone(),
-        branch: workspace.branch.clone(),
+        branch: workspace.branch().cloned(),
     }
 }
 

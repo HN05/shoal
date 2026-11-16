@@ -489,7 +489,7 @@ impl Manager {
     /// it instead.
     pub(crate) fn ensure_holds_agents(workspace: &crate::model::Workspace) -> anyhow::Result<()> {
         anyhow::ensure!(
-            workspace.branch.is_some(),
+            workspace.branch().is_some(),
             "workspace {} is at a commit and holds no agent of its own; start the agent in a workspace on a branch, such as one split with --base <commit>",
             workspace.name
         );

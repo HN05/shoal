@@ -186,8 +186,7 @@ async fn branch_observations_preserve_ownership_and_scope_denies_events() {
             .workspace_by_id(&workspace.id)
             .await
             .unwrap()
-            .branch
-            .as_ref()
+            .branch()
             .map(BranchName::as_str),
         Some("worker")
     );

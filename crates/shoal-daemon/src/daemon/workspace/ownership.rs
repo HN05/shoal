@@ -71,11 +71,8 @@ impl Manager {
         let (_repo, _guard) = self.lock_repository(workspace.repository()).await?;
         // The workspace may have gone while waiting for the repository.
         let workspace = self.workspace_by_id(&workspace.id).await?;
-        self.reopen_owned_workspace(
-            &workspace,
-            workspace.branch.as_ref().map(BranchName::as_str),
-        )
-        .await?;
+        self.reopen_owned_workspace(&workspace, workspace.branch().map(BranchName::as_str))
+            .await?;
         Ok(crate::model::OpenedWorkspace {
             workspace,
             reused: true,
@@ -226,7 +223,7 @@ impl Manager {
     /// branch, and no other workspace may own it.
     pub(crate) async fn reclaim_worktree(&self, workspace: &Workspace) -> Result<()> {
         let git_dir = self.linked_git_dir(workspace).await?;
-        match &workspace.branch {
+        match workspace.branch() {
             Some(recorded) => {
                 let branch = git::head_branch(&workspace.path, true, git::run)
                     .await
@@ -340,7 +337,7 @@ impl Manager {
         // Older records cannot prove identity after a move; a branch match at
         // another existing path is enough to block forgetting the workspace.
         // Every workspace without a branch records its Git directory.
-        let Some(branch) = workspace.branch.clone() else {
+        let Some(branch) = workspace.branch().cloned() else {
             return Ok(None);
         };
         let trees = git::worktrees(&repo.path, git::run).await?;

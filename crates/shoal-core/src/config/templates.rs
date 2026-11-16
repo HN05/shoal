@@ -325,9 +325,8 @@ impl Fields {
                 (
                     "{branch}",
                     workspace
-                        .branch
-                        .clone()
-                        .map(String::from)
+                        .branch()
+                        .map(ToString::to_string)
                         .unwrap_or_default(),
                 ),
                 ("{path}", workspace.path.to_string_lossy().into_owned()),
@@ -352,9 +351,8 @@ impl Fields {
                         (
                             "{branch}",
                             workspace
-                                .branch
-                                .clone()
-                                .map(String::from)
+                                .branch()
+                                .map(ToString::to_string)
                                 .unwrap_or_default(),
                         ),
                         ("{head}", head_label(workspace)),
@@ -384,7 +382,7 @@ impl Fields {
 
 /// What `workspace` has checked out, as a chat's text names it.
 fn head_label(workspace: &Workspace) -> String {
-    match (&workspace.branch, &workspace.at) {
+    match (workspace.branch(), &workspace.at) {
         (Some(branch), _) => format!("on branch {branch}"),
         (None, Some(at)) => format!("at commit {}", at.label()),
         (None, None) => "on a detached HEAD".to_owned(),
