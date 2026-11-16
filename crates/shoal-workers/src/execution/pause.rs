@@ -1,5 +1,7 @@
 //! An agent the daemon paused: why it stopped, its saved recovery record, and
 //! the wait for the daemon to restore it.
+mod place;
+
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use std::{ffi::OsString, io::Write, path::PathBuf};
@@ -20,6 +22,8 @@ use crate::{
     process,
     protocol::{ExecutionEvent, Protection},
 };
+use place::Key;
+pub(super) use place::Place;
 
 /// How the wrapper continues after its agent paused.
 pub(super) enum AfterPause {
@@ -83,16 +87,12 @@ pub(super) async fn pause_agent(
     let Some(protection) = awaited else {
         return Ok(AfterPause::Finish);
     };
-    eprintln!(
-        "shoal: agent stopped{}; waiting until {}; the agent resumes automatically",
-        stop.stated_reason(),
-        protection.resumes_when
-    );
-    await_restore(link, paths, plan, recovery, stop, saved).await
+    let place = Place::show(&protection);
+    await_restore(link, paths, plan, recovery, stop, saved, place).await
 }
 
-/// Wait for the daemon to restore an agent protection stopped, restarting it
-/// from its saved `record` when it resumes.
+/// Wait in `place` for the daemon to restore an agent protection stopped,
+/// restarting it from its saved `record` when it resumes.
 async fn await_restore(
     link: &mut Link,
     paths: &CommandPaths,
@@ -100,8 +100,12 @@ async fn await_restore(
     recovery: &recovery::Recovery,
     stop: &Halt,
     record: Result<PathBuf>,
+    mut place: Place,
 ) -> Result<AfterPause> {
-    match wait(link).await? {
+    let waited = wait(link, &mut place).await?;
+    // The terminal goes back to the restored agent, or to the shell.
+    drop(place);
+    match waited {
         Waited::Resume {
             ports,
             executable,
@@ -387,9 +391,10 @@ impl Waited {
     }
 }
 
-/// Wait for the daemon's verdict. While the daemon restarts, the link
-/// reattaches and the next daemon continues the wait.
-pub(super) async fn wait(link: &mut Link) -> Result<Waited> {
+/// Wait in `place` for the daemon's verdict, or for its Ctrl-C, which stops
+/// waiting. While the daemon restarts, the link reattaches and the next
+/// daemon continues the wait.
+pub(super) async fn wait(link: &mut Link, place: &mut Place) -> Result<Waited> {
     use super::link::{Received, Refused};
     use crate::protocol::Control;
     use tokio::signal::unix::{SignalKind, signal};
@@ -410,7 +415,7 @@ pub(super) async fn wait(link: &mut Link) -> Result<Waited> {
                     return Ok(Waited::Cancelled { reason, removed });
                 }
                 Ok(Received::Control(Control::RestoreWaits { issue })) => {
-                    eprintln!("shoal: the restore also waits until the agent's remaining processes exit: {issue}");
+                    place.note(format!("the restore also waits until the agent's remaining processes exit: {issue}"));
                 }
                 Ok(Received::Control(_)) => anyhow::bail!("unexpected recovery control"),
                 Err(error) if error.is::<Refused>() => {
@@ -418,6 +423,7 @@ pub(super) async fn wait(link: &mut Link) -> Result<Waited> {
                 }
                 Err(error) => return Err(error),
             },
+            Key::Stop = place.key() => return signalled(),
             _ = interrupt.recv() => return signalled(),
             _ = terminate.recv() => return signalled(),
             _ = quit.recv() => return signalled(),

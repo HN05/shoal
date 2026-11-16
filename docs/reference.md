@@ -588,7 +588,11 @@ stop` stopped, or that quit on its own, is stopped instead, and stays down
 until `shoal restore`. `shoal list` shows an asleep agent's space as `asleep`,
 the [inbox](#inbox) lists it, and `shoal status` adds an `Asleep` line with
 why it sleeps, what wakes it, and `shoal attach` and `shoal queue start`, which
-wake it now; `--json` gives `asleep` with `reason` and `wakes_when`.
+wake it now; `--json` gives `asleep` with `reason` and `wakes_when`. Where an
+asleep agent's wrapper waits in a terminal for its restore, it clears what the
+agent's interface left there and shows the agent asleep, with why and when it
+resumes, ignoring other keys: Ctrl-C stops the wait, leaving the agent
+stopped for `shoal restore`.
 
 While an entry in the [agent queue](#agent-queue) waits for a slot or memory,
 each [cleanup sweep](#automatic-cleanup) makes room for it: for each such
