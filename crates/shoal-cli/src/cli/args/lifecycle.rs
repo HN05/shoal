@@ -20,13 +20,13 @@ pub enum LifecycleCommand {
     Stop(StopArgs),
     /// Remove spaces, workspaces or chats, and release their resources.
     ///
-    /// Removing a space first removes the workspaces below it, and removing a chat stops its
-    /// agent. A branch goes too when a remote or the default branch has all its commits;
-    /// otherwise it stays. Deleting uncommitted changes or commits on a detached HEAD needs
-    /// confirmation, asked once for every space.
+    /// Removing a space first removes the spaces below it and stops its agent. A branch goes
+    /// too when a remote or the default branch has all its commits; otherwise it stays.
+    /// Deleting uncommitted changes or commits on a detached HEAD needs confirmation, asked
+    /// once for every space.
     ///
-    /// A workspace's removal goes on in the background once Shoal has reserved it and checked
-    /// that it can go; a failure after that keeps the workspace and arrives as a notification.
+    /// A space's removal goes on in the background once Shoal has reserved it and checked that
+    /// it can go; a failure after that keeps the space and arrives as a notification.
     Rm(RmArgs),
     /// Remove what Shoal left behind: spaces cleanup would remove, kept branches and caches.
     ///

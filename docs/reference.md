@@ -37,7 +37,7 @@ Progress uses terminal stderr only and is suppressed with JSON output or `TERM=d
 - [Daemon](#daemon)
 - [Workspaces](#workspaces)
 - [Setup and hooks](#workspace-setup-and-hooks)
-- [Removal and cleanup](#remove-a-workspace)
+- [Removal and cleanup](#remove-a-space)
 - [Notifications](#notifications)
 - [Ports](#port-reservations)
 - [Shell integration](#shell-navigation)
@@ -1944,7 +1944,7 @@ setup. A worktree that cannot be made gives the chat back. The workspace's mode 
 in a workspace's worktree (`shoal start --in`), one without a repository and a
 stopped chat are refused.
 
-`convert chat` removes the worktree as [`shoal rm`](#remove-a-workspace) does,
+`convert chat` removes the worktree as [`shoal rm`](#remove-a-space) does,
 with its removal hooks, once a [checkpoint](#checkpoints-and-restore) keeps its
 HEAD and unsaved files, so it asks nothing; one whose unsaved files no
 checkpoint can keep is refused. The branch stays, as a [kept
@@ -3407,7 +3407,7 @@ identical edits, which Git merges cleanly. A repository lists such files in
 [`[conflicts] sensitive`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#conflicts), and `shoal conflicts` also lists, under
 "Changed on both sides", each listed file that both HEAD and the target changed
 since their merge base, unless the target already has HEAD's changes as
-[removal](#remove-a-workspace) decides merges. Update the branch from the
+[removal](#remove-a-space) decides merges. Update the branch from the
 target and pick a number past the target's.
 
 Exits 1 on either; `--json` returns `target`, `target_commit`, `head`,
@@ -3808,7 +3808,7 @@ directory without a checkpoint, and cleanup deletes those that belong to no
 workspace or chat of the repository, or to no chat without a repository.
 Removing the repository deletes `.tmp`.
 
-### Remove a workspace
+### Remove a space
 
 `shoal rm` removes a workspace or a chat the same way. It returns once Shoal has
 reserved the space and checked that it can go: a refusal, such as unsaved work it
@@ -5129,7 +5129,7 @@ persists across new ones.
 An unfiltered `shoal watch` without a linked PR also returns when the workspace
 branch newly conflicts with the default target of `shoal conflicts`, naming the
 branch and the conflicted paths, unless that target already has HEAD's changes as
-[removal](#remove-a-workspace) decides merges or the assignment is done at HEAD
+[removal](#remove-a-space) decides merges or the assignment is done at HEAD
 with `--integrated`; with nothing linked, it waits for that alone. With a linked
 PR, whose forge reports its conflicts, the watch and the agent's deliveries
 report only the files [changed on both sides](#conflicts), such as
@@ -5475,7 +5475,7 @@ time survives restarts, except that idle cleanup starts over with its timers. `s
 
 A workspace whose branch merged into the default branch is removed once nothing
 has used it for [`[cleanup.merged] idle_minutes`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#cleanup), whether or not its agent ran `shoal done` or it
-has linked issues and PRs. Merged has the meaning [removal](#remove-a-workspace)
+has linked issues and PRs. Merged has the meaning [removal](#remove-a-space)
 gives it, against the default branch's remote-tracking branch as the
 [sync](#repositories) last fetched it, fetching it again when no sync has for ten
 minutes; until a fetch succeeds, the repository's workspaces are kept. Uncommitted and untracked files go into the
