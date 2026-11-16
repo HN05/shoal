@@ -22,6 +22,14 @@ use crate::{
 const SAMPLE_INTERVAL: Duration = Duration::from_secs(10);
 /// How late a sample may be before the sampler counts as stalled.
 const STALE: Duration = Duration::from_secs(30);
+/// How long a sample waits for the containers' reading. A sample's time is
+/// its processes' reading, before that wait, so it is recorded up to one
+/// wait later, and the next one up to an interval and a wait after that.
+const CONTAINER_READ_LIMIT: Duration = Duration::from_secs(8);
+const _: () = assert!(
+    2 * CONTAINER_READ_LIMIT.as_secs() + SAMPLE_INTERVAL.as_secs() < STALE.as_secs(),
+    "a runtime that always times out would let every sample go stale"
+);
 
 /// What the containers of each workspace whose project may run use, or why
 /// its runtime could not say.
@@ -319,8 +327,10 @@ fn reaper<'a>(
 pub(super) async fn run(manager: Arc<Manager>) {
     loop {
         let tracked = manager.usage.with_workspaces(|usages| usages.tracked());
-        let (sample, containers) =
-            tokio::join!(sample(&manager, tracked), manager.container_usage());
+        let (sample, containers) = tokio::join!(
+            sample(&manager, tracked),
+            manager.container_usage(CONTAINER_READ_LIMIT)
+        );
         manager
             .usage
             .with_workspaces(|usages| usages.record(sample, containers));
