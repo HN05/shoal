@@ -61,12 +61,7 @@ pub struct RemovedSpace {
     pub agents: Vec<crate::executions::StoppedAgent>,
     /// The last sessions of agents, which `shoal restore` continues once the
     /// space is restored.
-    #[serde(
-        default,
-        alias = "last_session",
-        deserialize_with = "crate::executions::one_or_many_sessions",
-        skip_serializing_if = "Vec::is_empty"
-    )]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub last_sessions: Vec<crate::executions::LastSession>,
     /// The agents' session files an import carried, which the daemon keeps
     /// until the restore that opens the space puts them in place with its

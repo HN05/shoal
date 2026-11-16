@@ -23,11 +23,7 @@ pub struct WatchRecord {
     /// When the workspace last set the item's state or edited
     /// its details through Shoal; observations that started by then cannot
     /// show it.
-    #[serde(
-        default,
-        alias = "own_state_at",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     own_change_at: Option<UnixTime>,
     #[serde(default, skip_serializing_if = "HeldPasses::is_empty")]
     held: HeldPasses,

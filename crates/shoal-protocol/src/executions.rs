@@ -3,7 +3,7 @@
 //! retries of their failed turns.
 use crate::space_names::SpaceName;
 use shoal_ids::execution_ids::ExecutionId;
-use std::{collections::BTreeMap, fs, io, path::Path, time::Duration};
+use std::{fs, io, path::Path, time::Duration};
 
 use serde::{Deserialize, Serialize};
 use shoal_states::states;
@@ -12,7 +12,7 @@ use crate::{
     agent::ModelChoice,
     processes::Identity,
     protocol::timing,
-    sessions::{HostName, Origin},
+    sessions::Origin,
     state::{AgentState, TurnFailure},
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
@@ -99,12 +99,7 @@ pub struct Record {
     pub stage: Option<Stage>,
     /// Where the agent ran, as its terminal host records it, so `shoal
     /// restore --all` can restore it there.
-    #[serde(
-        default,
-        alias = "place",
-        deserialize_with = "earlier_place",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<Origin>,
     /// The wrapper that restores the agent automatically while it runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -210,12 +205,7 @@ pub struct LastSession {
     pub converted: bool,
     /// Where the agent ran, as its terminal host records it, so `shoal
     /// resume` can restore it there; unknown for one that exited on its own.
-    #[serde(
-        default,
-        alias = "place",
-        deserialize_with = "earlier_place",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<Origin>,
     /// Why and when Shoal stopped the agent; none for one that exited on its
     /// own.
@@ -239,48 +229,6 @@ pub struct LastSession {
 /// The key of a last session saved without its execution.
 pub fn unnamed_execution() -> ExecutionId {
     ExecutionId::generate()
-}
-
-/// A record's place: an origin, or the bare pane ID records kept before
-/// origins, which only Herdr recorded.
-fn earlier_place<'de, D: serde::Deserializer<'de>>(
-    deserializer: D,
-) -> std::result::Result<Option<Origin>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Place {
-        Origin(Origin),
-        Pane(String),
-    }
-    Ok(Some(match Place::deserialize(deserializer)? {
-        Place::Origin(origin) => origin,
-        Place::Pane(pane) => Origin {
-            host: HostName::Herdr,
-            group: None,
-            place: Some(pane),
-            data: BTreeMap::new(),
-            owned: false,
-            instance: None,
-        },
-    }))
-}
-
-/// Read the last sessions of a removal record, which earlier records kept as
-/// a single one.
-pub fn one_or_many_sessions<'de, D>(deserializer: D) -> Result<Vec<LastSession>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Sessions {
-        Many(Vec<LastSession>),
-        One(Box<LastSession>),
-    }
-    Ok(match Sessions::deserialize(deserializer)? {
-        Sessions::Many(sessions) => sessions,
-        Sessions::One(session) => vec![*session],
-    })
 }
 
 /// A space's retry of its agent's failed turn.

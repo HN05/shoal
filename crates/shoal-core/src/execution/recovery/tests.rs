@@ -525,33 +525,6 @@ fn herdr_pane(pane: &str) -> Origin {
 }
 
 #[test]
-fn a_pane_recorded_before_origins_is_a_herdr_place() {
-    let record: Record =
-        serde_json::from_value(serde_json::json!({"agent": "codex", "place": "w1:p2"})).unwrap();
-    assert_eq!(record.origin, Some(herdr_pane("w1:p2")));
-    let saved = serde_json::to_value(&record).unwrap();
-    assert_eq!(
-        saved["origin"],
-        serde_json::json!({"host": "herdr", "place": "w1:p2"})
-    );
-    assert_eq!(serde_json::from_value::<Record>(saved).unwrap(), record);
-    let unknown = serde_json::json!({"agent": "codex", "origin": {"host": "screen"}});
-    assert!(serde_json::from_value::<Record>(unknown).is_err());
-}
-
-#[test]
-fn records_that_name_the_space_that_stopped_the_agent_load_without_it() {
-    let saved = serde_json::json!({"agent": "codex", "stopped_by": "lead"});
-    let record: Record = serde_json::from_value(saved).unwrap();
-    assert_eq!(record.agent, "codex");
-    assert!(serde_json::to_value(&record).unwrap()["stopped_by"].is_null());
-    let saved = serde_json::json!({"execution": "e1", "agent": "codex", "stopped_by": "lead"});
-    let last: LastSession = serde_json::from_value(saved).unwrap();
-    assert_eq!(last.execution, ExecutionId::from("e1"));
-    assert!(serde_json::to_value(&last).unwrap()["stopped_by"].is_null());
-}
-
-#[test]
 fn a_restored_session_learns_why_and_when_it_stopped_and_what_the_stop_ended() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
