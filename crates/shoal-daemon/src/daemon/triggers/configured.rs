@@ -51,12 +51,15 @@ impl Manager {
             }
         };
         for repository in repositories {
-            match self.repository_triggers(&repository).await {
-                Ok(found) => triggers.extend(found),
-                Err(error) => {
-                    log!("cannot read the triggers of repository {repository}: {error:#}")
-                }
+            let found = self.repository_triggers(&repository).await;
+            let error = found.as_ref().err().map(|error| format!("{error:#}"));
+            if self.triggers.read(&repository, error.clone()) {
+                log!(
+                    "cannot read the triggers of repository {repository}: {}",
+                    error.unwrap_or_default()
+                );
             }
+            triggers.extend(found.unwrap_or_default());
         }
         triggers
     }
