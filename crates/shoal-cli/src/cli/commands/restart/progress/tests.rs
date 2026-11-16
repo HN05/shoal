@@ -13,7 +13,7 @@ fn restart(name: &str) -> Restart {
         "repository".into(),
         name.into(),
         name.into(),
-        Some(name.into()),
+        crate::model::Head::Branch(name.into()),
         WorkspaceState::Ready,
     );
     Restart {

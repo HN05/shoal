@@ -188,7 +188,7 @@ fn workspace(root: &std::path::Path, name: &str, done: bool) -> Space {
         "repo".into(),
         name.into(),
         root.join(name),
-        Some(name.into()),
+        crate::model::Head::Branch(name.into()),
         crate::state::WorkspaceState::Ready,
     );
     workspace.done = done;

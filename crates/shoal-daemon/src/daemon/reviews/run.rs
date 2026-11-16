@@ -591,7 +591,7 @@ impl Manager {
     /// origin does not have, as a fork's, the head it was last moved to,
     /// whatever was committed on top of it there since.
     async fn pull_review_head(&self, workspace: &Workspace, head: &BranchName) -> Result<String> {
-        if let Some(at) = &workspace.at {
+        if let Some(at) = workspace.at() {
             return Ok(at.commit.clone().into());
         }
         let head_ref = crate::git::remote_ref("origin", head.as_str());

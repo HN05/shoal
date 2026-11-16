@@ -240,7 +240,7 @@ fn kept_refs<'a>(
     detached: bool,
     default_refs: &'a [String],
 ) -> Vec<&'a str> {
-    let start = workspace.at.as_ref().filter(|_| detached);
+    let start = workspace.at().filter(|_| detached);
     default_refs
         .first()
         .map(String::as_str)

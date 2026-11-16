@@ -12,7 +12,8 @@ use crate::{
     daemon::scope::Caller,
     git,
     model::{
-        MadeFor, OpenedWorkspace, RemovedSpace, Repository, SpaceKind, StartingCommit, Workspace,
+        Head, MadeFor, OpenedWorkspace, RemovedSpace, Repository, SpaceKind, StartingCommit,
+        Workspace,
     },
     protocol::{CommitStart, CreationOptions, PullHead},
     state::WorkspaceState,
@@ -234,7 +235,7 @@ impl Manager {
         let made_for = Some(MadeFor::Pr(number));
         Ok(self.list_workspaces().await?.into_iter().find(|workspace| {
             workspace.repository() == repository_id
-                && workspace.at.as_ref().is_some_and(|at| {
+                && workspace.at().is_some_and(|at| {
                     at.made_for == made_for || workspace.links.prs.iter().any(|pr| pr.url == *url)
                 })
         }))
@@ -253,8 +254,7 @@ impl Manager {
         // Reopening is activity, which restarts its idle cleanup timers.
         self.reopen_owned_workspace(workspace, None).await?;
         let at = workspace
-            .at
-            .as_ref()
+            .at()
             .context("workspace records no starting commit")?;
         if at.commit == head.commit {
             return Ok(());
@@ -434,10 +434,11 @@ impl Manager {
         let path = self.new_workspace_path(repo, directory, None).await?;
         let id = new.id.unwrap_or_else(SpaceId::generate);
         let state = WorkspaceState::Preparing;
-        let mut workspace = Workspace::record(id, repo.id.clone(), name, path, None, state);
-        workspace.base_commit = Some(at.commit.clone());
+        let base_commit = Some(at.commit.clone());
+        let head = Head::Commit(at);
+        let mut workspace = Workspace::record(id, repo.id.clone(), name, path, head, state);
+        workspace.base_commit = base_commit;
         workspace.base_ref = diff_ref;
-        workspace.at = Some(at);
         workspace.setup_skipped = options.skip_setup;
         workspace.disposable = options.disposable;
         self.insert_workspace(workspace, None, new.parent, true)

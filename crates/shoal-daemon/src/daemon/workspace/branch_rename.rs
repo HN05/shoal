@@ -4,7 +4,12 @@ mod intent;
 
 use super::Manager;
 use crate::refusal::{Reason, Refusal};
-use crate::{daemon::store, git, model::Workspace, state::WorkspaceState};
+use crate::{
+    daemon::store,
+    git,
+    model::{Head, Workspace},
+    state::WorkspaceState,
+};
 use anyhow::{Result, bail, ensure};
 use intent::RenameIntent;
 use rusqlite::params;
@@ -252,7 +257,7 @@ impl Manager {
                 workspace.path.display()
             );
             let mut candidate = workspace.clone();
-            candidate.branch = Some(actual.clone());
+            candidate.head = Head::Branch(actual.clone());
             self.reclaim_worktree(&candidate).await?;
         }
         if actual == intent.branch {

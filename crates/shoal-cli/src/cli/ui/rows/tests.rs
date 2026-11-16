@@ -15,7 +15,7 @@ pub(super) fn workspace(
             repository.into(),
             name.into(),
             format!("/work/{name}").into(),
-            Some(branch.into()),
+            crate::model::Head::Branch(branch.into()),
             state,
         )
     }

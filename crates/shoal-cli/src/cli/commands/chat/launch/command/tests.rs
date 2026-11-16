@@ -21,7 +21,7 @@ fn a_chat_in_a_workspace_is_told_not_to_edit() {
         "repo".into(),
         "worker".into(),
         "/work/worker".into(),
-        Some("feature".into()),
+        crate::model::Head::Branch("feature".into()),
         crate::state::WorkspaceState::Ready,
     );
     let topic = Topic::workspace(workspace.clone(), &"plan".into());
@@ -46,8 +46,7 @@ fn a_chat_in_a_workspace_is_told_not_to_edit() {
     // The chat template describes the checkout, which the chat is not in.
     assert!(!told.contains("registered\ncheckout"), "{told}");
 
-    workspace.branch = None;
-    workspace.at = Some(crate::model::StartingCommit {
+    workspace.head = crate::model::Head::Commit(crate::model::StartingCommit {
         commit: "0123456789abcdef".into(),
         made_for: None,
     });

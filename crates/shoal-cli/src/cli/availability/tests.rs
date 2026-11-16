@@ -40,7 +40,7 @@ fn workspace(state: WorkspaceState) -> Workspace {
         "repository".into(),
         "work".into(),
         std::env::temp_dir(),
-        Some("work".into()),
+        crate::model::Head::Branch("work".into()),
         state,
     )
 }

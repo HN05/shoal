@@ -24,7 +24,7 @@ fn workspace(name: &str, children: Vec<SpaceRef>) -> crate::model::Workspace {
         "repo".into(),
         name.into(),
         format!("/work/{name}").into(),
-        Some(name.into()),
+        crate::model::Head::Branch(name.into()),
         crate::state::WorkspaceState::Ready,
     );
     workspace.id = name.into();

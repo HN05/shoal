@@ -7,11 +7,14 @@ use serde::{Serialize, de::DeserializeOwned};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_refs::{BranchName, CommitId};
 use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 use crate::{
     forge::items::reference::ItemRef,
-    model::{Execution, LinkedItem, PortReservation, Relation, Repository, SpaceLinks, Workspace},
+    model::{
+        Execution, Head, LinkedItem, PortReservation, Relation, Repository, SpaceLinks, Workspace,
+    },
     state::{ExecutionState, WorkspaceState},
 };
 use shoal_protocol::{sim::CleanRequestStatus, space_names::SpaceName};
@@ -396,13 +399,12 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
         row.get("repository_id")?,
         row.get("name")?,
         PathBuf::from(row.get::<_, String>("path")?),
-        row.get("branch")?,
+        head(row)?,
         row.get("state")?,
     );
     workspace.number = row.get("number")?;
     workspace.mode = row.get("mode")?;
     workspace.narrowing = json_column(row, "narrowing")?.unwrap_or_default();
-    workspace.at = starting_commit(row)?;
     workspace.error = row.get("error")?;
     workspace.base_commit = row.get("base_commit")?;
     workspace.base_ref = row.get("base_ref")?;
@@ -413,21 +415,46 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
     Ok(workspace)
 }
 
-/// Where a workspace without a branch started, from its row.
-fn starting_commit(row: &Row<'_>) -> rusqlite::Result<Option<crate::model::StartingCommit>> {
-    let Some(commit) = row.get::<_, Option<String>>("start_commit")? else {
-        return Ok(None);
+/// A workspace's branch, or the commit it started at without one, from its
+/// row, which holds exactly one of them.
+fn head(row: &Row<'_>) -> rusqlite::Result<Head> {
+    let conversion = |error: Box<dyn std::error::Error + Send + Sync>| {
+        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, error)
     };
     let made_for = match row.get::<_, Option<String>>("made_for")? {
-        Some(json) => Some(serde_json::from_str(&json).map_err(|error| {
-            rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, error.into())
-        })?),
+        Some(json) => Some(serde_json::from_str(&json).map_err(|error| conversion(error.into()))?),
         None => None,
     };
-    Ok(Some(crate::model::StartingCommit {
-        commit: commit.into(),
-        made_for,
-    }))
+    match (
+        row.get("branch")?,
+        row.get::<_, Option<String>>("start_commit")?,
+    ) {
+        (Some(branch), None) if made_for.is_none() => Ok(Head::Branch(branch)),
+        (None, Some(commit)) => Ok(Head::Commit(crate::model::StartingCommit {
+            commit: commit.into(),
+            made_for,
+        })),
+        _ => Err(conversion(
+            "a workspace row holds exactly one of a branch and a starting commit".into(),
+        )),
+    }
+}
+
+/// The `branch`, `start_commit` and `made_for` columns that hold `head`.
+pub fn head_columns(
+    head: &Head,
+) -> Result<(Option<&BranchName>, Option<&CommitId>, Option<String>)> {
+    Ok(match head {
+        Head::Branch(branch) => (Some(branch), None, None),
+        Head::Commit(at) => (
+            None,
+            Some(&at.commit),
+            at.made_for
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()?,
+        ),
+    })
 }
 
 /// Read canonical links while keeping malformed legacy PR records out of list output.

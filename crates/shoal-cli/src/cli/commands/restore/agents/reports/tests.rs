@@ -14,7 +14,7 @@ fn a_stopped_command_reruns_in_its_workspace_by_number() {
             "repo".into(),
             "Fix login".into(),
             "/work/fix-login".into(),
-            Some("fix-login".into()),
+            crate::model::Head::Branch("fix-login".into()),
             crate::state::WorkspaceState::Ready,
         )
     };

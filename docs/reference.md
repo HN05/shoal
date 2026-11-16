@@ -2812,8 +2812,8 @@ Commands that need a branch, `pr open`, `merge`, `ready`, `done`, `branch rename
 and CI runs on its branch, refuse it, saying it is at a commit; diffs, demos,
 ports, simulators, checkpoints, reviews and CI and PR views work as anywhere. `status` shows `At:` with its commit and what it was made
 for where a branch workspace shows `Branch:`; `list --json` and `status --json`
-give `branch` null and `at` with `commit` and `made_for` (`{"ref": name}` or
-`{"pr": number}`). `{branch}` is empty for it in configured commands and agent
+give `at`, with `commit` and `made_for` (`{"ref": name}` or `{"pr": number}`),
+in place of `branch`. `{branch}` is empty for it in configured commands and agent
 templates, and place names use its name instead.
 
 The parent's agent, a workspace's or a chat's, receives the issue and PR

@@ -10,7 +10,7 @@ fn workspace(name: &str) -> Workspace {
         "repository".into(),
         name.into(),
         name.into(),
-        Some(name.into()),
+        shoal_protocol::model::Head::Branch(name.into()),
         WorkspaceState::Ready,
     )
 }

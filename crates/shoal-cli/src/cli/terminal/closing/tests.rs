@@ -361,7 +361,7 @@ async fn inspect(
             "repo".into(),
             "workspace".into(),
             "/workspace".into(),
-            Some("topic".into()),
+            crate::model::Head::Branch("topic".into()),
             WorkspaceState::Ready,
         );
         workspace.agent_state = turn.map(|state| AgentStatus {

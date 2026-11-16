@@ -57,6 +57,6 @@ pub use status::{
 };
 pub use sync::{CheckoutSync, SyncedRepository};
 pub use workspaces::{
-    Branch, CopiedFrom, MadeFor, OpenedWorkspace, Refreshed, StartingCommit, Workspace,
+    Branch, CopiedFrom, Head, MadeFor, OpenedWorkspace, Refreshed, StartingCommit, Workspace,
     WorkspaceRef, WorkspaceUsage, Worktree, no_branch,
 };

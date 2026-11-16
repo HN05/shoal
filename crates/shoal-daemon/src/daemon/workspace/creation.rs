@@ -9,7 +9,7 @@ use crate::{
     daemon::{spaces, store},
     fsutil::off_runtime,
     git::{self, default_branch::DefaultBranchLookup},
-    model::{Repository, SpaceKind, Workspace},
+    model::{Head, Repository, SpaceKind, Workspace},
     protocol::CreationOptions,
     state::WorkspaceState,
 };
@@ -191,7 +191,7 @@ impl Manager {
             repo.id.clone(),
             name,
             path,
-            Some(branch),
+            Head::Branch(branch),
             WorkspaceState::Preparing,
         );
         workspace.setup_skipped = options.skip_setup;
@@ -368,12 +368,13 @@ impl Manager {
                     tree::ensure_parent(tx, record.repository_id.as_ref(), &record.id, parent)?;
                     tree::set_parent(tx, &record.id, Some(parent))?;
                 }
+                let (branch, start_commit, made_for) = store::head_columns(&record.head)?;
                 tx.execute(
                     "INSERT INTO workspaces (id,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,start_commit,made_for,setup_skipped,disposable) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?3,?10,?11,?12,?13,?14)",
                     params![
                         record.id,
                         record.path.to_str(),
-                        record.branch().cloned(),
+                        branch,
                         record.state,
                         record.git_dir.as_ref().and_then(|p| p.to_str().map(str::to_owned)),
                         record.git_dir_id,
@@ -381,8 +382,8 @@ impl Manager {
                         record.base_ref,
                         record.state == WorkspaceState::Ready,
                         base_workspace,
-                        record.at.as_ref().map(|at| &at.commit),
-                        record.at.as_ref().and_then(|at| at.made_for.as_ref()).map(serde_json::to_string).transpose()?,
+                        start_commit,
+                        made_for,
                         record.setup_skipped,
                         record.disposable,
                     ],

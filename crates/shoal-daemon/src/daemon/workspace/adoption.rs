@@ -2,7 +2,12 @@
 use super::creation::{existing_base, recorded_base};
 use super::{Manager, identity::directory_identity};
 use crate::daemon::log;
-use crate::{fsutil::off_runtime, git, model::Workspace, state::WorkspaceState};
+use crate::{
+    fsutil::off_runtime,
+    git,
+    model::{Head, Workspace},
+    state::WorkspaceState,
+};
 use anyhow::{Context, Result, ensure};
 use shoal_protocol::space_names::SpaceName;
 use shoal_refs::{BranchName, CommitId};
@@ -69,7 +74,7 @@ impl Manager {
             repo.id.clone(),
             SpaceName::derive(branch.as_str(), "workspace"),
             path,
-            Some(branch.clone()),
+            Head::Branch(branch.clone()),
             WorkspaceState::Ready,
         );
         workspace.base_commit = Some(commit.into());
@@ -113,7 +118,7 @@ impl Manager {
             repo.id.clone(),
             name,
             destination,
-            Some(branch),
+            Head::Branch(branch),
             WorkspaceState::Preparing,
         );
         // Reserve the branch and destination before Git creates the worktree.

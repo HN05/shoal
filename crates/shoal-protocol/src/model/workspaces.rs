@@ -18,11 +18,8 @@ pub type Workspace = Space<Worktree>;
 #[serde(tag = "kind", rename = "workspace")]
 pub struct Worktree {
     pub path: PathBuf,
-    /// Its branch; `None` for a workspace at a commit, which `at` describes.
-    pub branch: Option<BranchName>,
-    /// Where a workspace without a branch was created.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub at: Option<StartingCommit>,
+    #[serde(flatten)]
+    pub head: Head,
     /// What a copy of another workspace started from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub copied_from: Option<CopiedFrom>,
@@ -74,7 +71,38 @@ impl Worktree {
 
     /// Its branch; `None` for a workspace at a commit.
     pub fn branch(&self) -> Option<&BranchName> {
-        self.branch.as_ref()
+        self.head.branch()
+    }
+
+    /// The commit it was created at; `None` for a workspace on a branch.
+    pub fn at(&self) -> Option<&StartingCommit> {
+        self.head.at()
+    }
+}
+
+/// What a workspace has checked out: its branch, or the commit it was
+/// created at without one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Head {
+    Branch(BranchName),
+    #[serde(rename = "at")]
+    Commit(StartingCommit),
+}
+
+impl Head {
+    pub fn branch(&self) -> Option<&BranchName> {
+        match self {
+            Self::Branch(branch) => Some(branch),
+            Self::Commit(_) => None,
+        }
+    }
+
+    pub fn at(&self) -> Option<&StartingCommit> {
+        match self {
+            Self::Branch(_) => None,
+            Self::Commit(at) => Some(at),
+        }
     }
 }
 
@@ -185,17 +213,10 @@ impl Workspace {
         repository_id: RepositoryId,
         name: SpaceName,
         path: PathBuf,
-        branch: Option<BranchName>,
+        head: Head,
         state: WorkspaceState,
     ) -> Self {
-        Self::record(
-            SpaceId::generate(),
-            repository_id,
-            name,
-            path,
-            branch,
-            state,
-        )
+        Self::record(SpaceId::generate(), repository_id, name, path, head, state)
     }
 
     /// The record of the workspace `id`, its worktree at `path`, with
@@ -205,14 +226,14 @@ impl Workspace {
         repository_id: RepositoryId,
         name: SpaceName,
         path: PathBuf,
-        branch: Option<BranchName>,
+        head: Head,
         state: WorkspaceState,
     ) -> Self {
         let workdir = Workdir::Worktree {
             workspace: WorkspaceRef {
                 id: id.clone(),
                 name: name.clone(),
-                branch: branch.clone(),
+                branch: head.branch().cloned(),
             },
             path: path.clone(),
         };
@@ -236,8 +257,7 @@ impl Workspace {
             workdir,
             part: Worktree {
                 path,
-                branch,
-                at: None,
+                head,
                 copied_from: None,
                 state,
                 error: None,
@@ -275,13 +295,19 @@ impl Workspace {
     /// Its branch, refusing a workspace at a commit for `action`, which
     /// needs one.
     pub fn require_branch(&self, action: &str) -> anyhow::Result<&BranchName> {
-        self.branch().ok_or_else(|| no_branch(&self.name, action))
+        match &self.head {
+            Head::Branch(branch) => Ok(branch),
+            Head::Commit(_) => Err(no_branch(&self.name, action)),
+        }
     }
 
     /// What names its work where a branch would: its branch, or the name
     /// of a workspace at a commit.
     pub fn branch_or_name(&self) -> &str {
-        self.branch().map_or(&self.name, BranchName::as_str)
+        match &self.head {
+            Head::Branch(branch) => branch.as_str(),
+            Head::Commit(_) => &self.name,
+        }
     }
 
     /// True when `path` (canonical) lies inside this worktree.
@@ -342,3 +368,6 @@ pub(super) fn directory_name(path: &Path) -> &str {
         .and_then(std::ffi::OsStr::to_str)
         .unwrap_or_default()
 }
+
+#[cfg(test)]
+mod tests;

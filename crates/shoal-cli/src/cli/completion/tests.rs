@@ -238,7 +238,7 @@ fn attach_workspaces(root: &std::path::Path) -> Vec<Workspace> {
             "repo".into(),
             name.into(),
             root.join(name),
-            Some(name.into()),
+            crate::model::Head::Branch(name.into()),
             WorkspaceState::Ready,
         );
         workspace.id = id.into();

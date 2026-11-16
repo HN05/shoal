@@ -13,7 +13,7 @@ use super::{Manager, NewWorkspace, creation::Configured, restore::RestoredFiles}
 use crate::{
     git,
     model::{
-        Checkpoint, CheckpointCause, CopiedFrom, Repository, StartingCommit, Workspace,
+        Checkpoint, CheckpointCause, CopiedFrom, Head, Repository, StartingCommit, Workspace,
         WorkspaceRef,
     },
     protocol::CopySource,
@@ -313,7 +313,7 @@ impl Manager {
             CopyPlace::Branch(Some(branch)) => branch.clone(),
             CopyPlace::Branch(None) | CopyPlace::Commit => source.copy_name(),
         };
-        let branch = match place {
+        let head = match place {
             CopyPlace::Branch(_) => {
                 git::check_branch_name(Some(&repo.path), &requested).await?;
                 let branch = self.available_branch(repo, &requested).await?;
@@ -321,9 +321,12 @@ impl Manager {
                     !new.exact_branch || branch == requested,
                     "branch {requested} conflicts with an existing branch or workspace; name another"
                 );
-                Some(branch)
+                Head::Branch(branch)
             }
-            CopyPlace::Commit => None,
+            CopyPlace::Commit => Head::Commit(StartingCommit {
+                commit: source.head.clone(),
+                made_for: None,
+            }),
         };
         let name = match &new.options.name {
             Some(given) => given.checked()?,
@@ -334,23 +337,13 @@ impl Manager {
             // The directory takes its own suffix, never the branch's.
             .new_workspace_path(repo, &requested, new.path.clone())
             .await?;
-        let at = branch.is_none().then(|| StartingCommit {
-            commit: source.head.clone(),
-            made_for: None,
-        });
-        let mut record = Workspace::new_record(
-            repo.id.clone(),
-            name,
-            path,
-            branch.clone(),
-            WorkspaceState::Preparing,
-        );
+        let base_branch = head.branch().and(source.base_branch.clone());
+        let mut record =
+            Workspace::new_record(repo.id.clone(), name, path, head, WorkspaceState::Preparing);
         record.base_commit = (source.base_commit.clone()).or_else(|| Some(source.head.clone()));
         record.base_ref = source.base_ref.clone();
-        record.at = at;
         record.setup_skipped = new.options.skip_setup;
         record.disposable = new.options.disposable;
-        let base_branch = branch.and(source.base_branch.clone());
         self.insert_workspace(record, base_branch, new.parent.clone(), chosen)
             .await
     }

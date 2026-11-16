@@ -690,7 +690,7 @@ fn plan(root: &Path) -> ExecutionPlan {
             "repo".into(),
             "worker".into(),
             root.to_owned(),
-            Some("worker".into()),
+            crate::model::Head::Branch("worker".into()),
             crate::state::WorkspaceState::Ready,
         ))
             .into(),

@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use crate::{
     config::{Settings, modes},
     forge::items::reference::ItemRef,
-    model::{ChatHome, SpaceKind, SpaceLinks, Workspace},
+    model::{ChatHome, Head, SpaceKind, SpaceLinks, Workspace},
 };
 
 pub use super::placeholders::render;
@@ -382,10 +382,9 @@ impl Fields {
 
 /// What `workspace` has checked out, as a chat's text names it.
 fn head_label(workspace: &Workspace) -> String {
-    match (workspace.branch(), &workspace.at) {
-        (Some(branch), _) => format!("on branch {branch}"),
-        (None, Some(at)) => format!("at commit {}", at.label()),
-        (None, None) => "on a detached HEAD".to_owned(),
+    match &workspace.head {
+        Head::Branch(branch) => format!("on branch {branch}"),
+        Head::Commit(at) => format!("at commit {}", at.label()),
     }
 }
 

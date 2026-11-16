@@ -452,7 +452,7 @@ async fn ensure_at_pull_head(ctx: &Context, workspace: &SpaceSelector) -> Result
     let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
         .await?
         .workspace;
-    let Some(at) = &workspace.at else {
+    let Some(at) = workspace.at() else {
         return Ok(());
     };
     let head = git::revision(&workspace.path, "HEAD", git::run).await?;

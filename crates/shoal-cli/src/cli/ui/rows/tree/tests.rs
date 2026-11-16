@@ -46,7 +46,10 @@ fn a_ci_jobs_workspace_lists_under_the_workspace_its_run_links() {
     let plain = Palette::stdout(true);
     let pull = workspace("a", "pull", "pull", WorkspaceState::Ready);
     let mut job = workspace("a", "ci-rust-4", "unused", WorkspaceState::Ready);
-    job.branch = None;
+    job.head = crate::model::Head::Commit(crate::model::StartingCommit {
+        commit: "0123456789abcdef".into(),
+        made_for: None,
+    });
     job.usage = Some(crate::model::WorkspaceUsage {
         cpu_percent: Some(250.0),
         memory_bytes: 3 << 29,

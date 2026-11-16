@@ -514,7 +514,7 @@ async fn found_spaces_too_large_for_a_frame_arrive_in_pages() {
                 "repo".into(),
                 format!("workspace-{n}").as_str().into(),
                 format!("/work/workspace-{n}").into(),
-                Some(format!("branch-{n}").into()),
+                crate::model::Head::Branch(format!("branch-{n}").into()),
                 WorkspaceState::Ready,
             ))
         })

@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, consumed_upgrades, place_owners, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 199;
+pub(super) const SCHEMA_VERSION: i64 = 200;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -477,12 +477,13 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (197, include_str!("container_projects.sql"), None),
     (198, include_str!("agent_assigned_issues.sql"), None),
     (199, include_str!("space_scope_agents.sql"), None),
+    (200, "", Some(workspace_heads)),
 ];
 
 /// The migrations that rebuild a table others reference, which run on their
 /// own with foreign keys off, so dropping the old table deletes nothing that
 /// references it.
-const REBUILDS: &[i64] = &[150, 182];
+const REBUILDS: &[i64] = &[150, 182, 200];
 
 /// Names are labels that may repeat, so the tables of workspaces and chats
 /// lose the unique constraint on them, which only a rebuild removes.
@@ -497,6 +498,26 @@ pub(super) fn repeatable_names(db: &Connection) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// A workspace holds exactly one of a branch and the commit it started at,
+/// with what that commit was made for only beside it, which only a rebuild
+/// lets the table check. A row that breaks it starts at its diff base
+/// without a branch, or keeps its branch alone.
+pub(super) fn workspace_heads(db: &Connection) -> Result<()> {
+    db.execute_batch(
+        "UPDATE workspaces SET start_commit=base_commit
+            WHERE branch IS NULL AND start_commit IS NULL;
+         UPDATE workspaces SET start_commit=NULL,made_for=NULL
+            WHERE branch IS NOT NULL AND (start_commit IS NOT NULL OR made_for IS NOT NULL);",
+    )?;
+    rebuild(
+        db,
+        "workspaces",
+        "made_for TEXT",
+        "made_for TEXT CHECK(made_for IS NULL OR start_commit IS NOT NULL)
+        CHECK((branch IS NULL) <> (start_commit IS NULL))",
+    )
 }
 
 /// Rebuild `table` with the column definition `from` replaced by `to`,

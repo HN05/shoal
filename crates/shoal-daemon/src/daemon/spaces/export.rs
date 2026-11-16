@@ -422,7 +422,7 @@ fn packaged_record(
             checkpoint,
             base_ref: workspace.base_ref.clone(),
             base_commit: workspace.base_commit.clone(),
-            at: workspace.at.clone(),
+            at: workspace.at().cloned(),
             setup_skipped: workspace.setup_skipped,
         })),
     }

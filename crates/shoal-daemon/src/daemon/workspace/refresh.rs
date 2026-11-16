@@ -167,10 +167,7 @@ impl Manager {
                 self.fast_forward_to(workspace, commit).await?;
             }
             target::How::Restart => {
-                let at = workspace
-                    .at
-                    .as_ref()
-                    .context("workspace records no start")?;
+                let at = workspace.at().context("workspace records no start")?;
                 if at.commit == moving.commit {
                     return Ok(false);
                 }

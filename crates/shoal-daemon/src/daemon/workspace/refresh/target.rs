@@ -7,7 +7,7 @@ use crate::{
     daemon::scope::Caller,
     forge::{PullRequest, items::reference::ItemInput, numbers::PullNumber},
     git::{self, default_branch::DefaultBranchLookup},
-    model::{CopiedFrom, MadeFor, Repository, Workspace},
+    model::{CopiedFrom, Head, MadeFor, Repository, Workspace},
     protocol::{ItemContext, PullHead},
 };
 use shoal_ids::space_ids::SpaceId;
@@ -74,9 +74,9 @@ impl Manager {
             return self.copy_target(workspace, copied, caller).await;
         }
         let repo = self.repository(workspace.repository()).await?;
-        match (workspace.branch(), &workspace.at) {
-            (Some(branch), _) => branch_target(&repo, workspace, branch).await,
-            (None, Some(at)) => match &at.made_for {
+        match &workspace.head {
+            Head::Branch(branch) => branch_target(&repo, workspace, branch).await,
+            Head::Commit(at) => match &at.made_for {
                 Some(MadeFor::Pr(number)) => self.pr_head(workspace, *number, caller).await,
                 Some(MadeFor::Ref(name)) => made_for_ref(&repo, name).await,
                 None => Ok(Target::Fixed(format!(
@@ -84,7 +84,6 @@ impl Manager {
                     at.commit.abbreviated(7)
                 ))),
             },
-            (None, None) => bail!("workspace {} records no start", workspace.name),
         }
     }
 

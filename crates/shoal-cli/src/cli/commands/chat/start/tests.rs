@@ -7,7 +7,7 @@ fn a_chat_is_refused_a_workspace_that_is_not_ready_before_anything_is_asked() {
         "repo".into(),
         "worker".into(),
         root.path().to_owned(),
-        Some("worker".into()),
+        crate::model::Head::Branch("worker".into()),
         crate::state::WorkspaceState::Ready,
     );
     ensure_hosts_chat(&workspace).unwrap();

@@ -13,7 +13,7 @@ fn a_launch_in_a_workspace_opens_only_that_workspace() {
             repository.into(),
             branch.into(),
             format!("/work/{branch}").into(),
-            Some(branch.into()),
+            crate::model::Head::Branch(branch.into()),
             WorkspaceState::Ready,
         )
     };
@@ -39,7 +39,7 @@ fn a_queued_launch_keeps_its_model_arguments_fork_issue_and_place() {
         "repo".into(),
         "child".into(),
         "/work/child".into(),
-        Some("child".into()),
+        crate::model::Head::Branch("child".into()),
         WorkspaceState::Ready,
     );
     let model = ModelChoice {

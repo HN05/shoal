@@ -10,7 +10,7 @@ fn workspace(name: &str, path: &Path) -> Workspace {
         "repo".into(),
         name.into(),
         path.into(),
-        Some(name.into()),
+        crate::model::Head::Branch(name.into()),
         state,
     );
     workspace.number = 1.into();

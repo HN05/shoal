@@ -704,7 +704,7 @@ fn a_converted_workspaces_agent_is_told_its_place_and_the_stopped_commands() {
         "repo".into(),
         "talk".into(),
         "/work/fix-login".into(),
-        Some("fix-login".into()),
+        crate::model::Head::Branch("fix-login".into()),
         crate::state::WorkspaceState::Ready,
     );
     let url = "https://forge.example/team/repo/issues/7";

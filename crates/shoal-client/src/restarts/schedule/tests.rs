@@ -10,7 +10,7 @@ fn a_joined_restart_stays_joined_once_it_ends() {
         "repository".into(),
         "api".into(),
         "api".into(),
-        Some("api".into()),
+        shoal_protocol::model::Head::Branch("api".into()),
         WorkspaceState::Ready,
     );
     let agent = RunningAgent {
@@ -58,7 +58,7 @@ fn an_agent_another_command_of_the_run_restarted_is_skipped() {
         "repository".into(),
         "web".into(),
         "web".into(),
-        Some("web".into()),
+        shoal_protocol::model::Head::Branch("web".into()),
         WorkspaceState::Ready,
     );
     let agent = RunningAgent {
@@ -96,7 +96,7 @@ fn an_agent_protection_stopped_while_the_run_waited_is_skipped() {
         "repository".into(),
         "docs".into(),
         "docs".into(),
-        Some("docs".into()),
+        shoal_protocol::model::Head::Branch("docs".into()),
         WorkspaceState::Ready,
     );
     let agent = RunningAgent {
@@ -163,7 +163,7 @@ async fn a_failed_restart_names_the_resume_and_keeps_the_daemons_error() {
         "repository".into(),
         "api".into(),
         "api".into(),
-        Some("api".into()),
+        shoal_protocol::model::Head::Branch("api".into()),
         WorkspaceState::Ready,
     );
     let refused = RemoteError {

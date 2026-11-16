@@ -9,7 +9,7 @@ use crate::{
         ui,
     },
     forge::review::status::PrStatus,
-    model::{AgentStatus, Chat, Completion, SpaceDetail, SpaceStatus, WorktreeStatus},
+    model::{AgentStatus, Chat, Completion, Head, SpaceDetail, SpaceStatus, WorktreeStatus},
 };
 use shoal_protocol::links::pr::RegistrationKind;
 
@@ -44,10 +44,9 @@ fn render_workspace(status: &WorktreeStatus, palette: Palette) {
         outln!("Mode:          {mode}");
     }
     outln!("Path:          {}", workspace.path.display());
-    match (workspace.branch(), &workspace.at) {
-        (Some(branch), _) => outln!("Branch:        {branch}"),
-        (None, Some(at)) => outln!("At:            {}", at.label()),
-        (None, None) => {}
+    match &workspace.head {
+        Head::Branch(branch) => outln!("Branch:        {branch}"),
+        Head::Commit(at) => outln!("At:            {}", at.label()),
     }
     if let Some(copied) = &workspace.copied_from {
         outln!("Copied from:   {}", copy_source(copied));

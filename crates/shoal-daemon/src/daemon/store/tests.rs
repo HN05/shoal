@@ -630,6 +630,11 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 199 {
         db.execute_batch(include_str!("space_scope_agents.sql"))?;
     }
+    if version >= 200 {
+        db.execute_batch("PRAGMA foreign_keys=OFF;")?;
+        workspace_heads(&db)?;
+        db.execute_batch("PRAGMA foreign_keys=ON;")?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -2084,6 +2089,50 @@ fn resource_leases_recorded_before_acquirers_are_the_users() -> Result<()> {
         [],
     );
     assert!(mismatched.is_err());
+    Ok(())
+}
+
+#[test]
+fn migrated_workspaces_hold_one_of_a_branch_and_a_starting_commit() -> Result<()> {
+    let mut db = historical_database(199)?;
+    db.execute_batch(
+        "BEGIN;
+         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('neither','workspace','repo','n'),
+             ('both','workspace','repo','b');
+         INSERT INTO workspaces(id,path,state,base_commit)
+             VALUES ('neither','/neither','ready','3f2a9c1');
+         INSERT INTO workspaces(id,path,branch,state,start_commit,made_for)
+             VALUES ('both','/both','topic','ready','84d4405','{\"ref\":\"main\"}');
+         COMMIT;",
+    )?;
+
+    migrate(&mut db)?;
+
+    let heads: Vec<[Option<String>; 4]> = db
+        .prepare("SELECT id,branch,start_commit,made_for FROM workspaces ORDER BY id")?
+        .query_map([], |row| {
+            Ok([row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?])
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    let head = |id: &str, branch: Option<&str>, commit: Option<&str>| {
+        [Some(id), branch, commit, None].map(|column| column.map(str::to_owned))
+    };
+    assert_eq!(
+        heads,
+        [
+            head("both", Some("topic"), None),
+            head("neither", None, Some("3f2a9c1")),
+            head("workspace", Some("worker"), None),
+        ]
+    );
+    assert_eq!(executions(&db, &SpaceId::from("workspace"))?.len(), 1);
+    for broken in [
+        "UPDATE workspaces SET start_commit='84d4405' WHERE id='both'",
+        "UPDATE workspaces SET start_commit=NULL WHERE id='neither'",
+        "UPDATE workspaces SET made_for='{}' WHERE id='both'",
+    ] {
+        assert!(db.execute(broken, []).is_err(), "{broken}");
+    }
     Ok(())
 }
 

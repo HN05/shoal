@@ -100,7 +100,7 @@ fn a_chat_in_a_workspace_reopens_there() {
         "repo".into(),
         "worker".into(),
         "/work/worker".into(),
-        Some("feature".into()),
+        crate::model::Head::Branch("feature".into()),
         crate::state::WorkspaceState::Ready,
     );
     workspace.id = "0b9c3a52-6f4e-4d8a-9c1e-2f7b5d3a1e09".into();

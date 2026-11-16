@@ -9,7 +9,7 @@ fn plan(args: &[&str]) -> AddPlan {
         "repo".into(),
         "topic".into(),
         "/work/topic".into(),
-        Some("topic".into()),
+        crate::model::Head::Branch("topic".into()),
         WorkspaceState::Ready,
     );
     let launch = QueuedLaunch {

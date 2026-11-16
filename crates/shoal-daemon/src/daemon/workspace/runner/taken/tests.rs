@@ -71,7 +71,7 @@ async fn a_job_of_another_run_waits_until_its_workspace_is_at_that_runs_commit()
         git(&workspace.path, &["rev-parse", "HEAD"]).trim(),
         fixture.topic
     );
-    assert_eq!(workspace.at.as_ref().unwrap().commit, fixture.topic);
+    assert_eq!(workspace.at().unwrap().commit, fixture.topic);
     let claimed = manager.claimed_jobs().await.unwrap().remove(0);
     assert_eq!(
         (claimed.job.job.id, claimed.job.job.run),

@@ -25,7 +25,7 @@ fn coordinated(coordinator: AgentState) -> Workspace {
         "repo".into(),
         "child".into(),
         "/child".into(),
-        Some("child".into()),
+        crate::model::Head::Branch("child".into()),
         WorkspaceState::Ready,
     );
     workspace.coordinator_state = Some(coordinator);
