@@ -290,8 +290,10 @@ impl Snapshot {
                 Err(error) => Err(error),
             };
             if let Err(error) = result {
-                // A worktree starts with the whole seed or none of it.
-                for path in &cloned {
+                // A worktree starts with the whole seed or none of it. A
+                // clone that failed partway, as on a full disk, leaves part
+                // of its tree, whose build records name files it lacks.
+                for path in cloned.iter().chain([path]) {
                     remove_tree(&worktree.join(path), &[])?;
                 }
                 return Err(error);

@@ -442,6 +442,33 @@ async fn a_failed_clone_leaves_no_outputs_behind() {
 }
 
 #[tokio::test]
+async fn a_clone_that_fails_partway_leaves_no_part_of_its_tree() {
+    let root = tempfile::tempdir().unwrap();
+    let layout = Layout::new(root.path(), &"repo".into());
+    layout.claim().unwrap();
+    fs::create_dir_all(layout.worktree().join("target")).unwrap();
+    let paths = vec!["target".to_owned()];
+    freeze(&copier(root.path()), &layout, "c1", &paths, Vec::new())
+        .await
+        .unwrap();
+    let workspace = root.path().join("workspace");
+    fs::create_dir_all(&workspace).unwrap();
+    // As a full disk does: the build records arrive, the outputs never.
+    let partial = async |_: &Path, destination: &Path| {
+        fs::create_dir_all(destination.join(".fingerprint")).unwrap();
+        anyhow::bail!("no space left on device")
+    };
+    let snapshot = Snapshot::open(&layout).unwrap().unwrap();
+    assert!(
+        snapshot
+            .clone_outputs_with(&partial, &layout, &workspace, &paths)
+            .await
+            .is_err()
+    );
+    assert!(!workspace.join("target").exists());
+}
+
+#[tokio::test]
 async fn outputs_never_pass_through_a_symlink() {
     let root = tempfile::tempdir().unwrap();
     let copy = copier(root.path());

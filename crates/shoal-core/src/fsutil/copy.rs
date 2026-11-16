@@ -157,21 +157,26 @@ pub(crate) fn clone_or_copy(source: &Path, destination: &Path) -> io::Result<()>
 }
 
 /// clonefile(2) of `source` to the missing `destination`, which clones a
-/// directory with everything in it.
+/// directory with everything in it. A clone that fails partway, as on a
+/// full disk, leaves nothing behind.
 #[cfg(target_os = "macos")]
 fn clone_file(source: &Path, destination: &Path) -> io::Result<()> {
     use std::os::unix::ffi::OsStrExt as _;
     // clone(2) flag: clone a symlink itself instead of its target.
     const CLONE_NOFOLLOW: u32 = 0x0001;
-    let source = std::ffi::CString::new(source.as_os_str().as_bytes())?;
-    let target = std::ffi::CString::new(destination.as_os_str().as_bytes())?;
+    let from = std::ffi::CString::new(source.as_os_str().as_bytes())?;
+    let to = std::ffi::CString::new(destination.as_os_str().as_bytes())?;
     // SAFETY: both arguments are NUL-terminated paths that outlive the call.
-    let status = unsafe { libc::clonefile(source.as_ptr(), target.as_ptr(), CLONE_NOFOLLOW) };
+    let status = unsafe { libc::clonefile(from.as_ptr(), to.as_ptr(), CLONE_NOFOLLOW) };
     if status == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
+        return Ok(());
     }
+    let error = io::Error::last_os_error();
+    // An existing destination was there before the call.
+    if error.kind() != io::ErrorKind::AlreadyExists {
+        let _ = remove_existing(destination);
+    }
+    Err(error)
 }
 
 /// Remove every child of the worktree directory `path` but its `.git`
