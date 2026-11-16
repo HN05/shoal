@@ -102,13 +102,9 @@ async fn adjacent_controls_child() {
             } if reason == "critical memory pressure"
         ));
         assert!(matches!(
-            super::super::pause::wait(
-                &mut link,
-                &mut super::super::pause::Place::lines(),
-                || async { Ok(()) }
-            )
-            .await
-            .unwrap(),
+            super::super::pause::wait(&mut link, &mut super::super::pause::Place::lines())
+                .await
+                .unwrap(),
             super::super::pause::Waited::Cancelled { reason: Some(reason), removed: true }
                 if reason == "the workspace is being removed"
         ));

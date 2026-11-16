@@ -591,8 +591,8 @@ why it sleeps, what wakes it, and `shoal attach` and `shoal queue start`, which
 wake it now; `--json` gives `asleep` with `reason` and `wakes_when`. Where an
 asleep agent's wrapper waits in a terminal for its restore, it clears what the
 agent's interface left there and shows the agent asleep, with why and when it
-resumes, ignoring other keys: Enter wakes the agent there at once, as
-`shoal queue start` does, showing why when Shoal refuses, and Ctrl-C stops
+resumes, ignoring other keys: Enter wakes the agent there, as
+`shoal queue start` does, once its processes have stopped, and Ctrl-C stops
 the wait, leaving the agent stopped for `shoal restore`.
 
 While an entry in the [agent queue](#agent-queue) waits for a slot or memory,

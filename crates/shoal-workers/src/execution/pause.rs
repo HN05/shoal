@@ -1,7 +1,6 @@
 //! An agent the daemon paused: why it stopped, its saved recovery record, and
 //! the wait for the daemon to restore it.
 mod place;
-mod waking;
 
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
@@ -103,7 +102,7 @@ async fn await_restore(
     record: Result<PathBuf>,
     mut place: Place,
 ) -> Result<AfterPause> {
-    let waited = wait(link, &mut place, || waking::wake(paths, &plan.id)).await?;
+    let waited = wait(link, &mut place).await?;
     // The terminal goes back to the restored agent, or to the shell.
     drop(place);
     match waited {
@@ -393,13 +392,9 @@ impl Waited {
 }
 
 /// Wait in `place` for the daemon's verdict, or for its keys: Enter wakes the
-/// agent with `wake`, Ctrl-C stops waiting. While the daemon restarts, the
-/// link reattaches and the next daemon continues the wait.
-pub(super) async fn wait<W: Future<Output = Result<()>>>(
-    link: &mut Link,
-    place: &mut Place,
-    mut wake: impl FnMut() -> W,
-) -> Result<Waited> {
+/// agent, Ctrl-C stops waiting. While the daemon restarts, the link
+/// reattaches and the next daemon continues the wait.
+pub(super) async fn wait(link: &mut Link, place: &mut Place) -> Result<Waited> {
     use super::link::{Received, Refused};
     use crate::protocol::Control;
     use tokio::signal::unix::{SignalKind, signal};
@@ -429,7 +424,7 @@ pub(super) async fn wait<W: Future<Output = Result<()>>>(
                 Err(error) => return Err(error),
             },
             key = place.key() => match key {
-                Key::Wake => wake_now(place, wake()).await,
+                Key::Wake => wake_now(link, place).await,
                 Key::Stop => return signalled(),
             },
             _ = interrupt.recv() => return signalled(),
@@ -439,11 +434,12 @@ pub(super) async fn wait<W: Future<Output = Result<()>>>(
     }
 }
 
-/// Wake the agent with `wake`, showing in `place` that it wakes or why the
-/// daemon refused; the restore it starts ends the wait with `Resume`.
-async fn wake_now(place: &mut Place, wake: impl Future<Output = Result<()>>) {
+/// Ask the daemon over `link` to start the agent's restore now, which only
+/// this execution's wrapper can, showing in `place` that the agent wakes or
+/// why the daemon cannot be asked; the restore ends the wait with `Resume`.
+async fn wake_now(link: &mut Link, place: &mut Place) {
     place.waking();
-    if let Err(error) = wake.await {
+    if let Err(error) = link.send(&ExecutionEvent::Wake).await {
         place.wake_refused(&error);
     }
 }

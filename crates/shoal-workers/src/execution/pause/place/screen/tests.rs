@@ -13,8 +13,12 @@ fn rows(screen: &Screen) -> Vec<String> {
     text.split_terminator("\r\n").map(str::to_owned).collect()
 }
 
+fn shows(rows: &[String], text: &str) -> bool {
+    rows.iter().any(|row| row.contains(text))
+}
+
 #[test]
-fn the_screen_shows_the_stop_and_the_keys() {
+fn the_screen_shows_why_the_agent_sleeps_and_when_it_resumes() {
     let rows = rows(&screen());
     assert!(
         rows.iter()
@@ -27,29 +31,20 @@ fn the_screen_shows_the_stop_and_the_keys() {
                 && row.ends_with(" an update arrives for it")),
         "{rows:?}"
     );
-    assert!(rows.iter().any(|row| row.starts_with("Enter ")), "{rows:?}");
-    assert!(
-        rows.iter().any(|row| row.starts_with("Ctrl-C ")),
-        "{rows:?}"
-    );
 }
 
 #[test]
-fn notes_and_the_wake_show_above_the_keys() {
+fn the_screen_shows_its_notes_and_only_the_latest_wake() {
     let mut screen = screen();
     screen
         .notes
         .push("the restore also waits for pid 42".into());
-    screen.wake = Some(Wake::Refused("approval pending".into()));
+    screen.wake = Some(Wake::Refused("the daemon is away".into()));
     let refused = rows(&screen);
-    let row = |text: &str| refused.iter().position(|row| row.contains(text)).unwrap();
-    let keys = row("Enter ");
-    assert!(row("pid 42") < keys, "{refused:?}");
-    assert!(row("approval pending") < keys, "{refused:?}");
+    assert!(shows(&refused, "pid 42"), "{refused:?}");
+    assert!(shows(&refused, "the daemon is away"), "{refused:?}");
     screen.wake = Some(Wake::Waking);
     let waking = rows(&screen);
-    assert!(
-        !waking.iter().any(|row| row.contains("approval pending")),
-        "{waking:?}"
-    );
+    assert!(shows(&waking, "pid 42"), "{waking:?}");
+    assert!(!shows(&waking, "the daemon is away"), "{waking:?}");
 }

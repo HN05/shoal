@@ -296,7 +296,9 @@ background commands ended; configured restore commands receive that prompt throu
 like running commands, so a daemon restart or crash hands the wait to the next
 daemon instead of cancelling the restore. A waiting wrapper's session shows
 the agent asleep, and Enter there starts its queued restore, as the user at
-the agent's place asks for it; `attach` to that session starts the restore
+the agent's place asks for it; the wrapper asks over its own connection,
+which only that execution's wrapper holds, so a scope token it inherited
+does not decide it. `attach` to that session starts the restore
 too and attaches once the agent runs, under every place recorded for it, and its pickers offer the
 workspace and that session as stopped. `attach` wakes an agent whatever the
 limits and rank, since the user asks for it: without a session showing an
