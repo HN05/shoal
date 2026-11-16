@@ -9,7 +9,7 @@ use shoal_protocol::triggers::{RunOrigin, RunOutcome, TriggerRun};
 use crate::{
     daemon::{
         approvals::Undecided,
-        chats::launches::tests::STARTED,
+        chats::launches::fake::STARTED,
         scope::Caller,
         test_support::{chat, configure, manager, repository},
         triggers::firing::Firing,

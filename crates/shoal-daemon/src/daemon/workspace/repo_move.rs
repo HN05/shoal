@@ -58,7 +58,7 @@ impl Manager {
     /// whose files it would move there, and the executions running in them,
     /// which must stop first, refusing as the move would before anything
     /// moves or changes.
-    pub async fn plan_repository_moves(
+    pub(crate) async fn plan_repository_moves(
         &self,
         root: Option<&Path>,
         layout: Layout,
@@ -95,7 +95,7 @@ impl Manager {
     /// of the chats without a repository, then link a root these moves
     /// emptied to the directory Spotlight skips. Each repository and chat
     /// must be idle; all are checked before the first moves.
-    pub async fn move_repositories(&self, layout: Layout) -> Result<Vec<MovedRepository>> {
+    pub(crate) async fn move_repositories(&self, layout: Layout) -> Result<Vec<MovedRepository>> {
         let _registry = self.gates.lock_registry().await;
         let mut target = self.configured_root()?;
         target.layout = layout;

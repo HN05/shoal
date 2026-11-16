@@ -139,7 +139,7 @@ async fn a_clients_chat_whose_agent_waits_is_recorded_with_its_entry() {
     let entries = manager.queue_entries().await.unwrap();
     let entry = entries.iter().find(|entry| entry.id == queued.entry.id);
     assert_eq!(entry.unwrap().space_id.as_ref(), Some(&queued.chat.id));
-    let launched = crate::daemon::chats::launches::tests::STARTED.lock();
+    let launched = crate::daemon::chats::launches::fake::STARTED.lock();
     let names: Vec<_> = (launched.unwrap().iter())
         .filter_map(|(start, _)| start.name.clone())
         .collect();

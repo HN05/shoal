@@ -57,7 +57,7 @@ pub(crate) struct ReattachedExecution {
 
 /// The connection must retain the Git guard through execution completion.
 #[derive(Debug)]
-pub(crate) struct StartedExecution {
+pub struct StartedExecution {
     pub plan: ExecutionPlan,
     /// The space it runs in, as the registration read it.
     pub space: PresentSpace,
@@ -188,8 +188,8 @@ impl ExecutionKindExt for ExecutionKind {
 impl Manager {
     /// Register an execution and issue its scope token. The returned receiver
     /// fires when the workspace asks its commands to stop.
-    #[cfg(test)]
-    pub(crate) async fn begin_execution(
+    #[cfg(any(test, feature = "test-support"))]
+    pub async fn begin_execution(
         &self,
         selector: &str,
         wrapper: Option<Identity>,
@@ -203,7 +203,7 @@ impl Manager {
     /// Register an execution and issue its scope token, recording the demo it
     /// runs with it. The returned receiver fires when the workspace asks its
     /// commands to stop.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) async fn begin_execution_running(
         &self,
         selector: &str,
@@ -262,7 +262,7 @@ impl Manager {
     /// End execution `id` as its wrapper does once its command exits: the
     /// process group it recorded ends, then it reports the exit, which the
     /// space's log records for an agent.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) async fn end_test_execution(&self, id: ExecutionId) {
         let query = id.clone();
         let recorded = self

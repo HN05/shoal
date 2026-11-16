@@ -17,8 +17,8 @@ use crate::{
     protocol::operations::{Order, Stream},
 };
 
-#[cfg(test)]
-pub(crate) mod fake;
+#[cfg(any(test, feature = "test-support"))]
+pub mod fake;
 
 /// How long output keeps arriving after the worker exited, from processes
 /// it left behind, before the operation ends without it.
@@ -42,7 +42,6 @@ pub(super) struct Worker {
 /// Start the worker of `order` in a new session, in `env` instead of the
 /// daemon's environment when given, as the user or, with `token`, with that
 /// scope.
-#[cfg(not(test))]
 pub(super) fn spawn(
     paths: &Paths,
     order: &Order,
@@ -54,6 +53,11 @@ pub(super) fn spawn(
     use tokio::io::AsyncWriteExt as _;
 
     use crate::workers::{Worker as Internal, detached_command, internal_command};
+
+    #[cfg(any(test, feature = "test-support"))]
+    if crate::daemon::fake_workers::faked() {
+        return Ok(fake::start(order, token));
+    }
 
     let argv = internal_command(paths, false, Internal::Operation)?;
     let mut command = detached_command(&argv);
@@ -106,17 +110,6 @@ pub(super) fn spawn(
             let _ = crate::process::identity::signal(&identity, libc::SIGTERM);
         })),
     })
-}
-
-/// Tests start a [`fake`] worker instead of running this binary.
-#[cfg(test)]
-pub(super) fn spawn(
-    _paths: &Paths,
-    order: &Order,
-    _env: Option<BTreeMap<String, String>>,
-    token: Option<&ScopeToken>,
-) -> anyhow::Result<Worker> {
-    Ok(fake::start(order, token))
 }
 
 /// Relay the worker's output to `entry` until it exits and its streams

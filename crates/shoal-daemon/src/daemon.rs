@@ -9,7 +9,7 @@ pub mod approvals;
 mod auto_update;
 pub(crate) mod blockers;
 pub(crate) mod caches;
-mod chats;
+pub(crate) mod chats;
 pub(crate) mod checkout_sync;
 pub mod cleanup;
 mod connections;
@@ -20,6 +20,8 @@ pub mod events;
 mod execution_connection;
 mod execution_recovery;
 mod exit_wait;
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) mod fake_workers;
 pub(crate) mod file_access;
 mod file_copies;
 pub(crate) mod forge_hosts;
@@ -63,9 +65,13 @@ mod startup;
 mod startup_audit;
 pub mod store;
 mod subscriptions;
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
+// Other crates' tests read most of it.
+#[cfg_attr(not(feature = "test-support"), allow(dead_code))]
 pub(crate) mod test_daemon;
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
+// Other crates' tests read only some of the daemon's own fixtures.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod test_support;
 mod tmp_dirs;
 pub(crate) mod triggers;

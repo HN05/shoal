@@ -41,7 +41,7 @@ impl Manager {
     /// workspace opens it in the caller's scope, and the daemon starts it,
     /// as it starts a launch in an existing workspace, unless its caller
     /// starts it.
-    pub(in crate::daemon) async fn queue_add_as(
+    pub async fn queue_add_as(
         &self,
         mut request: QueueRequest,
         caller: Option<&Caller>,

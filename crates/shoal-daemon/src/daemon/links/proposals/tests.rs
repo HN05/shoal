@@ -306,35 +306,6 @@ async fn a_proposal_keeps_its_number_and_reserves_its_removed_space() {
     assert_eq!(freed.number, proposer.number);
 }
 
-/// A pending issue proposal from `workspace`.
-pub(crate) async fn store_issue_proposal(manager: &Manager, space: &LinkSpace) -> ApprovalRequest {
-    let specification = Specification::Issue(IssueSpecification {
-        issue: NewIssue {
-            title: format!("Flaky in {}", space.name()),
-            ..NewIssue::default()
-        },
-        repository: None,
-        link: false,
-        branch: space.branch().map(str::to_owned).map(BranchName::from),
-        commit: space.workspace().map(|_| "head".into()),
-        agent: None,
-        duplicates: Vec::new(),
-        follow_up: None,
-    });
-    let mut request = proposal(
-        space.id(),
-        Target::IssueOpen,
-        proposals::ISSUE,
-        specification,
-    );
-    request.repository_id = Some(space.repository_id().to_owned());
-    let (request, _) = manager
-        .store_proposal(request, proposals::propose_issue)
-        .await
-        .unwrap();
-    request
-}
-
 #[tokio::test]
 async fn a_withdrawn_issue_proposal_goes_with_its_unread_notification() {
     let (root, manager) = manager().await;

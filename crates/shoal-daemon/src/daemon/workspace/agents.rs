@@ -495,7 +495,7 @@ impl Manager {
 
     /// `running` is how long the agent has already run, so a reattached
     /// agent keeps its place in the newest-first overload order.
-    pub(crate) async fn track_agent(
+    pub async fn track_agent(
         &self,
         id: &ExecutionId,
         tracked: &TrackedAgent,

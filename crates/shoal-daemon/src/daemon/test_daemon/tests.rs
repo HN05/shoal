@@ -917,7 +917,7 @@ async fn a_start_without_an_agent_queues_the_configured_default() {
 /// The resolved starts the daemon ran its chat start worker for, each with
 /// whether the worker acts with the caller's scope.
 fn launched_chats() -> Vec<(ChatStart, bool)> {
-    crate::daemon::chats::launches::tests::STARTED
+    crate::daemon::chats::launches::fake::STARTED
         .lock()
         .unwrap()
         .clone()

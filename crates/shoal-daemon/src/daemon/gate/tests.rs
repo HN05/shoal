@@ -337,8 +337,7 @@ async fn an_issue_proposal_whose_space_is_gone_goes_to_the_user() {
     let fixture = fixture().await;
     let space = fixture.workspace.clone().into();
     let request =
-        crate::daemon::links::proposals::tests::store_issue_proposal(&fixture.manager, &space)
-            .await;
+        crate::daemon::links::proposals::store_issue_proposal(&fixture.manager, &space).await;
     let manager = &fixture.manager;
     manager
         .remove_workspace(

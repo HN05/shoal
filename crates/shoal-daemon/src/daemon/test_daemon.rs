@@ -1,7 +1,10 @@
 //! A daemon serving the protocol on the socket of a temporary state
 //! directory, for tests that connect to it the way the CLI and apps do.
 use shoal_protocol::scope_tokens::ScopeToken;
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use tokio::{
     net::{UnixListener, UnixStream},
@@ -9,18 +12,19 @@ use tokio::{
 };
 
 use super::{Server, connections::Capacity, workspace::Manager};
+#[cfg(test)]
+use crate::client::connection::Connector;
 use crate::{
-    client::connection::Connector,
     daemon::test_support::{git, manager, repository},
     model::{Repository, Workspace},
 };
 use shoal_protocol::space_names::SpaceSelector;
 
 /// A generous guard against a hang; no test waits this long when it passes.
-pub(crate) const HANG: Duration = Duration::from_secs(60);
+pub const HANG: Duration = Duration::from_secs(60);
 
 /// A daemon with a registered repository whose origin no test reaches.
-pub(crate) struct TestDaemon {
+pub struct TestDaemon {
     _root: tempfile::TempDir,
     pub manager: Arc<Manager>,
     pub repository: Repository,
@@ -29,6 +33,7 @@ pub(crate) struct TestDaemon {
 
 impl TestDaemon {
     pub async fn start() -> Self {
+        super::fake_workers::fake();
         let (root, manager) = manager().await;
         let path = repository(root.path(), "repo");
         git(&path, &["config", "protocol.allow", "never"]);
@@ -67,6 +72,7 @@ impl TestDaemon {
     }
 
     /// Requests as the user.
+    #[cfg(test)]
     pub fn connector(&self) -> Connector {
         Connector {
             paths: self.manager.paths.clone(),
@@ -75,6 +81,7 @@ impl TestDaemon {
     }
 
     /// Requests as the agent of `workspace`.
+    #[cfg(test)]
     pub async fn scoped(&self, workspace: &Workspace) -> Connector {
         self.connector().scope(self.scope_token(workspace).await)
     }
@@ -114,8 +121,11 @@ impl TestDaemon {
 fn accept(manager: &Arc<Manager>) -> JoinHandle<()> {
     let listener = UnixListener::bind(&manager.paths.socket).unwrap();
     let server = Server {
+        manager: manager.clone(),
+        started: Instant::now(),
+        managed: false,
+        exit: tokio::sync::mpsc::channel(1).0,
         capacity: Arc::new(Capacity::new(16, 16)),
-        ..super::tests::server(manager.clone())
     };
     tokio::spawn(async move {
         let mut connections = JoinSet::new();

@@ -7,6 +7,10 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+# What other crates' tests drive a daemon with: `test_daemon`.
+test-support = ["shoal-core/test-support", "shoal-protocol/test-support"]
+
 [dependencies]
 anyhow.workspace = true
 fs2 = "0.4"

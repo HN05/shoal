@@ -112,7 +112,7 @@ pub struct Manager {
     /// Held while the owner of a recorded place is read and its place
     /// closed, or its ownership moves to another workspace.
     pub(crate) place_ownership: tokio::sync::Mutex<()>,
-    pub(crate) gates: gates::Gates,
+    pub gates: gates::Gates,
     pub(crate) waits: crate::daemon::links::wait::ActiveWaits,
     pub(super) cleanup_health: super::cleanup::CleanupHealth,
     /// The spaces automatic cleanup removed since Shoal's log recorded it.
@@ -124,7 +124,7 @@ pub struct Manager {
     /// The spaces whose issues wait for the agent account to be settled.
     pub(crate) agent_settles: super::links::issue::agent_settles::AgentSettles,
     pub(crate) config_state: config_state::ConfigState,
-    pub(crate) paths: Paths,
+    pub paths: Paths,
     /// Arrival order of queued resource and simulator requests.
     pub(crate) queues: super::queue::Queues,
     pub(crate) executions: executions::Executions,
@@ -239,7 +239,7 @@ impl Manager {
     /// Make `config` the one later operations read. Changed overload
     /// settings withdraw recovery readiness before anything can read them, so
     /// a waiting agent needs a fresh healthy interval under the new thresholds.
-    pub(crate) fn publish_config(&self, config: Config) {
+    pub fn publish_config(&self, config: Config) {
         if config.machine.overload != self.config().machine.overload {
             self.overload_recovery.reset();
         }

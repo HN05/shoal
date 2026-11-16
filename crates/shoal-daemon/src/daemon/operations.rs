@@ -25,8 +25,8 @@ use crate::protocol::operations::{
 };
 use crate::refusal::{Reason, Refusal};
 use shoal_protocol::space_names::SpaceSelector;
-#[cfg(test)]
-pub(crate) use worker::fake;
+#[cfg(any(test, feature = "test-support"))]
+pub use worker::fake;
 
 /// How long an ended operation can still be followed.
 const RETAIN: Duration = Duration::from_secs(600);
@@ -287,7 +287,7 @@ impl Manager {
     }
 
     /// Record the worker's `report` of operation `id`.
-    pub(crate) async fn report_operation(
+    pub async fn report_operation(
         &self,
         id: &str,
         report: Report,

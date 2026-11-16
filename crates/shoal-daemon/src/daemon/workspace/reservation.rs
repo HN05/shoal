@@ -9,7 +9,7 @@ use rusqlite::{OptionalExtension, params};
 use shoal_ids::space_ids::SpaceId;
 
 impl Manager {
-    pub(crate) async fn set_state(
+    pub async fn set_state(
         &self,
         id: &SpaceId,
         state: WorkspaceState,

@@ -198,7 +198,7 @@ impl Manager {
     }
 
     /// Forget a workspace whose directory was deleted outside Shoal.
-    pub async fn remove_deleted(&self, id: &SpaceId) -> Result<SpaceRemoval> {
+    pub(crate) async fn remove_deleted(&self, id: &SpaceId) -> Result<SpaceRemoval> {
         self.remove_space(id, Removal::Deleted).await
     }
 

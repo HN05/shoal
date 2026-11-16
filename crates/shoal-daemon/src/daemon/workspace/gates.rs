@@ -20,7 +20,7 @@ mod keyed;
 mod tests;
 
 #[derive(Default)]
-pub(crate) struct Gates {
+pub struct Gates {
     background_operations: Arc<RwLock<()>>,
     /// The exits that wait for work in progress, holding back new work.
     held_back: Arc<watch::Sender<Holds>>,
@@ -189,8 +189,8 @@ impl Gates {
     }
 
     /// Hold off every background operation once those in progress finish.
-    #[cfg(test)]
-    pub(crate) async fn quiesce(&self) -> OwnedRwLockWriteGuard<()> {
+    #[cfg(any(test, feature = "test-support"))]
+    pub async fn quiesce(&self) -> OwnedRwLockWriteGuard<()> {
         self.background_operations.clone().write_owned().await
     }
 

@@ -31,7 +31,7 @@ impl Manager {
     /// [`Self::open_branch`] below `parent`, where and as `new` says,
     /// returning the workspace with its parent. A scoped `caller` takes
     /// over no existing workspace outside its scope.
-    pub async fn open_branch_below(
+    pub(crate) async fn open_branch_below(
         &self,
         repository: crate::repository::Selector,
         branch: &str,
@@ -71,7 +71,7 @@ impl Manager {
 
     /// [`Self::create_workspace`] below `parent`, returning the workspace with
     /// its parent.
-    pub async fn create_workspace_below(
+    pub(crate) async fn create_workspace_below(
         &self,
         repository: crate::repository::Selector,
         name: String,

@@ -28,7 +28,7 @@ impl Manager {
     /// Create a workspace on a new branch named `name` in `parent`'s
     /// repository, leaving out what `options` say, and record `parent` as
     /// its parent.
-    pub(crate) async fn split_workspace(
+    pub async fn split_workspace(
         &self,
         parent: &SpaceSelector,
         name: String,

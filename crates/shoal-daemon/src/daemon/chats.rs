@@ -31,7 +31,7 @@ use shoal_protocol::space_names::SpaceSelector;
 impl Manager {
     /// Record the chat `name` in the repository's checkout, at the top, with
     /// its agent running.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub async fn start_chat(
         self: &std::sync::Arc<Self>,
         repository: crate::repository::Selector,
@@ -81,7 +81,7 @@ impl Manager {
     /// registers and tracks it, and return the chat running it. Asked to
     /// stop, the agent ends its processes and exits, as its wrapper stops
     /// it, first saving itself for `shoal restore` when the stop asks that.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) async fn run_chat_agent(
         self: &std::sync::Arc<Self>,
         chat: Chat,
@@ -537,7 +537,7 @@ impl Manager {
     }
 
     /// The scope token the agent of the chat `id` carries.
-    pub(crate) async fn chat_scope(&self, id: &SpaceId) -> Result<ScopeToken> {
+    pub async fn chat_scope(&self, id: &SpaceId) -> Result<ScopeToken> {
         let id = id.to_owned();
         let token = (self.store)
             .run(move |db| crate::daemon::scope::tokens::chat_token(db, &id))

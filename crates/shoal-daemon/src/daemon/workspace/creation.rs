@@ -96,7 +96,7 @@ impl Manager {
     /// without creating anything: the repository, the new `branch` or the
     /// `existing` one, and the new-worktree options. A missing branch is the
     /// one the caller has yet to choose.
-    pub async fn check_creation(
+    pub(crate) async fn check_creation(
         &self,
         repository: impl Into<crate::repository::Selector>,
         branch: Option<&str>,

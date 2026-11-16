@@ -62,7 +62,7 @@ impl Manager {
             .await
     }
 
-    pub(crate) async fn revoke_workspace_environment(
+    pub async fn revoke_workspace_environment(
         &self,
         selector: &SpaceSelector,
         token: ScopeToken,

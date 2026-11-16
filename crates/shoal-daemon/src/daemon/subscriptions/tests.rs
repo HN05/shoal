@@ -276,7 +276,7 @@ mod streams {
     async fn the_user_keeps_seeing_an_issue_proposal_its_workspace_left() {
         let daemon = TestDaemon::start().await;
         let workspace = daemon.workspace("proposer").await;
-        let proposal = crate::daemon::links::proposals::tests::store_issue_proposal(
+        let proposal = crate::daemon::links::proposals::store_issue_proposal(
             &daemon.manager,
             &workspace.clone().into(),
         )
@@ -300,7 +300,7 @@ mod streams {
 
     #[tokio::test]
     async fn a_chats_subscription_follows_the_issues_it_proposed() {
-        use crate::daemon::links::proposals::tests::store_issue_proposal;
+        use crate::daemon::links::proposals::store_issue_proposal;
         let daemon = TestDaemon::start().await;
         let chat = daemon
             .manager

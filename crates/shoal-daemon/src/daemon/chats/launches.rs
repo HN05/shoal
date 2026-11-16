@@ -256,7 +256,6 @@ fn launch_request(start: &ChatStart, source: LaunchSource) -> Result<ChatQueueRe
 /// the daemon in the environment of the terminal it names, as the user or,
 /// with `token`, with that scope, its agent taking the slot of the queue
 /// `entry`, and return the chat it reports once it runs its agent.
-#[cfg(not(test))]
 async fn run_worker(
     paths: &crate::paths::Paths,
     start: &ChatStart,
@@ -266,6 +265,11 @@ async fn run_worker(
     use crate::workers::{Worker, detached_command, internal_command};
     use std::process::Stdio;
     use tokio::io::AsyncWriteExt as _;
+
+    #[cfg(any(test, feature = "test-support"))]
+    if crate::daemon::fake_workers::faked() {
+        return fake::start(start, token);
+    }
 
     let argv = internal_command(paths, true, Worker::ChatStart)?;
     let env =
@@ -301,28 +305,5 @@ async fn run_worker(
     serde_json::from_slice(&output.stdout).context("read the chat the worker started")
 }
 
-/// Tests record the resolved starts, and whether the worker acts with a
-/// scope, instead of running this binary as the CLI, and report each as
-/// started in a background place.
-#[cfg(test)]
-async fn run_worker(
-    _paths: &crate::paths::Paths,
-    start: &ChatStart,
-    token: Option<&ScopeToken>,
-    _entry: Option<&shoal_ids::queue_entry_ids::QueueEntryId>,
-) -> Result<StartedChat> {
-    let scoped = token.is_some();
-    tests::STARTED.lock().unwrap().push((start.clone(), scoped));
-    Ok(StartedChat::Background(
-        shoal_protocol::chats::BackgroundChat {
-            id: None,
-            chat: start.name.clone().unwrap_or_else(|| "chat".into()),
-            agent: start.agent.clone().context("the start names no agent")?,
-            repository: None,
-            place: "background".into(),
-        },
-    ))
-}
-
-#[cfg(test)]
-pub(crate) mod tests;
+#[cfg(any(test, feature = "test-support"))]
+pub mod fake;

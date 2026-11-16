@@ -22,7 +22,7 @@ pub use store::{ReasonRequired, check, current, release, request_action};
 pub(crate) use store::{pending_count, release_decided_by};
 
 /// Operations on the client type [`ApprovalRequest`] that only the `shoal` command uses.
-pub(crate) trait ApprovalRequestExt {
+pub trait ApprovalRequestExt {
     fn new(
         owner: &SpaceId,
         target: Target,

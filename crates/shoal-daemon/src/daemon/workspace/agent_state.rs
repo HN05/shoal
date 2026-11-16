@@ -740,7 +740,7 @@ fn write_state(db: &Connection, report: &Report, starts: bool) -> Result<bool> {
 }
 
 /// The reports tests make, as a hook's request makes them when it arrives.
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl Manager {
     pub async fn set_agent_state(
         &self,

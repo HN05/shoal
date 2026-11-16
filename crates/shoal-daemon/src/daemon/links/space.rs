@@ -24,7 +24,7 @@ use shoal_protocol::space_names::SpaceSelector;
     clippy::large_enum_variant,
     reason = "a lookup's result, read by the request that made it"
 )]
-pub(crate) enum LinkSpace {
+pub enum LinkSpace {
     Workspace(Box<Workspace>),
     Chat { chat: Chat, checkout: Repository },
 }
@@ -122,7 +122,7 @@ impl LinkSpace {
 
 impl Manager {
     /// The workspace or running chat `selector` names, by ID or name.
-    pub(crate) async fn link_space(&self, selector: &SpaceSelector) -> Result<LinkSpace> {
+    pub async fn link_space(&self, selector: &SpaceSelector) -> Result<LinkSpace> {
         self.link_space_of(self.space(selector).await?).await
     }
 

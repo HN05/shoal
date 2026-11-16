@@ -136,7 +136,7 @@ impl Manager {
     /// waiting launches `targets` names was given, once none of them is refused, for
     /// the scoped process of the space `giver`, which gives only what it
     /// holds, or for the user.
-    pub async fn change_stopped_permissions(
+    pub(crate) async fn change_stopped_permissions(
         &self,
         targets: PermissionTargets<'_>,
         change: &crate::config::permissions::PermissionChange,
