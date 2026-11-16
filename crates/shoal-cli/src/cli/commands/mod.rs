@@ -10,7 +10,6 @@ mod base;
 mod branches;
 mod capabilities;
 mod catalog;
-mod chat;
 mod ci;
 mod cleanup;
 mod config_setup;

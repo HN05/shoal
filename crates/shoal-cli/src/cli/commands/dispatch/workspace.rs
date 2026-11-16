@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::cli::{
     args::workspace::WorkspaceCommand,
-    commands::{chat, inbox, listing, log, rename, restore, workspaces},
+    commands::{inbox, listing, log, rename, restore, spaces, workspaces},
     context::Context,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -23,10 +23,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: WorkspaceComman
             print: _,
         } => {
             let filter = listing::ListFilter::resolve(&ctx, repository, status).await?;
-            if chats {
-                return chat::list(&ctx, &filter).await;
-            }
-            workspaces::list(&ctx, &filter).await
+            spaces::list(&ctx, &filter, chats).await
         }
         WorkspaceCommand::Status { space, item } => workspaces::status(&ctx, space, item).await,
         WorkspaceCommand::Log(args) => log::run(&ctx, args).await,
