@@ -3,10 +3,6 @@
 //! Shoal removes once nothing of it is left.
 use anyhow::Result;
 
-use super::workspaces::{
-    AddOptions, StartsAsChat,
-    link::{self, AddInput},
-};
 use crate::{
     agent::Agent,
     agents,
@@ -14,16 +10,15 @@ use crate::{
         args::create::{ContributeArgs, StartArgs},
         context::Context,
         output::Palette,
-        ui,
+        ui::{self, ModeChoice},
     },
-    config::{Config, repo::ConfigLayers},
+    config::{Config, modes::ModeName, repo::ConfigLayers},
     git,
     model::Repository,
-    start_plan::Creation,
 };
 
 /// Register the repository a repository URL, or an issue, PR or branch link
-/// names, then add the workspace as `shoal start` would.
+/// names, then start the workspace in it as `shoal start` does.
 pub(super) async fn contribute(ctx: &Context, args: ContributeArgs) -> Result<i32> {
     let ContributeArgs {
         here,
@@ -35,47 +30,28 @@ pub(super) async fn contribute(ctx: &Context, args: ContributeArgs) -> Result<i3
         model,
         args,
     } = args;
-    // Without a branch the contribution begins as a chat, as a start does.
-    let unsettled = StartArgs {
-        here,
-        focus,
-        now,
-        agent: agent.clone(),
-        model: model.clone(),
-        args: args.clone(),
-        ..Default::default()
-    };
-    let options = AddOptions {
-        here,
-        focus,
-        now,
-        blockers: Vec::new(),
-        model: model.into(),
-        ..Default::default()
-    };
+    super::start::ensure_scope_token(ctx)?;
     ensure_agent_available(ctx, agent.as_ref())?;
     let source = match target.linked_repository() {
         Some(linked) => linked.repository_url(),
         None => target.to_string(),
     };
     let repo = register(ctx, source).await?;
-    let positional = target.linked_repository().is_some().then_some(target);
-    let input = AddInput {
-        positional,
-        repository: Some(repo.id.into()),
-        issue: None,
-    };
-    let creation = Creation {
+    let start = StartArgs {
+        here,
+        focus,
+        now,
+        agent,
+        model,
+        args,
         branch,
+        repository: target.linked_repository().is_some().then_some(target),
+        repository_override: Some(repo.id.to_string()),
+        checked_repository: Some(repo.id.into()),
         ..Default::default()
     };
-    match link::add(ctx, input, creation, agent, args, options).await {
-        Err(error) if error.is::<StartsAsChat>() => {
-            let starts = error.downcast::<StartsAsChat>()?;
-            super::start::as_chat(ctx, unsettled, starts).await
-        }
-        added => added,
-    }
+    let mode = ModeChoice::Named(ModeName::DEFAULT);
+    super::start::in_workspace(ctx, start, mode).await
 }
 
 /// Refuse an unavailable agent before registration, which may fork and clone.

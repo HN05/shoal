@@ -70,6 +70,25 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             ],
             "creation reached",
         ),
+        // A contribution without a terminal registers its repository, then
+        // leaves the start to the daemon as a start does.
+        (
+            vec![
+                "contribute",
+                "https://other.example/team/repo",
+                "--branch",
+                "new",
+                "--agent",
+                "codex",
+            ],
+            vec![
+                "register_contribution https://other.example/team/repo",
+                "list_repositories",
+                "layered_config id:registered",
+                "launch",
+            ],
+            "creation reached",
+        ),
         // A contribution refuses a missing agent before it forks or clones.
         (
             vec![
@@ -96,7 +115,9 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
         assert_eq!(daemon.methods(), expected, "{args:?}: {}", printed(&output));
         assert!(!output.status.success(), "{args:?}");
         assert!(output.stdout.is_empty(), "{args:?}: {}", printed(&output));
-        let error: Value = serde_json::from_slice(&output.stderr).unwrap();
+        // The error ends stderr, after any notice such as a registration's.
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let error: Value = serde_json::from_str(stderr.lines().last().unwrap()).unwrap();
         assert_eq!(error["error"]["code"], "command_failed");
         assert!(
             error["error"]["message"]
@@ -202,7 +223,8 @@ fn interactive_commands_refuse_their_arguments_before_prompting() {
 }
 
 /// A daemon socket in a checkout of forge.example/team/repo that records each
-/// request's method and answers with one registered repository.
+/// request's method and answers with its registered repository and a
+/// contribution's.
 struct FakeDaemon {
     root: tempfile::TempDir,
     socket: PathBuf,
@@ -254,10 +276,13 @@ impl FakeDaemon {
                     "list_repositories" => json!({"type": "repositories", "data": [{
                         "id": "test", "path": repo_path,
                         "source": "https://forge.example/team/repo", "last_used": 0
+                    }, {
+                        "id": "registered", "path": repo_path.join("registered"),
+                        "source": "https://forge.example/team/registered", "last_used": 0
                     }]}),
-                    "register_repository" => {
-                        let source = &request["method"]["register_repository"]["source"];
-                        method = format!("register_repository {}", source.as_str().unwrap());
+                    "register_repository" | "register_contribution" => {
+                        let source = &request["method"][&method]["source"];
+                        method = format!("{method} {}", source.as_str().unwrap());
                         json!({"type": "repository", "data": {
                             "id": "registered", "path": repo_path, "source": source,
                             "last_used": 0

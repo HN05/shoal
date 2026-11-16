@@ -34,12 +34,7 @@ pub(super) async fn run(ctx: &Context, mut args: StartArgs) -> Result<i32> {
 
 /// Start what `args` ask for.
 async fn start(ctx: &Context, mut args: StartArgs) -> Result<i32> {
-    // Without its token, the daemon would take a workspace process's start
-    // for the user's and create a space outside its own.
-    ensure!(
-        crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
-        "workspace processes start agents only with their scope token"
-    );
+    ensure_scope_token(ctx)?;
     if let Some(parent) = &args.parent {
         args.parent = Some(SpaceSelector::Id(space_id(ctx, parent).await?));
     }
@@ -55,6 +50,16 @@ async fn start(ctx: &Context, mut args: StartArgs) -> Result<i32> {
         Start::Chat(mode) => in_chat(ctx, args, mode).await,
         Start::Outside(mode) => outside_repositories(ctx, args, mode).await,
     }
+}
+
+/// Refuse a start from a workspace process without its scope token, which
+/// the daemon would take for the user's, creating a space outside its own.
+pub(super) fn ensure_scope_token(ctx: &Context) -> Result<()> {
+    ensure!(
+        crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
+        "workspace processes start agents only with their scope token"
+    );
+    Ok(())
 }
 
 /// The workspace `--in` names, else the current one or a picked one, by ID.
@@ -293,7 +298,7 @@ fn located(args: &StartArgs) -> Result<Launch> {
 /// Start the agent in a new or reopened workspace, or, for a start that
 /// names no branch, issue, PR or copy, in a chat that its
 /// agent makes a workspace once it knows the work.
-async fn in_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Result<i32> {
+pub(super) async fn in_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Result<i32> {
     if let Some(settings) = launch::detached(ctx, &args).await? {
         return launch::workspace(ctx, args, mode, settings).await;
     }
@@ -311,7 +316,7 @@ async fn in_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Resul
 /// as a start or a contribution may not, in a chat in the repository
 /// `starts` names, in the mode it chose, the worker's by default, refusing
 /// what only a new workspace takes.
-pub(super) async fn as_chat(
+async fn as_chat(
     ctx: &Context,
     mut args: StartArgs,
     starts: workspaces::StartsAsChat,
