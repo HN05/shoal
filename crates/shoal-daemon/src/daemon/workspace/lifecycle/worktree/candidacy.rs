@@ -5,7 +5,7 @@ use crate::{
     daemon::cleanup::{Rule, Tree},
     fsutil::off_runtime,
     git::{self, default_branch::DefaultBranchLookup},
-    model::{CleanupReason, Workspace},
+    model::{CleanupReason, Workspace, Worktree},
     process,
     removal::{self, IdleRestore, Inspection, InspectionPolicy, RemovalCheck},
     state::WorkspaceState,
@@ -138,18 +138,18 @@ impl Manager {
     /// most worktrees. `cancelled` are the restores a removal stopped.
     pub(in crate::daemon::workspace) async fn idle_worktree(
         &self,
-        workspace: &Workspace,
+        workspace: Workspace,
         cancelled: &[IdleRestore],
         users: &process::DirectoryUsers,
     ) -> Result<Result<String, CleanupReason>> {
+        let path = workspace.path.clone();
         let inspected = async {
             let executions = self.cleanup_executions(&workspace.id, cancelled).await?;
             if let Some(reason) = self.usage_reason(&workspace.id, &executions).await? {
                 return Ok(Err(reason));
             }
             let mut check =
-                (self.inspect_removal(workspace.clone(), InspectionPolicy::GitOnly, executions))
-                    .await?;
+                (self.inspect_removal(workspace, InspectionPolicy::GitOnly, executions)).await?;
             if let Some(reason) = worktree_cleanup_reason(&check).await? {
                 return Ok(Err(reason));
             }
@@ -157,9 +157,9 @@ impl Manager {
             if let Some(reason) = worktree_cleanup_reason(&check).await? {
                 return Ok(Err(reason));
             }
-            Ok(Ok(head(&workspace.path).await?))
+            Ok(Ok(head(&path).await?))
         };
-        self.check_access(&workspace.path, inspected).await
+        self.check_access(&path, inspected).await
     }
 
     /// HEAD of the worktree of `workspace` as a merged cleanup candidate,
@@ -170,10 +170,11 @@ impl Manager {
     /// the processes in the worktree are read from `users`.
     pub(in crate::daemon::workspace) async fn merged_worktree(
         &self,
-        workspace: &Workspace,
+        workspace: Workspace,
         cancelled: &[IdleRestore],
         users: &process::DirectoryUsers,
     ) -> Result<Option<String>> {
+        let path = workspace.path.clone();
         let inspected = async {
             let executions = self.cleanup_executions(&workspace.id, cancelled).await?;
             if self
@@ -184,11 +185,10 @@ impl Manager {
                 return Ok(None);
             }
             let mut check =
-                (self.inspect_removal(workspace.clone(), InspectionPolicy::GitOnly, executions))
-                    .await?;
-            if !off_runtime::is_dir(&workspace.path).await?
+                (self.inspect_removal(workspace, InspectionPolicy::GitOnly, executions)).await?;
+            if !off_runtime::is_dir(&path).await?
                 || !Rule::Merged.allows(&check)
-                || git::status::operation_in_progress(&workspace.path).await?
+                || git::status::operation_in_progress(&path).await?
                 || (check.dirty && !self.unsaved_files_are_leftovers(&check.workspace).await?)
             {
                 return Ok(None);
@@ -197,41 +197,40 @@ impl Manager {
             if !Rule::Merged.allows(&check) {
                 return Ok(None);
             }
-            Ok(Some(head(&workspace.path).await?))
+            Ok(Some(head(&path).await?))
         };
-        self.check_access(&workspace.path, inspected).await
+        self.check_access(&path, inspected).await
     }
 
-    /// HEAD of the worktree of `workspace` whose idle timer runs, inspected
-    /// under [`Manager::check_access`], or `None` when its commands, leases
-    /// or a process `users` finds in it keep it.
+    /// HEAD of `worktree`, of the workspace `id`, whose idle timer runs,
+    /// inspected under [`Manager::check_access`], or `None` when its
+    /// commands, leases or a process `users` finds in it keep it.
     pub(in crate::daemon::workspace) async fn idle_timer_worktree(
         &self,
-        workspace: &Workspace,
+        id: &SpaceId,
+        worktree: &Worktree,
         users: &process::DirectoryUsers,
     ) -> Result<Option<String>> {
+        let path = &worktree.path;
         let inspected = async {
-            let executions = self.cleanup_executions(&workspace.id, &[]).await?;
-            if self
-                .usage_reason(&workspace.id, &executions)
-                .await?
-                .is_some()
-                || !off_runtime::is_dir(&workspace.path).await?
-                || directory_in_use(&workspace.path, &executions, users).await?
+            let executions = self.cleanup_executions(id, &[]).await?;
+            if self.usage_reason(id, &executions).await?.is_some()
+                || !off_runtime::is_dir(path).await?
+                || directory_in_use(path, &executions, users).await?
             {
                 return Ok(None);
             }
-            Ok(Some(head(&workspace.path).await?))
+            Ok(Some(head(path).await?))
         };
-        self.check_access(&workspace.path, inspected).await
+        self.check_access(path, inspected).await
     }
 
-    /// One walk of the files in the worktree of `workspace`.
+    /// One walk of the files in `worktree`.
     pub(in crate::daemon::workspace) async fn walk_worktree(
         &self,
-        workspace: &Workspace,
+        worktree: &Worktree,
     ) -> Result<Tree> {
-        let path = workspace.path.clone();
+        let path = worktree.path.clone();
         tokio::task::spawn_blocking(move || crate::daemon::cleanup::walk(&path)).await?
     }
 

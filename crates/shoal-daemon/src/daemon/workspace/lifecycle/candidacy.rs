@@ -113,7 +113,7 @@ impl Manager {
             Err(reason) => return Ok(Err(reason)),
         };
         let head = match space.to_workspace() {
-            Some(workspace) => match self.idle_worktree(&workspace, cancelled, users).await? {
+            Some(workspace) => match self.idle_worktree(workspace, cancelled, users).await? {
                 Ok(head) => Some(head),
                 Err(reason) => return Ok(Err(reason)),
             },
@@ -140,7 +140,7 @@ impl Manager {
             return Ok(None);
         };
         let head = match space.to_workspace() {
-            Some(workspace) => match self.merged_worktree(&workspace, cancelled, users).await? {
+            Some(workspace) => match self.merged_worktree(workspace, cancelled, users).await? {
                 Some(head) => Some(head),
                 None => return Ok(None),
             },
@@ -196,8 +196,8 @@ impl Manager {
 
     /// One walk of the files of `space`: its worktree's, or none.
     pub(crate) async fn tree_of(&self, space: &Space) -> Result<Tree> {
-        match space.to_workspace() {
-            Some(workspace) => self.walk_worktree(&workspace).await,
+        match space.worktree() {
+            Some(worktree) => self.walk_worktree(worktree).await,
             None => Ok(Tree::EMPTY),
         }
     }
@@ -233,8 +233,8 @@ impl Manager {
         let Ok(agent) = self.recorded_candidate(space, Rule::Idle, &[]).await? else {
             return Ok(None);
         };
-        let head = match space.to_workspace() {
-            Some(workspace) => match self.idle_timer_worktree(&workspace, users).await? {
+        let head = match space.worktree() {
+            Some(worktree) => match self.idle_timer_worktree(&space.id, worktree, users).await? {
                 Some(head) => Some(head),
                 None => return Ok(None),
             },
