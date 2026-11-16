@@ -369,7 +369,7 @@ async fn a_request_an_exiting_daemon_held_back_goes_to_the_next_daemon() -> Resu
 enum Ended {
     Exited {
         waited_for: Vec<Work>,
-        stopped_work: Option<bool>,
+        stopped_spaces: Option<Vec<SpaceNumber>>,
     },
     Refused(Vec<Work>),
     Gone(Vec<Work>),
@@ -402,7 +402,7 @@ async fn exit_answering(when: ExitWhen, bodies: Vec<Body>) -> Result<(Ended, Vec
     let ended = match exit(&paths, request, |work| reported.push(work.to_vec())).await? {
         ExitAnswer::Exiting(exiting) => Ended::Exited {
             waited_for: exiting.waited_for.clone(),
-            stopped_work: exiting.stopped_work().await,
+            stopped_spaces: exiting.stopped_spaces().await,
         },
         ExitAnswer::Refused(work) => Ended::Refused(work),
         ExitAnswer::Gone(work) => Ended::Gone(work),
@@ -415,14 +415,15 @@ async fn exit_answering(when: ExitWhen, bodies: Vec<Body>) -> Result<(Ended, Vec
 #[tokio::test]
 async fn an_exit_that_waits_reports_the_work_until_the_daemon_agrees() -> Result<()> {
     let exited = Body::Exited(shoal_protocol::protocol::Exited {
-        stopped_work: false,
+        stopped_work: true,
+        spaces: vec![3.into()],
     });
     let waits = || Body::ExitWaits(vec![Work::Other]);
     let bodies = vec![waits(), waits(), Body::Ok, exited];
     let (ended, reported) = exit_answering(ExitWhen::Idle, bodies).await?;
     let exited = Ended::Exited {
         waited_for: vec![Work::Other],
-        stopped_work: Some(false),
+        stopped_spaces: Some(vec![3.into()]),
     };
     assert_eq!(ended, exited);
     assert_eq!(reported, [vec![Work::Other], vec![Work::Other]]);
@@ -448,15 +449,31 @@ async fn an_exit_that_does_not_wait_reports_the_work_that_keeps_the_daemon() -> 
 async fn an_exit_that_does_not_wait_still_waits_out_requests_and_passes() -> Result<()> {
     let exited = Body::Exited(shoal_protocol::protocol::Exited {
         stopped_work: false,
+        spaces: Vec::new(),
     });
     let bodies = vec![Body::ExitWaits(vec![Work::Other]), Body::Ok, exited];
     let (ended, reported) = exit_answering(ExitWhen::IfIdle, bodies).await?;
     let exited = Ended::Exited {
         waited_for: vec![Work::Other],
-        stopped_work: Some(false),
+        stopped_spaces: Some(Vec::new()),
     };
     assert_eq!(ended, exited);
     assert_eq!(reported, [vec![Work::Other]]);
+    Ok(())
+}
+
+/// A daemon of an earlier release says only that some space has stopped
+/// work, which names none.
+#[tokio::test]
+async fn an_exit_that_names_no_space_of_its_stopped_work_leaves_them_unknown() -> Result<()> {
+    let exited = r#"{"stopped_work":true}"#;
+    let exited = Body::Exited(serde_json::from_str(exited)?);
+    let (ended, _) = exit_answering(ExitWhen::Now, vec![Body::Ok, exited]).await?;
+    let exited = Ended::Exited {
+        waited_for: Vec::new(),
+        stopped_spaces: None,
+    };
+    assert_eq!(ended, exited);
     Ok(())
 }
 

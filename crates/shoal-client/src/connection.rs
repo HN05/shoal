@@ -2,6 +2,7 @@
 //! finding the daemon, sending one request per connection with the caller's
 //! scope token, reading its reply, and the daemon's own status, reload, exit
 //! and wait.
+use shoal_ids::space_ids::SpaceNumber;
 use shoal_protocol::connection::ProtocolMismatch;
 use std::{io, sync::OnceLock, time::Duration};
 
@@ -525,17 +526,16 @@ pub struct Exiting {
 }
 
 impl Exiting {
-    /// Whether the daemon left stopped work for `shoal restore`, once its
-    /// work has ended; `None` when it does not say, as a daemon of an
-    /// earlier release does not.
-    pub async fn stopped_work(mut self) -> Option<bool> {
+    /// The spaces whose work the exit stopped and left for `shoal restore`,
+    /// once its work has ended; `None` when the daemon does not say which.
+    pub async fn stopped_spaces(mut self) -> Option<Vec<SpaceNumber>> {
         let limit = timing::DAEMON_WAIT_TIMEOUT + timing::WORKSPACE_STOP_TIMEOUT;
         let read = protocol::read_buffered::<Response>(&mut self.stream);
         match timeout(limit, read).await {
             Ok(Ok(Response {
                 body: Body::Exited(exited),
                 ..
-            })) => Some(exited.stopped_work),
+            })) => exited.stopped_spaces(),
             _ => None,
         }
     }

@@ -223,8 +223,10 @@ down until `shoal restore`, except that queued launches in existing workspaces
 stay for the next daemon to start. The request is permanent like reattachment and
 answered before the protocol check, since restarting is how an upgrade reaches
 a daemon of another release; a daemon that does not answer gets SIGTERM. Once
-its work has ended, the daemon answers again on the same connection whether it
-left stopped work, which `shoal daemon stop` reads to point to `shoal restore`.
+its work has ended, the daemon answers again on the same connection with the
+spaces whose work it stopped and left for `shoal restore`, which
+`shoal daemon stop` names in the `shoal restore` it points to, so it restores
+nothing the stop did not stop.
 Work the daemon runs itself, in background operations, operation workers and
 connected setup or merges, cannot detach, so `shoal daemon stop` and `restart`
 ask the daemon to exit only once none runs, with the same quiescence an update

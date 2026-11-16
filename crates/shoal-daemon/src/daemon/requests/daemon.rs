@@ -14,6 +14,7 @@ use super::super::{
 };
 use crate::{
     config::permissions::PermissionKey,
+    model::PresentSpace,
     protocol::{
         self, Body, DaemonMethod, DaemonStatus, Exit, ExitRequest, ExitWhen, Exited, Response,
     },
@@ -147,12 +148,16 @@ impl RequestedExit {
         }
     }
 
-    /// Tell the client whether ending work left stopped work for `shoal
-    /// resume`, after the reply to its request, which every release reads
-    /// alone.
-    pub async fn answer(&mut self, manager: &Manager) {
+    /// Tell the client which of the `stopped` spaces, whose work ending it
+    /// stopped, left work for `shoal restore`, after the reply to its
+    /// request, which every release reads alone.
+    pub async fn answer(&mut self, manager: &Manager, stopped: &[PresentSpace]) {
+        let spaces: Vec<_> = (manager.awaiting_restore(stopped).await.into_iter())
+            .map(PresentSpace::number)
+            .collect();
         let exited = Exited {
-            stopped_work: crate::execution::recovery::any_pending(&manager.paths),
+            stopped_work: !spaces.is_empty(),
+            spaces,
         };
         let response = Response::new(self.request_id, Body::Exited(exited));
         // The client may have hung up.

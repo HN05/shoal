@@ -81,11 +81,11 @@ impl Manager {
     /// system shutdown is cancelled, so nothing starts again before it. The
     /// user learns what to continue. An update waits for the stop. Once a
     /// stop before a shutdown finished, later ones wait for it and leave the
-    /// work alone.
-    pub(crate) async fn stop_for_shutdown_of(&self, shutdown: Shutdown) {
+    /// work alone. Returns the spaces stopped.
+    pub(crate) async fn stop_for_shutdown_of(&self, shutdown: Shutdown) -> Vec<PresentSpace> {
         let mut finished = self.shutdown_stopped.lock().await;
         if *finished {
-            return;
+            return Vec::new();
         }
         let left = match shutdown.ends_jobs() {
             true => HashSet::new(),
@@ -102,6 +102,7 @@ impl Manager {
             .await;
         self.notify_shutdown_stop(shutdown, &stopped).await;
         *finished = true;
+        stopped
     }
 
     /// Admit queued agents again once the shutdown was cancelled, and stop
@@ -178,7 +179,10 @@ impl Manager {
 
     /// Those of the `stopped` spaces whose saved work only `shoal restore`
     /// continues; one whose saved work is unreadable counts.
-    async fn awaiting_restore<'a>(&self, stopped: &'a [PresentSpace]) -> Vec<&'a PresentSpace> {
+    pub(crate) async fn awaiting_restore<'a>(
+        &self,
+        stopped: &'a [PresentSpace],
+    ) -> Vec<&'a PresentSpace> {
         let queued = self
             .queued_stopped_restores()
             .await

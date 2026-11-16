@@ -224,9 +224,10 @@ fn a_resume_takes_saved_chats_and_workspaces_together() {
     );
 }
 
-/// `shoal restore --all` leaves out a done chat's stopped agent, which
-/// only naming the chat restores, and restores the stopped agents beside
-/// it.
+/// `shoal daemon stop` names the spaces whose work it stopped, here a done
+/// chat, and no other; `shoal restore --all` leaves out that chat's
+/// stopped agent, which only naming the chat restores, and restores the
+/// stopped agents beside it.
 #[test]
 fn restore_all_skips_a_done_chat_beside_a_stopped_workspace() {
     let mut fixture = chat_session_fixture_with("[cleanup.done]\nenabled = false\n");
@@ -243,13 +244,18 @@ fn restore_all_skips_a_done_chat_beside_a_stopped_workspace() {
         r#"{"agent":"claude"}"#,
     )
     .unwrap();
-    save_running_chat(&fixture, |fixture| {
+    let mut stopped = Value::Null;
+    let chat = save_running_chat(&fixture, |fixture| {
         let chat = fixture.ok(&["list", "--chats"])[0]["id"].clone();
         fixture.ok(&["done", chat.as_str().unwrap()]);
-        let output = fixture.run(&["daemon", "stop"]);
-        assert!(output.status.success(), "{}", printed(&output));
+        stopped = fixture.ok(&["daemon", "stop"]);
     });
     assert!(fixture.daemon.child.wait().unwrap().success());
+    assert_eq!(
+        stopped["stopped_spaces"],
+        serde_json::json!([chat["number"]]),
+        "{stopped}"
+    );
     fixture.restart();
 
     let restored = fixture.ok(&["restore", "--all"]);

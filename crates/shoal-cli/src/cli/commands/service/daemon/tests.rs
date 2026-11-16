@@ -18,3 +18,11 @@ fn status_names_failing_cleanup() {
         "{message}"
     );
 }
+
+#[test]
+fn a_stop_points_to_restoring_only_the_spaces_it_stopped() {
+    let left = Left::Spaces(vec![2.into(), 5.into()]);
+    let restore = left.restore().unwrap_or_default();
+    assert!(restore.ends_with("shoal restore 2 5"), "{restore}");
+    assert_eq!(Left::Spaces(Vec::new()).restore(), None);
+}

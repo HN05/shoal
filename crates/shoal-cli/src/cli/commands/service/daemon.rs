@@ -2,6 +2,7 @@
 //! daemon start`, `stop` and `restart`, which wait for work in progress the
 //! daemon's exit would cut off; and stopping a daemon that does not answer.
 use anyhow::{Result, ensure};
+use shoal_ids::space_ids::SpaceNumber;
 
 use super::install::install;
 use crate::client::connection::ExitAnswer;
@@ -77,6 +78,7 @@ pub(super) async fn start(ctx: &Context) -> Result<i32> {
     let started = Running {
         running: true,
         stopped_work: None,
+        stopped_spaces: Vec::new(),
         waited_for: Vec::new(),
     };
     ctx.emit_styled(Style::Success, "Daemon started", started)?;
@@ -85,11 +87,8 @@ pub(super) async fn start(ctx: &Context) -> Result<i32> {
 
 pub(super) async fn stop(ctx: &Context, when: ExitWhen) -> Result<i32> {
     match stop_showing_work(ctx, Exit::Stop, when).await? {
-        Stopping::Stopped {
-            stopped_work,
-            waited_for,
-        } => {
-            emit_stopped_work(ctx, "Daemon stopped", false, stopped_work, waited_for)?;
+        Stopping::Stopped { left, waited_for } => {
+            emit_stopped_work(ctx, "Daemon stopped", false, left, waited_for)?;
             Ok(0)
         }
         Stopping::Refused(work) => kept(ctx, Exit::Stop, work),
@@ -114,31 +113,66 @@ pub(super) async fn restart(ctx: &Context, when: ExitWhen) -> Result<i32> {
     start_service(ctx).await?;
     // The restart succeeded even when its saved work cannot be read.
     let stopped = crate::client::saved::waits_for_resume(&ctx.paths).await;
-    emit_stopped_work(ctx, "Daemon restarted", true, stopped.ok(), waited_for)?;
+    let left = stopped.map_or(Left::Unknown, Left::Any);
+    emit_stopped_work(ctx, "Daemon restarted", true, left, waited_for)?;
     Ok(0)
 }
 
+/// What a daemon's exit left for `shoal restore`.
+pub(super) enum Left {
+    /// The stopped work of these spaces, by number, which the exit stopped.
+    Spaces(Vec<SpaceNumber>),
+    /// Whether any space has stopped work, as a restart reads afterwards.
+    Any(bool),
+    /// Not known, as from a daemon that does not say.
+    Unknown,
+}
+
+impl Left {
+    /// The command that restores what is left, while some is or may be:
+    /// the spaces' own, so it restores nothing the exit did not stop.
+    fn restore(&self) -> Option<String> {
+        match self {
+            Self::Spaces(spaces) if spaces.is_empty() => None,
+            Self::Spaces(spaces) => {
+                let numbers: Vec<String> = spaces.iter().map(ToString::to_string).collect();
+                Some(format!(
+                    "restore its stopped work with shoal restore {}",
+                    numbers.join(" ")
+                ))
+            }
+            Self::Any(true) => Some("restore stopped work with shoal restore --all".into()),
+            Self::Any(false) => None,
+            Self::Unknown => Some("restore any stopped work with shoal restore".into()),
+        }
+    }
+}
+
 /// Stopping saves running agents and commands, as does a restart for those
-/// that cannot reattach; point to restoring them unless `stopped` says none
-/// wait, as a daemon that does not say may have left some.
+/// that cannot reattach; point to restoring what is `left`.
 fn emit_stopped_work(
     ctx: &Context,
     message: &str,
     running: bool,
-    stopped: Option<bool>,
+    left: Left,
     waited_for: Vec<Work>,
 ) -> Result<()> {
-    let message = match stopped {
-        Some(true) => format!("{message}; restore stopped work with shoal restore --all"),
-        None => format!("{message}; restore any stopped work with shoal restore --all"),
-        Some(false) => message.to_owned(),
+    let message = match left.restore() {
+        Some(restore) => format!("{message}; {restore}"),
+        None => message.to_owned(),
+    };
+    let (stopped_work, stopped_spaces) = match left {
+        Left::Spaces(spaces) => (Some(!spaces.is_empty()), spaces),
+        Left::Any(any) => (Some(any), Vec::new()),
+        Left::Unknown => (None, Vec::new()),
     };
     ctx.emit_styled(
         Style::Success,
         &message,
         Running {
             running,
-            stopped_work: stopped,
+            stopped_work,
+            stopped_spaces,
             waited_for,
         },
     )
@@ -201,12 +235,9 @@ async fn start_service(ctx: &Context) -> Result<()> {
 
 /// What asking the daemon to exit did.
 pub(super) enum Stopping {
-    /// It exited, after the work in progress it waited for, saying whether
-    /// it left stopped work when it says.
-    Stopped {
-        stopped_work: Option<bool>,
-        waited_for: Vec<Work>,
-    },
+    /// It exited, after the work in progress it waited for, leaving what it
+    /// says it stopped.
+    Stopped { left: Left, waited_for: Vec<Work> },
     /// It runs work in progress its exit would cut off, and keeps running.
     Refused(Vec<Work>),
 }
@@ -233,11 +264,8 @@ pub(super) async fn stop_daemon(
             ExitAnswer::Refused(work) => return Ok(Stopping::Refused(work)),
             ExitAnswer::Unanswered => {
                 terminate(paths).await?;
-                let stopped_work = None;
-                return Ok(Stopping::Stopped {
-                    stopped_work,
-                    waited_for,
-                });
+                let left = Left::Unknown;
+                return Ok(Stopping::Stopped { left, waited_for });
             }
             ExitAnswer::Gone(work) => {
                 Work::list_new(&mut waited_for, work);
@@ -248,16 +276,16 @@ pub(super) async fn stop_daemon(
         }
     };
     Work::list_new(&mut waited_for, exiting.waited_for.clone());
-    let stopped_work = exiting.stopped_work().await;
+    let left = exiting
+        .stopped_spaces()
+        .await
+        .map_or(Left::Unknown, Left::Spaces);
     client::wait(paths, false).await?;
     // The service manager keeps a daemon's service loaded after it exits.
     if service::installed(paths) {
         service::stop(paths).await?;
     }
-    Ok(Stopping::Stopped {
-        stopped_work,
-        waited_for,
-    })
+    Ok(Stopping::Stopped { left, waited_for })
 }
 
 /// The stop of a daemon that went while it waited and that no daemon
@@ -269,11 +297,8 @@ async fn stopped_without_successor(
     if service::installed(paths) {
         service::stop(paths).await?;
     }
-    let stopped_work = None;
-    Ok(Stopping::Stopped {
-        stopped_work,
-        waited_for,
-    })
+    let left = Left::Unknown;
+    Ok(Stopping::Stopped { left, waited_for })
 }
 
 /// Stop a daemon with SIGTERM through the OS service manager, or directly

@@ -1194,7 +1194,9 @@ async fn daemon_exit_with_runner(job: Value, cancelling: Cancelling) -> Fixture 
         let manager = manager.clone();
         async move {
             match cancelling {
-                Cancelling::DaemonStop => manager.end_work(Ending::Stop).await,
+                Cancelling::DaemonStop => {
+                    manager.end_work(Ending::Stop).await;
+                }
                 Cancelling::SystemShutdown => manager.stop_for_system_shutdown().await,
             }
         }

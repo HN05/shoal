@@ -11,6 +11,7 @@ use super::{
     shutdown_stop::Shutdown,
 };
 use crate::daemon::workspace::runner::JobStop;
+use crate::model::PresentSpace;
 use crate::protocol::{Exit, QueuedLaunches};
 use shoal_protocol::space_names::SpaceSelector;
 use std::collections::HashSet;
@@ -40,27 +41,28 @@ impl From<Exit> for Ending {
 
 impl Manager {
     /// End running work as the daemon exits with `ending`, refusing new
-    /// executions before the stop lists what runs. What still runs
-    /// afterwards, such as work that failed to stop, detaches or stops as
-    /// [`Manager::stop_for_shutdown`] decides.
-    pub(crate) async fn end_work(&self, ending: Ending) {
+    /// executions before the stop lists what runs, and return the spaces
+    /// whose work it stopped. What still runs afterwards, such as work that
+    /// failed to stop, detaches or stops as [`Manager::stop_for_shutdown`]
+    /// decides.
+    pub(crate) async fn end_work(&self, ending: Ending) -> Vec<PresentSpace> {
         match ending {
-            Ending::Detach => {}
+            Ending::Detach => Vec::new(),
             Ending::Stop => {
                 self.executions.close().await;
-                self.stop_all_for_exit().await;
+                self.stop_all_for_exit().await
             }
             Ending::Save => {
                 self.executions.close().await;
-                self.stop_for_shutdown_of(Shutdown::Daemon).await;
+                self.stop_for_shutdown_of(Shutdown::Daemon).await
             }
         }
     }
 
     /// Stop what `shoal stop --all` stops, as it does, keeping stopped
     /// agents down until `shoal restore`, after a stop before a shutdown that
-    /// is under way.
-    async fn stop_all_for_exit(&self) {
+    /// is under way. Returns the spaces stopped.
+    async fn stop_all_for_exit(&self) -> Vec<PresentSpace> {
         let _shutdown_stop = self.shutdown_stopped.lock().await;
         let moment = "before the Shoal daemon stopped";
         self.stop_every_target(moment, &HashSet::new(), |workspace| async move {
@@ -80,7 +82,7 @@ impl Manager {
                 .await?;
             Ok(())
         })
-        .await;
+        .await
     }
 }
 

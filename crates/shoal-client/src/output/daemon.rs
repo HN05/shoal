@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::output::outputs;
+use shoal_ids::space_ids::SpaceNumber;
 use shoal_protocol::{
     protocol::{DaemonStatus, Work},
     sessions::HostName,
@@ -32,12 +33,15 @@ pub struct Status {
 }
 
 /// A daemon started, or stopped with whether work it stopped waits for
-/// `shoal restore`, after the work in progress its exit waited for.
+/// `shoal restore` and in which spaces, after the work in progress its exit
+/// waited for.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Running {
     pub running: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stopped_work: Option<bool>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stopped_spaces: Vec<SpaceNumber>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub waited_for: Vec<Work>,
 }
