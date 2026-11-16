@@ -1654,7 +1654,7 @@ fn forgejo_reactions_are_removed_by_content_and_left_when_already_as_asked() {
 
 #[test]
 fn comment_edits_change_only_the_logins_own_comments_and_are_not_reported_back() {
-    let config = "[cleanup.auto]\nenabled=false\n[issue]\nassign=false\n";
+    let config = "[cleanup.auto]\nenabled=false\n[issue]\nassign=\"none\"\n";
     let fixture = Fixture::new(Forge::Forgejo, config);
     let issue = |state: &str| {
         json!({"body": {"number": 8, "title": "Issue", "state": state, "body": "",
