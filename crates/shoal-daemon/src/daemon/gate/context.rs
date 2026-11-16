@@ -126,11 +126,7 @@ impl Manager {
     /// The space's linked issues and PRs as the opening lists them; a failed
     /// lookup leaves them out.
     async fn gate_items(&self, space: &Space) -> Vec<String> {
-        let selector = SpaceSelector::id(&space.id);
-        let context = match space.kind() {
-            crate::model::SpaceKind::Workspace => ItemContext::Workspace(selector),
-            crate::model::SpaceKind::Chat => ItemContext::Chat(selector),
-        };
+        let context = ItemContext::space(SpaceSelector::id(&space.id));
         let selection = Selection {
             kind: None,
             input: None,

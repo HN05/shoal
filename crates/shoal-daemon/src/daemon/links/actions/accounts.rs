@@ -155,7 +155,7 @@ impl Manager {
             ItemContext::Checkout(repository) => {
                 Ok(Place::Checkout(self.repository(repository).await?))
             }
-            _ => {
+            ItemContext::Space { .. } => {
                 let space = self.context_space(context).await?;
                 self.verify_space(&space).await?;
                 anyhow::ensure!(

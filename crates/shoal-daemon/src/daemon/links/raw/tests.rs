@@ -34,7 +34,7 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
         &format!("[machine.forges.\"{host}\"]\ntype = \"github\"\nagent_token = \"agent\"\n"),
     )
     .await;
-    let context = ItemContext::Workspace(SpaceSelector::id(&workspace.id));
+    let context = ItemContext::space(SpaceSelector::id(&workspace.id));
     let caller = Caller {
         space_id: workspace.id.clone(),
         execution: None,
@@ -158,7 +158,7 @@ async fn a_chats_agent_reads_as_its_account_and_writes_only_when_allowed() {
         ),
     )
     .await;
-    let context = ItemContext::Chat(SpaceSelector::id(&chat.id));
+    let context = ItemContext::space(SpaceSelector::id(&chat.id));
     let caller = Caller {
         space_id: chat.id.clone(),
         execution: None,
@@ -261,7 +261,7 @@ async fn agents_download_from_their_forge_as_their_account() {
 
     let download = manager
         .forge_download(
-            &ItemContext::Workspace(SpaceSelector::id(&workspace.id)),
+            &ItemContext::space(SpaceSelector::id(&workspace.id)),
             url,
             None,
             Some(&caller),
@@ -272,7 +272,7 @@ async fn agents_download_from_their_forge_as_their_account() {
     assert_eq!(download.bytes, b"PNG");
     manager
         .forge_download(
-            &ItemContext::Workspace(SpaceSelector::id(&workspace.id)),
+            &ItemContext::space(SpaceSelector::id(&workspace.id)),
             "https://example.com/shot.png",
             None,
             Some(&caller),

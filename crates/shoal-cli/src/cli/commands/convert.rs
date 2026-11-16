@@ -98,7 +98,7 @@ fn own_space() -> Fallback {
 
 /// The issue `input` names, read where the chat reads its forge.
 async fn load_issue(ctx: &Context, chat: &SpaceSelector, input: &ItemInput) -> Result<Issue> {
-    super::issues::load(ctx, ItemContext::Chat(chat.clone()), input.clone()).await
+    super::issues::load(ctx, ItemContext::space(chat.clone()), input.clone()).await
 }
 
 /// The branch name the issue linked to the chat `chat` gives, refusing a

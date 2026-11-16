@@ -131,7 +131,7 @@ impl Manager {
         number: PullNumber,
         caller: Option<&Caller>,
     ) -> Result<Target> {
-        let context = ItemContext::Workspace(SpaceSelector::id(&workspace.id));
+        let context = ItemContext::space(SpaceSelector::id(&workspace.id));
         let pull = ItemInput::Number(number.get());
         let pull = self.pull_request(&context, &pull, caller).await?;
         Ok(Target::PrHead(pull_head(pull)?))

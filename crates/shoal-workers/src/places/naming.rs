@@ -49,10 +49,9 @@ pub async fn name_plan(
 /// Where `plan`'s issue in `repo` is read: from the workspace it opens or
 /// the chat it starts from, else from the checkout.
 fn plan_context(plan: &AddPlan, repo: &Repository) -> ItemContext {
-    match (&plan.workspace, &plan.chat) {
-        (Some(workspace), _) => ItemContext::Workspace(SpaceSelector::id(workspace)),
-        (None, Some(chat)) => ItemContext::Chat(SpaceSelector::id(chat)),
-        (None, None) => ItemContext::Checkout(repo.id.clone()),
+    match plan.workspace.as_ref().or(plan.chat.as_ref()) {
+        Some(space) => ItemContext::space(SpaceSelector::id(space)),
+        None => ItemContext::Checkout(repo.id.clone()),
     }
 }
 
@@ -93,7 +92,7 @@ pub async fn place_name(paths: &CommandPaths, workspace: &Workspace) -> Result<P
         .context("repository is no longer registered")?;
     let issue = match workspace.links.issue() {
         Some(linked) => {
-            let context = ItemContext::Workspace(SpaceSelector::id(&workspace.id));
+            let context = ItemContext::space(SpaceSelector::id(&workspace.id));
             let input = linked.url.clone().into();
             Some(crate::client::forge_reads::issue_details(paths, context, input).await?)
         }

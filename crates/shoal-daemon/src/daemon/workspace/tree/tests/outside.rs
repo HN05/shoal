@@ -389,9 +389,9 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
     let ItemMethod::ItemAction { context, .. } = close else {
         unreachable!("the method stays an item action");
     };
-    let ItemContext::ChatIn {
-        chat: acting,
-        repository,
+    let ItemContext::Space {
+        space: acting,
+        repository: Some(repository),
     } = context
     else {
         panic!("expected the chat acting in the checkout: {context:?}");
@@ -419,7 +419,7 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
 
     // What the scope keeps from every agent stays the user's.
     let mut merge = ItemMethod::ItemAction {
-        context: ItemContext::Chat(SpaceSelector::id(&master.id)),
+        context: ItemContext::space(SpaceSelector::id(&master.id)),
         kind: crate::forge::items::link::ItemKind::Pr,
         item: Some("1".parse().unwrap()),
         action: crate::forge::items::action::Action::CancelAutoMerge,

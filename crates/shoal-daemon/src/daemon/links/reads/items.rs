@@ -46,7 +46,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<Selected> {
         match context {
-            ItemContext::Workspace(_) | ItemContext::Chat(_) | ItemContext::ChatIn { .. } => {
+            ItemContext::Space { .. } => {
                 let space = self.context_space(context).await?;
                 self.select_items(&space, selection, elsewhere).await
             }

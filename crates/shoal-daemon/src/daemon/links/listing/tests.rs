@@ -49,7 +49,7 @@ async fn a_scoped_chat_lists_items_as_the_agent_account() {
         ),
     )
     .await;
-    let context = ItemContext::Chat(SpaceSelector::id(&chat.id));
+    let context = ItemContext::space(SpaceSelector::id(&chat.id));
     let search = Search {
         state: StateFilter::Open,
         labels: Vec::new(),

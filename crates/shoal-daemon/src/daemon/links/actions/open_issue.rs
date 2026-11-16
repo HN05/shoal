@@ -63,11 +63,15 @@ impl Manager {
     ) -> Result<OpenOutcome> {
         anyhow::ensure!(!issue.title.trim().is_empty(), "the issue needs a title");
         match context {
-            ItemContext::Workspace(selector) => {
+            // A workspace opens it from its worktree.
+            ItemContext::Space {
+                space: selector,
+                repository: None,
+            } if (self.space(selector).await?.worktree()).is_some() => {
                 self.open_workspace_issue(selector, issue, repository, link, caller)
                     .await
             }
-            ItemContext::Chat(_) | ItemContext::ChatIn { .. } => {
+            ItemContext::Space { .. } => {
                 self.open_chat_issue(context, issue, repository, link, caller)
                     .await
             }
@@ -94,7 +98,7 @@ impl Manager {
         link: bool,
         caller: Option<&Caller>,
     ) -> Result<OpenOutcome> {
-        let space = match self.chat_outside_repositories(context).await? {
+        let space = match self.outside_repositories(context).await? {
             // The registered repository it names counts as its own.
             Some(chat) => match self.registered_named(repository.as_deref()).await? {
                 Some(checkout) => LinkSpace::acting_in(chat, checkout),
@@ -107,7 +111,7 @@ impl Manager {
         };
         let proposer = self.proposer(caller).await;
         anyhow::ensure!(!link || space.keeps_links(), "{LINK_NEEDS_REPOSITORY}");
-        let checkout = self.context_checkout(&space.item_context()).await?;
+        let checkout = self.repository(space.repository_id()).await?;
         // The chat's gate keeps a link meanwhile from taking its issue's place.
         let _gate = self.gates.lock_prs([&space.id]).await;
         let own = self.checkout_forge(&checkout).await?;
@@ -158,16 +162,21 @@ impl Manager {
         Ok(OpenOutcome::Opened(opened))
     }
 
-    /// The chat without a repository the chat `context` names, if it is one.
-    async fn chat_outside_repositories(
+    /// The space without a repository, a chat, that `context` names acting
+    /// in no registered repository, if it is one.
+    async fn outside_repositories(
         &self,
         context: &ItemContext,
-    ) -> Result<Option<crate::model::Chat>> {
-        let ItemContext::Chat(selector) = context else {
+    ) -> Result<Option<crate::model::Space>> {
+        let ItemContext::Space {
+            space,
+            repository: None,
+        } = context
+        else {
             return Ok(None);
         };
-        let chat = self.chat(selector).await.ok();
-        Ok(chat.filter(|chat| chat.repository_id.is_none()))
+        let space = self.space(space).await.ok();
+        Ok(space.filter(|space| space.repository_id.is_none()))
     }
 
     /// Open the issue a chat without a repository opens in the repository

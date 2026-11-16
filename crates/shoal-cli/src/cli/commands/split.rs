@@ -213,7 +213,7 @@ fn report(ctx: &Context, child: &Workspace) -> Result<()> {
 
 /// The issue `input` names in the parent workspace's repository.
 async fn load_issue(ctx: &Context, parent: &SpaceSelector, input: &ItemInput) -> Result<Issue> {
-    let context = ItemContext::Workspace(parent.clone());
+    let context = ItemContext::space(parent.clone());
     super::issues::load(ctx, context, input.clone()).await
 }
 

@@ -58,7 +58,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<(ForgeRepo, Account)> {
         match context {
-            ItemContext::Workspace(_) | ItemContext::Chat(_) | ItemContext::ChatIn { .. } => {
+            ItemContext::Space { .. } => {
                 let space = self.context_space(context).await?;
                 self.verify_space(&space).await?;
                 let own = self.space_forge(&space).await?;
@@ -72,8 +72,8 @@ impl Manager {
                 };
                 Ok((forge, account))
             }
-            ItemContext::Checkout(_) => {
-                let checkout = self.context_checkout(context).await?;
+            ItemContext::Checkout(checkout) => {
+                let checkout = self.repository(checkout).await?;
                 let own = self.checkout_forge(&checkout).await?;
                 let forge = self.named_forge(own, repository).await?;
                 Ok((forge, self.user_account()))

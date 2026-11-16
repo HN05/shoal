@@ -38,7 +38,6 @@ use self::{
 pub(crate) use content::read_body;
 pub(super) use context::{
     current_context, named_repository, select_repo_context, select_space_item_context,
-    space_context,
 };
 
 pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {

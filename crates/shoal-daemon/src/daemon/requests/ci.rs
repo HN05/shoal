@@ -87,7 +87,7 @@ impl Scoped for CiMethod {
             // knows the runs it approves.
             CiMethod::ApproveCiRuns { context, .. } => {
                 super::items::reached_change_context(manager, caller, context).await?;
-                Some(super::items::context_workspace(context)?)
+                Some(super::items::context_selector(context)?)
             }
             // A chat without a repository acts in a registered checkout as
             // its own space, with its agent account.
@@ -103,19 +103,10 @@ impl Scoped for CiMethod {
             | CiMethod::CiRunJobs { context, .. }
             | CiMethod::CiRunJobLog { context, .. }
             | CiMethod::StartCiRun { context, .. } => {
-                let own = own_context(manager, caller).await?;
+                let own = ItemContext::space(SpaceSelector::id(&caller.space_id));
                 let context = context.get_or_insert(own);
                 Some(super::items::change_context_space(manager, caller, context).await?)
             }
         })
     }
-}
-
-/// The caller's own space as the context of a request that names none.
-async fn own_context(manager: &Manager, caller: &Caller) -> Result<ItemContext> {
-    let space = caller.space_id.clone();
-    Ok(match manager.caller_is_chat(caller).await? {
-        true => ItemContext::Chat(SpaceSelector::id(&space)),
-        false => ItemContext::Workspace(SpaceSelector::id(&space)),
-    })
 }

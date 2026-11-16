@@ -82,7 +82,7 @@ impl Manager {
             diff.as_ref()
                 .is_some_and(|diff| diff.shows(&finding.path, u64::from(finding.line)))
         };
-        let context = ItemContext::Workspace(SpaceSelector::id(&workspace.id));
+        let context = ItemContext::space(SpaceSelector::id(&workspace.id));
         let action = Action::Review(new_review(review, shows, moved.then_some(head)));
         let url = pull.to_string();
         match self

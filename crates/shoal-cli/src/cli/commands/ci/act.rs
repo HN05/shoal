@@ -133,18 +133,20 @@ fn outcome(action: CiAction) -> &'static str {
 /// while a workflow's URL may name another, and only a workspace links runs.
 fn follow_hint(context: Option<&ItemContext>, by_url: bool) -> &'static str {
     match (context, by_url) {
-        (None, _) | (Some(ItemContext::Checkout(_) | ItemContext::ChatIn { .. }), true) => {
-            "find it in the forge's web UI"
-        }
-        (Some(ItemContext::Checkout(_) | ItemContext::ChatIn { .. }), false) => {
-            "find it with shoal ci ls"
-        }
-        (Some(ItemContext::Workspace(_) | ItemContext::Chat(_)), true) => {
-            "find it in the forge's web UI and follow it with shoal link ci <URL> opened"
-        }
-        (Some(ItemContext::Workspace(_) | ItemContext::Chat(_)), false) => {
-            "find it with shoal ci ls and follow it with shoal link ci <URL> opened"
-        }
+        (
+            Some(ItemContext::Space {
+                repository: None, ..
+            }),
+            true,
+        ) => "find it in the forge's web UI and follow it with shoal link ci <URL> opened",
+        (
+            Some(ItemContext::Space {
+                repository: None, ..
+            }),
+            false,
+        ) => "find it with shoal ci ls and follow it with shoal link ci <URL> opened",
+        (Some(_), false) => "find it with shoal ci ls",
+        (None, _) | (Some(_), true) => "find it in the forge's web UI",
     }
 }
 

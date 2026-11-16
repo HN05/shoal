@@ -62,7 +62,7 @@ impl Manager {
                 let input = input.context(NOTHING_LINKED)?;
                 self.checkout_item_action(id, kind, &input, action).await
             }
-            _ => {
+            ItemContext::Space { .. } => {
                 let space = self.context_space(context).await?;
                 self.space_item_action(space, kind, input, action, caller)
                     .await

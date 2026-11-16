@@ -28,7 +28,7 @@ use shoal_protocol::space_names::SpaceSelector;
 pub(super) async fn select(ctx: &Context, items: ItemArgs) -> Result<(SpaceSelector, Selection)> {
     let selection = items.selection()?;
     let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory).await?;
-    let context = super::items::space_context(ctx, space.clone()).await?;
+    let context = ItemContext::space(space.clone());
     let selection = resolve_kind(ctx, context, selection).await?;
     Ok((space, selection))
 }
@@ -57,10 +57,10 @@ pub(super) async fn select_in_context(
 ) -> Result<(ItemContext, Selection)> {
     let (context, selection) = in_context(ctx, items, repo).await?;
     let selection = match &context {
-        ItemContext::Workspace(_) | ItemContext::Chat(_) => {
-            resolve_kind(ctx, context.clone(), selection).await?
-        }
-        ItemContext::Checkout(_) | ItemContext::ChatIn { .. } => selection,
+        ItemContext::Space {
+            repository: None, ..
+        } => resolve_kind(ctx, context.clone(), selection).await?,
+        ItemContext::Space { .. } | ItemContext::Checkout(_) => selection,
     };
     Ok((context, selection))
 }
@@ -91,7 +91,7 @@ pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
         "link needs an issue or PR number, or an issue, PR or CI run URL"
     );
     let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory).await?;
-    let context = super::items::space_context(ctx, space.clone()).await?;
+    let context = ItemContext::space(space.clone());
     let selected = resolve_kind(ctx, context.clone(), selected).await?;
     let (kind, input) = match selected {
         Selection {
@@ -213,19 +213,15 @@ async fn watch_context(
     space: &SpaceSelector,
     repo: Option<&str>,
 ) -> Result<(ItemContext, Option<RepositoryId>)> {
-    let context = super::items::space_context(ctx, space.clone()).await?;
-    let Some(repo) = repo else {
-        return Ok((context, None));
+    let repository = match repo {
+        Some(repo) => Some(super::items::named_repository(ctx, repo).await?.id),
+        None => None,
     };
-    let repository = super::items::named_repository(ctx, repo).await?.id;
-    let context = match context {
-        ItemContext::Chat(chat) => ItemContext::ChatIn {
-            chat,
-            repository: repository.clone(),
-        },
-        context => context,
+    let context = ItemContext::Space {
+        space: space.clone(),
+        repository: repository.clone(),
     };
-    Ok((context, Some(repository)))
+    Ok((context, repository))
 }
 
 pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {

@@ -287,7 +287,7 @@ impl Scoped for ItemMethod {
                 let merge = permissions::Action::new(PermissionKey::Merge, subject.await?)
                     .in_repository(repository);
                 manager.authorize_action(Some(caller), merge).await?;
-                Some(context_workspace(context)?)
+                Some(context_selector(context)?)
             }
             ItemMethod::MergeWarning { context, .. } => {
                 read_context_space(manager, caller, context).await?
@@ -368,20 +368,18 @@ impl Scoped for ItemMethod {
     }
 }
 
-/// The workspace `context` names: a workspace process acts on items from its
-/// workspace, never from a registered checkout.
-pub(super) fn context_workspace(context: &mut ItemContext) -> Result<&mut SpaceSelector> {
+/// The space `context` names: a scoped process acts on items from its
+/// space, never from a registered checkout.
+pub(super) fn context_selector(context: &mut ItemContext) -> Result<&mut SpaceSelector> {
     match context {
-        ItemContext::Workspace(space)
-        | ItemContext::Chat(space)
-        | ItemContext::ChatIn { chat: space, .. } => Ok(space),
+        ItemContext::Space { space, .. } => Ok(space),
         ItemContext::Checkout(_) => {
             bail!("scoped processes act on items from their space, not from a registered checkout")
         }
     }
 }
 
-/// The space a change from `context` is made by, which [`context_workspace`]
+/// The space a change from `context` is made by, which [`context_selector`]
 /// names; a caller whose scope reaches every space, which has every
 /// registered repository for its own, changes the items of a registered
 /// checkout as its own space acting there, under its permissions in that
@@ -394,12 +392,12 @@ pub(super) async fn change_context_space<'a>(
     if let ItemContext::Checkout(repository) = context
         && manager.reach_root(Some(caller)).await?.is_none()
     {
-        *context = ItemContext::ChatIn {
-            chat: SpaceSelector::id(&caller.space_id),
-            repository: repository.clone(),
+        *context = ItemContext::Space {
+            space: SpaceSelector::id(&caller.space_id),
+            repository: Some(repository.clone()),
         };
     }
-    context_workspace(context)
+    context_selector(context)
 }
 
 /// The repository a change from `context` is made in, once
@@ -417,7 +415,7 @@ pub(super) async fn reached_change_context(
     Ok(space.repository_id().clone())
 }
 
-/// The space a read from `context` runs in, which [`context_workspace`]
+/// The space a read from `context` runs in, which [`context_selector`]
 /// names; a caller whose scope reaches every space, which has every
 /// registered repository for its own, also reads from a registered
 /// checkout, which names none.
@@ -431,7 +429,7 @@ async fn read_context_space<'a>(
     {
         return Ok(None);
     }
-    context_workspace(context).map(Some)
+    context_selector(context).map(Some)
 }
 
 /// `value` as pieces of its JSON, each fitting a frame: one PR's discussion,

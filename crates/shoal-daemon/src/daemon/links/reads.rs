@@ -52,7 +52,7 @@ impl Manager {
             ItemContext::Checkout(selector) => {
                 Ok(ReadPlace::Checkout(self.repository(selector).await?))
             }
-            _ => {
+            ItemContext::Space { .. } => {
                 let space = self.context_space(context).await?;
                 self.verify_space(&space).await?;
                 Ok(ReadPlace::Space(space))

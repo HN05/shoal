@@ -129,7 +129,7 @@ pub(super) async fn start(
                 let (repo, url) = chat_pull(ctx, &chat).await?;
                 check_reviewer(ctx, &repo, &reviewer, post, &model).await?;
                 let pull =
-                    read_pull(ctx, ItemContext::Chat(SpaceSelector::id(&chat.id)), url).await?;
+                    read_pull(ctx, ItemContext::space(SpaceSelector::id(&chat.id)), url).await?;
                 pull_request(ctx, &repo, pull, reviewer, post, model, args).await
             }
             super::Space::Workspace(workspace) => {

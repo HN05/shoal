@@ -160,7 +160,7 @@ fn item_actions_send_rest_requests_and_record_events() {
             ],
             "PUT repos/team/project/issues/8/labels": {"body": []},
         }));
-        let action = json!({"item_action": {"workspace": fixture.id("topic"), "kind": "pr", "item": "8",
+        let action = json!({"item_action": {"space": {"space": fixture.id("topic")}, "kind": "pr", "item": "8",
             "action": {"action": "edit", "add_labels": ["ready"]}}});
         let response = fixture.request(action);
         assert_eq!(response["type"], "item", "{response}");
@@ -207,7 +207,7 @@ fn item_actions_send_rest_requests_and_record_events() {
             "POST repos/team/project/issues/8/comments": {"status": 403, "body": {"message": "no write access"}},
         }));
         let refused = fixture.request(
-            json!({"item_action": {"workspace": fixture.id("topic"), "kind": "pr",
+            json!({"item_action": {"space": {"space": fixture.id("topic")}, "kind": "pr",
             "item": "8", "action": {"action": "comment", "body": "hi"}}}),
         );
         assert_eq!(refused["type"], "error");
@@ -229,7 +229,7 @@ fn an_added_exclusive_label_replaces_the_one_of_its_scope() {
     let put = "PUT repos/team/project/issues/8/labels";
     let edit = |add: &str| {
         fixture.request(
-            json!({"item_action": {"workspace": fixture.id("topic"), "kind": "pr", "item": "8",
+            json!({"item_action": {"space": {"space": fixture.id("topic")}, "kind": "pr", "item": "8",
             "action": {"action": "edit", "add_labels": [add]}}}),
         )
     };
@@ -457,7 +457,7 @@ fn apps_read_forge_items_through_the_daemon() {
     };
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let topic = fixture.id("topic");
-    let workspace = || ItemContext::Workspace(topic.parse().unwrap());
+    let workspace = || ItemContext::space(topic.parse().unwrap());
     let repository = fixture.ok(&["repo", "ls"])[0]["id"]
         .as_str()
         .unwrap()
@@ -666,7 +666,7 @@ fn apps_read_forge_items_through_the_daemon() {
 /// Add the label `ready` to PR 8 of the workspace's repository.
 fn label_pr(fixture: &Fixture) -> Value {
     fixture.request(
-        json!({"item_action": {"workspace": fixture.id("topic"), "kind": "pr", "item": "8",
+        json!({"item_action": {"space": {"space": fixture.id("topic")}, "kind": "pr", "item": "8",
         "action": {"action": "edit", "add_labels": ["ready"]}}}),
     )
 }
@@ -937,7 +937,7 @@ fn changes_use_the_agent_account_and_merges_the_users() {
         }));
         let act = |action: Value| {
             fixture.request(
-                json!({"item_action": {"workspace": fixture.id("topic"), "kind": "pr",
+                json!({"item_action": {"space": {"space": fixture.id("topic")}, "kind": "pr",
                 "item": "8", "action": action}}),
             )
         };
@@ -1026,7 +1026,7 @@ fn reviews_comment_as_the_agent_and_leave_verdicts_to_the_user() {
         .unwrap()
         .to_owned();
     let review = |verdict: &str, comments: Value| {
-        json!({"item_action": {"workspace": fixture.id("topic"), "kind": "pr", "item": "8",
+        json!({"item_action": {"space": {"space": fixture.id("topic")}, "kind": "pr", "item": "8",
             "action": {"action": "review", "verdict": verdict, "body": "Close",
                 "comments": comments}}})
     };
@@ -3341,7 +3341,7 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
         .as_str()
         .unwrap()
         .to_owned();
-    let method = json!({"list_items": {"workspace": fixture.id("topic"), "kind": "pr",
+    let method = json!({"list_items": {"space": {"space": fixture.id("topic")}, "kind": "pr",
         "search": {"state": "closed", "labels": ["bug"], "author": "dev", "text": "crash",
             "matching": "both", "limit": 5}}});
     let result = fixture.request_as(method, Some(&scope));
@@ -3440,7 +3440,7 @@ fn scoped_check_logs_resolve_web_indices_and_use_the_agent_account() {
     fixture.respond(responses.clone());
     let exported = fixture.ok(&["internal", "env", &fixture.id("topic")]);
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
-    let method = json!({"check_log": {"workspace": fixture.id("topic"), "selection": {"kind": "pr", "input": "8"}, "check": "rust"}});
+    let method = json!({"check_log": {"space": {"space": fixture.id("topic")}, "selection": {"kind": "pr", "input": "8"}, "check": "rust"}});
     let result = fixture.request_as(method.clone(), Some(scope));
     assert_eq!(result["type"], "check_log", "{result}");
     assert_eq!(result["data"]["failed_step"], "Main Test");
@@ -3491,7 +3491,7 @@ fn scoped_check_logs_resolve_web_indices_and_use_the_agent_account() {
         "HEAD",
     ]);
     let mut other = method.clone();
-    other["check_log"]["workspace"] = json!(fixture.id("other"));
+    other["check_log"]["space"]["space"] = json!(fixture.id("other"));
     assert_eq!(
         fixture.request_as(other, Some(scope))["data"]["code"],
         "scope_denied"
@@ -3635,7 +3635,7 @@ esac
 "#,
     );
     let result = fixture.request(json!({"check_log": {
-        "workspace": fixture.id("topic"), "selection": {"kind": "pr", "input": "8"}, "check": "rust"
+        "space": {"space": fixture.id("topic")}, "selection": {"kind": "pr", "input": "8"}, "check": "rust"
     }}));
     let message = result["data"]["message"].as_str().unwrap();
     assert!(message.contains("exceeded"), "{result}");
@@ -4074,7 +4074,7 @@ fn ci_actions_rerun_failed_jobs_and_cancel_running_runs_on_the_head() {
     }));
     let ci = |action: &str, checks: Value| {
         fixture.request(
-            json!({"ci_action": {"workspace": fixture.id("topic"), "item": "8",
+            json!({"ci_action": {"space": {"space": fixture.id("topic")}, "item": "8",
             "action": action, "checks": checks}}),
         )
     };
@@ -4171,7 +4171,7 @@ fn forgejo_ci_cancels_runs_and_reruns_jobs_from_release_17_as_the_scoped_agent()
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let ci = |action: &str| {
         fixture.request_as(
-            json!({"ci_action": {"workspace": fixture.id("topic"), "item": "8", "action": action,
+            json!({"ci_action": {"space": {"space": fixture.id("topic")}, "item": "8", "action": action,
                 "checks": []}}),
             Some(scope),
         )
@@ -4260,7 +4260,7 @@ fn ci_runs_start_on_the_workspace_branch_with_inputs() {
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let start = |branch: &str| {
         fixture.request_as(
-            json!({"start_ci_run": {"workspace": fixture.id("topic"), "workflow": "deps.yml",
+            json!({"start_ci_run": {"space": {"space": fixture.id("topic")}, "workflow": "deps.yml",
                 "branch": branch, "inputs": {}}}),
             Some(scope),
         )
@@ -4276,8 +4276,10 @@ fn ci_runs_start_on_the_workspace_branch_with_inputs() {
             [json!([dispatch, {"ref": branch, "inputs": {}}])]
         );
     }
-    let unscoped = fixture.request(json!({"start_ci_run": {"workspace": fixture.id("topic"),
-        "workflow": "deps.yml", "branch": "main", "inputs": {}}}));
+    let unscoped = fixture.request(
+        json!({"start_ci_run": {"space": {"space": fixture.id("topic")},
+        "workflow": "deps.yml", "branch": "main", "inputs": {}}}),
+    );
     assert_eq!(unscoped["data"]["branch"], "main", "{unscoped}");
 
     // Bad arguments are refused before the workspace picker.
@@ -4718,8 +4720,10 @@ fn a_chat_links_views_and_watches_items_as_a_workspace_does() {
         "--space",
         &fixture.id("planning"),
     ]);
-    let selected = fixture.request(json!({"select_items": {"chat": fixture.id("planning"),
-        "selection": {"kind": null, "input": null}}}));
+    let selected = fixture.request(
+        json!({"select_items": {"space": {"space": fixture.id("planning")},
+        "selection": {"kind": null, "input": null}}}),
+    );
     let urls: Vec<&Value> = selected["data"]["items"]
         .as_array()
         .unwrap()
@@ -4794,8 +4798,10 @@ fn a_chat_links_views_and_watches_items_as_a_workspace_does() {
         &fixture.id("planning"),
     ]);
     assert_eq!(fixture.requests(), Vec::<Value>::new());
-    let selected = fixture.request(json!({"select_items": {"chat": fixture.id("planning"),
-        "selection": {"kind": null, "input": null}}}));
+    let selected = fixture.request(
+        json!({"select_items": {"space": {"space": fixture.id("planning")},
+        "selection": {"kind": null, "input": null}}}),
+    );
     assert_eq!(selected["data"]["items"], json!([]), "{selected}");
     agent.kill().unwrap();
     agent.wait().unwrap();
@@ -5018,7 +5024,7 @@ fn ci_run_actions_rerun_and_cancel_runs_of_the_workspace_branch() {
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let act = |run: &str, action: &str, scope| {
         fixture.request_as(
-            json!({"ci_run_action": {"workspace": fixture.id("topic"), "run": run, "action": action,
+            json!({"ci_run_action": {"space": {"space": fixture.id("topic")}, "run": run, "action": action,
                 "failed": false}}),
             scope,
         )
@@ -5126,7 +5132,7 @@ fn runs_of_another_repository_are_read_linked_and_acted_on_by_the_user() {
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     for method in [
         json!({"view_ci_run": {"run": other}}),
-        json!({"ci_run_jobs": {"workspace": fixture.id("topic"), "run": other}}),
+        json!({"ci_run_jobs": {"space": {"space": fixture.id("topic")}, "run": other}}),
         json!({"ci_run_action": {"run": other, "action": "cancel", "failed": false}}),
         json!({"link_item": {"space": fixture.id("topic"), "kind": "ci", "item": other,
             "relation": "related"}}),
@@ -5236,7 +5242,7 @@ fn forgejo_workspace_processes_cancel_runs_of_their_own_prs_on_any_head() {
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let cancel = |run: &str| {
         fixture.request_as(
-            json!({"ci_run_action": {"workspace": fixture.id("topic"), "run": run,
+            json!({"ci_run_action": {"space": {"space": fixture.id("topic")}, "run": run,
                 "action": "cancel", "failed": false}}),
             Some(scope),
         )

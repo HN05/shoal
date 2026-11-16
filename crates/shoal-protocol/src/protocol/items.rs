@@ -276,20 +276,27 @@ pub struct ViewPiece(pub String);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ItemContext {
-    /// The workspace.
-    Workspace(SpaceSelector),
-    /// The running chat, which acts in its repository's registered
-    /// checkout.
-    Chat(SpaceSelector),
-    /// The chat without a repository `chat` acting in the registered
-    /// checkout of `repository`, by its ID, which counts as its own.
-    ChatIn {
-        chat: SpaceSelector,
-        repository: RepositoryId,
+    /// The space, a workspace or a chat, acting in its own repository, or a
+    /// chat without one acting in the registered checkout of `repository`,
+    /// by its ID, which counts as its own.
+    Space {
+        space: SpaceSelector,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        repository: Option<RepositoryId>,
     },
     /// The registered checkout of a repository, by its ID, for a request
     /// that needs only the repository.
     Checkout(RepositoryId),
+}
+
+impl ItemContext {
+    /// The space `space` names, acting in its own repository.
+    pub fn space(space: SpaceSelector) -> Self {
+        Self::Space {
+            space,
+            repository: None,
+        }
+    }
 }
 
 impl ItemMethod {

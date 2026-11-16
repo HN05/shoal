@@ -134,10 +134,17 @@ impl Manager {
     ) -> Result<Option<RepositoryId>> {
         Ok(match context {
             None => None,
-            Some(ItemContext::Checkout(repository) | ItemContext::ChatIn { repository, .. }) => {
-                Some(self.repository(repository).await?.id)
-            }
-            Some(ItemContext::Workspace(space) | ItemContext::Chat(space)) => {
+            Some(
+                ItemContext::Checkout(repository)
+                | ItemContext::Space {
+                    repository: Some(repository),
+                    ..
+                },
+            ) => Some(self.repository(repository).await?.id),
+            Some(ItemContext::Space {
+                space,
+                repository: None,
+            }) => {
                 let space = self.space(&space).await;
                 space.context("find the space to act in")?.repository_id
             }

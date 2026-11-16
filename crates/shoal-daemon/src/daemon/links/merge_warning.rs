@@ -137,7 +137,7 @@ impl Manager {
                 let pull = ItemRef::in_repository(&forge, ItemKind::Pr.into(), &input)?;
                 Ok((forge, pull))
             }
-            _ => {
+            ItemContext::Space { .. } => {
                 let space = self.context_space(context).await?;
                 let forge = self.space_forge(&space).await?;
                 let pull =

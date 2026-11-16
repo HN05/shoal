@@ -62,7 +62,12 @@ async fn view(
     let (context, selection) = links::in_context(ctx, items, repo).await?;
     let read = views::read(&ctx.paths, context.clone(), selection, !no_comments);
     let mut views = ctx.progress("Reading items", read).await?;
-    if plain && let ItemContext::Workspace(workspace) = &context {
+    if plain
+        && let ItemContext::Space {
+            space: workspace,
+            repository: None,
+        } = &context
+    {
         let latest = super::review::show::latest(ctx, workspace.clone()).await;
         views.extend(latest.map(|review| {
             Shown::Review(ShownReview {

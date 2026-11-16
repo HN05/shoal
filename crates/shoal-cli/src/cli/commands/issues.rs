@@ -1,6 +1,5 @@
 //! Resolve issue context before workspace creation and agent launch.
 use anyhow::{Context as _, Result, ensure};
-use shoal_protocol::model::ByKind;
 
 use crate::{
     cli::{client, context::Context, scoping::Scoping, ui},
@@ -216,12 +215,7 @@ pub(in crate::cli) async fn read_context(ctx: &Context, repo: &Repository) -> Re
         && let Some(space) = crate::client::workspaces::present_space(&ctx.paths, &space).await?
         && space.repository_id.as_ref() == Some(&repo.id)
     {
-        return Ok(match space.by_kind() {
-            ByKind::Workspace(workspace) => {
-                ItemContext::Workspace(SpaceSelector::id(&workspace.id))
-            }
-            ByKind::Chat(chat) => ItemContext::Chat(SpaceSelector::id(&chat.id)),
-        });
+        return Ok(ItemContext::space(SpaceSelector::id(&space.id)));
     }
     Ok(ItemContext::Checkout(repo.id.clone()))
 }

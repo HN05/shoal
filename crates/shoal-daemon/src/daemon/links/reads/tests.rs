@@ -22,7 +22,7 @@ async fn a_stopped_chat_reads_in_its_repositorys_checkout() {
     manager.end_executions(&chat.id).await;
 
     let forge = manager
-        .context_forge(&ItemContext::Chat(SpaceSelector::id(&chat.id)))
+        .context_forge(&ItemContext::space(SpaceSelector::id(&chat.id)))
         .await
         .unwrap();
     assert!(forge == manager.forge(origin).await.unwrap());

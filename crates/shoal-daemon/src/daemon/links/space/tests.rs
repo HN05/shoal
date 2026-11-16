@@ -54,9 +54,9 @@ async fn chat(
 
 /// The context of `chat` acting in `repository`.
 fn acting_in(chat: &Chat, repository: &Repository) -> ItemContext {
-    ItemContext::ChatIn {
-        chat: SpaceSelector::id(&chat.id),
-        repository: repository.id.clone(),
+    ItemContext::Space {
+        space: SpaceSelector::id(&chat.id),
+        repository: Some(repository.id.clone()),
     }
 }
 
@@ -120,10 +120,6 @@ async fn a_chat_without_a_repository_acts_in_each_repository_under_its_permissio
         .context_space(&acting_in(&planning, &repos[1]))
         .await;
     assert!(elsewhere.is_err());
-    let checkout = manager
-        .context_checkout(&acting_in(&planning, &repos[1]))
-        .await;
-    assert!(checkout.is_err());
 }
 
 #[tokio::test]
@@ -179,7 +175,11 @@ async fn a_change_from_a_checkout_is_made_by_a_chat_without_a_repository_acting_
     let ItemMethod::OpenIssue { context, .. } = method else {
         unreachable!("the method stays an issue opening");
     };
-    let ItemContext::ChatIn { chat, repository } = context else {
+    let ItemContext::Space {
+        space: chat,
+        repository: Some(repository),
+    } = context
+    else {
         panic!("expected the chat acting in the checkout: {context:?}");
     };
     assert_eq!(
@@ -215,7 +215,11 @@ async fn a_chat_without_a_repository_follows_ci_in_a_registered_checkout_as_itse
     let crate::protocol::CiMethod::ListCiRuns { context, .. } = method else {
         unreachable!("the method stays a run listing");
     };
-    let ItemContext::ChatIn { chat, repository } = context else {
+    let ItemContext::Space {
+        space: chat,
+        repository: Some(repository),
+    } = context
+    else {
         panic!("expected the chat acting in the checkout: {context:?}");
     };
     assert_eq!(
@@ -246,7 +250,7 @@ async fn a_chat_without_a_repository_opens_no_issue_elsewhere_unless_allowed_dir
         crate::daemon::test_support::configure(&manager, &config).await;
         let opened = manager
             .open_issue(
-                &ItemContext::Chat(SpaceSelector::id(&master.id)),
+                &ItemContext::space(SpaceSelector::id(&master.id)),
                 issue(),
                 Some("https://github.com/other/unregistered".into()),
                 false,

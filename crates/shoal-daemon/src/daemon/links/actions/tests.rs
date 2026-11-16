@@ -93,7 +93,7 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
         title: "Follow-up".into(),
         ..NewIssue::default()
     };
-    let context = ItemContext::Workspace(SpaceSelector::id(&workspace.id));
+    let context = ItemContext::space(SpaceSelector::id(&workspace.id));
     let error = manager
         .open_issue(&context, issue, None, false, None)
         .await

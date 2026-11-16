@@ -2,7 +2,6 @@
 //! a registered checkout, where a chat runs its agent and where the
 //! user names a registered repository to act in without a workspace.
 use anyhow::{Result, ensure};
-use shoal_protocol::model::ByKind;
 
 use crate::{
     cli::{context::Context, ui},
@@ -49,7 +48,7 @@ pub(in crate::cli::commands) async fn select_space_item_context(
     }
     if space.is_some() || ui::current_chat(&space).is_some() {
         let space = ui::select_space(ctx, space, ui::Fallback::CurrentDirectory).await?;
-        return space_context(ctx, space.clone()).await;
+        return Ok(ItemContext::space(space));
     }
     if let Some(context) = current_context(ctx).await? {
         return Ok(context);
@@ -59,26 +58,7 @@ pub(in crate::cli::commands) async fn select_space_item_context(
     }
     ensure!(ctx.interactive(), "{NO_CONTEXT}");
     let space = ui::select_space(ctx, None, ui::Fallback::CurrentDirectory).await?;
-    space_context(ctx, space.clone()).await
-}
-
-/// The context of the workspace or running chat `space` names.
-pub(in crate::cli::commands) async fn space_context(
-    ctx: &Context,
-    space: SpaceSelector,
-) -> Result<ItemContext> {
-    Ok(
-        match crate::client::workspaces::present_space(&ctx.paths, &space)
-            .await?
-            .map(crate::model::Space::by_kind)
-        {
-            Some(ByKind::Chat(chat)) => ItemContext::Chat(SpaceSelector::id(&chat.id)),
-            Some(ByKind::Workspace(workspace)) => {
-                ItemContext::Workspace(SpaceSelector::id(&workspace.id))
-            }
-            None => ItemContext::Workspace(space),
-        },
-    )
+    Ok(ItemContext::space(space))
 }
 
 /// The context of a command whose `--repo` names any repository, and the
@@ -173,13 +153,13 @@ pub(in crate::cli::commands) async fn current_context(
 ) -> Result<Option<ItemContext>> {
     match ui::select_workspace(ctx, None, ui::Fallback::CurrentDirectoryOnly).await {
         Ok(workspace) => {
-            return Ok(Some(ItemContext::Workspace(workspace)));
+            return Ok(Some(ItemContext::space(workspace)));
         }
         Err(error) if error.is::<ui::NoCurrentWorkspace>() => {}
         Err(error) => return Err(error),
     }
     if let Some(chat) = ui::current_chat(&None) {
-        return Ok(Some(ItemContext::Chat(SpaceSelector::id(&chat))));
+        return Ok(Some(ItemContext::space(SpaceSelector::id(&chat))));
     }
     let repos = crate::client::repositories::list(&ctx.paths).await?;
     let checkout = super::super::issues::current_checkout(&repos).await?;
