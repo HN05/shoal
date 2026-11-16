@@ -290,6 +290,26 @@ async fn a_workspace_whose_file_lacks_the_checkouts_trigger_still_never_gets_its
     assert_eq!(names, ["API_KEY"]);
 }
 
+#[tokio::test]
+async fn an_unreadable_checkout_file_withholds_every_local_secret() {
+    let local = "[secrets.HOOK]\ncommand = ['true']\n";
+    let (_temp, manager, repo) = with_triggers(local).await;
+    configure(&manager, "[secrets.API_KEY]\ncommand = ['true']\n").await;
+    let workspace = (manager.create_workspace(&repo.id, "fix".into(), None, None, None))
+        .await
+        .unwrap();
+    // Its triggers could sign with any of the local config's secrets.
+    std::fs::write(repo.path.join(".shoal.toml"), "[triggers.labelled\n").unwrap();
+
+    let selector = shoal_protocol::space_names::SpaceSelector::id(&workspace.id);
+    let catalog = manager.secret_catalog(&selector).await.unwrap();
+
+    let names: Vec<_> = (catalog.secrets.iter())
+        .map(|secret| secret.name.as_str())
+        .collect();
+    assert_eq!(names, ["API_KEY"]);
+}
+
 #[tokio::test(start_paused = true)]
 async fn a_secret_command_that_never_answers_fails_the_delivery() {
     let secret = crate::secrets::Secret {
