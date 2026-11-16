@@ -6,7 +6,7 @@ use crate::{
         events::{EventCause, EventItem, EventKind},
         test_support::{chat_process, ended, manager, repository},
     },
-    model::{SpaceKind, SpaceRef},
+    model::{RefPart, SpaceKind, SpaceRef},
 };
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;
@@ -116,8 +116,9 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
     let worker = SpaceRef {
         id: workspace.id.clone(),
         name: workspace.name.clone(),
-        kind: SpaceKind::Workspace,
-        branch: workspace.branch().cloned(),
+        part: RefPart::Workspace {
+            branch: workspace.branch().cloned(),
+        },
     };
     let stopped = Chat {
         running: false,

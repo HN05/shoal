@@ -3,7 +3,7 @@ use super::super::{
     AgentStatus, Asleep, Chat, ChatPart, ReviewMark, SpaceHold, SpaceLinks, Workspace,
     WorkspaceRef, Worktree,
 };
-use super::{SpaceKind, SpaceRef};
+use super::{RefPart, SpaceKind, SpaceRef};
 use crate::config::modes::ModeName;
 use crate::config::permissions::{PermissionsConfig, SpaceMode};
 use crate::space_names::SpaceName;
@@ -277,10 +277,12 @@ impl Space {
         SpaceRef {
             id: self.id.clone(),
             name: self.name.clone(),
-            kind: self.kind(),
-            branch: self
-                .worktree()
-                .and_then(|worktree| worktree.branch().cloned()),
+            part: match self.worktree() {
+                Some(worktree) => RefPart::Workspace {
+                    branch: worktree.branch().cloned(),
+                },
+                None => RefPart::Chat,
+            },
         }
     }
 

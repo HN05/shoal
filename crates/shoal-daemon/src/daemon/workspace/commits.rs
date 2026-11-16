@@ -110,7 +110,7 @@ impl Manager {
             // Its last opener owns it, as a reopened branch's does; a
             // workspace's child stays its parent's.
             let workspace = match workspace.parent {
-                Some(parent) if parent.kind == SpaceKind::Workspace => {
+                Some(parent) if parent.kind() == SpaceKind::Workspace => {
                     self.workspace_by_id(&workspace.id).await?
                 }
                 _ => {

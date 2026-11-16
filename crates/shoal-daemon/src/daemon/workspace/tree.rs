@@ -13,7 +13,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::Manager;
 use crate::{
     daemon::notifications::NotificationKind,
-    model::{SpaceRef, Workspace, WorkspaceRef},
+    model::{RefPart, SpaceKind, SpaceRef, Workspace, WorkspaceRef},
     state::WorkspaceState,
 };
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
@@ -604,8 +604,12 @@ fn space_ref(row: &rusqlite::Row<'_>) -> rusqlite::Result<SpaceRef> {
     Ok(SpaceRef {
         id: row.get(0)?,
         name: row.get(1)?,
-        kind: row.get(2)?,
-        branch: row.get(3)?,
+        part: match row.get(2)? {
+            SpaceKind::Workspace => RefPart::Workspace {
+                branch: row.get(3)?,
+            },
+            SpaceKind::Chat => RefPart::Chat,
+        },
     })
 }
 

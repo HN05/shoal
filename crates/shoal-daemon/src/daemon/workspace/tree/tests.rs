@@ -7,7 +7,7 @@ use crate::{
         test_support::{manager, repository},
         workspace_files::Attacher,
     },
-    model::{CleanupReason, SpaceKind, SpaceRef, Workspace, WorkspaceRef},
+    model::{CleanupReason, RefPart, SpaceRef, Workspace, WorkspaceRef},
     protocol::{
         AgentMethod, ApprovalMethod, AssignmentMethod, Operation, QuestionMethod, QueueMethod,
         RemovalMethod, WorkspaceMethod,
@@ -22,8 +22,9 @@ fn space(workspace: &Workspace) -> SpaceRef {
     SpaceRef {
         id: workspace.id.clone(),
         name: workspace.name.clone(),
-        kind: SpaceKind::Workspace,
-        branch: workspace.branch().cloned(),
+        part: RefPart::Workspace {
+            branch: workspace.branch().cloned(),
+        },
     }
 }
 

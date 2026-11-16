@@ -51,10 +51,10 @@ impl<'a> From<&'a Space> for Announced<'a> {
 impl<'a> From<&'a SpaceRef> for Announced<'a> {
     fn from(space: &'a SpaceRef) -> Self {
         Self {
-            kind: space.kind,
+            kind: space.kind(),
             id: &space.id,
             name: &space.name,
-            worktree: space.kind.has_worktree(),
+            worktree: space.kind().has_worktree(),
         }
     }
 }

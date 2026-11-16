@@ -110,10 +110,13 @@ async fn a_chat_below_a_workspace_decides_and_coordinates_for_the_spaces_below_i
     let (root, chat, worker, process) = mixed_tree(&manager, &repo.id).await;
     let listed = manager.workspace_by_id(&worker.id).await.unwrap();
     let parent = listed.parent.unwrap();
-    assert_eq!((parent.id, parent.kind), (chat.id.clone(), SpaceKind::Chat));
+    assert_eq!(
+        (parent.id.clone(), parent.kind()),
+        (chat.id.clone(), SpaceKind::Chat)
+    );
     let children = manager.workspace_by_id(&root.id).await.unwrap().children;
     assert_eq!(children.len(), 1);
-    assert_eq!(children[0].kind, SpaceKind::Chat);
+    assert_eq!(children[0].kind(), SpaceKind::Chat);
     assert_eq!(
         manager.subtree(&root.id).await.unwrap(),
         [root.id.clone(), chat.id.clone(), worker.id.clone()]

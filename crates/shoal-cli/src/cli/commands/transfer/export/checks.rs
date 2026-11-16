@@ -86,7 +86,7 @@ impl Checked {
     /// `exported` too; the chats below those go with them.
     pub(super) fn ensure_children_exported(&self, exported: &[&SpaceId]) -> Result<()> {
         let missing: Vec<&str> = (self.taken.iter())
-            .filter(|space| space.kind == SpaceKind::Workspace && !exported.contains(&&space.id))
+            .filter(|space| space.kind() == SpaceKind::Workspace && !exported.contains(&&space.id))
             .map(|space| space.name.as_str())
             .collect();
         ensure!(

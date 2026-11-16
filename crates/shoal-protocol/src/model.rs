@@ -50,7 +50,8 @@ pub use repositories::{
     LocalConfigEdit, MovedRepository, Repository, RepositoryMoves, RepositoryRemoval,
 };
 pub use spaces::{
-    ByKind, Part, RenamedSpace, Space, SpaceKind, SpacePart, SpaceRef, SpaceTarget, Spaces, Workdir,
+    ByKind, Part, RefPart, RenamedSpace, Space, SpaceKind, SpacePart, SpaceRef, SpaceTarget,
+    Spaces, Workdir,
 };
 pub use status::{
     Attention, DiffSummary, Inspection, IssueStatus, SpaceDetail, SpaceStatus, WorktreeStatus,

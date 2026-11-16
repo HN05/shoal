@@ -189,11 +189,9 @@ impl Manager {
                 .into_iter()
                 .map(|url| url.to_string())
                 .chain(
-                    child
-                        .branch
-                        .clone()
+                    (child.branch())
                         .filter(|_| kind.is_none())
-                        .map(String::from),
+                        .map(ToString::to_string),
                 )
                 .collect::<Vec<_>>();
             let pending = self.pending_activity(&child.id, &keys).await?;

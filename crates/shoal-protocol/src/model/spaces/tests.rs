@@ -88,8 +88,12 @@ fn the_spaces_below_a_space_include_those_below_them() {
     let space = |id: &str, kind: SpaceKind| SpaceRef {
         id: id.into(),
         name: id.into(),
-        kind,
-        branch: (kind == SpaceKind::Workspace).then(|| id.into()),
+        part: match kind {
+            SpaceKind::Workspace => RefPart::Workspace {
+                branch: Some(id.into()),
+            },
+            SpaceKind::Chat => RefPart::Chat,
+        },
     };
     let workspace = |id: &str, children: Vec<SpaceRef>| -> Workspace {
         Workspace {
@@ -115,4 +119,18 @@ fn the_spaces_below_a_space_include_those_below_them() {
         .collect();
     assert_eq!(below, ["opened", "planning", "grandchild"]);
     assert!(spaces.below(&SpaceId::from("other")).is_empty());
+}
+
+/// A reference names its space's kind beside its ID and name, with a
+/// workspace's branch when it has one.
+#[test]
+fn a_space_reference_keeps_its_json() {
+    for wire in [
+        r#"{"id":"w","name":"fix","kind":"workspace","branch":"fix-x"}"#,
+        r#"{"id":"d","name":"pinned","kind":"workspace"}"#,
+        r#"{"id":"c","name":"plan","kind":"chat"}"#,
+    ] {
+        let reference: SpaceRef = serde_json::from_str(wire).unwrap();
+        assert_eq!(serde_json::to_string(&reference).unwrap(), wire);
+    }
 }

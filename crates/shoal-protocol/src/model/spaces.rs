@@ -14,9 +14,37 @@ use shoal_refs::BranchName;
 pub struct SpaceRef {
     pub id: SpaceId,
     pub name: SpaceName,
-    pub kind: SpaceKind,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub branch: Option<BranchName>,
+    #[serde(flatten)]
+    pub part: RefPart,
+}
+
+/// What only the kind of space a [`SpaceRef`] refers to has.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum RefPart {
+    Workspace {
+        /// None for a workspace at a commit.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        branch: Option<BranchName>,
+    },
+    Chat,
+}
+
+impl SpaceRef {
+    pub fn kind(&self) -> SpaceKind {
+        match self.part {
+            RefPart::Workspace { .. } => SpaceKind::Workspace,
+            RefPart::Chat => SpaceKind::Chat,
+        }
+    }
+
+    /// The branch of a workspace on one.
+    pub fn branch(&self) -> Option<&BranchName> {
+        match &self.part {
+            RefPart::Workspace { branch } => branch.as_ref(),
+            RefPart::Chat => None,
+        }
+    }
 }
 
 shoal_states::states!(

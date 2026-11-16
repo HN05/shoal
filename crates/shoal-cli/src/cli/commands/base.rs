@@ -8,7 +8,7 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
-    model::{SpaceKind, SpaceRef, Workspace, WorkspaceRef},
+    model::{RefPart, SpaceRef, Workspace, WorkspaceRef},
     refusal::{Reason, Refusal},
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -100,12 +100,12 @@ pub(super) fn render(workspace: &Workspace) {
 
 /// `space` by name, with a workspace's branch when it differs, or as a chat.
 pub(super) fn describe_space(space: &SpaceRef) -> String {
-    match (space.kind, &space.branch) {
-        (SpaceKind::Chat, _) => format!("{} (chat)", space.name),
-        (SpaceKind::Workspace, Some(branch)) if branch.as_str() != space.name.as_str() => {
-            format!("{} ({branch})", space.name)
-        }
-        (SpaceKind::Workspace, _) => space.name.to_string(),
+    match &space.part {
+        RefPart::Chat => format!("{} (chat)", space.name),
+        RefPart::Workspace {
+            branch: Some(branch),
+        } if branch.as_str() != space.name.as_str() => format!("{} ({branch})", space.name),
+        RefPart::Workspace { .. } => space.name.to_string(),
     }
 }
 

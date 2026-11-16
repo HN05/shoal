@@ -1,5 +1,5 @@
 use super::*;
-use crate::model::Chat;
+use crate::model::{Chat, RefPart};
 
 /// A chat named `name`, with a session to continue, in the worktree of
 /// `workspace` when given.
@@ -36,8 +36,10 @@ fn space(id: &str, name: &str, kind: SpaceKind) -> SpaceRef {
     SpaceRef {
         id: id.into(),
         name: name.into(),
-        kind,
-        branch: None,
+        part: match kind {
+            SpaceKind::Workspace => RefPart::Workspace { branch: None },
+            SpaceKind::Chat => RefPart::Chat,
+        },
     }
 }
 

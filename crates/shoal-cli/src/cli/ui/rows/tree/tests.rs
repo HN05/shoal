@@ -16,8 +16,9 @@ fn tree_rows_list_children_below_their_parent() {
     let reference = |w: &Workspace| crate::model::SpaceRef {
         id: w.id.clone(),
         name: w.name.clone(),
-        kind: crate::model::SpaceKind::Workspace,
-        branch: w.branch().cloned(),
+        part: crate::model::RefPart::Workspace {
+            branch: w.branch().cloned(),
+        },
     };
     workspaces[0].parent = Some(reference(&workspaces[3]));
     workspaces[1].parent = Some(reference(&workspaces[0]));
@@ -25,8 +26,9 @@ fn tree_rows_list_children_below_their_parent() {
     workspaces[2].parent = Some(crate::model::SpaceRef {
         id: "unlisted".into(),
         name: "unlisted".into(),
-        kind: crate::model::SpaceKind::Workspace,
-        branch: Some("unlisted".into()),
+        part: crate::model::RefPart::Workspace {
+            branch: Some("unlisted".into()),
+        },
     });
     let rows = workspace_tree_rows(&workspaces, &[], &Statuses::default(), &[], plain, None);
     let expected = [
@@ -89,8 +91,9 @@ fn spaces_under_one_parent_list_by_status_then_number() {
     child.parent = Some(crate::model::SpaceRef {
         id: parent.id.clone(),
         name: parent.name.clone(),
-        kind: crate::model::SpaceKind::Workspace,
-        branch: parent.branch().cloned(),
+        part: crate::model::RefPart::Workspace {
+            branch: parent.branch().cloned(),
+        },
     });
     let mut workspaces = vec![
         numbered("idle", 3, false),

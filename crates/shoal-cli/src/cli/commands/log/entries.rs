@@ -358,7 +358,7 @@ fn gate(event: &EventDetails) -> String {
 
 fn child(event: &EventDetails) -> String {
     match &event.child {
-        Some(child) if child.kind == SpaceKind::Chat => format!("{} (chat)", child.name),
+        Some(child) if child.kind() == SpaceKind::Chat => format!("{} (chat)", child.name),
         Some(child) => child.name.to_string(),
         None => String::new(),
     }

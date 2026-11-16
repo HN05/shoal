@@ -22,7 +22,7 @@ use crate::{
     },
     fsutil::off_runtime,
     model::{
-        Chat, ChatPart, Repository, SpaceKind, SpaceLinks, SpaceRef, Workdir, Workspace,
+        Chat, ChatPart, RefPart, Repository, SpaceKind, SpaceLinks, SpaceRef, Workdir, Workspace,
         WorkspaceRef,
     },
     tmp_dirs,
@@ -414,8 +414,7 @@ impl Manager {
                         Ok(SpaceRef {
                             id: row.get(0)?,
                             name: row.get(1)?,
-                            kind: SpaceKind::Chat,
-                            branch: None,
+                            part: RefPart::Chat,
                         })
                     })?
                     .collect::<rusqlite::Result<_>>()?)
