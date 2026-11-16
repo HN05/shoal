@@ -118,6 +118,7 @@ pub struct Manager {
     /// The spaces automatic cleanup removed since Shoal's log recorded it.
     pub(crate) cleanup_removals: super::cleanup::Removed,
     pub(crate) syncs: super::checkout_sync::Syncs,
+    pub(crate) triggers: super::triggers::Triggers,
     /// The spaces whose PRs' progress sections wait for an update.
     pub(crate) publications: super::progress::Publications,
     /// The spaces whose issues wait for the agent account to be settled.
@@ -187,6 +188,7 @@ impl Manager {
             cleanup_health: Default::default(),
             cleanup_removals: Default::default(),
             syncs: Default::default(),
+            triggers: Default::default(),
             publications: Default::default(),
             agent_settles: Default::default(),
             store: Store::open(paths.database()).await?,
@@ -243,6 +245,7 @@ impl Manager {
         }
         super::forge_hosts::learn_forge_pins(&self.config().machine.forges, &config.machine.forges);
         self.config_state.publish(config);
+        self.triggers.wake();
     }
 
     /// Replace the global config with the file's current contents for later

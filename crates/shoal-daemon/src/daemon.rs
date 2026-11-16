@@ -68,6 +68,7 @@ pub(crate) mod test_daemon;
 #[cfg(test)]
 pub(crate) mod test_support;
 mod tmp_dirs;
+pub(crate) mod triggers;
 mod unmoved_packages;
 mod untracked;
 mod warnings;
@@ -191,6 +192,7 @@ pub async fn run(
         shutdown_lock::run,
     );
     spawn_supervised(&mut background, &manager, "agent queue", queued_starts::run);
+    spawn_supervised(&mut background, &manager, "triggers", triggers::run);
     spawn_supervised(
         &mut background,
         &manager,

@@ -48,15 +48,20 @@ impl LaunchKeys {
             self.issue.is_none() || self.pr.is_none(),
             "a launch starts on an issue or a PR, not both"
         );
+        ensure!(
+            self.in_space.is_none() || self.repository.is_none(),
+            "a launch in an existing workspace starts in its repository; drop repository"
+        );
         self.read(&Value::Null, true).map(drop)
     }
 
     /// The launch a firing whose input is `input` asks for, in the
-    /// repository `repository` names; fails for a lookup that reaches no
-    /// value or a value its flag refuses.
+    /// repository `repository` names unless it starts in an existing
+    /// workspace; fails for a lookup that reaches no value or a value its
+    /// flag refuses.
     pub fn launch(&self, input: &Value, repository: Option<String>) -> Result<Launch> {
         let mut launch = self.read(input, false)?;
-        if launch.repository.is_none() {
+        if launch.repository.is_none() && launch.in_workspace.is_none() {
             launch.repository = repository;
         }
         Ok(launch)
