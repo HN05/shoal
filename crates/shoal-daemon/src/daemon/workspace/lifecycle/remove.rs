@@ -276,11 +276,13 @@ impl Manager {
                 Ok(SpaceRemoval { children, worktree })
             }
             Err(error) => {
-                let (unready, error) = match space.worktree() {
-                    Some(workspace) => {
-                        (self.failed_worktree_removal(workspace, removal, error)).await
+                let (unready, error) = match (space.worktree(), replaced) {
+                    (Some(workspace), Some(replaced)) => {
+                        let failed =
+                            self.failed_worktree_removal(workspace, replaced, removal, error);
+                        failed.await
                     }
-                    None => (false, error),
+                    (_, _) => (false, error),
                 };
                 (self.release_space(reservation, unready, removal.cause(), &error)).await?;
                 Err(error)

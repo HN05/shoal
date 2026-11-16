@@ -234,18 +234,23 @@ impl Manager {
         Ok(())
     }
 
-    /// What a `removal` of `workspace` that failed with `error` leaves:
-    /// whether the workspace can no longer be ready, with the error to
-    /// record. Its directory was deleted, or its `worktree remove` stopped
-    /// partway and could not put back what it deleted, which the next
-    /// removal does once the error says a [`STOPPED_REMOVAL`] left it.
+    /// What a `removal` of `workspace`, which was `replaced` before, that
+    /// failed with `error` leaves: whether the workspace can no longer be
+    /// ready, with the error to record. Its directory was deleted, or a
+    /// [`STOPPED_REMOVAL`] left what it deleted for the next removal to put
+    /// back, which its error says: this removal's `worktree remove`, stopped
+    /// partway and unable to restore, or an earlier one whose marker this
+    /// removal failed before settling.
     pub(in crate::daemon::workspace) async fn failed_worktree_removal(
         &self,
         workspace: &Workspace,
+        replaced: WorkspaceState,
         removal: Removal<'_>,
         error: anyhow::Error,
     ) -> (bool, anyhow::Error) {
-        if error.downcast_ref::<interrupted::Unrestored>().is_some() {
+        if error.downcast_ref::<interrupted::Unrestored>().is_some()
+            || stopped_removal_pending(workspace, replaced).await
+        {
             return (true, error.context(format!("{STOPPED_REMOVAL} partway")));
         }
         let deleted = matches!(removal, Removal::Deleted)
@@ -608,6 +613,17 @@ impl Manager {
         );
         Ok(())
     }
+}
+
+/// Whether `workspace`, in lifecycle state `state`, still waits for the
+/// files a stopped removal deleted: that removal left it, and its marker
+/// stays. A marker that cannot be read counts too.
+async fn stopped_removal_pending(workspace: &Workspace, state: WorkspaceState) -> bool {
+    let Some(admin_dir) = &workspace.git_dir else {
+        return false;
+    };
+    left_by_stopped_removal(workspace, state)
+        && !matches!(interrupted::began(admin_dir).await, Ok(false))
 }
 
 /// Whether `workspace`, in lifecycle state `state`, is as a removal that

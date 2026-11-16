@@ -1629,6 +1629,25 @@ async fn removal_finishes_one_that_stopped_partway() {
     assert!(!admin_dir.exists());
 }
 
+/// A retry that fails before it puts the files back keeps the error that
+/// marks the workspace for the removal after it.
+#[tokio::test]
+async fn a_failed_retry_keeps_the_stopped_removal_pending() {
+    let (_root, manager, workspace) = fixture().await;
+    let admin_dir = cut_short_removal(&manager, &workspace, Some(DAEMON_STOPPED)).await;
+    // Ownership no longer verifies, so the retry fails before restoring.
+    fs::write(admin_dir.join("shoal-workspace"), "another\n").unwrap();
+    let selector = SpaceSelector::id(&workspace.id);
+    (manager.remove_workspace(&selector, NOTHING.clone(), InspectionPolicy::GitOnly))
+        .await
+        .unwrap_err();
+    let retained = manager.workspace_by_id(&workspace.id).await.unwrap();
+    assert_eq!(retained.state, WorkspaceState::Failed);
+    let error = retained.error.unwrap_or_default();
+    assert!(error.starts_with(STOPPED_REMOVAL), "{error}");
+    assert!(admin_dir.join("shoal-removal").exists());
+}
+
 /// Once something readied the workspace, or failed it otherwise, its
 /// deletions may be its agent's: the marker goes and they count as unsaved
 /// work.
