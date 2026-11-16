@@ -54,7 +54,7 @@ struct OneShots {
 }
 
 /// A one-shot run's request for admission in `repository`, for the work it
-/// serves; it holds no agent slot, but its memory counts.
+/// serves; it holds no heavy slot, but its memory counts.
 struct OneShot {
     repository: RepositoryId,
     serving: Option<Serving>,

@@ -1,4 +1,4 @@
-//! A chat's agent under the agent slots: the queue admits it before any
+//! A chat's agent under the heavy slots: the queue admits it before any
 //! place opens, and a launch that waits leaves its chat to the queue's start,
 //! or, for a start without a terminal, records the chat at once.
 use anyhow::{Context as _, Result, bail};

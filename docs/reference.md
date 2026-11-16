@@ -322,12 +322,12 @@ started `--in` a workspace is not below it. Without a space it takes the current
 else a picker of the workspaces and the running chats, never the chat it runs in. Its agents, and those
 stopped there before, stay down until `shoal restore` continues them: each
 becomes a last session, as an agent that exits on its own leaves, which holds
-no agent slot, keeps nothing from cleanup and nothing restores on its own. To
+no heavy slot, keeps nothing from cleanup and nothing restores on its own. To
 take agents down briefly, use `shoal restart` instead. Commands started
 with `run` save their arguments, which `shoal restore` reports and never
 reruns; arguments that are not UTF-8 are not saved. Setup, merges and other internal commands save nothing.
 Agents waiting in the [agent queue](#agent-queue) to start in a stopped workspace, such as
-a launch a workspace process started waiting for a slot, have no session to save, so the stop removes them
+a launch a workspace process started waiting for a heavy slot, have no session to save, so the stop removes them
 from the queue and reports them in `cancelled`; `shoal restore` does not bring them back. One
 already starting is left to its agent. Naming a queued agent of a new workspace instead of a
 workspace removes it from the queue, as `shoal rm` does; a number always names a space,
@@ -424,7 +424,7 @@ an agent without turn reports counts as working. Interrupting the run leaves
 its restarts to the daemon and names them; a run that selects an agent already
 restarting continues the run that asked for it: it reports on that restart,
 even with `--wait`, and skips the agents that run restarted already. A
-restarted agent keeps its agent slot, and commands keep running. Agents without
+restarted agent keeps its heavy slot, and commands keep running. Agents without
 a command to resume their session and executions whose wrapper is gone are
 skipped, for `shoal stop` and `shoal restore`. `--permission KEY=VALUE`,
 repeatable, restarts each agent with that [permission](#mode-permissions)
@@ -465,7 +465,7 @@ A workspace without stopped agents continues one of its last sessions at once,
 placed as `--now` places an agent, or without a terminal through the queue, started at once, when restored by itself, left by `shoal stop`
 or by an agent that exited on its own, such as one the user quit, picked as
 stopped agents are, or the `--execution` one. A workspace keeps one per agent; the next new agent started
-there or `shoal done` replaces them. Unlike stopped work they use no agent slot and never delay
+there or `shoal done` replaces them. Unlike stopped work they use no heavy slot and never delay
 cleanup.
 Stopped commands are included in the continuation prompt, asking the agent to
 rerun the ones still needed: built-in agents receive it as their prompt argument,
@@ -514,7 +514,7 @@ interrupted turn continues, since it keeps the launch it runs under. A wrapper
 waiting to restore its agent restores it under them; one of a release before
 that leaves the agent stopped for a restore in a new wrapper.
 A stopped [chat's](#chats) agent restores as a workspace's does, without
-waiting for an agent slot, and `--forget` forgets its stopped work. A running
+waiting for a heavy slot, and `--forget` forgets its stopped work. A running
 chat has nothing to restore. `--all` never reopens removed workspaces.
 When a stopped agent's execution is unknown, after a daemon restart or a stop
 Shoal could not prove, the daemon forgets it once its wrapper has exited and none
@@ -597,12 +597,12 @@ resumes, ignoring other keys: Enter wakes the agent there, as
 `shoal queue start` does, once its processes have stopped, and Ctrl-C stops
 the wait, leaving the agent stopped for `shoal restore`.
 
-While an entry in the [agent queue](#agent-queue) waits for a slot or memory,
+While an entry in the [agent queue](#agent-queue) waits for a heavy slot or memory,
 each [cleanup sweep](#automatic-cleanup) makes room for it: for each such
 entry in queue order, it puts to sleep the lowest-ranked idle agent whose
 priority is no higher than the entry's, of the entry's repository when that
 repository's `agent.max_heavy_running` holds it, and for an entry that waits for a
-slot one that holds one, which a done space's agent does not, once that costs
+heavy slot one that holds one, which a done space's agent does not, once that costs
 no prompt cache, as
 for [`shoal sleep`](#idle-wakes). Only an agent something will wake sleeps for
 this: one whose space watches an open PR, is blocked, or has an open question
@@ -1073,7 +1073,7 @@ workspace's HEAD when it starts. A workspace has at most one queued or running
 review: running the command again returns the queued one, and is refused while one
 runs. A review waits in the [agent queue](#agent-queue), ranked
 with the workspace it reviews, for the memory and disk an agent's start needs,
-but takes no agent slot; `shoal queue` does not list it. A
+but takes no heavy slot; `shoal queue` does not list it. A
 chat has no changes of its own; see [chat reviews](#chat-reviews) below.
 
 The reviewer is `--agent`, else [`[review] agent`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#reviews), else `agent.default`, else one you
@@ -2057,7 +2057,8 @@ shoal priority urgent [space]                 # Ranks the space's queued work ah
 shoal priority 30 [space]                     # Any number from 0 to 100; low is 25, normal 50
 ```
 
-[`machine.max_heavy_agents`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine) limits the agents that run at once. It defaults to `dynamic`,
+[`machine.max_heavy_agents`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine) limits the heavy slots: the agents of
+[heavy](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules) modes that run at once. It defaults to `dynamic`,
 which starts one agent at a time, at least 10 seconds apart, while measured
 memory and disk leave room below the
 [`[machine.overload.warning]`](#overload-protection) memory and disk
@@ -2075,12 +2076,12 @@ or disk reading starts none, and disk below `[machine.overload.warning]
 disk_free_gib` starts none beside running work. Disabled memory or disk
 protection ignores that signal. While a fixed
 limit applies, so does the disk rule: below `[machine.overload.warning] disk_free_gib`
-an agent starts only when none uses a slot, and below
+an agent starts only when none uses a heavy slot, and below
 `machine.overload.disk.stop_free_gib` or without a reading none starts. That
-value counts every agent on the machine; a fixed [`agent.max_heavy_running`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#agent) counts
-only one repository's agents, within the machine limit; a chat without a
+value counts every heavy agent on the machine; a fixed [`agent.max_heavy_running`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#agent) counts
+only one repository's heavy agents, within the machine limit; a chat without a
 repository counts toward the machine's alone. Each tracked agent, a
-workspace's or a chat's, uses a slot while it runs, awaits reattachment
+workspace's or a chat's, uses a heavy slot while it runs, awaits reattachment
 after a daemon restart, or waits for `shoal restore`, unless its space is
 done, its restore waits in the queue or its mode is
 [light](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules), which starts it at once beside the agent
@@ -2094,7 +2095,7 @@ Overload protection stops a running reviewer before any agent, and disk
 protection stops every reviewer; the review is queued again and starts over
 once readings are healthy.
 
-`shoal start` with an agent asks the daemon for a slot after resolving the issue,
+`shoal start` with an agent asks the daemon for a heavy slot after resolving the issue,
 branch and agent. When none is free it prints the entry's place and returns
 (`--json` emits the entry); the workspace is created only when the entry
 starts, from the then-current default branch. A start that runs detached, from
@@ -2161,13 +2162,13 @@ stop's restore waits there, opening where the agent ran. A daemon restart or a
 lost connection keeps the order; an entry whose waiting wrapper has not
 reattached within two minutes is removed, leaving its record to `shoal restore`.
 `shoal restore` of an agent whose wrapper waits uses this entry: the restore
-keeps its place and waits only for a slot, and
+keeps its place and waits only for a heavy slot, and
 `--now` or `--focus` starts it at once in its wrapper.
 
 A restore that `shoal restore` or a signal stop queues joins the back of the
 queue and needs a free slot, or room for its load, as a launch does. A signal
 stop's restore of an idle agent holds no slot and holds nothing back until its
-update arrives; `shoal restore` makes it wait only for a slot, keeping its place.
+update arrives; `shoal restore` makes it wait only for a heavy slot, keeping its place.
 The daemon
 starts it as it starts a queued launch: in the place the agent stopped in, where
 its host keeps that place after its agent, once that is back at its prompt,
@@ -4748,7 +4749,7 @@ as at another PR, CI logs or an earlier proposal, it runs the `shoal` commands
 that only read, such as `shoal view`, `shoal status`, `shoal ci ls` and
 `shoal issue ls`, under a read-only scope of the requesting space that ends
 with the run: the daemon refuses that scope every request that changes
-anything. It holds no agent slot
+anything. It holds no heavy slot
 and waits only for memory and disk room. Its runs keep one session per space
 and subject: the space's own branch, with its PR, merges and unmerges; its
 issue proposals for each repository; and its pushes to each other ref. A later

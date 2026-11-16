@@ -117,7 +117,7 @@ pub enum SessionsCommand {
     /// List the agent queue, or start or cancel an entry.
     ///
     /// The queue holds the agent launches and restores of every repository
-    /// waiting for a slot under max_heavy_agents, named by workspace. Without a
+    /// waiting for a heavy slot under max_heavy_agents, named by workspace. Without a
     /// command on a terminal, choose an entry, then an action.
     #[command(args_conflicts_with_subcommands = true)]
     Queue {

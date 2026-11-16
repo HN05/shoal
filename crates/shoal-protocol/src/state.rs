@@ -40,7 +40,7 @@ states!(ExecutionState {
     Unknown => "unknown",
 });
 states!(QueueState {
-    /// Waiting for an agent slot.
+    /// Waiting for a heavy slot.
     Queued => "queued",
     /// Admitted to a slot; its agent has not registered yet.
     Starting => "starting",

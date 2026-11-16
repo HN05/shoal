@@ -81,7 +81,7 @@ impl Manager {
     }
 
     /// Keep the space's stopped agents whose execution ended as last
-    /// sessions, which hold no agent slot and nothing restores on its own.
+    /// sessions, which hold no heavy slot and nothing restores on its own.
     /// One a wrapper waits to restore stays, and one that cannot be kept,
     /// such as one a resume holds, stays stopped work.
     pub(super) async fn keep_stopped_as_last_sessions(

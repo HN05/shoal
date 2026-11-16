@@ -239,7 +239,7 @@ pub(crate) fn admit(
         }
         let repository = entry.repository.as_ref();
         let in_repository = repository.map_or(0, |id| used.get(id.as_str()).copied().unwrap_or(0));
-        // A one-shot run, such as a review, holds no agent slot, so of the
+        // A one-shot run, such as a review, holds no heavy slot, so of the
         // fixed limits only the disk's applies to it.
         let full = match entry.work {
             Work::OneShot { .. } => full_disk(limits, writing),

@@ -71,8 +71,7 @@ pub struct ModeConfig {
     /// What the mode's agents may do, over `[permissions]`.
     #[option(section)]
     pub permissions: PermissionsConfig,
-    /// Whether its agents take an agent slot in a workspace; a chat's never
-    /// does.
+    /// Whether its agents take a heavy slot, wherever they run.
     #[option(default = Weight::Heavy)]
     pub weight: Option<Weight>,
 }
@@ -80,10 +79,10 @@ pub struct ModeConfig {
 shoal_states::states!(
     /// How much of the machine a mode's agents take.
     Weight {
-        /// They start at once, hold no agent slot and are never stopped
+        /// They start at once, hold no heavy slot and are never stopped
         /// for load.
         Light => "light",
-        /// They wait for an agent slot and protection may stop them.
+        /// They wait for a heavy slot and protection may stop them.
         Heavy => "heavy",
     }
 );

@@ -220,7 +220,7 @@ instead of the PR delivery guidance below.
   unless its space is done or `shoal sleep` holds it. An agent Shoal stopped and
   brings back on its own is asleep; one that waits for `shoal restore` is
   stopped. The sweep puts an idle agent to sleep after `shoal sleep`, and to
-  make room for an entry waiting for a slot or memory (lowest rank first, no
+  make room for an entry waiting for a heavy slot or memory (lowest rank first, no
   higher priority than the entry, only one something will wake, a slot only
   from an agent that holds one), once the stop costs no prompt cache under the
   machine's schedule; light agents never sleep for room, nor stop on idle,
@@ -542,7 +542,7 @@ instead of the PR delivery guidance below.
   readings start none, and an idle machine starts one. Every caller sees the
   whole queue, each waiting entry with what held it back at the last pass.
   It accepts a positive fixed value or `none`; the global value limits the
-  machine while a repository's fixed value limits that repository. Slots derive from tracked
+  machine while a repository's fixed value limits that repository. Heavy slots derive from tracked
   agents, executions awaiting reattachment, resume records and starting queue
   entries, excluding done spaces and agents of a `light` mode, never from a
   separate counter; a mode's weight alone decides this, never the space's
@@ -551,7 +551,7 @@ instead of the PR delivery guidance below.
   but not past critical or failed readings, low disk or its tool's upstream
   limit. A heavy chat's start with no free slot queues as a new workspace's
   does. A review holds no
-  slot, but its memory counts and it waits for room and disk as a start does.
+  heavy slot, but its memory counts and it waits for room and disk as a start does.
   A starting
   entry keeps its slot only while its launch holds it or within the grace
   period, until its agent registers; queued entries create no worktree.

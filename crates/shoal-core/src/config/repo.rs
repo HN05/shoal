@@ -156,8 +156,8 @@ pub struct AgentConfig {
     /// The reasoning effort the `default` agent runs with, over its AI
     /// tool's.
     pub effort: Option<String>,
-    /// Agents of this repository running at once; by default only the
-    /// machine limit applies. Use `none` for unlimited.
+    /// Heavy modes' agents of this repository running at once; by default
+    /// only the machine limit applies. Use `none` for unlimited.
     #[option(default = crate::config::RunLimit::Dynamic)]
     pub max_heavy_running: Option<crate::config::RunLimit>,
     /// Directories every agent and chat gets as other working directories.

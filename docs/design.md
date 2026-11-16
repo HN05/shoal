@@ -289,9 +289,9 @@ session recovery is automatic for built-in Codex and Claude resume commands, or
 when explicitly configured for another agent, and load and disk space have
 recovered, except that an agent stopped between turns has nothing to do until
 an update arrives for it, so that update restores it instead, and its restore
-holds no agent slot until then. `shoal restore` of an agent whose wrapper
+holds no heavy slot until then. `shoal restore` of an agent whose wrapper
 waits is the user asking for it, so it uses the wrapper's queued restore,
-which then waits only for a slot, rather than refusing the agent as running
+which then waits only for a heavy slot, rather than refusing the agent as running
 or starting a second beside it. Manual and automatic restores prompt the agent to continue its
 unfinished assignment, naming when and why it stopped, which every stop that
 saves an agent records and a last session keeps, and that its subagents and
@@ -530,7 +530,7 @@ The request is its own file so that forgetting it, as a stop does, never
 replaces a record a restore holds. An
 agent that exits on its own before its assignment is done leaves its workspace
 a last session for `shoal restore` instead of stopped work: the user may have
-quit it on purpose, so it takes no agent slot, keeps nothing from cleanup and
+quit it on purpose, so it takes no heavy slot, keeps nothing from cleanup and
 comes back only when `shoal restore` names it or `--all` queues it. A workspace
 keeps one per agent, so resuming several stopped together restores each; a new
 agent replaces them, since the user moved on, while a restored one consumes
@@ -1742,7 +1742,7 @@ heavy chat uses the machine as a heavy workspace agent does: an agent of a
 `light` mode counts nowhere, starting at once, holding no slot, and never
 stopped for load or on idle, so a mode whose agents use little of the
 machine, such as a plan run in a workspace, is not held up while heavy work
-fills it, and a heavy chat's agent waits for a slot and holds one as a
+fills it, and a heavy chat's agent waits for a heavy slot and holds one as a
 workspace's does. Critical or missing readings, low disk and its tool's
 upstream limit hold every start, light ones too. The built-in modes that
 start chats are light, so they stay so in a workspace. A chat without a
@@ -2031,10 +2031,10 @@ backend output never reaches a message. The 30-minute limit is fixed: a review t
 long has stopped making progress. The daemon starts the reviewer as a one-shot
 agent run, which any feature can use: an AI tool's command without a terminal,
 which may resume a session an earlier run reported, in its own process group, killed on timeout, cancel or a daemon stop and
-found again by its marker after a crash. A one-shot run takes an agent slot like
-any agent and waits in the agent queue at the rank of the workspace it serves,
-ahead of that workspace's agent, which waits on it. Protection stops a one-shot run before
-any agent, since it has no running session to lose; it asks for a slot again and waits
+found again by its marker after a crash. A one-shot run waits for admission at the
+rank of the workspace it serves, ahead of that workspace's agent, which waits on it.
+Protection stops a one-shot run before
+any agent, since it has no running session to lose; it asks for admission again and waits
 for healthy readings, as a stopped agent's restore does. A chat has no worktree or branch, so it
 reviews no changes of its own: it names the workspace it reviews, or reviews
 its one linked PR as a PR target, and its reviews are those of its linked PRs. A PR target, named by URL or `--pr`, resolves a same-repository PR through the daemon's
@@ -3223,7 +3223,7 @@ does; an escalation then takes the `"propose"` route. Allowing approves
 through the path a decision takes, so the gate adds no way to act. It reads
 its rules from the registered checkout, never the requesting worktree, so an
 agent cannot write the rules that judge it, and runs as a one-shot run that
-holds no agent slot, since agents wait on it. It may look further than its
+holds no heavy slot, since agents wait on it. It may look further than its
 prompt with the `shoal` commands that only read, under a scope of the
 requesting space that the daemon refuses every change and that ends with the
 run. That scope is cooperative like any other: its sandbox opens Unix sockets,

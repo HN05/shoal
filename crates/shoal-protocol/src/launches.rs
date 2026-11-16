@@ -95,7 +95,7 @@ pub struct Launch {
     /// The spaces, queued agents and issues the agent waits for.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub blockers: Vec<String>,
-    /// Start the agent at once regardless of the agent slots.
+    /// Start the agent at once regardless of the heavy slots.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub now: bool,
     /// What the agent is told to do, passed on to it.

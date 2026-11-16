@@ -270,7 +270,7 @@ pub struct QueueRequest {
     pub source: Option<crate::launches::LaunchSource>,
 }
 
-/// The launch of a new chat's agent to admit under the agent slots, which
+/// The launch of a new chat's agent to admit under the heavy slots, which
 /// its start records once the queue starts it, or records at once and
 /// attaches to the launch when it waits.
 #[derive(Debug, Clone, Serialize, Deserialize)]

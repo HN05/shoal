@@ -259,7 +259,7 @@ impl Manager {
                 let plan = plan.context("queue entry restores an agent; it has no launch plan")?;
                 ensure!(
                     entry.state == QueueState::Starting,
-                    "queue entry {} is still waiting for a slot",
+                    "queue entry {} is still waiting for a heavy slot",
                     entry.name
                 );
                 Ok(QueuedPlan { entry, plan })

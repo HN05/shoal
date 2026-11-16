@@ -81,8 +81,8 @@ every checkout and every repository directory; it applies to new registrations
 after `shoal config reload`, and [`move root`](../../../../../../docs/reference.md#move-repositories-to-a-new-root)
 moves existing ones.
 
-`max_heavy_agents` limits the agents that run at once on the machine, and `max_jobs`
-the [CI jobs](../../../../../../docs/reference.md#runner): `dynamic` starts them one at a time while
+`max_heavy_agents` limits the heavy slots, the agents of [`heavy` modes](#modes-and-rules)
+that run at once on the machine, and `max_jobs` the [CI jobs](../../../../../../docs/reference.md#runner): `dynamic` starts them one at a time while
 measured memory and disk leave room below the [warning thresholds](#overload),
 a number is a fixed limit, and `none` admits everything. See the
 [agent queue](../../../../../../docs/reference.md#agent-queue). `schedule` decides what the queue
@@ -296,7 +296,7 @@ git_profile = "agent"    # A Git profile for agents' Git commands; no default
 
 `default` names a built-in AI tool or one under `[agents]`. `dirs` entries are
 absolute or start with `~/`, and an empty list gives none. `max_heavy_running` limits
-one repository's agents within `machine.max_heavy_agents`; set globally, it applies to
+one repository's heavy slots within `machine.max_heavy_agents`; set globally, it applies to
 each repository that sets none, and `dynamic` adds no repository limit.
 `git_profile` names a [Git profile](#git-profiles) that reaches tracked agents
 over every Git config file; see [agent accounts](../../../../../../docs/reference.md#agent-accounts).
@@ -422,7 +422,7 @@ rules = ["work", "worker"]
 instructions = "Fix the findings of the latest review."
 focus = true             # Over terminal.focus for its launches; unset follows it
 idle_wake_minutes = 60   # Unset or 0 never wakes its agent
-weight = "heavy"         # "light": no agent slot; default "heavy", "light" for the built-in chat modes
+weight = "heavy"         # "light": no heavy slot; default "heavy", "light" for the built-in chat modes
 
 [modes.review-fixer.permissions]
 push = "propose"
@@ -440,8 +440,8 @@ the terminal; set it for a mode whose agent needs your input to start, such as
 one without instructions. `idle_wake_minutes` is how long its agent may stay
 idle before Shoal wakes it. `weight` alone decides how a mode's agent takes
 the machine's capacity, in a workspace or a chat: a `light` mode's agents
-start at once, hold no [agent slot](../../../../../../docs/reference.md#agent-queue) and are never
-stopped for load or on idle, and a `heavy` one's wait for a slot and are; the
+start at once, hold no [heavy slot](../../../../../../docs/reference.md#agent-queue) and are never
+stopped for load or on idle, and a `heavy` one's wait for a heavy slot and are; the
 built-in modes that start chats are light, so one set to `kind = "workspace"`
 stays so. A chat without a repository takes its mode's weight from the global
 config and counts toward `machine.max_heavy_agents` alone.

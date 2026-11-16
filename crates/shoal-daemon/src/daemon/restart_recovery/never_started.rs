@@ -104,7 +104,7 @@ impl Manager {
             unstarted.execution.id,
             &unstarted.space.name
         );
-        // The execution no longer takes an agent slot.
+        // The execution no longer takes a heavy slot.
         self.agent_queue.wake();
         Ok(())
     }

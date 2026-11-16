@@ -14,7 +14,7 @@ use crate::{
 };
 use shoal_protocol::{chats::StartedChat, space_names::SpaceSelector};
 
-/// A machine of one agent slot with a heavy chat mode `pair` and a light
+/// A machine of one heavy slot with a heavy chat mode `pair` and a light
 /// one `chat`, and the workspace launch `busy` holding the slot. Its
 /// `claude` is a program every runner has, since a chat's launch checks
 /// that its agent is installed.

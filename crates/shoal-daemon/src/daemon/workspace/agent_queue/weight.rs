@@ -1,5 +1,5 @@
 //! Which agents are light: those of a mode whose `weight` is `light` start
-//! at once, hold no agent slot and are never stopped for load, in a
+//! at once, hold no heavy slot and are never stopped for load, in a
 //! workspace or a chat alike.
 use std::collections::{HashMap, HashSet};
 

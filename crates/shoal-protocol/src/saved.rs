@@ -185,7 +185,7 @@ impl Saved {
 
     /// How a resume that starts restores as `queuing` says restores this
     /// work. Without stopped agents, a last session continues at once, as
-    /// resuming the workspace by itself does not wait for a slot it never
+    /// resuming the workspace by itself does not wait for a heavy slot it never
     /// held: from a process with a terminal where it stopped or in the
     /// background, otherwise through the queue, started now.
     pub fn restore(&self, queuing: Queuing) -> Restore {

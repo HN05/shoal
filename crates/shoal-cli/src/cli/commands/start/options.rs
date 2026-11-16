@@ -52,7 +52,7 @@ pub(in crate::cli::commands) struct Options {
     pub narrowing: Narrowing,
     /// The priority set on the chat.
     pub priority: Option<Priority>,
-    /// Start its agent regardless of the agent slots.
+    /// Start its agent regardless of the heavy slots.
     pub now: bool,
 }
 

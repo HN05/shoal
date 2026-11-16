@@ -1,7 +1,7 @@
 //! New chats the daemon starts for a client, as `shoal start` starts one
 //! without a terminal: it resolves what the start leaves out under the
 //! chat's settings and checks where the chat goes, and admits its agent
-//! under the agent slots. An admitted chat's start worker opens a background
+//! under the heavy slots. An admitted chat's start worker opens a background
 //! place for it, and the daemon answers once the chat runs its agent; one
 //! whose agent waits is recorded at once, and the answer names its entry.
 use crate::removal::{InspectionPolicy, UnsavedWork};

@@ -1,4 +1,4 @@
-//! The launches of new chats' agents: admitting one under the agent slots or
+//! The launches of new chats' agents: admitting one under the heavy slots or
 //! queuing it, and attaching it to the chat its start records.
 use anyhow::{Result, ensure};
 use rusqlite::params;

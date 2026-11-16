@@ -15,10 +15,11 @@
 # Parent of every repository's workspaces and URL clones.
 root_dir = "~/shoal"
 
-# Agents that run at once; by default `dynamic` starts them one at a time while
-# measured load stays below the warning thresholds `load` sets. `shoal start`
-# queues the rest and starts them as slots free. Set a positive number for a
-# fixed limit or `none` for unlimited admission.
+# Heavy slots: agents of heavy modes that run at once; by default `dynamic`
+# starts them one at a time while measured load stays below the warning
+# thresholds `load` sets. `shoal start` queues the rest and starts them as heavy
+# slots free. Set a positive number for a fixed limit or `none` for unlimited
+# admission.
 # max_heavy_agents = 3
 
 # CI jobs the runner runs at once; `dynamic` admits them with agents, one start
@@ -141,8 +142,8 @@ allow_any = false
 # Directories every agent and chat may read without a permission prompt, as
 # other working directories. Entries are absolute or start with ~/.
 dirs = ["/tmp"]
-# Agents of one repository that run at once, as a positive number; by default
-# only [machine] max_heavy_agents limits them.
+# Agents of heavy modes of one repository that run at once, as a positive
+# number; by default only [machine] max_heavy_agents limits them.
 # max_heavy_running = 3
 # The Git profile from [machine.git_profiles] for tracked agents' Git commands.
 # git_profile = "agent"

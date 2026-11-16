@@ -175,7 +175,7 @@ pub struct StoppedAgent {
 }
 
 /// An agent that exited on its own before its assignment was done, which
-/// `shoal restore` continues. Unlike stopped work, it uses no agent slot, never
+/// `shoal restore` continues. Unlike stopped work, it uses no heavy slot, never
 /// delays cleanup and nothing restores it on its own. A workspace keeps one
 /// per agent.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

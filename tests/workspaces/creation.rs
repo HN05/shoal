@@ -809,7 +809,7 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     );
 }
 
-/// One agent slot and a `waiter` agent that records its start.
+/// One heavy slot and a `waiter` agent that records its start.
 pub(super) const WAITER: &str = "machine.max_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'printf agent > agent-started']\n";
 
 /// A fixture with [`WAITER`] whose setups fail as [`require_fix`] makes

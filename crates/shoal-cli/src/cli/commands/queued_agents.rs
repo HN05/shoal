@@ -90,13 +90,13 @@ pub(super) fn report_queued(ctx: &Context, entry: &QueueEntry, waiting: usize) -
     Ok(0)
 }
 
-/// When the queued `entry` starts: once nothing blocks it and an agent slot
+/// When the queued `entry` starts: once nothing blocks it and a heavy slot
 /// is free.
 pub(super) fn starts_when(entry: &QueueEntry) -> String {
     match entry.blockers.as_slice() {
-        [] => "when an agent slot is free".to_owned(),
+        [] => "when a heavy slot is free".to_owned(),
         blockers => format!(
-            "once it is no longer blocked by {} and an agent slot is free",
+            "once it is no longer blocked by {} and a heavy slot is free",
             blockers.join(", ")
         ),
     }

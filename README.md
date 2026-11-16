@@ -132,10 +132,10 @@ workspace unless its agent runs in a zmx session.
 Agent admission defaults to starting agents and CI jobs one at a time while
 measured memory and disk leave room; `machine.load = "light"`, `"balanced"`
 or `"full"` says how hard to push the machine. `shoal queue` shows what holds
-each waiting entry. Set a fixed machine-wide limit
-(`shoal config set machine.max_heavy_agents 3`) or `none` to disable queuing, and
-limit one repository's agents with `agent.max_heavy_running` (`--repo my-project`). `shoal start` queues agents past the effective
-limit and starts them as slots free; `--now` starts one anyway, and `shoal rm
+each waiting entry. Set a fixed machine-wide limit on heavy slots, the agents
+of `heavy` modes (`shoal config set machine.max_heavy_agents 3`) or `none` to disable queuing, and
+limit one repository's with `agent.max_heavy_running` (`--repo my-project`). `shoal start` queues agents past the effective
+limit and starts them as heavy slots free; `--now` starts one anyway, and `shoal rm
 <name>` drops a queued one. `--add-blocker <space|issue>` holds an agent
 until that work is done and starts it on the finished branch; an issue's agent
 is also blocked by the issues blocking that issue. See the [agent queue](docs/reference.md#agent-queue).
@@ -168,7 +168,7 @@ shoal                         # Inbox when something needs you, else workspaces;
 shoal repo                    # Interactive repository menu
 shoal inbox                   # Questions, approvals, agents needing input, failures, ready work, demos; --print to list
 shoal list                    # Workspaces, chats and queued agents; --print to list
-shoal queue                   # Agents waiting for a slot under the agent limits; start or cancel one
+shoal queue                   # Agents waiting for a heavy slot under the agent limits; start or cancel one
 shoal trigger ls              # Triggers of this repository and the global config: next firing, last run
 shoal trigger run triage      # Fire the trigger triage now; pause and resume stop and restart it
 shoal list --chats            # Running chats
@@ -368,7 +368,7 @@ false`. See [overload protection](docs/reference.md#overload-protection)
 for thresholds and timing. When disk space runs low, the daemon removes
 workspaces idle cleanup would remove; if space stays critical, it stops tracked
 executions. Agents restore once space returns; `shoal restore` restores the rest. Stop agents manually with `shoal stop`:
-they stay down, holding no agent slot and no workspace from cleanup, until
+they stay down, holding no heavy slot and no workspace from cleanup, until
 `shoal restore` continues them, as it continues an agent that exited on its own,
 such as one you quit. To take agents down briefly, use `shoal restart`. `shoal
 restore --all` queues the restores to start as the agent limits allow; `--now`
