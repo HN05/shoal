@@ -189,15 +189,29 @@ impl Manager {
         let manager = self.clone();
         tokio::spawn(async move {
             let _permit = permit;
-            let _firing = manager.triggers.firing.lock().await;
-            let firing = Firing {
-                origin: RunOrigin::Source,
-                input: webhook::input(&trigger.name, &request, at),
-                at,
-            };
-            if let Err(error) = manager.fire_trigger(&trigger, firing).await {
+            if let Err(error) = manager.fire_accepted(&trigger, &request, at).await {
                 log!("{} did not fire: {error:#}", trigger.label());
             }
         });
+    }
+
+    /// Fire `trigger` for the accepted `request` once no other firing
+    /// runs, unless a pause came meanwhile.
+    pub(super) async fn fire_accepted(
+        self: &Arc<Self>,
+        trigger: &Configured,
+        request: &WebhookRequest,
+        at: UnixTime,
+    ) -> Result<()> {
+        let _firing = self.triggers.firing.lock().await;
+        if self.trigger_state(trigger, UnixTime::now()).await?.paused {
+            return Ok(());
+        }
+        let firing = Firing {
+            origin: RunOrigin::Source,
+            input: webhook::input(&trigger.name, request, at),
+            at,
+        };
+        self.fire_trigger(trigger, firing).await.map(drop)
     }
 }

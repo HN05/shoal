@@ -197,6 +197,31 @@ async fn a_repositorys_trigger_never_signs_with_a_global_secret() {
 }
 
 #[tokio::test]
+async fn a_delivery_accepted_before_a_pause_never_fires() {
+    let (_temp, manager, repo) = with_triggers(LABELLED).await;
+    let trigger = (manager.configured_triggers().await.into_iter())
+        .find(|trigger| trigger.name == "labelled")
+        .unwrap();
+    let request = WebhookRequest {
+        headers: vec![("X-Forgejo-Event".into(), "issues".into())],
+        query: Vec::new(),
+        body: ISSUE.to_owned(),
+    };
+    let context = Some(crate::protocol::ItemContext::Checkout(repo.id.clone()));
+    (manager.pause_trigger(context, "labelled", true, None))
+        .await
+        .unwrap();
+
+    // Its firing waits for the lock, past the pause.
+    (manager.fire_accepted(&trigger, &request, crate::time::UnixTime::now()))
+        .await
+        .unwrap();
+
+    assert!(runs(&manager, &repo, "labelled").await.is_empty());
+    assert!(STARTED.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn a_filtered_delivery_is_accepted_like_any_other() {
     let (_temp, manager, repo, address) = listening(LABELLED).await;
     let unlabelled = r#"{"issue":{"number":7,"title":"Typo","labels":[]}}"#;
