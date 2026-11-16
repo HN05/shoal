@@ -97,7 +97,7 @@ impl Manager {
         let space = match self.chat_outside_repositories(context).await? {
             // The registered repository it names counts as its own.
             Some(chat) => match self.registered_named(repository.as_deref()).await? {
-                Some(checkout) => LinkSpace::Chat { chat, checkout },
+                Some(checkout) => LinkSpace::acting_in(chat, checkout),
                 None => {
                     anyhow::ensure!(!link, "{LINK_NEEDS_REPOSITORY}");
                     return self.open_outside_issue(issue, repository, caller).await;
@@ -109,7 +109,7 @@ impl Manager {
         anyhow::ensure!(!link || space.keeps_links(), "{LINK_NEEDS_REPOSITORY}");
         let checkout = self.context_checkout(&space.item_context()).await?;
         // The chat's gate keeps a link meanwhile from taking its issue's place.
-        let _gate = self.gates.lock_prs([space.id()]).await;
+        let _gate = self.gates.lock_prs([&space.id]).await;
         let own = self.checkout_forge(&checkout).await?;
         let destination = self.issue_destination(own, repository.as_deref()).await?;
         if link {
@@ -145,7 +145,7 @@ impl Manager {
         if space.keeps_links() {
             let (linked, warning) = self
                 .keep_created(
-                    space.id(),
+                    &space.id,
                     ItemKind::Issue,
                     &opened.item,
                     link,

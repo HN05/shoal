@@ -7,7 +7,6 @@ use anyhow::{Result, ensure};
 use super::{
     issue::{Assigner, AssignerOf},
     proposals::OpenOutcome,
-    space::LinkSpace,
 };
 use crate::{
     config::permissions::{Opening, Pushes},
@@ -38,21 +37,21 @@ impl Manager {
             options.base.is_none(),
             "a revert targets the reverted PR's base branch"
         );
-        let id = self.link_space(selector).await?.id().to_owned();
+        let id = self.link_space(selector).await?.id.to_owned();
         // Cleanup holds the workspace's gate, so it cannot remove the
         // workspace between opening the revert and recording it.
         let _gate = self.gates.lock_prs([&id]).await;
         let space = self.link_space(&SpaceSelector::id(&id)).await?;
         self.verify_space(&space).await?;
-        let settings = match &space {
-            LinkSpace::Workspace(workspace) => {
+        let settings = match space.to_workspace() {
+            Some(workspace) => {
                 ensure!(
                     workspace.state.accepts_links(),
                     "workspace cannot accept a PR in its current state"
                 );
-                self.workspace_settings(workspace).await?
+                self.workspace_settings(&workspace).await?
             }
-            LinkSpace::Chat { checkout, .. } => self.repository_settings(&checkout.id).await?,
+            None => self.repository_settings(space.repository_id()).await?,
         };
         if let Some(caller) = caller {
             let permissions = self
@@ -72,7 +71,7 @@ impl Manager {
             );
         }
         let (forge, account) = (self.space_forge(&space).await?, self.agent_account());
-        let pull = (self.named_or_linked(input, Some(space.id()), &forge, ItemKind::Pr)).await?;
+        let pull = (self.named_or_linked(input, Some(&space.id), &forge, ItemKind::Pr)).await?;
         let current = forge.merged(&account, pull.pull()?).await?;
         let options = revert_options(&current.item, options);
         let required = &settings.pr.required_labels;
@@ -81,7 +80,7 @@ impl Manager {
         let created = forge.revert_pull(&account, &current, &revert).await?;
         let (_, warning) = self
             .keep_created(
-                space.id(),
+                &space.id,
                 ItemKind::Pr,
                 &created.item,
                 false,
@@ -119,7 +118,7 @@ impl Manager {
         let space = self.link_space(selector).await?;
         self.verify_space(&space).await?;
         let (forge, account) = (self.space_forge(&space).await?, self.agent_account());
-        let pull = (self.named_or_linked(input, Some(space.id()), &forge, ItemKind::Pr)).await?;
+        let pull = (self.named_or_linked(input, Some(&space.id), &forge, ItemKind::Pr)).await?;
         forge.merged_pull(&account, pull.pull()?).await
     }
 }

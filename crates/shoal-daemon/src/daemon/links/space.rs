@@ -4,9 +4,8 @@
 //! completes.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::model::ByKind;
 use shoal_refs::BranchName;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use rusqlite::Connection;
@@ -21,134 +20,106 @@ use crate::{
 use shoal_forge::RepoRequests;
 use shoal_protocol::space_names::SpaceSelector;
 
-#[allow(
-    clippy::large_enum_variant,
-    reason = "a lookup's result, read by the request that made it"
-)]
-pub enum LinkSpace {
-    Workspace(Box<Workspace>),
-    Chat { chat: Chat, checkout: Repository },
+/// A space as a request about its items sees it.
+pub struct LinkSpace {
+    pub space: Space,
+    /// The repository it acts in: its own, or the registered one a chat
+    /// without one names, which counts as its own.
+    repository: RepositoryId,
+    /// The checkout of that registered repository, where a chat without a
+    /// repository of its own acts.
+    acting_in: Option<PathBuf>,
+}
+
+impl std::ops::Deref for LinkSpace {
+    type Target = Space;
+
+    fn deref(&self) -> &Space {
+        &self.space
+    }
 }
 
 impl From<Workspace> for LinkSpace {
     fn from(workspace: Workspace) -> Self {
-        Self::Workspace(Box::new(workspace))
-    }
-}
-
-impl<'a> From<&'a LinkSpace> for crate::hooks::HookSpace<'a> {
-    fn from(space: &'a LinkSpace) -> Self {
-        match space {
-            LinkSpace::Workspace(workspace) => Self::Workspace(workspace),
-            LinkSpace::Chat { chat, checkout } => Self::Chat {
-                chat,
-                checkout: &checkout.path,
-            },
+        let repository = workspace.repository().clone();
+        Self {
+            space: workspace.into(),
+            repository,
+            acting_in: None,
         }
     }
 }
 
 impl LinkSpace {
-    pub(crate) fn id(&self) -> &SpaceId {
-        match self {
-            Self::Workspace(workspace) => &workspace.id,
-            Self::Chat { chat, .. } => &chat.id,
-        }
+    /// `space` acting in its own repository, which may have been removed
+    /// meanwhile; a chat without one is refused.
+    pub(crate) fn own(space: Space) -> Result<Self> {
+        let repository = (space.repository_id.clone()).with_context(|| {
+            format!(
+                "chat {} has no repository of its own; name the repository with --repo or an \
+                 issue or PR URL",
+                space.name
+            )
+        })?;
+        Ok(Self {
+            space,
+            repository,
+            acting_in: None,
+        })
     }
 
-    pub(crate) fn name(&self) -> &shoal_protocol::space_names::SpaceName {
-        match self {
-            Self::Workspace(workspace) => &workspace.name,
-            Self::Chat { chat, .. } => &chat.name,
+    /// The chat without a repository `chat` acting in the registered
+    /// `checkout`, which counts as its own.
+    pub(crate) fn acting_in(chat: Chat, checkout: Repository) -> Self {
+        Self {
+            space: chat.into(),
+            repository: checkout.id,
+            acting_in: Some(checkout.path),
         }
     }
 
     pub(crate) fn repository_id(&self) -> &RepositoryId {
-        match self {
-            Self::Workspace(workspace) => workspace.repository(),
-            Self::Chat { checkout, .. } => &checkout.id,
-        }
-    }
-
-    pub(crate) fn workspace(&self) -> Option<&Workspace> {
-        match self {
-            Self::Workspace(workspace) => Some(workspace),
-            Self::Chat { .. } => None,
-        }
+        &self.repository
     }
 
     /// Whether the space records the items it opens and links: a chat
     /// without a repository acts in many and records none.
     pub(crate) fn keeps_links(&self) -> bool {
-        match self {
-            Self::Workspace(_) => true,
-            Self::Chat { chat, .. } => chat.repository_id.is_some(),
-        }
+        self.space.repository_id.is_some()
     }
 
     /// The branch whose merge conflicts a workspace's watch reports; a chat
     /// works on none.
     pub(crate) fn branch(&self) -> Option<&str> {
-        self.workspace()
-            .and_then(|workspace| workspace.branch.as_ref().map(BranchName::as_str))
-    }
-
-    /// Whether the space recorded its work as done, which ends the activity
-    /// of its closed items.
-    pub(crate) fn done(&self) -> bool {
-        match self {
-            Self::Workspace(workspace) => workspace.done,
-            Self::Chat { chat, .. } => chat.completion.is_some(),
-        }
+        (self.worktree()).and_then(|worktree| worktree.branch.as_ref().map(BranchName::as_str))
     }
 
     /// Where an item request of the space runs: the workspace, or the
     /// chat's checkout, the one it acts in for a chat without a repository.
     pub(crate) fn item_context(&self) -> ItemContext {
-        match self {
-            Self::Workspace(workspace) => ItemContext::Workspace(SpaceSelector::id(&workspace.id)),
-            Self::Chat { chat, checkout } if chat.repository_id.is_none() => ItemContext::ChatIn {
-                chat: SpaceSelector::id(&chat.id),
-                repository: checkout.id.clone(),
+        let id = SpaceSelector::id(&self.id);
+        match (self.worktree(), &self.acting_in) {
+            (Some(_), _) => ItemContext::Workspace(id),
+            (None, Some(_)) => ItemContext::ChatIn {
+                chat: id,
+                repository: self.repository.clone(),
             },
-            Self::Chat { chat, .. } => ItemContext::Chat(SpaceSelector::id(&chat.id)),
-        }
-    }
-
-    /// The issues and PRs linked to the space under any relation.
-    pub(crate) fn links(&self) -> &crate::model::SpaceLinks {
-        match self {
-            Self::Workspace(workspace) => &workspace.links,
-            Self::Chat { chat, .. } => &chat.links,
+            (None, None) => ItemContext::Chat(id),
         }
     }
 
     /// The directory whose `origin` names the space's repository on its
-    /// forge: the workspace's worktree, or the chat's checkout.
+    /// forge: where it works, or the checkout a chat without a repository
+    /// acts in.
     pub(crate) fn origin_path(&self) -> &Path {
-        match self {
-            Self::Workspace(workspace) => &workspace.path,
-            Self::Chat { checkout, .. } => &checkout.path,
-        }
+        (self.acting_in.as_deref()).unwrap_or_else(|| self.workdir.path())
     }
 }
 
 impl Manager {
     /// The workspace or running chat `selector` names, by ID or name.
     pub async fn link_space(&self, selector: &SpaceSelector) -> Result<LinkSpace> {
-        self.link_space_of(self.space(selector).await?).await
-    }
-
-    /// `space` as the space whose items a request links, which may have
-    /// been removed meanwhile.
-    pub(crate) async fn link_space_of(&self, space: Space) -> Result<LinkSpace> {
-        Ok(match space.by_kind() {
-            ByKind::Workspace(workspace) => LinkSpace::Workspace(Box::new(workspace)),
-            ByKind::Chat(chat) => {
-                let checkout = self.chat_own_checkout(&chat).await?;
-                LinkSpace::Chat { chat, checkout }
-            }
-        })
+        LinkSpace::own(self.space(selector).await?)
     }
 
     /// The space `context` names: a workspace or a chat by its selector, or
@@ -179,7 +150,7 @@ impl Manager {
     /// repository `repository` names, which counts as its own.
     async fn chat_in(&self, chat: &SpaceSelector, repository: &RepositoryId) -> Result<LinkSpace> {
         let (chat, checkout) = self.chat_acting_in(chat, repository).await?;
-        Ok(LinkSpace::Chat { chat, checkout })
+        Ok(LinkSpace::acting_in(chat, checkout))
     }
 
     /// The chat without a repository `chat` names and the checkout of the
@@ -223,8 +194,8 @@ impl Manager {
     /// Verify a workspace's worktree before a request relies on it; a
     /// chat's checkout is the registered one.
     pub(crate) async fn verify_space(&self, space: &LinkSpace) -> Result<()> {
-        match space.workspace() {
-            Some(workspace) => self.verify_worktree(workspace).await,
+        match space.to_workspace() {
+            Some(workspace) => self.verify_worktree(&workspace).await,
             None => Ok(()),
         }
     }
@@ -299,9 +270,9 @@ impl Manager {
     /// The settings of the space: a workspace's own, or a chat's
     /// repository's.
     pub(crate) async fn space_settings(&self, space: &LinkSpace) -> Result<Effective> {
-        match space {
-            LinkSpace::Workspace(workspace) => self.workspace_settings(workspace).await,
-            LinkSpace::Chat { checkout, .. } => self.repository_settings(&checkout.id).await,
+        match space.to_workspace() {
+            Some(workspace) => self.workspace_settings(&workspace).await,
+            None => self.repository_settings(space.repository_id()).await,
         }
     }
 

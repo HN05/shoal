@@ -454,7 +454,9 @@ impl Manager {
             return Ok(());
         }
         self.verify_worktree(workspace).await?;
-        let configured_env = self.configured_workspace_environment(workspace).await?;
+        let settings = self.workspace_settings(workspace).await?;
+        let repository = workspace.repository();
+        let configured_env = (self.hook_environment(workspace, repository, &settings)).await?;
         hooks::run_detached(
             Hook::PostAgentExit {
                 agent,

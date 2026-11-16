@@ -171,7 +171,7 @@ impl Manager {
         space: &LinkSpace,
         items: Vec<ItemRef>,
     ) -> Result<Vec<ItemRef>> {
-        let (id, done) = (space.id().to_owned(), space.done());
+        let (id, done) = (space.id.to_owned(), space.done());
         self.store
             .run(move |db| {
                 let mut open = Vec::new();

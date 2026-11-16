@@ -203,7 +203,9 @@ impl Manager {
     /// Failure only notifies; it never undoes completion.
     async fn run_done_hook(&self, workspace: &Workspace, command: &Path, completion: &Completion) {
         let result = async {
-            let configured_env = self.configured_workspace_environment(workspace).await?;
+            let settings = self.workspace_settings(workspace).await?;
+            let repository = workspace.repository();
+            let configured_env = (self.hook_environment(workspace, repository, &settings)).await?;
             hooks::run_detached(
                 Hook::PostDone(completion),
                 workspace,

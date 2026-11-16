@@ -65,6 +65,14 @@ pub struct Worktree {
     pub job: Option<Box<QueuedJob>>,
 }
 
+impl Worktree {
+    /// Its worktree directory's name, the last part of its path, which
+    /// `{workspace}` and its terminal session take since it never changes.
+    pub fn directory_name(&self) -> &str {
+        directory_name(&self.path)
+    }
+}
+
 /// The CPU and memory a workspace's processes use, from the daemon's latest
 /// sample of the processes carrying its identity.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -271,12 +279,6 @@ impl Workspace {
     /// of a workspace at a commit.
     pub fn branch_or_name(&self) -> &str {
         self.branch.as_ref().map_or(&self.name, BranchName::as_str)
-    }
-
-    /// Its worktree directory's name, the last part of its path, which
-    /// `{workspace}` and its terminal session take since it never changes.
-    pub fn directory_name(&self) -> &str {
-        directory_name(&self.path)
     }
 
     /// True when `path` (canonical) lies inside this worktree.

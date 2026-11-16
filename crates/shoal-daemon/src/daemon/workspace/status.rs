@@ -114,7 +114,7 @@ impl Manager {
             None => (self.selected_items(space, selection).await?)
                 .into_iter()
                 .map(|url| SelectedItem {
-                    relations: space.links().relations_of(&url),
+                    relations: space.links.relations_of(&url),
                     url,
                 })
                 .collect(),

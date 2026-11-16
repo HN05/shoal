@@ -9,7 +9,7 @@ use crate::{
     },
     fsutil::off_runtime,
     hooks::{HookDirectory, HookKind},
-    model::{LocalConfigEdit, Workspace},
+    model::{LocalConfigEdit, Part, Space, Workspace},
     protocol::ConfigTarget,
 };
 use anyhow::{Context, Result};
@@ -358,13 +358,17 @@ impl Manager {
         config.resolve(&layers)
     }
 
-    /// What `[env]` and the workspace's temporary directory, created when
-    /// missing, add to the environment of its hooks.
-    pub(crate) async fn configured_workspace_environment(
+    /// What `[env]` of `settings` and the temporary directory of `space`,
+    /// created when missing, add to the environment of its hooks, which act
+    /// in the repository `repository`: its own, or the registered one a chat
+    /// without one acts in.
+    pub(crate) async fn hook_environment<P: Part>(
         &self,
-        workspace: &Workspace,
+        space: &Space<P>,
+        repository: &RepositoryId,
+        settings: &Effective,
     ) -> Result<BTreeMap<String, std::ffi::OsString>> {
-        self.rendered_workspace_environment(workspace, true).await
+        (self.environment_from_settings(space, repository, settings, true)).await
     }
 
     /// What `[env]` adds to the environment of the post-remove hook, which
@@ -374,49 +378,36 @@ impl Manager {
         &self,
         workspace: &Workspace,
     ) -> Result<BTreeMap<String, std::ffi::OsString>> {
-        self.rendered_workspace_environment(workspace, false).await
-    }
-
-    async fn rendered_workspace_environment(
-        &self,
-        workspace: &Workspace,
-        with_tmp_dir: bool,
-    ) -> Result<BTreeMap<String, std::ffi::OsString>> {
         let settings = self.workspace_settings(workspace).await?;
-        self.environment_from_settings(workspace, &settings, with_tmp_dir)
-            .await
+        let repository = workspace.repository();
+        (self.environment_from_settings(workspace, repository, &settings, false)).await
     }
 
-    /// [`Self::configured_workspace_environment`] from `settings` the caller
-    /// resolved, so one operation reads one version of the config.
-    pub(crate) async fn configured_environment_from(
+    async fn environment_from_settings<P: Part>(
         &self,
-        workspace: &Workspace,
-        settings: &Effective,
-    ) -> Result<BTreeMap<String, std::ffi::OsString>> {
-        self.environment_from_settings(workspace, settings, true)
-            .await
-    }
-
-    async fn environment_from_settings(
-        &self,
-        workspace: &Workspace,
+        space: &Space<P>,
+        repository: &RepositoryId,
         settings: &Effective,
         with_tmp_dir: bool,
     ) -> Result<BTreeMap<String, std::ffi::OsString>> {
-        let repository = self.repository(workspace.repository()).await?;
-        let ports = self
-            .list_ports(Some(&SpaceSelector::id(&workspace.id)))
+        let repository = self.repository(repository).await?;
+        let id = space.id.clone();
+        let ports = (self.store)
+            .read(move |tx| crate::daemon::store::ports(tx, Some(&id)))
             .await?;
         let caches = crate::caches::directories(&repository, &settings.caches)?;
-        let tmp_dir = if with_tmp_dir {
-            crate::tmp_dirs::directory(&repository, &workspace.id)?
-        } else {
-            None
+        let tmp_dir = match with_tmp_dir {
+            true => {
+                let own = space.repository_id.is_some().then_some(&repository);
+                (self.tmp_layout(own, space.workdir.root_dir()))
+                    .map(|layout| layout.prepare(&space.id))
+                    .transpose()?
+            }
+            false => None,
         };
         Ok(crate::env::render_configured_environment(
             &settings.env,
-            workspace,
+            space,
             crate::repository::name(&repository),
             &ports,
             &caches,

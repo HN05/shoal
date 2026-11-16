@@ -66,10 +66,10 @@ impl Manager {
 
     pub async fn set_pr(&self, selector: &SpaceSelector, action: Action) -> Result<()> {
         let space = self.link_space(selector).await?;
-        if let LinkSpace::Chat { .. } = space {
+        if space.worktree().is_none() {
             return self.set_chat_pr(&space, action).await;
         }
-        let (workspace, _guard) = self.lock_pr_gate(&SpaceSelector::id(space.id())).await?;
+        let (workspace, _guard) = self.lock_pr_gate(&SpaceSelector::id(&space.id)).await?;
         self.set_pr_gated(
             &SpaceSelector::id(&workspace.id),
             action,
@@ -81,7 +81,7 @@ impl Manager {
     /// [`Self::set_pr`] for a chat, whose PR watches drive no cleanup and
     /// whose checkout's branch is not its own.
     async fn set_chat_pr(&self, chat: &LinkSpace, action: Action) -> Result<()> {
-        let id = chat.id().to_owned();
+        let id = chat.id.to_owned();
         let _guard = self.gates.lock_prs([&id]).await;
         let previous = match self.pr_registration(&id).await {
             Ok(previous) => previous,

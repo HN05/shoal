@@ -68,7 +68,7 @@ impl Manager {
         title: Option<String>,
         assigner: Assigner,
     ) -> Result<Vec<String>> {
-        let id = self.link_space(selector).await?.id().to_owned();
+        let id = self.link_space(selector).await?.id.to_owned();
         let _guard = self.gates.lock_prs([&id]).await;
         self.set_issue_gated(&SpaceSelector::id(&id), input, title, assigner)
             .await
@@ -86,7 +86,7 @@ impl Manager {
         self.verify_space(&space).await?;
         let (forge, url) = self.issue_forge(space.origin_path(), input).await?;
         let fresh = self
-            .persist_issue_assignment(space.id(), &url, title, assigner)
+            .persist_issue_assignment(&space.id, &url, title, assigner)
             .await?;
         Ok(self.assign_linked(&space, &forge, &url, fresh).await)
     }
@@ -110,7 +110,7 @@ impl Manager {
         };
         let mut warnings = Vec::new();
         if fresh && assign.user() {
-            warnings.extend(self.assign_on_forge(space.id(), forge, url).await);
+            warnings.extend(self.assign_on_forge(&space.id, forge, url).await);
         }
         if assign.agent() {
             // The user's assignment names the others already.
@@ -143,7 +143,7 @@ impl Manager {
         selector: &SpaceSelector,
         input: Option<&ItemInput>,
     ) -> Result<Vec<String>> {
-        let id = self.link_space(selector).await?.id().to_owned();
+        let id = self.link_space(selector).await?.id.to_owned();
         let _guard = self.gates.lock_prs([&id]).await;
         let space = self.link_space(&SpaceSelector::id(&id)).await?;
         let selected = match input {

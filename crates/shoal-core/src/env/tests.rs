@@ -1,4 +1,5 @@
 use super::*;
+use crate::model::Workspace;
 use shoal_ids::space_ids::SpaceId;
 
 #[test]

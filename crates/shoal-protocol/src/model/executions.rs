@@ -1,5 +1,5 @@
 //! Executions and the plans and places they run with.
-use super::{MergePlan, PortReservation, UnmergePlan, Workspace};
+use super::{MergePlan, PortReservation, UnmergePlan};
 use crate::processes::Identity;
 use crate::state::ExecutionState;
 use serde::{Deserialize, Serialize};
@@ -85,13 +85,13 @@ impl ExecutionSpace {
     }
 }
 
-impl From<&Workspace> for ExecutionSpace {
-    fn from(workspace: &Workspace) -> Self {
+impl<P: super::Part> From<&super::Space<P>> for ExecutionSpace {
+    fn from(space: &super::Space<P>) -> Self {
         Self {
-            id: workspace.id.clone(),
-            number: workspace.number,
-            kind: super::SpaceKind::Workspace,
-            path: workspace.path.clone(),
+            id: space.id.clone(),
+            number: space.number,
+            kind: space.kind(),
+            path: space.workdir.path().to_owned(),
         }
     }
 }

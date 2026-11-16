@@ -43,8 +43,8 @@ async fn a_workspace_has_its_own_tmpdir_until_it_is_removed() {
         .unwrap();
     assert_eq!(started.plan.environment[env::TMPDIR], expected.as_os_str());
     assert!(expected.is_dir(), "a tracked execution creates it");
-    let hooks = manager
-        .configured_workspace_environment(&workspace)
+    let settings = manager.workspace_settings(&workspace).await.unwrap();
+    let hooks = (manager.hook_environment(&workspace, workspace.repository(), &settings))
         .await
         .unwrap();
     assert_eq!(hooks[env::TMPDIR], expected.as_os_str());

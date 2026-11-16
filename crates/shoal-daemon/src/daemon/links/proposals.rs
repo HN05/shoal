@@ -89,7 +89,7 @@ impl Manager {
         link: bool,
         proposer: Proposer,
     ) -> Result<Proposed> {
-        let (id, home) = (space.id(), space.repository_id());
+        let (id, home) = (&space.id, space.repository_id());
         let files = self
             .lock_proposal_files_of(home, &issue.attachments)
             .await?;
@@ -107,7 +107,7 @@ impl Manager {
             follow_up: None,
         });
         let mut request = proposal(
-            space.id(),
+            &space.id,
             Target::IssueOpen,
             proposals::ISSUE,
             specification,
@@ -211,9 +211,9 @@ impl Manager {
         let space = space.as_ref();
         // A PR an earlier approval posted was pushed already.
         if approve && request.pending_push().is_some() && request.url.is_none() {
-            let workspace = space.and_then(LinkSpace::workspace);
+            let workspace = space.and_then(|space| space.to_workspace());
             return self
-                .start_approved_push(request, workspace, &decision, env)
+                .start_approved_push(request, workspace.as_ref(), &decision, env)
                 .await;
         }
         let (request, message) = if approve {
@@ -237,7 +237,7 @@ impl Manager {
         self.forget_proposal(request).await?;
         self.prune_proposal_files(request).await;
         if let Some(space) = space {
-            self.tell_space(space.id(), message).await;
+            self.tell_space(&space.id, message).await;
         }
         Ok(())
     }
@@ -296,9 +296,9 @@ impl Manager {
         let (item, linked) = match request.target {
             Target::IssueOpen => self.open_proposed_issue(&mut request, space).await?,
             Target::PrOpen => {
-                let workspace = (space.and_then(LinkSpace::workspace))
+                let workspace = (space.and_then(|space| space.to_workspace()))
                     .context("the workspace that proposed the PR is gone")?;
-                self.open_proposed_pull(&mut request, workspace).await?
+                self.open_proposed_pull(&mut request, &workspace).await?
             }
             _ => bail!("approval request {} is not a proposal", request.number),
         };
@@ -506,7 +506,7 @@ impl Manager {
         };
         // Only a scoped caller proposes, and it acts as the agent account.
         let recorded = async {
-            self.keep_created(space.id(), ItemKind::Issue, item, link, Assigner::Agent)
+            self.keep_created(&space.id, ItemKind::Issue, item, link, Assigner::Agent)
                 .await
         };
         match recorded.await {
@@ -709,7 +709,7 @@ impl Manager {
     ) -> Result<Option<String>> {
         let posted = match space {
             Some(space) => self
-                .apply_own(space.id(), forge, account, target.clone(), &comment, None)
+                .apply_own(&space.id, forge, account, target.clone(), &comment, None)
                 .await
                 .map(|_| ()),
             None => forge
@@ -836,7 +836,7 @@ async fn head_commit(
 /// The branch and commit a space proposes an issue from: a workspace's; a
 /// chat works on neither.
 async fn proposed_from(space: &LinkSpace) -> Result<(Option<String>, Option<String>)> {
-    let Some(workspace) = space.workspace() else {
+    let Some(workspace) = space.worktree() else {
         return Ok((None, None));
     };
     let commit = crate::git::revision(&workspace.path, "HEAD", crate::git::run).await?;
@@ -894,19 +894,19 @@ mod files;
 pub async fn store_issue_proposal(manager: &Manager, space: &LinkSpace) -> ApprovalRequest {
     let specification = Specification::Issue(IssueSpecification {
         issue: NewIssue {
-            title: format!("Flaky in {}", space.name()),
+            title: format!("Flaky in {}", space.name),
             ..NewIssue::default()
         },
         repository: None,
         link: false,
         branch: space.branch().map(str::to_owned).map(BranchName::from),
-        commit: space.workspace().map(|_| "head".into()),
+        commit: space.worktree().map(|_| "head".into()),
         agent: None,
         duplicates: Vec::new(),
         follow_up: None,
     });
     let mut request = proposal(
-        space.id(),
+        &space.id,
         Target::IssueOpen,
         proposals::ISSUE,
         specification,

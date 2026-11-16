@@ -225,7 +225,7 @@ pub(super) async fn handle(
                 .await?,
         ),
         ItemMethod::RelinkSpace { space, links } => {
-            let id = manager.link_space(&space).await?.id().to_owned();
+            let id = manager.link_space(&space).await?.id.to_owned();
             let warnings = manager.relink_space(&id, &links, caller).await;
             Body::Linked(shoal_protocol::links::Linked {
                 title_error: None,

@@ -84,7 +84,7 @@ impl Manager {
     ) -> Result<Item> {
         self.verify_space(&space).await?;
         let forge = self.space_forge(&space).await?;
-        let item = (self.named_or_linked(input, Some(space.id()), &forge, kind)).await?;
+        let item = (self.named_or_linked(input, Some(&space.id), &forge, kind)).await?;
         let (number, url) = (item.number().get(), item.to_string());
         let account = match caller {
             None if users_decision(&action) => self.user_account(),
@@ -93,10 +93,10 @@ impl Manager {
         };
         // Held from before the change, so a poll that observes it records
         // it after the cursors that take it as the space's own know it.
-        let _gate = self.lock_change_gates(space.id(), &[]).await?;
+        let _gate = self.lock_change_gates(&space.id, &[]).await?;
         let target = Target { kind, number, url };
         let item = self
-            .apply_own(space.id(), &forge, &account, target, &action, caller)
+            .apply_own(&space.id, &forge, &account, target, &action, caller)
             .await?;
         self.sync_after_merge(space.repository_id(), &action, &item);
         Ok(item)
@@ -194,7 +194,7 @@ impl Manager {
                     number: number.get(),
                     url,
                 };
-                self.apply_own(space.id(), &forge, &account, target, &action, None)
+                self.apply_own(&space.id, &forge, &account, target, &action, None)
                     .await?;
             }
         }
@@ -235,7 +235,7 @@ impl Manager {
             number: number.get(),
             url,
         };
-        self.apply_own(space.id(), &forge, &account, target, &action, None)
+        self.apply_own(&space.id, &forge, &account, target, &action, None)
             .await?;
         Ok(())
     }

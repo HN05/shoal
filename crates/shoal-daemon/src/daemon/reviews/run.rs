@@ -299,7 +299,7 @@ impl Manager {
             runs: &self.oneshot_runs,
             settings,
             configured: self
-                .configured_environment_from(workspace, settings)
+                .hook_environment(workspace, workspace.repository(), settings)
                 .await?,
             instructions: self
                 .review_instructions(review, workspace, settings, files, commits)

@@ -70,7 +70,7 @@ impl Manager {
         if selected == Some(ItemKind::Issue) {
             return Ok(Vec::new());
         }
-        let id = space.id().to_owned();
+        let id = space.id.to_owned();
         let linked = self
             .store
             .run(move |db| linked_items(db, &id, Some(ItemKind::Pr)));

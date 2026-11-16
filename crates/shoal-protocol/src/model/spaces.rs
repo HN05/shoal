@@ -3,7 +3,7 @@ use super::{Chat, Workspace};
 
 mod record;
 use crate::space_names::{SpaceName, SpaceSelector};
-pub use record::{ByKind, Space, SpacePart, Workdir};
+pub use record::{ByKind, Part, Space, SpacePart, Workdir};
 use serde::{Deserialize, Serialize};
 use shoal_ids::space_ids::SpaceId;
 use shoal_refs::BranchName;

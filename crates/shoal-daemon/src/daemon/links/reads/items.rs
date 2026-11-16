@@ -214,7 +214,7 @@ impl Manager {
 async fn linked_kind(space: &LinkSpace, number: u64) -> Result<Option<LinkKind>> {
     let linked = Selected {
         path: space.origin_path().to_owned(),
-        items: (space.links().items().into_iter())
+        items: (space.links.items().into_iter())
             .map(|item| SelectedItem {
                 url: item.url,
                 relations: Vec::new(),

@@ -4,7 +4,7 @@
 use crate::config::hooks::HookCommand;
 use crate::forge::items::reference::ItemRef;
 use shoal_ids::space_ids::SpaceId;
-use std::{collections::BTreeMap, ffi::OsString, path::Path};
+use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, params};
@@ -24,7 +24,7 @@ use crate::{
     },
     forge::items::link::{ItemKind, LinkKind, Selection},
     hooks::{self, Hook, HookKind},
-    model::{Chat, ReadyMarks, Repository, ReviewMark, SkippedPr},
+    model::{ReadyMarks, ReviewMark, SkippedPr},
 };
 use pulls::Pulls;
 use shoal_protocol::space_names::SpaceSelector;
@@ -91,7 +91,7 @@ impl Manager {
         selection: Selection,
         caller: Option<&Caller>,
     ) -> Result<ReadyMarks> {
-        let id = self.link_space(selector).await?.id().to_owned();
+        let id = self.link_space(selector).await?.id.to_owned();
         let _guard = self.lock_change_gates(&id, &[]).await?;
         let space = self.link_space(&SpaceSelector::id(&id)).await?;
         let head = self.ready_head(&space, caller).await?;
@@ -117,7 +117,7 @@ impl Manager {
             (self.run_post_ready(&space, &settings, &command, &ready.marks)).await;
         }
         self.tell_coordinator(
-            space.name(),
+            &space.name,
             Some(&id),
             None,
             ready_notice(&ready.marks),
@@ -139,9 +139,10 @@ impl Manager {
         space: &LinkSpace,
         caller: Option<&Caller>,
     ) -> Result<Option<CommitId>> {
-        let Some(workspace) = space.workspace() else {
+        let Some(workspace) = space.to_workspace() else {
             return Ok(None);
         };
+        let workspace = &workspace;
         workspace.require_branch("shoal ready")?;
         self.verify_worktree(workspace).await?;
         let head = current_head(workspace).await?;
@@ -160,31 +161,21 @@ impl Manager {
         command: &Path,
         marks: &[ReviewMark],
     ) {
-        let result = match self.hook_environment(space, settings).await {
+        let repository = space.repository_id();
+        let result = match self
+            .hook_environment(&space.space, repository, settings)
+            .await
+        {
             Ok(configured) => {
                 let hook = Hook::PostReady(marks);
-                hooks::run_detached(hook, space, command, &self.paths, &configured).await
+                (hooks::run_detached(hook, &space.space, command, &self.paths, &configured)).await
             }
             Err(error) => Err(error),
         };
         if let Err(error) = result {
             let message = format!("marked ready for review; {error:#}");
             let kind = NotificationKind::HookFailed;
-            (self.notify_space(space.name(), space.id(), kind, message)).await;
-        }
-    }
-
-    /// What `[env]` adds to the environment of the space's hooks.
-    async fn hook_environment(
-        &self,
-        space: &LinkSpace,
-        settings: &Effective,
-    ) -> Result<BTreeMap<String, OsString>> {
-        match space {
-            LinkSpace::Workspace(workspace) => {
-                self.configured_workspace_environment(workspace).await
-            }
-            LinkSpace::Chat { chat, checkout } => chat_hook_environment(chat, checkout, settings),
+            (self.notify_space(&space.name, &space.id, kind, message)).await;
         }
     }
 
@@ -245,12 +236,12 @@ impl Manager {
         selection: Selection,
         draft: Option<bool>,
     ) -> Result<Vec<ReviewMark>> {
-        let id = self.link_space(selector).await?.id().to_owned();
+        let id = self.link_space(selector).await?.id.to_owned();
         let _guard = self.lock_change_gates(&id, &[]).await?;
         let space = self.link_space(&SpaceSelector::id(&id)).await?;
         let kind = marked_kind(&selection)?;
         let explicit = marked_item(self.explicit_item(space.origin_path(), &selection).await?);
-        let selected = self.selected_marks(space.id(), kind, explicit).await?;
+        let selected = self.selected_marks(&space.id, kind, explicit).await?;
         let draft = match draft {
             Some(draft) => draft,
             None => self.space_settings(&space).await?.pr.draft_on_unready,
@@ -262,7 +253,7 @@ impl Manager {
                     "kept the marks: a PR could not return to draft; retry, or pass --no-draft",
                 )?;
         }
-        self.delete_marks(space.id(), &selected).await?;
+        self.delete_marks(&space.id, &selected).await?;
         Ok(selected)
     }
 
@@ -320,23 +311,6 @@ impl Manager {
             })
             .await
     }
-}
-
-/// What a chat's hooks add to their environment: the repository's `[env]`
-/// with the placeholders a chat has, after its temporary directory.
-fn chat_hook_environment(
-    chat: &Chat,
-    checkout: &Repository,
-    settings: &Effective,
-) -> Result<BTreeMap<String, OsString>> {
-    let caches = crate::caches::directories(checkout, &settings.caches)?;
-    Ok(crate::env::render_chat_environment(
-        &settings.env,
-        &checkout.path,
-        crate::repository::name(checkout),
-        &caches,
-        chat.tmp_dir.as_deref(),
-    ))
 }
 
 /// The items a mark of `kind`, or of the `explicit` item, covers among the

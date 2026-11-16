@@ -436,9 +436,10 @@ impl Manager {
         if let Allocation::Granted(lease) = &acquisition
             && let Some(command) = hook
         {
-            let configured_env = self
-                .configured_workspace_environment(&hook_workspace)
-                .await?;
+            let settings = self.workspace_settings(&hook_workspace).await?;
+            let repository = hook_workspace.repository();
+            let configured_env =
+                (self.hook_environment(&hook_workspace, repository, &settings)).await?;
             crate::hooks::run_detached(
                 crate::hooks::Hook::PostResourceAcquire(lease),
                 &hook_workspace,
@@ -544,7 +545,9 @@ impl Manager {
     ) -> Result<()> {
         if let Some(command) = command {
             self.verify_worktree(workspace).await?;
-            let configured_env = self.configured_workspace_environment(workspace).await?;
+            let settings = self.workspace_settings(workspace).await?;
+            let repository = workspace.repository();
+            let configured_env = (self.hook_environment(workspace, repository, &settings)).await?;
             crate::hooks::run_detached(
                 crate::hooks::Hook::PreResourceRelease(lease),
                 workspace,

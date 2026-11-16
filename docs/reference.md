@@ -5218,10 +5218,10 @@ A [chat](#chats) marks each linked open PR whatever its head on the forge, since
 its checkout is not on the PR's branch, and its linked issue, or the chat
 itself when nothing is linked. `list --chats` shows a marked chat as `ready`,
 `inbox` lists its marks, and `list --json` lists them as the chat's `review`. The
-[review gate](#local-reviews) does not apply to a chat's marks; `hooks.post_ready` runs in
-the chat's checkout, with the repository's `[env]`, whose `{path}` is the
-checkout and `{repo}` the repository; a chat has no `{workspace}`, `{branch}`
-or ports.
+[review gate](#local-reviews) does not apply to a chat's marks; `hooks.post_ready` runs
+where the chat works, its repository's checkout or the worktree it runs in, with the
+repository's `[env]`, whose `{path}` is that directory and `{repo}` the repository; a
+chat has no `{workspace}`, `{branch}` or ports.
 
 `hooks.post_ready` runs in the daemon after marks are recorded, under the same
 rules, precedence and limits as `hooks.post_done`, with `SHOAL_REVIEW_MARKS` holding

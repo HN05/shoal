@@ -45,7 +45,7 @@ impl Manager {
                 continue;
             }
             failure.get_or_insert_with(|| {
-                error.context(format!("background item activity for {}", space.name()))
+                error.context(format!("background item activity for {}", space.name))
             });
         }
         failure.map_or(Ok(()), Err)
@@ -58,10 +58,8 @@ impl Manager {
         let ready = workspaces.filter(|w| w.state == crate::state::WorkspaceState::Ready);
         let mut spaces: Vec<LinkSpace> = ready.map(LinkSpace::from).collect();
         let chats = self.chats().await?.into_iter();
-        for chat in chats.filter(|chat| chat.running) {
-            if let Some(checkout) = self.chat_repository(&chat).await? {
-                spaces.push(LinkSpace::Chat { chat, checkout });
-            }
+        for chat in chats.filter(|chat| chat.running && chat.repository_id.is_some()) {
+            spaces.push(LinkSpace::own(chat.into())?);
         }
         Ok(spaces)
     }
@@ -69,7 +67,7 @@ impl Manager {
     /// Read the activity of the space's polled items, and record and queue
     /// what changed.
     pub(super) async fn poll_space_item_activity(&self, space: &LinkSpace) -> Result<()> {
-        let id = space.id().to_owned();
+        let id = space.id.to_owned();
         let items = self.store.run(move |db| polled_items(db, &id)).await?;
         if items.is_empty() {
             return Ok(());
@@ -90,7 +88,7 @@ impl Manager {
             }
             Err(error) => Err(error),
         };
-        self.queue_background_updates(space.id(), observations, observed_at)
+        self.queue_background_updates(&space.id, observations, observed_at)
             .await?;
         looked_up
     }
@@ -105,7 +103,7 @@ impl Manager {
         let branch = space
             .branch()
             .filter(|_| report == BranchReport::ChangedOnBothSides)?;
-        self.branch_observation(space.id(), branch.to_owned(), report)
+        self.branch_observation(&space.id, branch.to_owned(), report)
             .await
     }
 
@@ -118,12 +116,12 @@ impl Manager {
         space: &LinkSpace,
         activity: Vec<(String, Snapshot)>,
     ) -> Result<()> {
-        let seen = (self.record_background_activity(space.id(), activity)).await?;
+        let seen = (self.record_background_activity(&space.id, activity)).await?;
         if seen.merged {
             self.syncs.request(space.repository_id());
         }
         if seen.changed_draft {
-            self.publications.request(space.id());
+            self.publications.request(&space.id);
         }
         Ok(())
     }

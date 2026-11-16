@@ -78,7 +78,7 @@ impl Manager {
                 format!(
                     "chat {} has no repository of its own; name the item's repository with \
                      --repo or select the item by its URL",
-                    &space.name
+                    space.name
                 )
             })?;
             return Ok(Some(named.clone()));
@@ -128,7 +128,7 @@ impl Manager {
             .selection_items(space, selection, followed_items)
             .await?;
         if items.is_empty() && selection.input.is_none() {
-            self.ensure_links_kind(space.id(), selection.kind).await?;
+            self.ensure_links_kind(&space.id, selection.kind).await?;
         }
         Ok(items)
     }
@@ -162,7 +162,7 @@ impl Manager {
         if let Some(item) = self.explicit_item(space.origin_path(), selection).await? {
             return Ok(vec![item]);
         }
-        let id = space.id().to_owned();
+        let id = space.id.to_owned();
         let kind = selection.kind;
         self.store.run(move |db| linked(db, &id, kind)).await
     }

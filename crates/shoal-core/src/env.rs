@@ -13,7 +13,7 @@ use tokio::process::Command;
 
 use crate::{
     config::placeholders,
-    model::{ExecutionSpace, PortReservation, SpaceKind, Workspace},
+    model::{ExecutionSpace, Part, PortReservation, Space, SpaceKind},
     paths::Paths,
 };
 pub use shoal_protocol::env::*;
@@ -35,24 +35,31 @@ pub fn agent_config_environment(
         .collect()
 }
 
-/// Render configured values once for one workspace, after `tmp_dir`, its
-/// temporary directory, as [`TMPDIR`], which `[env]` may override. Inserted
-/// values are never scanned again, matching the prompt template substitution
-/// rules.
-pub fn render_configured_environment(
+/// Render configured values once for `space`, after `tmp_dir`, its
+/// temporary directory, as [`TMPDIR`], which `[env]` may override: a
+/// workspace's placeholders where it owns a worktree, else `{path}`, the
+/// directory it works in, and `{repo}`. Inserted values are never scanned
+/// again, matching the prompt template substitution rules.
+pub fn render_configured_environment<P: Part>(
     values: &BTreeMap<String, String>,
-    workspace: &Workspace,
+    space: &Space<P>,
     repository_name: &str,
     ports: &[PortReservation],
     caches: &BTreeMap<String, PathBuf>,
     tmp_dir: Option<&Path>,
 ) -> BTreeMap<String, OsString> {
-    let mut fields = workspace_fields(
-        workspace.directory_name(),
-        &workspace.path,
-        workspace.branch.as_ref().map(BranchName::as_str),
-        repository_name,
-    );
+    let mut fields = match space.worktree() {
+        Some(worktree) => workspace_fields(
+            worktree.directory_name(),
+            &worktree.path,
+            worktree.branch.as_ref().map(BranchName::as_str),
+            repository_name,
+        ),
+        None => vec![
+            ("{path}", space.workdir.path().as_os_str()),
+            ("{repo}", OsStr::new(repository_name)),
+        ],
+    };
     let mut port_values = Vec::new();
     for port in ports {
         port_values.push((format!("{{port.{}}}", port.name), port.port.to_string()));
@@ -94,22 +101,6 @@ fn workspace_fields<'a>(
         ("{repo}", OsStr::new(repository_name)),
         ("{branch}", OsStr::new(branch.unwrap_or_default())),
     ]
-}
-
-/// [`render_configured_environment`] for a chat, which runs in the
-/// registered checkout at `checkout` and has no workspace, branch or ports.
-pub fn render_chat_environment(
-    values: &BTreeMap<String, String>,
-    checkout: &Path,
-    repository_name: &str,
-    caches: &BTreeMap<String, PathBuf>,
-    tmp_dir: Option<&Path>,
-) -> BTreeMap<String, OsString> {
-    let fields = vec![
-        ("{path}", checkout.as_os_str()),
-        ("{repo}", std::ffi::OsStr::new(repository_name)),
-    ];
-    render_environment(values, fields, caches, tmp_dir)
 }
 
 /// `values` with `fields` and each cache's `{cache.<name>}` filled in, after

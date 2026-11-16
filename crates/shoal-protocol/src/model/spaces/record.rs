@@ -210,15 +210,62 @@ impl<P> std::fmt::Display for Space<P> {
     }
 }
 
-impl Space {
-    /// The worktree it owns, which only a workspace has.
-    pub fn worktree(&self) -> Option<&Worktree> {
-        match &self.part {
-            SpacePart::Workspace(worktree) => Some(worktree),
-            SpacePart::Chat(_) => None,
+/// What a space's part tells of its kind.
+pub trait Part {
+    /// The worktree the space owns, which only a workspace has.
+    fn worktree(&self) -> Option<&Worktree>;
+
+    fn kind(&self) -> SpaceKind;
+}
+
+impl Part for Worktree {
+    fn worktree(&self) -> Option<&Worktree> {
+        Some(self)
+    }
+
+    fn kind(&self) -> SpaceKind {
+        SpaceKind::Workspace
+    }
+}
+
+impl Part for ChatPart {
+    fn worktree(&self) -> Option<&Worktree> {
+        None
+    }
+
+    fn kind(&self) -> SpaceKind {
+        SpaceKind::Chat
+    }
+}
+
+impl Part for SpacePart {
+    fn worktree(&self) -> Option<&Worktree> {
+        match self {
+            Self::Workspace(worktree) => Some(worktree),
+            Self::Chat(_) => None,
         }
     }
 
+    fn kind(&self) -> SpaceKind {
+        match self {
+            Self::Workspace(_) => SpaceKind::Workspace,
+            Self::Chat(_) => SpaceKind::Chat,
+        }
+    }
+}
+
+impl<P: Part> Space<P> {
+    /// The worktree it owns, which only a workspace has.
+    pub fn worktree(&self) -> Option<&Worktree> {
+        self.part.worktree()
+    }
+
+    pub fn kind(&self) -> SpaceKind {
+        self.part.kind()
+    }
+}
+
+impl Space {
     /// A copy of the workspace it is, for a caller that holds it only by
     /// reference.
     pub fn to_workspace(&self) -> Option<Workspace> {
@@ -250,13 +297,6 @@ impl Space {
         match &self.part {
             SpacePart::Workspace(worktree) => worktree.done,
             SpacePart::Chat(chat) => chat.completion.is_some(),
-        }
-    }
-
-    pub fn kind(&self) -> SpaceKind {
-        match &self.part {
-            SpacePart::Workspace(_) => SpaceKind::Workspace,
-            SpacePart::Chat(_) => SpaceKind::Chat,
         }
     }
 

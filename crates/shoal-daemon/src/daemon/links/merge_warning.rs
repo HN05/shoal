@@ -141,7 +141,7 @@ impl Manager {
                 let space = self.context_space(context).await?;
                 let forge = self.space_forge(&space).await?;
                 let pull =
-                    (self.named_or_linked(input, Some(space.id()), &forge, ItemKind::Pr)).await?;
+                    (self.named_or_linked(input, Some(&space.id), &forge, ItemKind::Pr)).await?;
                 Ok((forge, pull))
             }
         }

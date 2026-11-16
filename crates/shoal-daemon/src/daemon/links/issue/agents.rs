@@ -53,7 +53,7 @@ impl Manager {
         };
         for warning in warnings {
             let kind = NotificationKind::UnassignFailed;
-            (self.notify_space(space.name(), id, kind, warning)).await;
+            (self.notify_space(&space.name, id, kind, warning)).await;
         }
     }
 

@@ -177,7 +177,7 @@ impl Manager {
             url,
             title: run.workflow,
         };
-        self.record_items(space.id(), vec![(relation, item)]).await
+        self.record_items(&space.id, vec![(relation, item)]).await
     }
 
     /// Record an opened or related item named by number or URL.
@@ -193,7 +193,7 @@ impl Manager {
         self.verify_space(&space).await?;
         let url = self.space_item(&space, kind, input).await?;
         let item = LinkedItem { url, title };
-        self.record_items(space.id(), vec![(relation, item)]).await
+        self.record_items(&space.id, vec![(relation, item)]).await
     }
 
     /// Forget a relation's recorded items of `kind`, or the one `input` names,
@@ -212,7 +212,7 @@ impl Manager {
             _ => None,
         };
         let removed = self
-            .remove_items(space.id(), relation, kind, url.clone())
+            .remove_items(&space.id, relation, kind, url.clone())
             .await?;
         match url {
             Some(url) => ensure!(
@@ -296,7 +296,7 @@ impl Manager {
         kind: Option<ItemKind>,
     ) -> Result<()> {
         let space = self.link_space(selector).await?;
-        let id = space.id();
+        let id = &space.id;
         let issue = kind != Some(ItemKind::Pr) && !self.issue_registrations(id).await?.is_empty();
         let pr =
             kind != Some(ItemKind::Issue) && !matches!(self.pr_registration(id).await, Ok(None));

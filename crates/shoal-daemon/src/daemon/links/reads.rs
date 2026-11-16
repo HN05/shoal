@@ -101,7 +101,7 @@ impl Manager {
         kind: ItemKind,
     ) -> Result<ItemRef> {
         let space = match place {
-            ReadPlace::Space(space) => Some(space.id()),
+            ReadPlace::Space(space) => Some(&space.id),
             ReadPlace::Checkout(_) => None,
         };
         self.named_or_linked(item, space, forge, kind).await
