@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use std::{process::Output, time::Duration};
 use tokio::process::Command;
 
-const COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
+pub(super) const COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
 /// Give the OS time to finish a daemon drain before forcing termination.
 pub(super) const SERVICE_STOP_TIMEOUT: Duration =
     timing::WORKSPACE_STOP_TIMEOUT.saturating_add(COMMAND_TIMEOUT);

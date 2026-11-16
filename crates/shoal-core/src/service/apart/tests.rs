@@ -28,7 +28,7 @@ fn the_launcher_starts_a_scope_in_the_services_slice() {
     let service = Service {
         slice: Some("workloads.slice".into()),
     };
-    let launcher = service.launcher();
+    let launcher = service.launcher(vec!["systemd-run".into()]);
     assert!(launcher.contains(&"--scope".into()), "{launcher:?}");
     assert!(
         launcher.contains(&"--slice=workloads.slice".into()),
