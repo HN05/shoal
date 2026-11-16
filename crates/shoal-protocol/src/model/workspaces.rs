@@ -323,13 +323,6 @@ pub struct Refreshed {
     pub setup: bool,
 }
 
-/// A workspace after it took a new name, with the name it had before.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RenamedWorkspace {
-    pub workspace: Workspace,
-    pub previous_name: SpaceName,
-}
-
 /// A branch a new workspace can take, local or on a remote.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Branch {

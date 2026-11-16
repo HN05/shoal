@@ -711,7 +711,7 @@ async fn a_cleanup_request_takes_one_of_two_same_named_spaces() {
             .create_workspace(&repo.id, branch.into(), None, None, None)
             .await
             .unwrap();
-        (manager.set_workspace_name(&SpaceSelector::id(&workspace.id), &"Same".parse().unwrap()))
+        (manager.rename_space(&SpaceSelector::id(&workspace.id), &"Same".parse().unwrap()))
             .await
             .unwrap();
         workspaces.push(workspace);

@@ -499,7 +499,7 @@ async fn a_copy_of_a_renamed_workspace_at_a_commit_branches_from_its_commit() {
         .unwrap();
     let selector = SpaceSelector::id(&detached.id);
     (f.manager
-        .set_workspace_name(&selector, &"Try the cache".parse().unwrap()))
+        .rename_space(&selector, &"Try the cache".parse().unwrap()))
     .await
     .unwrap();
     let source = CopySource {

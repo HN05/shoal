@@ -5,7 +5,7 @@ use crate::{
         events::{EventCause, EventItem, EventKind},
         test_support::{chat_process, ended, manager, repository},
     },
-    model::{SpaceKind, SpaceRef},
+    model::{PresentSpace, SpaceKind, SpaceRef},
 };
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;
@@ -293,30 +293,31 @@ async fn a_renamed_chat_keeps_its_files() {
     std::fs::create_dir_all(files.parent().unwrap()).unwrap();
     std::fs::write(files.with_extension("log"), "talk log").unwrap();
 
-    let rename = |chat: &str, name: &str| manager.rename_chat(chat.into(), name.into());
+    let rename = async |chat: &str, name: &str| {
+        let renamed = (manager.rename_space(&SpaceSelector::Id(chat.into()), &name.into())).await?;
+        let PresentSpace::Chat(chat) = renamed.space else {
+            panic!("renamed a workspace");
+        };
+        anyhow::Ok((chat, renamed.previous_name))
+    };
     assert!(rename("gone", "topic").await.is_err());
     assert_eq!(
         rename(talk.id.as_str(), "talk").await.unwrap(),
-        RenamedChat {
-            chat: talk.clone(),
-            previous_name: "talk".into(),
-        }
+        (talk.clone(), "talk".into())
     );
 
     // The reply names the chat as it was before.
-    let renamed = rename(talk.id.as_str(), "topic").await.unwrap();
+    let (renamed, previous_name) = rename(talk.id.as_str(), "topic").await.unwrap();
     assert_eq!(
         renamed,
-        RenamedChat {
-            chat: Chat {
-                name: "topic".into(),
-                ..talk.clone()
-            },
-            previous_name: "talk".into(),
+        Chat {
+            name: "topic".into(),
+            ..talk.clone()
         }
     );
-    assert!(manager.chats().await.unwrap().contains(&renamed.chat));
-    assert_eq!(manager.paths.chat_files(&renamed.chat), files);
+    assert_eq!(previous_name, "talk");
+    assert!(manager.chats().await.unwrap().contains(&renamed));
+    assert_eq!(manager.paths.chat_files(&renamed), files);
     assert_eq!(
         std::fs::read_to_string(files.with_extension("log")).unwrap(),
         "talk log"

@@ -9,7 +9,7 @@ use tokio::sync::OnceCell;
 use crate::{
     cli::context::Context,
     config::Effective,
-    model::Workspace,
+    model::{PresentSpace, Workspace},
     sessions::{HostName, Origin},
     terminal::{Configured, Options, PlaceName, Places},
 };
@@ -23,12 +23,12 @@ pub(in crate::cli) struct Labels {
     pub expected: String,
 }
 
-/// The labels of the places hosting `workspace` after its name changed
-/// from `previous`, from one lookup of its repository and issue, made when
-/// a host first needs it.
+/// The labels of the places hosting `space` after its name changed from
+/// `previous`, from one lookup of a workspace's repository and issue, made
+/// when a host first needs it.
 pub(in crate::cli) struct Renamed<'a> {
     ctx: &'a Context,
-    workspace: &'a Workspace,
+    space: &'a PresentSpace,
     previous: &'a str,
     name: OnceCell<Option<PlaceName>>,
 }
@@ -36,51 +36,53 @@ pub(in crate::cli) struct Renamed<'a> {
 impl<'a> Renamed<'a> {
     pub(in crate::cli) fn new(
         ctx: &'a Context,
-        workspace: &'a Workspace,
+        space: &'a PresentSpace,
         previous: &'a str,
     ) -> Self {
         Self {
             ctx,
-            workspace,
+            space,
             previous,
             name: OnceCell::new(),
         }
     }
 
-    /// The labels of the workspace's places on a host with `options`,
-    /// rendered for its name and its previous one. Without a template the
-    /// labels are the names; without the lookup a template's places keep
-    /// their labels.
+    /// The labels of the space's places on a host with `options`, rendered
+    /// for its name and its previous one. Without a template, or a worktree
+    /// to fill one in, the labels are the names; without the lookup a
+    /// template's places keep their labels.
     pub(in crate::cli) async fn labels(&self, options: &Options) -> Labels {
-        let branch = self.workspace.branch_or_name();
-        if options.name_template.is_none() {
+        let (Some(workspace), Some(template)) = (self.space.worktree(), &options.name_template)
+        else {
             return Labels {
-                new: self.workspace.name.to_string(),
+                new: self.space.name().to_string(),
                 expected: self.previous.to_owned(),
             };
-        }
-        let Some(name) = self.name().await else {
+        };
+        let branch = workspace.branch_or_name();
+        let Some(name) = self.name(workspace).await else {
             return Labels {
                 new: branch.to_owned(),
                 expected: branch.to_owned(),
             };
         };
-        let name = name.templated(options.name_template.clone());
+        let name = name.templated(Some(template.clone()));
         Labels {
-            new: name.render(branch, &self.workspace.name),
+            new: name.render(branch, &workspace.name),
             expected: name.render(branch, self.previous),
         }
     }
 
-    /// The workspace's place name, looked up once; a failed lookup warns.
-    async fn name(&self) -> Option<&PlaceName> {
+    /// The place name of `workspace`, the space's, looked up once; a failed
+    /// lookup warns.
+    async fn name(&self, workspace: &Workspace) -> Option<&PlaceName> {
         let looked_up = self.name.get_or_init(async || {
-            place_name(&self.ctx.paths, self.workspace)
+            place_name(&self.ctx.paths, workspace)
                 .await
                 .inspect_err(|error| {
                     eprintln!(
                         "warning: cannot name the places of {}: {error:#}",
-                        self.workspace.name
+                        workspace.name
                     );
                 })
                 .ok()

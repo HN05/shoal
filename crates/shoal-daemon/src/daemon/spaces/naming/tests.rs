@@ -1,4 +1,5 @@
 use crate::daemon::test_support::{manager, repository};
+use crate::model::PresentSpace;
 use shoal_refs::BranchName;
 
 #[tokio::test]
@@ -16,18 +17,21 @@ async fn a_name_is_cleaned_up_kept_on_the_record_and_returned_with_the_previous_
     let selector = shoal_protocol::space_names::SpaceSelector::id(&workspace.id);
 
     let renamed = manager
-        .set_workspace_name(
+        .rename_space(
             &selector,
             &"  Plan:  summary with shoal done ".to_owned().into(),
         )
         .await
         .unwrap();
-    assert_eq!(renamed.workspace.name, "Plan: summary with shoal done");
+    let PresentSpace::Workspace(renamed_workspace) = &renamed.space else {
+        panic!("renamed a chat");
+    };
+    assert_eq!(renamed_workspace.name, "Plan: summary with shoal done");
     assert_eq!(renamed.previous_name, "topic");
     // Nothing built from the name moves.
-    assert_eq!(renamed.workspace.path, workspace.path);
+    assert_eq!(renamed_workspace.path, workspace.path);
     assert_eq!(
-        renamed.workspace.branch.as_ref().map(BranchName::as_str),
+        renamed_workspace.branch.as_ref().map(BranchName::as_str),
         Some("topic")
     );
     assert_eq!(
@@ -37,7 +41,7 @@ async fn a_name_is_cleaned_up_kept_on_the_record_and_returned_with_the_previous_
 
     for name in ["   ", "two\nlines", &"x".repeat(41)] {
         let refused = manager
-            .set_workspace_name(&selector, &name.to_owned().into())
+            .rename_space(&selector, &name.to_owned().into())
             .await;
         assert!(refused.is_err(), "{name:?}");
     }

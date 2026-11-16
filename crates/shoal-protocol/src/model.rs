@@ -20,7 +20,7 @@ mod sync;
 mod workspaces;
 
 pub use agents::{AgentSession, AgentStatus, Asleep, PendingRestart, RunningAgent};
-pub use chats::{Chat, ChatHome, RenamedChat, chat_mode};
+pub use chats::{Chat, ChatHome, chat_mode};
 pub use checkpoints::{Checkpoint, CheckpointCause, RestoredCheckpoint};
 pub use cleanup::CleanupReason;
 pub use completion::{Completion, HandedBack};
@@ -49,12 +49,12 @@ pub use removal::{
 pub use repositories::{
     LocalConfigEdit, MovedRepository, Repository, RepositoryMoves, RepositoryRemoval,
 };
-pub use spaces::{PresentSpace, SpaceKind, SpaceRef, SpaceTarget, Spaces};
+pub use spaces::{PresentSpace, RenamedSpace, SpaceKind, SpaceRef, SpaceTarget, Spaces};
 pub use status::{
     Attention, DiffSummary, Inspection, IssueStatus, SpaceDetail, SpaceStatus, WorktreeStatus,
 };
 pub use sync::{CheckoutSync, SyncedRepository};
 pub use workspaces::{
-    Branch, CopiedFrom, MadeFor, OpenedWorkspace, Refreshed, RenamedWorkspace, StartingCommit,
-    Workspace, WorkspaceRef, WorkspaceUsage, no_branch,
+    Branch, CopiedFrom, MadeFor, OpenedWorkspace, Refreshed, StartingCommit, Workspace,
+    WorkspaceRef, WorkspaceUsage, no_branch,
 };

@@ -125,9 +125,10 @@ pub enum WorkspaceMethod {
     FindSpaces {
         target: crate::model::SpaceTarget,
     },
-    /// Give the workspace a new name.
-    SetWorkspaceName {
-        workspace: SpaceSelector,
+    /// Give the workspace or chat `space` the name `name`; the reply also
+    /// names it as it was before.
+    RenameSpace {
+        space: SpaceSelector,
         name: crate::space_names::SpaceName,
     },
     /// Where the space's executions run and the places Shoal created for

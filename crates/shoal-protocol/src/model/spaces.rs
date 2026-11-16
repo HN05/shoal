@@ -32,6 +32,14 @@ impl SpaceKind {
     }
 }
 
+/// A space after it took a new name, with the name it had before, which
+/// the places shown for it may still show.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RenamedSpace {
+    pub space: PresentSpace,
+    pub previous_name: SpaceName,
+}
+
 /// Something a space links or a workspace holds, for finding that space.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

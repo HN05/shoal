@@ -57,10 +57,6 @@ pub(super) async fn handle(
             Body::RemovedChat(manager.remove_chat(&chat, children).await?)
         }
         ChatMethod::ListChats => Body::Chats(manager.visible_chats(caller).await?),
-        ChatMethod::RenameChat { chat, name } => {
-            let id = manager.chat(&chat).await?.id;
-            Body::RenamedChat(manager.rename_chat(id, name).await?)
-        }
         ChatMethod::CheckChatParent {
             repository,
             workspace,
@@ -118,12 +114,6 @@ impl Scoped for ChatMethod {
     ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             ChatMethod::ListChats => None,
-            // A chat's agent chooses its chat's name.
-            ChatMethod::RenameChat { chat, .. } => Some(
-                manager
-                    .own_workspace(caller, chat, "chat processes rename only their own chat")
-                    .await?,
-            ),
             // A scoped caller starts chats only in its own tree, below its
             // own space unless it names one below it, in a worktree of its
             // tree, and runs each in the session it starts, with its scope.

@@ -150,10 +150,3 @@ impl<'a> ChatHome<'a> {
         }
     }
 }
-
-/// A chat after a rename, with the name it had before.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RenamedChat {
-    pub chat: Chat,
-    pub previous_name: SpaceName,
-}

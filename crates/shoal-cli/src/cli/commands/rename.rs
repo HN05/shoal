@@ -1,18 +1,22 @@
 //! `shoal rename`: rename a workspace or a chat, a picked one with what the
 //! user types, or ask its agent to choose.
-use anyhow::Result;
-use shoal_ids::space_ids::SpaceId;
+use anyhow::{Context as _, Result, ensure};
 
-use super::{chat, workspaces};
+use super::chat;
 use crate::{
     cli::{
         context::Context,
+        terminal,
         ui::{self, Fallback},
     },
-    model::PresentSpace,
+    model::RenamedSpace,
+    protocol::ConfigTarget,
 };
 use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
+
+/// What `shoal rename --request` asks a space's agent.
+const NAME_REQUEST: &str = "The user asks you to rename this space: name the work as it stands now in a few words with `shoal rename \"<name>\"`.";
 
 /// Rename the space `space` selects, else the space this runs in or a
 /// picked one.
@@ -23,6 +27,7 @@ pub(super) async fn rename(
 ) -> Result<i32> {
     // Refuse a name before a picker asks for the space.
     let name = SpaceName::parse(&name)?;
+    let space = chosen_space(ctx, space).await?;
     rename_space(ctx, space, name).await
 }
 
@@ -30,16 +35,52 @@ pub(super) async fn rename(
 pub(super) async fn rename_picked(ctx: &Context) -> Result<i32> {
     let space = ui::pick_any_space(ctx).await?;
     let name = ask_name(ctx).await?;
-    rename_space(ctx, Some(space), name).await
+    rename_space(ctx, space, name).await
 }
 
-/// Give the chat or workspace `space` names, else the one this runs in or
-/// a picked one, the name `name`.
-async fn rename_space(ctx: &Context, space: Option<SpaceSelector>, name: SpaceName) -> Result<i32> {
-    match chosen_chat(ctx, space).await? {
-        Ok(chat) => chat::rename(ctx, SpaceSelector::Id(chat), name).await,
-        Err(workspace) => workspaces::set_name(ctx, Some(workspace), name).await,
+/// Give the space `space` selects the name `name`, and show it on the
+/// places that still show its previous one.
+async fn rename_space(ctx: &Context, space: SpaceSelector, name: SpaceName) -> Result<i32> {
+    let renamed = crate::client::workspaces::rename_space(&ctx.paths, space, name).await?;
+    // The name is recorded; a place left with its old label only warns.
+    if let Err(error) = relabel(ctx, &renamed).await {
+        eprintln!(
+            "warning: cannot relabel the places of {}: {error:#}",
+            renamed.space.label()
+        );
     }
+    ctx.show(&renamed.space, |space| {
+        outln!(
+            "Renamed space {} {} to {}",
+            space.number(),
+            renamed.previous_name,
+            space.name()
+        )
+    })?;
+    Ok(0)
+}
+
+/// Show the renamed space's label on the places it runs in and those Shoal
+/// created for it, where they still show the label its previous name gave
+/// them.
+async fn relabel(ctx: &Context, renamed: &RenamedSpace) -> Result<()> {
+    let RenamedSpace {
+        space,
+        previous_name,
+    } = renamed;
+    let places =
+        crate::client::workspaces::places(&ctx.paths, SpaceSelector::id(space.id())).await?;
+    let running = (places.executions.into_iter()).filter_map(|execution| execution.origin);
+    let mut shown = Vec::new();
+    for place in running.chain(places.places) {
+        if !shown.contains(&place) {
+            shown.push(place);
+        }
+    }
+    let settings = shoal_workers::settings::of(&ctx.paths, ConfigTarget::space(space)).await?;
+    let labels = terminal::Renamed::new(ctx, space, previous_name);
+    terminal::relabel_space(&settings, &shown, async |host| labels.labels(host).await).await;
+    Ok(())
 }
 
 /// Ask for a space's new name until it is one a space can have.
@@ -53,34 +94,44 @@ async fn ask_name(ctx: &Context) -> Result<SpaceName> {
     .await
 }
 
-/// Ask the agent of the space `space` selects, else the one this runs in or
-/// a picked one, to choose its name.
+/// Ask the running agent of the space `space` selects, else the one this
+/// runs in or a picked one, to choose its name, through the messages
+/// `shoal messages send` queues. Without an agent the message would wait
+/// unread, so that is refused.
 pub(super) async fn request(ctx: &Context, space: Option<SpaceSelector>) -> Result<i32> {
     chat::ensure_scope_token(ctx)?;
-    match chosen_chat(ctx, space).await? {
-        Ok(chat) => chat::request_name(ctx, SpaceSelector::Id(chat)).await,
-        Err(workspace) => workspaces::request_name(ctx, Some(workspace)).await,
-    }
+    let selector = chosen_space(ctx, space).await?;
+    let space = (crate::client::workspaces::present_space(&ctx.paths, &selector).await?)
+        .with_context(|| format!("no space {selector}"))?;
+    let selector = SpaceSelector::id(space.id());
+    let agents = crate::client::agents::running(&ctx.paths, selector.clone()).await?;
+    ensure!(
+        !agents.is_empty(),
+        "{} has no running agent to ask; set its name with shoal rename {} <NAME>",
+        space.label(),
+        space.number()
+    );
+    crate::client::agent_messages::send(
+        &ctx.paths,
+        selector,
+        NAME_REQUEST.into(),
+        Vec::new(),
+        None,
+    )
+    .await?;
+    ctx.emit("Asked the space's agent to choose its name.", ())?;
+    Ok(0)
 }
 
 /// The space `space` names, else the current workspace or the chat this runs
 /// in, else the current checkout's only running chat, else the current
-/// workspace or a picked space: a chat's ID, or else the workspace.
-async fn chosen_chat(
-    ctx: &Context,
-    space: Option<SpaceSelector>,
-) -> Result<Result<SpaceId, SpaceSelector>> {
+/// workspace or a picked space.
+async fn chosen_space(ctx: &Context, space: Option<SpaceSelector>) -> Result<SpaceSelector> {
     if space.is_none() && ui::current_chat(&None).is_none() {
         let chats = crate::client::chats::list(&ctx.paths).await?;
         if let Some(chat) = super::sessions::checkout_chat(ctx, &chats).await? {
-            return Ok(Ok(chat.id));
+            return Ok(SpaceSelector::Id(chat.id));
         }
     }
-    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    Ok(
-        match crate::client::workspaces::present_space(&ctx.paths, &space).await? {
-            Some(PresentSpace::Chat(chat)) => Ok(chat.id),
-            _ => Err(space),
-        },
-    )
+    ui::select_space(ctx, space, Fallback::CurrentDirectory).await
 }

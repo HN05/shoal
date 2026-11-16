@@ -201,8 +201,8 @@ pub(super) async fn handle(
         WorkspaceMethod::SetBaseWorkspace { workspace, base } => {
             Body::Workspace(manager.set_base_workspace(&workspace, base).await?)
         }
-        WorkspaceMethod::SetWorkspaceName { workspace, name } => {
-            Body::RenamedWorkspace(manager.set_workspace_name(&workspace, &name).await?)
+        WorkspaceMethod::RenameSpace { space, name } => {
+            Body::RenamedSpace(manager.rename_space(&space, &name).await?)
         }
         WorkspaceMethod::VerifyWorkspace {
             workspace,
@@ -382,7 +382,6 @@ impl Scoped for WorkspaceMethod {
             // The handler answers with the caller's own space's.
             WorkspaceMethod::HeldPermissions { .. } => None,
             WorkspaceMethod::SetBaseWorkspace { workspace, .. }
-            | WorkspaceMethod::SetWorkspaceName { workspace, .. }
             | WorkspaceMethod::SpacePlaces { space: workspace }
             | WorkspaceMethod::RenameBranch { workspace, .. }
             | WorkspaceMethod::ConvertToChat { workspace, .. }
@@ -406,6 +405,16 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::LayeredConfig {
                 target: ConfigTarget::Space(workspace),
             } => Some(workspace),
+            // A space's agent chooses its own space's name.
+            WorkspaceMethod::RenameSpace { space, .. } => Some(
+                manager
+                    .own_workspace(
+                        caller,
+                        space,
+                        "scoped processes rename only their own space",
+                    )
+                    .await?,
+            ),
             WorkspaceMethod::SpaceStatus { space } | WorkspaceMethod::SpaceSessions { space } => {
                 Some(space)
             }

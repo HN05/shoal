@@ -54,12 +54,6 @@ pub enum ChatMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         children: Option<Vec<SpaceId>>,
     },
-    /// Give the running chat `chat`, by ID or name, the name `name`; the
-    /// reply also names the chat as it was before.
-    RenameChat {
-        chat: SpaceSelector,
-        name: SpaceName,
-    },
     /// Refuse a `parent` a new chat in `repository`, or without one, in the
     /// worktree of `workspace` when given, could not go below.
     CheckChatParent {

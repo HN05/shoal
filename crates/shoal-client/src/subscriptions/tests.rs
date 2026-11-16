@@ -452,13 +452,13 @@ async fn a_log_subscription_follows_one_space_within_its_scope() {
     assert!(!records.is_empty());
     daemon
         .manager
-        .set_workspace_name(&SpaceSelector::id(&own.id), &"Login fix".into())
+        .rename_space(&SpaceSelector::id(&own.id), &"Login fix".into())
         .await
         .unwrap();
     // Another space's entries stay out.
     daemon
         .manager
-        .set_workspace_name(&SpaceSelector::id(&other.id), &"Other".into())
+        .rename_space(&SpaceSelector::id(&other.id), &"Other".into())
         .await
         .unwrap();
     let Update::Changed(record) = until(&mut subscription, changed(RecordKind::LogEntry)).await

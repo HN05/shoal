@@ -1,4 +1,4 @@
-//! Chats: starting, restoring and handing over their agents, their names,
+//! Chats: starting, restoring and handing over their agents, their
 //! parents and scope, listing them and removing them.
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
@@ -9,7 +9,7 @@ use shoal_protocol::space_names::SpaceSelector;
 
 use crate::connection::{Daemon, request};
 use shoal_protocol::{
-    model::{Chat, ChatHome, RenamedChat},
+    model::{Chat, ChatHome},
     protocol::{ChatMethod, ChatScope},
     repository::Selector,
     scope_tokens::ScopeToken,
@@ -97,15 +97,6 @@ pub async fn scope(daemon: &impl Daemon, chat: &Chat) -> Result<ScopeToken> {
 pub async fn place(daemon: &impl Daemon, chat: &Chat, origin: Origin) -> Result<()> {
     let chat = SpaceSelector::id(&chat.id);
     request(daemon, ChatMethod::PlaceChat { chat, origin }).await
-}
-
-/// Rename `chat` to `name`.
-pub async fn rename(
-    daemon: &impl Daemon,
-    chat: SpaceSelector,
-    name: SpaceName,
-) -> Result<RenamedChat> {
-    request(daemon, ChatMethod::RenameChat { chat, name }).await
 }
 
 /// Running chats.

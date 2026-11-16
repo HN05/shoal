@@ -869,3 +869,32 @@ async fn a_scoped_start_takes_the_queue_entry_of_the_launch_it_starts_itself() {
     assert_eq!(parent, Some(&chat.id));
     fake::take(&started.operation).exit(0);
 }
+
+#[tokio::test]
+async fn a_workspaces_agent_renames_only_its_own_space() {
+    let daemon = TestDaemon::start().await;
+    let app = daemon.connector();
+    let parent = daemon.workspace("parent").await;
+    let split = WorkspaceMethod::SplitWorkspace {
+        workspace: SpaceSelector::id(&parent.id),
+        name: "child".into(),
+        base: Some("HEAD".into()),
+        options: Default::default(),
+    };
+    let child = connection::request::<Workspace>(&app, split).await.unwrap();
+    let agent = daemon.scoped(&parent).await;
+    let rename = |space: &Workspace, name: &str| {
+        crate::workspaces::rename_space(&agent, SpaceSelector::id(&space.id), name.into())
+    };
+
+    let renamed = rename(&parent, "Login retries").await.unwrap();
+    assert_eq!(renamed.space.id(), &parent.id);
+    assert_eq!(renamed.space.name(), "Login retries");
+    assert_eq!(renamed.previous_name, "parent");
+    // A space below it keeps the name its own agent or the user gives it.
+    assert_eq!(code(rename(&child, "Other").await), ErrorCode::ScopeDenied);
+    assert_eq!(
+        inspect(&app, child.id.as_str()).await.unwrap().name,
+        "child"
+    );
+}

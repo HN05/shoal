@@ -17,8 +17,8 @@ use shoal_protocol::{
     config::hooks::HookKind,
     model::{
         Blocker, ConflictCheck, DiffBase, Inspection, MergePreview, OwnedPlace, PresentSpace,
-        Refreshed, RenamedWorkspace, SpacePlaces, SpaceStatus, SpaceTarget, Spaces,
-        UntrackedWorktree, Workspace,
+        Refreshed, RenamedSpace, SpacePlaces, SpaceStatus, SpaceTarget, Spaces, UntrackedWorktree,
+        Workspace,
     },
     protocol::{CommitStart, ConfigTarget, CreationOptions, RepositoryLayers, WorkspaceMethod},
     repository::Selector,
@@ -156,17 +156,13 @@ pub async fn rename_branch(
     request(daemon, WorkspaceMethod::RenameBranch { workspace, branch }).await
 }
 
-/// Give `workspace` the name `name`.
-pub async fn set_name(
+/// Give the workspace or chat `space` the name `name`.
+pub async fn rename_space(
     daemon: &impl Daemon,
-    workspace: SpaceSelector,
+    space: SpaceSelector,
     name: shoal_protocol::space_names::SpaceName,
-) -> Result<RenamedWorkspace> {
-    request(
-        daemon,
-        WorkspaceMethod::SetWorkspaceName { workspace, name },
-    )
-    .await
+) -> Result<RenamedSpace> {
+    request(daemon, WorkspaceMethod::RenameSpace { space, name }).await
 }
 
 /// Build `workspace` on the workspace `base`, or on the default branch

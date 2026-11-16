@@ -636,7 +636,7 @@ async fn same_named_spaces_reach_their_own_coordinators() {
     // Both take the same name, which identifies neither.
     for workspace in [&worker, &other] {
         let selector = SpaceSelector::id(&workspace.id);
-        (manager.set_workspace_name(&selector, &"Same work".parse().unwrap()))
+        (manager.rename_space(&selector, &"Same work".parse().unwrap()))
             .await
             .unwrap();
         (manager.set_agent_state(&selector, AgentState::Working, None, None))
@@ -679,7 +679,7 @@ async fn same_named_siblings_send_the_same_message_apart() {
         .unwrap();
     for workspace in [&worker, &sibling] {
         let selector = SpaceSelector::id(&workspace.id);
-        (manager.set_workspace_name(&selector, &"Same work".parse().unwrap()))
+        (manager.rename_space(&selector, &"Same work".parse().unwrap()))
             .await
             .unwrap();
         (manager.set_agent_state(&selector, AgentState::Working, None, None))

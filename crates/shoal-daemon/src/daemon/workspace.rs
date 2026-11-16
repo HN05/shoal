@@ -37,7 +37,6 @@ pub(crate) use lifecycle::fail_interrupted_removals;
 mod location;
 pub(crate) mod lost_reports;
 mod merge;
-mod naming;
 mod overload_recovery;
 mod ownership;
 pub(crate) mod paths;

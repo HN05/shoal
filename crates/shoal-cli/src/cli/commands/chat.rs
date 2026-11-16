@@ -6,7 +6,6 @@
 //! Every start makes a new chat, focused as its mode says.
 mod issue;
 pub(super) mod removal;
-mod rename;
 
 mod agent;
 mod launch;
@@ -19,7 +18,6 @@ pub(super) use agent::{chat_agent, check_model};
 pub(super) use launch::{report_started, start_changed};
 pub(super) use list::{list, listed};
 pub(super) use options::{ChatPlace, Narrowing, Options, ensure_scope_token};
-pub(super) use rename::{rename, request_name};
 pub(super) use start::{
     Subject, root_dir, settings, start, start_handed, start_in_workspace,
     start_outside_repositories,

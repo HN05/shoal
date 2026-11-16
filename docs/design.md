@@ -1420,8 +1420,8 @@ The CLI owns Herdr tab handoffs after issue lookup and interactive workspace and
 agent choices and labels the tab with the space's name by default, which a
 template's `{name}` also gives. The user may rename the space or ask the
 agent to choose a name, a fixed agent message refused without a running agent,
-which would leave it unread until removal. A rename relabels the places Shoal
-created for the workspace, wherever the command runs: each through the host
+which would leave it unread until removal. A rename relabels the places the
+space's agents run in and those Shoal created for it, wherever the command runs: each through the host
 that opened it, on the server its record names, as closing reaches it. An optional `terminal.herdr.tab_name` template
 follows normal configuration precedence, substitutes repository, branch and issue
 fields once, and updates the branch after allocation. The resolved template travels

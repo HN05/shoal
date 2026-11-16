@@ -20,9 +20,7 @@ use crate::{
         workspace::{self, Manager},
     },
     fsutil::off_runtime,
-    model::{
-        Chat, RenamedChat, Repository, SpaceKind, SpaceLinks, SpaceRef, Workspace, WorkspaceRef,
-    },
+    model::{Chat, Repository, SpaceKind, SpaceLinks, SpaceRef, Workspace, WorkspaceRef},
     tmp_dirs,
 };
 use shoal_protocol::space_names::SpaceName;
@@ -357,22 +355,6 @@ impl Manager {
         }
     }
 
-    /// Give the chat `chat` the name `name`.
-    pub async fn rename_chat(&self, chat: SpaceId, name: SpaceName) -> Result<RenamedChat> {
-        // A request's name reads as sent, so the rule applies here.
-        let name = SpaceName::parse(&name)?;
-        let owner = self.root_dir_owner();
-        let (old, mut renamed) = self
-            .store
-            .write(move |tx| rename(tx, &owner, &chat, &name))
-            .await?;
-        renamed.agent = self.agent_of(&renamed.id).await?;
-        Ok(RenamedChat {
-            chat: renamed,
-            previous_name: old.name,
-        })
-    }
-
     /// Running and stopped chats in start order, each with its agent.
     pub async fn chats(&self) -> Result<Vec<Chat>> {
         let recorded = self.recorded_chats().await?;
@@ -655,31 +637,6 @@ fn ensure_place_free(
         }
         None => bail!("the chat's workspace was removed"),
     }
-}
-
-/// Rename the running or stopped chat `chat` to `name`. Returns the chat
-/// before and after.
-fn rename(
-    tx: &rusqlite::Transaction<'_>,
-    owner: &Path,
-    chat: &SpaceId,
-    name: &SpaceName,
-) -> Result<(Chat, Chat)> {
-    let old = recorded(tx, owner)?
-        .into_iter()
-        .find(|running| running.id == *chat)
-        .with_context(|| format!("no chat {chat}"))?;
-    if old.name != *name {
-        tx.execute(
-            "UPDATE spaces SET name=?2 WHERE id=?1",
-            params![old.id, name],
-        )?;
-    }
-    let renamed = Chat {
-        name: name.clone(),
-        ..old.clone()
-    };
-    Ok((old, renamed))
 }
 
 /// The running and stopped chats in start order, a chat without a

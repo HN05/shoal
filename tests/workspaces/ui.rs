@@ -870,10 +870,7 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
             assert!(transcript.is_empty(), "{transcript}");
         }
         if args[0] == "rename" {
-            assert!(
-                stdout.contains("Renamed workspace 1 available to Renamed"),
-                "{stdout}"
-            );
+            assert!(stdout.contains("1 available to Renamed"), "{stdout}");
         } else if args[0] == "attach" {
             assert!(stdout.is_empty(), "{stdout}");
         } else {

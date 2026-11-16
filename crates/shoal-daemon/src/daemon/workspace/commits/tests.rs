@@ -343,7 +343,7 @@ async fn a_removed_workspace_at_a_commit_is_restored_without_a_branch() {
     std::fs::write(workspace.path.join("draft"), "draft\n").unwrap();
     // Its name, which nothing is built from, changes before it goes.
     let selector = SpaceSelector::id(&workspace.id);
-    (manager.set_workspace_name(&selector, &"Try the cache".parse().unwrap()))
+    (manager.rename_space(&selector, &"Try the cache".parse().unwrap()))
         .await
         .unwrap();
     manager
