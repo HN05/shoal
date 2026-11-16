@@ -2360,7 +2360,8 @@ A request the trigger takes gets `202` before it fires, whether it then starts
 a run, its filter drops it or its key repeats one, so a caller cannot probe the
 filter. A request to no webhook trigger's route, to a paused one, with another
 method or with a wrong signature gets `404`, and records nothing; a body over
-5 MiB gets `413`. For a trigger with `secret`, the daemon runs the secret's
+5 MiB gets `413`, and a request while 16 others are being read, checked or
+wait to fire gets `503`. For a trigger with `secret`, the daemon runs the secret's
 command for each request to check its signature and keeps the value nowhere.
 A trigger without `secret` takes any request that reaches the listener.
 

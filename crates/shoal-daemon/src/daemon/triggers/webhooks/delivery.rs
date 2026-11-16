@@ -6,6 +6,7 @@ use std::{os::unix::ffi::OsStrExt, sync::Arc};
 
 use anyhow::{Context as _, Result};
 use shoal_protocol::triggers::{RunOrigin, WebhookRequest};
+use tokio::sync::OwnedSemaphorePermit;
 
 use super::super::{Configured, firing::Firing};
 use crate::{
@@ -52,12 +53,14 @@ impl<'a> Route<'a> {
 
 impl Manager {
     /// Deliver `request` to the webhook trigger whose route is `path`,
-    /// where its signature of `body`, the body as sent, checks out.
+    /// where its signature of `body`, the body as sent, checks out, holding
+    /// `permit` until its firing ends.
     pub(in crate::daemon::triggers) async fn deliver_webhook(
         self: &Arc<Self>,
         path: &str,
         request: WebhookRequest,
         body: &[u8],
+        permit: OwnedSemaphorePermit,
     ) -> Result<Delivered> {
         let Some((trigger, signed)) = self.routed_trigger(path).await? else {
             return Ok(Delivered::Refused);
@@ -73,7 +76,7 @@ impl Manager {
         {
             return Ok(Delivered::Refused);
         }
-        self.fire_webhook(trigger, request, at);
+        self.fire_webhook(trigger, request, at, permit);
         Ok(Delivered::Accepted)
     }
 
@@ -141,10 +144,17 @@ impl Manager {
     }
 
     /// Fire `trigger` for `request`, received at `at`, once the triggers
-    /// fire one at a time.
-    fn fire_webhook(self: &Arc<Self>, trigger: Configured, request: WebhookRequest, at: UnixTime) {
+    /// fire one at a time, giving `permit` back after.
+    fn fire_webhook(
+        self: &Arc<Self>,
+        trigger: Configured,
+        request: WebhookRequest,
+        at: UnixTime,
+        permit: OwnedSemaphorePermit,
+    ) {
         let manager = self.clone();
         tokio::spawn(async move {
+            let _permit = permit;
             let _firing = manager.triggers.firing.lock().await;
             let firing = Firing {
                 origin: RunOrigin::Source,

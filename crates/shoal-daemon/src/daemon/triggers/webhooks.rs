@@ -14,7 +14,10 @@ use hyper::{
 };
 use hyper_util::rt::{TokioIo, TokioTimer};
 use shoal_protocol::triggers::WebhookRequest;
-use tokio::net::{TcpListener, TcpStream};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    sync::Semaphore,
+};
 
 use crate::daemon::{log, notifications::NotificationKind, workspace::Manager};
 
@@ -24,6 +27,11 @@ use delivery::Delivered;
 
 /// The largest body a request may send.
 pub(crate) const MAX_BODY: usize = 5 * 1024 * 1024;
+
+/// The most requests read, checked or waiting to fire at once; one more
+/// gets `503`, so that requests cannot take the daemon's memory or start
+/// unbounded secret commands.
+pub(crate) const MAX_DELIVERIES: usize = 16;
 
 /// How long a client may take to send a request's headers, and then its
 /// body.
@@ -40,6 +48,7 @@ struct Bound {
 /// stops.
 pub(crate) async fn run(manager: Arc<Manager>) {
     let mut reloaded = manager.config_state.watch();
+    let deliveries = Arc::new(Semaphore::new(MAX_DELIVERIES));
     let mut bound = Bound {
         address: None,
         listener: None,
@@ -56,7 +65,7 @@ pub(crate) async fn run(manager: Arc<Manager>) {
         }
         tokio::select! {
             _ = reloaded.changed() => {}
-            () = accept(&manager, bound.listener.as_ref()) => {}
+            () = accept(&manager, &deliveries, bound.listener.as_ref()) => {}
         }
         reloaded.borrow_and_update();
     }
@@ -88,15 +97,20 @@ impl Manager {
     }
 }
 
-/// Answer each connection to `listener` on its own; none never accepts.
-async fn accept(manager: &Arc<Manager>, listener: Option<&TcpListener>) {
+/// Answer each connection to `listener` on its own, with at most the
+/// `deliveries` permits in flight; none never accepts.
+async fn accept(
+    manager: &Arc<Manager>,
+    deliveries: &Arc<Semaphore>,
+    listener: Option<&TcpListener>,
+) {
     let Some(listener) = listener else {
         return std::future::pending().await;
     };
     loop {
         match listener.accept().await {
             Ok((stream, _)) => {
-                tokio::spawn(serve(manager.clone(), stream));
+                tokio::spawn(serve(manager.clone(), deliveries.clone(), stream));
             }
             Err(error) => {
                 log!("webhooks: accept failed: {error}");
@@ -107,10 +121,10 @@ async fn accept(manager: &Arc<Manager>, listener: Option<&TcpListener>) {
 }
 
 /// Answer the requests on `stream` until it closes.
-async fn serve(manager: Arc<Manager>, stream: TcpStream) {
+async fn serve(manager: Arc<Manager>, deliveries: Arc<Semaphore>, stream: TcpStream) {
     let service = service_fn(move |request| {
-        let manager = manager.clone();
-        async move { Ok::<_, Infallible>(respond(&manager, request).await) }
+        let (manager, deliveries) = (manager.clone(), deliveries.clone());
+        async move { Ok::<_, Infallible>(respond(&manager, deliveries, request).await) }
     });
     let _ = http1::Builder::new()
         .timer(TokioTimer::new())
@@ -121,8 +135,16 @@ async fn serve(manager: Arc<Manager>, stream: TcpStream) {
 
 /// The empty response `request` gets: `202` once accepted, before its
 /// firing runs, so what the filter and key decide never shows; `404` for a
-/// request no trigger takes, `413` for a body over [`MAX_BODY`].
-async fn respond(manager: &Arc<Manager>, request: Request<Incoming>) -> Response<Empty<Bytes>> {
+/// request no trigger takes, `413` for a body over [`MAX_BODY`] and `503`
+/// while every one of the `deliveries` permits is taken.
+async fn respond(
+    manager: &Arc<Manager>,
+    deliveries: Arc<Semaphore>,
+    request: Request<Incoming>,
+) -> Response<Empty<Bytes>> {
+    let Ok(permit) = deliveries.try_acquire_owned() else {
+        return empty(StatusCode::SERVICE_UNAVAILABLE);
+    };
     let status = match read(request).await {
         Read::NotFound => StatusCode::NOT_FOUND,
         Read::TooLarge => StatusCode::PAYLOAD_TOO_LARGE,
@@ -134,7 +156,7 @@ async fn respond(manager: &Arc<Manager>, request: Request<Incoming>) -> Response
             path,
             request,
             body,
-        } => match manager.deliver_webhook(&path, request, &body).await {
+        } => match manager.deliver_webhook(&path, request, &body, permit).await {
             Ok(Delivered::Accepted) => StatusCode::ACCEPTED,
             Ok(Delivered::Refused) => StatusCode::NOT_FOUND,
             Err(error) => {
@@ -143,6 +165,11 @@ async fn respond(manager: &Arc<Manager>, request: Request<Incoming>) -> Response
             }
         },
     };
+    empty(status)
+}
+
+/// A response with `status` and no body.
+fn empty(status: StatusCode) -> Response<Empty<Bytes>> {
     let mut response = Response::new(Empty::new());
     *response.status_mut() = status;
     response

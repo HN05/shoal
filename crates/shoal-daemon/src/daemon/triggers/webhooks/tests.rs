@@ -9,9 +9,10 @@ use shoal_protocol::triggers::{Fired, RunOrigin, RunOutcome, TriggerRun, Webhook
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
+    sync::Semaphore,
 };
 
-use super::{MAX_BODY, accept};
+use super::{MAX_BODY, MAX_DELIVERIES, accept};
 use crate::{
     daemon::{
         chats::launches::fake::STARTED,
@@ -38,12 +39,21 @@ const ISSUE: &str = r#"{"action":"label_updated","issue":{"number":42,"title":"C
 /// A manager whose repository `repo` has `triggers`, serving webhooks on
 /// a port of its own.
 async fn listening(triggers: &str) -> (tempfile::TempDir, Arc<Manager>, Repository, SocketAddr) {
+    listening_with(triggers, MAX_DELIVERIES).await
+}
+
+/// [`listening`] with `permits` deliveries in flight at most.
+async fn listening_with(
+    triggers: &str,
+    permits: usize,
+) -> (tempfile::TempDir, Arc<Manager>, Repository, SocketAddr) {
     let (temp, manager, repo) = with_triggers(triggers).await;
     configure(&manager, "[machine.webhooks]\nlisten = '127.0.0.1:0'\n").await;
     let listener = (manager.bind_webhooks(manager.webhook_address()).await).unwrap();
     let address = listener.local_addr().unwrap();
     let serving = manager.clone();
-    tokio::spawn(async move { accept(&serving, Some(&listener)).await });
+    let deliveries = Arc::new(Semaphore::new(permits));
+    tokio::spawn(async move { accept(&serving, &deliveries, Some(&listener)).await });
     (temp, manager, repo, address)
 }
 
@@ -183,6 +193,14 @@ async fn a_filtered_delivery_is_accepted_like_any_other() {
     let runs = runs_once(&manager, &repo, 1).await;
     assert_eq!(outcomes(&runs), [RunOutcome::Started]);
     assert_eq!(STARTED.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn a_request_past_the_deliveries_in_flight_is_turned_away() {
+    let (_temp, manager, repo, address) = listening_with(LABELLED, 0).await;
+
+    assert_eq!(deliver(address, "d-1", SECRET, ISSUE).await, 503);
+    assert!(runs(&manager, &repo, "labelled").await.is_empty());
 }
 
 #[tokio::test]
