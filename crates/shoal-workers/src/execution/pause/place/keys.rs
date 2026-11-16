@@ -64,6 +64,7 @@ impl Keys {
             .map_err(std::io::Error::from)
             .context("watch the terminal")?;
         apply(terminal.get_ref(), &key_mode(previous))?;
+        discard_typed(terminal.get_ref());
         Ok(Self { terminal, previous })
     }
 
@@ -134,6 +135,15 @@ fn stdin_terminal() -> Result<std::path::PathBuf> {
     // SAFETY: ttyname_r succeeded, so `name` holds a NUL-terminated path.
     let name = unsafe { CStr::from_ptr(name.as_ptr()) };
     Ok(std::ffi::OsStr::from_bytes(name.to_bytes()).into())
+}
+
+/// Discard input not yet read, which was typed to the agent before it
+/// stopped, so only keys pressed at the screen count.
+fn discard_typed(terminal: &File) {
+    // SAFETY: tcflush only drops the terminal's queued input.
+    unsafe {
+        libc::tcflush(terminal.as_raw_fd(), libc::TCIFLUSH);
+    }
 }
 
 fn settings(terminal: &File) -> Result<libc::termios> {
