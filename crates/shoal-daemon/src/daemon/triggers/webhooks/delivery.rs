@@ -139,10 +139,7 @@ impl Manager {
     }
 
     /// Whether `request` signs `body` with the secret of `trigger`, whose
-    /// value its command fetches now and nothing keeps. A repository's
-    /// trigger takes its secret from that repository's local config alone,
-    /// which reaches no other repository's agents, and the global config's
-    /// from the global config, whose triggers' secrets reach no agent.
+    /// value its command fetches now and nothing keeps.
     async fn signature_verifies(
         &self,
         trigger: &Configured,
@@ -150,7 +147,17 @@ impl Manager {
         request: &WebhookRequest,
         body: &[u8],
     ) -> Result<bool> {
-        let (secrets, file) = match &trigger.repository {
+        let secret = self.trigger_secret(trigger, signed).await?;
+        let value = fetch_secret(&signed.secret, &secret).await?;
+        Ok(signed.signature.verifies(value.as_bytes(), request, body))
+    }
+
+    /// The secret `trigger` signs with. A repository's trigger takes it
+    /// from that repository's local config alone, which reaches no other
+    /// repository's agents, and the global config's from the global
+    /// config, whose triggers' secrets reach no agent.
+    async fn trigger_secret(&self, trigger: &Configured, signed: &Signed) -> Result<Secret> {
+        let (mut secrets, file) = match &trigger.repository {
             Some(repository) => {
                 let target = ConfigTarget::Repository(repository.clone().into());
                 let layers = self.config_layers_for(target).await?;
@@ -161,15 +168,13 @@ impl Manager {
                 "the global config",
             ),
         };
-        let secret = (secrets.get(&signed.secret)).with_context(|| {
+        (secrets.remove(&signed.secret)).with_context(|| {
             format!(
                 "the {} names secret {}, which {file} does not configure",
                 trigger.label(),
                 signed.secret
             )
-        })?;
-        let value = fetch_secret(&signed.secret, secret).await?;
-        Ok(signed.signature.verifies(value.as_bytes(), request, body))
+        })
     }
 
     /// Fire `trigger` for `request`, received at `at`, once the triggers

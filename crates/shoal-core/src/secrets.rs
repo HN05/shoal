@@ -126,15 +126,20 @@ fn write_launchers(secrets: &Secrets, paths: &Paths) -> Result<tempfile::TempDir
     Ok(directory)
 }
 
-/// The `secrets` agents receive: every one but those named in `signing`,
-/// which webhook triggers sign requests with, so that no agent can sign
-/// its own and start spaces as the user.
-pub(crate) fn for_agents<'a>(
-    secrets: &Secrets,
-    signing: impl IntoIterator<Item = &'a str>,
+/// The secrets of `settings` that agents receive: every one but those a
+/// webhook trigger signs requests with, of `settings`, of the global
+/// config's `global` triggers or that `layers` name, so that no agent can
+/// sign its own and start spaces as the user.
+pub(crate) fn for_agents(
+    settings: &crate::config::Settings,
+    global: &crate::triggers::Triggers,
+    layers: &crate::config::repo::ConfigLayers,
 ) -> Secrets {
-    let signing: BTreeSet<&str> = signing.into_iter().collect();
-    (secrets.iter())
+    let triggers = (settings.triggers.values()).chain(global.values());
+    let signing: BTreeSet<&str> = (triggers.filter_map(|trigger| trigger.signing_secret()))
+        .chain(layers.signing_secrets.iter().map(String::as_str))
+        .collect();
+    (settings.secrets.iter())
         .filter(|(name, _)| !signing.contains(name.as_str()))
         .map(|(name, secret)| (name.clone(), secret.clone()))
         .collect()

@@ -231,6 +231,7 @@ impl Effective {
         settings: Settings,
         tools: crate::ai::Tools,
         proxies: BTreeMap<String, crate::config::proxies::Proxy>,
+        agent_secrets: crate::secrets::Secrets,
     ) -> Self {
         let commands = |command: fn(&AgentTool) -> &Option<Vec<String>>| {
             settings
@@ -243,7 +244,7 @@ impl Effective {
         crate::ai::inherit_launchers(&tools, &mut launchers);
         let resume_commands = commands(|agent| &agent.resume_command);
         Self {
-            agent_secrets: settings.secrets.clone(),
+            agent_secrets,
             settings,
             tools,
             launchers,
