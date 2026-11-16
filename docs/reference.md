@@ -5599,9 +5599,8 @@ the UUID of the space it records as `space_id`, `space_kind` (`workspace` or
 repository), `name`, `path` and `branch` (null for a chat), `kind`, `cause`, and
 `error`. Kinds are `created`, `ready`, `setup_failed`,
 `completed`, `undone`, `removed`, `retained`, `branch_changed`, `review_ready`,
-`review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity`, `parent_changed`, `demo_started`, `demo_stopped`, `simulator_acquired`, `simulator_released`, `renamed`, `restored`, `agent_started`, `agent_stopped`, `agent_exited`, `question_asked`, `question_answered`, `approval_requested`, `approval_decided`, `gate_decided`, `alert_sent`, `progress_changed`, `child_created`, `child_removed` and `job_ended`; history from earlier versions may also contain `continued` and `chat_changed`. Review events add a `review` object with the mark's `kind` and
-`url`, both null for a workspace mark; those from earlier versions also carry
-the commit as `head`. Link events add a `link`
+`review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity`, `parent_changed`, `demo_started`, `demo_stopped`, `simulator_acquired`, `simulator_released`, `renamed`, `restored`, `agent_started`, `agent_stopped`, `agent_exited`, `question_asked`, `question_answered`, `approval_requested`, `approval_decided`, `gate_decided`, `alert_sent`, `progress_changed`, `child_created`, `child_removed` and `job_ended`. Review events add a `review` object with the mark's `kind` and
+`url`, both null for a workspace mark. Link events add a `link`
 object with the linked issue or PR's `kind` and canonical `url`. Agent state
 events add `agent_state` with the reported `state`, null when its execution ended.
 `item_changed` events add an `item` object with the `kind`, `url` and `action`
@@ -5613,12 +5612,9 @@ and `created` events add `base_ref`, the ref the workspace started from, both
 null for a chat.
 `created` and `parent_changed` events add `parent`, the space above the
 workspace with its `id`, `name`, `kind` and a workspace's `branch`, or null once
-a [chat](#chats) that opened it returned it to you. Earlier versions recorded
-`parent_workspace` on these events and `chat`, the chat's ID, on
-`chat_changed` events.
+a [chat](#chats) that opened it returned it to you.
 `renamed` events record a space's new `name` and a workspace's `branch`, as
-`shoal rename` or a branch rename gives them; earlier versions added a
-`title`, which a workspace's name has since replaced. `restored` events record a workspace
+`shoal rename` or a branch rename gives them. `restored` events record a workspace
 `shoal restore` reopened, which takes the removed workspace's events
 under its own ID. `agent_started`, `agent_stopped` (Shoal or a stop request
 stopped it) and `agent_exited` (it exited on its own) events add `agent`

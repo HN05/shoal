@@ -128,3 +128,45 @@ fn earlier_links_registrations_and_snapshots_take_the_current_shape() -> Result<
     );
     Ok(())
 }
+
+#[test]
+fn events_earlier_versions_journaled_take_the_current_shape() -> Result<()> {
+    let mut db = before(207)?;
+    db.execute_batch(
+        r#"INSERT INTO removed_spaces(space_id,repository_id,chat,name,expires_at,record)
+             VALUES ('c',NULL,1,'planner',9,'{}');
+         INSERT INTO space_events(space_id,record) VALUES
+             ('w','{"kind":"continued","space_id":"w"}'),
+             ('w','{"kind":"chat_changed","space_id":"w","chat":"c"}'),
+             ('w','{"kind":"chat_changed","space_id":"w","chat":null}'),
+             ('w','{"kind":"created","space_id":"w",
+                 "parent_workspace":{"id":"p","name":"lead","branch":"main"}}'),
+             ('w','{"kind":"review_ready","space_id":"w",
+                 "review":{"kind":null,"url":null,"head":"abc"}}');"#,
+    )?;
+    migrate(&mut db)?;
+    let events: Vec<Value> = db
+        .prepare("SELECT record FROM space_events ORDER BY id")?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .map(|record| Ok(serde_json::from_str(&record?)?))
+        .collect::<Result<_>>()?;
+    let field = |event: &Value, key: &str| event[key].clone();
+    assert_eq!(field(&events[0], "kind"), "undone");
+    assert_eq!(
+        (field(&events[1], "kind"), field(&events[1], "parent")),
+        (
+            "parent_changed".into(),
+            json!({"id": "c", "name": "planner", "kind": "chat"})
+        )
+    );
+    assert_eq!(field(&events[2], "parent"), Value::Null);
+    assert_eq!(
+        field(&events[3], "parent"),
+        json!({"id": "p", "name": "lead", "branch": "main", "kind": "workspace"})
+    );
+    assert_eq!(
+        field(&events[4], "review"),
+        json!({"kind": null, "url": null})
+    );
+    Ok(())
+}

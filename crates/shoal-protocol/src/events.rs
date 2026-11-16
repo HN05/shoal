@@ -75,8 +75,6 @@ states!(EventKind {
     Ready => "ready",
     SetupFailed => "setup_failed",
     Completed => "completed",
-    /// Recorded only by earlier versions, before `undone` replaced continuation.
-    Continued => "continued",
     /// A recorded completion was withdrawn.
     Undone => "undone",
     /// A removal of the workspace reserved it and began.
@@ -92,9 +90,7 @@ states!(EventKind {
     ReviewCleared => "review_cleared",
     /// The workspace's base workspace was set, cleared, or removed.
     BaseChanged => "base_changed",
-    /// A chat opened the workspace, or it returned to the user; earlier
-    /// versions recorded it when they moved the children of a removed
-    /// workspace up to its own parent.
+    /// A chat opened the workspace, or it returned to the user.
     ParentChanged => "parent_changed",
     /// A workspace link was added.
     Linked => "linked",
@@ -106,9 +102,6 @@ states!(EventKind {
     ItemChanged => "item_changed",
     /// An issue or PR changed on its forge.
     ItemActivity => "item_activity",
-    /// Recorded only by earlier versions, when a chat opened the workspace
-    /// or it returned to the user, as `parent_changed` records it now.
-    ChatChanged => "chat_changed",
     /// A demo's command ran for the first time.
     DemoStarted => "demo_started",
     /// A demo that had run ended with its execution.
@@ -250,14 +243,6 @@ pub struct EventDetails {
         with = "present_or_null"
     )]
     pub parent: Option<Option<crate::model::SpaceRef>>,
-    /// The parent workspace on creation and parent changes recorded by
-    /// earlier versions, which `parent` replaces.
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "present_or_null"
-    )]
-    pub parent_workspace: Option<Option<crate::model::WorkspaceRef>>,
     /// The issue, PR or CI run link changed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<Box<LinkEvent>>,
@@ -269,14 +254,6 @@ pub struct EventDetails {
     /// An issue or PR changed on its forge.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item_activity: Option<Box<ItemActivityEvent>>,
-    /// Present on chat changes recorded by earlier versions; null once the
-    /// workspace returned to the user.
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "present_or_null"
-    )]
-    pub chat: Option<Option<String>>,
     /// The demo that started or stopped.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub demo: Option<DemoEvent>,

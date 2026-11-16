@@ -139,6 +139,57 @@ fn authored_comments(comments: &mut Map<String, Value>) {
     }
 }
 
+/// Events earlier versions journaled take the shapes recorded now: a
+/// withdrawn completion is `undone`, a chat opening a workspace or
+/// returning it is `parent_changed` naming the chat as its `parent`, a
+/// parent workspace is the `parent`, and a ready mark names no commit.
+pub(super) fn current_events(db: &Connection) -> Result<()> {
+    let chats = chat_names(db)?;
+    rewrite(db, "space_events", |event| {
+        match event.get("kind").and_then(Value::as_str) {
+            Some("continued") => {
+                event.insert("kind".into(), json!("undone"));
+            }
+            Some("chat_changed") => {
+                event.insert("kind".into(), json!("parent_changed"));
+                let chat = event
+                    .remove("chat")
+                    .and_then(|chat| chat.as_str().map(str::to_owned));
+                let parent = chat.map(|id| {
+                    let name = chats.get(&id).cloned().unwrap_or_else(|| id.clone());
+                    json!({"id": id, "name": name, "kind": "chat"})
+                });
+                event.insert("parent".into(), parent.unwrap_or(Value::Null));
+            }
+            _ => {}
+        }
+        if let Some(workspace) = event.remove("parent_workspace") {
+            let parent = match workspace {
+                Value::Object(mut workspace) => {
+                    workspace.insert("kind".into(), json!("workspace"));
+                    Value::Object(workspace)
+                }
+                none => none,
+            };
+            event.entry("parent").or_insert(parent);
+        }
+        if let Some(review) = event.get_mut("review").and_then(Value::as_object_mut) {
+            review.remove("head");
+        }
+    })
+}
+
+/// The name of every chat, removed or not, by its ID.
+fn chat_names(db: &Connection) -> Result<std::collections::HashMap<String, String>> {
+    Ok(db
+        .prepare(
+            "SELECT id,name FROM spaces WHERE kind='chat'
+             UNION ALL SELECT space_id,name FROM removed_spaces WHERE chat",
+        )?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 /// Rewrite every record of `table` with `change`, writing back those it
 /// changed.
 fn rewrite(db: &Connection, table: &str, change: impl Fn(&mut Map<String, Value>)) -> Result<()> {

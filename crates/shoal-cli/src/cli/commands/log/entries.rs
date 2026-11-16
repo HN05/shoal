@@ -80,7 +80,7 @@ fn event_line(event: &EventDetails) -> (String, String) {
         EventKind::ReviewReady => fixed("Marked ready", review(event)),
         EventKind::ReviewCleared => fixed("Ready withdrawn", review(event)),
         EventKind::Completed => fixed("Done", String::new()),
-        EventKind::Undone | EventKind::Continued => fixed("Done withdrawn", String::new()),
+        EventKind::Undone => fixed("Done withdrawn", String::new()),
         EventKind::Linked | EventKind::Unlinked => link(event),
         EventKind::ItemChanged => item_changed(event),
         EventKind::ItemActivity => item_activity(event),
@@ -112,7 +112,7 @@ fn event_line(event: &EventDetails) -> (String, String) {
             .into(),
         ),
         EventKind::BaseChanged => fixed("Base changed", base(event)),
-        EventKind::ParentChanged | EventKind::ChatChanged => fixed("Parent changed", parent(event)),
+        EventKind::ParentChanged => fixed("Parent changed", parent(event)),
         EventKind::AgentState => fixed(
             "Agent state",
             (event.agent_state.as_ref().and_then(|state| state.state))
