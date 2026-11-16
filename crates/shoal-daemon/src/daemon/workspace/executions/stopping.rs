@@ -181,7 +181,8 @@ impl StopRequest {
         }
     }
 
-    /// Removal of an existing worktree, whose removal record keeps its agents.
+    /// Removal of a chat or an existing worktree, whose removal record keeps
+    /// its agents.
     pub(in crate::daemon::workspace) fn restorable_removal() -> Self {
         Self {
             save: Save::RemovedAgents,

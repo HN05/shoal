@@ -370,7 +370,8 @@ impl Manager {
     }
 
     /// Stop the agent of `space` and its commands for `removal`, with what
-    /// else runs in its worktree.
+    /// else runs in its worktree, keeping a chat's agent for its removal
+    /// record as an existing worktree's.
     async fn stop_for_removal(
         &self,
         space: &PresentSpace,
@@ -382,7 +383,7 @@ impl Manager {
                 self.stop_worktree_work(worktree).await;
                 worktree.stop_request()
             }
-            None => StopRequest::removal(),
+            None => StopRequest::restorable_removal(),
         };
         (self.stop_space_agent(space, removal.stop_policy(), &request)).await
     }

@@ -80,7 +80,8 @@ impl Manager {
 
     /// Run the agent of `chat` as its execution, as its wrapper registers
     /// and tracks it, and return the chat running it. Asked to stop, the
-    /// agent ends its processes and exits, as its wrapper stops it.
+    /// agent ends its processes and exits, as its wrapper stops it, first
+    /// saving itself for `shoal restore` when the stop asks that.
     #[cfg(test)]
     pub(crate) async fn run_chat_agent(self: &std::sync::Arc<Self>, chat: Chat) -> Result<Chat> {
         let place = (chat.origin.clone()).map(|origin| workspace::places::ExecutionPlace {
@@ -105,9 +106,16 @@ impl Manager {
         let id = started.plan.id.clone();
         let running = std::time::Duration::ZERO;
         (self.track_agent(&id, &agent, &chat.id, &chat.name, true, running)).await;
-        let manager = self.clone();
+        let (manager, space) = (self.clone(), chat.id.clone());
         tokio::spawn(async move {
             if started.stop.wait_for(|stop| *stop).await.is_ok() {
+                let request = manager.executions.stop_request(&id).await;
+                if let Some(request) = request.filter(|request| request.saves(true)) {
+                    use crate::execution::recovery::{self, RecordExt};
+                    let stage = shoal_protocol::executions::Stage::Stopped;
+                    let record = recovery::Record::new(&agent, Some(&request.reason), stage, None);
+                    recovery::save_stopped(&manager.paths, &space, &id, record, None).unwrap();
+                }
                 manager.end_test_execution(id).await;
             }
         });

@@ -56,6 +56,21 @@ pub async fn chat(
     manager.run_chat_agent(chat).await.unwrap()
 }
 
+/// Keep `session` as the one the agent running in the space `id` reported,
+/// as its hooks' report with its execution keeps it, leaving its turn state
+/// as it is.
+pub async fn report_session(manager: &Manager, id: &SpaceId, session: &str) {
+    let executions = manager.workspace_executions(id).await.unwrap();
+    let mut agents = executions
+        .iter()
+        .filter(|execution| execution.agent.is_some());
+    let (Some(execution), None) = (agents.next(), agents.next()) else {
+        panic!("one execution runs the agent: {executions:?}");
+    };
+    let session = session.into();
+    crate::execution::recovery::save_session(&manager.paths, id, &execution.id, &session).unwrap();
+}
+
 /// Run a sleep as the process of the agent running in the space `id`,
 /// recorded as the child of its execution, which a stop of it signals.
 pub async fn agent_process(manager: &Manager, id: &SpaceId) -> ProcessGroup {
