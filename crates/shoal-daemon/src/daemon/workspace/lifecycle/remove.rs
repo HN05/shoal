@@ -302,12 +302,15 @@ impl Manager {
         replaced: Option<WorkspaceState>,
         checked: impl FnOnce(&PresentSpace) -> Result<()>,
     ) -> Result<(Vec<SpaceName>, Option<(WorktreeStage, WorktreeRemoval)>)> {
-        let worktree = match (space.worktree(), replaced) {
-            (Some(workspace), Some(replaced)) => Some(
-                self.begin_worktree_removal(workspace, replaced, removal)
-                    .await?,
-            ),
-            _ => None,
+        let worktree = match space.worktree() {
+            Some(workspace) => {
+                let replaced = replaced.context("the reservation holds no worktree")?;
+                Some(
+                    self.begin_worktree_removal(workspace, replaced, removal)
+                        .await?,
+                )
+            }
+            None => None,
         };
         let id = space.id();
         let cause = (worktree.as_ref()).map_or(removal.cause(), |stage| stage.cause(removal));
