@@ -39,7 +39,7 @@ pub(in crate::daemon::links) struct RunPlace {
 
 impl RunPlace {
     /// The workspace whose own repository the request acts in.
-    pub fn own_workspace(&self) -> Option<&Workspace> {
+    pub fn own_workspace(&self) -> Option<Workspace> {
         (self.origin.as_ref())
             .and_then(Place::workspace)
             .filter(|_| self.own)

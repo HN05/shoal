@@ -35,6 +35,7 @@ impl Manager {
     ) -> Result<RunsApproved> {
         let place = self.place(context).await?;
         let workspace = place.workspace();
+        let workspace = workspace.as_ref();
         let forge = self.place_forge(&place).await?;
         // A scoped caller approves as the agent account.
         let account = match caller {
@@ -95,7 +96,7 @@ impl Manager {
         self.authorize_approval(caller, place, approval).await?;
         let (approved, result) = forge.approve_runs(account, &waiting).await;
         if !approved.is_empty() {
-            self.record_approval(place.workspace(), LinkKind::Pr, &url)
+            self.record_approval(place.workspace().as_ref(), LinkKind::Pr, &url)
                 .await?;
         }
         result.with_context(|| {

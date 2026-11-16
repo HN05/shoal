@@ -9,35 +9,36 @@ use crate::{
         Config,
         forges::{Forges, Whose},
     },
-    daemon::workspace::Manager,
+    daemon::{links::space::LinkSpace, workspace::Manager},
     forge::ForgeRepo,
     model::{Repository, Workspace},
     protocol::ItemContext,
 };
 use shoal_forge::{RepoRequests, account::Account};
 
-/// Where an action on a repository's items runs: a workspace, its worktree
-/// verified, a chat in its repository's registered checkout, or the
-/// registered checkout of a repository without either.
+/// Where an action on a repository's items runs: a space, a workspace's
+/// worktree verified, acting in the repository whose checkout or worktree's
+/// `origin` gives its forge, or the registered checkout of a repository
+/// without one.
 pub(in crate::daemon::links) enum Place {
-    Workspace(Box<Workspace>),
-    Chat { id: SpaceId, checkout: Repository },
+    Space(Box<LinkSpace>),
     Checkout(Repository),
 }
 
 impl Place {
-    pub(in crate::daemon::links) fn workspace(&self) -> Option<&Workspace> {
+    /// The workspace the place is, which records the changes it makes.
+    pub(in crate::daemon::links) fn workspace(&self) -> Option<Workspace> {
         match self {
-            Self::Workspace(workspace) => Some(workspace),
-            Self::Chat { .. } | Self::Checkout(_) => None,
+            Self::Space(space) => space.to_workspace(),
+            Self::Checkout(_) => None,
         }
     }
 
     /// The repository it acts in.
     pub(in crate::daemon::links) fn repository_id(&self) -> &RepositoryId {
         match self {
-            Self::Workspace(workspace) => workspace.repository(),
-            Self::Chat { checkout, .. } | Self::Checkout(checkout) => &checkout.id,
+            Self::Space(space) => space.repository_id(),
+            Self::Checkout(checkout) => &checkout.id,
         }
     }
 
@@ -45,8 +46,7 @@ impl Place {
     /// and which records the changes it makes.
     pub(in crate::daemon::links) fn space_id(&self) -> Option<&SpaceId> {
         match self {
-            Self::Workspace(workspace) => Some(&workspace.id),
-            Self::Chat { id, .. } => Some(id),
+            Self::Space(space) => Some(&space.id),
             Self::Checkout(_) => None,
         }
     }
@@ -147,34 +147,25 @@ impl Manager {
         Ok((self.checkout_forge(repository).await?, self.agent_account()))
     }
 
-    /// Where `context` runs, with the workspace's worktree verified.
+    /// Where `context` runs, with a workspace's worktree verified. Only a
+    /// chat without a repository acts in another's checkout, and only while
+    /// it runs.
     pub(in crate::daemon::links) async fn place(&self, context: &ItemContext) -> Result<Place> {
-        Ok(match context {
-            ItemContext::Workspace(selector) => {
-                let workspace = self.workspace(selector).await?;
-                self.verify_worktree(&workspace).await?;
-                Place::Workspace(Box::new(workspace))
+        match context {
+            ItemContext::Checkout(repository) => {
+                Ok(Place::Checkout(self.repository(repository).await?))
             }
-            ItemContext::Chat(selector) => {
-                let chat = self.chat(selector).await?;
-                let checkout = self.chat_own_checkout(&chat).await?;
-                Place::Chat {
-                    id: chat.id,
-                    checkout,
-                }
+            _ => {
+                let space = self.context_space(context).await?;
+                self.verify_space(&space).await?;
+                anyhow::ensure!(
+                    space.keeps_links() || space.running,
+                    "no running chat {}",
+                    space.name
+                );
+                Ok(Place::Space(Box::new(space)))
             }
-            // Only a chat without a repository acts in another's checkout,
-            // and only while it runs, as any chat's place.
-            ItemContext::ChatIn { chat, repository } => {
-                let (chat, checkout) = self.chat_acting_in(chat, repository).await?;
-                anyhow::ensure!(chat.running, "no running chat {}", chat.name);
-                Place::Chat {
-                    id: chat.id,
-                    checkout,
-                }
-            }
-            ItemContext::Checkout(_) => Place::Checkout(self.context_checkout(context).await?),
-        })
+        }
     }
 
     /// The forge of the place's `origin`, with the agent account acting there.
@@ -182,12 +173,7 @@ impl Manager {
         &self,
         place: &Place,
     ) -> Result<(ForgeRepo, Account)> {
-        match place {
-            Place::Workspace(workspace) => self.workspace_forge_account(workspace).await,
-            Place::Chat { checkout, .. } | Place::Checkout(checkout) => {
-                self.checkout_forge_account(checkout).await
-            }
-        }
+        Ok((self.place_forge(place).await?, self.agent_account()))
     }
 
     /// The forge of the place's `origin`, with the account that changes
@@ -201,17 +187,15 @@ impl Manager {
             Place::Checkout(checkout) => {
                 Ok((self.checkout_forge(checkout).await?, self.user_account()))
             }
-            Place::Workspace(_) | Place::Chat { .. } => self.place_forge_account(place).await,
+            Place::Space(_) => self.place_forge_account(place).await,
         }
     }
 
     /// The forge of the place's `origin`.
     pub(in crate::daemon::links) async fn place_forge(&self, place: &Place) -> Result<ForgeRepo> {
         match place {
-            Place::Workspace(workspace) => self.workspace_forge(workspace).await,
-            Place::Chat { checkout, .. } | Place::Checkout(checkout) => {
-                self.checkout_forge(checkout).await
-            }
+            Place::Space(space) => self.space_forge(space).await,
+            Place::Checkout(checkout) => self.checkout_forge(checkout).await,
         }
     }
 }

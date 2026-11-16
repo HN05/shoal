@@ -193,7 +193,9 @@ impl Manager {
         // A chat's checkout is not on its PR's branch, so its runs are
         // those of its linked PR.
         let pr = match (pr, &filter.branch, &place.origin) {
-            (None, None, Some(Place::Chat { id, .. })) => self.linked_pr(id).await?,
+            (None, None, Some(Place::Space(space))) if space.worktree().is_none() => {
+                self.linked_pr(&space.id).await?
+            }
             (Some(pr), ..) => Some(ItemRef::in_repository(forge, LinkKind::Pr, &pr)?),
             (None, ..) => None,
         };
