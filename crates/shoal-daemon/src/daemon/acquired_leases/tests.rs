@@ -491,3 +491,31 @@ async fn a_release_decided_for_an_agent_leaves_a_lease_the_user_took_over_since(
     );
     assert_eq!(fixture.simulators().await, ["sim"]);
 }
+
+/// Releasing an ended agent's leases is not use of its workspace, so idle
+/// cleanup keeps counting from when the agent last worked.
+#[tokio::test]
+async fn releasing_an_ended_agents_leases_leaves_the_workspace_idle() {
+    let fixture = Fixture::new(POOL).await;
+    let (execution_id, caller) = fixture.agent().await;
+    fixture.acquire("agent", Some(&caller)).await;
+    let agent = Acquirer::Agent {
+        execution_id: execution_id.clone(),
+    };
+    fixture.lease_simulator("agent", agent).await;
+    let manager = &fixture.manager;
+    let id = fixture.workspace.id.clone();
+    (manager.store.run(move |db| {
+        db.execute("UPDATE workspaces SET active_at=1 WHERE id=?1", [id])?;
+        Ok(())
+    }))
+    .await
+    .unwrap();
+
+    manager.release_agent_leases(&execution_id).await;
+
+    assert_eq!(fixture.permits().await, []);
+    assert_eq!(fixture.simulators().await, Vec::<String>::new());
+    let active_at = manager.active_at(&fixture.workspace.id).await.unwrap();
+    assert_eq!(active_at, Some(crate::time::UnixTime::from_seconds(1)));
+}

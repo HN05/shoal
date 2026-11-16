@@ -474,7 +474,8 @@ impl Manager {
 
     /// Release the lease `name` of `pool` in `selector`'s workspace, unless
     /// `holder` names an acquirer it no longer has, as when the user took
-    /// over an agent's lease since a release of it was decided.
+    /// over an agent's lease since a release of it was decided. Only a
+    /// release without `holder`, which someone asked for, is activity.
     pub(crate) async fn release_resource_held_by(
         &self,
         selector: &SpaceSelector,
@@ -483,7 +484,9 @@ impl Manager {
         holder: Option<&Acquirer>,
     ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
-        self.touch(&workspace.id).await;
+        if holder.is_none() {
+            self.touch(&workspace.id).await;
+        }
         let hook = self
             .workspace_hook(&workspace, crate::hooks::HookKind::PreResourceRelease)
             .await?;

@@ -555,7 +555,8 @@ impl Manager {
 
     /// Release the simulator lease `name` of `selector`'s workspace, unless
     /// `holder` names an acquirer it no longer has, as when the user took
-    /// over an agent's lease since a release of it was decided.
+    /// over an agent's lease since a release of it was decided. Only a
+    /// release without `holder`, which someone asked for, is activity.
     pub(crate) async fn release_simulator_held_by(
         &self,
         selector: &SpaceSelector,
@@ -568,7 +569,9 @@ impl Manager {
             workspace.state == WorkspaceState::Ready,
             Refusal::new(Reason::NotReady, "workspace is not ready")
         );
-        self.touch(&workspace.id).await;
+        if holder.is_none() {
+            self.touch(&workspace.id).await;
+        }
         let sim = self
             .list_simulators(Some(&workspace.id))
             .await?
