@@ -39,7 +39,7 @@ pub(crate) fn settings<'a>(
 
 /// Remove Shoal's credential helpers, and the resets before them, from the
 /// Git settings `command` passes on, for a push that goes out as the user.
-pub(crate) fn strip(command: &mut tokio::process::Command) {
+pub fn strip(command: &mut tokio::process::Command) {
     let helpers: Vec<OsString> = crate::agent_git::passed_on(command)
         .into_iter()
         .filter(|(_, value)| is_helper(value))

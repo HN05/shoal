@@ -371,7 +371,7 @@ pub(super) async fn prepare_tracked_launch(
     let mut auth =
         prepare_agent_launch(paths, &workspace, mode, agent.as_ref(), place.as_ref()).await?;
     let recovery = if let Some(agent) = &agent {
-        Some(recovery::Recovery::for_launch(paths, &workspace, agent).await)
+        Some(super::restore::for_launch(paths, &workspace, agent).await)
     } else {
         None
     };
@@ -430,9 +430,8 @@ async fn prepare_taken_over_launch(
         Some(&agent),
         recovery.automatic,
     );
-    let (command, proxy) = recovery
-        .restore_command(paths, &plan.space, record.as_deref())
-        .await;
+    let (command, proxy) =
+        super::restore::restore_command(&recovery, paths, &plan.space, record.as_deref()).await;
     // The restore command was resolved to go through `proxy`, from the same
     // settings.
     if let Some(auth) = auth.as_mut() {
@@ -466,7 +465,7 @@ async fn prepare_restore(
         let place = terminal_place(mode).await;
         let auth =
             prepare_agent_launch(paths, workspace, mode, Some(agent), place.as_ref()).await?;
-        let recovery = recovery::Recovery::for_launch(paths, workspace, agent).await;
+        let recovery = super::restore::for_launch(paths, workspace, agent).await;
         takeover::ensure_restorable(&recovery)?;
         Ok((place, auth, recovery))
     })
@@ -612,7 +611,7 @@ async fn prepare_agent_launch(
     )
     .await?;
     let secrets = if has_agent {
-        crate::secrets::Launch::prepare(&settings.secrets, paths).await?
+        shoal_core::secrets::Launch::prepare(&settings.secrets, paths).await?
     } else {
         Default::default()
     };
@@ -660,7 +659,7 @@ async fn prepare_push_gate(
     paths: &CommandPaths,
     space: &SpaceSelector,
     agent: &crate::execution::TrackedAgent,
-) -> Result<crate::push_gate::Launch> {
+) -> Result<shoal_core::push_gate::Launch> {
     let records = crate::agents::HomeRecords::read(paths, space).await?;
     let crate::agents::AgentHome::Workspace(workspace) = records.home()? else {
         return Ok(Default::default());
@@ -678,7 +677,7 @@ async fn prepare_push_gate(
         on_branch: false,
     };
     let workspace: crate::model::Workspace = connection::request(paths, method).await?;
-    crate::push_gate::Launch::prepare(paths, &workspace.path)
+    shoal_core::push_gate::Launch::prepare(paths, &workspace.path)
         .await
         .context("the push permission")
 }

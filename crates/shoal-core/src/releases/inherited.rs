@@ -17,14 +17,14 @@ use crate::{
 
 /// The path a process was started through, and the file there at the time.
 #[derive(Debug, Clone)]
-pub(crate) struct Invoked {
+pub struct Invoked {
     pub(crate) path: PathBuf,
     pub(crate) identity: Option<FileIdentity>,
 }
 
 impl Invoked {
     /// `path`, with the file there now.
-    pub(crate) fn at(path: PathBuf) -> Self {
+    pub fn at(path: PathBuf) -> Self {
         let identity = FileIdentity::of(&path).ok();
         Self { path, identity }
     }

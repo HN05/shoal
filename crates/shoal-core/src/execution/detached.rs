@@ -94,7 +94,7 @@ pub struct DetachedLaunch {
 
 /// Tell the spawning CLI that the launch is recorded, then point stdout at the
 /// log (the wrapper's stderr) so nothing else ever writes to the closed pipe.
-pub(super) fn report_launch(launch: &DetachedLaunch) -> Result<()> {
+pub fn report_launch(launch: &DetachedLaunch) -> Result<()> {
     let mut stdout = std::io::stdout().lock();
     serde_json::to_writer(&mut stdout, launch)?;
     stdout.write_all(b"\n")?;

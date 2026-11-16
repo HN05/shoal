@@ -22,7 +22,7 @@ pub(in crate::cli::commands) async fn diff(
     if crate::env::in_chat().is_some() {
         return diff_untracked(&base.path, &command);
     }
-    execution::run(
+    shoal_workers::execution::run(
         &ctx.paths,
         SpaceSelector::Id(base.workspace_id),
         command,

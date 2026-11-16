@@ -49,11 +49,11 @@ fn json_errors_carry_the_specific_code_of_a_daemon_or_cli_refusal() {
     use anyhow::Context as _;
 
     use crate::{
-        execution::SetupVerificationFailure,
         operations::Failed,
         protocol::operations::Failure,
         refusal::{Reason, Refusal},
     };
+    use shoal_workers::execution::SetupVerificationFailure;
 
     let failed = |failure| anyhow::Error::from(Failed(failure));
 

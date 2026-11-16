@@ -18,8 +18,9 @@ mod inherited;
 mod lease;
 mod sweep;
 
+pub use inherited::Invoked;
+pub(crate) use inherited::invoked;
 pub use inherited::take as take_inherited;
-pub(crate) use inherited::{Invoked, invoked};
 use lease::Lease;
 
 /// The file each copy's users hold a shared lock on.
@@ -29,7 +30,7 @@ const LOCK: &str = "lock";
 const TEMPORARY: &str = ".tmp-";
 
 /// Whether this process runs from a release copy it holds the lock of.
-pub(crate) fn holds_locks() -> bool {
+pub fn holds_locks() -> bool {
     inherited::locks().next().is_some()
 }
 
@@ -47,9 +48,9 @@ impl Releases {
 /// What a wrapper replaces itself with: a locked copy of a release, and the
 /// variables that hand it the path the wrapper was started through and every
 /// release lock the wrapper holds.
-pub(crate) struct Replacement {
-    pub(crate) program: PathBuf,
-    pub(crate) variables: Vec<(&'static str, OsString)>,
+pub struct Replacement {
+    pub program: PathBuf,
+    pub variables: Vec<(&'static str, OsString)>,
     /// Kept open until the replacement takes the lock over.
     _lease: Option<Lease>,
 }
@@ -59,7 +60,7 @@ impl Replacement {
     /// through `invoked`; `executable` itself, after a warning that names the
     /// failure, when the copy fails. A program outside a bundle keeps its
     /// grants by its path, which no upgrade removes, so it needs no copy.
-    pub(crate) fn of(
+    pub fn of(
         releases: Option<&Releases>,
         executable: PathBuf,
         invoked: &Invoked,

@@ -20,7 +20,7 @@ const HELPER: &str = "git-remote-shoal";
 /// The push URL rewrites an agent launch adds to the agent's Git settings,
 /// and the directory with the remote helper they reach.
 #[derive(Debug, Default)]
-pub(crate) struct Launch {
+pub struct Launch {
     settings: Vec<(String, String)>,
     helper: Option<tempfile::TempDir>,
 }
@@ -28,7 +28,7 @@ pub(crate) struct Launch {
 impl Launch {
     /// The rewrites for the remotes of the repository at `worktree`, and
     /// the helper they reach.
-    pub(crate) async fn prepare(paths: &Paths, worktree: &Path) -> Result<Self> {
+    pub async fn prepare(paths: &Paths, worktree: &Path) -> Result<Self> {
         let settings = rewrites(&git::remote_urls(worktree).await?)?;
         if settings.is_empty() {
             return Ok(Self::default());
@@ -40,12 +40,12 @@ impl Launch {
     }
 
     /// The Git settings that send pushes through the helper.
-    pub(crate) fn settings(&self) -> &[(String, String)] {
+    pub fn settings(&self) -> &[(String, String)] {
         &self.settings
     }
 
     /// Put the helper first on the child's PATH.
-    pub(crate) fn apply(&self, command: &mut tokio::process::Command) {
+    pub fn apply(&self, command: &mut tokio::process::Command) {
         if let Some(helper) = &self.helper {
             env::prepend_path(command, helper.path().as_os_str());
         }
@@ -111,7 +111,7 @@ pub fn strip(command: &mut tokio::process::Command) {
 
 /// Whether the Git setting `key` is one of the rewrites; Git compares the
 /// section and variable names without case.
-pub(crate) fn is_rewrite(key: &OsStr) -> bool {
+pub fn is_rewrite(key: &OsStr) -> bool {
     let key = key.to_string_lossy();
     let Some(rest) = key
         .get(..PREFIX.len())

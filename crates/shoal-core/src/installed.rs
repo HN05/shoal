@@ -33,7 +33,7 @@ impl Executable {
         }
     }
 
-    pub(crate) fn at(path: PathBuf) -> Self {
+    pub fn at(path: PathBuf) -> Self {
         let identity = FileIdentity::of(&path).ok();
         Self {
             path: Some(path),
@@ -65,7 +65,7 @@ impl Executable {
     }
 
     /// The installed binary, once an upgrade replaced this one.
-    pub(crate) fn installed(&self) -> Option<&std::path::Path> {
+    pub fn installed(&self) -> Option<&std::path::Path> {
         self.path.as_deref().filter(|_| self.replaced())
     }
 

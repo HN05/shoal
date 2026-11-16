@@ -10,7 +10,7 @@ use anyhow::{Context, Result, ensure};
 use tokio::process::Command;
 
 /// Restore foreground ownership, OS settings and shell input modes on exit.
-pub(crate) struct Terminal {
+pub struct Terminal {
     previous_group: i32,
     previous_settings: libc::termios,
     previous_handler: Option<libc::sighandler_t>,
@@ -20,7 +20,7 @@ pub(crate) struct Terminal {
 impl Terminal {
     /// Capture before launching a child. Background hooks skip the terminal;
     /// tracked commands require foreground ownership when stdin is a terminal.
-    pub(crate) fn capture(require_foreground: bool) -> Result<Option<Self>> {
+    pub fn capture(require_foreground: bool) -> Result<Option<Self>> {
         if !std::io::stdin().is_terminal() {
             return Ok(None);
         }
@@ -53,7 +53,7 @@ impl Terminal {
     /// sent after [`Terminal::give_to`], leaving it stopped in the
     /// foreground. A child whose standard input is another file keeps
     /// waiting for `give_to`.
-    pub(crate) fn hand_over_at_start(&self, command: &mut Command) {
+    pub fn hand_over_at_start(&self, command: &mut Command) {
         // SAFETY: the hook makes only async-signal-safe calls.
         unsafe {
             command.pre_exec(|| {
@@ -63,7 +63,7 @@ impl Terminal {
         }
     }
 
-    pub(crate) fn give_to(&mut self, group: i32) -> Result<()> {
+    pub fn give_to(&mut self, group: i32) -> Result<()> {
         // Ignore SIGTTOU only after spawning, so the child keeps normal job
         // control while the wrapper can reclaim the terminal from background.
         self.previous_handler = Some(unsafe { libc::signal(libc::SIGTTOU, libc::SIG_IGN) });
@@ -79,7 +79,7 @@ impl Terminal {
 /// Make this process's group the foreground of the terminal on its standard
 /// input, as a new child does before exec. With SIGTTOU blocked, a background
 /// group may do so without being stopped.
-pub(super) fn take_foreground() {
+pub fn take_foreground() {
     // SAFETY: sigset and mask calls touch only this thread's local set and
     // mask; tcsetpgrp names this process's own group.
     unsafe {
@@ -139,7 +139,7 @@ impl Terminal {
 
 /// Clear the screen and scrollback of the terminal a demo starts in, which
 /// shows how its host started the wrapper, so the user sees only the demo.
-pub(super) fn clear_terminal() {
+pub fn clear_terminal() {
     let mut stdout = std::io::stdout();
     if stdout.is_terminal() {
         let _ = stdout

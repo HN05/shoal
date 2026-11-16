@@ -10,14 +10,14 @@ use crate::{
     cli::{context::Context, terminal},
     config::permissions::PermissionChange,
     execution::recovery::{
-        Copied, LastSession, Recovery, Restored, Saved, SavedCommand, claim_last_session,
-        claim_record,
+        Copied, LastSession, Recovery, Saved, SavedCommand, claim_last_session, claim_record,
     },
     model::{PresentSpace, Workspace},
     protocol::ConfigTarget,
 };
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_workers::execution::Restored;
 
 /// Resume the stopped agent of the space `space` names, the `execution` one
 /// when given. The agent restores in this terminal when `here`, otherwise
@@ -162,7 +162,7 @@ async fn restore(
         narrowing: session.narrowing,
         session: session.session.as_ref(),
     };
-    let recovery = Recovery::resolve(
+    let recovery = shoal_workers::execution::resolve(
         &ctx.paths,
         home.home()?,
         restored,
@@ -345,7 +345,7 @@ async fn launch(
         PresentSpace::Chat(chat) => crate::terminal::Owner::Chat(&chat.id),
     };
     terminal::label_current(&ctx.paths, owner).await?;
-    crate::execution::run_recovery(
+    shoal_workers::execution::run_recovery(
         &ctx.paths,
         SpaceSelector::id(space.id()),
         recovery.command,

@@ -12,10 +12,11 @@ use std::{
 use anyhow::{Context, Result};
 use tokio::process::{Child, Command};
 
-use super::{Mode, terminal::Terminal};
+use super::Mode;
 use crate::{
     client::connection::CommandPaths, config::value::Value, env, model::ExecutionPlan, paths::Paths,
 };
+use shoal_core::execution::Terminal;
 
 /// What an agent's or publishing child receives beyond the workspace
 /// environment: the agent Git profile and, for agents, the configured secrets
@@ -24,8 +25,8 @@ pub(super) struct AgentLaunch {
     pub(super) git: crate::agent_git::Launch,
     /// The helper that holds back an agent's pushes where its `push`
     /// permission asks, whose rewrites `git` carries.
-    pub(super) push_gate: crate::push_gate::Launch,
-    pub(super) secrets: crate::secrets::Launch,
+    pub(super) push_gate: shoal_core::push_gate::Launch,
+    pub(super) secrets: shoal_core::secrets::Launch,
     pub(super) output: Option<(&'static str, &'static str)>,
     /// The agent's integration, which launch profiles share with their base.
     pub(super) integration: Option<crate::ai::IntegrationKind>,
@@ -34,7 +35,7 @@ pub(super) struct AgentLaunch {
     pub(super) home: PathBuf,
     /// The proxy the agent's API requests go through, which
     /// [`AgentLaunch::start_proxy`] runs as long as this wrapper does.
-    pub(super) routed: Option<crate::proxy::Proxy>,
+    pub(super) routed: Option<shoal_core::proxy::Proxy>,
     /// The key `routed` names by command, with the value the command
     /// printed, fetched before the execution registers: the daemon cannot
     /// stop a launch until its agent starts.
@@ -50,7 +51,7 @@ const KEY_COMMAND_LIMIT: std::time::Duration = std::time::Duration::from_secs(60
 
 /// Run the command that `routed` takes its key from, when it names one.
 pub(super) async fn fetch_command_key(
-    routed: Option<&crate::proxy::Proxy>,
+    routed: Option<&shoal_core::proxy::Proxy>,
 ) -> Result<Option<(Value, String)>> {
     let Some(key) = routed
         .and_then(|proxy| proxy.key.as_ref())
@@ -65,9 +66,9 @@ pub(super) async fn fetch_command_key(
 impl AgentLaunch {
     /// Hold back the agent's pushes through `gate` in place of the one it
     /// launched with.
-    pub(super) fn regate(&mut self, gate: crate::push_gate::Launch) {
+    pub(super) fn regate(&mut self, gate: shoal_core::push_gate::Launch) {
         self.git
-            .retain(|key| !crate::push_gate::is_rewrite(key.as_ref()));
+            .retain(|key| !shoal_core::push_gate::is_rewrite(key.as_ref()));
         self.git.add(gate.settings());
         self.push_gate = gate;
     }
@@ -106,7 +107,7 @@ impl AgentLaunch {
     /// agent sees it.
     fn upstream(
         &self,
-        proxy: &crate::proxy::Proxy,
+        proxy: &shoal_core::proxy::Proxy,
         command: &[OsString],
         directory: &Path,
         environment: &BTreeMap<String, OsString>,
@@ -159,7 +160,7 @@ impl AgentLaunch {
     /// it changed, so what the old one reported no longer holds.
     pub(super) async fn restart_proxy(
         &mut self,
-        proxy: Option<crate::proxy::Proxy>,
+        proxy: Option<shoal_core::proxy::Proxy>,
         command: &[OsString],
         directory: &Path,
         environment: &BTreeMap<String, OsString>,
@@ -315,12 +316,12 @@ pub(super) fn spawn(
     // Shoal authorized these pushes itself, so an enclosing agent's push
     // rewrites would only ask again.
     if matches!(mode, Mode::Publish | Mode::Merge { .. }) {
-        crate::push_gate::strip(&mut process);
+        shoal_core::push_gate::strip(&mut process);
     }
     // A merge pushes the default branch as the user, not as an enclosing
     // agent's account.
     if matches!(mode, Mode::Merge { .. }) {
-        crate::git_credential::strip(&mut process);
+        shoal_core::git_credential::strip(&mut process);
     }
     export_execution(&mut process, paths, plan);
     // A demo is the user's, so the agent's output setting stays behind, and

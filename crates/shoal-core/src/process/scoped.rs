@@ -17,7 +17,7 @@ const DIRECTORY: &str = "scoped-processes";
 /// so the command can run nothing before an ancestor is recorded, and the
 /// command's own while it lives, so its descendants stay scoped when the
 /// wrapper hands it over. Dropping removes the records whose process ended.
-pub(crate) struct Records {
+pub struct Records {
     directory: PathBuf,
     wrapper: Identity,
     command: Option<Identity>,
@@ -25,7 +25,7 @@ pub(crate) struct Records {
 
 impl Records {
     /// Record this process, the wrapper, before it spawns its command.
-    pub(crate) fn wrapper(state: &Path) -> Result<Self> {
+    pub fn wrapper(state: &Path) -> Result<Self> {
         let wrapper =
             identity::capture(std::process::id())?.context("cannot identify execution wrapper")?;
         let directory = state.join(DIRECTORY);
@@ -40,7 +40,7 @@ impl Records {
     }
 
     /// Record the spawned command, unless it has already exited.
-    pub(crate) fn command(&mut self, pid: u32) -> Result<()> {
+    pub fn command(&mut self, pid: u32) -> Result<()> {
         if let Some(command) = identity::capture(pid)? {
             write(&self.directory, &command)?;
             self.command = Some(command);

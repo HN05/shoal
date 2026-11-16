@@ -290,8 +290,8 @@ pub(super) fn foreign_place_variables(host: HostName) -> Vec<&'static str> {
 /// # Safety
 ///
 /// No other thread reads or writes the environment meanwhile.
-#[cfg(test)]
-pub(crate) unsafe fn forget_inherited_places() {
+#[cfg(any(test, feature = "test-support"))]
+pub unsafe fn forget_inherited_places() {
     for name in hosts()
         .filter_map(Host::places)
         .flat_map(|places| places.place_variables().iter().copied())

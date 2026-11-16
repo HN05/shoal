@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use super::*;
 use crate::test_support::printed;
 
-fn proxy(upstream: &str, key: Option<&str>) -> crate::proxy::Proxy {
+fn proxy(upstream: &str, key: Option<&str>) -> shoal_core::proxy::Proxy {
     let key = key.map_or(String::new(), |env| format!("key = {{ env = '{env}' }}\n"));
     toml::from_str(&format!("upstream = '{upstream}'\n{key}")).unwrap()
 }
@@ -92,7 +92,7 @@ async fn a_restore_whose_requests_go_elsewhere_replaces_a_proxy_without_an_upstr
     let home = tempfile::tempdir().unwrap();
     let mut launch = launch(home.path());
     let environment = BTreeMap::new();
-    let retrying: crate::proxy::Proxy = toml::from_str("").unwrap();
+    let retrying: shoal_core::proxy::Proxy = toml::from_str("").unwrap();
     let sent_to = |url: &str| -> Vec<OsString> {
         let settings = format!(r#"{{"env":{{"ANTHROPIC_BASE_URL":"{url}"}}}}"#);
         vec!["claude".into(), "--settings".into(), settings.into()]
@@ -116,14 +116,14 @@ async fn a_restore_whose_requests_go_elsewhere_replaces_a_proxy_without_an_upstr
 async fn a_proxy_uses_the_key_its_command_printed_before_the_launch_registered() {
     let home = tempfile::tempdir().unwrap();
     let mut launch = launch(home.path());
-    let fetched: crate::proxy::Proxy =
+    let fetched: shoal_core::proxy::Proxy =
         toml::from_str("upstream = 'http://127.0.0.1:9'\nkey = { cmd = ['echo', 'sk-cmd'] }")
             .unwrap();
     launch.fetched_key = fetch_command_key(Some(&fetched)).await.unwrap();
     let key = fetched.key.clone().unwrap();
     assert_eq!(launch.fetched_key, Some((key.clone(), "sk-cmd".to_owned())));
     // The same command is not run again, so one that would fail never does.
-    let failing: crate::proxy::Proxy =
+    let failing: shoal_core::proxy::Proxy =
         toml::from_str("upstream = 'http://127.0.0.1:9'\nkey = { cmd = ['false'] }").unwrap();
     launch.fetched_key = Some((failing.key.clone().unwrap(), "sk-fetched".to_owned()));
     assert!(
@@ -146,7 +146,7 @@ async fn a_proxy_uses_the_key_its_command_printed_before_the_launch_registered()
 async fn a_restore_that_runs_a_key_command_stops_it_at_the_limit() {
     let home = tempfile::tempdir().unwrap();
     let mut launch = launch(home.path());
-    let hanging: crate::proxy::Proxy =
+    let hanging: shoal_core::proxy::Proxy =
         toml::from_str("upstream = 'http://127.0.0.1:9'\nkey = { cmd = ['sleep', '86400'] }")
             .unwrap();
     let error = launch
@@ -228,7 +228,7 @@ async fn removed_base_url_child() {
     }
     let home = tempfile::tempdir().unwrap();
     let mut launch = launch(home.path());
-    let retrying: crate::proxy::Proxy = toml::from_str("").unwrap();
+    let retrying: shoal_core::proxy::Proxy = toml::from_str("").unwrap();
     let upstream = async |launch: &mut AgentLaunch| {
         let proxy = Some(retrying.clone());
         let unset = BTreeMap::new();

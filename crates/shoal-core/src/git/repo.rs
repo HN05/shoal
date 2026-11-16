@@ -230,7 +230,7 @@ async fn merge_branch(plan: MergePlan) -> Result<MergedBranch> {
 
 /// The wrapper runs rollback only after stopping the merge process group. Keep
 /// a completed merge, and refuse to reset a checkout whose branch/HEAD changed.
-pub(crate) async fn rollback_merge(plan: &MergePlan) -> Result<()> {
+pub async fn rollback_merge(plan: &MergePlan) -> Result<()> {
     let Some(checkout) = &plan.checkout else {
         return Ok(());
     };

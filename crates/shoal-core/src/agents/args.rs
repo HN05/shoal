@@ -72,7 +72,7 @@ pub fn restored_instruction_args<'a>(
 
 /// Add `options` to `command`, a configured command: before a `--`, after
 /// which arguments are the agent's prompt, else at the end.
-pub(crate) fn insert_options(command: &mut Vec<OsString>, options: Vec<OsString>) {
+pub fn insert_options(command: &mut Vec<OsString>, options: Vec<OsString>) {
     let at = command
         .iter()
         .position(|arg| arg == "--")

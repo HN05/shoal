@@ -9,7 +9,6 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
-    execution,
     protocol::ConfigTarget,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -20,7 +19,7 @@ pub(in crate::cli::commands) async fn exec(
     command: Vec<OsString>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    execution::run_command(&ctx.paths, workspace, command).await
+    shoal_workers::execution::run_command(&ctx.paths, workspace, command).await
 }
 
 /// The configured command `shoal edit` runs instead of `$VISUAL` or `$EDITOR`.
@@ -46,7 +45,7 @@ pub(in crate::cli::commands) async fn edit(
             .into(),
     );
     command.extend(args);
-    execution::run_command(&ctx.paths, workspace, command).await
+    shoal_workers::execution::run_command(&ctx.paths, workspace, command).await
 }
 
 /// The first set of `$VISUAL` and `$EDITOR` as an argument array: split on

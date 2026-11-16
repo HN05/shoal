@@ -38,12 +38,12 @@ pub(crate) fn agents_can_be_prompted(settings: &Effective) -> bool {
 /// prompt for it: the place the daemon records for its execution, in a host
 /// that types into its places.
 #[derive(Clone)]
-pub(crate) struct PromptSession {
+pub struct PromptSession {
     place: Origin,
 }
 
 impl PromptSession {
-    pub(crate) fn current() -> Option<Self> {
+    pub fn current() -> Option<Self> {
         let place = current_origin().filter(|place| place.place.is_some())?;
         named(place.host).types()?;
         Some(Self { place })
@@ -52,13 +52,13 @@ impl PromptSession {
     /// The session with what tells its place apart from a later place under
     /// its ID, read while this process still runs in it, so its prompts
     /// never reach a place a restarted host gave the ID.
-    pub(crate) async fn pinned(mut self) -> Result<Self> {
+    pub async fn pinned(mut self) -> Result<Self> {
         self.place = with_instance(named(self.place.host), self.place).await?;
         Ok(self)
     }
 
     /// Submit `text` as a prompt in the session.
-    pub(crate) async fn submit(&self, text: &str) -> Result<()> {
+    pub async fn submit(&self, text: &str) -> Result<()> {
         submit_prompt(&self.place, text).await
     }
 }

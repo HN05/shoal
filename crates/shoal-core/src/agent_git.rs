@@ -13,10 +13,7 @@ pub struct Launch {
 impl Launch {
     /// The child's environment changes for the Git profile `git_profile`
     /// names; nested commands inherit it.
-    pub(crate) fn prepare(
-        git_profile: Option<&str>,
-        git: &crate::git_profile::Git,
-    ) -> Result<Self> {
+    pub fn prepare(git_profile: Option<&str>, git: &crate::git_profile::Git) -> Result<Self> {
         let git = match git_profile {
             Some(name) => git
                 .profile(name)
@@ -39,7 +36,7 @@ impl Launch {
 
     /// Add the credential helper for each of `hosts`, the hosts with an
     /// agent token, that the profile's own credential helper leaves to it.
-    pub(crate) fn add_agent_logins<'a>(
+    pub fn add_agent_logins<'a>(
         &mut self,
         paths: &crate::paths::Paths,
         hosts: impl IntoIterator<Item = &'a str>,
@@ -50,12 +47,12 @@ impl Launch {
     }
 
     /// Add `settings` after the profile's.
-    pub(crate) fn add(&mut self, settings: &[(String, String)]) {
+    pub fn add(&mut self, settings: &[(String, String)]) {
         self.git.extend_from_slice(settings);
     }
 
     /// Keep only the settings whose key `keep` accepts, in their order.
-    pub(crate) fn retain(&mut self, mut keep: impl FnMut(&str) -> bool) {
+    pub fn retain(&mut self, mut keep: impl FnMut(&str) -> bool) {
         self.git.retain(|(key, _)| keep(key));
     }
 

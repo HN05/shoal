@@ -477,7 +477,7 @@ async fn recreate_branch(plan: &UnmergePlan) -> Result<bool> {
 /// The wrapper runs rollback only after stopping the unmerge process group:
 /// a replay it interrupted ran in a worktree of its own, which goes, and
 /// the default branch moves only once the replay is done.
-pub(crate) async fn rollback_unmerge(plan: &UnmergePlan) -> Result<()> {
+pub async fn rollback_unmerge(plan: &UnmergePlan) -> Result<()> {
     remove_replay_worktree(&plan.repo.path)
         .await
         .context("could not remove the interrupted unmerge's replay worktree")

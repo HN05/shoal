@@ -6,7 +6,7 @@ use std::{fs, io, path::Path};
 pub mod atomic;
 pub mod copy;
 pub mod current_dir;
-pub(crate) mod descriptors;
+pub mod descriptors;
 pub mod disk_space;
 pub mod executables;
 pub mod home;

@@ -25,7 +25,6 @@ use crate::{
         repo::ConfigLayers,
         resolve::Stack,
     },
-    execution,
     model::Workspace,
     protocol::ConfigTarget,
 };
@@ -223,7 +222,7 @@ async fn run_defined(
         args,
     )
     .await?;
-    execution::run_command(
+    shoal_workers::execution::run_command(
         &ctx.paths,
         SpaceSelector::Id(inspection.workspace.id),
         command,

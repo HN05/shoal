@@ -2,7 +2,7 @@
 use std::io;
 
 /// Set whether descriptor `fd` stays open in a program this process execs.
-pub(crate) fn set_inherited(fd: std::os::fd::RawFd, inherited: bool) -> anyhow::Result<()> {
+pub fn set_inherited(fd: std::os::fd::RawFd, inherited: bool) -> anyhow::Result<()> {
     // SAFETY: fcntl validates the descriptor; neither operation uses a pointer.
     let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
     anyhow::ensure!(

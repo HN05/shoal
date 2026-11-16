@@ -30,7 +30,7 @@ pub(super) enum AfterPause {
     /// child is registered, under `narrowing` when the daemon changed it.
     Restart {
         command: Vec<OsString>,
-        proxy: Option<crate::proxy::Proxy>,
+        proxy: Option<shoal_core::proxy::Proxy>,
         ports: Vec<PortReservation>,
         record: Option<PathBuf>,
         narrowing: Option<PermissionsConfig>,
@@ -101,8 +101,8 @@ async fn await_restore(
     stop: &Halt,
     record: Result<PathBuf>,
 ) -> Result<AfterPause> {
-    match recovery::wait(link).await? {
-        recovery::Waited::Resume {
+    match wait(link).await? {
+        Waited::Resume {
             ports,
             executable,
             narrowing,
@@ -116,9 +116,9 @@ async fn await_restore(
                     narrowing,
                 });
             }
-            let (command, proxy) = recovery
-                .restore_command(paths, &plan.space, record.as_deref())
-                .await;
+            let (command, proxy) =
+                super::restore::restore_command(recovery, paths, &plan.space, record.as_deref())
+                    .await;
             Ok(AfterPause::Restart {
                 command,
                 proxy,
@@ -127,7 +127,7 @@ async fn await_restore(
                 narrowing,
             })
         }
-        recovery::Waited::Cancelled { reason, removed } => {
+        Waited::Cancelled { reason, removed } => {
             if record.is_ok() {
                 let cancelled = reason.map(|reason| format!(": {reason}"));
                 eprintln!(
@@ -357,6 +357,71 @@ fn restore_steps(workspace: &SpaceId, execution: &ExecutionId, removed: bool) ->
         format!("restore with shoal restore {workspace}")
     } else {
         format!("restore with shoal restore {workspace} --execution {execution}")
+    }
+}
+
+/// How a stopped agent's wait for automatic recovery ended.
+#[derive(Debug)]
+pub(super) enum Waited {
+    Resume {
+        ports: Vec<crate::model::PortReservation>,
+        /// The binary the daemon runs, when it says.
+        executable: Option<crate::fsutil::FileIdentity>,
+        /// The narrowing the agent restores under, when the daemon changed it.
+        narrowing: Option<crate::config::permissions::PermissionsConfig>,
+    },
+    /// The restore was cancelled, with the daemon's reason if it gave one.
+    Cancelled {
+        reason: Option<String>,
+        /// Removal cancelled it, and the removal record keeps the agent.
+        removed: bool,
+    },
+}
+
+impl Waited {
+    fn cancelled(reason: impl Into<String>) -> Self {
+        Self::Cancelled {
+            reason: Some(reason.into()),
+            removed: false,
+        }
+    }
+}
+
+/// Wait for the daemon's verdict. While the daemon restarts, the link
+/// reattaches and the next daemon continues the wait.
+pub(super) async fn wait(link: &mut Link) -> Result<Waited> {
+    use super::link::{Received, Refused};
+    use crate::protocol::Control;
+    use tokio::signal::unix::{SignalKind, signal};
+    let mut interrupt = signal(SignalKind::interrupt())?;
+    let mut terminate = signal(SignalKind::terminate())?;
+    let mut quit = signal(SignalKind::quit())?;
+    let signalled = || Ok(Waited::cancelled("interrupted"));
+    loop {
+        tokio::select! {
+            received = link.recv() => match received {
+                Ok(Received::Detached | Received::Reattached) => {}
+                Ok(Received::Control(Control::Resume { ports, executable, narrowing })) => {
+                    // The restored child reattaches once it is registered.
+                    link.disarm();
+                    return Ok(Waited::Resume { ports, executable, narrowing });
+                }
+                Ok(Received::Control(Control::Stop { reason, removed })) => {
+                    return Ok(Waited::Cancelled { reason, removed });
+                }
+                Ok(Received::Control(Control::RestoreWaits { issue })) => {
+                    eprintln!("shoal: the restore also waits until the agent's remaining processes exit: {issue}");
+                }
+                Ok(Received::Control(_)) => anyhow::bail!("unexpected recovery control"),
+                Err(error) if error.is::<Refused>() => {
+                    return Ok(Waited::cancelled(error.to_string()));
+                }
+                Err(error) => return Err(error),
+            },
+            _ = interrupt.recv() => return signalled(),
+            _ = terminate.recv() => return signalled(),
+            _ = quit.recv() => return signalled(),
+        }
     }
 }
 

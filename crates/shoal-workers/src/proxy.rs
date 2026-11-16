@@ -1,5 +1,5 @@
-//! The proxy a tracked agent's wrapper runs, the key its requests name,
-//! and the reports it sends the daemon.
+//! The proxy a tracked agent's wrapper runs and the reports it sends the
+//! daemon.
 use anyhow::Context;
 use anyhow::Result;
 use shoal_ids::execution_ids::ExecutionId;
@@ -7,15 +7,6 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{space_names::SpaceSelector, time::UnixTime};
 
 use crate::client::connection::CommandPaths;
-
-/// The header an agent names its proxy's key in, which the proxy checks.
-pub(crate) const KEY_HEADER: &str = "x-shoal-proxy-key";
-
-/// The variable of a proxied agent's environment that holds its proxy's
-/// key, for an agent that names a variable rather than a value: the
-/// environment is the agent's alone, while any local user can read its
-/// command line.
-pub(crate) const KEY_VARIABLE: &str = "SHOAL_PROXY_KEY";
 
 /// The proxy a tracked agent's wrapper runs while the agent does, at `url`.
 pub(crate) struct Running {
@@ -471,3 +462,6 @@ pub(crate) async fn start(upstream_url: &str, key: Option<&str>) -> Result<Runni
         reporting: None,
     })
 }
+
+#[cfg(test)]
+mod tests;

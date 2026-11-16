@@ -21,7 +21,6 @@ use crate::{
         ui,
     },
     client::connection::CommandPaths,
-    execution,
     forge::{
         capability::Capability,
         items::{create::PullOptions, revert::MergedPull},
@@ -209,7 +208,12 @@ async fn revert_merge(
     };
     let merge = Merge::of(path, &facts).await?;
     let run = async |command| {
-        execution::publish(&ctx.paths, SpaceSelector::Id(workspace.id.clone()), command).await
+        shoal_workers::execution::publish(
+            &ctx.paths,
+            SpaceSelector::Id(workspace.id.clone()),
+            command,
+        )
+        .await
     };
     match git_revert::revert(path, &merge, message, run).await? {
         Reverted::Committed => Ok(()),

@@ -29,7 +29,7 @@ pub const MANIFEST: &str = ".secrets.json";
 /// The secret variables an agent launch adds to its child's environment, and
 /// the launchers that give tool-scoped secrets to their tools.
 #[derive(Debug, Default)]
-pub(crate) struct Launch {
+pub struct Launch {
     environment: Vec<(String, OsString)>,
     launchers: Option<tempfile::TempDir>,
 }
@@ -38,7 +38,7 @@ impl Launch {
     /// Fetch every environment secret now, so a failing command stops the
     /// launch before the agent starts. Tool-scoped secrets are fetched each
     /// time their tool runs.
-    pub(crate) async fn prepare(secrets: &Secrets, paths: &Paths) -> Result<Self> {
+    pub async fn prepare(secrets: &Secrets, paths: &Paths) -> Result<Self> {
         validate(secrets)?;
         let (scoped, unscoped): (Secrets, Secrets) = secrets
             .clone()
@@ -60,13 +60,13 @@ impl Launch {
     }
 
     /// The environment secrets, each with its value.
-    pub(crate) fn environment(&self) -> impl Iterator<Item = (String, OsString)> + '_ {
+    pub fn environment(&self) -> impl Iterator<Item = (String, OsString)> + '_ {
         self.environment.iter().cloned()
     }
 
     /// Put the launchers first on the child's PATH, ahead of directories an
     /// earlier step prepended.
-    pub(crate) fn apply(&self, command: &mut tokio::process::Command) {
+    pub fn apply(&self, command: &mut tokio::process::Command) {
         if !self.environment.is_empty() {
             for (name, value) in &self.environment {
                 command.env(name, value);

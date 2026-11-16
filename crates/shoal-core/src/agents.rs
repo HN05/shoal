@@ -30,9 +30,8 @@ use crate::{
     model::Workspace,
 };
 
-pub(crate) use args::insert_options;
 pub use args::{
-    chat_dir_args, dir_args, model_args, restored_instruction_args, workspace_args,
+    chat_dir_args, dir_args, insert_options, model_args, restored_instruction_args, workspace_args,
     workspace_dir_args, writable_config_dir,
 };
 pub use checks::{
@@ -40,7 +39,7 @@ pub use checks::{
     named_agent, programs, resolve_launch, resolve_model,
 };
 pub use homes::{AgentHome, HomeRecords};
-pub(crate) use proxy::{
+pub use proxy::{
     Routing, agent_url, launch_proxy, proxy_defaults, proxy_ends_turns, proxy_environment,
     route_through_proxy, upstream, with_proxy_args,
 };
@@ -344,7 +343,7 @@ pub fn prompt_cache(
 
 /// When the wrapper of an agent wakes it by typing a prompt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum PromptWake {
+pub enum PromptWake {
     /// Whenever it idles: no hook of its own starts its turn.
     Always,
     /// While it idles where the hook that wakes it otherwise cannot: after
@@ -355,7 +354,7 @@ pub(crate) enum PromptWake {
 
 /// When the wrapper of an agent with integration `kind` wakes it by typing
 /// a prompt, unless it never does.
-pub(crate) fn prompt_wake(kind: IntegrationKind) -> Option<PromptWake> {
+pub fn prompt_wake(kind: IntegrationKind) -> Option<PromptWake> {
     let integration = integration(kind);
     match integration.wakes() {
         Wake::Prompt => Some(PromptWake::Always),

@@ -307,7 +307,7 @@ impl IdentityAge for Identity {
 
 /// Wait until no process of process group `group` remains. A leader may
 /// exit before its descendants finish their signal handlers.
-pub(crate) async fn group_exited(group: u32) -> Result<()> {
+pub async fn group_exited(group: u32) -> Result<()> {
     while group_alive(group).await? {
         tokio::time::sleep(Duration::from_millis(25)).await;
     }

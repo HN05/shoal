@@ -41,8 +41,10 @@ pub use opening::{
     chat_place_env, open_add, place_env, rerun_in_host, shoal_command, show_opened,
     start_in_background,
 };
-pub(crate) use prompts::{PromptSession, agents_can_be_prompted};
+pub use prompts::PromptSession;
+pub(crate) use prompts::agents_can_be_prompted;
 pub use prompts::{WAKE_PROMPT, send_keys, submit_prompt};
-pub(crate) use sessions::{Attachment, OwnerKind};
+pub use sessions::Attachment;
+pub(crate) use sessions::OwnerKind;
 pub use sessions::{Owner, Session};
 pub use typed::run as run_launch;

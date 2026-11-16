@@ -9,7 +9,6 @@ use std::{
 
 use crate::client::output::error::{CommandError, ErrorDetail};
 use crate::{
-    execution::SetupVerificationFailure,
     forge::{ci::check_state::CheckState, review::status::ReviewState},
     operations::Failed,
     protocol::{ErrorCode, RemoteError},
@@ -20,6 +19,7 @@ use shoal_protocol::{
     approvals::{DecisionStatus, Undecided},
     sim::SimulatorState,
 };
+use shoal_workers::execution::SetupVerificationFailure;
 
 /// The columns of the terminal `fd` writes to, or `None` when it is not one.
 pub fn terminal_width(fd: impl AsFd) -> Option<usize> {

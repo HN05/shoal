@@ -271,7 +271,7 @@ pub(crate) fn apply_chat_identity(command: &mut Command, chat: &SpaceId, paths: 
 
 /// Give `command` the identity of the space an execution runs in: a
 /// workspace's, or a chat's, which leaves a workspace's out.
-pub(crate) fn apply_space_identity(command: &mut Command, space: &ExecutionSpace, paths: &Paths) {
+pub fn apply_space_identity(command: &mut Command, space: &ExecutionSpace, paths: &Paths) {
     match space.kind {
         SpaceKind::Workspace => apply_workspace_identity(command, space, paths),
         SpaceKind::Chat => apply_chat_identity(command, &space.id, paths),
@@ -388,7 +388,7 @@ pub fn selects_json(setting: Option<&OsStr>) -> Result<bool> {
 
 /// The [`OUTPUT`] default an agent Shoal launches gets: JSON, unless this
 /// process already carries a nonempty setting, which the agent inherits instead.
-pub(crate) fn agent_output() -> Option<(&'static str, &'static str)> {
+pub fn agent_output() -> Option<(&'static str, &'static str)> {
     agent_output_under(std::env::var_os(OUTPUT).as_deref())
 }
 
@@ -541,7 +541,7 @@ pub fn opened_chat_place() -> bool {
 
 /// Whether this process ends the session it runs in, as
 /// [`take_session_end`] read it.
-pub(crate) fn ends_launch_session() -> bool {
+pub fn ends_launch_session() -> bool {
     ENDS_LAUNCH_SESSION.load(std::sync::atomic::Ordering::Relaxed)
 }
 

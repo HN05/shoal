@@ -357,7 +357,7 @@ pub async fn settings(daemon: &impl Daemon, target: ConfigTarget) -> Result<Effe
 }
 
 /// The global config read at launch and the settings it yields for `target`.
-pub(crate) async fn configuration(
+pub async fn configuration(
     daemon: &impl Daemon,
     target: ConfigTarget,
 ) -> Result<(Config, Effective)> {

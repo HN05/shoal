@@ -7,7 +7,7 @@ pub mod identity;
 pub mod load;
 pub mod machine;
 pub mod responsibility;
-pub(crate) mod scoped;
+pub mod scoped;
 pub(crate) mod tty;
 pub mod usage;
 

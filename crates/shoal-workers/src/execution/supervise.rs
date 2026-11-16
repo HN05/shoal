@@ -12,13 +12,11 @@ use tokio::{
 
 use super::{
     Mode,
-    detached::{DetachedLaunch, report_launch},
     link::{Link, Received, Refused},
     pause::Halt,
     recovery,
     signal_report::SignalReport,
     spawn::{AgentLaunch, spawn},
-    terminal::Terminal,
 };
 use crate::{
     model::ExecutionPlan,
@@ -26,13 +24,7 @@ use crate::{
     process,
     protocol::{Control, ExecutionEvent, timing},
 };
-
-/// Exit status as a shell would report it: the code, or 128 + signal.
-pub fn exit_code(status: ExitStatus) -> i32 {
-    status
-        .code()
-        .unwrap_or_else(|| 128 + status.signal().unwrap_or(1))
-}
+use shoal_core::execution::{DetachedLaunch, Terminal, exit_code, report_launch};
 
 #[derive(Debug)]
 pub(super) enum Outcome {

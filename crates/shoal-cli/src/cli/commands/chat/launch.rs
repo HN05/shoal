@@ -358,8 +358,10 @@ async fn run_agent(
     };
     let space = SpaceSelector::id(&chat.id);
     match records.is_empty() {
-        true => crate::execution::run(&ctx.paths, space, command, Some(agent)).await,
-        false => crate::execution::run_recovery(&ctx.paths, space, command, agent, records).await,
+        true => shoal_workers::execution::run(&ctx.paths, space, command, Some(agent)).await,
+        false => {
+            shoal_workers::execution::run_recovery(&ctx.paths, space, command, agent, records).await
+        }
     }
 }
 

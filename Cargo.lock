@@ -1388,6 +1388,7 @@ dependencies = [
  "shoal-refs",
  "shoal-schedule",
  "shoal-subprocess",
+ "shoal-workers",
  "socket2",
  "tempfile",
  "tokio",
@@ -1547,13 +1548,19 @@ name = "shoal-workers"
 version = "0.17.2"
 dependencies = [
  "anyhow",
+ "libc",
  "serde_json",
  "shoal-client",
  "shoal-core",
+ "shoal-forge-types",
  "shoal-ids",
  "shoal-protocol",
+ "shoal-proxy",
  "shoal-refs",
+ "tempfile",
  "tokio",
+ "toml",
+ "uuid",
 ]
 
 [[package]]

@@ -10,14 +10,14 @@ use crate::{ai::IntegrationKind, config::Effective};
 
 /// Whether a failure stream from the proxy of an agent with integration
 /// `kind` ends its turn.
-pub(crate) fn proxy_ends_turns(kind: IntegrationKind) -> bool {
+pub fn proxy_ends_turns(kind: IntegrationKind) -> bool {
     integration(kind).proxy_ends_turns()
 }
 
 /// What the environment of an agent with integration `kind` gets so its
 /// requests name its proxy's `key`, reading the environment it runs with
 /// otherwise from `variable`.
-pub(crate) fn proxy_environment(
+pub fn proxy_environment(
     kind: IntegrationKind,
     key: &str,
     variable: &dyn Fn(&str) -> Option<OsString>,
@@ -27,7 +27,7 @@ pub(crate) fn proxy_environment(
 
 /// The variables an agent with integration `kind` gets through its proxy
 /// that `variable`, the environment it runs with otherwise, leaves unset.
-pub(crate) fn proxy_defaults(
+pub fn proxy_defaults(
     kind: IntegrationKind,
     variable: &dyn Fn(&str) -> Option<OsString>,
 ) -> Vec<(&'static str, &'static str)> {
@@ -43,7 +43,7 @@ pub(crate) fn proxy_defaults(
 /// `url`: under the path of its API when the proxy forwards to an
 /// `upstream`, a server root, and `url` itself when it forwards to the
 /// agent's own base URL.
-pub(crate) fn agent_url(kind: IntegrationKind, url: &str, proxy: &crate::proxy::Proxy) -> String {
+pub fn agent_url(kind: IntegrationKind, url: &str, proxy: &crate::proxy::Proxy) -> String {
     match proxy.upstream {
         Some(_) => format!("{url}{}", integration(kind).api_path()),
         None => url.to_owned(),
@@ -54,7 +54,7 @@ pub(crate) fn agent_url(kind: IntegrationKind, url: &str, proxy: &crate::proxy::
 /// launched as `command` in `directory`, with its user files under `home`
 /// and the environment `variable` reads, its own removals included: its
 /// `upstream`, else where the agent's requests go without it.
-pub(crate) fn upstream(
+pub fn upstream(
     kind: IntegrationKind,
     proxy: &crate::proxy::Proxy,
     command: &[OsString],
@@ -79,14 +79,14 @@ fn routes_through_proxy(kind: IntegrationKind) -> bool {
 /// it runs in, and a `private` directory only its user can read, for what
 /// must stay off its command line, which any local user can read.
 pub struct Routing<'a> {
-    pub(crate) url: &'a str,
-    pub(crate) directory: &'a Path,
-    pub(crate) private: &'a Path,
+    pub url: &'a str,
+    pub directory: &'a Path,
+    pub private: &'a Path,
 }
 
 /// `command` of an agent with integration `kind`, running with `configured`
 /// added to this process's environment, sent to its proxy by `routing`.
-pub(crate) fn route_through_proxy(
+pub fn route_through_proxy(
     kind: IntegrationKind,
     mut command: Vec<OsString>,
     routing: &Routing,
@@ -101,7 +101,7 @@ pub(crate) fn route_through_proxy(
 /// `command`, a configured command of agent `name` that Shoal gives no
 /// hooks, with the arguments that send its API requests to its proxy when it
 /// has one it can use.
-pub(crate) fn with_proxy_args(settings: &Effective, name: &Agent, command: &mut Vec<OsString>) {
+pub fn with_proxy_args(settings: &Effective, name: &Agent, command: &mut Vec<OsString>) {
     let kind = settings.integration(name);
     if settings.proxy(name).is_none() || !routes_through_proxy(kind) {
         return;
@@ -112,7 +112,7 @@ pub(crate) fn with_proxy_args(settings: &Effective, name: &Agent, command: &mut 
 /// The proxy agent `name`'s API requests go through, if it names one; an
 /// error when Shoal cannot point it there, for every launch, a resumed one
 /// included.
-pub(crate) fn launch_proxy<'a>(
+pub fn launch_proxy<'a>(
     settings: &'a Effective,
     name: &Agent,
 ) -> Result<Option<&'a crate::proxy::Proxy>> {

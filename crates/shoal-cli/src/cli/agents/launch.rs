@@ -51,7 +51,7 @@ pub(super) async fn tracked(
     }
     terminal::label_current(&ctx.paths, crate::terminal::Owner::Workspace(&workspace.id)).await?;
     if replaces.is_empty() {
-        return execution::run(
+        return shoal_workers::execution::run(
             &ctx.paths,
             SpaceSelector::Id(workspace.id),
             command,
@@ -59,7 +59,7 @@ pub(super) async fn tracked(
         )
         .await;
     }
-    execution::run_recovery(
+    shoal_workers::execution::run_recovery(
         &ctx.paths,
         SpaceSelector::Id(workspace.id),
         command,

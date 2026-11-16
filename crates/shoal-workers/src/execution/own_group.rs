@@ -5,7 +5,7 @@ use std::io::IsTerminal;
 
 use anyhow::{Result, ensure};
 
-use super::terminal::take_foreground;
+use shoal_core::execution::take_foreground;
 
 /// This process, moved out of its starter's process group into one of its
 /// own; dropping it gives the terminal back to the starter's group when

@@ -29,7 +29,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             approvals::decide_row(&ctx, &row, decision).await
         }
         InternalCommand::ProxyReport { report } => {
-            crate::proxy::send_relayed(&ctx.paths, &report).await
+            shoal_workers::proxy::send_relayed(&ctx.paths, &report).await
         }
         InternalCommand::AgentState {
             state,
@@ -97,7 +97,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
                 mode,
                 narrowing,
             });
-            crate::execution::run_detached_wrapper(
+            shoal_workers::execution::run_detached_wrapper(
                 &ctx.paths,
                 SpaceSelector::Id(workspace),
                 log,
@@ -132,7 +132,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             record,
             log,
         } => {
-            let taken = crate::execution::TakenOver {
+            let taken = shoal_workers::execution::TakenOver {
                 workspace,
                 agent: TrackedAgent {
                     name: agent,
@@ -144,7 +144,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
                 record,
                 log,
             };
-            crate::execution::take_over(&ctx.paths, taken).await
+            shoal_workers::execution::take_over(&ctx.paths, taken).await
         }
         InternalCommand::Add(args) => terminal::add_worker(ctx, args).await,
         InternalCommand::Demo {
@@ -154,8 +154,13 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
         } => {
             let launch = serde_json::from_str(&launch)
                 .map_err(|error| anyhow::anyhow!("invalid demo launch: {error}"))?;
-            crate::execution::run_demo(&ctx.paths, SpaceSelector::Id(workspace), launch, command)
-                .await
+            shoal_workers::execution::run_demo(
+                &ctx.paths,
+                SpaceSelector::Id(workspace),
+                launch,
+                command,
+            )
+            .await
         }
         InternalCommand::Session {
             workspace,
@@ -193,7 +198,7 @@ async fn run_session(
     command: Vec<std::ffi::OsString>,
 ) -> Result<i32> {
     if records.is_empty() {
-        return crate::execution::run(
+        return shoal_workers::execution::run(
             &ctx.paths,
             SpaceSelector::Id(workspace),
             command,
@@ -201,7 +206,7 @@ async fn run_session(
         )
         .await;
     }
-    crate::execution::run_recovery(
+    shoal_workers::execution::run_recovery(
         &ctx.paths,
         SpaceSelector::Id(workspace),
         command,

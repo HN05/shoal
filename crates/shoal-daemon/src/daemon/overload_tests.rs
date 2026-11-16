@@ -53,7 +53,6 @@ async fn chat_restore_child() {
     if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
         return;
     }
-    use crate::execution::recovery::Recovery;
     let (_root, manager, workspace, serving) = fixture().await;
     let paths = CommandPaths::from(manager.paths.clone());
     let checkout = manager
@@ -82,11 +81,11 @@ async fn chat_restore_child() {
     assert_eq!(home.path(), checkout);
 
     let session = "s1".into();
-    let restored = crate::execution::recovery::Restored {
+    let restored = shoal_workers::execution::Restored {
         mode: &crate::model::chat_mode(),
         ..restored("claude", Some(&session))
     };
-    let recovery = Recovery::resolve(&paths, home, restored, None, None)
+    let recovery = shoal_workers::execution::resolve(&paths, home, restored, None, None)
         .await
         .unwrap();
 
@@ -133,7 +132,6 @@ async fn built_in_restore_child() {
     if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
         return;
     }
-    use crate::execution::recovery::Recovery;
     let (_root, manager, workspace, serving) = fixture().await;
     // The daemon as the workspace's wrapper reaches it.
     let paths = CommandPaths::from(manager.paths.clone());
@@ -159,9 +157,15 @@ async fn built_in_restore_child() {
             &["claude-fixture", "--continue"][..],
         ),
     ] {
-        let recovery = Recovery::resolve(&paths, &workspace, restored(agent, None), handoff, None)
-            .await
-            .unwrap();
+        let recovery = shoal_workers::execution::resolve(
+            &paths,
+            &workspace,
+            restored(agent, None),
+            handoff,
+            None,
+        )
+        .await
+        .unwrap();
         assert!(recovery.automatic);
         assert_eq!(recovery.handoff_delivered, handoff.is_some());
         // Restored sessions keep receiving agent messages and may work in
@@ -212,7 +216,7 @@ async fn built_in_restore_child() {
         ("codex", &["codex-fixture", "resume", "s1"][..]),
         ("claude", &["claude-fixture", "--resume", "s1"][..]),
     ] {
-        let recovery = Recovery::resolve(
+        let recovery = shoal_workers::execution::resolve(
             &paths,
             &workspace,
             restored(agent, Some(&"s1".into())),
@@ -235,11 +239,11 @@ async fn built_in_restore_child() {
     )
     .unwrap();
     let session = "s1".into();
-    let triage = crate::execution::recovery::Restored {
+    let triage = shoal_workers::execution::Restored {
         mode: &"triage".into(),
         ..restored("claude", Some(&session))
     };
-    let recovery = Recovery::resolve(&paths, &workspace, triage, None, None)
+    let recovery = shoal_workers::execution::resolve(&paths, &workspace, triage, None, None)
         .await
         .unwrap();
     let told =
@@ -278,14 +282,14 @@ async fn built_in_restore_child() {
         ),
     ] {
         let agent = crate::agent::Agent::from(agent);
-        let restored = crate::execution::recovery::Restored {
+        let restored = shoal_workers::execution::Restored {
             mode: &WORKER,
             narrowing: Default::default(),
             agent: &agent,
             model: &model,
             session: Some(&"s1".into()),
         };
-        let recovery = Recovery::resolve(&paths, &workspace, restored, None, None)
+        let recovery = shoal_workers::execution::resolve(&paths, &workspace, restored, None, None)
             .await
             .unwrap();
         let restore = restore.iter().map(std::ffi::OsString::from);
@@ -296,9 +300,10 @@ async fn built_in_restore_child() {
         );
         assert_eq!(recovery.model, model);
     }
-    let unsupported = Recovery::resolve(&paths, &workspace, restored("custom", None), None, None)
-        .await
-        .unwrap();
+    let unsupported =
+        shoal_workers::execution::resolve(&paths, &workspace, restored("custom", None), None, None)
+            .await
+            .unwrap();
     assert!(!unsupported.automatic);
     assert!(unsupported.command.is_empty());
     fs::write(
@@ -306,7 +311,7 @@ async fn built_in_restore_child() {
         "[agents.codex]\nresume_command = ['saved-session', 'specific-id']\n",
     )
     .unwrap();
-    let overridden = Recovery::resolve(
+    let overridden = shoal_workers::execution::resolve(
         &paths,
         &workspace,
         restored("codex", None),
@@ -326,7 +331,7 @@ async fn built_in_restore_child() {
         "[agents.codex]\nresume_command = ['saved-session', '--', '{prompt}']\n",
     )
     .unwrap();
-    let prompted = Recovery::resolve(
+    let prompted = shoal_workers::execution::resolve(
         &paths,
         &workspace,
         restored("codex", None),
@@ -344,9 +349,10 @@ async fn built_in_restore_child() {
         prompt.to_string_lossy().ends_with("\n\nhandoff"),
         "{prompt:?}"
     );
-    let prompted = Recovery::resolve(&paths, &workspace, restored("codex", None), None, None)
-        .await
-        .unwrap();
+    let prompted =
+        shoal_workers::execution::resolve(&paths, &workspace, restored("codex", None), None, None)
+            .await
+            .unwrap();
     assert!(!prompted.handoff_delivered);
     let [program, separator, prompt] = &prompted.command[..] else {
         panic!("{:?}", prompted.command);
@@ -362,22 +368,24 @@ async fn built_in_restore_child() {
         crate::agent::Agent::from("codex"),
         crate::agent::Agent::from("custom"),
     );
-    let with_model = |agent| crate::execution::recovery::Restored {
+    let with_model = |agent| shoal_workers::execution::Restored {
         mode: &WORKER,
         narrowing: Default::default(),
         agent,
         model: &model,
         session: None,
     };
-    let kept = Recovery::resolve(&paths, &workspace, with_model(&codex), None, None)
-        .await
-        .unwrap();
+    let kept =
+        shoal_workers::execution::resolve(&paths, &workspace, with_model(&codex), None, None)
+            .await
+            .unwrap();
     assert_eq!(
         kept.command[..4],
         ["saved-session", "-m", "m1", "--"].map(std::ffi::OsString::from)
     );
     // A tool that cannot take it refuses the restore, which waits.
-    let refused = Recovery::resolve(&paths, &workspace, with_model(&custom), None, None);
+    let refused =
+        shoal_workers::execution::resolve(&paths, &workspace, with_model(&custom), None, None);
     assert!(refused.await.is_err());
     // So does the restore of an agent config turns off.
     let config = fs::read_to_string(workspace.path.join(".shoal.toml")).unwrap();
@@ -386,7 +394,7 @@ async fn built_in_restore_child() {
         format!("{config}enabled = false\n"),
     )
     .unwrap();
-    let off = Recovery::resolve(&paths, &workspace, with_model(&codex), None, None);
+    let off = shoal_workers::execution::resolve(&paths, &workspace, with_model(&codex), None, None);
     assert!(off.await.is_err());
     fs::write(workspace.path.join(".shoal.toml"), config).unwrap();
     // A restore tells the session why and when it stopped.
@@ -394,7 +402,7 @@ async fn built_in_restore_child() {
         reason: Some("critical memory pressure".into()),
         at: None,
     };
-    let told = Recovery::resolve(
+    let told = shoal_workers::execution::resolve(
         &paths,
         &workspace,
         restored("codex", None),
@@ -515,7 +523,7 @@ async fn run_tracked_agent(script: &str) {
     let root = std::env::current_dir().unwrap();
     let paths = CommandPaths::from(crate::paths::Paths::for_test(root));
     let id = SpaceSelector::Id(std::env::var("SHOAL_TEST_WORKSPACE").unwrap().into());
-    let code = crate::execution::run(
+    let code = shoal_workers::execution::run(
         &paths,
         id,
         vec!["sh".into(), "-c".into(), script.into()],
@@ -539,7 +547,7 @@ async fn tracked_command_child() {
     let root = std::env::current_dir().unwrap();
     let paths = CommandPaths::from(crate::paths::Paths::for_test(root));
     let id = SpaceSelector::Id(std::env::var("SHOAL_TEST_WORKSPACE").unwrap().into());
-    let code = crate::execution::run_command(
+    let code = shoal_workers::execution::run_command(
         &paths,
         id,
         vec![
@@ -1389,7 +1397,7 @@ async fn resumed_agent_child() {
     let id = SpaceSelector::Id(std::env::var("SHOAL_TEST_WORKSPACE").unwrap().into());
     let record = std::env::var_os("SHOAL_TEST_RECORD").unwrap();
     let script = "trap 'exit 0' TERM; touch started; while :; do sleep 1; done";
-    let code = crate::execution::run_recovery(
+    let code = shoal_workers::execution::run_recovery(
         &paths,
         id,
         vec!["sh".into(), "-c".into(), script.into()],
@@ -1589,13 +1597,13 @@ static WORKER: crate::config::modes::ModeName = crate::config::modes::ModeName::
 fn restored<'a>(
     agent: &str,
     session: Option<&'a shoal_ids::agent_session_ids::AgentSessionId>,
-) -> crate::execution::recovery::Restored<'a> {
+) -> shoal_workers::execution::Restored<'a> {
     let agent = Box::leak(Box::new(agent.into()));
     static OWN: crate::agent::ModelChoice = crate::agent::ModelChoice {
         model: None,
         effort: None,
     };
-    crate::execution::recovery::Restored {
+    shoal_workers::execution::Restored {
         mode: &WORKER,
         narrowing: Default::default(),
         agent,

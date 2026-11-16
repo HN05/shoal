@@ -19,20 +19,16 @@ pub use claim::{RecoveryClaim, claim, claim_last_session, claim_record, forget_s
 
 use crate::{
     agent::{Agent, ModelChoice},
-    agents::AgentHome,
-    client::connection::CommandPaths,
     fsutil::atomic::{Permissions, ReplaceOptions},
-    model::{ExecutionSpace, Workspace},
+    model::Workspace,
     paths::Paths,
     process::identity::{self, Identity},
-    protocol::ConfigTarget,
     sessions::Origin,
     state::AgentState,
 };
 pub(crate) use shoal_protocol::executions::unnamed_execution;
 pub use shoal_protocol::executions::{Copied, LastSession, Record, Stage, Stop, StoppedAgent};
 pub use shoal_protocol::saved::{Saved, SavedCommand, SavedSession};
-use shoal_protocol::space_names::SpaceSelector;
 
 #[derive(Debug)]
 pub struct Recovery {
@@ -40,20 +36,20 @@ pub struct Recovery {
     /// The model and effort the agent runs with, which its restore keeps.
     pub model: ModelChoice,
     /// The mode the agent started in, which its restore keeps.
-    pub(crate) mode: crate::config::modes::ModeName,
+    pub mode: crate::config::modes::ModeName,
     /// The `--permission` narrowing it started with, which its restore keeps.
-    pub(crate) narrowing: crate::config::permissions::PermissionsConfig,
+    pub narrowing: crate::config::permissions::PermissionsConfig,
     pub command: Vec<OsString>,
     pub automatic: bool,
     /// Whether `command` carries the handoff message as the agent's prompt.
     pub handoff_delivered: bool,
     /// The proxy `command` was resolved to go through, from the same
     /// settings.
-    pub(crate) proxy: Option<crate::proxy::Proxy>,
+    pub proxy: Option<crate::proxy::Proxy>,
 }
 
 /// Operations on the client type [`Stop`] that only the `shoal` command uses.
-trait StopExt {
+pub trait StopExt {
     /// The stop of the agent `record`, saved at `path`, keeps.
     fn of(record: &Record, path: &Path) -> Self;
 
@@ -92,7 +88,7 @@ pub fn saved_at(path: &Path) -> Option<crate::time::UnixTime> {
 
 /// What a restored session is told: why and when it stopped when known, to
 /// continue, then `handoff`.
-fn resumed_prompt(stop: Option<&Stop>, handoff: Option<&str>) -> String {
+pub fn resumed_prompt(stop: Option<&Stop>, handoff: Option<&str>) -> String {
     let mut prompt = stop.map_or_else(|| "Shoal resumed this session.".to_owned(), Stop::describe);
     prompt.push(' ');
     prompt.push_str("Continue working on the unfinished assignment from where you left off.");
@@ -175,78 +171,6 @@ pub fn converted_subject(
     }
 }
 
-/// What a restore command of agent `name` in `home` is built from: the
-/// message it continues with and the arguments that keep its model and
-/// effort.
-struct RestoreCommand<'a> {
-    paths: &'a CommandPaths,
-    settings: &'a crate::config::Effective,
-    name: &'a Agent,
-    home: AgentHome<'a>,
-    prompt: &'a std::ffi::OsStr,
-    model_args: Vec<OsString>,
-    /// The arguments that give the agent its mode's rules again, which only
-    /// its built-in resume arguments carry.
-    instruction_args: Vec<OsString>,
-}
-
-impl RestoreCommand<'_> {
-    /// The agent's configured `argv` restore command, with its model, effort
-    /// and proxy arguments, and whether it carries the prompt. It is the
-    /// user's own, so Shoal adds no rules to it.
-    async fn configured(self, argv: &[String]) -> Result<(Vec<OsString>, bool)> {
-        let mut command = (self.home)
-            .expand(
-                self.paths,
-                &self.settings.resume_commands,
-                self.name.name(),
-                vec![],
-                &[("{prompt}", self.prompt)],
-            )
-            .await?;
-        crate::agents::insert_options(&mut command, self.model_args);
-        // Without Shoal's hooks it still goes through the agent's proxy.
-        crate::agents::with_proxy_args(self.settings, self.name, &mut command);
-        Ok((command, argv.iter().any(|arg| arg.contains("{prompt}"))))
-    }
-
-    /// The agent's launcher with `resume_args`, its model, effort, rules and
-    /// its space's arguments, and the prompt.
-    async fn resumed(self, mut args: Vec<OsString>) -> Result<Vec<OsString>> {
-        args.extend(self.model_args);
-        args.extend(self.instruction_args);
-        args.extend(self.home.args(self.paths, self.settings, self.name).await?);
-        let takes_field = self
-            .settings
-            .launchers
-            .get(self.name.name())
-            .is_some_and(|argv| argv.iter().any(|arg| arg.contains("{prompt}")));
-        if !takes_field {
-            args.push(self.prompt.to_owned());
-        }
-        (self.home)
-            .expand(
-                self.paths,
-                &self.settings.launchers,
-                self.name.name(),
-                args,
-                &[("{prompt}", self.prompt)],
-            )
-            .await
-    }
-}
-
-/// The agent a restore continues: its name, the model and effort it ran
-/// with, the mode and narrowing it started with, and the session it
-/// reported, if any.
-pub struct Restored<'a> {
-    pub agent: &'a Agent,
-    pub model: &'a ModelChoice,
-    pub mode: &'a crate::config::modes::ModeName,
-    pub narrowing: crate::config::permissions::PermissionsConfig,
-    pub session: Option<&'a AgentSessionId>,
-}
-
 impl Recovery {
     /// The agent it restores, with the model and effort it runs with.
     pub fn tracked(&self) -> super::TrackedAgent {
@@ -258,147 +182,9 @@ impl Recovery {
         }
     }
 
-    pub(super) async fn for_launch(
-        paths: &CommandPaths,
-        workspace: &SpaceSelector,
-        agent: &super::TrackedAgent,
-    ) -> Self {
-        let restored = Restored {
-            agent: &agent.name,
-            model: &agent.model,
-            mode: &agent.mode,
-            narrowing: agent.narrowing,
-            session: None,
-        };
-        let resolved = Self::resolve_in(paths, workspace, restored, None).await;
-        resolved.unwrap_or_else(|error| {
-            eprintln!("warning: automatic agent recovery unavailable: {error:#}");
-            Self {
-                agent: agent.name.normalized(),
-                model: agent.model.clone(),
-                mode: agent.mode.clone(),
-                narrowing: agent.narrowing,
-                command: vec![],
-                automatic: false,
-                handoff_delivered: false,
-                proxy: None,
-            }
-        })
-    }
-
-    /// [`Self::resolve`] in the space `space` as the daemon records it now.
-    async fn resolve_in(
-        paths: &CommandPaths,
-        space: &SpaceSelector,
-        restored: Restored<'_>,
-        stop: Option<&Stop>,
-    ) -> Result<Self> {
-        let records = crate::agents::HomeRecords::read(paths, space).await?;
-        Self::resolve(paths, records.home()?, restored, None, stop).await
-    }
-
-    /// Ask the `restored` session to continue, telling it about its `stop`
-    /// and including `handoff` where the command accepts a prompt: agents
-    /// with resume arguments and `{prompt}` in its `resume_command`. Resume
-    /// arguments restore its session when known, otherwise the workspace's
-    /// latest session, with its model and effort, in `home`, a workspace or
-    /// a chat.
-    pub async fn resolve<'a>(
-        paths: &CommandPaths,
-        home: impl Into<AgentHome<'a>>,
-        restored: Restored<'_>,
-        handoff: Option<&str>,
-        stop: Option<&Stop>,
-    ) -> Result<Self> {
-        let home = home.into();
-        let settings =
-            crate::config::settings(paths, ConfigTarget::Space(SpaceSelector::id(home.id())))
-                .await?;
-        let name = restored.agent.normalized();
-        // A restore of an agent config turned off waits, as one it cannot
-        // run with its model does.
-        anyhow::ensure!(
-            !settings.turned_off(&name),
-            "{name} is turned off: its [agents] entry sets enabled = false"
-        );
-        let configured = settings.resume_commands.get(name.name());
-        let resume_args = settings
-            .launch(&name)
-            .arguments
-            .resume_args(restored.session);
-        let automatic = configured.is_some() || resume_args.is_some();
-        let message = resumed_prompt(stop, handoff);
-        let restore = RestoreCommand {
-            paths,
-            settings: &settings,
-            name: &name,
-            home,
-            prompt: std::ffi::OsStr::new(&message),
-            // A restore runs with what the agent ran with, or not at all, so
-            // the record stays for once its templates take the values again.
-            model_args: crate::agents::model_args(&settings, &name, restored.model)?,
-            instruction_args: crate::agents::restored_instruction_args(
-                &settings,
-                &name,
-                home,
-                restored.mode,
-            ),
-        };
-        let (command, handoff_delivered) = match (configured, resume_args) {
-            (Some(argv), _) => restore.configured(argv).await?,
-            (None, Some(args)) => (restore.resumed(args).await?, true),
-            (None, None) => (vec![], false),
-        };
-        let proxy = crate::agents::launch_proxy(&settings, &name)?.cloned();
-        Ok(Self {
-            agent: name,
-            model: restored.model.clone(),
-            mode: restored.mode.to_owned(),
-            narrowing: restored.narrowing,
-            command,
-            automatic,
-            handoff_delivered: handoff_delivered && handoff.is_some(),
-            proxy,
-        })
-    }
-
-    /// The command restoring the agent stopped with `record`, with the
-    /// proxy it was resolved to go through: the session it saved, told why
-    /// and when it stopped, otherwise the restore command resolved at launch.
-    pub(super) async fn restore_command(
-        &self,
-        paths: &CommandPaths,
-        space: &ExecutionSpace,
-        record: Option<&Path>,
-    ) -> (Vec<OsString>, Option<crate::proxy::Proxy>) {
-        let launched = || (self.command.clone(), self.proxy.clone());
-        let Some((path, record)) =
-            record.and_then(|path| Some((path, Record::load(path).ok().flatten()?)))
-        else {
-            return launched();
-        };
-        let stop = Stop::of(&record, path);
-        let restored = Restored {
-            narrowing: self.narrowing,
-            agent: &self.agent,
-            model: &self.model,
-            mode: &self.mode,
-            session: record.session.as_ref(),
-        };
-        let space = SpaceSelector::id(&space.id);
-        match Self::resolve_in(paths, &space, restored, Some(&stop)).await {
-            Ok(recovery) if !recovery.command.is_empty() => (recovery.command, recovery.proxy),
-            Ok(_) => launched(),
-            Err(error) => {
-                eprintln!("warning: cannot resolve the restore command: {error:#}");
-                launched()
-            }
-        }
-    }
-
     /// Save the stopped agent; `restorer` brings it back besides `shoal
     /// resume`.
-    pub(super) fn save(
+    pub fn save(
         &self,
         paths: &Paths,
         space_id: &SpaceId,
@@ -413,7 +199,7 @@ impl Recovery {
 
     /// Save the agent as `save` does before a stop reaches it, so the record
     /// survives this wrapper; saving it once stopped completes the record.
-    pub(super) fn save_stopping(
+    pub fn save_stopping(
         &self,
         paths: &Paths,
         space_id: &SpaceId,
@@ -468,7 +254,7 @@ pub fn save_stopped(
 
 /// What brings a stopped agent back besides `shoal restore`.
 #[derive(Debug)]
-pub(crate) enum Restorer {
+pub enum Restorer {
     /// Nothing: it stays stopped until the user resumes it.
     User,
     /// This waiting wrapper, once protection lets it.
@@ -1046,7 +832,7 @@ pub(crate) struct CommandRecord {
     pub(crate) argv: Vec<String>,
 }
 
-pub(super) fn save_command(
+pub fn save_command(
     paths: &Paths,
     space_id: &SpaceId,
     id: &ExecutionId,
@@ -1072,71 +858,6 @@ pub(super) fn save_command(
         },
     )?;
     Ok(path)
-}
-
-/// How a stopped agent's wait for automatic recovery ended.
-#[derive(Debug)]
-pub(super) enum Waited {
-    Resume {
-        ports: Vec<crate::model::PortReservation>,
-        /// The binary the daemon runs, when it says.
-        executable: Option<crate::fsutil::FileIdentity>,
-        /// The narrowing the agent restores under, when the daemon changed it.
-        narrowing: Option<crate::config::permissions::PermissionsConfig>,
-    },
-    /// The restore was cancelled, with the daemon's reason if it gave one.
-    Cancelled {
-        reason: Option<String>,
-        /// Removal cancelled it, and the removal record keeps the agent.
-        removed: bool,
-    },
-}
-
-impl Waited {
-    fn cancelled(reason: impl Into<String>) -> Self {
-        Self::Cancelled {
-            reason: Some(reason.into()),
-            removed: false,
-        }
-    }
-}
-
-/// Wait for the daemon's verdict. While the daemon restarts, the link
-/// reattaches and the next daemon continues the wait.
-pub(super) async fn wait(link: &mut super::link::Link) -> Result<Waited> {
-    use super::link::{Received, Refused};
-    use crate::protocol::Control;
-    use tokio::signal::unix::{SignalKind, signal};
-    let mut interrupt = signal(SignalKind::interrupt())?;
-    let mut terminate = signal(SignalKind::terminate())?;
-    let mut quit = signal(SignalKind::quit())?;
-    let signalled = || Ok(Waited::cancelled("interrupted"));
-    loop {
-        tokio::select! {
-            received = link.recv() => match received {
-                Ok(Received::Detached | Received::Reattached) => {}
-                Ok(Received::Control(Control::Resume { ports, executable, narrowing })) => {
-                    // The restored child reattaches once it is registered.
-                    link.disarm();
-                    return Ok(Waited::Resume { ports, executable, narrowing });
-                }
-                Ok(Received::Control(Control::Stop { reason, removed })) => {
-                    return Ok(Waited::Cancelled { reason, removed });
-                }
-                Ok(Received::Control(Control::RestoreWaits { issue })) => {
-                    eprintln!("shoal: the restore also waits until the agent's remaining processes exit: {issue}");
-                }
-                Ok(Received::Control(_)) => anyhow::bail!("unexpected recovery control"),
-                Err(error) if error.is::<Refused>() => {
-                    return Ok(Waited::cancelled(error.to_string()));
-                }
-                Err(error) => return Err(error),
-            },
-            _ = interrupt.recv() => return signalled(),
-            _ = terminate.recv() => return signalled(),
-            _ = quit.recv() => return signalled(),
-        }
-    }
 }
 
 /// Reading what a workspace saved, which the daemon answers requests with.

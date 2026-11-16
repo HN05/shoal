@@ -102,8 +102,8 @@ async fn adjacent_controls_child() {
             } if reason == "critical memory pressure"
         ));
         assert!(matches!(
-            recovery::wait(&mut link).await.unwrap(),
-            recovery::Waited::Cancelled { reason: Some(reason), removed: true }
+            super::super::pause::wait(&mut link).await.unwrap(),
+            super::super::pause::Waited::Cancelled { reason: Some(reason), removed: true }
                 if reason == "the workspace is being removed"
         ));
         assert!(
