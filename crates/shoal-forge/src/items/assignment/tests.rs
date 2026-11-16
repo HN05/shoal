@@ -94,6 +94,18 @@ async fn unassigning_its_own_takes_the_accounts_login_off() {
 }
 
 #[tokio::test]
+async fn reading_the_other_assignees_changes_nothing() {
+    let server = issue_server("open", &["ann", "agent"]);
+    let account = agent_on(&server, "agent").remembering(Memory::default());
+    let (repo, issue) = issue(&server);
+    let others = repo.others_assigned(&account, &issue).await.unwrap();
+    assert_eq!(others, Some(vec!["ann".into()]));
+    let none = Account::agent(Default::default(), Default::default());
+    assert_eq!(repo.others_assigned(&none, &issue).await.unwrap(), None);
+    assert!(changes(&server).is_empty());
+}
+
+#[tokio::test]
 async fn an_issue_the_account_has_already_is_left_as_it_is() {
     let server = issue_server("open", &["agent"]);
     let account = agent_on(&server, "agent").remembering(Memory::default());

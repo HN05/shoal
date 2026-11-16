@@ -54,13 +54,9 @@ impl ForgeRepo {
     ) -> Result<Option<Assignment>> {
         issue.belongs_to(self)?;
         let number = issue.issue()?;
-        // Read as no other account, since the change goes out as this one.
-        if !account.has_login(self) {
+        let Some(login) = self.assigning_login(account).await? else {
             return Ok(None);
-        }
-        self.require(Capability::IssueAssignees)?;
-        let login = (self.kind().own_assignee(self, account).await?)
-            .context("the forge did not report the account's login")?;
+        };
         let current = self.issue_details(account, number).await?.item;
         let assigned = has_assignee(&current, &login);
         let added = !assigned && current.state == ItemState::Open;
@@ -71,9 +67,7 @@ impl ForgeRepo {
             };
             (self.act(account, ItemKind::Issue, number.get(), &Action::edit(edit))).await?;
         }
-        let others = (current.assignees.into_iter())
-            .filter(|assignee| !assignee.eq_ignore_ascii_case(&login))
-            .collect();
+        let others = besides(current.assignees, &login);
         Ok(Some(Assignment {
             login,
             added,
@@ -99,13 +93,40 @@ impl ForgeRepo {
         issue: &ItemRef,
     ) -> Result<Option<Unassignment>> {
         issue.belongs_to(self)?;
+        let Some(login) = self.assigning_login(account).await? else {
+            return Ok(None);
+        };
+        take_off(self, account, issue, &login).await.map(Some)
+    }
+
+    /// The assignees of `issue`, of this repository, besides the login
+    /// `account` signs in as, read without changing them. An account
+    /// without a login of its own there reads none.
+    pub async fn others_assigned(
+        &self,
+        account: &Account,
+        issue: &ItemRef,
+    ) -> Result<Option<Vec<String>>> {
+        issue.belongs_to(self)?;
+        let Some(login) = self.assigning_login(account).await? else {
+            return Ok(None);
+        };
+        let current = self.issue_details(account, issue.issue()?).await?.item;
+        Ok(Some(besides(current.assignees, &login)))
+    }
+
+    /// The login `account` assigns and unassigns itself as in this
+    /// repository: none for an account without a login of its own there,
+    /// which reads as no other account, since its changes go out as this
+    /// one.
+    async fn assigning_login(&self, account: &Account) -> Result<Option<String>> {
         if !account.has_login(self) {
             return Ok(None);
         }
         self.require(Capability::IssueAssignees)?;
         let login = (self.kind().own_assignee(self, account).await?)
             .context("the forge did not report the account's login")?;
-        take_off(self, account, issue, &login).await.map(Some)
+        Ok(Some(login))
     }
 
     /// Remove `login` from the assignees of `issue`, of this repository,
@@ -134,10 +155,15 @@ async fn take_off(
         };
         (repo.act(account, ItemKind::Issue, number.get(), &Action::edit(edit))).await?;
     }
-    let others = (current.assignees.into_iter())
-        .filter(|assignee| !assignee.eq_ignore_ascii_case(login))
-        .collect();
+    let others = besides(current.assignees, login);
     Ok(Unassignment { removed, others })
+}
+
+/// `assignees` without `login`, whatever its case.
+fn besides(assignees: Vec<String>, login: &str) -> Vec<String> {
+    (assignees.into_iter())
+        .filter(|assignee| !assignee.eq_ignore_ascii_case(login))
+        .collect()
 }
 
 /// Whether `login` is among the assignees of `item`; logins name the same

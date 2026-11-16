@@ -77,6 +77,15 @@ async fn the_agent_account_stays_while_another_agent_works_the_issue() {
 }
 
 #[tokio::test]
+async fn the_agent_account_another_shoal_put_on_stays_once_no_agent_here_works_the_issue() {
+    let fixture = agents(&["fix"], &["shoal-agent"], "").await;
+    let workspace = &fixture.workspaces[0];
+    assert!(fixture.link(workspace).await.is_empty());
+    remove(&fixture, workspace).await;
+    assert!(fixture.changes().is_empty());
+}
+
+#[tokio::test]
 async fn both_assigns_the_user_and_the_agent_and_takes_both_back() {
     let fixture = agents(&["fix"], &[], "[issue]\nassign = \"both\"\n").await;
     let workspace = &fixture.workspaces[0];

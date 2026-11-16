@@ -2549,9 +2549,11 @@ an agent made the link and no agent of the space's own has ended since, as for a
 child a coordinator splits for its subagents, and the space's work is not done. It comes off an open issue once none does, at
 `shoal done`, a stop that waits for `shoal restore`, an exit, an unlink or a
 removal, and goes back on when an agent starts or is restored or `done --undo`
-withdraws the completion. Only Shoal assigns the agent account, so Shoal reads the
-forge for it instead of recording it, and settles it in the background, so a
-slow forge holds back no start or stop. The user's own login, under `[issue]
+withdraws the completion. Every Shoal acting as the same account shares that
+assignee, so each records the issues it put or kept the account on and takes it
+off only those, leaving one another Shoal's agent may work; it reads the forge
+for whether the account is there, and settles it in the background, so a slow
+forge holds back no start or stop. The user's own login, under `[issue]
 assign = "user"` or `"both"`, joins on every assigned link, whoever makes it, and
 leaves through the link and unlink paths, removal among them: Shoal records each
 login it added, per issue, so it takes back only its own and only once no space

@@ -233,13 +233,16 @@ fn claim(db: &Connection, id: &SpaceId, assignees: &[IssueAssignee]) -> Result<(
 
 /// [`Manager::hand_over_assignees`] within the caller's transaction: the
 /// space's links no longer say who assigned them, so its agent works none
-/// here.
+/// here, and the agent account stays on the issues no other space here
+/// links.
 fn hand_over(db: &Connection, id: &SpaceId) -> Result<()> {
     db.execute(
         "UPDATE space_issue SET linked_by=NULL WHERE space_id=?1",
         [id],
     )?;
-    for Dropped { url, login } in dropped(db, id, &super::assigned_urls(db, id)?)? {
+    let issues = super::assigned_urls(db, id)?;
+    super::agents::hand_over_agent(db, &issues)?;
+    for Dropped { url, login } in dropped(db, id, &issues)? {
         db.execute(
             "UPDATE space_issue SET assignee=NULL WHERE space_id=?1 AND url=?2",
             rusqlite::params![id, url],

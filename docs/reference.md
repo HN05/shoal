@@ -5022,9 +5022,10 @@ agent of its own that runs, waits in the queue, restarts or is asleep, or an
 agent linked the issue and no agent of its own has ended since, and the space is
 not done. Shoal takes it off once no
 space whose agent works the issue links it, after `shoal done`, a stop that
-waits for `shoal restore`, the agent's exit, an unlink or a removal, and puts it
-back when an agent starts, `shoal restore` queues one or `shoal done --undo`
-withdraws the completion. `"user"` adds the user's own login on every assigned
+waits for `shoal restore`, the agent's exit, an unlink or a removal, where this
+Shoal put it on, so it leaves one another Shoal acting as the same account
+assigned; it puts it back when an agent starts, `shoal restore` queues one or
+`shoal done --undo` withdraws the completion. `"user"` adds the user's own login on every assigned
 link, whoever makes it, and Shoal takes it off once no space links the issue,
 if Shoal added it; `"both"` does both, and `"none"` neither. A closed issue
 keeps its assignees. A warning on stderr and in the JSON `warnings` names the

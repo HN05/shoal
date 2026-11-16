@@ -1,7 +1,8 @@
 //! The agent account among the forge assignees of the issues spaces link as
 //! assigned: it joins an issue while an agent works it and leaves it once
-//! none does. Only Shoal assigns it, so Shoal reads the forge for it instead
-//! of recording what it added.
+//! none does. Every Shoal acting as the account shares that assignee, so
+//! each records the issues it put or kept the account on and takes it off
+//! only those, and reads the forge for whether it is there.
 use anyhow::Result;
 use rusqlite::{Connection, params};
 use shoal_ids::space_ids::SpaceId;
@@ -116,12 +117,44 @@ impl Manager {
     /// unless the agent account has no login of its own there.
     async fn settle_issue_agent(&self, url: &ItemRef) -> Result<Option<Vec<String>>> {
         let _gate = self.gates.lock_issue_assignees(url.url()).await;
+        match self.agent_works_issue(url).await? {
+            true => self.keep_agent_on(url).await,
+            false => self.take_agent_off(url).await,
+        }
+    }
+
+    /// Put the agent account on the issue `url`, or keep it there, and
+    /// record that this Shoal did.
+    async fn keep_agent_on(&self, url: &ItemRef) -> Result<Option<Vec<String>>> {
+        let forge = self.item_forge(url).await?;
+        let Some(assigned) = forge.assign_own(&self.agent_account(), url).await? else {
+            return Ok(None);
+        };
+        let issue = url.url().to_owned();
+        (self
+            .store
+            .write(move |tx| record_agent_assigned(tx, &issue)))
+        .await?;
+        Ok(Some(assigned.others))
+    }
+
+    /// Take the agent account off the issue `url` where this Shoal put or
+    /// kept it there, and leave it where another Shoal acting as the same
+    /// account may have, whose agent may still work the issue.
+    async fn take_agent_off(&self, url: &ItemRef) -> Result<Option<Vec<String>>> {
         let forge = self.item_forge(url).await?;
         let account = self.agent_account();
-        Ok(match self.agent_works_issue(url).await? {
-            true => (forge.assign_own(&account, url).await?).map(|assigned| assigned.others),
-            false => (forge.unassign_own(&account, url).await?).map(|removed| removed.others),
-        })
+        let issue = url.url().to_owned();
+        if !(self.store.read(move |tx| agent_assigned_here(tx, &issue))).await? {
+            return forge.others_assigned(&account, url).await;
+        }
+        let removed = forge.unassign_own(&account, url).await?;
+        let issue = url.url().to_owned();
+        (self
+            .store
+            .write(move |tx| forget_agent_assigned(tx, &issue)))
+        .await?;
+        Ok(removed.map(|removed| removed.others))
     }
 
     /// Whether an agent works the issue `url`: that of a space linking it
@@ -188,6 +221,43 @@ pub(super) fn agent_ended(db: &Connection, id: &SpaceId) -> Result<()> {
         "UPDATE space_issue SET linked_by=?2 WHERE space_id=?1 AND linked_by=?3",
         params![id, Assigner::User, Assigner::Agent],
     )?;
+    Ok(())
+}
+
+/// Record that this Shoal put or kept the agent account on the issue `url`.
+fn record_agent_assigned(db: &Connection, url: &str) -> Result<()> {
+    db.execute(
+        "INSERT OR IGNORE INTO agent_assigned_issues(url) VALUES (?1)",
+        [url],
+    )?;
+    Ok(())
+}
+
+/// Whether this Shoal put or kept the agent account on the issue `url`.
+fn agent_assigned_here(db: &Connection, url: &str) -> Result<bool> {
+    Ok(db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM agent_assigned_issues WHERE url=?1)",
+        [url],
+        |row| row.get(0),
+    )?)
+}
+
+/// Forget that this Shoal put the agent account on the issue `url`.
+fn forget_agent_assigned(db: &Connection, url: &str) -> Result<()> {
+    db.execute("DELETE FROM agent_assigned_issues WHERE url=?1", [url])?;
+    Ok(())
+}
+
+/// Leave the agent account on `issues`, which a space that moved to
+/// another machine links, to that machine, where no space here settles it.
+pub(super) fn hand_over_agent(db: &Connection, issues: &[ItemRef]) -> Result<()> {
+    for url in issues {
+        db.execute(
+            "DELETE FROM agent_assigned_issues WHERE url=?1 AND NOT EXISTS(
+                SELECT 1 FROM space_issue WHERE url=?1 AND linked_by IS NOT NULL)",
+            [url.url()],
+        )?;
+    }
     Ok(())
 }
 
