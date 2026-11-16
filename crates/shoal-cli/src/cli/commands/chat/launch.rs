@@ -27,6 +27,8 @@ mod admission;
 mod command;
 mod detached;
 
+pub(in crate::cli::commands) use detached::report_started;
+
 /// Start a chat about `repo` and `topic` with the chosen agent. `settings`
 /// choose the agent before the refresh touches the checkout; the launch reads
 /// them again afterwards, so the checkout's updated configuration applies.

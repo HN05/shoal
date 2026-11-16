@@ -87,23 +87,45 @@ pub(super) async fn add_detached(
 /// `--focus` asks to focus, which nothing shows. The daemon starts the
 /// agent from the background, which some host must take, unless the user's
 /// agent runs its own way.
-pub(super) async fn ensure_detachable(
-    settings: &AddSettings<'_>,
+pub(super) fn ensure_detachable(
+    settings: &Effective,
     agent: Option<&crate::agent::Agent>,
     options: &AddOptions,
 ) -> Result<()> {
     let Some(agent) = agent else {
         return Ok(());
     };
-    ensure!(
-        !options.focus,
-        "a call without a terminal starts its agent detached, with nothing to focus; leave out --focus, or pass --here to run it in place"
-    );
-    let settings = settings.get().await?;
+    ensure_unfocused(options)?;
     if !crate::env::is_scoped() && agents::runs_its_own_way(agent, settings) {
         return Ok(());
     }
     crate::terminal::queued::ensure_background(settings)
+}
+
+/// Why the daemon's queued start of an agent under `settings` could not
+/// run from this terminal, which the launch carries for the daemon to
+/// refuse it with once it knows it starts one, as `--focus`, which nothing
+/// shows, is refused here.
+pub(super) fn unplaceable(
+    settings: &Effective,
+    agent: Option<&crate::agent::Agent>,
+    options: &AddOptions,
+) -> Result<Option<String>> {
+    if agent.is_some() {
+        ensure_unfocused(options)?;
+    }
+    let refused = crate::terminal::queued::ensure_background(settings).err();
+    Ok(refused.map(|error| format!("{error:#}")))
+}
+
+/// Refuse `--focus` for an agent that starts detached, with nothing to
+/// focus.
+fn ensure_unfocused(options: &AddOptions) -> Result<()> {
+    ensure!(
+        !options.focus,
+        "a call without a terminal starts its agent detached, with nothing to focus; leave out --focus, or pass --here to run it in place"
+    );
+    Ok(())
 }
 
 /// Whether the user's detached start of `agent` starts it in this process,

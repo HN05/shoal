@@ -95,7 +95,7 @@ pub(super) async fn reopened_workspace(
 
 /// Agent arguments as a queued launch carries them, refusing one that is
 /// not UTF-8.
-pub(super) fn launch_args(args: Vec<OsString>) -> Result<Vec<String>> {
+pub(in crate::cli::commands) fn launch_args(args: Vec<OsString>) -> Result<Vec<String>> {
     (args.into_iter())
         .map(|arg| {
             arg.into_string()

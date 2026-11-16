@@ -76,6 +76,23 @@ pub(super) async fn start(ctx: &Context, launch: Launch) -> Result<Started> {
     else {
         anyhow::bail!("the daemon started the chat's agent in no chat");
     };
+    reported(ctx, started)
+}
+
+/// Report the chat the daemon started for a start that runs it in no
+/// terminal, as a start of it in its place would.
+pub(in crate::cli::commands) fn report_started(ctx: &Context, started: StartedChat) -> Result<i32> {
+    match reported(ctx, started)? {
+        Started::Exited(code) => Ok(code),
+        Started::Background(chat) => {
+            ctx.emit(&chat.place, &chat)?;
+            Ok(0)
+        }
+    }
+}
+
+/// How the daemon `started` the chat, once what only the start reports is.
+fn reported(ctx: &Context, started: StartedChat) -> Result<Started> {
     match started {
         StartedChat::Queued(queued) => {
             report_queued(ctx, &queued)?;

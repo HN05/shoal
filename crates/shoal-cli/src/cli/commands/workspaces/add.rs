@@ -20,6 +20,8 @@ pub(in crate::cli::commands) use agent::AgentLaunch;
 pub(in crate::cli::commands) use branch::owning_workspace;
 pub(in crate::cli::commands) use existing::start_worker;
 pub(in crate::cli) use finish::execute_add;
+pub(in crate::cli::commands) use launch::launch_workspace;
+pub(in crate::cli::commands) use plan::launch_args;
 use shoal_protocol::space_names::SpaceSelector;
 use std::ffi::OsString;
 
@@ -169,7 +171,7 @@ async fn start_planned(
         blockers,
     } = planned;
     if starts_detached(ctx, plan.agent_name().is_some(), &options) {
-        ensure_detachable(settings, plan.agent.agent.as_ref(), &options).await?;
+        ensure_detachable(settings.get().await?, plan.agent.agent.as_ref(), &options)?;
         // Boxed, as are the launches below it: the start path's futures
         // nest deep enough to overflow the main thread's stack in debug
         // builds on Linux.

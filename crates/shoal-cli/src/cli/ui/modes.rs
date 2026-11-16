@@ -41,6 +41,15 @@ impl ModeFit {
 }
 
 impl ModeChoice {
+    /// The mode it names; none for a pick, which a start without a
+    /// terminal leaves to the default mode.
+    pub fn named(self) -> Option<ModeName> {
+        match self {
+            Self::Named(mode) => Some(mode),
+            Self::Pick => None,
+        }
+    }
+
     /// The mode of a start in the spaces `fit` allows: the named one, which
     /// `modes` must define, else one picked among those that start there,
     /// without asking when only one does.

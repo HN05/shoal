@@ -42,25 +42,6 @@ fn an_issue_numbered_zero_is_refused_before_any_request() {
 fn add_reuses_resolution_requests_without_reordering_failures() {
     for (args, expected, diagnostic) in [
         (
-            vec!["start", "7", "--repo", "test", "--agent", "missing"],
-            vec!["layered_config test"],
-            "\"missing\"",
-        ),
-        (
-            vec!["start", "https://other.example/team/repo/issues/7"],
-            vec!["list_repositories"],
-            "shoal repo add https://other.example/team/repo",
-        ),
-        (
-            vec![
-                "start",
-                "--issue",
-                "https://other.example/team/repo/issues/7#comment",
-            ],
-            vec!["list_repositories"],
-            "shoal repo add https://other.example/team/repo",
-        ),
-        (
             vec![
                 "review",
                 "run",
@@ -69,9 +50,11 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             vec!["list_repositories"],
             "shoal repo add http://other.example:3000/team/repo",
         ),
+        // A start without a terminal reads its repository's settings once,
+        // then leaves the rest of it to the daemon.
         (
             vec!["start", "test", "--branch", "new"],
-            vec!["list_repositories", "list_workspaces", "start_workspace"],
+            vec!["list_repositories", "layered_config id:test", "launch"],
             "creation reached",
         ),
         (
@@ -97,21 +80,6 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             ],
             vec![],
             "\"missing\"",
-        ),
-        // Work to wait for is refused before the agent or any picker.
-        (
-            vec![
-                "start",
-                "test",
-                "--branch",
-                "new",
-                "--agent",
-                "codex",
-                "--add-blocker",
-                "missing",
-            ],
-            vec!["list_repositories", "list_workspaces", "check_blockers"],
-            "neither a workspace nor a queued agent",
         ),
     ] {
         let daemon = FakeDaemon::start();

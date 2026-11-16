@@ -45,6 +45,7 @@ async fn start(ctx: &Context, mut args: StartArgs) -> Result<i32> {
         args.parent = Some(SpaceSelector::Id(space_id(ctx, parent).await?));
     }
     let launch = args.launch();
+    launches::decided_target(&launch)?;
     launches::ensure_copy_fits(&launch)?;
     ensure_nothing_dropped(&args)?;
     launches::ensure_in_fits(&launch)?;
@@ -376,6 +377,9 @@ async fn mode_repository(ctx: &Context, args: &StartArgs) -> Result<Option<Repos
 /// names no branch, issue, PR or copy, in a chat that its
 /// agent makes a workspace once it knows the work.
 async fn in_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Result<i32> {
+    if let Some(settings) = launch::detached(ctx, &args).await? {
+        return launch::workspace(ctx, args, mode, settings).await;
+    }
     let unsettled = args.clone();
     match in_new_workspace(ctx, args, mode).await {
         Err(error) if error.is::<workspaces::StartsAsChat>() => {
@@ -625,6 +629,8 @@ async fn outside_repositories(
 fn given(changes: &[PermissionChange]) -> PermissionsConfig {
     PermissionChange::combined(changes).set
 }
+
+mod launch;
 
 #[cfg(test)]
 mod tests;

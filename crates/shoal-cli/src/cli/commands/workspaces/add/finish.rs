@@ -359,7 +359,7 @@ async fn start_add_workspace<'c>(
 /// its PR and queues its agent, before reporting it, unless the start
 /// `named` it, when only `--json` reports it, and entering it unless `agent`
 /// takes the terminal.
-async fn finish_add_workspace(
+pub(super) async fn finish_add_workspace(
     ctx: &Context,
     preparing: Preparing<'_, CommandPaths>,
     rest: &mut AfterSetup,
