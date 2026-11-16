@@ -22,6 +22,7 @@ LABELS = [  # name, colour, exclusive, description
     ("area/docs",         "6b7280", False, "README, reference, design and contributor documentation"),
     ("area/infra",        "b45309", False, "Developer tooling, CI, releases, Homebrew taps and hosting"),
     ("blocked",           "000000", False, "Cannot proceed until something outside the issue happens"),
+    ("main-broken",       "dc2626", False, "A failure on main; agents whose checks hit it comment here instead of filing another"),
     ("needs-plan",        "fbbf24", False, "Needs a plan settled with the owner before anyone implements it"),
     ("planned",           "16a34a", False, "The issue body holds a settled plan; an agent can implement it without input"),
     ("tracking",          "6e7781", False, "A standing issue a workflow rewrites and nobody closes"),

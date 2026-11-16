@@ -547,16 +547,20 @@ Issues and PRs carry one or more `area/` labels and one `type/` and one
 `.forgejo/scripts/labels.py` creates the scheme. `type/` names what the change
 is for, wherever its code lives: work that makes the tests faster is
 `type/test`. An issue states the problem or goal and what done looks like.
-One whose approach is settled is labelled `planned`, and agents implement it
-without asking; one that leaves a choice for
+Before opening one, rebase onto `origin/main` and check that the problem is
+still there: `main` has often fixed it already. One whose approach is settled
+is labelled `planned`, and agents implement it without asking; one that leaves a choice for
 the owner is labelled `needs-plan` until `shoal start --mode plan` settles a Plan section in
 its body. Issues with neither, such as tracking and meta issues, stay out of that
 flow. A PR description follows
 `.forgejo/pull_request_template.md`. Push the branch and let CI verify instead
 of running the full suite locally first.
 A failed check is a defect even when a rerun passes. Read its log, then fix the
-cause in its own commit or, when it lies outside the change, open an issue with
-the failing test and log excerpt; rerun only after that, never instead of it.
+cause in its own commit or, when it lies outside the change, give it an issue
+with the failing test and log excerpt; rerun only after that, never instead of
+it. A failure `main`'s latest run has too (`shoal ci ls --branch main`) shares
+`main`'s one open `main-broken` issue (`shoal issue ls --label main-broken`):
+comment your run there, and open it, with that label, only when none is open.
 
 ## Committing
 
@@ -613,9 +617,12 @@ the failing test and log excerpt; rerun only after that, never instead of it.
 - When your work is a PR, run `shoal done` only after it merges: until then,
   keep handling its reviews, CI results and merge conflicts. After it merges,
   watch the `ci.yml` run on `main` for its merge (`shoal ci ls --branch
-  main`, `shoal view ci <run>`). When that run fails, open a PR that fixes
-  `main`. You are finished once the run passes, or once another PR merges
-  into `main` after yours, which makes `main` no longer yours to fix.
+  main`, `shoal view ci <run>`). When that run fails, the failure is yours,
+  even when another merge crossed yours: at once, before you start the fix,
+  comment your run on the open `main-broken` issue or, when none is open,
+  open one with that label, the failing test and log excerpt; then open a PR
+  that fixes `main` and closes it. You are finished once that run or a later
+  run on `main` passes, or once that issue closes.
 
 ## Shoal feedback
 
