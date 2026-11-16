@@ -113,7 +113,7 @@ pub fn definition(paths: &Paths, executable: &Path, platform: Platform) -> Resul
                 .collect::<Result<Vec<_>>>()?
                 .join(" ");
             format!(
-                "[Unit]\nDescription=Shoal local agent resource manager\n\n[Service]\nType=exec\nExecStart={args}\nEnvironment={}\nRestart=on-failure\nRestartSec=5\nTimeoutStopSec={stop_seconds}\nUMask=0077\n\n[Install]\nWantedBy=default.target\n",
+                "[Unit]\nDescription=Shoal local agent resource manager\n\n[Service]\nType=exec\nExecStart={args}\nEnvironment={}\nRestart=on-failure\nRestartSec=5\nTimeoutStopSec={stop_seconds}\nOOMPolicy=continue\nUMask=0077\n\n[Install]\nWantedBy=default.target\n",
                 systemd_quote(&format!("PATH={search_path}"), false)?
             )
         }

@@ -33,5 +33,11 @@ fn systemd_escapes_expansion_and_quotes() {
             .lines()
             .any(|line| { line == format!("TimeoutStopSec={}", SERVICE_STOP_TIMEOUT.as_secs()) })
     );
+    assert!(
+        definition
+            .content
+            .lines()
+            .any(|line| line == "OOMPolicy=continue")
+    );
     assert!(definition.content.contains("%%name/$$data"));
 }

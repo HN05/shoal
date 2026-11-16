@@ -93,7 +93,9 @@ shoal status                       # Outside a space: the daemon, notifications,
 ```
 
 macOS uses a launchd LaunchAgent in `~/Library/LaunchAgents` (requires a GUI
-login session); Linux uses a systemd user service. Without a service manager,
+login session); Linux uses a systemd user service, whose unit sets
+`OOMPolicy=continue` so that the kernel's OOM killer ending one process in it,
+other than the daemon, leaves the service and its other processes running. Without a service manager,
 run `shoal --state-dir /tmp/shoal-dev daemon run` in the foreground and target
 it with the same `--state-dir` (or `SHOAL_STATE_DIR`). State defaults to
 `~/.local/state/shoal`; runtime state and the Unix socket are private to the
@@ -3593,7 +3595,9 @@ a daemon restart, a job whose runner is gone goes the same way and the forge
 times it out. Where the daemon runs as a systemd user service, with systemd 254
 or later and a user bus that starts a scope when the daemon starts, each job's
 wrapper runs in a transient scope of its own in the service's slice, so that systemd's stop of the service, as once the daemon
-exited with a failure, leaves the job running for the next daemon; launchd
+exited with a failure, leaves the job running for the next daemon, and with
+`OOMPolicy=continue`, so that the OOM killer ending one of its processes leaves
+the rest running; launchd
 ends only the daemon's own process group, which the wrapper has left.
 Protection never stops a running job; the workflow's
 `timeout-minutes` bounds it. `shoal stop` on the job's workspace, and `shoal ci

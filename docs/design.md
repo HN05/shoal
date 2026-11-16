@@ -513,7 +513,9 @@ input. Keep writable state outside the binary's directory.
 Service setup manages one per-user launchd/systemd service and refuses to change
 its state directory until the existing service is stopped; foreground mode covers
 environments without a service manager. The service captures the installing shell's
-`PATH`.
+`PATH`. The unit and every scope Shoal starts set
+`OOMPolicy=continue`, so an OOM kill ends only the process it chose and the
+daemon's own death alone fails the service.
 Managed daemons record their stable executable path before startup work and restart
 after a replacement, including one during startup, once daemon operations are idle
 and no setup or merge runs; commands reattach.

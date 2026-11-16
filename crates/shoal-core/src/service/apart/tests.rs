@@ -34,6 +34,10 @@ fn the_launcher_starts_a_scope_in_the_services_slice() {
         launcher.contains(&"--slice=workloads.slice".into()),
         "{launcher:?}"
     );
+    assert!(
+        launcher.contains(&"--property=OOMPolicy=continue".into()),
+        "{launcher:?}"
+    );
     assert_eq!(launcher.last(), Some(&"--".into()));
 }
 

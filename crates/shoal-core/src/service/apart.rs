@@ -76,7 +76,8 @@ impl Service {
     }
 
     /// The `systemd-run` command that starts a program in a scope of its
-    /// own in this service's slice, which goes once its processes have.
+    /// own in this service's slice, which goes once its processes have and
+    /// outlives the OOM killer's kill of one of them.
     fn launcher(&self) -> Vec<OsString> {
         let mut launcher: Vec<OsString> = [
             Tool::SystemdRun.program(),
@@ -85,6 +86,7 @@ impl Service {
             "--quiet",
             "--collect",
             "--expand-environment=no",
+            "--property=OOMPolicy=continue",
         ]
         .into_iter()
         .map(Into::into)
