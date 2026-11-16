@@ -20,6 +20,7 @@ pub mod zmx;
 #[allow(unused_imports)]
 pub use shoal_core::test_support::printed;
 
+use shoal_core::test_support::isolate;
 use std::{
     ffi::{OsStr, OsString},
     fs,
@@ -88,34 +89,18 @@ pub fn install_fake_agent(dir: &Path) {
     fs::write(dir.join("agent.sh"), fake_agent_script("agent-started")).unwrap();
 }
 
-/// Keep commands and their descendants in a temporary home, state and cwd.
-/// Preserve PATH for test tooling, preferring executables in the fixture's
-/// bin, then the fake hosts of [`runner_path`].
+/// Keep commands and their descendants in a temporary home, state and cwd,
+/// as [`isolate`] does, with terminal host sessions of their own. Preserve
+/// PATH for test tooling, preferring executables in the fixture's bin, then
+/// the fake hosts of [`runner_path`].
 pub fn isolated(root: &Path, program: impl AsRef<OsStr>) -> Command {
     let mut command = Command::new(program);
-    for (name, _) in std::env::vars_os() {
-        if name.to_str().is_some_and(|name| {
-            [
-                "SHOAL_", "XDG_", "HAPPY_", "GIT_", "HERDR_", "ZMX_", "REX_", "TMUX", "ZELLIJ",
-            ]
-            .iter()
-            .any(|prefix| name.starts_with(prefix))
-                || ["CLAUDE_CONFIG_DIR", "CODEX_HOME", "BASH_ENV", "ENV"].contains(&name)
-        }) {
-            command.env_remove(name);
-        }
-    }
+    isolate(&mut command, root);
     let path = std::env::join_paths(
         std::iter::once(root.join("bin")).chain(std::env::split_paths(&runner_path())),
     )
     .unwrap();
     command
-        // Whatever stdin the runner has must not reach a test: a command that
-        // reads an open pipe or socket to its end would wait forever.
-        .stdin(Stdio::null())
-        .current_dir(root)
-        .env("HOME", root)
-        .env("ZDOTDIR", root)
         .env("SHOAL_STATE_DIR", root.join("state"))
         // A launch that reaches a real zmx must not use the user's sessions.
         .env("ZMX_DIR", root.join("zmx"))
@@ -124,8 +109,6 @@ pub fn isolated(root: &Path, program: impl AsRef<OsStr>) -> Command {
         .env("TMUX_TMPDIR", root.join("t"))
         // Nor a Zellij one the user's sessions.
         .env("ZELLIJ_SOCKET_DIR", root.join("z"))
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("PATH", path);
     command
 }

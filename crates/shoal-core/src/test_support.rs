@@ -14,22 +14,45 @@ pub mod subvolumes;
 #[cfg(test)]
 mod tests;
 
-/// Run Git in `repo` without the caller's Git variables, which a hook or
-/// wrapper running the tests may export to point Git at its own repository,
-/// index or command-scope configuration.
-pub fn git(repo: &Path, args: &[&str]) -> String {
-    let mut command = Command::new("git");
+/// The prefixes of the runner's variables that would point a test's command
+/// at the runner's Shoal, terminal and its hosts, agents or Git repository.
+const RUNNER_PREFIXES: [&str; 10] = [
+    "SHOAL_", "XDG_", "HAPPY_", "GIT_", "HERDR_", "ZMX_", "REX_", "TERM", "TMUX", "ZELLIJ",
+];
+
+/// The runner's variables beyond [`RUNNER_PREFIXES`] that would point a
+/// test's command at its agents' configuration or a shell's startup files.
+const RUNNER_VARIABLES: [&str; 4] = ["CLAUDE_CONFIG_DIR", "CODEX_HOME", "BASH_ENV", "ENV"];
+
+/// Run `command` from `root`, its home, without the runner's Shoal, terminal,
+/// agent or Git variables, Git configuration beyond the repository's,
+/// or stdin: a command that read an open pipe or socket to its end would
+/// wait forever. The rest of the environment, such as `PATH` and `TMPDIR`,
+/// stays.
+pub fn isolate<'a>(command: &'a mut Command, root: &Path) -> &'a mut Command {
     for (name, _) in std::env::vars_os() {
-        if name.to_str().is_some_and(|name| name.starts_with("GIT_")) {
+        if name.to_str().is_some_and(|name| {
+            RUNNER_PREFIXES
+                .iter()
+                .any(|prefix| name.starts_with(prefix))
+                || RUNNER_VARIABLES.contains(&name)
+        }) {
             command.env_remove(name);
         }
     }
-    let output = command
-        .arg("-C")
-        .arg(repo)
-        .args(args)
+    command
+        .current_dir(root)
+        .env("HOME", root)
+        .env("ZDOTDIR", root)
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
         .env("GIT_CONFIG_NOSYSTEM", "1")
+        .stdin(std::process::Stdio::null())
+}
+
+/// Run Git in `repo` in the environment [`isolate`] gives it.
+pub fn git(repo: &Path, args: &[&str]) -> String {
+    let output = isolate(&mut Command::new("git"), repo)
+        .args(args)
         .output()
         .unwrap();
     assert!(
@@ -124,20 +147,13 @@ pub fn write_beside_global_config(paths: &Paths, name: &str, text: &str) {
 /// Run a test helper as its own wrapper, without the runner's scope or terminal.
 pub fn isolated_test(root: &Path, name: &str) -> tokio::process::Command {
     let mut command = tokio::process::Command::new(std::env::current_exe().unwrap());
+    isolate(command.as_std_mut(), root);
     command
         .args(["--exact", name, "--ignored", "--nocapture"])
-        .env_clear()
-        .env("PATH", std::env::var_os("PATH").unwrap_or_default())
-        .env("HOME", root)
-        .env("ZDOTDIR", root)
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("SHOAL_TEST_HELPER", "1")
         // The helper runs CLI handlers in-process; give its test thread the
         // stack the CLI's runtime threads get, which Linux debug builds need.
         .env("RUST_MIN_STACK", crate::WORKER_STACK.to_string())
-        .current_dir(root)
-        .stdin(std::process::Stdio::null())
         .kill_on_drop(true);
     command
 }
@@ -596,17 +612,11 @@ impl Drop for ProcessGroup {
     }
 }
 
-/// `program` run from `dir` without the runner's Shoal variables or
-/// configuration locations.
+/// `program` run from `dir` in the environment [`isolate`] gives it.
 pub fn isolated_command(program: &str, dir: &Path) -> tokio::process::Command {
     let mut command = tokio::process::Command::new(program);
-    command
-        .env_clear()
-        .env("PATH", std::env::var_os("PATH").unwrap_or_default())
-        .env("HOME", dir)
-        .current_dir(dir)
-        .stdin(std::process::Stdio::null())
-        .kill_on_drop(true);
+    isolate(command.as_std_mut(), dir);
+    command.kill_on_drop(true);
     command
 }
 
