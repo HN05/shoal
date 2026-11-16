@@ -166,7 +166,7 @@ async fn run_worker(paths: &CommandPaths, handoff: &Handoff) -> Result<i32> {
         .status()
         .await
         .context("run the chat worker")?;
-    Ok(crate::execution::exit_code(status))
+    Ok(shoal_core::execution::exit_code(status))
 }
 
 /// The chat worker that starts the chat whose start `handoff` holds.

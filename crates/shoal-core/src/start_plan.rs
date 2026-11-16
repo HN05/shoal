@@ -1,10 +1,10 @@
 //! The plan of a queued agent start, which everything that queues one and
 //! the `queue-start` worker that carries it out agree on. The queue keeps it
 //! as JSON in [`QueueRequest::plan`] until the worker runs; the protocol
-//! calls live in [`crate::client::queue`] and the daemon's runner in
-//! `daemon::queued_starts`. Entries queued by an earlier version still
+//! calls live in `shoal-client`'s `queue`, the worker in `shoal-workers`'
+//! `queued_starts` and the daemon's runner in `daemon::queued_starts`. Entries queued by an earlier version still
 //! start, so the format only gains fields with defaults.
-use shoal_ids::space_ids::SpaceId;
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use std::{ffi::OsString, path::PathBuf};
 
 use anyhow::Result;
@@ -13,12 +13,48 @@ use crate::{
     agent::{Agent, ModelChoice},
     model::{QueueRequest, Workspace},
     protocol::{
-        CreationOptions, PullHead,
+        ChatStart, CreationOptions, PullHead,
         operations::{QueuedLaunch, WorkspaceStart},
     },
     terminal::PlaceName,
 };
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+
+/// What the queue's start of a chat launch runs, which a launch of a new
+/// workspace's plan tells apart by its `chat_start`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ChatPlan {
+    /// The space the chat goes below, which the queue ranks and scopes the
+    /// launch by until the chat exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<SpaceSelector>,
+    pub chat_start: ChatPlanStart,
+}
+
+/// How a queued chat starts.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChatPlanStart {
+    /// The `shoal` arguments that start the chat `name` here, as the
+    /// terminal that queued it built them, run in `home`, its checkout,
+    /// worktree or `root_dir`, of `repository`, or of none.
+    Relaunch {
+        args: Vec<String>,
+        repository: Option<RepositoryId>,
+        home: PathBuf,
+        name: SpaceName,
+    },
+    /// The start the daemon resolved for a client, whose chat it recorded
+    /// when the launch had to wait.
+    Resolved(Box<ChatStart>),
+}
+
+impl ChatPlan {
+    /// The chat plan `plan` holds, if it is one.
+    pub fn of(plan: &str) -> Option<Self> {
+        serde_json::from_str(plan).ok()
+    }
+}
 
 #[derive(Default, serde::Serialize, serde::Deserialize)]
 pub struct Creation {

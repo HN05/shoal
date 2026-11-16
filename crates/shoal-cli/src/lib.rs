@@ -11,10 +11,10 @@ mod cli;
 #[cfg(test)]
 use shoal_core::test_support;
 use shoal_core::{
-    agents, ai, build, chat_handoff, chat_starts, config, config_file, daemon_handoff,
-    daemon_owner, env, execution, fsutil, git, installed, launches, opened_pull, paths, process,
-    profile, queued_launches, queued_starts, refusal, releases, removal, repository, reviews,
-    service, sessions, shell, start_plan, stdout, terminal, tools, transfer, workers,
+    agents, ai, build, chat_handoff, config, config_file, daemon_handoff, daemon_owner, env,
+    execution, fsutil, git, installed, launches, paths, process, profile, refusal, releases,
+    removal, repository, reviews, service, sessions, shell, start_plan, stdout, terminal, tools,
+    transfer, workers,
 };
 
 use shoal_client as client;
@@ -24,7 +24,7 @@ use shoal_forge_types as forge;
 use shoal_protocol::time;
 use shoal_protocol::{agent, model, protocol, state, validate};
 use shoal_subprocess as subprocess;
-use shoal_workers::operations;
+use shoal_workers::{chat_starts, opened_pull, operations, queued_launches, queued_starts};
 
 pub use cli::entry::{RunDaemon, run};
 

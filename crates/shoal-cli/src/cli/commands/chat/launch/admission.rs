@@ -8,7 +8,7 @@ use crate::client::queue::{self, Hold};
 use crate::{
     cli::context::Context,
     model::{Chat, ChatQueueRequest, QueueEntry},
-    queued_starts::{ChatPlan, ChatPlanStart},
+    start_plan::{ChatPlan, ChatPlanStart},
 };
 use shoal_protocol::launches::LaunchSource;
 use shoal_protocol::space_names::SpaceSelector;

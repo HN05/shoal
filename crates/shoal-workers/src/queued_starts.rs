@@ -12,7 +12,6 @@ use crate::client::queue;
 use crate::{client::connection::CommandPaths, state::QueueKind};
 use shoal_ids::queue_entry_ids::QueueEntryId;
 
-pub use chat::{ChatPlan, ChatPlanStart};
 pub use launch::{plan as launch_plan, start_admitted as start_admitted_launch};
 
 /// Start the admitted queue `entry`: open its launch's place, or restore its

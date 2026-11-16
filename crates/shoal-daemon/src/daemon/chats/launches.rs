@@ -13,7 +13,7 @@ use crate::{
     model::{ChatHome, ChatQueueRequest, QueueAdmission, SpaceKind},
     protocol::ChatStart,
 };
-use shoal_core::queued_starts::{ChatPlan, ChatPlanStart};
+use shoal_core::start_plan::{ChatPlan, ChatPlanStart};
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::chats::{QueuedChat, StartedChat};
 use shoal_protocol::launches::LaunchSource;

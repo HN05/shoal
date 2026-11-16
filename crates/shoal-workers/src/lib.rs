@@ -3,17 +3,25 @@
 //! builds those processes' command lines for the daemon, which never
 //! depends on this crate.
 
+// Every module sees the shared crate's print macros.
+#[macro_use]
+extern crate shoal_core;
+
+pub mod chat_starts;
 pub mod execution;
 pub mod git_credential;
+pub mod opened_pull;
 pub mod operations;
 pub mod proxy;
 pub mod push_gate;
+pub mod queued_launches;
+pub mod queued_starts;
 pub mod secrets;
 
 use shoal_client as client;
 use shoal_core::{
-    agent_git, agents, ai, config, env, fsutil, git, hooks, installed, opened_pull, paths, process,
-    queued_launches, releases, sessions, terminal, tools, workers,
+    agent_git, agents, ai, chat_handoff, config, env, fsutil, git, hooks, installed, paths,
+    process, releases, repository, sessions, start_plan, terminal, tools, workers,
 };
 use shoal_forge_types as forge;
 use shoal_protocol::{agent, model, protocol, state};
