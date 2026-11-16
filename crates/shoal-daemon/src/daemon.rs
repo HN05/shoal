@@ -199,6 +199,12 @@ pub async fn run(
     spawn_supervised(
         &mut background,
         &manager,
+        "webhooks",
+        triggers::serve_webhooks,
+    );
+    spawn_supervised(
+        &mut background,
+        &manager,
         "turn retries",
         workspace::turn_retry::run,
     );

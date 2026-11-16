@@ -13,8 +13,12 @@ test-support = ["shoal-core/test-support", "shoal-protocol/test-support"]
 
 [dependencies]
 anyhow.workspace = true
+form_urlencoded = "1"
 fs2 = "0.4"
 futures-util.workspace = true
+http-body-util = "0.1"
+hyper = { version = "1", features = ["http1", "server"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
 libc.workspace = true
 rusqlite = { workspace = true, features = ["bundled"] }
 serde.workspace = true
@@ -41,6 +45,7 @@ rustix = { version = "1", features = ["fs"] }
 zbus = { version = "6", default-features = false, features = ["tokio", "proxy"] }
 
 [dev-dependencies]
+hmac = "0.13"
 shoal-core = { workspace = true, features = ["test-support"] }
 shoal-forge = { workspace = true, features = ["test-support"] }
 shoal-ids = { workspace = true, features = ["test-support"] }

@@ -25,7 +25,7 @@ const HOUR: Duration = Duration::from_secs(3600);
 
 /// A manager with a registered repository whose local config defines
 /// `triggers`.
-async fn with_triggers(triggers: &str) -> (tempfile::TempDir, Arc<Manager>, Repository) {
+pub(super) async fn with_triggers(triggers: &str) -> (tempfile::TempDir, Arc<Manager>, Repository) {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
@@ -67,7 +67,7 @@ async fn set_state(
 }
 
 /// The runs of the repository's trigger `name`, oldest first.
-async fn runs(manager: &Manager, repo: &Repository, name: &str) -> Vec<TriggerRun> {
+pub(super) async fn runs(manager: &Manager, repo: &Repository, name: &str) -> Vec<TriggerRun> {
     let (scope, name) = (repo.id.to_string(), name.to_owned());
     manager
         .store
@@ -105,7 +105,7 @@ async fn fire(manager: &Arc<Manager>, repo: &Repository, name: &str) -> Option<T
     manager.fire_trigger(&trigger, firing).await.unwrap()
 }
 
-fn outcomes(runs: &[TriggerRun]) -> Vec<RunOutcome> {
+pub(super) fn outcomes(runs: &[TriggerRun]) -> Vec<RunOutcome> {
     runs.iter().map(|run| run.outcome).collect()
 }
 

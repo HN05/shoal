@@ -147,7 +147,7 @@ impl Manager {
     /// Whether this daemon fires the global config's triggers: a
     /// development build leaves those of the user's own config to the
     /// installed Shoal, whose daemon fires them.
-    fn fires_global_triggers(&self) -> bool {
+    pub(super) fn fires_global_triggers(&self) -> bool {
         let config = crate::config::Config::path(&self.paths);
         crate::config_file::refuse_user_config(&config).is_ok()
     }
