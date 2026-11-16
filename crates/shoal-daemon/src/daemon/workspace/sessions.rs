@@ -1,9 +1,11 @@
-//! End terminal sessions Shoal created once their owner ends, including
-//! leftovers from failed closes. An owner is a space, a workspace or a chat,
-//! whose removal ends its places the same way whatever its kind. Hosts
-//! supply discovery and close operations, not lifecycle policy. Sessions a
-//! host labels as Shoal's are found there; places a host does not label are
-//! closed from the daemon's records of the places Shoal created.
+//! End terminal sessions Shoal created once their owner ends, or its agent
+//! left them, including leftovers from failed closes. An owner is a space, a
+//! workspace or a chat, whose removal ends its places the same way whatever
+//! its kind. Hosts supply discovery and close operations, not lifecycle
+//! policy. Sessions a host labels as Shoal's are found there; places a host
+//! does not label are closed from the daemon's records of the places Shoal
+//! created.
+mod left;
 pub(super) mod pending;
 
 use anyhow::{Context as _, Result};
@@ -106,6 +108,12 @@ impl Manager {
         place: &Origin,
     ) -> Result<PlaceClose> {
         let _ownership = self.place_ownership.lock().await;
+        self.close_recorded(space, place).await
+    }
+
+    /// [`Self::close_recorded_place`] once its caller holds the ownership
+    /// lock.
+    async fn close_recorded(&self, space: &SpaceId, place: &Origin) -> Result<PlaceClose> {
         if self.place_runs_elsewhere(place, space).await? {
             return Ok(PlaceClose::OwnedElsewhere);
         }

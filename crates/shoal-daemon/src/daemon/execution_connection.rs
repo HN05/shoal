@@ -373,6 +373,10 @@ async fn relay(
                 manager
                     .record_execution_child(execution_id.clone(), child, group_id)
                     .await?;
+                let left = match agent {
+                    Some(_) => manager.left_places(&space.id, execution_id).await,
+                    None => Vec::new(),
+                };
                 if let Some(tracked) = agent {
                     if !restored {
                         manager.forget_last_sessions(&space.id);
@@ -389,6 +393,7 @@ async fn relay(
                     (manager.record_agent(&space.id, EventKind::AgentStarted, started)).await;
                 }
                 protocol::write(writer, &Control::Started).await?;
+                manager.close_left_places(&space.id, left).await;
             }
             ExecutionEvent::Finished { exit_code } => {
                 *stopped = sent_stop;

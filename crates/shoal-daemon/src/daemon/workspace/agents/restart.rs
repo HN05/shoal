@@ -355,17 +355,20 @@ impl Manager {
 
     /// The place the wrapper of `id` registered in a terminal host; none
     /// when it runs outside one or its record cannot be read, which only
-    /// leaves the place out of the restart's report.
-    async fn execution_place(&self, id: &ExecutionId) -> Option<Origin> {
-        let id = id.to_owned();
+    /// leaves the place out of what reads it, such as a restart's report.
+    pub(in crate::daemon::workspace) async fn execution_place(
+        &self,
+        id: &ExecutionId,
+    ) -> Option<Origin> {
+        let execution = id.to_owned();
         match self
             .store
-            .run(move |db| store::find_execution(db, &id))
+            .run(move |db| store::find_execution(db, &execution))
             .await
         {
             Ok(execution) => execution.and_then(|execution| execution.origin),
             Err(error) => {
-                log!("place of restarted execution not read: {error:#}");
+                log!("place of execution {id} not read: {error:#}");
                 None
             }
         }

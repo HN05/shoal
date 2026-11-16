@@ -75,6 +75,28 @@ pub(super) fn runs_elsewhere(db: &Connection, place: &Origin, space: &SpaceId) -
     let origins = statement.query_map(params![space, place.host, place.id()], |row| {
         row.get::<_, String>(0)
     })?;
+    on_server_of(origins, place)
+}
+
+/// Whether an execution of any space, an agent or a command, is recorded at
+/// `place`.
+pub(super) fn occupied(db: &Connection, place: &Origin) -> Result<bool> {
+    let mut statement = db.prepare(
+        "SELECT origin FROM executions
+         WHERE json_extract(origin,'$.host')=?1 AND json_extract(origin,'$.place')=?2",
+    )?;
+    let origins = statement.query_map(params![place.host, place.id()], |row| {
+        row.get::<_, String>(0)
+    })?;
+    on_server_of(origins, place)
+}
+
+/// Whether any of `origins`, places of `place`'s host under its ID as
+/// executions record them, is on `place`'s server.
+fn on_server_of(
+    origins: impl Iterator<Item = rusqlite::Result<String>>,
+    place: &Origin,
+) -> Result<bool> {
     for origin in origins {
         if serde_json::from_str::<Origin>(&origin?)?.server() == place.server() {
             return Ok(true);

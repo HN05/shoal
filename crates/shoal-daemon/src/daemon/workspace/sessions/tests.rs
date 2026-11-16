@@ -18,7 +18,7 @@ use std::{
 };
 
 #[derive(Default)]
-struct FakeHost {
+pub(super) struct FakeHost {
     name: Option<HostName>,
     remaining: Mutex<Vec<(String, SpaceId)>>,
     demos: Mutex<std::collections::HashMap<String, String>>,
@@ -27,7 +27,7 @@ struct FakeHost {
 }
 
 impl FakeHost {
-    fn add(&self, name: &str, workspace: &str) -> Result<()> {
+    pub(super) fn add(&self, name: &str, workspace: &str) -> Result<()> {
         self.remaining
             .lock()
             .map_err(|e| anyhow::anyhow!("{e}"))?
@@ -43,7 +43,7 @@ impl FakeHost {
         Ok(())
     }
 
-    fn closed(&self) -> Result<Vec<String>> {
+    pub(super) fn closed(&self) -> Result<Vec<String>> {
         Ok(self
             .closed
             .lock()
@@ -472,7 +472,7 @@ async fn failed_execution_deletion_does_not_commit_a_pending_close() -> Result<(
 
 /// A Rex host whose `remaining` blocks are open, with `owned` recorded as
 /// Shoal's for the workspace.
-async fn rex_fixture(
+pub(super) async fn rex_fixture(
     owned: &[&str],
 ) -> Result<(tempfile::TempDir, Arc<Manager>, Workspace, Arc<FakeHost>)> {
     let (root, manager, workspace, host) = fixture_for("rex").await?;
