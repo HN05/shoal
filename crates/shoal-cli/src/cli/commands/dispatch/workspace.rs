@@ -32,11 +32,6 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: WorkspaceComman
         WorkspaceCommand::Log(args) => log::run(&ctx, args).await,
         WorkspaceCommand::Cd { workspace } => workspaces::cd(&ctx, workspace).await,
         WorkspaceCommand::Edit { workspace, args } => workspaces::edit(&ctx, workspace, args).await,
-        WorkspaceCommand::Open {
-            workspace,
-            app,
-            args,
-        } => workspaces::open(&ctx, workspace, app, args).await,
         WorkspaceCommand::Rename {
             space,
             name: Some(name),

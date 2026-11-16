@@ -40,6 +40,7 @@ use crate::cli::args::{
     resources::ResourcesCommand,
     service::{ConfigCommand, DaemonCommand, ServiceCommand},
     sessions::SessionsCommand,
+    space::SpaceCommand,
     workspace::WorkspaceCommand,
 };
 use crate::config::permissions::PermissionKey;
@@ -112,6 +113,8 @@ pub enum Command {
     Sessions(SessionsCommand),
     #[command(flatten)]
     Coordination(CoordinationCommand),
+    #[command(flatten)]
+    Space(SpaceCommand),
     #[command(flatten)]
     Workspace(WorkspaceCommand),
     #[command(flatten)]
@@ -229,7 +232,7 @@ impl Command {
             Command::Sessions(SessionsCommand::Attach { .. }) => recent::ATTACH.into(),
             Command::Sessions(SessionsCommand::Demo { .. }) => "demo".into(),
             Command::Workspace(WorkspaceCommand::Edit { .. }) => "edit".into(),
-            Command::Workspace(WorkspaceCommand::Open { .. }) => "open".into(),
+            Command::Space(SpaceCommand::Open { .. }) => "open".into(),
             Command::Changes(ChangesCommand::Diff { .. }) => "diff".into(),
             Command::Workspace(WorkspaceCommand::Status { .. }) => "status".into(),
             Command::Run {

@@ -6,7 +6,7 @@ use anyhow::{Result, ensure};
 use crate::{
     cli::{
         agents,
-        args::workspace::DesktopApp,
+        args::space::DesktopApp,
         context::Context,
         ui::{self, Fallback},
     },

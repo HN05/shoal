@@ -74,21 +74,6 @@ pub enum WorkspaceCommand {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
-    /// Open a workspace in a desktop app.
-    ///
-    /// The app runs untracked: Shoal gives it no instructions, scope or
-    /// model, and cleanup does not see its activity.
-    Open {
-        workspace: Option<SpaceSelector>,
-        /// The app to open the workspace in: claude (macOS), codex or t3;
-        /// defaults to app.default, else the only one installed, else a
-        /// picker.
-        #[arg(long, value_enum)]
-        app: Option<DesktopApp>,
-        /// Arguments forwarded to the app's launcher.
-        #[arg(last = true)]
-        args: Vec<OsString>,
-    },
     /// Give a space a new name, which lists and the tabs Shoal opens for it
     /// show.
     ///
@@ -147,8 +132,6 @@ pub enum WorkspaceCommand {
         name: Option<String>,
     },
 }
-
-pub use crate::config::repo::DesktopApp;
 
 // Arguments of `shoal log`.
 #[derive(Debug, Args)]

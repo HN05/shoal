@@ -13,4 +13,5 @@ pub(super) mod resources;
 pub(super) mod run;
 pub(super) mod service;
 pub(super) mod sessions;
+pub(super) mod space;
 pub(super) mod workspace;

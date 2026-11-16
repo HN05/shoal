@@ -7,7 +7,7 @@ use crate::{
         Command, agents,
         args::{
             create::{CreateCommand, StartArgs},
-            workspace::{DesktopApp, WorkspaceCommand},
+            space::{DesktopApp, SpaceCommand},
         },
         context::Context,
         ui,
@@ -68,7 +68,7 @@ pub(super) async fn execute_command(
             here: true,
             ..Default::default()
         }))),
-        ExecuteChoice::App(app) => Command::Workspace(WorkspaceCommand::Open {
+        ExecuteChoice::App(app) => Command::Space(SpaceCommand::Open {
             workspace,
             app: Some(app),
             args: vec![],

@@ -10,7 +10,7 @@ use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     agents::trust::{CLAUDE_CODE, CODEX, TrustFile},
-    cli::{args::workspace::DesktopApp, context::Context},
+    cli::{args::space::DesktopApp, context::Context},
     env, execution,
     model::Workspace,
 };

@@ -63,6 +63,7 @@ pub(in crate::cli) mod sessions;
 mod simulators;
 mod skill;
 mod sleep;
+mod spaces;
 mod split;
 mod start;
 mod stop;
@@ -343,6 +344,7 @@ fn dispatch(
         Command::Items(command) => Box::pin(dispatch::items::run(ctx, command)),
         Command::Sessions(command) => Box::pin(dispatch::sessions::run(ctx, command)),
         Command::Coordination(command) => Box::pin(dispatch::coordination::run(ctx, command)),
+        Command::Space(command) => Box::pin(dispatch::space::run(ctx, command)),
         Command::Workspace(command) => Box::pin(dispatch::workspace::run(ctx, command)),
         Command::Changes(command) => Box::pin(dispatch::changes::run(ctx, command)),
         Command::Resources(command) => Box::pin(dispatch::resources::run(ctx, command)),
