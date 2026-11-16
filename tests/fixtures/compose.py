@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Container runtime fixture: records each `compose` call and reads its running
 projects' stats; never runs Docker or Podman."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -10,17 +11,18 @@ root = Path(os.environ['HOME'])
 args = sys.argv[1:]
 state_file = root / 'compose-projects.json'
 projects = json.loads(state_file.read_text()) if state_file.exists() else {}
-# Each running project has one container, its `db`, which reads as `STATS`.
+# Each running project has one container, its `db`, which reads as `STATS`
+# under its ID shortened as Docker's `stats` prints it.
 STATS = {'CPUPerc': '12.50%', 'MemUsage': '1.5GiB / 7.6GiB'}
-if args[:3] == ['ps', '--quiet', '--filter']:
-    label, _, project = args[3].rpartition('=')
+if args[:4] == ['ps', '--quiet', '--no-trunc', '--filter']:
+    label, _, project = args[4].rpartition('=')
     assert label == 'label=com.docker.compose.project'
     if projects.get(project, {}).get('state') == 'running':
-        print(f'{project}-db-1')
+        print(hashlib.sha256(project.encode()).hexdigest())
     sys.exit(0)
 if args[:4] == ['stats', '--no-stream', '--format', 'json']:
     for container in args[4:]:
-        print(json.dumps({'ID': container, 'Name': container, **STATS}))
+        print(json.dumps({'ID': container[:12], **STATS}))
     sys.exit(0)
 assert args.pop(0) == 'compose'
 assert args.pop(0) == '--project-name'
