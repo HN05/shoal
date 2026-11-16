@@ -4172,8 +4172,8 @@ Issue associations and PR watches remain registered. It does not keep the worksp
 cleanup proceeds as if `done` had not run.
 
 `hooks.post_done` runs in the daemon after recording completion, before cleanup,
-where the space's agent works as its working directory, no terminal, and a
-60-second limit; a chat without a repository runs the global config's hook in
+with the directory the space's agent works in as its working directory, no
+terminal, and a 60-second limit; a chat without a repository runs the global config's hook in
 its `root_dir`, without `[env]`.
 It follows normal global and repository configuration precedence and receives the
 [hook identity environment](#workspace-setup-and-hooks) plus
