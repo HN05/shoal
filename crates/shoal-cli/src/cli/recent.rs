@@ -7,14 +7,9 @@ use anyhow::{Context as _, Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    cli::{
-        context::Context,
-        scoping::Scoping,
-        ui,
-        workspace_context::{ScopeOrder, WorkspaceContext},
-    },
+    cli::{context::Context, ui},
     fsutil::atomic::{Permissions, ReplaceOptions},
-    model::Chat,
+    model::Spaces,
     paths::Paths,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -24,15 +19,15 @@ pub fn is_previous(selector: &SpaceSelector) -> bool {
     *selector == SpaceSelector::Previous
 }
 
-/// The history `attach -` reads, which every command that shows a
-/// workspace's or a chat's agent session here keeps.
+/// The history `attach -` reads, which every command that shows a space's
+/// agent session here keeps.
 pub const ATTACH: &str = "attach";
 
 /// Entries kept per command, enough to pass over the current space and
-/// removed workspaces or ended chats.
+/// removed ones.
 const LIMIT: usize = 8;
 
-/// Workspace and chat IDs by command name, most recent first.
+/// Space IDs by command name, most recent first.
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct History(BTreeMap<String, Vec<SpaceId>>);
 
@@ -95,20 +90,21 @@ impl History {
     }
 }
 
-/// The workspace the command last acted on other than the current one.
+/// The space the command last acted on other than the current workspace
+/// and the space this process runs in.
 pub async fn previous(ctx: &Context) -> Result<SpaceId> {
-    let command = command(ctx)?;
-    previous_among(ctx, command, &[])
-        .await?
-        .with_context(|| format!("no previous workspace for `shoal {command}`"))
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
+    previous_among(ctx, &spaces)
 }
 
-/// The workspace or one of the running `chats` the command last acted on,
-/// other than the current workspace and the chat this process runs in.
-pub async fn previous_space(ctx: &Context, chats: &[Chat]) -> Result<SpaceId> {
+/// [`previous`] among `spaces`, for a command that returns only to some.
+pub fn previous_among(ctx: &Context, spaces: &Spaces) -> Result<SpaceId> {
     let command = command(ctx)?;
-    previous_among(ctx, command, chats)
-        .await?
+    let current = current(spaces)?;
+    let listed: Vec<&SpaceId> = spaces.iter().map(|space| &space.id).collect();
+    let current: Vec<&SpaceId> = current.iter().collect();
+    History::load(&ctx.paths)
+        .previous(command, &listed, &current)
         .with_context(|| format!("no previous space for `shoal {command}`"))
 }
 
@@ -118,42 +114,34 @@ fn command(ctx: &Context) -> Result<&str> {
     let command = ctx
         .recent
         .as_deref()
-        .context("this command does not accept - for a previous workspace")?;
+        .context("this command does not accept - for a previous space")?;
     ensure!(
         keeps_history(ctx),
-        "workspace processes have no previous workspace"
+        "workspace processes have no previous space"
     );
     Ok(command)
 }
 
-/// The most recent of the workspaces and `chats` in `command`'s history
-/// other than the current workspace and the space this process runs in.
-async fn previous_among(ctx: &Context, command: &str, chats: &[Chat]) -> Result<Option<SpaceId>> {
-    let workspaces = crate::client::spaces::list(&ctx.paths)
-        .await?
-        .into_workspaces();
-    let own = crate::env::own_space();
-    let current: Vec<&SpaceId> = ui::current_workspace(&workspaces)?
-        .map(|workspace| &workspace.id)
+/// The spaces a command here runs in, the one it leaves first: the
+/// workspace the current directory is in, then the space this process
+/// belongs to.
+fn current(spaces: &Spaces) -> Result<Vec<SpaceId>> {
+    let workspace =
+        ui::current_workspace(&spaces.workspaces())?.map(|workspace| workspace.id.clone());
+    Ok(workspace
         .into_iter()
-        .chain(own.as_ref())
-        .collect();
-    let spaces: Vec<&SpaceId> = workspaces
-        .iter()
-        .map(|workspace| &workspace.id)
-        .chain(chats.iter().map(|chat| &chat.id))
-        .collect();
-    Ok(History::load(&ctx.paths).previous(command, &spaces, &current))
+        .chain(crate::env::own_space())
+        .collect())
 }
 
-/// Remember that the command acted on the workspace `selector` names.
+/// Remember that the command acted on the space `selector` names.
 pub async fn record(ctx: &Context, selector: &SpaceSelector) {
     if let Some(command) = ctx.recent.as_deref() {
         remember(ctx, command, selector, false).await;
     }
 }
 
-/// Remember that the command moved from the current workspace to the one
+/// Remember that the command moved from the current space to the one
 /// `selector` names, so `-` returns to the one it left.
 pub async fn record_move(ctx: &Context, selector: &SpaceSelector) {
     if let Some(command) = ctx.recent.as_deref() {
@@ -161,31 +149,11 @@ pub async fn record_move(ctx: &Context, selector: &SpaceSelector) {
     }
 }
 
-/// Remember that this terminal showed an agent session of the workspace
-/// `selector` names and left it running, so `attach -` returns to it
-/// whichever command showed it.
+/// Remember that this terminal showed an agent session of the space
+/// `selector` names, whose agent runs or is about to, and left it running,
+/// so `attach -` returns to it whichever command showed it.
 pub async fn record_attach(ctx: &Context, selector: &SpaceSelector) {
     remember(ctx, ATTACH, selector, false).await;
-}
-
-/// Remember that this terminal showed the agent session of the chat
-/// `selector` names or identifies, whose agent runs or is about to, and left
-/// it running, as [`record_attach`] does for a workspace. Failing to keep it
-/// never fails the command.
-pub async fn record_chat_attach(ctx: &Context, selector: &SpaceSelector) {
-    if !keeps_history(ctx) {
-        return;
-    }
-    let Ok(chats) = crate::client::spaces::list(&ctx.paths)
-        .await
-        .map(shoal_protocol::model::Spaces::into_chats)
-    else {
-        return;
-    };
-    let named = |chat: &&Chat| selector.selects(&chat.id, chat.number);
-    if let Some(chat) = chats.iter().find(named) {
-        let _ = History::update(&ctx.paths, |history| history.record(ATTACH, &chat.id));
-    }
 }
 
 /// Failing to keep the history never fails the command.
@@ -193,25 +161,18 @@ async fn remember(ctx: &Context, command: &str, selector: &SpaceSelector, from_c
     if !keeps_history(ctx) {
         return;
     }
-    let Ok(workspaces) = crate::client::spaces::list(&ctx.paths)
-        .await
-        .map(shoal_protocol::model::Spaces::into_workspaces)
-    else {
+    let Ok(spaces) = crate::client::spaces::list(&ctx.paths).await else {
         return;
     };
-    let Some(target) = WorkspaceContext::from_directory(&workspaces, None).resolve(
-        Some(selector),
-        Scoping::Unscoped,
-        ScopeOrder::AfterDirectory,
-    ) else {
+    let Some(target) = spaces.find(selector) else {
         return;
     };
     let current = from_current
-        .then(|| ui::current_workspace(&workspaces).ok().flatten())
+        .then(|| current(&spaces).ok()?.into_iter().next())
         .flatten();
     let _ = History::update(&ctx.paths, |history| {
         if let Some(current) = current {
-            history.record(command, &current.id);
+            history.record(command, &current);
         }
         history.record(command, &target.id);
     });

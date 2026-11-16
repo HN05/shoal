@@ -256,7 +256,7 @@ impl Launch {
             }
         };
         if crate::env::shown_chat() {
-            recent::record_chat_attach(ctx, &SpaceSelector::id(&chat.id)).await;
+            recent::record_attach(ctx, &SpaceSelector::id(&chat.id)).await;
         }
         agents::link_chat(ctx, &chat, &launch.links).await;
         Ok(chat)

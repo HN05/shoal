@@ -909,13 +909,15 @@ The picker leaves out workspaces without what the command acts on, such as an
 agent session for `attach` or a running agent or command for `stop`, and reports
 when none is left. Workspaces the command would refuse for their state, or for
 `setup` a running execution, come last with the reason in place of their status.
-`cd`, `attach` and the commands that open, show or run something in one workspace
-remember, across terminals, the workspaces each acted on, and take `-` as the
-target for the latest one other than the current workspace; `cd` also remembers
-the workspace it leaves, and `attach` the workspace or chat of each agent
-session it or a launch such as `start` or `claude` showed here and left
-running, and of each place a focused `start` opened; its `-` passes over chats
-that no longer run as it passes over removed workspaces. Scoped callers keep no such history.
+`cd`, `attach` and the commands that open, show or run something in one space
+remember, across terminals, the spaces each acted on, workspaces and chats
+alike, and take `-` as the target for the latest one other than the current
+workspace and the space the command runs in; `cd` also remembers the space it
+leaves, and `attach` the space of each agent session it or a launch such as
+`start` or `claude` showed here and left running, and of each place a focused
+`start` opened. `-` passes over removed spaces, and `attach -` over chats that
+no longer run; a command that refuses a chat refuses one `-` selects. Scoped
+callers keep no such history.
 Invalid explicit targets and other invalid arguments fail without fallback,
 before any prompt for the omitted ones; without a
 current workspace, noninteractive and JSON calls require a target. Scoped callers

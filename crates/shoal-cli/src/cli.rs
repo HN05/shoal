@@ -224,7 +224,7 @@ fn names_unknown_command(error: &clap::Error, args: impl IntoIterator<Item = OsS
 }
 
 impl Command {
-    /// The name under which the command remembers the workspaces it acts on,
+    /// The name under which the command remembers the spaces it acts on,
     /// so `-` selects the previous one; `None` for commands that keep no history.
     pub fn recent_name(&self) -> Option<String> {
         Some(match self {

@@ -266,7 +266,7 @@ pub(in crate::cli) async fn start_chat(
         if report_detach(attaches, space, &session).await?
             && let Some(chat) = chat
         {
-            recent::record_chat_attach(ctx, &SpaceSelector::id(&chat.id)).await;
+            recent::record_attach(ctx, &SpaceSelector::id(&chat.id)).await;
         }
         return Ok(ChatStarted::Shown);
     }

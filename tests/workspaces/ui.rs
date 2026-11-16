@@ -1166,6 +1166,19 @@ fn previous_workspace_is_remembered_per_command_and_not_for_scoped_callers() {
 }
 
 #[test]
+fn previous_space_returns_to_a_chat_the_command_acted_on() {
+    let fixture = Fixture::new();
+    fixture.add("first");
+    let (mut agent, chat) = super::chats::start_test_chat(&fixture, "planning");
+    fixture.ok(&["status", &fixture.id("first")]);
+    fixture.ok(&["status", &fixture.id("planning")]);
+    let previous = fixture.ok(&["status", "-"]);
+    assert_eq!(previous["chat"]["id"], chat.as_str(), "{previous}");
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
+#[test]
 fn menu_bindings_preserve_enter_status_cancel_and_scope() {
     let fixture = Fixture::new();
     let workspace = fixture.add("menu-worker");

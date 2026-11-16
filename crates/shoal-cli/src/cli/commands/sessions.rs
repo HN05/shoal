@@ -15,7 +15,7 @@ use crate::{
         ui::{self, Fallback, NoCurrentWorkspace},
     },
     client::connection::CommandPaths,
-    model::{Chat, Inspection},
+    model::{Chat, Inspection, Spaces},
     protocol::{ConfigTarget, Protection},
     sessions::{HostName, Origin},
     terminal::Session,
@@ -96,6 +96,14 @@ pub(super) async fn agent_terminal_session(
     Ok(session.map(|session| session.name))
 }
 
+/// The spaces `attach -` returns to: every workspace and the chats whose
+/// agent runs, since a chat whose agent exited has no session left.
+fn attachable(spaces: Spaces) -> Spaces {
+    (spaces.0.into_iter())
+        .filter(|space| space.kind().has_worktree() || space.running)
+        .collect()
+}
+
 /// The one of `sessions` where an agent runs that Shoal has not stopped,
 /// only `execution`'s when given, since a host may give the places of
 /// several agents one name.
@@ -122,15 +130,16 @@ impl Target {
     /// picker of the workspaces and the chats with sessions or an agent that
     /// sleeps or is stopped.
     async fn resolve(ctx: &Context, name: Option<SpaceSelector>) -> Result<Self> {
-        let chats = crate::client::spaces::list(&ctx.paths).await?.into_chats();
+        let spaces = crate::client::spaces::list(&ctx.paths).await?;
+        if name.as_ref().is_some_and(recent::is_previous) {
+            let id = recent::previous_among(ctx, &attachable(spaces.clone()))?;
+            return Self::space(ctx, spaces.into_chats(), id).await;
+        }
+        let chats = spaces.into_chats();
         let running: Vec<Chat> = (chats.iter())
             .filter(|chat| chat.running)
             .cloned()
             .collect();
-        if name.as_ref().is_some_and(recent::is_previous) {
-            let id = recent::previous_space(ctx, &running).await?;
-            return Self::space(ctx, running, id).await;
-        }
         if let Some(name) = name {
             return match (chats.into_iter()).find(|chat| name.selects(&chat.id, chat.number)) {
                 Some(chat) => Ok(Self::Chat(Box::new(chat))),
@@ -199,16 +208,11 @@ impl Target {
         }
     }
 
-    /// Remember a workspace or chat once its session was shown and still
-    /// runs, so `attach -` returns to the session last detached from rather
-    /// than the one last attached, which another terminal may still show.
+    /// Remember the space once its session was shown and still runs, so
+    /// `attach -` returns to the session last detached from rather than the
+    /// one last attached, which another terminal may still show.
     async fn record_detach(&self, ctx: &Context) {
-        match self {
-            Self::Workspace(inspection) => {
-                recent::record_attach(ctx, &SpaceSelector::id(&inspection.workspace.id)).await;
-            }
-            Self::Chat(chat) => recent::record_chat_attach(ctx, &SpaceSelector::id(&chat.id)).await,
-        }
+        recent::record_attach(ctx, &SpaceSelector::id(self.id())).await;
     }
 
     /// The target's open sessions, each where an agent Shoal stopped waits

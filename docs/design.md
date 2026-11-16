@@ -1916,9 +1916,10 @@ detaches, or right away for a host that shows it without attaching the terminal.
 focused `start` that opens a place records the workspace once the place hosts it, and a
 focused `chat` that opens one records the chat once it registers there, since the host
 may show the place before the workspace or chat exists. So `attach -` returns to the
-session last detached from, not one another terminal still shows or one that ended;
-it passes over removed workspaces and chats that no longer run, while other
-commands' `-` selects only workspaces.
+session last detached from, not one another terminal still shows or one that ended.
+Every command records and selects workspaces and chats through the same history,
+passing over removed spaces, and `attach` over chats that no longer run, which
+have no session left; a command that refuses a chat refuses one its `-` selects.
 `restore` uses the current workspace only when it has something to restore; its
 picker groups the workspaces with the agents and commands it would restore, the
 stopped chats and the removed workspaces and chats, since one command brings back whatever
