@@ -249,7 +249,7 @@ pub async fn acquire_containers(
 ) -> Result<ContainerAcquisition> {
     match call(
         daemon,
-        ContainerMethod::AcquireContainers { workspace, reason },
+        ContainerMethod::ContainerAcquire { workspace, reason },
     )
     .await?
     {
@@ -262,7 +262,7 @@ pub async fn acquire_containers(
 
 /// Stop the containers of `workspace`, keeping their volumes and ports.
 pub async fn release_containers(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<()> {
-    request(daemon, ContainerMethod::ReleaseContainers { workspace }).await
+    request(daemon, ContainerMethod::ContainerRelease { workspace }).await
 }
 
 /// Start the containers of `workspace` after its setup command, where its
@@ -273,7 +273,7 @@ pub async fn set_up_containers(
     workspace: SpaceSelector,
     for_agent: bool,
 ) -> Result<()> {
-    let method = ContainerMethod::SetUpContainers {
+    let method = ContainerMethod::ContainerSetUp {
         workspace,
         for_agent,
     };
@@ -283,7 +283,7 @@ pub async fn set_up_containers(
 /// Give the agent of `daemon`'s scope the containers of `workspace` as it
 /// starts there, where its repository starts them with setup.
 pub async fn start_agent_containers(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<()> {
-    request(daemon, ContainerMethod::StartAgentContainers { workspace }).await
+    request(daemon, ContainerMethod::ContainerAgentStart { workspace }).await
 }
 
 /// The containers of `workspace`, or of every workspace.

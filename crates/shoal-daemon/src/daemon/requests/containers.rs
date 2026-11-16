@@ -23,22 +23,22 @@ pub(super) async fn handle(
         ContainerMethod::ContainerOverview { workspace } => {
             Body::ContainerOverview(manager.container_overview(workspace.as_ref()).await?)
         }
-        ContainerMethod::AcquireContainers { workspace, reason } => manager
+        ContainerMethod::ContainerAcquire { workspace, reason } => manager
             .acquire_containers(&workspace, reason, caller)
             .await?
             .into_body(),
-        ContainerMethod::ReleaseContainers { workspace } => {
+        ContainerMethod::ContainerRelease { workspace } => {
             manager.release_containers(&workspace).await?;
             Body::Ok
         }
-        ContainerMethod::SetUpContainers {
+        ContainerMethod::ContainerSetUp {
             workspace,
             for_agent,
         } => {
             (manager.set_up_containers(&workspace, for_agent, caller)).await?;
             Body::Ok
         }
-        ContainerMethod::StartAgentContainers { workspace } => {
+        ContainerMethod::ContainerAgentStart { workspace } => {
             manager.start_agent_containers(&workspace, caller).await?;
             Body::Ok
         }
@@ -49,10 +49,10 @@ impl Scoped for ContainerMethod {
     async fn scope(&mut self, _: &Manager, caller: &Caller) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             ContainerMethod::ContainerCatalog { workspace }
-            | ContainerMethod::AcquireContainers { workspace, .. }
-            | ContainerMethod::ReleaseContainers { workspace }
-            | ContainerMethod::SetUpContainers { workspace, .. }
-            | ContainerMethod::StartAgentContainers { workspace } => Some(workspace),
+            | ContainerMethod::ContainerAcquire { workspace, .. }
+            | ContainerMethod::ContainerRelease { workspace }
+            | ContainerMethod::ContainerSetUp { workspace, .. }
+            | ContainerMethod::ContainerAgentStart { workspace } => Some(workspace),
             ContainerMethod::ContainerOverview { workspace } => {
                 Some(caller.own_by_default(workspace))
             }
