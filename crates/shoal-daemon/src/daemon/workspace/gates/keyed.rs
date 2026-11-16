@@ -34,6 +34,11 @@ impl<L: Default> Keyed<L> {
         keys.into_iter().map(|key| share(&mut gates, key)).collect()
     }
 
+    /// Whether someone holds or awaits the gate of `key`.
+    pub(super) fn in_use(&self, key: &str) -> bool {
+        self.live().contains_key(key)
+    }
+
     /// The map, without the entries of gates nobody holds or awaits.
     fn live(&self) -> std::sync::MutexGuard<'_, HashMap<String, Weak<L>>> {
         let mut gates = self

@@ -69,6 +69,14 @@ impl WatchRecord {
         }
     }
 
+    /// Note that something changes the item for the workspace through
+    /// Shoal while a poll that started at `observed_at` reads it, so the
+    /// poll reports none of the item's details or state as changed: what
+    /// it read may show the change before its record does.
+    pub fn own_change_running(&mut self, observed_at: UnixTime) {
+        self.own_change_at = self.own_change_at.max(Some(observed_at));
+    }
+
     /// Note the comments and reviews in `authored`, the `state` and the
     /// details `edited` that the workspace changed through Shoal, so no
     /// watch reports them back.

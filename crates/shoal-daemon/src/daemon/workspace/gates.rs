@@ -367,6 +367,12 @@ impl Gates {
         self.issue_assignees.gate(url).lock_owned().await
     }
 
+    /// Whether Shoal changes the issue `url`'s assignees, or waits to, so a
+    /// poll may read the change before Shoal records it.
+    pub(crate) fn issue_assignees_changing(&self, url: &str) -> bool {
+        self.issue_assignees.in_use(url)
+    }
+
     /// The gate of `host`, for tests that count who waits on it.
     #[cfg(test)]
     pub(crate) fn forge_host_gate(&self, host: &str) -> Arc<Mutex<()>> {

@@ -31,12 +31,20 @@ impl Manager {
         report: BranchReport,
         observed_at: UnixTime,
     ) -> Result<Vec<Update>> {
+        let _guard = self.gates.lock_prs([id]).await;
+        // Checked before recording, so a change that starts later comes
+        // after the poll's read, and one that ended was recorded first.
+        let changing = (observations.iter())
+            .map(|(url, _)| url)
+            .filter(|url| self.gates.issue_assignees_changing(url))
+            .cloned()
+            .collect();
         let poll = Poll {
             selection: selection.clone(),
             report,
             observed_at,
+            changing,
         };
-        let _guard = self.gates.lock_prs([id]).await;
         let id = id.to_owned();
         let agents = self.tracked_agents().await;
         self.store
@@ -100,6 +108,9 @@ struct Poll {
     report: BranchReport,
     /// When the poll started.
     observed_at: UnixTime,
+    /// The observed items Shoal was changing on its own as the poll
+    /// recorded them, which it records as the spaces' own once changed.
+    changing: Vec<String>,
 }
 
 /// Record `observations` from `poll` on the cursor of the space `id` in one
@@ -124,6 +135,9 @@ fn record_observations(
             continue;
         }
         let mut record = cursor_record(tx, id, &url)?.unwrap_or_default();
+        if poll.changing.contains(&url) {
+            record.own_change_running(observed_at);
+        }
         updates.extend(record.observe(snapshot, &url, observed_at));
         save_cursor_record(tx, id, &url, &record)?;
     }
@@ -204,7 +218,8 @@ pub(crate) fn record_own_change(
 
 /// Record `edited`, a change Shoal made to the item at `url` on its own,
 /// such as an assignee it added, on every space's cursor of the item, so
-/// no watch reports it.
+/// no watch reports it. The caller holds the gate a poll checks for such a
+/// change from before it.
 pub(in crate::daemon::links) fn record_shoal_change(
     db: &rusqlite::Connection,
     url: &str,

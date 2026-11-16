@@ -3689,6 +3689,14 @@ new coordinator can hear the change back once. Shoal accepts that echo. Holding
 the gates of the spaces above for every move into a subtree would make each move
 wait for their forge requests and still miss what the joining space polled
 earlier, and a cursor records what changed, not who changed it.
+An assignee Shoal adds or removes on its own, as an agent starts or stops or a
+link comes or goes, is taken as seen on every cursor of the issue, since it is
+nobody's activity. It is changed under the issue's assignee gate, not the PR
+gates, which callers that link, unlink and remove spaces already hold for one
+space and could not take for the others without deadlock; a poll that records
+an issue while that gate is held reports none of its details or state as
+changed, so what it read before Shoal recorded the change stays unreported,
+and another edit it read arrives with the next poll.
 Passing checks wait on the cursor while another check on the PR's head commit is
 pending, since a pass asks nothing of the agent until the rest finish and each
 wake costs it a turn: a check that does not pass delivers them at once, the last

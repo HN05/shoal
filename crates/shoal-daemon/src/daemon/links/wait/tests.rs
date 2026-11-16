@@ -1826,6 +1826,26 @@ async fn the_agent_account_an_agents_start_puts_on_is_the_spaces_own_change() {
 }
 
 #[tokio::test]
+async fn a_poll_while_shoal_changes_an_issues_assignees_reports_none_of_it() {
+    let fixture = assigned_issue().await;
+    assert!(observe_issue(&fixture, &[], 1).await.is_empty());
+    let url = format!("http://{}/team/repo/issues/7", fixture.server.host);
+    let gate = fixture.manager.gates.lock_issue_assignees(&url).await;
+    // It may read the change before Shoal records it.
+    assert!(
+        observe_issue(&fixture, &["shoal-agent"], 2)
+            .await
+            .is_empty()
+    );
+    drop(gate);
+    // A change Shoal never recorded is someone else's.
+    edit_naming(
+        &observe_issue(&fixture, &["shoal-agent"], 3).await,
+        "shoal-agent",
+    );
+}
+
+#[tokio::test]
 async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
