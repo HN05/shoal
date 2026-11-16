@@ -445,7 +445,10 @@ that asks for no action, so agents keep to their work. Warnings repeat per signa
 after an interval and never stop, clean up or notify. A memory or CPU warning
 never wakes an idle agent, since it gives the agent nothing to do and a woken
 turn costs tokens; it waits for the agent's next update or turn. A disk warning
-wakes it, since deleting files frees space.
+wakes it, since deleting files frees space, but only in its own worktree and
+only whole build outputs: other workspaces' files and the preset files beside
+them are in use by agents it cannot see, and part of a build's output leaves
+records the build tool takes as fresh for files that are gone.
 Their thresholds are not
 validated against stop thresholds, so lowering a stop threshold never invalidates
 an existing configuration.

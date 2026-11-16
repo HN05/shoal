@@ -262,7 +262,9 @@ disk space is past its `[machine.overload.warning]` threshold and that protectio
 enabled, the daemon queues an [agent message](#agent-messages) for each
 workspace with a running agent, naming the threshold. A memory or CPU warning
 tells the agent that load is high and that it needs no action; a disk warning
-asks it to free space. CPU must stay above its warning threshold for `cpu_sustained_seconds`.
+asks it to free space in its own worktree, deleting a build's output whole or
+not at all, and to leave other worktrees and Shoal's directories beside them
+to Shoal. CPU must stay above its warning threshold for `cpu_sustained_seconds`.
 Each workspace hears about each signal at most once per `repeat_minutes`, and
 agents started later are warned at the next sample. A memory or CPU warning
 arrives with the agent's next update or turn without waking an idle agent; a

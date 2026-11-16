@@ -93,7 +93,7 @@ pub(super) fn cpu(settings: &Overload) -> String {
 /// `available` describes the filesystem with the least free space.
 pub(super) fn disk(settings: &Overload, available: &str) -> String {
     format!(
-        "Free disk space is low: {available}; Shoal stops running agents and tracked commands below {} GiB. Delete build output and caches you no longer need, and avoid large downloads.",
+        "Free disk space is low: {available}; Shoal stops running agents and tracked commands below {} GiB. Delete build output you no longer need in your own worktree, a whole directory or with its clean command, and avoid large downloads; leave other worktrees and Shoal's .caches and .seed alone.",
         settings.disk.stop_free_gib,
     )
 }
