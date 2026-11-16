@@ -406,6 +406,7 @@ impl Manager {
                         number: record.number,
                         mode: record.mode.as_ref(),
                         narrowing: &record.narrowing,
+                        created_at: crate::time::UnixTime::now(),
                     })?,
                 };
                 tx.execute(

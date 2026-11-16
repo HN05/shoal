@@ -1213,10 +1213,7 @@ async fn a_launch_a_space_queued_keeps_it_and_goes_with_it() {
         .store
         .run(move |db| {
             let tx = db.transaction()?;
-            tx.execute(
-                "INSERT INTO chats(id,started_at) VALUES (?1,0)",
-                [&parent_id],
-            )?;
+            tx.execute("INSERT INTO chats(id) VALUES (?1)", [&parent_id])?;
             tx.execute("UPDATE spaces SET kind='chat' WHERE id=?1", [&parent_id])?;
             tx.execute("DELETE FROM workspaces WHERE id=?1", [&parent_id])?;
             tx.commit()?;

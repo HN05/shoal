@@ -612,6 +612,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 193 {
         db.execute_batch(include_str!("chat_agents.sql"))?;
     }
+    if version >= 194 {
+        db.execute_batch(include_str!("space_creation_times.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -966,11 +969,11 @@ fn new_spaces_take_the_smallest_number_no_space_holds() -> Result<()> {
          INSERT INTO workspaces(id,path,branch,state) VALUES ('second','/second','second','ready');
          INSERT INTO spaces(id,kind,repository_id,name,mode)
              VALUES ('chat','chat','repo','chat','chat');
-         INSERT INTO chats(id,started_at) VALUES ('chat',1);
+         INSERT INTO chats(id) VALUES ('chat');
          DELETE FROM spaces WHERE id='second';
          INSERT INTO spaces(id,kind,repository_id,name,mode)
              VALUES ('reused','chat','repo','reused','chat'),('next','chat','repo','next','chat');
-         INSERT INTO chats(id,started_at) VALUES ('reused',2),('next',3);
+         INSERT INTO chats(id) VALUES ('reused'),('next');
          UPDATE spaces SET name='renamed' WHERE id='workspace';",
     )?;
     assert_eq!(
@@ -1149,7 +1152,7 @@ fn migration_numbers_items_within_their_space() -> Result<()> {
     db.execute_batch(
         "INSERT INTO spaces(id,kind,repository_id,name,mode)
              VALUES ('new','chat','repo','new','chat');
-         INSERT INTO chats(id,started_at) VALUES ('new',2);",
+         INSERT INTO chats(id) VALUES ('new');",
     )?;
     assert!(space_numbers(&db)?.contains(&("new".into(), 5)));
     Ok(())
@@ -1582,7 +1585,7 @@ fn executions_and_queue_restores_keep_their_workspace_as_their_space() -> Result
     db.execute_batch(
         "INSERT INTO spaces(id,kind,repository_id,name,mode)
             VALUES ('chat','chat','repo','chat','chat');
-         INSERT INTO chats(id,started_at) VALUES ('chat',1);
+         INSERT INTO chats(id) VALUES ('chat');
          INSERT INTO executions(id,space_id,state) VALUES ('chat-execution','chat','running');
          INSERT INTO agent_queue(id,kind,repository_id,name,agent,execution_id,state,created_at,space_id)
             VALUES ('chat-restore','restore','repo','chat','claude','chat-execution','queued',1,'chat');
@@ -1935,7 +1938,7 @@ fn migration_drops_a_chats_own_record_of_its_agent() -> Result<()> {
     // A chat recorded now journals its creation.
     db.execute_batch(
         "BEGIN;
-         INSERT INTO chats(id,started_at) VALUES ('new',1);
+         INSERT INTO chats(id) VALUES ('new');
          INSERT INTO spaces(id,kind,repository_id,name) VALUES ('new','chat','repo','new');
          COMMIT;",
     )?;
@@ -1946,6 +1949,45 @@ fn migration_drops_a_chats_own_record_of_its_agent() -> Result<()> {
         |row| row.get(0),
     )?;
     assert_eq!(created, 1);
+    Ok(())
+}
+
+#[test]
+fn migration_records_when_every_space_was_created() -> Result<()> {
+    let mut db = historical_database(193)?;
+    db.execute_batch(
+        "BEGIN;
+         INSERT INTO chats(id,started_at) VALUES ('chat',7),('journaled',9);
+         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('chat','chat','repo','chat'),
+             ('journaled','chat','repo','journaled');
+         COMMIT;
+         UPDATE space_events SET created_at=3
+             WHERE space_id IN ('workspace','journaled')
+                AND json_extract(record,'$.kind')='created';
+         DELETE FROM space_events WHERE space_id='chat';",
+    )?;
+
+    migrate(&mut db)?;
+
+    let created: Vec<(String, i64)> = db
+        .prepare("SELECT id,created_at FROM spaces ORDER BY id")?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    let space = |id: &str, at| (id.to_owned(), at);
+    // A chat whose creation the journal no longer has keeps its start.
+    assert_eq!(
+        created,
+        [
+            space("chat", 7),
+            space("journaled", 3),
+            space("workspace", 3)
+        ]
+    );
+    // A chat's row keeps only what only a chat has.
+    assert_eq!(
+        store_columns(&db, "chats")?,
+        ["id", "workspace_id", "root_dir"]
+    );
     Ok(())
 }
 
@@ -2615,7 +2657,7 @@ fn chats_may_have_no_repository_once_migrated_and_keep_what_references_them() ->
     migrate_through_v0_17_0(&mut db)?;
     db.execute_batch(
         "INSERT INTO spaces(id,kind,name,mode) VALUES ('master','chat','master','chat');
-         INSERT INTO chats(id,started_at) VALUES ('master',2);",
+         INSERT INTO chats(id) VALUES ('master');",
     )?;
     let repositories: Vec<Option<String>> = db
         .prepare("SELECT repository_id FROM spaces WHERE kind='chat' ORDER BY name")?

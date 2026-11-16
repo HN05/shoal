@@ -25,14 +25,16 @@ pub(crate) struct NewSpace<'a> {
     pub number: SpaceNumber,
     pub mode: Option<&'a ModeName>,
     pub narrowing: &'a PermissionsConfig,
+    /// When it was recorded, which a conversion keeps.
+    pub created_at: crate::time::UnixTime,
 }
 
 /// Record `space`, whose kind's row is already recorded, and return its
 /// number.
 pub(crate) fn record(tx: &Transaction<'_>, space: &NewSpace<'_>) -> Result<SpaceNumber> {
     tx.execute(
-        "INSERT INTO spaces(id,kind,repository_id,name,number,mode,narrowing)
-         VALUES (?1,?2,?3,?4,NULLIF(?5,0),?6,?7)",
+        "INSERT INTO spaces(id,kind,repository_id,name,number,mode,narrowing,created_at)
+         VALUES (?1,?2,?3,?4,NULLIF(?5,0),?6,?7,?8)",
         params![
             space.id,
             space.kind,
@@ -41,6 +43,7 @@ pub(crate) fn record(tx: &Transaction<'_>, space: &NewSpace<'_>) -> Result<Space
             space.number,
             space.mode,
             store::narrowing_column(space.narrowing)?,
+            space.created_at,
         ],
     )?;
     Ok(

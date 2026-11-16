@@ -397,7 +397,7 @@ fn require_finding(db: &Connection, id: FindingId) -> Result<()> {
 }
 
 const COLUMNS: &str = "reviews.id,workspace_id,spaces.name,target,agent,reviewer,reviews.state,
-    failure,head,base,created_at,started_at,ended_at,summary,verdict,posted,reviews.model";
+    failure,head,base,reviews.created_at,started_at,ended_at,summary,verdict,posted,reviews.model";
 
 /// Review `id` with its findings.
 pub(crate) fn load(db: &Connection, id: ReviewId) -> Result<Option<Review>> {

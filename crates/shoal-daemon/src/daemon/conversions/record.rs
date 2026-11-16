@@ -61,7 +61,7 @@ pub(crate) enum Pending {
 }
 
 /// The columns of a chat's row, which a conversion keeps as they are.
-const CHAT_COLUMNS: &[&str] = &["id", "started_at", "workspace_id", "root_dir"];
+const CHAT_COLUMNS: &[&str] = &["id", "workspace_id", "root_dir"];
 
 /// The columns of the chat's space's row it keeps with them, which name
 /// what the chat's agent ran in.
@@ -327,10 +327,7 @@ pub(crate) fn replace_workspace(
     id: &SpaceId,
     chat: &ConvertedChat,
 ) -> Result<Vec<ApprovalRequest>> {
-    tx.execute(
-        "INSERT INTO chats(id,started_at) VALUES (?1,unixepoch())",
-        [id],
-    )?;
+    tx.execute("INSERT INTO chats(id) VALUES (?1)", [id])?;
     spaces::convert(tx, id, SpaceKind::Chat, &chat.mode, &chat.narrowing)?;
     // The environments the workspace exported go with its worktree, and the
     // chat's agent carries a token of its own.

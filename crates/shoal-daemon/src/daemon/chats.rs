@@ -595,10 +595,9 @@ fn insert(
         workspace::set_parent(tx, &chat.id, Some(parent))?;
     }
     tx.execute(
-        "INSERT INTO chats(id,started_at,workspace_id,root_dir) VALUES (?1,?2,?3,?4)",
+        "INSERT INTO chats(id,workspace_id,root_dir) VALUES (?1,?2,?3)",
         params![
             chat.id,
-            chat.started_at,
             workspace,
             (chat.root_dir.as_deref()).map(|root| root.to_string_lossy().into_owned()),
         ],
@@ -613,6 +612,7 @@ fn insert(
             number: SpaceNumber::default(),
             mode: Some(&chat.mode),
             narrowing: &chat.narrowing,
+            created_at: chat.started_at,
         },
     )?;
     crate::daemon::scope::tokens::issue(tx, &chat.id)?;
@@ -690,7 +690,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
     db.prepare(
         "SELECT chats.id,space.repository_id,space.name,
                     EXISTS (SELECT 1 FROM executions e WHERE e.space_id=chats.id) AS running,
-                    chats.started_at,repositories.workspaces_dir,
+                    space.created_at AS started_at,repositories.workspaces_dir,
                     space_completion.record AS completion,
                     workspaces.id AS workspace_id,home.name AS workspace_name,
                     workspaces.branch,space.number,space.mode,chats.root_dir,space.narrowing
@@ -699,7 +699,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
                 LEFT JOIN workspaces ON workspaces.id=chats.workspace_id
                 LEFT JOIN spaces home ON home.id=workspaces.id
                 LEFT JOIN space_completion ON space_completion.space_id=chats.id
-             ORDER BY chats.started_at, chats.rowid",
+             ORDER BY space.created_at, chats.rowid",
     )?
     .query_map([], |row| {
         let id: SpaceId = row.get("id")?;
