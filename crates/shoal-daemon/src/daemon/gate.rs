@@ -267,17 +267,18 @@ impl Manager {
     }
 
     /// Deny `request`, whose case could not be read for `error`, telling the
-    /// user when the configuration names no agent the gate can run.
+    /// user when the configuration names no agent the gate can run, before
+    /// the denial reaches the space's agent.
     async fn deny_unreadable(&self, request: &ApprovalRequest, error: anyhow::Error) {
         log!(
             "approval {}: the gate cannot decide it: {error:#}",
             request.number
         );
-        let failure = format!("the gate could not be set up: {error:#}");
-        self.conclude_gate_failure(request, None, failure).await;
         if error.downcast_ref::<context::Unavailable>().is_some() {
             self.report_unavailable_gate(request, &error).await;
         }
+        let failure = format!("the gate could not be set up: {error:#}");
+        self.conclude_gate_failure(request, None, failure).await;
     }
 
     /// Give `request`, whose space is gone, as an issue proposal outlives it,
