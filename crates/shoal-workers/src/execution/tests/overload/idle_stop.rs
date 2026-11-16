@@ -1,9 +1,10 @@
 //! An idle agent Shoal stops to free memory comes back when an update arrives,
 //! even in a done workspace and whatever the overload recovery policy says.
 use super::*;
-use crate::{daemon::workspace_files::Attacher, state::AgentState};
+use crate::state::AgentState;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::assignments::Done;
+use shoal_protocol::files::Attacher;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Report the workspace's running agent idle, then hold the workspace and

@@ -41,11 +41,8 @@ rustix = { version = "1", features = ["fs"] }
 zbus = { version = "6", default-features = false, features = ["tokio", "proxy"] }
 
 [dev-dependencies]
-shoal-client.workspace = true
 shoal-core = { workspace = true, features = ["test-support"] }
 shoal-forge = { workspace = true, features = ["test-support"] }
 shoal-ids = { workspace = true, features = ["test-support"] }
 shoal-protocol = { workspace = true, features = ["test-support"] }
-# The tests run the execution wrapper as the worker processes would.
-shoal-workers.workspace = true
 tokio = { workspace = true, features = ["test-util"] }

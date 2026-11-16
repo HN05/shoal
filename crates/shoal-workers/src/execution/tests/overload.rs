@@ -1,38 +1,74 @@
-use super::notifications::NotificationKind;
-use super::*;
+//! The execution wrapper under a daemon's overload protection: it stops,
+//! saves and restores the agents it runs as the daemon asks.
 use crate::client::connection::CommandPaths;
-use crate::daemon::{
-    test_support::{
-        install_test_script,
-        overload::{
-            bounded, child_command, configure_fixture, fixture, launch, launch_child,
-            report_session, run_child, serve_fixture, wait_launched, wait_paused, wait_started,
-        },
-    },
-    workspace::StopRequest,
-    workspace_files::Attacher,
-};
-use crate::execution::recovery::LastSessionExt;
-use crate::execution::recovery::RecordExt;
-use crate::execution::recovery::SavedExt as _;
 use crate::model::PresentSpace;
 use crate::paths::StateFiles;
+use crate::test_support::install_test_script;
+use anyhow::Result;
+use shoal_core::execution::recovery::LastSessionExt;
+use shoal_core::execution::recovery::RecordExt;
+use shoal_core::execution::recovery::SavedExt as _;
+use shoal_daemon::test_daemon::{
+    Manager, StopRequest,
+    overload::{
+        bounded, configure_fixture, execution_agent, fixture, record_group, report_session,
+        serve_fixture, wait_launched, wait_paused, wait_started,
+    },
+};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::assignments::Done;
 use shoal_protocol::space_names::SpaceSelector;
-use std::{fs, future::Future, os::unix::fs::PermissionsExt};
+use shoal_protocol::{files::Attacher, notifications::NotificationKind};
+use std::{fs, future::Future, os::unix::fs::PermissionsExt, time::Duration};
 
 mod agent_restart;
 mod idle_cleanup;
 mod idle_stop;
 mod restart;
 
+fn launch(
+    manager: &Manager,
+    workspace: &crate::model::Workspace,
+) -> tokio::task::JoinHandle<Result<i32>> {
+    launch_child(
+        manager,
+        workspace,
+        "execution::tests::overload::tracked_agent_child",
+    )
+}
+
+fn launch_child(
+    manager: &Manager,
+    workspace: &crate::model::Workspace,
+    test: &str,
+) -> tokio::task::JoinHandle<Result<i32>> {
+    run_child(child_command(manager, workspace, test))
+}
+
+/// The agent helper `test` as a wrapper in `workspace`.
+fn child_command(
+    manager: &Manager,
+    workspace: &crate::model::Workspace,
+    test: &str,
+) -> tokio::process::Command {
+    let mut command = crate::test_support::isolated_test(&manager.paths.home, test);
+    command.env("SHOAL_TEST_WORKSPACE", &workspace.id);
+    command
+}
+
+fn run_child(mut command: tokio::process::Command) -> tokio::task::JoinHandle<Result<i32>> {
+    tokio::spawn(async move {
+        let status = command.status().await?;
+        Ok(shoal_core::execution::exit_code(status))
+    })
+}
+
 #[tokio::test]
 async fn built_in_agents_resume_without_configuration_or_a_session_picker() {
     let root = tempfile::tempdir().unwrap();
-    let mut command = crate::daemon::test_support::isolated_test(
+    let mut command = crate::test_support::isolated_test(
         root.path(),
-        "daemon::overload_tests::built_in_restore_child",
+        "execution::tests::overload::built_in_restore_child",
     );
     assert!(bounded(command.status()).await.unwrap().success());
 }
@@ -40,9 +76,9 @@ async fn built_in_agents_resume_without_configuration_or_a_session_picker() {
 #[tokio::test]
 async fn a_chats_agent_resumes_with_its_chats_rules_hooks_and_directories() {
     let root = tempfile::tempdir().unwrap();
-    let mut command = crate::daemon::test_support::isolated_test(
+    let mut command = crate::test_support::isolated_test(
         root.path(),
-        "daemon::overload_tests::chat_restore_child",
+        "execution::tests::overload::chat_restore_child",
     );
     assert!(bounded(command.status()).await.unwrap().success());
 }
@@ -74,25 +110,25 @@ async fn chat_restore_child() {
         )
         .await
         .unwrap();
-    let records = shoal_workers::homes::records(&paths, &SpaceSelector::id(&chat.id))
+    let records = crate::homes::records(&paths, &SpaceSelector::id(&chat.id))
         .await
         .unwrap();
     let home = records.home().unwrap();
     assert_eq!(home.path(), checkout);
 
     let session = "s1".into();
-    let restored = shoal_workers::execution::Restored {
+    let restored = crate::execution::Restored {
         mode: &crate::model::chat_mode(),
         ..restored("claude", Some(&session))
     };
-    let recovery = shoal_workers::execution::resolve(&paths, home, restored, None, None)
+    let recovery = crate::execution::resolve(&paths, home, restored, None, None)
         .await
         .unwrap();
 
     // It continues its session, told the chat's rules again, with the
     // hooks of a chat and its directories: `/tmp`, the default agent
     // directory, and its temporary directory.
-    let settings = shoal_workers::settings::of(
+    let settings = crate::settings::of(
         &paths,
         crate::protocol::ConfigTarget::Space(SpaceSelector::id(&chat.id)),
     )
@@ -157,15 +193,10 @@ async fn built_in_restore_child() {
             &["claude-fixture", "--continue"][..],
         ),
     ] {
-        let recovery = shoal_workers::execution::resolve(
-            &paths,
-            &workspace,
-            restored(agent, None),
-            handoff,
-            None,
-        )
-        .await
-        .unwrap();
+        let recovery =
+            crate::execution::resolve(&paths, &workspace, restored(agent, None), handoff, None)
+                .await
+                .unwrap();
         assert!(recovery.automatic);
         assert_eq!(recovery.handoff_delivered, handoff.is_some());
         // Restored sessions keep receiving agent messages and may work in
@@ -186,7 +217,7 @@ async fn built_in_restore_child() {
         // The restored session is told its mode's rules again, after its
         // resume arguments.
         let target = crate::protocol::ConfigTarget::Space(SpaceSelector::id(&workspace.id));
-        let settings = shoal_workers::settings::of(&paths, target).await.unwrap();
+        let settings = crate::settings::of(&paths, target).await.unwrap();
         let rules = crate::agents::restored_instruction_args(
             &settings,
             &agent.into(),
@@ -216,7 +247,7 @@ async fn built_in_restore_child() {
         ("codex", &["codex-fixture", "resume", "s1"][..]),
         ("claude", &["claude-fixture", "--resume", "s1"][..]),
     ] {
-        let recovery = shoal_workers::execution::resolve(
+        let recovery = crate::execution::resolve(
             &paths,
             &workspace,
             restored(agent, Some(&"s1".into())),
@@ -239,11 +270,11 @@ async fn built_in_restore_child() {
     )
     .unwrap();
     let session = "s1".into();
-    let triage = shoal_workers::execution::Restored {
+    let triage = crate::execution::Restored {
         mode: &"triage".into(),
         ..restored("claude", Some(&session))
     };
-    let recovery = shoal_workers::execution::resolve(&paths, &workspace, triage, None, None)
+    let recovery = crate::execution::resolve(&paths, &workspace, triage, None, None)
         .await
         .unwrap();
     let told =
@@ -282,14 +313,14 @@ async fn built_in_restore_child() {
         ),
     ] {
         let agent = crate::agent::Agent::from(agent);
-        let restored = shoal_workers::execution::Restored {
+        let restored = crate::execution::Restored {
             mode: &WORKER,
             narrowing: Default::default(),
             agent: &agent,
             model: &model,
             session: Some(&"s1".into()),
         };
-        let recovery = shoal_workers::execution::resolve(&paths, &workspace, restored, None, None)
+        let recovery = crate::execution::resolve(&paths, &workspace, restored, None, None)
             .await
             .unwrap();
         let restore = restore.iter().map(std::ffi::OsString::from);
@@ -301,7 +332,7 @@ async fn built_in_restore_child() {
         assert_eq!(recovery.model, model);
     }
     let unsupported =
-        shoal_workers::execution::resolve(&paths, &workspace, restored("custom", None), None, None)
+        crate::execution::resolve(&paths, &workspace, restored("custom", None), None, None)
             .await
             .unwrap();
     assert!(!unsupported.automatic);
@@ -311,7 +342,7 @@ async fn built_in_restore_child() {
         "[agents.codex]\nresume_command = ['saved-session', 'specific-id']\n",
     )
     .unwrap();
-    let overridden = shoal_workers::execution::resolve(
+    let overridden = crate::execution::resolve(
         &paths,
         &workspace,
         restored("codex", None),
@@ -331,7 +362,7 @@ async fn built_in_restore_child() {
         "[agents.codex]\nresume_command = ['saved-session', '--', '{prompt}']\n",
     )
     .unwrap();
-    let prompted = shoal_workers::execution::resolve(
+    let prompted = crate::execution::resolve(
         &paths,
         &workspace,
         restored("codex", None),
@@ -350,7 +381,7 @@ async fn built_in_restore_child() {
         "{prompt:?}"
     );
     let prompted =
-        shoal_workers::execution::resolve(&paths, &workspace, restored("codex", None), None, None)
+        crate::execution::resolve(&paths, &workspace, restored("codex", None), None, None)
             .await
             .unwrap();
     assert!(!prompted.handoff_delivered);
@@ -368,24 +399,22 @@ async fn built_in_restore_child() {
         crate::agent::Agent::from("codex"),
         crate::agent::Agent::from("custom"),
     );
-    let with_model = |agent| shoal_workers::execution::Restored {
+    let with_model = |agent| crate::execution::Restored {
         mode: &WORKER,
         narrowing: Default::default(),
         agent,
         model: &model,
         session: None,
     };
-    let kept =
-        shoal_workers::execution::resolve(&paths, &workspace, with_model(&codex), None, None)
-            .await
-            .unwrap();
+    let kept = crate::execution::resolve(&paths, &workspace, with_model(&codex), None, None)
+        .await
+        .unwrap();
     assert_eq!(
         kept.command[..4],
         ["saved-session", "-m", "m1", "--"].map(std::ffi::OsString::from)
     );
     // A tool that cannot take it refuses the restore, which waits.
-    let refused =
-        shoal_workers::execution::resolve(&paths, &workspace, with_model(&custom), None, None);
+    let refused = crate::execution::resolve(&paths, &workspace, with_model(&custom), None, None);
     assert!(refused.await.is_err());
     // So does the restore of an agent config turns off.
     let config = fs::read_to_string(workspace.path.join(".shoal.toml")).unwrap();
@@ -394,15 +423,15 @@ async fn built_in_restore_child() {
         format!("{config}enabled = false\n"),
     )
     .unwrap();
-    let off = shoal_workers::execution::resolve(&paths, &workspace, with_model(&codex), None, None);
+    let off = crate::execution::resolve(&paths, &workspace, with_model(&codex), None, None);
     assert!(off.await.is_err());
     fs::write(workspace.path.join(".shoal.toml"), config).unwrap();
     // A restore tells the session why and when it stopped.
-    let stop = crate::execution::recovery::Stop {
+    let stop = shoal_core::execution::recovery::Stop {
         reason: Some("critical memory pressure".into()),
         at: None,
     };
-    let told = shoal_workers::execution::resolve(
+    let told = crate::execution::resolve(
         &paths,
         &workspace,
         restored("codex", None),
@@ -523,11 +552,11 @@ async fn run_tracked_agent(script: &str) {
     let root = std::env::current_dir().unwrap();
     let paths = CommandPaths::from(crate::paths::Paths::for_test(root));
     let id = SpaceSelector::Id(std::env::var("SHOAL_TEST_WORKSPACE").unwrap().into());
-    let code = shoal_workers::execution::run(
+    let code = crate::execution::run(
         &paths,
         id,
         vec!["sh".into(), "-c".into(), script.into()],
-        Some(crate::execution::TrackedAgent::named("fixture")),
+        Some(shoal_core::execution::TrackedAgent::named("fixture")),
     )
     .await
     // A daemon crash ends the wrapper with an error, as it does a real one.
@@ -547,7 +576,7 @@ async fn tracked_command_child() {
     let root = std::env::current_dir().unwrap();
     let paths = CommandPaths::from(crate::paths::Paths::for_test(root));
     let id = SpaceSelector::Id(std::env::var("SHOAL_TEST_WORKSPACE").unwrap().into());
-    let code = shoal_workers::execution::run_command(
+    let code = crate::execution::run_command(
         &paths,
         id,
         vec![
@@ -563,7 +592,7 @@ async fn tracked_command_child() {
 
 #[tokio::test]
 async fn an_agent_whose_terminal_closes_is_saved_as_stopped() {
-    use crate::execution::recovery::{LastSession, Record, Saved};
+    use shoal_core::execution::recovery::{LastSession, Record, Saved};
     let (_root, manager, workspace, serving) = fixture().await;
     let agent = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
@@ -590,12 +619,12 @@ async fn an_agent_whose_terminal_closes_is_saved_as_stopped() {
 /// so the record is saved before the agent is stopped.
 #[tokio::test]
 async fn an_agent_whose_session_ends_is_saved_before_it_stops() {
-    use crate::execution::recovery::{Record, record_path, restore_requests};
+    use shoal_core::execution::recovery::{Record, record_path, restore_requests};
     let (_root, manager, workspace, serving) = fixture().await;
     let agent = launch_child(
         &manager,
         &workspace,
-        "daemon::overload_tests::tracked_agent_holding_on",
+        "execution::tests::overload::tracked_agent_holding_on",
     );
     wait_started(&manager, &workspace).await;
     report_session(&manager, &workspace, "ending-session").await;
@@ -607,11 +636,7 @@ async fn an_agent_whose_session_ends_is_saved_before_it_stops() {
         .remove(0);
     // The daemon keeps the agent's name, which its session needs without a record.
     let id = execution.id.clone();
-    let agent_name = manager
-        .store
-        .run(move |db| store::execution_agent(db, &id))
-        .await
-        .unwrap();
+    let agent_name = execution_agent(&manager, id).await;
     assert_eq!(
         agent_name.as_ref().map(|agent| agent.name()),
         Some("fixture")
@@ -680,7 +705,7 @@ async fn overload_restores_the_configured_session_and_keeps_waiting_execution_ow
     // The restored agent took over the slot its restore kept.
     assert!(queue_is_empty(&manager).await);
     drop(bounded(manager.gates.quiesce()).await);
-    assert!(!crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    assert!(!shoal_core::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     assert_eq!(
         fs::read_to_string(workspace.path.join("restored")).unwrap(),
         "restored"
@@ -724,7 +749,7 @@ async fn a_waiting_wrapper_restores_its_agent_under_a_permission_change() {
         workspace: SpaceSelector::id(&workspace.id),
         execution: execution.clone(),
     }];
-    let targets = crate::daemon::workspace::PermissionTargets {
+    let targets = shoal_daemon::test_daemon::PermissionTargets {
         agents: &agents,
         launches: &[],
     };
@@ -745,7 +770,7 @@ async fn a_waiting_wrapper_restores_its_agent_under_a_permission_change() {
 /// keeping the agent as one that exited on its own.
 #[tokio::test]
 async fn a_restore_its_wrapper_fails_to_start_waits_in_the_agent_queue() {
-    use crate::execution::recovery::{LastSession, record_path};
+    use shoal_core::execution::recovery::{LastSession, record_path};
     let (_root, manager, workspace, serving) = fixture().await;
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
@@ -867,7 +892,7 @@ async fn launch_with_background(
     launch_agent_with_background(
         manager,
         workspace,
-        "daemon::overload_tests::tracked_agent_with_background_child",
+        "execution::tests::overload::tracked_agent_with_background_child",
     )
     .await
 }
@@ -898,7 +923,7 @@ async fn agent_exit_stops_commands_outside_the_agent_group() {
     let (launched, background) = launch_agent_with_background(
         &manager,
         &workspace,
-        "daemon::overload_tests::tracked_agent_exiting_with_background_child",
+        "execution::tests::overload::tracked_agent_exiting_with_background_child",
     )
     .await;
     fs::write(workspace.path.join("exit"), "").unwrap();
@@ -957,7 +982,7 @@ async fn overload_without_recovery_stops_commands_outside_the_agent_group() {
             .executions
             .is_empty()
     );
-    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    assert!(shoal_core::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     serving.abort();
 }
 
@@ -982,24 +1007,8 @@ async fn cancelling_a_restore_still_stops_commands_outside_the_agent_group() {
             .executions
             .is_empty()
     );
-    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    assert!(shoal_core::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     serving.abort();
-}
-
-/// Set the recorded process group of the workspace's only execution.
-async fn record_group(manager: &Manager, workspace: &crate::model::Workspace, group: Option<u32>) {
-    let id = workspace.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "UPDATE executions SET group_id=?2 WHERE space_id=?1",
-                rusqlite::params![id, group],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
 }
 
 #[tokio::test]
@@ -1008,7 +1017,7 @@ async fn unproven_stop_keeps_the_agent_waiting_until_proof_then_restores_it() {
     let mut command = child_command(
         &manager,
         &workspace,
-        "daemon::overload_tests::tracked_agent_child",
+        "execution::tests::overload::tracked_agent_child",
     );
     let terminal = manager.paths.home.join("terminal");
     command.stderr(fs::File::create(&terminal).unwrap());
@@ -1095,7 +1104,7 @@ async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
     let waiting = record.as_object_mut().unwrap().remove("waiting").unwrap();
     let waiting: crate::process::identity::Identity = serde_json::from_value(waiting).unwrap();
     assert!(!crate::process::identity::alive(&waiting).unwrap());
-    assert!(crate::execution::recovery::any_pending(&manager.paths));
+    assert!(shoal_core::execution::recovery::any_pending(&manager.paths));
     assert_eq!(
         record,
         serde_json::json!({
@@ -1144,7 +1153,7 @@ async fn failed_restore_expansion_does_not_block_launch_or_manual_recovery_recor
     );
     bounded(launched).await.unwrap().unwrap();
     assert!(!workspace.path.join("restored").exists());
-    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    assert!(shoal_core::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     assert!(
         manager
             .inspect_workspace(&SpaceSelector::id(&workspace.id))
@@ -1184,7 +1193,7 @@ async fn refused_recovery_finishes_the_stopped_execution_and_retains_manual_reco
     );
     assert!(!workspace.path.join("restored").exists());
     assert!(queue_is_empty(&manager).await);
-    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    assert!(shoal_core::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     serving.abort();
 }
 
@@ -1209,7 +1218,7 @@ async fn a_done_workspace_does_not_restore_its_stopped_agent() {
     bounded(launched).await.unwrap().unwrap();
     assert!(!workspace.path.join("restored").exists());
     assert!(queue_is_empty(&manager).await);
-    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    assert!(shoal_core::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     serving.abort();
 }
 
@@ -1237,11 +1246,12 @@ async fn resuming_a_done_workspaces_agent_lets_a_later_stop_restore_it() {
     );
     bounded(launched).await.unwrap().unwrap();
     fs::remove_file(workspace.path.join("started")).unwrap();
-    let record = crate::execution::recovery::record_path(&manager.paths, &workspace.id, &execution);
+    let record =
+        shoal_core::execution::recovery::record_path(&manager.paths, &workspace.id, &execution);
     let mut command = child_command(
         &manager,
         &workspace,
-        "daemon::overload_tests::resumed_agent_child",
+        "execution::tests::overload::resumed_agent_child",
     );
     command.env("SHOAL_TEST_RECORD", &record);
     let resumed = run_child(command);
@@ -1276,7 +1286,7 @@ async fn wait_withdrawn(manager: &Manager, workspace: &crate::model::Workspace) 
 /// Waits until the daemon handled the start of the workspace's running agent,
 /// whose event it records last.
 async fn wait_start_handled(manager: &Manager, workspace: &crate::model::Workspace) {
-    use crate::daemon::events::{EventItem, EventKind};
+    use shoal_protocol::events::{EventItem, EventKind};
     let execution = only_execution(manager, workspace).await;
     bounded(async {
         loop {
@@ -1350,11 +1360,12 @@ async fn an_automatic_restore_in_a_new_wrapper_keeps_the_completion() {
             .await
     );
     let restore = starting_restore(&manager, execution.as_str()).await;
-    let record = crate::execution::recovery::record_path(&manager.paths, &workspace.id, &execution);
+    let record =
+        shoal_core::execution::recovery::record_path(&manager.paths, &workspace.id, &execution);
     let mut command = child_command(
         &manager,
         &workspace,
-        "daemon::overload_tests::resumed_agent_child",
+        "execution::tests::overload::resumed_agent_child",
     );
     command
         .env("SHOAL_TEST_RECORD", &record)
@@ -1397,11 +1408,11 @@ async fn resumed_agent_child() {
     let id = SpaceSelector::Id(std::env::var("SHOAL_TEST_WORKSPACE").unwrap().into());
     let record = std::env::var_os("SHOAL_TEST_RECORD").unwrap();
     let script = "trap 'exit 0' TERM; touch started; while :; do sleep 1; done";
-    let code = shoal_workers::execution::run_recovery(
+    let code = crate::execution::run_recovery(
         &paths,
         id,
         vec!["sh".into(), "-c".into(), script.into()],
-        crate::execution::TrackedAgent::named("fixture"),
+        shoal_core::execution::TrackedAgent::named("fixture"),
         vec![record.into()],
     )
     .await
@@ -1436,7 +1447,7 @@ async fn finishing_the_assignment_cancels_a_waiting_restore() {
     bounded(launched).await.unwrap().unwrap();
     assert!(!workspace.path.join("restored").exists());
     assert!(queue_is_empty(&manager).await);
-    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    assert!(shoal_core::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     serving.abort();
 }
 
@@ -1464,7 +1475,7 @@ async fn disabling_recovery_while_an_agent_waits_finishes_it_with_a_restore_reco
     set_recovery(&manager, false).await;
     bounded(launched).await.unwrap().unwrap();
     assert!(!workspace.path.join("restored").exists());
-    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    assert!(shoal_core::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     serving.abort();
 }
 
@@ -1544,11 +1555,11 @@ async fn critical_disk_space_stops_commands_and_restores_agents_once_space_recov
     let command = launch_child(
         &manager,
         &workspace,
-        "daemon::overload_tests::tracked_command_child",
+        "execution::tests::overload::tracked_command_child",
     );
     wait_started(&manager, &workspace).await;
     wait_launched(&manager, &workspace, "command-started", 2).await;
-    let mut monitor = super::disk::Monitor::default();
+    let mut monitor = shoal_daemon::test_daemon::DiskMonitor::default();
     let now = tokio::time::Instant::now();
     let empty = |_: &std::path::Path| Ok(0);
     bounded(monitor.check(&manager, now, empty)).await.unwrap();
@@ -1597,13 +1608,13 @@ static WORKER: crate::config::modes::ModeName = crate::config::modes::ModeName::
 fn restored<'a>(
     agent: &str,
     session: Option<&'a shoal_ids::agent_session_ids::AgentSessionId>,
-) -> shoal_workers::execution::Restored<'a> {
+) -> crate::execution::Restored<'a> {
     let agent = Box::leak(Box::new(agent.into()));
     static OWN: crate::agent::ModelChoice = crate::agent::ModelChoice {
         model: None,
         effort: None,
     };
-    shoal_workers::execution::Restored {
+    crate::execution::Restored {
         mode: &WORKER,
         narrowing: Default::default(),
         agent,

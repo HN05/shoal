@@ -38,8 +38,6 @@ pub mod notifications;
 pub(crate) mod oneshot;
 pub(crate) mod operations;
 mod overload;
-#[cfg(test)]
-mod overload_tests;
 mod ownership;
 mod permissions;
 pub mod ports;

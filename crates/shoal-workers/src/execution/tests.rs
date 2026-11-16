@@ -56,3 +56,5 @@ async fn setup_reports_a_protocol_mismatch_before_the_error() {
         assert!(!error.is::<RemoteError>());
     }
 }
+
+mod overload;

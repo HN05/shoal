@@ -14,7 +14,9 @@ nextest-version = "0.9.91"
 overload-fixture = { max-threads = 1 }
 
 [[profile.default.overrides]]
-filter = 'package(shoal-daemon) & kind(lib) & test(/^daemon::overload_tests::/)'
+filter = '''
+(package(shoal-daemon) & kind(lib) & test(/^daemon::restart_recovery::tests::/))
+| (package(shoal-workers) & kind(lib) & test(/^execution::tests::overload::/))'''
 test-group = 'overload-fixture'
 # They run one after another for minutes; starting them first keeps them from
 # becoming the run's tail.

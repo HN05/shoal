@@ -1,63 +1,19 @@
 //! Daemon interruptions of stopped agents: a restart quarantines their
 //! executions, and startup reconciles them from their recovery records.
-use super::*;
+use crate::daemon::test_support::overload::{
+    blocked, executions, fixture, record, restart, store_reaches,
+};
+use crate::daemon::{store, workspace::Manager};
 use crate::execution::recovery::LastSessionExt;
-use crate::execution::recovery::RecordExt;
 use crate::process::identity::IdentityExt;
 use crate::{
-    execution::recovery::{Record, Stage, record_path},
-    model::{Execution, Workspace},
+    execution::recovery::{Stage, record_path},
+    model::Workspace,
     process::identity::{self as process, Identity},
     state::ExecutionState,
 };
 use shoal_ids::execution_ids::ExecutionId;
-use shoal_protocol::space_names::SpaceSelector;
-
-/// Open the state as a restarted daemon does before it serves.
-async fn restart(manager: &Manager) -> Arc<Manager> {
-    let reopened = Manager::open(manager.paths.clone()).await.unwrap();
-    reopened
-        .store
-        .quarantine_interrupted_operations()
-        .await
-        .unwrap();
-    reopened
-}
-
-async fn executions(manager: &Manager, workspace: &Workspace) -> Vec<Execution> {
-    manager
-        .inspect_workspace(&SpaceSelector::id(&workspace.id))
-        .await
-        .unwrap()
-        .executions
-}
-
-/// Wait until a committed state change satisfies `reached`.
-async fn store_reaches(manager: &Manager, mut reached: impl AsyncFnMut() -> bool) {
-    // Subscribe before the first check so a concurrent commit cannot be missed.
-    let mut changed = manager.store.watch_changes();
-    bounded(async {
-        while !reached().await {
-            changed.changed().await.unwrap();
-        }
-    })
-    .await;
-}
-
-fn record(manager: &Manager, workspace: &Workspace, id: &ExecutionId) -> Option<Record> {
-    Record::load(&record_path(&manager.paths, &workspace.id, id)).unwrap()
-}
-
-async fn blocked(manager: &Manager) -> Vec<String> {
-    manager
-        .notifications(false, 50)
-        .await
-        .unwrap()
-        .into_iter()
-        .filter(|notification| notification.kind == NotificationKind::RecoveryBlocked)
-        .map(|notification| notification.message)
-        .collect()
-}
+use std::{fs, time::Duration};
 
 /// A process whose identity stays verifiable until it is killed.
 fn sleeper() -> (tokio::process::Child, Identity) {
@@ -430,9 +386,7 @@ async fn unresolved_stopped_agents_are_reconciled_once_their_survivors_exit() {
     .await;
     let reconciling = tokio::spawn({
         let manager = manager.clone();
-        async move {
-            super::super::restart_recovery::reconcile(&manager, Duration::from_millis(50)).await
-        }
+        async move { super::reconcile(&manager, Duration::from_millis(50)).await }
     });
     store_reaches(&manager, async || !blocked(&manager).await.is_empty()).await;
     assert_eq!(executions(&manager, &workspace).await.len(), 1);
@@ -444,157 +398,5 @@ async fn unresolved_stopped_agents_are_reconciled_once_their_survivors_exit() {
     .await;
     assert!(record(&manager, &workspace, &ExecutionId::from("survivor")).is_some());
     reconciling.abort();
-    serving.abort();
-}
-
-/// How the daemon goes away while a stopped agent waits for its restore.
-enum Interruption {
-    Crash,
-    Shutdown,
-}
-
-/// Protection stops the agent and the daemon goes away while its wrapper waits
-/// for an automatic restore. The wrapper reattaches to the next daemon, which
-/// continues the wait and restores the agent once load recovers.
-async fn interrupt_while_protected(interruption: Interruption, stop: impl AsyncFnOnce(&Manager)) {
-    let (_root, manager, workspace, serving) = fixture().await;
-    let launched = launch(&manager, &workspace);
-    wait_started(&manager, &workspace).await;
-    stop(&manager).await;
-    wait_paused(&manager, &workspace).await;
-    let id = executions(&manager, &workspace).await[0].id.clone();
-    if let Interruption::Shutdown = interruption {
-        // A daemon stops accepting before it shuts down.
-        fs::remove_file(&manager.paths.socket).unwrap();
-        bounded(manager.stop_for_shutdown()).await;
-    }
-    serving.abort();
-    let reopened = restart(&manager).await;
-    // The waiting wrapper restores the agent, so only cleanup counts it as
-    // stopped work.
-    let saved = record(&reopened, &workspace, &id).unwrap();
-    assert_eq!(saved.stage, Some(Stage::Stopped));
-    assert!(saved.waiting.is_some());
-    assert!(crate::execution::recovery::pending(&reopened.paths, &workspace.id).unwrap());
-    assert!(!crate::execution::recovery::any_pending(&reopened.paths));
-    let serving = serve_fixture(reopened.clone());
-    // Reattachment restores the protection stop after recording the execution
-    // as running.
-    bounded(async {
-        while !reopened.agent_was_overloaded(&id).await {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await;
-    assert_eq!(
-        executions(&reopened, &workspace).await[0].state,
-        ExecutionState::Running
-    );
-    // An update waits for the restore here too.
-    assert!(reopened.gates.try_quiesce().is_none());
-    assert!(!launched.is_finished());
-    assert!(!workspace.path.join("restored").exists());
-    publish_recovery(&reopened);
-    assert_eq!(bounded(launched).await.unwrap().unwrap(), 0);
-    assert_eq!(
-        fs::read_to_string(workspace.path.join("restored")).unwrap(),
-        "restored"
-    );
-    assert!(record(&reopened, &workspace, &id).is_none());
-    assert!(blocked(&reopened).await.is_empty());
-    reopened.store.shutdown().await;
-    serving.abort();
-}
-
-async fn stop_for_memory(manager: &Manager) {
-    assert!(
-        manager
-            .stop_agent_for_overload("test memory pressure")
-            .await
-    );
-}
-
-#[tokio::test]
-async fn daemon_crash_under_memory_pressure_keeps_the_agent_waiting_for_its_restore() {
-    interrupt_while_protected(Interruption::Crash, stop_for_memory).await;
-}
-
-#[tokio::test]
-async fn daemon_crash_under_disk_pressure_keeps_the_agent_waiting_for_its_restore() {
-    interrupt_while_protected(Interruption::Crash, async |manager| {
-        let protection = crate::daemon::workspace::Protection {
-            reason: "test disk pressure".into(),
-            resumes_when: "free disk space recovers".into(),
-        };
-        assert_eq!(
-            manager.stop_agents_for_disk_space(&protection).await.len(),
-            1
-        );
-    })
-    .await;
-}
-
-#[tokio::test]
-async fn daemon_shutdown_hands_an_agent_waiting_for_its_restore_to_the_next_daemon() {
-    interrupt_while_protected(Interruption::Shutdown, stop_for_memory).await;
-}
-
-/// Protection saved its stop, then an update restarted the daemon before the
-/// stop reached the wrapper, which detached with its agent still running.
-#[tokio::test]
-async fn update_restart_discards_a_stop_that_never_reached_the_agent() {
-    let (_root, manager, workspace, serving) = fixture().await;
-    let launched = launch(&manager, &workspace);
-    wait_started(&manager, &workspace).await;
-    let id = executions(&manager, &workspace).await[0].id.clone();
-    crate::execution::recovery::save_record(
-        &manager.paths,
-        &workspace.id,
-        &id,
-        &crate::execution::TrackedAgent::named("fixture"),
-        Some("test memory pressure"),
-        None,
-    )
-    .unwrap();
-    // A daemon stops accepting before it shuts down; the next one serves the
-    // reattachment.
-    fs::remove_file(&manager.paths.socket).unwrap();
-    bounded(manager.stop_for_shutdown()).await;
-    serving.abort();
-    let reopened = restart(&manager).await;
-    // The live wrapper may still reattach, so nothing is decided yet.
-    assert_eq!(
-        reopened
-            .reconcile_interrupted_agents()
-            .await
-            .unwrap()
-            .waiting
-            .len(),
-        1
-    );
-    assert_eq!(
-        record(&reopened, &workspace, &id).unwrap().stage,
-        Some(Stage::Stopping)
-    );
-    let serving = serve_fixture(reopened.clone());
-    // Reattachment commits `Running`, then discards the stop before it
-    // releases the connection lock.
-    store_reaches(&reopened, async || {
-        executions(&reopened, &workspace).await[0].state == ExecutionState::Running
-    })
-    .await;
-    drop(reopened.executions.connections().await);
-    assert!(record(&reopened, &workspace, &id).is_none());
-    assert!(blocked(&reopened).await.is_empty());
-    // A stop the agent receives saves the wrapper's record as usual.
-    bounded(reopened.stop_space(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
-        .await
-        .unwrap();
-    assert_eq!(bounded(launched).await.unwrap().unwrap(), 0);
-    assert_eq!(
-        record(&reopened, &workspace, &id).unwrap().stage,
-        Some(Stage::Stopped)
-    );
-    reopened.store.shutdown().await;
     serving.abort();
 }

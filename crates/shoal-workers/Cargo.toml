@@ -24,6 +24,8 @@ uuid = { workspace = true, features = ["serde", "v4"] }
 
 [dev-dependencies]
 shoal-core = { workspace = true, features = ["test-support"] }
+# The overload tests run the execution wrapper under a daemon.
+shoal-daemon = { workspace = true, features = ["test-support"] }
 shoal-ids = { workspace = true, features = ["test-support"] }
 shoal-protocol = { workspace = true, features = ["test-support"] }
 tokio = { workspace = true, features = ["test-util"] }

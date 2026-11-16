@@ -7,7 +7,9 @@ pub(crate) use crate::test_support::*;
 use crate::{daemon::workspace::Manager, paths::Paths};
 use shoal_ids::space_ids::SpaceId;
 
-pub(crate) mod overload;
+// The overload tests in `shoal-workers` read the rest of it.
+#[cfg_attr(not(feature = "test-support"), allow(dead_code))]
+pub mod overload;
 
 /// Keep the temporary root alive until all manager operations have finished.
 /// Its global config removes eligible workspaces on their first sweep, as

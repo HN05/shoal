@@ -2,8 +2,9 @@
 //! its workspace from no cleanup; removal cancels it and keeps the agent for
 //! `shoal restore`.
 use super::*;
-use crate::{daemon::workspace_files::Attacher, model::CleanupReason, state::AgentState};
+use crate::{model::CleanupReason, state::AgentState};
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::files::Attacher;
 use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
@@ -41,9 +42,11 @@ async fn cleanup_removes_a_workspace_whose_idle_agent_waits_for_an_update() {
         .restore_workspace(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
-    let stopped =
-        crate::execution::recovery::stopped_agents(&manager.paths, &restored.opened.workspace.id)
-            .unwrap();
+    let stopped = shoal_core::execution::recovery::stopped_agents(
+        &manager.paths,
+        &restored.opened.workspace.id,
+    )
+    .unwrap();
     assert_eq!(stopped.len(), 1);
     assert_eq!(stopped[0].execution, id);
     serving.abort();

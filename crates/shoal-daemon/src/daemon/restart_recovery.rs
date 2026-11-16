@@ -382,3 +382,6 @@ fn forget_unknown_execution(
     }
     Ok(Some(space))
 }
+
+#[cfg(test)]
+mod tests;

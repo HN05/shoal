@@ -39,7 +39,7 @@ async fn restart_in_place_restores_the_agent_in_its_wrapper_without_waiting_for_
         "restored"
     );
     assert!(queue_is_empty(&manager).await);
-    assert!(!crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    assert!(!shoal_core::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     serving.abort();
 }
 
@@ -71,8 +71,9 @@ async fn a_restart_in_place_that_cannot_start_the_agent_leaves_it_for_shoal_resu
     let restarted = bounded(manager.restart_agent(&execution, None, true, None, None)).await;
     assert!(restarted.is_err());
     bounded(launched).await.unwrap().unwrap();
-    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
-    let mut saved = crate::execution::recovery::Saved::load(&manager.paths, &workspace.id).unwrap();
+    assert!(shoal_core::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    let mut saved =
+        shoal_core::execution::recovery::Saved::load(&manager.paths, &workspace.id).unwrap();
     saved.retain_unattended();
     assert_eq!(saved.agents.len(), 1, "{saved:?}");
     serving.abort();
@@ -97,7 +98,7 @@ async fn a_restart_resumes_only_in_a_ready_recorded_workspace() {
     assert!(restarted.is_err());
     bounded(launched).await.unwrap().unwrap();
     assert!(!workspace.path.join("restored").exists());
-    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    assert!(shoal_core::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     serving.abort();
 }
 
@@ -143,7 +144,7 @@ async fn restart_starts_the_agent_in_a_new_wrapper_in_the_slot_it_kept() {
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
     let execution = agent_execution(&manager, &workspace).await;
-    manager.publish_config(crate::daemon::test_support::global_config(
+    manager.publish_config(crate::test_support::global_config(
         "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false",
     ));
     let waiting = manager.queue_add(waiting_launch(&workspace)).await.unwrap();
@@ -168,7 +169,7 @@ async fn restart_starts_the_agent_in_a_new_wrapper_in_the_slot_it_kept() {
     let restore = starting_restore(&manager, execution.as_str()).await;
     assert_eq!(restore.state, QueueState::Starting);
     bounded(async {
-        while !crate::daemon::queued_starts::fake::STARTED
+        while !shoal_daemon::test_daemon::STARTED_QUEUED
             .lock()
             .unwrap()
             .iter()
@@ -178,7 +179,7 @@ async fn restart_starts_the_agent_in_a_new_wrapper_in_the_slot_it_kept() {
         }
     })
     .await;
-    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    assert!(shoal_core::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     // No wrapper runs the agent now, and its slot stays the restore's.
     manager.dispatch_queue().await.unwrap();
     let state = |entries: &[QueueEntry], id: &str| {
@@ -197,7 +198,7 @@ async fn restart_starts_the_agent_in_a_new_wrapper_in_the_slot_it_kept() {
     let mut renewed = child_command(
         &manager,
         &workspace,
-        "daemon::overload_tests::agent_restart::renewed_agent_child",
+        "execution::tests::overload::agent_restart::renewed_agent_child",
     );
     renewed.env("SHOAL_TEST_QUEUE_ENTRY", &restore.id);
     let renewed = run_child(renewed);
@@ -250,7 +251,7 @@ async fn a_restart_whose_new_wrapper_fails_to_start_leaves_the_agent_for_shoal_r
         format!("{error}"),
         "no terminal host can start queued agents"
     );
-    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    assert!(shoal_core::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     assert!(manager.running_agents().await.unwrap().is_empty());
     serving.abort();
 }
@@ -297,7 +298,7 @@ async fn a_restart_in_a_new_wrapper_is_joined_by_the_execution_the_agent_ran_as(
     let mut renewed = child_command(
         &manager,
         &workspace,
-        "daemon::overload_tests::agent_restart::renewed_agent_child",
+        "execution::tests::overload::agent_restart::renewed_agent_child",
     );
     renewed.env("SHOAL_TEST_QUEUE_ENTRY", &restore.id);
     let renewed = run_child(renewed);
@@ -333,7 +334,7 @@ async fn a_restart_in_a_new_wrapper_keeps_a_done_workspaces_completion() {
         .mark_done(
             &SpaceSelector::id(&workspace.id),
             shoal_protocol::assignments::Done::default(),
-            &crate::daemon::workspace_files::Attacher::User,
+            &shoal_protocol::files::Attacher::User,
         )
         .await
         .unwrap();
@@ -347,11 +348,12 @@ async fn a_restart_in_a_new_wrapper_keeps_a_done_workspaces_completion() {
     });
     bounded(launched).await.unwrap().unwrap();
     let restore = starting_restore(&manager, execution.as_str()).await;
-    let record = crate::execution::recovery::record_path(&manager.paths, &workspace.id, &execution);
+    let record =
+        shoal_core::execution::recovery::record_path(&manager.paths, &workspace.id, &execution);
     let mut renewed = child_command(
         &manager,
         &workspace,
-        "daemon::overload_tests::resumed_agent_child",
+        "execution::tests::overload::resumed_agent_child",
     );
     renewed
         .env("SHOAL_TEST_RECORD", &record)

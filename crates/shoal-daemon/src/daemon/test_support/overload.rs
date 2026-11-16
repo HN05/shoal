@@ -8,17 +8,21 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::Result;
 use tokio::{net::UnixListener, task::JoinSet, time::timeout};
 
-use super::{install_test_script, isolated_test, manager, repository};
-use crate::daemon::{Server, connections, serve, store, workspace::Manager};
+use super::{install_test_script, manager, repository};
+use crate::daemon::{
+    Server, connections, notifications::NotificationKind, serve, store, workspace::Manager,
+};
+use crate::execution::recovery::{Record, RecordExt as _, record_path};
+use crate::model::Execution;
+use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// A hang guard, not a deadline for process scans on a shared CI host. Its
 /// panic names the caller, so a hang shows which exchange never finished.
 #[track_caller]
-pub(crate) fn bounded<T>(future: impl Future<Output = T>) -> impl Future<Output = T> {
+pub fn bounded<T>(future: impl Future<Output = T>) -> impl Future<Output = T> {
     let caller = std::panic::Location::caller();
     async move {
         timeout(Duration::from_secs(60), future)
@@ -31,7 +35,7 @@ pub(crate) fn bounded<T>(future: impl Future<Output = T>) -> impl Future<Output 
 /// the host's readings: under the default measured limit, critical memory
 /// or disk on the machine running the tests holds a restore back for as
 /// long as it lasts.
-pub(crate) async fn configure_fixture(manager: &Manager, text: &str) {
+pub async fn configure_fixture(manager: &Manager, text: &str) {
     super::configure(
         manager,
         &format!("{text}\n[machine]\nmax_agents = 'none'\n"),
@@ -39,12 +43,12 @@ pub(crate) async fn configure_fixture(manager: &Manager, text: &str) {
     .await;
 }
 
-pub(crate) struct FixtureRoot {
+pub struct FixtureRoot {
     _root: tempfile::TempDir,
     _process_file_guard: std::fs::File,
 }
 
-pub(crate) async fn fixture() -> (
+pub async fn fixture() -> (
     FixtureRoot,
     Arc<Manager>,
     crate::model::Workspace,
@@ -70,6 +74,8 @@ pub(crate) async fn fixture() -> (
     })
     .await
     .unwrap();
+    // Restores start through the agent queue, which runs no worker here.
+    crate::daemon::fake_workers::fake();
     let (root, manager) = manager().await;
     configure_fixture(&manager, "[cleanup]\ngrace_minutes = 0").await;
     let repo = repository(root.path(), "repo");
@@ -102,7 +108,7 @@ pub(crate) async fn fixture() -> (
 
 /// Serve `manager` on its socket as the daemon does, replacing a socket left
 /// by an earlier fixture server.
-pub(crate) fn serve_fixture(manager: Arc<Manager>) -> tokio::task::JoinHandle<()> {
+pub fn serve_fixture(manager: Arc<Manager>) -> tokio::task::JoinHandle<()> {
     let _ = fs::remove_file(&manager.paths.socket);
     let listener = UnixListener::bind(&manager.paths.socket).unwrap();
     let server = Server {
@@ -139,7 +145,7 @@ pub(crate) fn serve_fixture(manager: Arc<Manager>) -> tokio::task::JoinHandle<()
 }
 
 #[track_caller]
-pub(crate) fn wait_started<'a>(
+pub fn wait_started<'a>(
     manager: &'a Manager,
     workspace: &'a crate::model::Workspace,
 ) -> impl Future<Output = ()> + 'a {
@@ -152,7 +158,7 @@ pub(crate) fn wait_started<'a>(
 /// a stop sent then reaches an execution that never paused and whose launch
 /// is unproven.
 #[track_caller]
-pub(crate) fn wait_launched<'a>(
+pub fn wait_launched<'a>(
     manager: &'a Manager,
     workspace: &'a crate::model::Workspace,
     marker: &'a str,
@@ -181,7 +187,7 @@ pub(crate) fn wait_launched<'a>(
 
 /// A pause clears the process group that `wait_started` saw recorded.
 #[track_caller]
-pub(crate) fn wait_paused<'a>(
+pub fn wait_paused<'a>(
     manager: &'a Manager,
     workspace: &'a crate::model::Workspace,
 ) -> impl Future<Output = ()> + 'a {
@@ -205,51 +211,8 @@ pub(crate) fn wait_paused<'a>(
     })
 }
 
-pub(crate) fn launch(
-    manager: &Manager,
-    workspace: &crate::model::Workspace,
-) -> tokio::task::JoinHandle<Result<i32>> {
-    launch_child(
-        manager,
-        workspace,
-        "daemon::overload_tests::tracked_agent_child",
-    )
-}
-
-pub(crate) fn launch_child(
-    manager: &Manager,
-    workspace: &crate::model::Workspace,
-    test: &str,
-) -> tokio::task::JoinHandle<Result<i32>> {
-    run_child(child_command(manager, workspace, test))
-}
-
-/// The agent helper `test` as a wrapper in `workspace`.
-pub(crate) fn child_command(
-    manager: &Manager,
-    workspace: &crate::model::Workspace,
-    test: &str,
-) -> tokio::process::Command {
-    let mut command = isolated_test(&manager.paths.home, test);
-    command.env("SHOAL_TEST_WORKSPACE", &workspace.id);
-    command
-}
-
-pub(crate) fn run_child(
-    mut command: tokio::process::Command,
-) -> tokio::task::JoinHandle<Result<i32>> {
-    tokio::spawn(async move {
-        let status = command.status().await?;
-        Ok(crate::execution::exit_code(status))
-    })
-}
-
 /// Report `session` from the workspace's running agent, as its hooks do.
-pub(crate) async fn report_session(
-    manager: &Manager,
-    workspace: &crate::model::Workspace,
-    session: &str,
-) {
+pub async fn report_session(manager: &Manager, workspace: &crate::model::Workspace, session: &str) {
     let execution = manager
         .inspect_workspace(&SpaceSelector::id(&workspace.id))
         .await
@@ -266,4 +229,86 @@ pub(crate) async fn report_session(
         )
         .await
         .unwrap();
+}
+
+/// Wait until a committed state change satisfies `reached`.
+pub async fn store_reaches(manager: &Manager, mut reached: impl AsyncFnMut() -> bool) {
+    // Subscribe before the first check so a concurrent commit cannot be missed.
+    let mut changed = manager.store.watch_changes();
+    bounded(async {
+        while !reached().await {
+            changed.changed().await.unwrap();
+        }
+    })
+    .await;
+}
+
+/// Set the recorded process group of the workspace's only execution.
+pub async fn record_group(
+    manager: &Manager,
+    workspace: &crate::model::Workspace,
+    group: Option<u32>,
+) {
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE executions SET group_id=?2 WHERE space_id=?1",
+                rusqlite::params![id, group],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+}
+
+/// The agent the daemon recorded for the execution `id`.
+pub async fn execution_agent(manager: &Manager, id: ExecutionId) -> Option<crate::agent::Agent> {
+    manager
+        .store
+        .run(move |db| store::execution_agent(db, &id))
+        .await
+        .unwrap()
+}
+
+/// Open the state as a restarted daemon does before it serves.
+pub async fn restart(manager: &Manager) -> Arc<Manager> {
+    let reopened = Manager::open(manager.paths.clone()).await.unwrap();
+    reopened
+        .store
+        .quarantine_interrupted_operations()
+        .await
+        .unwrap();
+    reopened
+}
+
+/// The executions the daemon records for `workspace`.
+pub async fn executions(manager: &Manager, workspace: &crate::model::Workspace) -> Vec<Execution> {
+    manager
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap()
+        .executions
+}
+
+/// The recovery record of the execution `id` in `workspace`.
+pub fn record(
+    manager: &Manager,
+    workspace: &crate::model::Workspace,
+    id: &ExecutionId,
+) -> Option<Record> {
+    Record::load(&record_path(&manager.paths, &workspace.id, id)).unwrap()
+}
+
+/// The messages of the notifications that a recovery is blocked.
+pub async fn blocked(manager: &Manager) -> Vec<String> {
+    manager
+        .notifications(false, 50)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|notification| notification.kind == NotificationKind::RecoveryBlocked)
+        .map(|notification| notification.message)
+        .collect()
 }
