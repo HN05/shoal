@@ -725,6 +725,10 @@ impl Manager {
         let issue = self.execution_completion_issue(&id, scan).await?;
         let complete = issue.is_none();
         self.keep_stopped_turn(&id, None).await;
+        // Before its record goes, so a demo that replaces it waits for them.
+        if complete {
+            self.release_execution_leases(&id).await;
+        }
         let connections = self.executions.connections().await;
         let completed = self
             .record_execution_completion(&id, kind, exit_code, issue)
@@ -934,6 +938,7 @@ impl Manager {
     /// Delete an execution record whose processes the caller proved stopped.
     pub(crate) async fn forget_execution(&self, id: &ExecutionId) -> Result<()> {
         self.keep_stopped_turn(id, None).await;
+        self.release_execution_leases(id).await;
         let demo = self.delete_execution_record(id).await?;
         self.close_demo_session(demo).await;
         Ok(())

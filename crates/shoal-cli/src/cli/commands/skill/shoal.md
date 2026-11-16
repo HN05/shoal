@@ -682,7 +682,9 @@ reservation returns the same port. Exit 2 with `reserved: false` is a conflict
 suggestion, not a reservation; repeating the request with
 `--port <suggested_port>` reserves it. The returned `port` is the reserved one.
 New reservations do not change the environment of running commands.
-Reservations and leases outlive the command that made them.
+Reservations and leases outlive the command that made them. The simulator
+leases and resource permits an agent acquires end with the agent, when it
+exits or is stopped; the user's stay until released.
 
 ## Resource pools
 

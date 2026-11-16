@@ -95,6 +95,9 @@ states!(NotificationKind {
     /// agent account on while an agent works it or take it off once none
     /// does.
     UnassignFailed => "unassign_failed",
+    /// A lease could not be released when the agent or demo that acquired
+    /// it ended, and stays held.
+    ReleaseFailed => "release_failed",
 });
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

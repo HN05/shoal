@@ -586,10 +586,10 @@ impl Manager {
     }
 
     /// Prove that a protection-stopped agent ended, then forget its stopped
-    /// child. Identity-verified processes it left outside its process group,
-    /// such as background shell commands, are stopped as `shoal stop`
-    /// stops them; the waiting wrapper is not a target. Reports what survives
-    /// when `patience` passes without proof.
+    /// child and release its leases. Identity-verified processes it left
+    /// outside its process group, such as background shell commands, are
+    /// stopped as `shoal stop` stops them; the waiting wrapper is not a
+    /// target. Reports what survives when `patience` passes without proof.
     pub(crate) async fn pause_agent_execution(
         &self,
         id: &ExecutionId,
@@ -607,16 +607,18 @@ impl Manager {
         {
             return Ok(Pause::Unproven(issue));
         }
-        let id = id.to_owned();
+        let record_id = id.to_owned();
         self.store
             .run(move |db| {
                 db.execute(
                     "UPDATE executions SET child=NULL,group_id=NULL WHERE id=?1",
-                    [id],
+                    [record_id],
                 )?;
                 Ok(())
             })
             .await?;
+        // Its leases end with the agent, though its execution stays.
+        self.release_agent_leases(id).await;
         Ok(Pause::Paused)
     }
 

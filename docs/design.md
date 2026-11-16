@@ -2997,7 +2997,17 @@ Repeated acquisition reruns its hook against the same lease, so scripts must be
 idempotent. Hooks receive lease JSON, use normal config precedence and executable
 path rules, and cannot overlap permit or lifecycle transitions in their workspace.
 Release hooks also run in the shared removal path while the worktree exists;
-all permits remain owned until removal succeeds. User scripts own integrations
+all permits remain owned until removal succeeds.
+Simulator leases and permits record their acquirer: the user for an unscoped
+caller, else the agent execution the caller runs or was started by. An agent's
+lease ends with it, since capacity it no longer uses would otherwise keep other
+workspaces waiting and its workspace from removal: one daemon operation
+releases an execution's leases through each kind's release once its end is
+recorded or its stopped agent is proven ended while its execution waits for a
+restore, and startup releases those of executions whose end was recorded
+first. The user's lease stays until released; the user's acquire takes an
+agent's lease over, never the reverse. Ports, holds and secret grants keep
+their own lifetimes. User scripts own integrations
 with the underlying resources.
 
 Busy resource and simulator requests may queue. The daemon keeps queued lease names

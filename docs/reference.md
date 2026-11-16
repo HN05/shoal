@@ -5826,6 +5826,18 @@ Simulator, resource, and repository leases take `--name` (default `default`) to
 hold several, `--reason`, and `--queue` to wait, without a time limit, until the
 lease is acquired or its approval denied. `acquire repo` selects only `kind = "repo"` members.
 
+A simulator, resource or repository lease records who acquired it. The user's,
+from an unscoped terminal, stays until `shoal release` or the workspace's
+removal. An agent's, acquired by the agent or a command it started, ends with
+the agent: once its execution exits or it is stopped, as by `shoal stop`,
+`shoal restart` or overload protection, Shoal releases the lease as
+`shoal release` does, so a simulator keeps its apps and data and a permit runs
+`hooks.pre_resource_release`. A failed release keeps the lease and records a
+`release_failed` notification naming the command that releases it. The user
+acquiring an agent's lease again makes it the user's; an agent acquiring the
+user's leaves it the user's. Ports, holds and secret grants keep their own
+rules.
+
 Queued requests get capacity in arrival order, per pool and for simulators. While
 any are queued, every other request for new capacity is busy, even when capacity is
 free; renewing a held lease and requesting approval are not affected. A request
@@ -6034,7 +6046,8 @@ shoal release sim --name tests     # Or every simulator lease
 Acquisition returns a ready device UDID; use it explicitly with `simctl` or
 `xcodebuild -destination 'platform=iOS Simulator,id=<UDID>'`. Repeating a lease name
 returns the same device. Leases belong to worktrees, survive command exit and
-restarts, block automatic removal, and are deleted with the workspace. At capacity,
+restarts, block automatic removal, and are deleted with the workspace; an
+agent's [ends with the agent](#leases). At capacity,
 idle managed devices shut down first; active leases and personal simulators are
 never touched, every device not confirmed shut down counts toward the limit, and busy requests
 exit 2 unless `--queue`. Released devices keep apps and settings until the
@@ -6079,7 +6092,7 @@ the existing permit. `--json` returns the lease or `acquired: false` with exit 2
 elsewhere are independent. Global changes apply on reload, repository config is read
 per request, and conflicting definitions block new claims until they agree or leases
 drain. Leases survive command exit and restarts, block automatic cleanup, and are
-released by successful removal. Shoal accounts for permits only; stop using a
+released by successful removal; an agent's [end with the agent](#leases). Shoal accounts for permits only; stop using a
 resource before releasing it.
 
 ### Related repository paths
@@ -6110,7 +6123,7 @@ Global or repository config can name [`hooks.post_resource_acquire`](../crates/s
 `hooks.pre_resource_release`, using the [hook path and environment rules](#workspace-setup-and-hooks).
 They apply to generic permits, run in the daemon without a terminal, and have a
 60-second limit. `SHOAL_RESOURCE_LEASE` contains the lease as JSON, including its
-`id`, `scope`, `pool`, `resource`, `name`, `mode`, and `reason`.
+`id`, `scope`, `pool`, `resource`, `name`, `mode`, `reason` and `acquirer`.
 
 Acquisition records the lease before running its hook, including when an existing
 lease is returned; busy requests run no hook. A failed acquisition hook returns
