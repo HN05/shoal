@@ -12,9 +12,14 @@ use super::*;
 /// hook does, writes to its temporary directory, then talks until a signal
 /// ends it; resumed, it only records how it ran.
 pub(crate) fn chat_session_fixture() -> Fixture {
-    let fixture = Fixture::with_config(Some(
-        "[agents.claude]\ncommand = ['sh', './chat-agent.sh']\n",
-    ));
+    chat_session_fixture_with("")
+}
+
+/// A [`chat_session_fixture`] with the repository `config` added.
+fn chat_session_fixture_with(config: &str) -> Fixture {
+    let fixture = Fixture::with_config(Some(&format!(
+        "[agents.claude]\ncommand = ['sh', './chat-agent.sh']\n{config}"
+    )));
     fs::write(
         fixture.repo.join("chat-agent.sh"),
         format!(
@@ -217,6 +222,41 @@ fn a_resume_takes_saved_chats_and_workspaces_together() {
         rows[2..].iter().all(|row| row.contains("removed")),
         "{rows:?}"
     );
+}
+
+/// `shoal restore --all` leaves out a done chat's stopped agent, which
+/// only naming the chat restores, and restores the stopped agents beside
+/// it.
+#[test]
+fn restore_all_skips_a_done_chat_beside_a_stopped_workspace() {
+    let mut fixture = chat_session_fixture_with("[cleanup.done]\nenabled = false\n");
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    let worker = fixture.add("worker");
+    let state = fixture
+        .root
+        .path()
+        .join("state/workspaces")
+        .join(worker["id"].as_str().unwrap());
+    fs::create_dir_all(&state).unwrap();
+    fs::write(
+        state.join("worker-agent.recovery.json"),
+        r#"{"agent":"claude"}"#,
+    )
+    .unwrap();
+    save_running_chat(&fixture, |fixture| {
+        let chat = fixture.ok(&["list", "--chats"])[0]["id"].clone();
+        fixture.ok(&["done", chat.as_str().unwrap()]);
+        let output = fixture.run(&["daemon", "stop"]);
+        assert!(output.status.success(), "{}", printed(&output));
+    });
+    assert!(fixture.daemon.child.wait().unwrap().success());
+    fixture.restart();
+
+    let restored = fixture.ok(&["restore", "--all"]);
+    let names: Vec<_> = (restored["queued"].as_array().unwrap().iter())
+        .map(|entry| entry["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["worker"], "{restored}");
 }
 
 #[test]
