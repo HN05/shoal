@@ -19,13 +19,21 @@ instead of the PR delivery guidance below.
   handoff, preserving event cursors, and continue in the installed release when
   the protocol changes. Only requests a daemon refused unrun are sent again.
 - Apps use the protocol through the `shoal-client` crate, which keeps no
-  compatibility promise beyond the exact version match. The CLI and apps share
-  that crate's connection and client-side logic; the CLI sends each daemon
-  request through a named client operation and never builds one itself.
-  Parsing and resolving config live in `shoal-core`; the protocol carries a
-  target's repository layers without reading them. `shoal-client` depends on
-  no Shoal crate but `shoal-forge-types`, `shoal-ids`, `shoal-refs`,
-  `shoal-schedule`, `shoal-states`, `shoal-time` and `shoal-config-derive`.
+  compatibility promise beyond the exact version match. `shoal-protocol`
+  holds the types the daemon or core build or read, with the logic over them
+  that needs no connection; `shoal-client` holds the connection, one
+  operation per request in the module of the same name, the handles that
+  read from a connection and what only callers print, and re-exports nothing
+  of `shoal-protocol`. Flag a type the daemon or core uses that lives in
+  `shoal-client`, and a daemon call in `shoal-protocol`. The CLI and apps
+  share `shoal-client`; the CLI sends each daemon request through a named
+  client operation and never builds one itself. Parsing and resolving config
+  live in `shoal-core`; the protocol carries a target's repository layers
+  without reading them. `shoal-protocol` depends on no Shoal crate but
+  `shoal-config-derive`, `shoal-forge-types`, `shoal-ids`, `shoal-refs`,
+  `shoal-schedule`, `shoal-states` and `shoal-time`; `shoal-client` on none
+  but `shoal-forge-types`, `shoal-ids`, `shoal-protocol`, `shoal-schedule`
+  and `shoal-states`.
 - `crates/shoal-schedule` holds the agent queue's order: priorities, the rank
   types, the snapshot a policy reads, the `Scheduler` trait and the built-in
   policies, and depends on no Shoal crate but `shoal-ids`, `shoal-time` and
@@ -36,8 +44,8 @@ instead of the PR delivery guidance below.
   on neither each other; the `shoal` package's `main` joins them. Code they
   share lives in `crates/shoal-core`, which names neither and depends on no
   Shoal crate but `shoal-client`, `shoal-config-derive`, `shoal-forge`,
-  `shoal-forge-types`, `shoal-ids`, `shoal-proxy`, `shoal-refs`,
-  `shoal-schedule`, `shoal-states` and `shoal-subprocess`. Flag an item there made `pub` that no
+  `shoal-forge-types`, `shoal-ids`, `shoal-protocol`, `shoal-proxy`,
+  `shoal-refs`, `shoal-schedule`, `shoal-states` and `shoal-subprocess`. Flag an item there made `pub` that no
   other Shoal crate uses, and test fixtures outside its `test-support` feature that other
   crates' tests need.
 - `crates/shoal-cli` serves only the CLI: flag code there that the daemon, the

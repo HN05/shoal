@@ -58,9 +58,11 @@ frame is sent in pages, each frame but the last marked as continued; streamed
 listings send their frames, then `ok`; the daemon answers any other reply that
 would not fit with an error saying so.
 The protocol is the one protocol for the CLI and for apps. Apps use it through
-the `shoal-client` library, which holds the requests and responses with the
-types they carry, the connection the CLI makes, and the client-side logic the
-CLI shares with apps. The forge data they carry, such as item references, CI
+the `shoal-client` library, which holds the connection the CLI makes, an
+operation for each request and the handles that read from a connection. The
+requests and responses with the types they carry, and the logic over those
+types that needs no connection, are `shoal-protocol`'s, which the daemon and
+`shoal-core` use. The forge data they carry, such as item references, CI
 runs and review threads, comes from `shoal-forge-types`, which reads it
 without a request, so a client builds no forge's requests; `shoal-forge` sends
 them and depends on it. Config files are parsed and resolved in `shoal-core`: the

@@ -107,14 +107,20 @@ for delivering a PR, under Committing near the end, decide when work is done.
   operation for it.
 - Apps use Shoal's protocol through the `shoal-client` crate, with no
   compatibility promise: the protocol changes freely and only the exact
-  version match protects a client. The CLI and apps share that crate's
-  connection and client-side logic: the CLI sends each daemon request through
-  a named operation of the client module for its subject and never builds one
+  version match protects a client. `crates/shoal-protocol` holds the types
+  the daemon or core build or read, with the logic over them that needs no
+  connection, and `shoal-client` the connection, one operation per request in
+  the module of the same name, the handles that read from a connection and
+  what only callers print, re-exporting none of `shoal-protocol`. The CLI and
+  apps share `shoal-client`: the CLI sends each daemon request through a
+  named operation of the client module for its subject and never builds one
   itself. What the CLI alone needs, such as parsing, prompting and printing,
   stays in `shoal-cli`, and parsing and resolving config, which the protocol
-  carries without reading, lives in `shoal-core`. `shoal-client` depends on
-  no Shoal crate but `shoal-forge-types`, `shoal-ids`, `shoal-refs`,
-  `shoal-schedule`, `shoal-states`, `shoal-time` and `shoal-config-derive`.
+  carries without reading, lives in `shoal-core`. `shoal-protocol` depends on
+  no Shoal crate but `shoal-config-derive`, `shoal-forge-types`, `shoal-ids`,
+  `shoal-refs`, `shoal-schedule`, `shoal-states` and `shoal-time`;
+  `shoal-client` on none but `shoal-forge-types`, `shoal-ids`,
+  `shoal-protocol`, `shoal-schedule` and `shoal-states`.
 - `crates/shoal-schedule` holds the agent queue's order: priorities, the
   rank types that explain an entry's place, the snapshot a policy reads, the
   `Scheduler` trait and the built-in policies. A policy reads only that
@@ -132,8 +138,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   or through code they call, lives in `crates/shoal-core`, in a top-level
   module named for what it does; it names neither the CLI nor the daemon and
   depends on no Shoal crate but `shoal-client`, `shoal-config-derive`,
-  `shoal-forge`, `shoal-forge-types`, `shoal-ids`, `shoal-proxy`,
-  `shoal-refs`, `shoal-schedule`, `shoal-states` and `shoal-subprocess`. Its
+  `shoal-forge`, `shoal-forge-types`, `shoal-ids`, `shoal-protocol`,
+  `shoal-proxy`, `shoal-refs`, `shoal-schedule`, `shoal-states` and
+  `shoal-subprocess`. Its
   items are `pub` only where another Shoal crate uses them, and fixtures the
   other crates' tests share sit behind its `test-support` feature.
 - `crates/shoal-cli` serves only the CLI. Code that the daemon, the execution

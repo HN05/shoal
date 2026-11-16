@@ -34,13 +34,13 @@ by these areas, giving any path not listed to the closest one:
 - Workspaces, ownership and removal:
   `crates/shoal-daemon/src/daemon/workspace`,
   `crates/shoal-daemon/src/daemon/cleanup`, `crates/shoal-core/src/removal`,
-  `crates/shoal-core/src/git`, `crates/shoal-client/src/repository.rs`
+  `crates/shoal-core/src/git`, `crates/shoal-protocol/src/repository.rs`
 - Daemon lifecycle, persisted state and recovery:
   `crates/shoal-daemon/src/daemon.rs`, `crates/shoal-daemon/src/daemon/store`,
   `crates/shoal-daemon/src/daemon/recovery`,
   `crates/shoal-core/src/daemon_handoff.rs`,
   `crates/shoal-daemon/src/daemon/auto_update.rs`,
-  `crates/shoal-client/src/state.rs`, `crates/shoal-client/src/protocol.rs`
+  `crates/shoal-protocol/src/state.rs`, `crates/shoal-protocol/src/protocol.rs`
 - Execution wrapper, tracked processes and agents:
   `crates/shoal-core/src/execution`, `crates/shoal-core/src/process`,
   `crates/shoal-daemon/src/daemon/execution_*`,
