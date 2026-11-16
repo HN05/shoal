@@ -106,7 +106,7 @@ impl Manager {
                     HeldBy::RepositoryLimit => Room::Slot {
                         repository: Some(entry.repository_id?),
                     },
-                    HeldBy::MaxAgents => Room::Slot { repository: None },
+                    HeldBy::MaxHeavyAgents => Room::Slot { repository: None },
                     HeldBy::Memory { .. } | HeldBy::MemoryKept => Room::Memory,
                     _ => return None,
                 };

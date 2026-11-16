@@ -38,7 +38,7 @@ pub fn bounded<T>(future: impl Future<Output = T>) -> impl Future<Output = T> {
 pub async fn configure_fixture(manager: &Manager, text: &str) {
     super::configure(
         manager,
-        &format!("{text}\n[machine]\nmax_agents = 'none'\n"),
+        &format!("{text}\n[machine]\nmax_heavy_agents = 'none'\n"),
     )
     .await;
 }

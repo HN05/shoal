@@ -497,7 +497,7 @@ instead of the PR delivery guidance below.
   Default focus follows the resolved launch: agents started with an issue prompt
   or forwarded arguments stay in the background, tabs waiting for input receive
   focus, and explicit focus settings override either default. `--focus` also
-  starts the agent past `max_agents`, as `--now` does; the `focus` setting does not.
+  starts the agent past `max_heavy_agents`, as `--now` does; the `focus` setting does not.
   Help calls, calls without a terminal and `--here` calls run in place, except
   that a scoped caller's agent, and an agent of `start` or `restore --now` from a
   caller without a terminal, start detached through the daemon unless `start --here`,
@@ -535,7 +535,7 @@ instead of the PR delivery guidance below.
   placed workspace outside it, even when the user config is absent, preserving
   other settings; successful repository removal removes those trust entries while
   preserving other project settings.
-- `max_agents` admission is the daemon's: it defaults to `dynamic`, which starts
+- `max_heavy_agents` admission is the daemon's: it defaults to `dynamic`, which starts
   one agent at a time, staggered, while memory below its warning threshold, less
   what recently started agents and jobs are expected to use, and free disk leave
   room; CPU never holds back a start. Critical or failed memory and disk

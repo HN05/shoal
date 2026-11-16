@@ -541,7 +541,7 @@ fn add_inside(fixture: &Fixture, zellij: &mut ZellijServer, workspace: &str) {
 #[test]
 fn additions_open_owned_tabs_that_removal_closes_leaving_the_users_pane() {
     let fixture = Fixture::with_config(Some(&format!(
-        "machine.max_agents = 'none'\n[terminal.zellij]\nenabled = true\n{AGENT}"
+        "machine.max_heavy_agents = 'none'\n[terminal.zellij]\nenabled = true\n{AGENT}"
     )));
     let Some(mut zellij) = ZellijServer::start(&fixture) else {
         return;
@@ -578,7 +578,7 @@ fn additions_open_owned_tabs_that_removal_closes_leaving_the_users_pane() {
 #[test]
 fn split_placement_opens_additions_beside_the_callers_pane() {
     let fixture = Fixture::with_config(Some(&format!(
-        "machine.max_agents = 'none'\n[terminal.zellij]\nenabled = true\nplacement = 'split'\n{AGENT}"
+        "machine.max_heavy_agents = 'none'\n[terminal.zellij]\nenabled = true\nplacement = 'split'\n{AGENT}"
     )));
     let Some(mut zellij) = ZellijServer::start(&fixture) else {
         return;
@@ -603,7 +603,7 @@ fn split_placement_opens_additions_beside_the_callers_pane() {
 fn zellij_off_leaves_launches_from_its_panes_to_zmx() {
     // The agent exits at once, so the attached zmx session ends.
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 'none'\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
+        "machine.max_heavy_agents = 'none'\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
     ));
     let Some(zellij) = ZellijServer::start(&fixture) else {
         return;
@@ -650,7 +650,7 @@ fn removal_leaves_a_pane_recorded_on_an_earlier_server() {
 #[test]
 fn additions_outside_zellij_open_sessions_that_removal_ends() {
     let fixture = Fixture::with_config(Some(&format!(
-        "machine.max_agents = 'none'\n[terminal]\ndefault_host = 'zellij'\n{AGENT}"
+        "machine.max_heavy_agents = 'none'\n[terminal]\ndefault_host = 'zellij'\n{AGENT}"
     )));
     let Some(zellij) = ZellijServer::start(&fixture) else {
         return;
@@ -715,7 +715,7 @@ impl ZellijServer {
 #[test]
 fn a_workspace_title_relabels_the_tab_shoal_opened_leaving_the_users() {
     let fixture = Fixture::with_config(Some(&format!(
-        "machine.max_agents = 'none'\n[terminal.zellij]\nenabled = true\n{AGENT}"
+        "machine.max_heavy_agents = 'none'\n[terminal.zellij]\nenabled = true\n{AGENT}"
     )));
     let Some(mut zellij) = ZellijServer::start(&fixture) else {
         return;
@@ -739,7 +739,7 @@ fn a_workspace_title_relabels_the_tab_shoal_opened_leaving_the_users() {
 #[test]
 fn chat_rename_relabels_a_zellij_tab_that_still_shows_the_old_name() {
     let fixture = Fixture::with_config(Some(&format!(
-        "machine.max_agents = 'none'\n[terminal.zellij]\nenabled = true\n{AGENT}"
+        "machine.max_heavy_agents = 'none'\n[terminal.zellij]\nenabled = true\n{AGENT}"
     )));
     let Some(mut zellij) = ZellijServer::start(&fixture) else {
         return;

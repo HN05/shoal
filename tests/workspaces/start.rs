@@ -338,7 +338,7 @@ fn a_scoped_start_queues_a_blocked_agent() {
 
 #[test]
 fn add_starts_agents_only_after_creation_and_preserves_workspace_on_exit() {
-    let fixture = Fixture::with_config(Some("machine.max_agents = 'none'"));
+    let fixture = Fixture::with_config(Some("machine.max_heavy_agents = 'none'"));
     let bin = fixture.root.path().join("add-agent-bin");
     fs::create_dir(&bin).unwrap();
     let inspection = fixture.root.path().join("agent-inspection.json");
@@ -3018,9 +3018,9 @@ fn plan_mode_opens_a_chat_on_an_issue_that_needs_a_plan() {
 }
 
 #[test]
-fn add_queues_agents_past_max_agents_until_removed() {
+fn add_queues_agents_past_max_heavy_agents_until_removed() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     let repo = fixture.repo.to_str().unwrap();
     let mut first = fixture
@@ -3130,7 +3130,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
 #[test]
 fn a_queued_issue_start_reopens_its_workspace_by_any_repository_name() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n[agents.counter]\ncommand = ['sh', '-c', 'echo run >> \"$HOME/counted\"']\n",
+        "machine.max_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n[agents.counter]\ncommand = ['sh', '-c', 'echo run >> \"$HOME/counted\"']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     fixture.add_github_origin();
@@ -3180,7 +3180,7 @@ fn a_queued_issue_start_reopens_its_workspace_by_any_repository_name() {
 #[test]
 fn a_queued_worker_start_opens_in_its_workspaces_terminal_host() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[terminal]\ndefault_host = 'herdr'\n[terminal.herdr]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n[agents.counter]\ncommand = ['sh', '-c', 'echo run >> \"$HOME/counted\"']\n",
+        "machine.max_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n[terminal]\ndefault_host = 'herdr'\n[terminal.herdr]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n[agents.counter]\ncommand = ['sh', '-c', 'echo run >> \"$HOME/counted\"']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let repo = fixture.repo.to_str().unwrap();
@@ -3226,7 +3226,7 @@ fn a_queued_worker_start_opens_in_its_workspaces_terminal_host() {
 #[test]
 fn queue_start_attaches_to_the_started_agents_session() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n[agents.missing]\ncommand = ['shoal-test-missing-agent']\n",
+        "machine.max_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n[agents.missing]\ncommand = ['shoal-test-missing-agent']\n",
     ));
     let home = fixture.root.path();
     install_test_script(home.join("bin/zmx"), PASSTHROUGH_ZMX);
@@ -3337,7 +3337,7 @@ fn queue_start_attaches_to_the_started_agents_session() {
 #[test]
 fn a_queued_agent_keeps_its_callers_output_setting() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n[agents.recorder]\ncommand = ['sh', '-c', 'printf %s \"${SHOAL_OUTPUT-unset}\" > \"$HOME/queued-output\"; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n[agents.recorder]\ncommand = ['sh', '-c', 'printf %s \"${SHOAL_OUTPUT-unset}\" > \"$HOME/queued-output\"; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     // The daemon's worker starts the queued agent in a detached session.
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
@@ -3439,7 +3439,7 @@ fn a_start_without_a_terminal_leaves_its_agent_to_the_daemon() {
 #[test]
 fn resume_now_without_a_terminal_has_the_daemon_start_its_restores() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; touch restored; while :; do sleep 1; done']\n",
+        "machine.max_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; touch restored; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let mut paths = Vec::new();
@@ -3509,11 +3509,11 @@ fn resume_without_a_terminal_or_host_is_refused_before_queuing() {
 }
 
 /// `shoal restore` queues restores, which the daemon starts in detached
-/// sessions as `max_agents` allows, leaving out done workspaces.
+/// sessions as `max_heavy_agents` allows, leaving out done workspaces.
 #[test]
 fn resume_queues_restores_that_start_as_agent_slots_free() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; touch restored; while :; do sleep 1; done']\n",
+        "machine.max_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; touch restored; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let (mut paths, mut numbers) = (Vec::new(), Vec::new());

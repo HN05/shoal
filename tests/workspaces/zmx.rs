@@ -164,7 +164,7 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
 fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
     // `shift` drops Shoal's guidance, the first argument.
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 1\n[agents.pi]\ncommand = ['sh', '-c', 'shift; echo \"$ZMX_SESSION ${SHOAL_EXECUTION_ID:+tracked} $*\" >> \"$HOME/agent-runs\"', 'agent', '{args}']\n",
+        "machine.max_heavy_agents = 1\n[agents.pi]\ncommand = ['sh', '-c', 'shift; echo \"$ZMX_SESSION ${SHOAL_EXECUTION_ID:+tracked} $*\" >> \"$HOME/agent-runs\"', 'agent', '{args}']\n",
     ));
     let home = fixture.root.path();
     let repo = fixture.repo.to_str().unwrap();

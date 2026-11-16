@@ -19,7 +19,7 @@ async fn a_light_agent_holds_no_slot_and_starts_beside_full_limits() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     manager.publish_config(global_config(
-        "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false\n\
+        "[machine]\nmax_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n\
          [modes.triage]\nweight = 'light'\n",
     ));
     let workspace = create(&manager, &repo, "busy").await;

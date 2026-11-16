@@ -707,7 +707,7 @@ async fn ask(manager: &Manager, workspace: &Workspace) {
 async fn an_agent_something_will_wake_sleeps_to_make_room_for_queued_work() {
     let (root, manager) = manager().await;
     manager.publish_config(crate::test_support::global_config(
-        "[machine]\nmax_agents = 3\n[machine.overload.disk]\nenabled = false",
+        "[machine]\nmax_heavy_agents = 3\n[machine.overload.disk]\nenabled = false",
     ));
     let repo = repository(root.path(), "repo");
     let repo = manager

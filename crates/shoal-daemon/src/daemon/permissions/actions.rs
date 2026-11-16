@@ -106,7 +106,7 @@ impl Manager {
     }
 
     /// Let `caller` `start` an agent in `repository` regardless of
-    /// `max_agents` and memory, as its `limits` permission allows.
+    /// `max_heavy_agents` and memory, as its `limits` permission allows.
     pub(crate) async fn authorize_beyond_limits(
         &self,
         caller: &Caller,

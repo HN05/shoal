@@ -25,7 +25,7 @@ async fn a_chat_recorded_for_a_scoped_launch_goes_below_its_queuer() {
         .await
         .unwrap();
     manager.publish_config(global_config(
-        "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false\n",
+        "[machine]\nmax_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n",
     ));
     let queuer = chat(&manager, "queuer", "chat", Some(&repo), None).await;
     let caller = Caller {

@@ -1,4 +1,4 @@
-//! The agent queue: admitting launches under `max_agents`, the entries
+//! The agent queue: admitting launches under `max_heavy_agents`, the entries
 //! waiting, and the hold that keeps a starting entry's slot.
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::queue_entry_ids::QueueEntryId;

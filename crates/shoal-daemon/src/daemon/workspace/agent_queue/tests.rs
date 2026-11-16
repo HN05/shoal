@@ -42,7 +42,7 @@ pub(super) async fn register(
 /// Limit the machine to `limit` agents; host disk must not decide the test.
 pub(super) fn limit_globally(manager: &Manager, limit: u32) {
     manager.publish_config(global_config(&format!(
-        "[machine]\nmax_agents = {limit}\n[machine.overload.disk]\nenabled = false"
+        "[machine]\nmax_heavy_agents = {limit}\n[machine.overload.disk]\nenabled = false"
     )));
 }
 
@@ -84,7 +84,7 @@ pub(super) fn started(id: &QueueEntryId) -> bool {
 async fn launches_without_a_limit_start_untracked() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
+    manager.publish_config(global_config("[machine]\nmax_heavy_agents = 'none'"));
     let admission = add(&manager, &repo, "first").await;
     assert!(admission.start && admission.entry.is_none());
     assert!(manager.queue_entries().await.unwrap().is_empty());
@@ -166,7 +166,7 @@ async fn repository_limits_hold_back_only_their_own_entries() {
     let other = register(&manager, &temp, "other").await;
     limit_globally(&manager, 3);
     manager
-        .write_local_config(&limited.id, Some("agent.max_running = 1\n".into()))
+        .write_local_config(&limited.id, Some("agent.max_heavy_running = 1\n".into()))
         .await
         .unwrap();
 
@@ -449,7 +449,7 @@ async fn low_disk_holds_fixed_limits() {
     // No disk has this much free space, so the host reads low or critical;
     // either holds every start after the first below the fixed limit.
     manager.publish_config(global_config(
-        "[machine]\nmax_agents = 3\n[machine.overload.warning]\ndisk_free_gib = 1048576",
+        "[machine]\nmax_heavy_agents = 3\n[machine.overload.warning]\ndisk_free_gib = 1048576",
     ));
     add(&manager, &repo, "first").await;
     assert!(!add(&manager, &repo, "second").await.start);
@@ -904,7 +904,7 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     let other = register(&manager, &temp, "other").await;
-    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
+    manager.publish_config(global_config("[machine]\nmax_heavy_agents = 'none'"));
     let parent = manager
         .create_workspace(&repo.id, "parent".into(), None, None, None)
         .await
@@ -962,7 +962,7 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
 async fn a_launch_in_an_existing_workspace_its_caller_starts_is_left_to_it() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
+    manager.publish_config(global_config("[machine]\nmax_heavy_agents = 'none'"));
     let workspace = create(&manager, &repo, "here").await;
     let admission = manager
         .queue_add(QueueRequest {
@@ -1301,7 +1301,7 @@ async fn a_space_a_removal_holds_refuses_the_launches_it_queues() {
 async fn an_expired_launch_in_an_existing_workspace_reports_its_failure() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
+    manager.publish_config(global_config("[machine]\nmax_heavy_agents = 'none'"));
     let child = manager
         .create_workspace(&repo.id, "child".into(), None, None, None)
         .await
@@ -1465,7 +1465,7 @@ async fn a_message_to_every_agent_restores_an_idle_stopped_agent() {
 async fn an_update_restores_an_idle_agent_only_once_disk_space_recovered() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("[machine]\nmax_agents = 'unlimited'"));
+    manager.publish_config(global_config("[machine]\nmax_heavy_agents = 'unlimited'"));
     let idle = create(&manager, &repo, "idle").await;
     let (execution, _stop) = connected_agent(&manager, &idle).await;
     manager
@@ -1666,7 +1666,7 @@ async fn protection_stops_oneshot_runs_which_wait_for_recovery_to_run_again() {
 async fn launch_waiting_for_setup() -> (tempfile::TempDir, Arc<Manager>, Workspace, QueueEntry) {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
+    manager.publish_config(global_config("[machine]\nmax_heavy_agents = 'none'"));
     let child = manager
         .create_workspace(&repo.id, "child".into(), None, None, None)
         .await
@@ -1873,7 +1873,7 @@ async fn a_start_gives_its_queue_entry_the_workspace_before_its_setup_runs() {
 async fn a_launch_waits_for_a_setup_the_daemon_never_started() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
+    manager.publish_config(global_config("[machine]\nmax_heavy_agents = 'none'"));
     let child = manager
         .create_workspace(&repo.id, "child".into(), None, None, None)
         .await
@@ -1918,7 +1918,7 @@ async fn an_entrys_wait_for_memory_lasts_while_passes_hold_it_for_memory() {
         Duration::from_secs(90)
     );
     // Held for anything else, or started, it waits for memory anew.
-    hold(crate::model::HeldBy::MaxAgents, 120);
+    hold(crate::model::HeldBy::MaxHeavyAgents, 120);
     assert_eq!(queue.waited_for_memory(&id, at(120)), Duration::ZERO);
     hold(memory, 180);
     assert_eq!(
@@ -1959,7 +1959,7 @@ async fn a_chats_restore_waits_for_a_slot_by_its_modes_weight() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     manager.publish_config(global_config(
-        "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false\n\
+        "[machine]\nmax_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n\
          [modes.solo]\nkind = 'chat'\nrepository = false\n",
     ));
     assert!(add(&manager, &repo, "busy").await.start);
@@ -1974,7 +1974,7 @@ async fn a_chats_restore_waits_for_a_slot_by_its_modes_weight() {
     assert!(started(&light.id));
     let entries = manager.queue_entries().await.unwrap();
     let waiting = entries.iter().find(|entry| entry.id == heavy.id).unwrap();
-    assert_eq!(waiting.held_by, Some(crate::model::HeldBy::MaxAgents));
+    assert_eq!(waiting.held_by, Some(crate::model::HeldBy::MaxHeavyAgents));
 }
 
 /// A heavy chat's agent holds a machine slot, and one in a repository
@@ -1984,7 +1984,7 @@ async fn a_heavy_chats_agent_holds_a_slot() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     manager.publish_config(global_config(
-        "[machine]\nmax_agents = 2\n[machine.overload.disk]\nenabled = false\n\
+        "[machine]\nmax_heavy_agents = 2\n[machine.overload.disk]\nenabled = false\n\
          [modes.solo]\nkind = 'chat'\nrepository = false\n\
          [modes.pair]\nkind = 'chat'\n",
     ));

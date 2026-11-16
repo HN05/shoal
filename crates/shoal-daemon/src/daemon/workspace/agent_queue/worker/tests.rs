@@ -47,7 +47,7 @@ async fn a_running_agent_refuses_another_worker() {
 async fn a_queued_agent_refuses_another_worker() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
+    manager.publish_config(global_config("[machine]\nmax_heavy_agents = 'none'"));
     let workspace = create(&manager, &repo, "waiting").await;
     launch_in(&manager, &repo, &workspace).await.unwrap();
     let refused = refusal(launch_in(&manager, &repo, &workspace).await);
@@ -154,7 +154,7 @@ async fn a_start_reopening_a_workspace_that_gained_an_agent_is_refused() {
 async fn overlapping_unlimited_starts_on_an_existing_branch_take_one_worker() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
+    manager.publish_config(global_config("[machine]\nmax_heavy_agents = 'none'"));
     let on_topic = || QueueRequest {
         plan: r#"{"creation":{"existing":"topic"}}"#.into(),
         ..request(&repo, "topic", true)

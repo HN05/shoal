@@ -959,7 +959,7 @@ fn a_start_without_a_terminal_hands_a_happy_agent_over_here() {
 #[test]
 fn a_start_without_a_terminal_admits_a_happy_agent_before_it_opens_here() {
     let fixture = Fixture::with_config(Some(&format!(
-        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n{NO_HOST}{HAPPY_ENABLED}[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n"
+        "machine.max_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n{NO_HOST}{HAPPY_ENABLED}[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n"
     )));
     let record = install_fake_happy(&fixture);
     let server = FakeHappyServer::start(&fixture);

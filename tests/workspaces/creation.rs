@@ -810,7 +810,7 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
 }
 
 /// One agent slot and a `waiter` agent that records its start.
-pub(super) const WAITER: &str = "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'printf agent > agent-started']\n";
+pub(super) const WAITER: &str = "machine.max_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'printf agent > agent-started']\n";
 
 /// A fixture with [`WAITER`] whose setups fail as [`require_fix`] makes
 /// them.
@@ -943,7 +943,7 @@ fn resume_checks_every_target_before_it_retries_a_failed_setup() {
 #[test]
 fn a_failed_setup_leaves_the_agent_waiting_after_its_cli_exited() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'printf agent > agent-started']\n",
+        "machine.max_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'printf agent > agent-started']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let release = fixture.root.path().join("release-setup");
@@ -988,7 +988,7 @@ fn a_failed_setup_leaves_the_agent_waiting_after_its_cli_exited() {
 #[test]
 fn a_retry_that_fails_again_keeps_the_agent_waiting() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'printf agent > agent-started']\n",
+        "machine.max_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'printf agent > agent-started']\n",
     ));
     install_test_script(fixture.repo.join("setup.sh"), "#!/bin/sh\nexit 3\n");
     commit_resource_config(&fixture.repo, "setup.command = 'setup.sh'\n");
@@ -1013,7 +1013,7 @@ fn a_retry_that_fails_again_keeps_the_agent_waiting() {
 #[test]
 fn a_retry_whose_post_setup_hook_fails_keeps_the_agent_waiting() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'printf agent > agent-started']\n",
+        "machine.max_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'printf agent > agent-started']\n",
     ));
     // Setup fails once, then succeeds before a hook that fails.
     install_test_script(

@@ -150,16 +150,16 @@ fn agent_and_job_limits_accept_dynamic_fixed_and_unlimited_values() {
         ("3", RunLimit::Fixed(std::num::NonZeroU32::new(3).unwrap())),
     ] {
         let text = format!(
-            "agent.max_running = {value}\n[machine]\nmax_agents = {value}\nmax_jobs = {value}"
+            "agent.max_heavy_running = {value}\n[machine]\nmax_heavy_agents = {value}\nmax_jobs = {value}"
         );
         let config = Config::from_toml(&text).unwrap();
-        assert_eq!(config.machine.max_agents, expected);
+        assert_eq!(config.machine.max_heavy_agents, expected);
         assert_eq!(config.machine.max_jobs, expected);
-        assert_eq!(config.repository.agent.max_running, Some(expected));
+        assert_eq!(config.repository.agent.max_heavy_running, Some(expected));
     }
     for value in ["0", "'automatic'"] {
-        assert!(Config::from_toml(&format!("agent.max_running = {value}")).is_err());
-        assert!(Config::from_toml(&format!("[machine]\nmax_agents = {value}")).is_err());
+        assert!(Config::from_toml(&format!("agent.max_heavy_running = {value}")).is_err());
+        assert!(Config::from_toml(&format!("[machine]\nmax_heavy_agents = {value}")).is_err());
     }
 }
 

@@ -40,6 +40,7 @@ fn removed_settings_are_refused() {
     for text in [
         "[agent.forge_clis]\nfj = '~/fj'\n",
         "[idle_stop]\nenabled = true\n",
+        "[agent]\nmax_running = 2\n",
     ] {
         assert!(global(text).is_err());
         assert!(repository(text).is_err());
@@ -49,6 +50,8 @@ fn removed_settings_are_refused() {
         ("[agents.codex]\ndefault_mode = 'cli'\n", "app.default"),
         ("[idle_stop]\nenabled = true\n", "[sleep] idle"),
         ("[terminal.happy]\nenabled = false\n", "[agents.happy]"),
+        ("[machine]\nmax_agents = 3\n", "machine.max_heavy_agents"),
+        ("agent.max_running = 2\n", "agent.max_heavy_running"),
     ] {
         let error = message(global(text).unwrap_err());
         assert!(error.contains(replacement), "{error}");

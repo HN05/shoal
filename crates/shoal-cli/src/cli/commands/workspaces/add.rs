@@ -56,7 +56,7 @@ pub(in crate::cli::commands) struct AddOptions {
     pub here: bool,
     /// Focus the new tab or session whatever the `focus` setting says.
     pub focus: bool,
-    /// Start the agent even when `max_agents` is reached.
+    /// Start the agent even when `max_heavy_agents` is reached.
     pub now: bool,
     /// Workspaces, queued agents and issues that block the agent.
     pub blockers: Vec<String>,

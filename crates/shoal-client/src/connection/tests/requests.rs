@@ -756,7 +756,7 @@ async fn a_scoped_start_takes_no_queue_entry_of_another_launch() {
     daemon
         .manager
         .publish_config(shoal_core::test_support::global_config(
-            "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false",
+            "[machine]\nmax_heavy_agents = 1\n[machine.overload.disk]\nenabled = false",
         ));
     let parent = daemon.workspace("parent").await;
     let child = daemon
@@ -818,7 +818,7 @@ async fn a_scoped_start_takes_the_queue_entry_of_the_launch_it_starts_itself() {
     daemon
         .manager
         .publish_config(shoal_core::test_support::global_config(
-            "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false",
+            "[machine]\nmax_heavy_agents = 1\n[machine.overload.disk]\nenabled = false",
         ));
     let chat = daemon
         .manager

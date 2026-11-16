@@ -159,7 +159,7 @@ pub struct AgentConfig {
     /// Agents of this repository running at once; by default only the
     /// machine limit applies. Use `none` for unlimited.
     #[option(default = crate::config::RunLimit::Dynamic)]
-    pub max_running: Option<crate::config::RunLimit>,
+    pub max_heavy_running: Option<crate::config::RunLimit>,
     /// Directories every agent and chat gets as other working directories.
     #[option(default = vec!["/tmp".into()])]
     pub dirs: Option<Vec<String>>,

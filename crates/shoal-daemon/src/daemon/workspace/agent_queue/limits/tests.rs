@@ -341,7 +341,10 @@ fn each_entry_passed_over_names_what_holds_it() {
     let fixed = limits(Some(2), &[("a", Some(1))]);
     assert_eq!(
         held(&["a"], &queue, &fixed),
-        held_by(&[("a1", HeldBy::RepositoryLimit), ("b2", HeldBy::MaxAgents)])
+        held_by(&[
+            ("a1", HeldBy::RepositoryLimit),
+            ("b2", HeldBy::MaxHeavyAgents)
+        ])
     );
     let low_disk = Limits {
         disk: Some(1),
@@ -560,7 +563,7 @@ fn a_chat_without_a_repository_meets_the_machines_limits_alone() {
     let held = pass(&full, chat(false)).held;
     assert_eq!(
         held.get(&QueueEntryId::from("chat")),
-        Some(&HeldBy::MaxAgents)
+        Some(&HeldBy::MaxHeavyAgents)
     );
     assert_eq!(pass(&full, chat(true)).admitted, ["chat"]);
     // It counts toward no repository's limit.

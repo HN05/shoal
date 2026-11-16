@@ -487,7 +487,7 @@ fn a_parents_stop_with_yes_acknowledges_nothing_the_daemon_proves() {
 #[test]
 fn a_parent_stops_its_children_and_resumes_them_whoever_stopped_them() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; touch restored; while :; do sleep 1; done']\n",
+        "machine.max_heavy_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; touch restored; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     fixture.add("parent");
@@ -559,7 +559,7 @@ fn a_parent_stops_its_children_and_resumes_them_whoever_stopped_them() {
 #[test]
 fn stopping_a_workspace_stops_the_workspaces_below_it() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; touch restored; while :; do sleep 1; done']\n",
+        "machine.max_heavy_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; touch restored; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     fixture.add("parent");

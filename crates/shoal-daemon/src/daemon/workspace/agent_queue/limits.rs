@@ -335,7 +335,7 @@ fn full_limit(
         limit.is_some_and(|limit| count.saturating_sub(own) >= limit as usize)
     };
     if full(total, limits.global) {
-        Some(HeldBy::MaxAgents)
+        Some(HeldBy::MaxHeavyAgents)
     } else if full(writing, limits.disk) {
         Some(HeldBy::Disk)
     } else if full(used, repository.and_then(|id| limits.repository(id))) {
@@ -383,7 +383,7 @@ impl Manager {
     ) -> Result<Limits> {
         let config = self.config();
         let overload = &config.machine.overload;
-        let global = config.machine.max_agents;
+        let global = config.machine.max_heavy_agents;
         let max_jobs = config.machine.max_jobs;
         // A one-shot run holds no slot, but uses the machine's memory.
         let admitted = self.agent_queue.admitted_oneshots();
@@ -424,7 +424,7 @@ impl Manager {
             let resolved = config.resolve(&layers)?;
             limits
                 .repositories
-                .insert(id, fixed_limit(resolved.agent.max_running));
+                .insert(id, fixed_limit(resolved.agent.max_heavy_running));
         }
         if fixed_limit(global).is_some() || limits.repositories.values().any(Option::is_some) {
             limits.disk = self.disk_limit(overload, slots.len()).await?;

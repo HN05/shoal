@@ -1,4 +1,4 @@
-//! `shoal start` launches under `max_agents`: admission, the entries the
+//! `shoal start` launches under `max_heavy_agents`: admission, the entries the
 //! queue lists, and the hold that keeps a starting launch's slot.
 
 use anyhow::Result;

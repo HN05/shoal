@@ -12,7 +12,7 @@ use crate::forge::items::{
     reference::{ItemInput, ItemRef},
 };
 
-/// An agent launch or restore waiting for, or starting in, a `max_agents`
+/// An agent launch or restore waiting for, or starting in, a `max_heavy_agents`
 /// slot, or a CI job waiting for the runner.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueueEntry {
@@ -88,11 +88,11 @@ pub enum HeldBy {
     MemoryKept,
     /// Free disk space is below the warning threshold.
     Disk,
-    /// `machine.max_agents` is reached.
-    MaxAgents,
+    /// `machine.max_heavy_agents` is reached.
+    MaxHeavyAgents,
     /// `machine.max_jobs` is reached.
     MaxJobs,
-    /// The repository's `agent.max_running` is reached.
+    /// The repository's `agent.max_heavy_running` is reached.
     RepositoryLimit,
     /// The repository's `runner.permit` pool has no free permit.
     Permits,

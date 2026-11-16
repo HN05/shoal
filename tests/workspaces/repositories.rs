@@ -1403,9 +1403,9 @@ fn repository_setup_without_a_terminal_launches_its_agent_through_the_daemon() {
 }
 
 #[test]
-fn repository_setup_starts_its_agent_past_max_agents() {
+fn repository_setup_starts_its_agent_past_max_heavy_agents() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     install_recording_agent(&fixture, "claude");
     let repo = fixture.repo.to_str().unwrap();

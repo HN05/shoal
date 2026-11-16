@@ -34,7 +34,7 @@ pub struct Machine {
     pub keep_awake: bool,
     /// Agents running at once on this machine; defaults to measured load and
     /// `shoal start` queues past it. Use `none` for unlimited admission.
-    pub max_agents: RunLimit,
+    pub max_heavy_agents: RunLimit,
     /// CI jobs the runner runs at once on this machine; defaults to measured
     /// load, which agents and jobs share. Use `none` for unlimited admission.
     pub max_jobs: RunLimit,

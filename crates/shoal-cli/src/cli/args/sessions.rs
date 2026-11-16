@@ -18,7 +18,7 @@ pub enum SessionsCommand {
     /// Restore what of a space is stopped, interrupted or removed, or return a workspace to a checkpoint.
     ///
     /// Queues the restore of stopped agent sessions and lists interrupted commands. The daemon
-    /// starts queued restores as `max_agents` allows: where each agent stopped, otherwise in a
+    /// starts queued restores as `max_heavy_agents` allows: where each agent stopped, otherwise in a
     /// background place of the terminal host it was queued from or of `terminal.default_host`,
     /// such as a Herdr tab or a detached zmx session. A named workspace or running chat whose
     /// agent's turn `shoal stop --interrupt` ended continues that turn instead. A stopped chat
@@ -117,7 +117,7 @@ pub enum SessionsCommand {
     /// List the agent queue, or start or cancel an entry.
     ///
     /// The queue holds the agent launches and restores of every repository
-    /// waiting for a slot under max_agents, named by workspace. Without a
+    /// waiting for a slot under max_heavy_agents, named by workspace. Without a
     /// command on a terminal, choose an entry, then an action.
     #[command(args_conflicts_with_subcommands = true)]
     Queue {

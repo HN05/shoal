@@ -69,7 +69,7 @@ git_profile = "work"     # Top level: a Git profile for new worktrees; no defaul
 
 [machine]
 root_dir = "~/shoal"     # Parent of every repository's workspaces and URL clones
-max_agents = "dynamic"   # Or a positive number, or "none"
+max_heavy_agents = "dynamic" # Or a positive number, or "none"
 max_jobs = "dynamic"     # Or a positive number, or "none"
 schedule = "balanced"    # "balanced", "speed" or "cache"
 load = "balanced"        # "light", "balanced" or "full"
@@ -81,7 +81,7 @@ every checkout and every repository directory; it applies to new registrations
 after `shoal config reload`, and [`move root`](../../../../../../docs/reference.md#move-repositories-to-a-new-root)
 moves existing ones.
 
-`max_agents` limits the agents that run at once on the machine, and `max_jobs`
+`max_heavy_agents` limits the agents that run at once on the machine, and `max_jobs`
 the [CI jobs](../../../../../../docs/reference.md#runner): `dynamic` starts them one at a time while
 measured memory and disk leave room below the [warning thresholds](#overload),
 a number is a fixed limit, and `none` admits everything. See the
@@ -290,13 +290,13 @@ default = "claude"       # The agent starts use without --agent; no default
 model = "opus"           # For the default agent, over its tool's own
 effort = "xhigh"         # For the default agent, over its tool's own
 dirs = ["/tmp"]          # Directories every agent may read without a prompt
-max_running = "dynamic"  # Or a positive number, or "none"
+max_heavy_running = "dynamic" # Or a positive number, or "none"
 git_profile = "agent"    # A Git profile for agents' Git commands; no default
 ```
 
 `default` names a built-in AI tool or one under `[agents]`. `dirs` entries are
-absolute or start with `~/`, and an empty list gives none. `max_running` limits
-one repository's agents within `machine.max_agents`; set globally, it applies to
+absolute or start with `~/`, and an empty list gives none. `max_heavy_running` limits
+one repository's agents within `machine.max_heavy_agents`; set globally, it applies to
 each repository that sets none, and `dynamic` adds no repository limit.
 `git_profile` names a [Git profile](#git-profiles) that reaches tracked agents
 over every Git config file; see [agent accounts](../../../../../../docs/reference.md#agent-accounts).
@@ -444,7 +444,7 @@ start at once, hold no [agent slot](../../../../../../docs/reference.md#agent-qu
 stopped for load or on idle, and a `heavy` one's wait for a slot and are; the
 built-in modes that start chats are light, so one set to `kind = "workspace"`
 stays so. A chat without a repository takes its mode's weight from the global
-config and counts toward `machine.max_agents` alone.
+config and counts toward `machine.max_heavy_agents` alone.
 `permissions` takes the keys of
 [`[permissions]`](#permissions). `[rules.<name>]` sets a rule's `text`, which
 any mode can list; a mode naming a rule no layer defines is refused.
@@ -498,7 +498,7 @@ that order from widest to narrowest; no built-in mode sets `"gate"`.
 and `unmerge`, and merging a PR, its automatic merge and deleting its branch, `push` pushes to the repository's remotes by `shoal pr open` or
 `git push`, `api_writes` `shoal forge api` requests other than reads,
 `daemon` installing, starting, stopping and restarting the daemon and
-`shoal update` while a daemon of the same Shoal answers to decide it, `limits` starting agents regardless of `max_agents` and
+`shoal update` while a daemon of the same Shoal answers to decide it, `limits` starting agents regardless of `max_heavy_agents` and
 memory, `user_holds` releasing the user's holds and removing the spaces the
 user holds, `notifications` reading your notifications, Shoal's own log and
 the inbox's daemon-wide problems, `decide` deciding the approval requests of

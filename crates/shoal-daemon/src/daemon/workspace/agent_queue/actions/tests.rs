@@ -326,14 +326,14 @@ async fn workspace_processes_see_the_whole_queue_and_act_only_below_theirs() {
         .iter()
         .map(|entry| (entry.name.as_str(), entry.held_by))
         .collect();
-    let max_agents = Some(crate::model::HeldBy::MaxAgents);
+    let max_heavy_agents = Some(crate::model::HeldBy::MaxHeavyAgents);
     assert_eq!(
         names,
         [
             ("first", None),
-            ("one", max_agents),
-            ("two", max_agents),
-            ("other", max_agents)
+            ("one", max_heavy_agents),
+            ("two", max_heavy_agents),
+            ("other", max_heavy_agents)
         ]
     );
     let reachable = manager.reachable_queue(caller).await.unwrap();

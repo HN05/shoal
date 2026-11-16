@@ -601,7 +601,7 @@ While an entry in the [agent queue](#agent-queue) waits for a slot or memory,
 each [cleanup sweep](#automatic-cleanup) makes room for it: for each such
 entry in queue order, it puts to sleep the lowest-ranked idle agent whose
 priority is no higher than the entry's, of the entry's repository when that
-repository's `agent.max_running` holds it, and for an entry that waits for a
+repository's `agent.max_heavy_running` holds it, and for an entry that waits for a
 slot one that holds one, which a done space's agent does not, once that costs
 no prompt cache, as
 for [`shoal sleep`](#idle-wakes). Only an agent something will wake sleeps for
@@ -2040,10 +2040,10 @@ plan splits off. You start an agent on it when you want one, with
 ### Agent queue
 
 ```sh
-shoal config set machine.max_agents dynamic   # Start agents while memory and disk allow
-shoal config set machine.max_agents 3         # Fixed machine-wide limit
-shoal config set agent.max_running 2 --repo shoal  # And at most two of them in this repository
-shoal config set agent.max_running none --repo docs # No repository limit
+shoal config set machine.max_heavy_agents dynamic   # Start agents while memory and disk allow
+shoal config set machine.max_heavy_agents 3         # Fixed machine-wide limit
+shoal config set agent.max_heavy_running 2 --repo shoal  # And at most two of them in this repository
+shoal config set agent.max_heavy_running none --repo docs # No repository limit
 shoal start <issue-url> --agent claude          # Starts now, or queues when no slot is free
 shoal start <issue-url> --agent claude --now    # Starts now regardless of the limits
 shoal start <issue-url> --agent claude --add-blocker <id> --add-blocker 12  # Starts once that workspace and #12 clear
@@ -2057,7 +2057,7 @@ shoal priority urgent [space]                 # Ranks the space's queued work ah
 shoal priority 30 [space]                     # Any number from 0 to 100; low is 25, normal 50
 ```
 
-[`machine.max_agents`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine) limits the agents that run at once. It defaults to `dynamic`,
+[`machine.max_heavy_agents`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine) limits the agents that run at once. It defaults to `dynamic`,
 which starts one agent at a time, at least 10 seconds apart, while measured
 memory and disk leave room below the
 [`[machine.overload.warning]`](#overload-protection) memory and disk
@@ -2077,7 +2077,7 @@ protection ignores that signal. While a fixed
 limit applies, so does the disk rule: below `[machine.overload.warning] disk_free_gib`
 an agent starts only when none uses a slot, and below
 `machine.overload.disk.stop_free_gib` or without a reading none starts. That
-value counts every agent on the machine; a fixed [`agent.max_running`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#agent) counts
+value counts every agent on the machine; a fixed [`agent.max_heavy_running`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#agent) counts
 only one repository's agents, within the machine limit; a chat without a
 repository counts toward the machine's alone. Each tracked agent, a
 workspace's or a chat's, uses a slot while it runs, awaits reattachment
@@ -2204,15 +2204,15 @@ machine-wide, or of one with `--repo`, as `queued, position N` or `starting`,
 followed by `blocked by` and what blocks a waiting launch, or `after an update` for a
 restore of an idle agent, then what held a waiting entry back at the last
 admission pass, as `held by` memory with what the entry needs and what is
-left, low disk space, `machine.max_agents`, `machine.max_jobs`,
-`agent.max_running`, a full `runner.permit` pool, or a critical or missing
+left, low disk space, `machine.max_heavy_agents`, `machine.max_jobs`,
+`agent.max_heavy_running`, a full `runner.permit` pool, or a critical or missing
 reading; the stagger between starts is too brief to show. A restore shows its
 agent; `shoal list` shows the entries after the workspaces. `queue --json` gives the entries with their `kind`,
 `launch`, `restore` or `job`, a restore's stopped `execution`, a job's `job`
 with its run, `blockers` while any remain, the setup of the workspace it opens
 among them,
 `waits_for_update` for a restore of an idle agent, `held_by` with its `reason`
-(`memory` with `needed` and `left` bytes, `memory_kept`, `disk`, `max_agents`, `max_jobs`,
+(`memory` with `needed` and `left` bytes, `memory_kept`, `disk`, `max_heavy_agents`, `max_jobs`,
 `repository_limit`, `permits`, `reading`, or `upstream_limit` with the `limit`,
 `rate_limited` or `exhausted`, and the Unix-seconds `until`), a waiting entry's `rank` with its
 `priority` and `tier` and, for each it took from other work, `priority_from`
@@ -2306,7 +2306,7 @@ nothing and leaves no trace; `shoal trigger run` names the condition that did
 not hold. Any other firing is a run: its launch's templates
 render, each value other than `task` must read as its flag's value would, and
 the launch goes through the operation `shoal start` uses, the
-[agent queue](#agent-queue) and `max_agents` included, as you, starting a
+[agent queue](#agent-queue) and `max_heavy_agents` included, as you, starting a
 top-level space with its mode's permissions and the usual cleanup, or with `in`
 giving the task to that workspace's agent. The journal records the trigger as
 the launch's source, which [`shoal log`](#space-log) shows with the agent's
@@ -2619,7 +2619,7 @@ one below; `daemon` governs installing,
 starting, stopping and restarting the daemon, and `shoal update`, which a
 scoped process takes only while a daemon of the same Shoal answers to decide
 it; `limits`
-starting agents regardless of `max_agents` and memory, with `--now`,
+starting agents regardless of `max_heavy_agents` and memory, with `--now`,
 `--focus`, `queue start` or the queue picker's start; `admin`
 governs the rest of administering Shoal, its config, repositories and
 cleanup, and repairing, adopting and moving workspaces, in the
@@ -3701,7 +3701,7 @@ its run links, ahead of a queued agent of the same space. The daemon reads them 
 while a job could start and every minute while none can, so new jobs show in
 the queue and the entries of jobs the forge no longer lists, which another
 runner took or a cancel ended, leave it. `machine.max_jobs`
-limits jobs as [`machine.max_agents`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine) limits agents, counting only jobs. Under
+limits jobs as [`machine.max_heavy_agents`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine) limits agents, counting only jobs. Under
 `dynamic`, agents and jobs start through one admission, one at a time at least
 10 seconds apart, while measured memory and disk leave room below the
 `[machine.overload.warning]` thresholds: a job counts at the most resident

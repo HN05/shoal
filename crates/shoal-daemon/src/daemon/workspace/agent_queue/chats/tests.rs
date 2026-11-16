@@ -20,7 +20,7 @@ use shoal_protocol::{chats::StartedChat, space_names::SpaceSelector};
 /// that its agent is installed.
 async fn full_machine(manager: &Manager, repo: &Repository) {
     manager.publish_config(global_config(
-        "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false\n\
+        "[machine]\nmax_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n\
          [modes.pair]\nkind = 'chat'\n[modes.solo]\nkind = 'chat'\nrepository = false\n\
          [agents.claude]\ncommand = ['sh']\n",
     ));

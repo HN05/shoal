@@ -27,7 +27,7 @@ create or change it, except that a contribution's tracked file defines none,
 since its repository's maintainers are not the user who runs it; each source is a module behind one interface whose
 firings carry a JSON input document, which filters, templates and keys read
 without knowing the source, and every firing launches through the operation
-`shoal start` uses, as the user, so the queue, `max_agents` and cleanup apply.
+`shoal start` uses, as the user, so the queue, `max_heavy_agents` and cleanup apply.
 Which machine a space starts on or moves to is placement, an app's to build on
 `shoal move` and the protocol. `shoal start` and `shoal open`
 are thin launchers around the generic execution path; CLI launcher argument arrays are configurable defaults; session and desktop
@@ -1458,7 +1458,7 @@ overrides this choice, so each mode can decide whether its spaces take the
 terminal, and the built-in chat modes, whose agents the user talks with,
 are set to; `repo
 setup` and `config setup` always focus the agent the user works with straight
-away. A launch the user waits for starts past `max_agents`, as `--now` does:
+away. A launch the user waits for starts past `max_heavy_agents`, as `--now` does:
 one `--focus` focuses, or an interactive call's agent waiting for input that
 the setting does not send to the background, unless `--add-blocker` makes it wait for work; the setting alone does not, so it
 cannot switch the limit off. Commands say only what they
@@ -1730,7 +1730,7 @@ showing demos follow them without polling; restarts between runs are not
 changes. The listing carries a web demo's URL, which the daemon derives as
 opening does, so clients do not rebuild it.
 
-`max_agents` admission belongs to the daemon, so concurrent additions and its
+`max_heavy_agents` admission belongs to the daemon, so concurrent additions and its
 dispatcher share one count. Slots derive from what the daemon tracks: connected
 agents, executions awaiting reattachment, resume records and starting queue
 entries, excluding completed workspaces. A one-shot run such as a review is
@@ -1747,15 +1747,15 @@ workspace's does. Critical or missing readings, low disk and its tool's
 upstream limit hold every start, light ones too. The built-in modes that
 start chats are light, so they stay so in a workspace. A chat without a
 repository resolves its mode, and so its weight, in the global config, and
-its slot counts toward `machine.max_agents` alone. A heavy chat's start with
+its slot counts toward `machine.max_heavy_agents` alone. A heavy chat's start with
 no free slot follows a new workspace's: from a terminal nothing is recorded
 until its entry starts, since its place opens then, while without one, or for
 a scoped caller, the chat is recorded at once so the caller can address it
 and it goes below the caller, its launch attached to it. A one-shot run's
 admission is its in-memory request, which ends with the run, or with the daemon
 for a run whose processes could not be proven stopped, so none outlives a
-restart. `machine.max_agents`
-limits the machine; the repository option `agent.max_running` limits each repository,
+restart. `machine.max_heavy_agents`
+limits the machine; the repository option `agent.max_heavy_running` limits each repository,
 with a global default like any other option, so one name never means both caps.
 The machine setting defaults to `dynamic`, which
 admits from measured memory and disk instead of a slot count, so the machine
@@ -1840,7 +1840,7 @@ is surest to be warm when its agent starts; the others then follow
 `balanced`. An entry that has waited an hour ranks as if it led as well as
 any other, so no schedule passes it over or starves work within its
 priority, and its tier orders it among them as under `balanced`. Admission,
-with `max_agents`, `max_jobs`, `load` and the rest of what measures the
+with `max_heavy_agents`, `max_jobs`, `load` and the rest of what measures the
 machine, stays with each machine's daemon, the only one that measures it, and
 no policy replaces it, so a schedule changes only the order. Within a priority, its tiers are `finishing` (a space with an open PR or a ready mark, CI
 jobs on PRs and the default branch), `started` (restores of agents that have

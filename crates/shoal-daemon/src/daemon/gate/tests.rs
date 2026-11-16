@@ -52,7 +52,7 @@ async fn fixture_deciding_by(gate: &str) -> Fixture {
          [agents.reviewer]\ncommand = ['{}']\nreview = ['{{prompt}}', '{{schema}}']\n\
          [gate]\nagent = '{gate}'\nescalate = ['a push to a tag']\n\
          [permissions]\npush = 'gate'\n\
-         [machine]\nmax_agents = 4\n[machine.overload.disk]\nenabled = false\n",
+         [machine]\nmax_heavy_agents = 4\n[machine.overload.disk]\nenabled = false\n",
         script.display(),
         script.display(),
     );

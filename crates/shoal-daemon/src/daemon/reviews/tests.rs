@@ -45,7 +45,7 @@ async fn fixture_with(reviewers: &[(&str, &str)], review: &str, settings: &str) 
             path.display()
         ));
     }
-    config.push_str("[machine]\nmax_agents = 4\n[machine.overload.disk]\nenabled = false\n");
+    config.push_str("[machine]\nmax_heavy_agents = 4\n[machine.overload.disk]\nenabled = false\n");
     configure(&manager, &config).await;
     let path = repository(root.path(), "repo");
     let repo = manager
@@ -1397,7 +1397,7 @@ async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
         &manager,
         &format!(
             "[review]\nagent = 'reviewer'\n[agents.reviewer]\ncommand = ['{}']\nreview = ['{{prompt}}', '{{schema}}']\n\
-             [machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false\n",
+             [machine]\nmax_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n",
             script.display()
         ),
     )

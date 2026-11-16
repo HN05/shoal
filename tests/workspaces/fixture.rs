@@ -363,7 +363,7 @@ pub(crate) fn link_runner_program(tools: &Path, program: &str) {
 /// the load on the machine running the tests, with the fixture's
 /// [`NO_MEMORY_OVERLOAD`].
 pub(crate) const UNLIMITED_AGENTS: &str =
-    "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n";
+    "machine.max_heavy_agents = 'none'\n[machine.overload.disk]\nenabled = false\n";
 
 /// The lines `stream` carries, as a reader thread receives them.
 pub(crate) fn lines(

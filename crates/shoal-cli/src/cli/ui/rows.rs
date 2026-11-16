@@ -392,9 +392,9 @@ pub fn held_by_label(held: HeldBy) -> String {
         ),
         HeldBy::MemoryKept => "memory kept for a higher-ranked entry".into(),
         HeldBy::Disk => "low disk space".into(),
-        HeldBy::MaxAgents => "machine.max_agents".into(),
+        HeldBy::MaxHeavyAgents => "machine.max_heavy_agents".into(),
         HeldBy::MaxJobs => "machine.max_jobs".into(),
-        HeldBy::RepositoryLimit => "agent.max_running".into(),
+        HeldBy::RepositoryLimit => "agent.max_heavy_running".into(),
         HeldBy::Permits => "runner.permit pool".into(),
         HeldBy::Reading => "critical or missing reading".into(),
         HeldBy::UpstreamLimit { limit, until } => {

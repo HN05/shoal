@@ -1,4 +1,4 @@
-//! The agent queue: `shoal start` launches past `max_agents`, restores of
+//! The agent queue: `shoal start` launches past `max_heavy_agents`, restores of
 //! stopped agents and one-shot runs such as reviews wait here and start in
 //! order as slots free.
 mod actions;

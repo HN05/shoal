@@ -5,7 +5,7 @@ use shoal_ids::queue_entry_ids::QueueEntryId;
 
 use super::Lifetime;
 
-/// Requests about the agent queue under `max_agents`.
+/// Requests about the agent queue under `max_heavy_agents`.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum QueueMethod {

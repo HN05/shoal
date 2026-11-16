@@ -53,6 +53,14 @@ const REMOVED: &[(&[&str], &str)] = &[
         &["terminal", "happy"],
         "[terminal.happy] moved: set enabled under [agents.happy]",
     ),
+    (
+        &["machine", "max_agents"],
+        "machine.max_agents is now machine.max_heavy_agents",
+    ),
+    (
+        &["agent", "max_running"],
+        "agent.max_running is now agent.max_heavy_running",
+    ),
 ];
 
 /// Fail at the first setting of `root` that [`REMOVED`] names.

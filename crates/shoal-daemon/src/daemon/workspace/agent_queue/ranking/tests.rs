@@ -344,7 +344,7 @@ async fn a_space_and_a_queued_launch_rank_with_the_priority_set_on_them() {
 }
 
 /// The labels config, with the machine limited to one agent.
-const LABELS: &str = "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false\n\
+const LABELS: &str = "[machine]\nmax_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n\
      [priority.labels]\nurgent = 75\nlater = 25\n";
 
 /// Queue a launch in a new workspace `name` of `repo`, whose issue
@@ -555,7 +555,7 @@ async fn a_queued_restore_reads_when_its_agents_prompt_cache_expires() {
 }
 
 /// The machine limited to one agent, with area labels prefixed `area/`.
-const AREAS: &str = "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false\n\
+const AREAS: &str = "[machine]\nmax_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n\
      [issue]\narea_prefix = 'area/'\n";
 
 /// Assign `workspace` the issue `number` and watch its PR `number`, whose

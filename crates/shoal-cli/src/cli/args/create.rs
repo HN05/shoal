@@ -224,7 +224,7 @@ pub struct StartArgs {
     /// that conversation, which stays unchanged.
     #[arg(long, conflicts_with = "checkpoint")]
     pub fork: bool,
-    /// Start the agent now even when max_agents is reached, instead of queuing it.
+    /// Start the agent now even when max_heavy_agents is reached, instead of queuing it.
     #[arg(long)]
     pub now: bool,
     /// Queue the agent until this space, queued agent or issue is complete;
@@ -465,7 +465,7 @@ pub struct ContributeArgs {
     /// Start a built-in agent or a configured command after worktree creation.
     #[arg(short = 'a', long, value_parser = AgentParser)]
     pub agent: Option<Agent>,
-    /// Start the agent now even when max_agents is reached, instead of queuing it.
+    /// Start the agent now even when max_heavy_agents is reached, instead of queuing it.
     #[arg(long)]
     pub now: bool,
     #[command(flatten)]

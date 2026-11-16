@@ -185,7 +185,7 @@ permission_keys! {
     /// Administering Shoal: its config, repositories, cleanup, the repair,
     /// adoption, restoring and moving of workspaces.
     admin: Admin => "admin", Acting;
-    /// Starting agents regardless of `max_agents` and memory.
+    /// Starting agents regardless of `max_heavy_agents` and memory.
     limits: Limits => "limits", Acting;
     /// Removing or converting a space the user holds, and releasing the
     /// user's holds.

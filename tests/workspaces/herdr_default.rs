@@ -34,7 +34,7 @@ fn calls_of(fixture: &Fixture, prefix: &[&str]) -> Vec<Vec<String>> {
 #[test]
 fn background_additions_open_tabs_in_the_repository_workspace() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 'none'\nterminal.default_host = 'herdr'\nterminal.focus = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
+        "machine.max_heavy_agents = 'none'\nterminal.default_host = 'herdr'\nterminal.focus = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
     ));
     install_fake_herdr(&fixture);
     let repo = fixture.repo.to_str().unwrap();
@@ -66,7 +66,7 @@ fn background_additions_open_tabs_in_the_repository_workspace() {
 #[test]
 fn launches_from_a_terminal_need_no_zmx_while_herdr_is_the_default() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 'none'\nterminal.default_host = 'herdr'\nterminal.focus = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
+        "machine.max_heavy_agents = 'none'\nterminal.default_host = 'herdr'\nterminal.focus = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
     ));
     install_fake_herdr(&fixture);
     fixture.interactive_path();
@@ -83,7 +83,7 @@ fn launches_from_a_terminal_need_no_zmx_while_herdr_is_the_default() {
 #[test]
 fn a_fixed_workspace_name_is_reused_as_herdr_lists_it() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 'none'\nterminal.default_host = 'herdr'\nterminal.focus = false\n[terminal.herdr]\nworkspace_name = 'agents'\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
+        "machine.max_heavy_agents = 'none'\nterminal.default_host = 'herdr'\nterminal.focus = false\n[terminal.herdr]\nworkspace_name = 'agents'\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
     ));
     install_fake_herdr(&fixture);
     fs::write(
@@ -107,7 +107,7 @@ fn a_fixed_workspace_name_is_reused_as_herdr_lists_it() {
 #[test]
 fn focused_starts_attach_the_terminal_to_their_herdr_tab() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 'none'\nterminal.default_host = 'herdr'\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
+        "machine.max_heavy_agents = 'none'\nterminal.default_host = 'herdr'\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
     ));
     install_fake_herdr(&fixture);
     fixture.add("agent");
@@ -191,7 +191,7 @@ fn a_herdr_only_herdr_bin_path_names_serves_a_focused_start() {
 #[test]
 fn a_start_queued_outside_herdr_keeps_the_herdr_session_it_chose() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 1\nterminal.default_host = 'herdr'\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_heavy_agents = 1\nterminal.default_host = 'herdr'\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     install_fake_herdr(&fixture);
     let repo = fixture.repo.to_str().unwrap();

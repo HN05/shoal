@@ -1,4 +1,4 @@
--- Agent launches waiting for a slot under `max_agents`, in insertion order.
+-- Agent launches waiting for a slot under `max_heavy_agents`, in insertion order.
 -- `plan` is the CLI's opaque launch plan and `env` the launching terminal's
 -- multiplexer variables. A starting entry keeps its slot until its agent
 -- registers, its workspace goes, or its holder is gone for longer than the
