@@ -13,7 +13,7 @@ use tempfile::TempDir;
 use crate::support::{
     self,
     daemon::{CommandGroup, DaemonGuard, Detached},
-    git::{git, init_repo},
+    git, repository_with,
 };
 
 /// Global config without overload warnings, which would add a message to
@@ -284,7 +284,7 @@ fn write_global_config(root: &Path, config: &str) {
 /// Create repository `name` in `root` holding `files`, whose `main` is on its
 /// origin and whose fetches never reach the network.
 fn offline_repository(root: &Path, name: &str, files: &[(&str, &str)]) -> PathBuf {
-    let repo = init_repo(root, name, files);
+    let repo = repository_with(root, name, files);
     // Model a starting commit already present on a remote, without network I/O.
     git(&repo, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
     // Fetches over SSH, as the daemon's background sync of a GitHub

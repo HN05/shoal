@@ -5,8 +5,7 @@ mod support;
 use support::{
     fixture::Base,
     forge::{Server, github_search},
-    git::{git, git_with_identity, init_repo},
-    printed,
+    git, git_with_identity, printed, repository_with,
 };
 
 use serde_json::{Value, json};
@@ -5847,7 +5846,7 @@ fn denied_and_duplicate_issue_proposals_reach_the_agent_and_outlive_the_workspac
     assert_eq!(inbox[0]["kind"], "approval", "{inbox}");
     assert_eq!(inbox.as_array().unwrap().len(), 1);
     // Another repository's inbox leaves it out.
-    let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
+    let other = repository_with(fixture.root.path(), "other", &[("tracked", "other\n")]);
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     let filtered = |repo: &Path| fixture.ok(&["inbox", "--repo", repo.to_str().unwrap()]);
     assert_eq!(filtered(&other), json!([]));
@@ -6571,7 +6570,7 @@ fn item_commands_act_in_a_named_repository_without_a_workspace() {
         "issue", "comment", "40", "--body", "Seen", "--repo", "./repo",
     ]);
     assert_eq!(writes(&fixture).len(), 1);
-    let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
+    let other = repository_with(fixture.root.path(), "other", &[("tracked", "other\n")]);
     fixture.ok(&["repo", "add", other.to_str().unwrap(), "--name", "repo"]);
     refused(&["issue", "close", "40", "--repo", "repo"]);
 }

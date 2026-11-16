@@ -8,7 +8,6 @@ pub mod daemon_client;
 pub mod fake_daemon;
 pub mod fixture;
 pub mod forge;
-pub mod git;
 pub mod ports;
 pub mod prompt;
 pub mod pty;
@@ -18,7 +17,10 @@ pub mod zmx;
 
 // Each test binary uses its own subset of support, this included.
 #[allow(unused_imports)]
-pub use shoal_core::test_support::{install_test_script, install_test_script_with_mode, printed};
+pub use shoal_core::test_support::{
+    git, git_with_identity, install_test_script, install_test_script_with_mode, printed,
+    repository_with,
+};
 
 use shoal_core::test_support::{copy_in_child, isolate};
 use std::{

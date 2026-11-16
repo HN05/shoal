@@ -2523,7 +2523,7 @@ fn start_puts_a_chat_below_the_parent_it_names() {
     assert_eq!(chats[0]["parent"]["name"], "worker", "{chats}");
     assert_eq!(chats[0]["mode"], "chat", "{chats}");
     // A parent in another repository is refused before the agent picker.
-    let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
+    let other = repository_with(fixture.root.path(), "other", &[("tracked", "other\n")]);
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     let other = other.to_str().unwrap();
     let (output, rows) = fixture.pick(
@@ -3053,7 +3053,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
     let entries = fixture.ok(&["queue"]);
     assert_eq!(entries.as_array().unwrap().len(), 1, "{entries}");
     assert_eq!(entries[0]["name"], "second");
-    let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
+    let other = repository_with(fixture.root.path(), "other", &[("tracked", "other\n")]);
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     assert_eq!(
         fixture.ok(&["queue", "--repo", "other"]),

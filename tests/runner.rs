@@ -7,11 +7,7 @@ use std::{fs, path::Path, process::Output};
 use serde_json::{Value, json};
 use shoal_forge::test_support::Server;
 use support::{
-    cli,
-    daemon::DaemonGuard,
-    git::{git, init_repo},
-    install_test_script,
-    wait::wait_until,
+    cli, daemon::DaemonGuard, git, install_test_script, repository_with, wait::wait_until,
 };
 
 /// A Forgejo whose `team/repo` holds job `h1` waiting in run 1, a push to
@@ -75,7 +71,7 @@ fn workspaces(root: &Path) -> Vec<Value> {
 fn the_runner_runs_a_waiting_job_in_its_own_workspace_and_deletes_itself_when_turned_off() {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let root = &fs::canonicalize(root.path()).unwrap();
-    let repo = init_repo(root, "repo", &[("README", "runner\n")]);
+    let repo = repository_with(root, "repo", &[("README", "runner\n")]);
     let head = git(&repo, &["rev-parse", "HEAD"]).trim().to_owned();
     let finish = root.join("finish");
     let server = forgejo(head.clone(), finish.clone());

@@ -1130,7 +1130,7 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
     assert_eq!(listed.unwrap()["children"][0]["name"], "opened", "{chats}");
 
     // A child is in its parent's repository.
-    let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
+    let other = repository_with(fixture.root.path(), "other", &[("tracked", "other\n")]);
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     let output = add(&other, "foreign");
     assert!(!output.status.success(), "{}", printed(&output));
@@ -1152,7 +1152,7 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
     assert!(!output.status.success(), "{}", printed(&output));
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
     // Nor is registering another repository offered there.
-    let unregistered = init_repo(fixture.root.path(), "third", &[("tracked", "third\n")]);
+    let unregistered = repository_with(fixture.root.path(), "third", &[("tracked", "third\n")]);
     let (output, transcript) = fixture.terminal_command(
         fixture
             .command()
@@ -2276,7 +2276,7 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
 fn attach_returns_to_chats_by_name() {
     let fixture = Fixture::new();
     let home = fixture.root.path();
-    let other = init_repo(home, "other", &[("tracked", "committed\n")]);
+    let other = repository_with(home, "other", &[("tracked", "committed\n")]);
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     // Sessions are found where the chat was recorded, whatever their name.
     let (_agents, ids) = running_chats(
@@ -2341,7 +2341,7 @@ fn attach_returns_to_chats_by_name() {
 fn chat_rename_renames_the_named_current_or_picked_chat() {
     let fixture = Fixture::new();
     let home = fixture.root.path();
-    let other = init_repo(home, "other", &[("tracked", "committed\n")]);
+    let other = repository_with(home, "other", &[("tracked", "committed\n")]);
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     let (_agents, ids) = running_chats(
         &fixture,

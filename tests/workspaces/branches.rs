@@ -330,7 +330,6 @@ fn unmerge_moves_main_back_after_an_agents_request_is_approved() {
 #[test]
 fn a_merge_that_pushes_asks_first_unless_confirmed() {
     let fixture = Fixture::new();
-    configure_identity(&fixture.repo);
     let worker = fixture.add("worker");
     let path = Path::new(worker["path"].as_str().unwrap());
     upstream_remote(&fixture);
@@ -376,7 +375,6 @@ fn a_merge_that_pushes_asks_first_unless_confirmed() {
 fn merge_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
     for interruption in ["stop", "daemon", "interrupt"] {
         let mut fixture = Fixture::new();
-        configure_identity(&fixture.repo);
         fs::write(fixture.repo.join(".gitattributes"), "tracked merge=slow\n").unwrap();
         commit_file(&fixture.repo, ".gitattributes", "tracked merge=slow\n");
         let worker = fixture.add("worker");

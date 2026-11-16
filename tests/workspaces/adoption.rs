@@ -297,7 +297,7 @@ fn adopt_infers_the_repository_from_the_worktree_remote() {
     let fixture = Fixture::new();
     fixture.add_github_origin();
     let adopt = |name: &str, remote: &str| {
-        let clone = init_repo(fixture.root.path(), name, &[("tracked", "clone\n")]);
+        let clone = repository_with(fixture.root.path(), name, &[("tracked", "clone\n")]);
         git(&clone, &["remote", "add", "origin", remote]);
         let path = fixture.root.path().join(format!("{name}-worktree"));
         git(

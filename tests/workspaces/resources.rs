@@ -1692,7 +1692,7 @@ pub(crate) fn wait_for_busy(fixture: &Fixture, workspace: &str) {
 #[test]
 fn repository_resources_return_checkouts_and_preserve_them_on_cleanup() {
     let mut fixture = Fixture::new();
-    let related = init_repo(
+    let related = repository_with(
         fixture.root.path(),
         "server",
         &[("DESIGN.MD", "server design\n")],
@@ -1833,7 +1833,7 @@ fn repository_resources_return_checkouts_and_preserve_them_on_cleanup() {
 #[test]
 fn acquire_picks_an_omitted_resource_of_its_kind() {
     let fixture = Fixture::with_config(Some("[resources.lock]\n[resources.workers]\ncapacity=2\n"));
-    let related = init_repo(fixture.root.path(), "server", &[("tracked", "server\n")]);
+    let related = repository_with(fixture.root.path(), "server", &[("tracked", "server\n")]);
     fixture.ok(&["repo", "add", related.to_str().unwrap(), "--name", "server"]);
     set_repository_toml(&fixture, "[resources.server]\nkind='repo'\nrepo='server'\n");
     fixture.add("consumer");
@@ -1885,7 +1885,7 @@ fn acquire_port_picks_an_omitted_configured_port() {
 #[test]
 fn repository_resources_select_registrations_by_remote_url() {
     let fixture = Fixture::new();
-    let related = init_repo(fixture.root.path(), "server", &[("tracked", "server\n")]);
+    let related = repository_with(fixture.root.path(), "server", &[("tracked", "server\n")]);
     git(
         &related,
         &[
@@ -1939,7 +1939,7 @@ fn repository_resources_select_registrations_by_remote_url() {
 #[test]
 fn repository_resources_validate_targets_before_claiming_and_bind_approvals() {
     let fixture = Fixture::new();
-    let related = init_repo(fixture.root.path(), "server", &[("tracked", "server\n")]);
+    let related = repository_with(fixture.root.path(), "server", &[("tracked", "server\n")]);
     fixture.ok(&["repo", "add", related.to_str().unwrap(), "--name", "server"]);
     set_repository_toml(
         &fixture,
@@ -2001,7 +2001,7 @@ fn repository_resources_validate_targets_before_claiming_and_bind_approvals() {
     ]);
     // Reusing the configured name for another registration cannot reuse approval.
     fixture.ok(&["repo", "rm", "server", "--yes"]);
-    let replacement = init_repo(
+    let replacement = repository_with(
         fixture.root.path(),
         "replacement",
         &[("tracked", "other\n")],

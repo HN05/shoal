@@ -50,7 +50,7 @@ fn git_fixtures_ignore_inherited_git_variables_child() -> Result<()> {
     commit(&fixture, "added");
     assert_eq!(
         git(&fixture, &["log", "--format=%an %s"]),
-        "Shoal Test added\nShoal Test tracked\n"
+        "Shoal Test added\nShoal Test initial\n"
     );
     assert_eq!(git(&fixture, &["status", "--porcelain"]), "");
     Ok(())

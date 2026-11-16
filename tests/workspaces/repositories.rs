@@ -101,7 +101,7 @@ fn repository_selectors_preserve_names_and_reject_colliding_registered_paths() {
     ]);
     let caller = fixture.root.path().join("caller");
     fs::create_dir(&caller).unwrap();
-    let unrelated = init_repo(&caller, "saldoir-server", &[("precious", "keep me\n")]);
+    let unrelated = repository_with(&caller, "saldoir-server", &[("precious", "keep me\n")]);
     git(
         &unrelated,
         &[
@@ -202,7 +202,7 @@ fn unregistered_repository_path_diagnostic_keeps_the_typed_argument() {
     let fixture = Fixture::new();
     let caller = fixture.root.path().join("caller");
     fs::create_dir(&caller).unwrap();
-    let path = init_repo(&caller, "saldoir-server", &[("tracked", "unregistered\n")]);
+    let path = repository_with(&caller, "saldoir-server", &[("tracked", "unregistered\n")]);
     let output = fixture
         .command()
         .current_dir(&caller)
@@ -1030,7 +1030,7 @@ fn repository_removal_keeps_the_confirmed_target_when_a_name_is_reassigned() {
 
     let fixture = Fixture::new();
     let selected = fixture.ok(&["repo", "rename", fixture.repo.to_str().unwrap(), "project"]);
-    let other = init_repo(fixture.root.path(), "other", &[("tracked", "keep\n")]);
+    let other = repository_with(fixture.root.path(), "other", &[("tracked", "keep\n")]);
     let replacement = fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     let (mut master, slave) = pty::open();
     let mut child = fixture

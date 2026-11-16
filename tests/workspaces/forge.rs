@@ -1734,8 +1734,6 @@ fn merge_asks_before_merging_files_changed_on_both_sides() {
     let reason = pending["request"]["reason"].as_str().unwrap();
     assert!(reason.ends_with(": version."), "{reason}");
 
-    // Merging makes a merge commit in the checkout, which needs an identity.
-    configure_identity(&fixture.repo);
     assert_eq!(
         fixture.ok(&["merge", "--yes", &fixture.id("worker")])["updated"],
         true

@@ -1631,7 +1631,7 @@ fn base_set_picks_a_workspace_of_the_same_repository() {
     let fixture = Fixture::new();
     let lower = fixture.add("lower");
     fixture.add("upper");
-    let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
+    let other = repository_with(fixture.root.path(), "other", &[("tracked", "other\n")]);
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     let foreign = fixture.ok(&["start", other.to_str().unwrap(), "--branch", "foreign"]);
     let lower = lower["id"].as_str().unwrap();
@@ -1654,7 +1654,7 @@ fn base_set_picks_a_workspace_of_the_same_repository() {
 fn work_lists_only_the_selected_repository() {
     let fixture = Fixture::new();
     fixture.add("local");
-    let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
+    let other = repository_with(fixture.root.path(), "other", &[("tracked", "other\n")]);
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     fixture.ok(&["start", other.to_str().unwrap(), "--branch", "foreign"]);
     let names = |repository: &str| -> Vec<_> {

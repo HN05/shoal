@@ -88,7 +88,7 @@ fn managed_update_completes_active_requests_and_continues_event_streams() {
         sync::mpsc,
     };
     let root = tempfile::tempdir_in("/tmp").unwrap();
-    let repo = init_repo(root.path(), "repo", &[("tracked", "committed\n")]);
+    let repo = repository_with(root.path(), "repo", &[("tracked", "committed\n")]);
     git(&repo, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
     let install = root.path().join("install");
     fs::create_dir(&install).unwrap();

@@ -90,30 +90,51 @@ impl fmt::Display for Printed<'_> {
     }
 }
 
-pub fn commit(repo: &Path, file: &str) {
-    git(repo, &["add", "--", file]);
+/// The identity tests make commits, tags and rebases under.
+const AUTHOR: [(&str, &str); 2] = [
+    ("user.name", "Shoal Test"),
+    ("user.email", "shoal@example.invalid"),
+];
+
+/// Run a Git command that records an author or committer, such as `commit`,
+/// `tag -a` or `rebase`, under the tests' identity, in a repository that
+/// [`repository_with`] did not create, such as a clone.
+pub fn git_with_identity(repo: &Path, args: &[&str]) -> String {
+    let options = AUTHOR.map(|(name, value)| format!("{name}={value}"));
+    let identity = options.iter().flat_map(|option| ["-c", option.as_str()]);
     git(
         repo,
-        &[
-            "-c",
-            "user.name=Shoal Test",
-            "-c",
-            "user.email=shoal@example.invalid",
-            "commit",
-            "-m",
-            file,
-        ],
-    );
+        &identity.chain(args.iter().copied()).collect::<Vec<_>>(),
+    )
 }
 
+/// Commit `file` in `repo`, with its name as the message.
+pub fn commit(repo: &Path, file: &str) {
+    git(repo, &["add", "--", file]);
+    git_with_identity(repo, &["commit", "-m", file]);
+}
+
+/// [`repository_with`] the file `tracked`.
 pub fn repository(root: &Path, name: &str) -> PathBuf {
+    repository_with(root, name, &[("tracked", "initial\n")])
+}
+
+/// Create the repository `name` in `root`, at its canonical path, on `main`
+/// with the tests' identity, for the commits Shoal makes there too, and an
+/// initial commit of `files`.
+pub fn repository_with(root: &Path, name: &str, files: &[(&str, &str)]) -> PathBuf {
     let repo = root.join(name);
     fs::create_dir(&repo).unwrap();
+    let repo = fs::canonicalize(repo).unwrap();
     git(&repo, &["init", "-b", "main"]);
-    git(&repo, &["config", "user.name", "Shoal Test"]);
-    git(&repo, &["config", "user.email", "shoal@example.invalid"]);
-    fs::write(repo.join("tracked"), "initial\n").unwrap();
-    commit(&repo, "tracked");
+    for (name, value) in AUTHOR {
+        git(&repo, &["config", name, value]);
+    }
+    for (name, contents) in files {
+        fs::write(repo.join(name), contents).unwrap();
+    }
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "--allow-empty", "-m", "initial"]);
     repo
 }
 

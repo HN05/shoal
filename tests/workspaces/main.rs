@@ -49,9 +49,8 @@ use support::{
     daemon::DaemonGuard,
     fake_agent_script,
     fixture::Base,
-    git::{configure_identity, git, git_with_identity, init_repo},
-    install_fake_agent, install_test_script, install_test_script_with_mode, ports, printed, prompt,
-    pty,
+    git, git_with_identity, install_fake_agent, install_test_script, install_test_script_with_mode,
+    ports, printed, prompt, pty, repository_with,
     wait::{try_wait_for, try_wait_within, wait_for, wait_until},
     zmx::{PASSTHROUGH_ZMX, terminal_zmx},
 };
