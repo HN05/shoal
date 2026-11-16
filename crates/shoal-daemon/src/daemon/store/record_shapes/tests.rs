@@ -197,3 +197,16 @@ fn a_git_directory_recorded_by_device_and_inode_takes_its_identity_now() -> Resu
     assert_eq!(identity, now);
     Ok(())
 }
+
+#[test]
+fn a_snapshot_that_saw_no_state_leaves_it_out() -> Result<()> {
+    let mut db = before(210)?;
+    db.execute_batch(
+        r#"INSERT INTO pr_activity(space_id,url,record)
+             VALUES ('w','https://forge/o/r/pulls/1','{"state":"","comments":{}}');"#,
+    )?;
+    migrate(&mut db)?;
+    let watch = record(&db, "pr_activity", "space_id='w'")?;
+    assert_eq!(watch, json!({"comments": {}}));
+    Ok(())
+}

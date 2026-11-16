@@ -242,14 +242,13 @@ fn comment_updates_count_changes_by_kind_and_author() {
 }
 
 #[test]
-fn snapshots_saved_without_a_kind_report_the_next_observations_state() {
+fn a_snapshot_without_a_kind_reports_the_next_observations_state() {
     let saved = |state: &str| -> Snapshot {
         serde_json::from_value(json!({
             "comments": {}, "checks": {}, "conflict": null, "state": state, "errors": {},
         }))
         .unwrap()
     };
-    assert_eq!(saved("").state, None);
     let closed = Snapshot::of(SnapshotKind::Issue, Some(SnapshotState::Closed));
     let updates = saved("open").changes(&closed, "issue");
     assert_eq!(updates[0].kind, UpdateKind::Closed);

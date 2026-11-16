@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, consumed_upgrades, place_owners, place_servers, record_shapes};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 209;
+pub(super) const SCHEMA_VERSION: i64 = 210;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -491,6 +491,7 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
         RETIRED_NOTIFICATIONS,
         Some(consumed_upgrades::refuse_earlier_state),
     ),
+    (210, STATELESS_SNAPSHOTS, None),
 ];
 
 /// The migrations that rebuild a table others reference, which run on their
@@ -1086,6 +1087,14 @@ pub(super) const RETIRED_KEEP_REQUESTS: &str = "UPDATE workspace_completion
 /// directory, which no daemon moves any longer; the user read each one.
 pub(super) const RETIRED_NOTIFICATIONS: &str =
     "DELETE FROM notifications WHERE kind='unmoved_packages';";
+
+/// Snapshots that saw no state leave it out, where earlier ones saved it
+/// empty.
+pub(super) const STATELESS_SNAPSHOTS: &str =
+    "UPDATE pr_activity SET record=json_remove(record,'$.state')
+        WHERE json_valid(record) AND json_extract(record,'$.state')='';
+    UPDATE space_item_activity SET record=json_remove(record,'$.state')
+        WHERE json_valid(record) AND json_extract(record,'$.state')='';";
 
 /// Checkpoints outlive their workspace, not their repository.
 pub(super) const CHECKPOINTS: &str = "CREATE TABLE checkpoints (

@@ -6,7 +6,7 @@ use std::{
 };
 
 use anyhow::Result;
-use serde::{Deserialize, Deserializer, Serialize, de::IntoDeserializer};
+use serde::{Deserialize, Serialize};
 use shoal_refs::CommitId;
 use shoal_time::UnixTime;
 
@@ -50,8 +50,7 @@ pub use watch::WatchRecord;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Snapshot {
-    /// What the snapshot read; `None` before a first observation, and in
-    /// snapshots saved before kinds were recorded.
+    /// What the snapshot read; `None` before a first observation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) kind: Option<SnapshotKind>,
     pub(crate) comments: BTreeMap<String, Entry>,
@@ -80,14 +79,9 @@ pub struct Snapshot {
     pub(crate) conflict_exact: bool,
     /// The item's or run's state; `None` for a branch, and before a first
     /// observation.
-    #[serde(
-        default,
-        deserialize_with = "saved_state",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) state: Option<SnapshotState>,
-    /// What people edit of an issue or PR; `None` for a CI run or branch,
-    /// and in snapshots saved before details were recorded.
+    /// What people edit of an issue or PR; `None` for a CI run or branch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) details: Option<ItemDetails>,
     /// A failed run's failed jobs.
@@ -111,16 +105,6 @@ pub struct Snapshot {
     /// again.
     #[serde(skip)]
     pub(crate) failures_shown_elsewhere: bool,
-}
-
-/// A saved snapshot's state, which snapshots that saw none save as empty.
-fn saved_state<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Option<SnapshotState>, D::Error> {
-    match String::deserialize(deserializer)?.as_str() {
-        "" => Ok(None),
-        state => SnapshotState::deserialize(state.into_deserializer()).map(Some),
-    }
 }
 
 /// A failed job of a run, with the step that failed where its log names one.
