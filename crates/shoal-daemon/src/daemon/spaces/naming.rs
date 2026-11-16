@@ -18,22 +18,26 @@ impl Manager {
     ) -> Result<RenamedSpace> {
         // A request's name reads as sent, so the rule applies here.
         let name = SpaceName::parse(name)?;
-        let previous = self.space(selector).await?;
-        let id = previous.id().clone();
-        self.store
-            .write(move |tx| store_name(tx, &id, &name))
+        let id = self.space(selector).await?.id().clone();
+        let owned = id.clone();
+        let previous_name = (self.store)
+            .write(move |tx| store_name(tx, &owned, &name))
             .await?;
         Ok(RenamedSpace {
-            space: self.space_by_id(previous.id()).await?,
-            previous_name: previous.name().clone(),
+            space: self.space_by_id(&id).await?,
+            previous_name,
         })
     }
 }
 
-/// Record `name` as the name of space `id`.
-fn store_name(tx: &Transaction<'_>, id: &SpaceId, name: &SpaceName) -> Result<()> {
+/// Record `name` as the name of space `id`, returning the name it replaces,
+/// read in the same transaction so a concurrent rename cannot come between.
+fn store_name(tx: &Transaction<'_>, id: &SpaceId, name: &SpaceName) -> Result<SpaceName> {
+    let previous = tx.query_row("SELECT name FROM spaces WHERE id=?1", [id], |row| {
+        row.get(0)
+    })?;
     tx.execute("UPDATE spaces SET name=?2 WHERE id=?1", params![id, name])?;
-    Ok(())
+    Ok(previous)
 }
 
 #[cfg(test)]
