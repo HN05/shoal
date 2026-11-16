@@ -4,7 +4,7 @@
 use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::{Context, Result, bail, ensure};
 use shoal_ids::space_ids::SpaceId;
-use shoal_refs::{BranchName, CommitId};
+use shoal_refs::CommitId;
 use std::path::PathBuf;
 
 use crate::{
@@ -13,8 +13,8 @@ use crate::{
         approvals::{
             ApprovalRequest, DecisionStatus, Lifetime, Specification, Target,
             proposals::{
-                self, Duplicate, Finding, IssueSpecification, ProposalDecision, PullSpecification,
-                PushSpecification, Recorded,
+                self, Duplicate, Finding, IssueSpecification, ProposalDecision, ProposedAt,
+                PullSpecification, PushSpecification, Recorded,
             },
         },
         links::{LinkSpace, issue::Assigner},
@@ -95,13 +95,11 @@ impl Manager {
             .await?;
         self.keep_attachments(id, home, &mut issue.body, &mut issue.attachments)
             .await?;
-        let (branch, commit) = proposed_from(space).await?;
         let specification = Specification::Issue(IssueSpecification {
             issue,
             repository,
             link,
-            branch: branch.map(BranchName::from),
-            commit: commit.map(CommitId::from),
+            workspace: proposed_from(space).await?,
             agent: proposer.agent,
             duplicates: Vec::new(),
             follow_up: None,
@@ -835,15 +833,15 @@ async fn head_commit(
 
 /// The branch and commit a space proposes an issue from: a workspace's; a
 /// chat works on neither.
-async fn proposed_from(space: &LinkSpace) -> Result<(Option<String>, Option<String>)> {
+async fn proposed_from(space: &LinkSpace) -> Result<Option<ProposedAt>> {
     let Some(workspace) = space.worktree() else {
-        return Ok((None, None));
+        return Ok(None);
     };
     let commit = crate::git::revision(&workspace.path, "HEAD", crate::git::run).await?;
-    Ok((
-        workspace.branch().map(ToString::to_string),
-        Some(commit.trim().to_owned()),
-    ))
+    Ok(Some(ProposedAt {
+        branch: workspace.branch().cloned(),
+        commit: commit.trim().into(),
+    }))
 }
 
 /// A pending request for the space `id` to open what `specification`
@@ -899,8 +897,10 @@ pub async fn store_issue_proposal(manager: &Manager, space: &LinkSpace) -> Appro
         },
         repository: None,
         link: false,
-        branch: space.branch().map(str::to_owned).map(BranchName::from),
-        commit: space.worktree().map(|_| "head".into()),
+        workspace: space.worktree().map(|_| ProposedAt {
+            branch: space.branch().map(shoal_refs::BranchName::from),
+            commit: "head".into(),
+        }),
         agent: None,
         duplicates: Vec::new(),
         follow_up: None,

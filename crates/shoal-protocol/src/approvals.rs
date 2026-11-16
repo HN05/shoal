@@ -482,12 +482,9 @@ pub struct IssueSpecification {
     pub repository: Option<String>,
     /// Whether approval also assigns the issue to the space.
     pub link: bool,
-    /// The proposing workspace's branch; `None` for one at a commit and for
-    /// a chat.
-    pub branch: Option<BranchName>,
-    /// The proposing workspace's commit; `None` for a chat.
+    /// The proposing workspace's HEAD when it proposed; `None` for a chat.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub commit: Option<CommitId>,
+    pub workspace: Option<ProposedAt>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<crate::agent::Agent>,
     /// Findings of proposals the user marked as duplicates of this one,
@@ -498,6 +495,15 @@ pub struct IssueSpecification {
     /// Forgejo's labels, until it is done.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub follow_up: Option<Edit>,
+}
+
+/// The proposing workspace's HEAD when it proposed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProposedAt {
+    /// None for a detached HEAD, as in a workspace at a commit.
+    pub branch: Option<BranchName>,
+    pub commit: CommitId,
 }
 
 /// A duplicate proposal's text and files, which become a comment on what it

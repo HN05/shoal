@@ -16,8 +16,8 @@ use crate::daemon::{item_numbers, links::space::require_ready_space, store};
 use crate::forge::items::attach::Attachment;
 use shoal_forge::items::attach;
 pub(crate) use shoal_protocol::approvals::{
-    Duplicate, Finding, ISSUE, IssueSpecification, PR, ProposalDecision, PullSpecification,
-    PushSpecification,
+    Duplicate, Finding, ISSUE, IssueSpecification, PR, ProposalDecision, ProposedAt,
+    PullSpecification, PushSpecification,
 };
 
 /// A stored proposal, and whether this call recorded it.

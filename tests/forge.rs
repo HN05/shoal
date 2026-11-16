@@ -5495,7 +5495,7 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
     assert_eq!(proposed["target"], "issue_open");
     assert_eq!(proposed["status"], "pending");
     assert_eq!(proposed["specification"]["issue"]["title"], "Flaky");
-    assert_eq!(proposed["specification"]["branch"], "topic");
+    assert_eq!(proposed["specification"]["workspace"]["branch"], "topic");
     // Repeating the command returns the same proposal; asking to link it is
     // another proposal.
     assert_eq!(
@@ -5651,7 +5651,10 @@ fn a_chats_proposed_issue_opens_from_its_checkout_on_approval() {
     };
     let proposed = in_chat(&["issue", "open", "--title", "Flaky", "--link"])["proposed"].clone();
     assert_eq!(proposed["space"], "planning", "{proposed}");
-    assert_eq!(proposed["specification"]["branch"], Value::Null);
+    assert!(
+        proposed["specification"].get("workspace").is_none(),
+        "{proposed}"
+    );
     assert_eq!(proposed["specification"].get("commit"), None);
     let other = in_chat(&["issue", "open", "--title", "Noise"])["proposed"]["number"]
         .as_str()

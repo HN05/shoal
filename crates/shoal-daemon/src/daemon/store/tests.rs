@@ -638,6 +638,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 201 {
         db.execute_batch(include_str!("removed_workspace_heads.sql"))?;
     }
+    if version >= 202 {
+        db.execute_batch(include_str!("issue_proposal_heads.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -2167,6 +2170,47 @@ fn migrated_removal_records_name_the_branch_their_restore_opens() -> Result<()> 
             // A detached HEAD restores on the branch restore named it.
             branch("detached", Some("bbbbbbb")),
             branch("topic", Some("topic")),
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn migrated_issue_proposals_name_the_workspace_head_in_one_value() -> Result<()> {
+    let mut db = historical_database(201)?;
+    db.execute_batch(
+        r#"INSERT INTO access_requests(id,space_id,target_key,name,record,number) VALUES
+            ('topic','workspace','issue_open','topic',
+                '{"specification":{"link":false,"branch":"topic","commit":"aaa"}}',1),
+            ('detached','workspace','issue_open','detached',
+                '{"specification":{"link":false,"branch":null,"commit":"bbb"}}',2),
+            ('chat','workspace','issue_open','chat',
+                '{"specification":{"link":false,"branch":null}}',3),
+            ('push','workspace','push','push','{"specification":{"commit":"ccc"}}',4);"#,
+    )?;
+
+    migrate(&mut db)?;
+
+    let specifications: Vec<(String, String)> = db
+        .prepare(
+            "SELECT id,json_extract(record,'$.specification') FROM access_requests ORDER BY id",
+        )?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    let specification = |id: &str, json: serde_json::Value| (id.to_owned(), json.to_string());
+    assert_eq!(
+        specifications,
+        [
+            specification("chat", serde_json::json!({"link": false})),
+            specification(
+                "detached",
+                serde_json::json!({"link": false, "workspace": {"branch": null, "commit": "bbb"}})
+            ),
+            specification("push", serde_json::json!({"commit": "ccc"})),
+            specification(
+                "topic",
+                serde_json::json!({"link": false, "workspace": {"branch": "topic", "commit": "aaa"}})
+            ),
         ]
     );
     Ok(())
