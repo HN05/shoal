@@ -19,6 +19,11 @@ use crate::{
 };
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 
+/// How the error begins of a workspace that a removal which stopped before
+/// it finished left failed, which a later removal looks for to tell that
+/// what the worktree misses is that removal's doing.
+pub(in crate::daemon::workspace) const STOPPED_REMOVAL: &str = "removal stopped";
+
 /// A removal under way from its reservation. Dropped before
 /// [`Self::finish`], as when its work panics or is dropped, it fails the
 /// workspace, so none stays in `removing` with no removal running.
@@ -111,7 +116,7 @@ fn fail_stopped_removal(tx: &Connection, id: &SpaceId, why: &str) -> Result<()> 
         return Ok(());
     };
     let space = number.map_or_else(|| id.to_string(), |number| number.to_string());
-    let error = format!("removal stopped when {why}; shoal rm {space} finishes it");
+    let error = format!("{STOPPED_REMOVAL} when {why}; shoal rm {space} finishes it");
     let cause = started_cause(tx, id)?;
     events::retain(tx, id, WorkspaceState::Failed, cause, &error)
 }
