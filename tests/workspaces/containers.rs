@@ -229,3 +229,84 @@ fn a_failed_down_keeps_the_workspace_and_its_project() {
     fixture.ok(&["rm", "--wait", &space, "--yes"]);
     assert_eq!(commands(&fixture, &project), ["up", "down", "down"]);
 }
+
+const SETUP: &str = "[containers]\ncompose = 'compose.yaml'\nports = ['db']\nstart = 'setup'\n";
+
+#[test]
+fn setup_starts_the_project_before_the_workspace_is_ready() {
+    let fixture = with_containers(SETUP);
+    let workspace = fixture.add("worker");
+    assert_eq!(workspace["state"], "ready");
+    let space = fixture.id("worker");
+    let listed = fixture.ok(&["leases", "containers", "--space", &space]);
+    let project = &listed["projects"][0];
+    assert_eq!(project["state"], "running");
+    assert_eq!(project["acquirer"]["kind"], "user");
+    assert_eq!(commands(&fixture, &project["project"]), ["up"]);
+}
+
+#[test]
+fn containers_that_do_not_start_fail_setup_until_it_is_retried() {
+    let fixture = with_containers(SETUP);
+    fs::write(fixture.root.path().join("compose-fail"), "up").unwrap();
+    let failed = fixture.run(&[
+        "start",
+        fixture.repo.to_str().unwrap(),
+        "--branch",
+        "worker",
+    ]);
+    assert!(!failed.status.success(), "{}", printed(&failed));
+    let space = fixture.id("worker");
+    assert_eq!(
+        fixture.ok(&["status", &space])["workspace"]["state"],
+        "failed"
+    );
+
+    fs::remove_file(fixture.root.path().join("compose-fail")).unwrap();
+    fixture.ok(&["setup", &space]);
+    assert_eq!(
+        fixture.ok(&["status", &space])["workspace"]["state"],
+        "ready"
+    );
+    let listed = fixture.ok(&["leases", "containers", "--space", &space]);
+    assert_eq!(listed["projects"][0]["state"], "running");
+}
+
+#[test]
+fn the_workspaces_agent_takes_over_the_project_setup_started_for_it() {
+    let fixture = with_containers(SETUP);
+    install_test_script(
+        fixture.root.path().join("bin/claude"),
+        format!(
+            "#!/bin/sh\n'{}' leases containers >\"$HOME/agent-saw\"\n",
+            support::shoal_binary()
+        ),
+    );
+    let started = fixture.run(&[
+        "start",
+        fixture.repo.to_str().unwrap(),
+        "--branch",
+        "worker",
+        "--agent",
+        "claude",
+        "--here",
+    ]);
+    assert!(started.status.success(), "{}", printed(&started));
+    let saw = fs::read_to_string(fixture.root.path().join("agent-saw")).unwrap();
+    let saw: Value = serde_json::from_str(&saw).unwrap();
+    let project = &saw["projects"][0];
+    assert_eq!(project["state"], "running");
+    assert_eq!(project["acquirer"]["kind"], "agent");
+
+    // It ends with the agent, and the agent's next start starts it again.
+    let space = fixture.id("worker");
+    let state =
+        || fixture.ok(&["leases", "containers", "--space", &space])["projects"][0]["state"].clone();
+    wait_until("the agent's containers stop", || state() == "stopped");
+    let again = fixture.run(&["start", "--in", &space, "--here", "--agent", "claude"]);
+    assert!(again.status.success(), "{}", printed(&again));
+    assert_eq!(
+        commands(&fixture, &project["project"]),
+        ["up", "stop", "up", "stop"]
+    );
+}

@@ -378,6 +378,9 @@ pub(super) async fn prepare_tracked_launch(
     let recover = recovery.as_ref().is_some_and(|recovery| recovery.automatic);
     let (mut link, plan) =
         open_execution(paths, workspace, mode, agent.as_ref(), recover, place).await?;
+    if agent.is_some() {
+        super::containers::start_for_agent(paths, &plan).await;
+    }
     // The daemon has registered the execution, so a launch that fails from
     // here reports its end, which lets the daemon forget it.
     let command = match ready_command(paths, &plan, command, mode, auth.as_mut()).await {

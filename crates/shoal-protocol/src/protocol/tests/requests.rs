@@ -253,6 +253,8 @@ const REQUESTS: &[&str] = &[
     r#"{"container_overview":{"workspace":null}}"#,
     r#"{"acquire_containers":{"workspace":"fix","reason":"database"}}"#,
     r#"{"release_containers":{"workspace":"fix"}}"#,
+    r#"{"set_up_containers":{"workspace":"fix","for_agent":true}}"#,
+    r#"{"start_agent_containers":{"workspace":"fix"}}"#,
     r#"{"sim_acquire":{"workspace":"fix","request":{"request_id":"u1","clean":false,"name":"default","profile":null,"device":null,"runtime":null,"reason":null,"queue":false}}}"#,
     r#"{"sim_release":{"workspace":"fix","name":"default"}}"#,
     r#"{"sim_history":{"workspace":null,"limit":20,"before":null}}"#,

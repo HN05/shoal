@@ -265,6 +265,27 @@ pub async fn release_containers(daemon: &impl Daemon, workspace: SpaceSelector) 
     request(daemon, ContainerMethod::ReleaseContainers { workspace }).await
 }
 
+/// Start the containers of `workspace` after its setup command, where its
+/// repository starts them with setup, for the agent that starts there next
+/// when `for_agent`.
+pub async fn set_up_containers(
+    daemon: &impl Daemon,
+    workspace: SpaceSelector,
+    for_agent: bool,
+) -> Result<()> {
+    let method = ContainerMethod::SetUpContainers {
+        workspace,
+        for_agent,
+    };
+    request(daemon, method).await
+}
+
+/// Give the agent of `daemon`'s scope the containers of `workspace` as it
+/// starts there, where its repository starts them with setup.
+pub async fn start_agent_containers(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<()> {
+    request(daemon, ContainerMethod::StartAgentContainers { workspace }).await
+}
+
 /// The containers of `workspace`, or of every workspace.
 pub async fn containers(
     daemon: &impl Daemon,

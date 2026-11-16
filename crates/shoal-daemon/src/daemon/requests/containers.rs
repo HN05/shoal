@@ -31,6 +31,17 @@ pub(super) async fn handle(
             manager.release_containers(&workspace).await?;
             Body::Ok
         }
+        ContainerMethod::SetUpContainers {
+            workspace,
+            for_agent,
+        } => {
+            (manager.set_up_containers(&workspace, for_agent, caller)).await?;
+            Body::Ok
+        }
+        ContainerMethod::StartAgentContainers { workspace } => {
+            manager.start_agent_containers(&workspace, caller).await?;
+            Body::Ok
+        }
     }))
 }
 
@@ -39,7 +50,9 @@ impl Scoped for ContainerMethod {
         Ok(match self {
             ContainerMethod::ContainerCatalog { workspace }
             | ContainerMethod::AcquireContainers { workspace, .. }
-            | ContainerMethod::ReleaseContainers { workspace } => Some(workspace),
+            | ContainerMethod::ReleaseContainers { workspace }
+            | ContainerMethod::SetUpContainers { workspace, .. }
+            | ContainerMethod::StartAgentContainers { workspace } => Some(workspace),
             ContainerMethod::ContainerOverview { workspace } => {
                 Some(caller.own_by_default(workspace))
             }

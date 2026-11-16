@@ -6,6 +6,7 @@
 mod attachment;
 mod cancellation;
 mod completion;
+mod containers;
 mod demo;
 mod launch;
 mod link;

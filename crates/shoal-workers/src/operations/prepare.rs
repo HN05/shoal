@@ -1,6 +1,6 @@
-//! Preparing a workspace: its tracked setup, failing as the operation
-//! reports it, then linking its PR, then its post-setup hook, failing in
-//! turn, then queuing its agent.
+//! Preparing a workspace: its tracked setup and the containers that start
+//! with it, failing as the operation reports it, then linking its PR, then
+//! its post-setup hook, failing in turn, then queuing its agent.
 use anyhow::{Result, ensure};
 
 use super::{Failed, Reporter};
@@ -28,7 +28,8 @@ pub(super) async fn prepare(
         .workspace;
     if steps.setup {
         reporter.step(Step::SetupStarted).await?;
-        workspace = match run_setup(paths, &workspace).await {
+        let for_agent = steps.agent.is_some() || steps.waiting.is_some();
+        workspace = match set_up(paths, &workspace, for_agent).await {
             Ok(set_up) => set_up,
             Err(error) => {
                 // The workspace stays for a retried setup, with the agent
@@ -70,6 +71,18 @@ pub(super) async fn prepare(
     };
     let workspace = Box::new(workspace);
     Ok(Prepared { workspace, agent })
+}
+
+/// Run the setup command, then start the containers that start with setup,
+/// for the agent that starts in the workspace when `for_agent`.
+async fn set_up(paths: &CommandPaths, workspace: &Workspace, for_agent: bool) -> Result<Workspace> {
+    let workspace = run_setup(paths, workspace).await?;
+    let selector = SpaceSelector::id(&workspace.id);
+    if let Err(error) = crate::client::leases::set_up_containers(paths, selector, for_agent).await {
+        let message = format!("{error:#}");
+        return Err(Failed(Failure::SetupFailed { message }).into());
+    }
+    Ok(workspace)
 }
 
 /// Run the setup command as a tracked execution; a setup whose processes

@@ -2,10 +2,11 @@
 //! started on its reserved ports, stopped on release and removed with the
 //! workspace. Each project is recorded before any `compose` call, so Shoal
 //! never touches a project it has no record of.
+mod automatic;
 mod compose;
 pub(crate) mod records;
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use shoal_ids::space_ids::SpaceId;
 
 use compose::Compose;
@@ -18,7 +19,8 @@ use super::{
     workspace::Manager,
 };
 use crate::{
-    model::{PortReservation, Workspace},
+    daemon::approvals::ApprovalRequest,
+    model::{PortReservation, PortSuggestion, Workspace},
     protocol::Body,
     refusal::{Reason, Refusal},
     state::WorkspaceState,
@@ -35,7 +37,10 @@ use shoal_protocol::{
 /// or a port reservation it needs that is not granted yet.
 pub enum ContainerAcquisition {
     Started(Box<Containers>),
-    Port(ports::Acquisition),
+    /// A port it reserves waits for approval.
+    Approval(Box<ApprovalRequest>),
+    /// The preferred port of one it reserves is taken.
+    Suggested(PortSuggestion),
 }
 
 impl ContainerAcquisition {
@@ -43,7 +48,8 @@ impl ContainerAcquisition {
     pub fn into_body(self) -> Body {
         match self {
             Self::Started(containers) => Body::Containers(containers),
-            Self::Port(acquisition) => acquisition.into_body(),
+            Self::Approval(request) => Body::ApprovalRequest(request),
+            Self::Suggested(suggestion) => Body::PortSuggestion(suggestion),
         }
     }
 }
@@ -149,7 +155,7 @@ impl Manager {
             .await?
         {
             Ok(ports) => ports,
-            Err(pending) => return Ok(ContainerAcquisition::Port(pending)),
+            Err(pending) => return Ok(pending),
         };
         let runtime = match self.container_project(&workspace.id).await? {
             Some(recorded) if recorded.project.state == ContainerState::Running => {
@@ -210,31 +216,52 @@ impl Manager {
         workspace: &Workspace,
         names: Vec<String>,
         caller: Option<&Caller>,
-    ) -> Result<Result<Vec<PortReservation>, ports::Acquisition>> {
+    ) -> Result<Result<Vec<PortReservation>, ContainerAcquisition>> {
         let selector = SpaceSelector::id(&workspace.id);
         let mut reserved = Vec::with_capacity(names.len());
         for name in names {
             let request = PortRequest::default();
-            match self.acquire_port(&selector, name, request, caller).await? {
-                ports::Acquisition::Allocation(Allocation::Granted(port)) => reserved.push(port),
-                pending => return Ok(Err(pending)),
-            }
+            let pending = match self.acquire_port(&selector, name, request, caller).await? {
+                ports::Acquisition::Allocation(Allocation::Granted(port)) => {
+                    reserved.push(port);
+                    continue;
+                }
+                ports::Acquisition::Allocation(Allocation::Approval(request)) => {
+                    ContainerAcquisition::Approval(request)
+                }
+                ports::Acquisition::Allocation(Allocation::Busy(message)) => bail!(message),
+                ports::Acquisition::Suggested(suggestion) => {
+                    ContainerAcquisition::Suggested(suggestion)
+                }
+            };
+            return Ok(Err(pending));
         }
         Ok(Ok(reserved))
     }
 
-    /// The running project `recorded` acquired again by `starter`: the
-    /// user's acquire makes it the user's, and a reason replaces its own.
+    /// The running project `recorded` acquired again by `starter`: one set
+    /// up for the workspace's agent, or started again for it, goes to
+    /// `starter`; otherwise the user's acquire makes it the user's. A reason
+    /// replaces its own.
     async fn renew_containers(
         &self,
         mut recorded: Recorded,
         starter: Starter,
     ) -> Result<ContainerProject> {
-        let acquirer = recorded.project.acquirer.renewed_by(&starter.acquirer);
+        let (acquirer, for_agent) = match recorded.for_agent || starter.for_agent {
+            true => (starter.acquirer, starter.for_agent),
+            false => (
+                recorded.project.acquirer.renewed_by(&starter.acquirer),
+                false,
+            ),
+        };
         let reason = starter.reason.or(recorded.project.reason.clone());
-        if acquirer != recorded.project.acquirer || reason != recorded.project.reason {
-            recorded.for_agent &= acquirer == recorded.project.acquirer;
+        if (acquirer != recorded.project.acquirer)
+            || (for_agent != recorded.for_agent)
+            || (reason != recorded.project.reason)
+        {
             recorded.project.acquirer = acquirer;
+            recorded.for_agent = for_agent;
             recorded.project.reason = reason;
             self.save_containers(&recorded).await?;
         }
