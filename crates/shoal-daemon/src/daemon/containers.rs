@@ -282,6 +282,17 @@ impl Manager {
         self.save_containers(&recorded).await
     }
 
+    /// Make the project of `workspace` the user's.
+    pub(crate) async fn give_containers_to_user(&self, workspace: &SpaceId) -> Result<()> {
+        let _gate = self.gates.lock_containers(workspace).await;
+        if let Some(mut recorded) = self.container_project(workspace).await? {
+            recorded.project.acquirer = Acquirer::User;
+            recorded.for_agent = false;
+            self.save_containers(&recorded).await?;
+        }
+        Ok(())
+    }
+
     async fn save_containers(&self, recorded: &Recorded) -> Result<()> {
         let recorded = recorded.clone();
         self.store

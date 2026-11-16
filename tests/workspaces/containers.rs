@@ -87,8 +87,11 @@ fn release_stops_the_project_and_keeps_its_ports() {
     let space = fixture.id("worker");
     let started = fixture.ok(&["acquire", "containers", "--space", &space]);
     let port = started["services"][0]["ports"][0]["published"].clone();
+    let cleanup = || fixture.ok(&["status", &space])["cleanup_reason"]["reason"].clone();
+    assert_eq!(cleanup(), "containers");
 
     fixture.ok(&["release", "containers", "--space", &space]);
+    assert_ne!(cleanup(), "containers");
     let listed = fixture.ok(&["leases", "containers", "--space", &space]);
     assert_eq!(listed["projects"][0]["state"], "stopped");
     assert_eq!(commands(&fixture, &started["project"]), ["up", "stop"]);
@@ -141,4 +144,42 @@ fn a_repository_without_a_compose_file_has_no_containers() {
     let refused = fixture.run(&["acquire", "containers", "--space", &fixture.id("worker")]);
     assert!(!refused.status.success());
     assert!(compose_events(&fixture).is_empty());
+}
+
+#[test]
+fn an_agents_containers_stop_when_it_exits_and_the_users_keep_running() {
+    let fixture = with_containers(CONTAINERS);
+    fixture.add("agent");
+    fixture.add("user");
+    install_test_script(
+        fixture.root.path().join("bin/claude"),
+        format!(
+            "#!/bin/sh\n'{}' acquire containers >\"$HOME/agent-acquired\"\n",
+            support::shoal_binary()
+        ),
+    );
+    let user = fixture.ok(&["acquire", "containers", "--space", &fixture.id("user")]);
+    let launched = fixture.run(&[
+        "start",
+        "--in",
+        &fixture.id("agent"),
+        "--here",
+        "--agent",
+        "claude",
+    ]);
+    assert!(launched.status.success(), "{}", printed(&launched));
+    let acquired = fs::read_to_string(fixture.root.path().join("agent-acquired")).unwrap();
+    let acquired: Value = serde_json::from_str(&acquired).unwrap();
+    assert_eq!(acquired["acquirer"]["kind"], "agent");
+
+    let state = |name: &str| {
+        let space = fixture.id(name);
+        fixture.ok(&["leases", "containers", "--space", &space])["projects"][0]["state"].clone()
+    };
+    wait_until("the agent's containers stop", || {
+        state("agent") == "stopped"
+    });
+    assert_eq!(commands(&fixture, &acquired["project"]), ["up", "stop"]);
+    assert_eq!(state("user"), "running");
+    assert_eq!(commands(&fixture, &user["project"]), ["up"]);
 }

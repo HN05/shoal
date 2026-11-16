@@ -260,6 +260,11 @@ impl Manager {
         {
             return Ok(Some(CleanupReason::Simulators));
         }
+        if (self.container_project(id).await?)
+            .is_some_and(|recorded| recorded.project.state.active())
+        {
+            return Ok(Some(CleanupReason::Containers));
+        }
         Ok(None)
     }
 }

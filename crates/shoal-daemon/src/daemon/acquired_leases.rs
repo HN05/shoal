@@ -1,5 +1,5 @@
-//! The simulator leases and resource permits an execution acquired, which
-//! end with it: who acquires a lease, the lease a demo takes over from the
+//! The simulator leases, containers and resource permits an execution
+//! acquired, which end with it: who acquires a lease, the lease a demo takes over from the
 //! agent that started it, and releasing an execution's leases through each
 //! kind's release path once it ends.
 use std::collections::HashMap;
@@ -11,7 +11,7 @@ use shoal_ids::space_ids::SpaceId;
 #[cfg(test)]
 use super::allocation::Allocation;
 use super::{
-    log, resources,
+    containers, log, resources,
     scope::Caller,
     workspace::{Manager, ResourcesBusy},
 };
@@ -31,6 +31,7 @@ struct Acquired {
 /// What a lease holds, as its kind's release names it.
 enum Held {
     Simulator { name: String },
+    Containers,
     Permit { pool: String, name: String },
 }
 
@@ -39,6 +40,7 @@ impl Held {
     fn release_command(&self, number: impl std::fmt::Display) -> String {
         match self {
             Self::Simulator { name } => format!("shoal release sim --name {name} --space {number}"),
+            Self::Containers => format!("shoal release containers --space {number}"),
             Self::Permit { pool, name } => {
                 format!("shoal release resource {pool} --name {name} --space {number}")
             }
@@ -50,6 +52,7 @@ impl std::fmt::Display for Held {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Simulator { name } => write!(f, "simulator lease {name}"),
+            Self::Containers => write!(f, "containers"),
             Self::Permit { pool, name } => write!(f, "resource lease {pool}/{name}"),
         }
     }
@@ -172,7 +175,8 @@ impl Manager {
         }
     }
 
-    /// Every simulator lease and resource permit an execution acquired.
+    /// Every simulator lease, running project and resource permit an
+    /// execution acquired.
     async fn acquired_leases(&self) -> Result<Vec<Acquired>> {
         let permits = self.store.read(|db| resources::leases(db, None)).await?;
         let permits = permits.into_iter().map(|lease| Acquired {
@@ -193,8 +197,17 @@ impl Manager {
                 },
             })
         });
+        let projects = self.store.read(|db| containers::records::list(db, None));
+        let projects = (projects.await?.into_iter())
+            .filter(|recorded| recorded.project.state.active())
+            .map(|recorded| Acquired {
+                workspace: recorded.project.workspace_id,
+                acquirer: recorded.project.acquirer,
+                held: Held::Containers,
+            });
         Ok(permits
             .chain(simulators)
+            .chain(projects)
             .filter(|lease| lease.acquirer != Acquirer::User)
             .collect())
     }
@@ -224,6 +237,7 @@ impl Manager {
             Held::Simulator { name } => {
                 (self.release_simulator_held_by(&selector, name.clone(), holder)).await
             }
+            Held::Containers => self.release_containers_held_by(&selector, holder).await,
             Held::Permit { pool, name } => {
                 let (pool, name) = (pool.clone(), name.clone());
                 (self.release_resource_held_by(&selector, pool, name, holder)).await
@@ -245,6 +259,7 @@ impl Manager {
             Held::Simulator { name } => {
                 (self.give_simulator_lease_to_user(&workspace.id, name)).await
             }
+            Held::Containers => self.give_containers_to_user(&workspace.id).await,
             Held::Permit { pool, name } => {
                 (self.give_resource_lease_to_user(&workspace.id, pool, name)).await
             }
