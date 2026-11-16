@@ -30,6 +30,20 @@ impl Path {
         self.steps.contains(&Step::Each)
     }
 
+    /// Its first key, a top-level key of the document.
+    pub fn top(&self) -> &str {
+        match self.steps.first() {
+            Some(Step::Key(key)) => key,
+            // A parsed path starts with a key.
+            _ => "",
+        }
+    }
+
+    /// Whether it names only a top-level key.
+    pub fn is_top(&self) -> bool {
+        self.steps.len() == 1
+    }
+
     /// Every value it reaches in `document`; none where a step finds
     /// nothing, and `null` counts as nothing.
     pub fn values<'a>(&self, document: &'a Value) -> Vec<&'a Value> {

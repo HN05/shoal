@@ -4,12 +4,11 @@
 use std::{collections::BTreeMap, str::FromStr};
 
 use anyhow::{Context, Result, bail, ensure};
-use serde_json::Value;
 use shoal_protocol::launches::{IssueChoice, Launch, SpaceChoice, StartTarget};
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use shoal_schedule::priority::Priority;
 
-use super::template::Template;
+use super::{input::Input, template::Template};
 use crate::{
     agent::{Agent, ModelChoice},
     config::{modes::ModeName, permissions::PermissionsConfig},
@@ -52,14 +51,14 @@ impl LaunchKeys {
             self.in_space.is_none() || self.repository.is_none(),
             "a launch in an existing workspace starts in its repository; drop repository"
         );
-        self.read(&Value::Null, true).map(drop)
+        self.read(&Input::default(), true).map(drop)
     }
 
     /// The launch a firing whose input is `input` asks for, in the
     /// repository `repository` names unless it starts in an existing
     /// workspace; fails for a lookup that reaches no value or a value its
     /// flag refuses.
-    pub fn launch(&self, input: &Value, repository: Option<String>) -> Result<Launch> {
+    pub fn launch(&self, input: &Input, repository: Option<String>) -> Result<Launch> {
         let mut launch = self.read(input, false)?;
         if launch.repository.is_none() && launch.in_workspace.is_none() {
             launch.repository = repository;
@@ -69,7 +68,7 @@ impl LaunchKeys {
 
     /// The launch these keys give for `input`; with `only_static`, the
     /// values that look nothing up, the rest left out.
-    fn read(&self, input: &Value, only_static: bool) -> Result<Launch> {
+    fn read(&self, input: &Input, only_static: bool) -> Result<Launch> {
         let render = |key: &str, template: &Option<Template>| -> Result<Option<String>> {
             match template {
                 Some(template) if !only_static || template.is_static() => {
@@ -132,9 +131,25 @@ impl LaunchKeys {
             name,
             priority,
             permissions,
-            task: render("task", &self.task)?.into_iter().collect(),
+            task: self.task(input, only_static)?.into_iter().collect(),
             ..Launch::default()
         })
+    }
+
+    /// The task for `input`, each value an outside request sent marked as
+    /// data and a note after it saying so; with `only_static`, only a task
+    /// that looks nothing up.
+    fn task(&self, input: &Input, only_static: bool) -> Result<Option<String>> {
+        let Some(template) = (self.task.as_ref()).filter(|task| !only_static || task.is_static())
+        else {
+            return Ok(None);
+        };
+        let mut task = template.render_marked(input).context("task")?;
+        ensure!(!task.trim().is_empty(), "task renders empty");
+        if let Some(request) = template.request_read(input) {
+            task = format!("{task}\n\n{}", request.note());
+        }
+        Ok(Some(task))
     }
 }
 

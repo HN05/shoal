@@ -31,7 +31,7 @@ fn a_repository_trigger_launches_in_its_repository() {
     let input = json!({ "previous_at": "2026-11-13T09:00:00+01:00" });
     let launch = trigger
         .launch
-        .launch(&input, Some("repo-id".into()))
+        .launch(&input.into(), Some("repo-id".into()))
         .unwrap();
     assert_eq!(launch.repository.as_deref(), Some("repo-id"));
     assert_eq!(launch.mode.unwrap().as_str(), "chat");
@@ -49,7 +49,12 @@ fn a_firing_fails_on_a_missing_lookup_or_a_value_its_flag_refuses() {
     let trigger = trigger(
         "[triggers.fix]\non = 'timer'\nevery = '1h'\nissue = '{{ payload.issue }}'\npriority = '{{ payload.priority }}'",
     );
-    let failure = |input| format!("{:#}", trigger.launch.launch(&input, None).unwrap_err());
+    let failure = |input: serde_json::Value| {
+        format!(
+            "{:#}",
+            trigger.launch.launch(&input.into(), None).unwrap_err()
+        )
+    };
     assert!(failure(json!({})).contains("payload.priority"));
     let refused = failure(json!({ "payload": { "issue": "a title", "priority": "low" } }));
     assert!(refused.starts_with("issue a title"), "{refused}");
@@ -58,7 +63,7 @@ fn a_firing_fails_on_a_missing_lookup_or_a_value_its_flag_refuses() {
     let launch = trigger
         .launch
         .launch(
-            &json!({ "payload": { "issue": 4, "priority": "low" } }),
+            &json!({ "payload": { "issue": 4, "priority": "low" } }).into(),
             None,
         )
         .unwrap();

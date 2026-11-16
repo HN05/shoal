@@ -10,7 +10,11 @@ fn renders_lookups_as_text_or_json() {
             "labels": [{ "name": "bug" }, { "name": "p1" }],
         },
     });
-    let render = |text: &str| text.parse::<Template>().unwrap().render(&input);
+    let render = |text: &str| {
+        text.parse::<Template>()
+            .unwrap()
+            .render(&input.clone().into())
+    };
     assert_eq!(
         render("#{{ payload.issue.number }}: {{payload.issue.title}}").unwrap(),
         "#42: Crash"

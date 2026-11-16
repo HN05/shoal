@@ -6,7 +6,10 @@ use anyhow::{Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::path::Path;
+use super::{
+    input::{Input, Request},
+    path::Path,
+};
 
 /// A template as config writes it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,16 +49,38 @@ impl Template {
 
     /// The text with each lookup replaced by the value its path reaches in
     /// `input`: a string or number as text, an object or array as JSON.
-    pub fn render(&self, input: &Value) -> Result<String, Missing> {
+    pub fn render(&self, input: &Input) -> Result<String, Missing> {
+        self.render_with(input, false)
+    }
+
+    /// [`Self::render`] with each value an outside request sent between
+    /// the delimiters of its request, so that text reads as data.
+    pub fn render_marked(&self, input: &Input) -> Result<String, Missing> {
+        self.render_with(input, true)
+    }
+
+    /// The request whose data a lookup of it reads in `input`, if any.
+    pub fn request_read<'a>(&self, input: &'a Input) -> Option<&'a Request> {
+        (self.parts.iter()).find_map(|part| match part {
+            Part::Lookup(path) => input.request_read_by(path),
+            Part::Text(_) => None,
+        })
+    }
+
+    fn render_with(&self, input: &Input, marked: bool) -> Result<String, Missing> {
         let mut rendered = String::new();
         for part in &self.parts {
             match part {
                 Part::Text(text) => rendered.push_str(text),
                 Part::Lookup(path) => {
-                    let value = path.value(input).ok_or_else(|| Missing(path.clone()))?;
-                    match value {
-                        Value::String(text) => rendered.push_str(text),
-                        value => rendered.push_str(&value.to_string()),
+                    let value = input.lookup(path).ok_or_else(|| Missing(path.clone()))?;
+                    let text = match value.as_ref() {
+                        Value::String(text) => text.clone(),
+                        value => value.to_string(),
+                    };
+                    match input.request_read_by(path) {
+                        Some(request) if marked => rendered.push_str(&request.mark(&text)),
+                        _ => rendered.push_str(&text),
                     }
                 }
             }

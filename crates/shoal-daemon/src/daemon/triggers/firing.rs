@@ -5,7 +5,6 @@
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
-use serde_json::Value;
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use shoal_protocol::launches::{Launch, LaunchSource, Launched};
 use shoal_protocol::triggers::{RunOrigin, RunOutcome, TriggerRun};
@@ -17,15 +16,14 @@ use super::{
 use crate::{
     daemon::workspace::Manager,
     time::UnixTime,
-    triggers::{Overlap, filter},
+    triggers::{Overlap, filter, input::Input},
 };
 
 /// One firing of a trigger.
 pub(super) struct Firing {
     pub origin: RunOrigin,
-    /// The source's input document, which the filter, templates and key
-    /// read.
-    pub input: Value,
+    /// The source's input, which the filter, templates and key read.
+    pub input: Input,
     pub at: UnixTime,
 }
 
@@ -58,7 +56,7 @@ impl Manager {
         trigger: &Configured,
         firing: Firing,
     ) -> Result<Option<TriggerRun>> {
-        if !filter::passes(&trigger.trigger.filter, &firing.input) {
+        if !filter::passes(&trigger.trigger.filter, &firing.input.document) {
             return Ok(None);
         }
         let (scope, name, at) = (trigger.scope(), trigger.name.clone(), firing.at);
@@ -88,7 +86,7 @@ impl Manager {
                 Ok(key) => Some(key),
                 Err(error) => return Ok(Err(failed(error))),
             },
-            None => None,
+            None => firing.input.default_key.clone(),
         };
         if let Some(key) = &key
             && self.key_is_live(trigger, key, firing.at).await?

@@ -6,19 +6,20 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use shoal_protocol::triggers::SourceKind;
 use shoal_states::states;
 
 use crate::{config::span::Span, time::UnixTime};
 
 pub mod filter;
+pub mod input;
 pub mod launch;
 pub mod path;
 pub mod template;
 pub mod timer;
 
 use filter::Condition;
+use input::Input;
 use launch::LaunchKeys;
 use template::Template;
 use timer::{ClockTime, Day, Timer};
@@ -63,9 +64,9 @@ impl Source {
 
     /// The input of the firing of the trigger `name` that `shoal trigger
     /// run` makes at `now`, after the firing at `previous`.
-    pub fn manual_input(&self, name: &str, now: UnixTime, previous: UnixTime) -> Value {
+    pub fn manual_input(&self, name: &str, now: UnixTime, previous: UnixTime) -> Input {
         match self {
-            Self::Timer(timer) => timer.input(name, now, now, Some(previous)),
+            Self::Timer(timer) => timer.input(name, now, now, Some(previous)).into(),
         }
     }
 }

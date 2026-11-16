@@ -80,7 +80,7 @@ impl Manager {
         self.skip_missed(trigger, due.skipped, due.counted_to)
             .await?;
         if let Some(scheduled) = due.fire {
-            let input = timer.input(&trigger.name, scheduled, now, Some(state.previous()));
+            let input = (timer.input(&trigger.name, scheduled, now, Some(state.previous()))).into();
             let firing = Firing {
                 origin: RunOrigin::Source,
                 input,
@@ -131,7 +131,7 @@ impl Manager {
         }
         let firing = Firing {
             origin: RunOrigin::Source,
-            input: serde_json::Value::Null,
+            input: Default::default(),
             at: now,
         };
         let run = self

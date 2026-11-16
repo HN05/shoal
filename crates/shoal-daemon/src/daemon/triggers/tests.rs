@@ -99,7 +99,7 @@ async fn fire(manager: &Arc<Manager>, repo: &Repository, name: &str) -> Option<T
         .unwrap();
     let firing = Firing {
         origin: RunOrigin::Manual,
-        input: serde_json::json!({ "trigger": name }),
+        input: serde_json::json!({ "trigger": name }).into(),
         at: UnixTime::now(),
     };
     manager.fire_trigger(&trigger, firing).await.unwrap()
