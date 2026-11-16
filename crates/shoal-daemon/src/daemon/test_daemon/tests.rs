@@ -403,9 +403,8 @@ async fn a_launch_in_a_workspace_queues_its_worker_on_the_launchs_task() {
         Launched::Worker(worker) => *worker,
         launched => panic!("expected a worker: {launched:?}"),
     };
-    let send = |connector, launch| async move {
-        crate::client::launches::launch(connector, launch, LaunchSource::Manual).await
-    };
+    let send =
+        |connector, launch| async move { crate::client::launches::launch(connector, launch).await };
     let queued = worker(send(&app, launch(&parent, Some("probe"))).await.unwrap());
     assert_eq!(queued.workspace.id, parent.id);
     let entry = queued.entry.unwrap();
@@ -456,9 +455,7 @@ async fn a_launch_opens_a_new_workspace_and_prepares_it() {
         agent: Some("probe".into()),
         ..workspace_launch(&daemon, "new")
     };
-    let launched = crate::client::launches::launch(&app, launch, LaunchSource::Manual)
-        .await
-        .unwrap();
+    let launched = crate::client::launches::launch(&app, launch).await.unwrap();
     let Launched::Workspace(started) = launched else {
         panic!("expected a workspace: {launched:?}");
     };
@@ -493,9 +490,7 @@ async fn a_launch_that_starts_now_waits_for_none_of_its_blockers() {
         ..workspace_launch(&daemon, "now")
     };
     let app = daemon.connector();
-    let launched = crate::client::launches::launch(&app, launch, LaunchSource::Manual)
-        .await
-        .unwrap();
+    let launched = crate::client::launches::launch(&app, launch).await.unwrap();
     let Launched::Workspace(started) = launched else {
         panic!("expected a workspace: {launched:?}");
     };
@@ -531,7 +526,7 @@ async fn a_launch_refuses_what_it_cannot_start_before_it_creates_anything() {
         ),
     ];
     for (launch, refusal) in refused {
-        let error = crate::client::launches::launch(&app, launch, LaunchSource::Manual)
+        let error = crate::client::launches::launch(&app, launch)
             .await
             .unwrap_err();
         assert!(format!("{error:#}").contains(refusal), "{error:#}");
@@ -940,7 +935,7 @@ async fn an_app_starts_a_chat_whose_agent_and_mode_the_daemon_resolves() {
         task: vec!["Read the build".into()],
         ..Default::default()
     };
-    let error = crate::client::launches::launch(&app, start(), LaunchSource::Manual)
+    let error = crate::client::launches::launch(&app, start())
         .await
         .unwrap_err();
     assert!(format!("{error:#}").contains("agent.default"), "{error:#}");
@@ -950,7 +945,7 @@ async fn an_app_starts_a_chat_whose_agent_and_mode_the_daemon_resolves() {
         "[agent]\ndefault = \"probe\"\n[agents.probe]\ncommand = [\"true\"]\n",
     )
     .await;
-    (crate::client::launches::launch(&app, start(), LaunchSource::Manual))
+    (crate::client::launches::launch(&app, start()))
         .await
         .unwrap();
     let [(launched, scoped)] = launched_chats().try_into().unwrap();
@@ -985,7 +980,7 @@ async fn a_scoped_app_starts_chats_below_its_own_space() {
         parent,
         ..Default::default()
     };
-    let launch = |launch| crate::client::launches::launch(&agent, launch, LaunchSource::Manual);
+    let launch = |launch| crate::client::launches::launch(&agent, launch);
     let outside = start(Some(SpaceSelector::id(&other.id)));
     assert!(launch(outside).await.is_err());
     launch(start(None)).await.unwrap();

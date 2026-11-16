@@ -144,7 +144,6 @@ async fn a_scoped_chat_start_now_elsewhere_is_refused_without_asking() {
             now: true,
             ..Launch::default()
         }),
-        source: LaunchSource::Manual,
     };
     // Its scope confines the workspace before the launch asks anything.
     let target = launch.scope(&manager, &caller).await.unwrap().unwrap();

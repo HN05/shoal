@@ -29,7 +29,7 @@ use crate::{
     start_plan::{Creation, ResolvedAddAgent},
 };
 use shoal_protocol::launches::{
-    IssueChoice, Launch, LaunchSource, Launched, QueuedWorker, SpaceChoice, StartTarget,
+    IssueChoice, Launch, Launched, QueuedWorker, SpaceChoice, StartTarget,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -173,7 +173,7 @@ async fn has_default(settings: &AddSettings<'_>) -> Result<bool> {
 /// Send `launch`, which `agent` runs if it names one, and report what the
 /// daemon started.
 async fn send(ctx: &Context, launch: Launch, agent: Option<crate::agent::Agent>) -> Result<i32> {
-    let launched = crate::client::launches::launch(&ctx.paths, launch, LaunchSource::Manual);
+    let launched = crate::client::launches::launch(&ctx.paths, launch);
     match launched.await? {
         Launched::Chat(started) => chat::report_started(ctx, started),
         Launched::Worker(worker) => {

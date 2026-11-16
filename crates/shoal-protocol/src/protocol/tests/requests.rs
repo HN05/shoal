@@ -127,7 +127,7 @@ const REQUESTS: &[&str] = &[
     r#"{"session_signalled":{"signal":"terminate"}}"#,
     // Chats.
     r#"{"start_chat":{"repository":"app","name":"app-chat","agent":"claude"}}"#,
-    r#"{"launch":{"launch":{"target":"app","in":{"space":"3"},"mode":"chat","agent":"claude","task":["Read the build"]},"source":{"kind":"manual"}}}"#,
+    r#"{"launch":{"launch":{"target":"app","in":{"space":"3"},"mode":"chat","agent":"claude","task":["Read the build"]}}}"#,
     r#""list_chats""#,
     r#"{"remove_chat":{"chat":"app-chat"}}"#,
     r#"{"rename_chat":{"chat":"app-chat","name":"topic"}}"#,

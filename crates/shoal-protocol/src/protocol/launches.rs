@@ -2,20 +2,17 @@
 use serde::{Deserialize, Serialize};
 
 use super::Lifetime;
-use crate::launches::{Launch, LaunchSource};
+use crate::launches::Launch;
 
 /// Requests that launch agents.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LaunchMethod {
-    /// Start an agent as `launch` asks, which `source` made: the daemon
-    /// decides its mode, the kind of space it starts in and the repository,
-    /// creates or selects the space and queues its agent. Answers with
-    /// [`super::Body::Launched`].
-    Launch {
-        launch: Box<Launch>,
-        source: LaunchSource,
-    },
+    /// Start an agent as `launch` asks, which a client made itself, so the
+    /// journal records it as manual: the daemon decides its mode, the kind
+    /// of space it starts in and the repository, creates or selects the
+    /// space and queues its agent. Answers with [`super::Body::Launched`].
+    Launch { launch: Box<Launch> },
 }
 
 impl LaunchMethod {

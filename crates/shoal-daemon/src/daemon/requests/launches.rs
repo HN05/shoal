@@ -7,7 +7,10 @@ use super::super::{
     workspace::Manager,
 };
 use crate::protocol::{Body, LaunchMethod};
-use shoal_protocol::{launches::SpaceChoice, space_names::SpaceSelector};
+use shoal_protocol::{
+    launches::{LaunchSource, SpaceChoice},
+    space_names::SpaceSelector,
+};
 
 pub(super) async fn handle(
     manager: &std::sync::Arc<Manager>,
@@ -15,7 +18,9 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
-        LaunchMethod::Launch { launch, source } => {
+        LaunchMethod::Launch { launch } => {
+            // What a client sends is a start it made itself.
+            let source = LaunchSource::Manual;
             Body::Launched(manager.launch(*launch, source, caller).await?)
         }
     }))

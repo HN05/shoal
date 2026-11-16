@@ -12,7 +12,7 @@ use crate::{
     },
 };
 use shoal_protocol::chats::{QueuedChat, StartedChat};
-use shoal_protocol::launches::{IssueChoice, Launch, LaunchSource, Launched, SpaceChoice};
+use shoal_protocol::launches::{IssueChoice, Launch, Launched, SpaceChoice};
 use shoal_protocol::space_names::SpaceName;
 
 /// The launch the daemon carries out for the chat about `topic` with
@@ -68,11 +68,8 @@ pub(super) fn request(
 /// runs in a background place to the caller, one an app runs here, and one
 /// whose agent waits in the agent queue.
 pub(super) async fn start(ctx: &Context, launch: Launch) -> Result<Started> {
-    let source = LaunchSource::Manual;
     // A launch that asks for a chat starts in one.
-    let Launched::Chat(started) =
-        crate::client::launches::launch(&ctx.paths, launch, source).await?
-    else {
+    let Launched::Chat(started) = crate::client::launches::launch(&ctx.paths, launch).await? else {
         anyhow::bail!("the daemon started the chat's agent in no chat");
     };
     reported(ctx, started)
