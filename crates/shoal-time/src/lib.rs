@@ -32,6 +32,11 @@ impl UnixTime {
         Self(seconds)
     }
 
+    /// The whole Unix seconds, for arithmetic in other units of time.
+    pub const fn seconds(self) -> i64 {
+        self.0
+    }
+
     /// The whole seconds of `time`, or the epoch for a time before it.
     pub fn from_system_time(time: SystemTime) -> Self {
         Self::EPOCH + time.duration_since(UNIX_EPOCH).unwrap_or_default()

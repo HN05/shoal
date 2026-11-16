@@ -5,3 +5,4 @@
 pub mod filter;
 pub mod path;
 pub mod template;
+pub mod timer;
