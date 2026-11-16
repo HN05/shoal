@@ -8,6 +8,7 @@ mod chats;
 mod commands;
 mod completion;
 mod configuration;
+mod containers;
 mod creation;
 mod demos;
 mod executions;

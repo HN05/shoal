@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use super::{
-    ports,
+    containers, ports,
     resources::{self, Members},
     secrets, simulators,
 };
@@ -30,6 +30,10 @@ pub(super) async fn show(
             let catalog = simulators::fetch_catalog(ctx, &workspace).await?;
             display(ctx, &catalog, simulators::render_catalog)
         }
+        Some(CatalogKind::Containers) => {
+            let catalog = containers::fetch_catalog(ctx, &workspace).await?;
+            display(ctx, &catalog, containers::render_catalog)
+        }
         Some(CatalogKind::Resource) => {
             let catalog = resources::fetch_catalog(ctx, &workspace, Members::Locks).await?;
             display(ctx, &catalog, resources::render_catalog)
@@ -46,6 +50,7 @@ pub(super) async fn show(
             let catalog = Catalog {
                 ports: ports::fetch_catalog(ctx, &workspace).await?,
                 simulators: simulators::fetch_catalog(ctx, &workspace).await?,
+                containers: containers::fetch_catalog(ctx, &workspace).await?,
                 resources: resources::fetch_catalog(ctx, &workspace, Members::All).await?,
                 secrets: secrets::fetch_catalog(ctx, &workspace).await?,
             };
@@ -66,6 +71,8 @@ fn render_catalog(catalog: &Catalog, palette: Palette) {
     ports::render_catalog(&catalog.ports, palette);
     outln!("{}", palette.paint(Style::Heading, "Simulators"));
     simulators::render_catalog(&catalog.simulators, palette);
+    outln!("{}", palette.paint(Style::Heading, "Containers"));
+    containers::render_catalog(&catalog.containers, palette);
     outln!("{}", palette.paint(Style::Heading, "Resources"));
     resources::render_catalog(&catalog.resources, palette);
     outln!("{}", palette.paint(Style::Heading, "Secrets"));

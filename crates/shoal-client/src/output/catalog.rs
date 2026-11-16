@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::output::outputs;
 use shoal_protocol::{
-    model::PortCatalog, resources::Catalog as ResourceCatalog, secrets::SecretCatalog,
-    sim::SimulatorCatalog,
+    containers::ContainerCatalog, model::PortCatalog, resources::Catalog as ResourceCatalog,
+    secrets::SecretCatalog, sim::SimulatorCatalog,
 };
 
 /// Every kind's catalog for one workspace.
@@ -12,6 +12,7 @@ use shoal_protocol::{
 pub struct Catalog {
     pub ports: PortCatalog,
     pub simulators: SimulatorCatalog,
+    pub containers: ContainerCatalog,
     pub resources: ResourceCatalog,
     pub secrets: SecretCatalog,
 }
@@ -19,6 +20,7 @@ pub struct Catalog {
 outputs!(Catalog);
 
 outputs!(
+    ContainerCatalog,
     PortCatalog,
     ResourceCatalog,
     SecretCatalog,

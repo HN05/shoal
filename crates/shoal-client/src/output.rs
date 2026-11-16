@@ -91,6 +91,8 @@ outputs!(
     std::collections::BTreeMap<String, String>,
     shoal_protocol::agent_messages::AgentMessage,
     shoal_protocol::approvals::ApprovalRequest,
+    shoal_protocol::containers::ContainerOverview,
+    shoal_protocol::containers::Containers,
     shoal_protocol::demos::Running,
     shoal_protocol::events::EventItem,
     shoal_protocol::files::AttachedFile,

@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::output::outputs;
 use shoal_protocol::{
+    containers::ContainerOverview,
     model::{PortOverview, PortSuggestion, Workspace},
     resources::Overview,
     sim::SimulatorOverview,
@@ -14,6 +15,7 @@ pub struct Leases {
     pub workspace: Workspace,
     pub ports: PortOverview,
     pub simulators: SimulatorOverview,
+    pub containers: ContainerOverview,
     pub resources: Overview,
 }
 
@@ -24,6 +26,7 @@ pub struct Leases {
 pub enum Held {
     Port { name: String },
     Sim { name: String },
+    Containers,
     Resource { pool: String, name: String },
     Repo { pool: String, name: String },
     Secret { name: String },
@@ -34,6 +37,7 @@ impl std::fmt::Display for Held {
         match self {
             Self::Port { name } => write!(f, "port {name}"),
             Self::Sim { name } => write!(f, "simulator {name}"),
+            Self::Containers => write!(f, "containers"),
             Self::Resource { pool, name } => write!(f, "resource {pool}/{name}"),
             Self::Repo { pool, name } => write!(f, "repo {pool}/{name}"),
             Self::Secret { name } => write!(f, "secret {name}"),

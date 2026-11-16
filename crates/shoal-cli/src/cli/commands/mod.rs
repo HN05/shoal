@@ -16,6 +16,7 @@ mod cleanup;
 mod config_setup;
 mod configuration;
 pub(crate) mod configured;
+mod containers;
 mod contribute;
 mod convert;
 mod copies;

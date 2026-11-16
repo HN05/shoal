@@ -1,9 +1,10 @@
-//! Typed acquisition and release across ports, simulators, and resources.
+//! Typed acquisition and release across ports, simulators, containers and
+//! resources.
 
 use anyhow::{Context as _, Result, ensure};
 
 use super::{
-    ports,
+    containers, ports,
     resources::{self, Members},
     secrets, simulators, workspace_overviews,
 };
@@ -76,6 +77,7 @@ pub(super) async fn acquire(
             };
             simulators::acquire(ctx, workspace, request).await
         }
+        AcquireKind::Containers { reason } => containers::acquire(ctx, workspace, reason).await,
         AcquireKind::Resource {
             pool,
             member,
@@ -190,6 +192,7 @@ async fn select_held(
         Some(ReleaseKind::Secret { name: Some(name) }) => {
             return Ok(vec![Held::Secret { name: name.clone() }]);
         }
+        Some(ReleaseKind::Containers) => return Ok(vec![Held::Containers]),
         _ => {}
     }
     let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace.clone()).await?;
@@ -216,13 +219,18 @@ async fn select_held(
             }
         }
     });
+    let containers = leases::containers(&ctx.paths, Some(workspace.clone())).await?;
+    let containers = (containers.projects.into_iter())
+        .filter(|containers| containers.project.state.active())
+        .map(|_| Held::Containers);
     let requests = crate::client::approvals::list(&ctx.paths, Some(workspace.clone()))
         .await?
         .into_iter()
         .filter(|request| request.space_id == id && request.active)
         .filter_map(requested);
     let mut selected = Vec::new();
-    for held in ports.chain(simulators).chain(resources).chain(requests) {
+    let held = ports.chain(simulators).chain(containers).chain(resources);
+    for held in held.chain(requests) {
         if matches_kind(&held, kind.as_ref()) && !selected.contains(&held) {
             selected.push(held);
         }
@@ -288,6 +296,7 @@ fn matches_kind(held: &Held, kind: Option<&ReleaseKind>) -> bool {
         (_, None)
         | (Held::Port { .. }, Some(ReleaseKind::Port { .. }))
         | (Held::Sim { .. }, Some(ReleaseKind::Sim { .. }))
+        | (Held::Containers, Some(ReleaseKind::Containers))
         | (Held::Secret { .. }, Some(ReleaseKind::Secret { .. })) => true,
         (Held::Resource { pool, name }, Some(ReleaseKind::Resource { selection }))
         | (Held::Repo { pool, name }, Some(ReleaseKind::Repo { selection })) => {
@@ -306,6 +315,7 @@ async fn release_one(ctx: &Context, workspace: &SpaceSelector, held: &Held) -> R
         Held::Sim { name } => {
             leases::release_simulator(&ctx.paths, workspace.clone(), name.clone()).await
         }
+        Held::Containers => leases::release_containers(&ctx.paths, workspace.clone()).await,
         Held::Resource { pool, name } | Held::Repo { pool, name } => {
             leases::release_resource(&ctx.paths, workspace.clone(), pool.clone(), name.clone())
                 .await
@@ -325,6 +335,7 @@ pub(super) async fn show(
         Some(LeaseKind::Hold) => super::holds::list(ctx, scope).await,
         Some(LeaseKind::Port) => ports::overview(ctx, scope).await,
         Some(LeaseKind::Sim) => simulators::overview(ctx, scope).await,
+        Some(LeaseKind::Containers) => containers::overview(ctx, scope).await,
         Some(LeaseKind::Resource) => resources::overview(ctx, scope, Members::Locks).await,
         Some(LeaseKind::Repo) => resources::overview(ctx, scope, Members::Repositories).await,
         None => {
@@ -348,16 +359,18 @@ pub(super) async fn show(
 async fn fetch_leases(ctx: &Context, workspace: &SpaceSelector) -> Result<Leases> {
     let ports = leases::ports(&ctx.paths, workspace.clone()).await?;
     let simulators = leases::simulators(&ctx.paths, Some(workspace.clone())).await?;
+    let containers = containers::fetch_overview(ctx, workspace).await?;
     let resources = resources::fetch_overview(ctx, workspace.to_owned(), Members::All).await?;
     Ok(Leases {
         workspace: ports.workspace.clone(),
         ports,
         simulators,
+        containers,
         resources,
     })
 }
 
-/// Simulators appear only where devices exist.
+/// Simulators and containers appear only where they exist.
 fn render_leases(leases: &Leases, palette: Palette) {
     outln!("{}", palette.paint(Style::Heading, "Ports"));
     ports::render_overview(&leases.ports, palette);
@@ -365,6 +378,10 @@ fn render_leases(leases: &Leases, palette: Palette) {
     if !simulators.simulators.is_empty() {
         outln!("{}", palette.paint(Style::Heading, "Simulators"));
         simulators::render_overview(simulators, palette);
+    }
+    if !leases.containers.projects.is_empty() {
+        outln!("{}", palette.paint(Style::Heading, "Containers"));
+        containers::render_overview(&leases.containers, palette);
     }
     outln!("{}", palette.paint(Style::Heading, "Resources"));
     resources::render_overview(&leases.resources, palette);

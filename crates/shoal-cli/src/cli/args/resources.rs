@@ -5,7 +5,7 @@ use shoal_protocol::space_names::SpaceSelector;
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum ResourcesCommand {
-    /// Acquire a hold, port, simulator, resource permit, or related repository.
+    /// Acquire a hold, port, simulator, containers, resource permit, or related repository.
     Acquire {
         #[command(subcommand)]
         kind: AcquireKind,
@@ -51,6 +51,8 @@ pub enum CatalogKind {
     Port,
     /// Device types, installed runtimes and machine profiles.
     Sim,
+    /// The Compose file, its ports, when it starts and the runtime.
+    Containers,
     /// Resource pools, their members and approval settings.
     Resource,
     /// Related repositories that can be borrowed.
@@ -83,6 +85,7 @@ pub enum LeaseKind {
     Hold,
     Port,
     Sim,
+    Containers,
     Resource,
     Repo,
 }
@@ -144,6 +147,12 @@ pub enum AcquireKind {
         #[arg(long, requires = "reason")]
         clean: bool,
     },
+    /// Start the workspace's service containers; repeated requests return the running project.
+    Containers {
+        /// Explain what the containers are used for.
+        #[arg(long)]
+        reason: Option<String>,
+    },
     /// Acquire a permit or reader/writer lock from a configured pool.
     Resource {
         /// Configured resource or pool; omit to choose one.
@@ -204,6 +213,8 @@ pub enum ReleaseKind {
         #[arg(long)]
         name: Option<String>,
     },
+    /// Stop the workspace's service containers, keeping their volumes and ports.
+    Containers,
     /// Release resource permits and locks.
     Resource {
         #[command(flatten)]
