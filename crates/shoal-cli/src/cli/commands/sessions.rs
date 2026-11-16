@@ -40,32 +40,47 @@ pub(super) async fn attach(
     Ok(0)
 }
 
-/// The one of `target`'s `sessions` that `named` names, its only one, or one
-/// picked among them.
+/// The one of `target`'s `sessions` that `named` names, else the only one
+/// [`offered`] offers, or one picked among them.
 fn chosen_session<'a>(
     ctx: &Context,
     target: &Target,
     named: Option<String>,
     sessions: &'a [Session],
 ) -> Result<&'a Session> {
-    Ok(match (named, sessions) {
-        (Some(name), _) => sessions
+    if let Some(name) = named {
+        return sessions
             .iter()
             .find(|session| session.name == name)
-            .with_context(|| format!("{} has no session {name}", target.name()))?,
-        (None, []) => bail!("{}", target.without_sessions()),
-        (None, [only]) => only,
-        (None, several) => {
-            let labels: Vec<_> = several.iter().map(Session::label).collect();
+            .with_context(|| format!("{} has no session {name}", target.name()));
+    }
+    Ok(match offered(sessions).as_slice() {
+        [] => bail!("{}", target.without_sessions()),
+        [only] => only,
+        several => {
+            let labels: Vec<_> = several.iter().map(|session| session.label()).collect();
             let choices: Vec<_> = several
                 .iter()
                 .zip(&labels)
-                .map(|(session, label)| (session, label.as_str()))
+                .map(|(session, label)| (*session, label.as_str()))
                 .collect();
             ui::require_argument(ctx, "session", "session")?;
             ui::pick_choice(ctx, "Attach session> ", &choices)?
         }
     })
+}
+
+/// The ones of `sessions` an attach that names none offers: those where the
+/// daemon recorded an agent, when any is, rather than a place such as one an
+/// earlier run of the agent left, else every one.
+fn offered(sessions: &[Session]) -> Vec<&Session> {
+    let agents: Vec<_> = (sessions.iter())
+        .filter(|session| session.agent.is_some())
+        .collect();
+    match agents.is_empty() {
+        true => sessions.iter().collect(),
+        false => agents,
+    }
 }
 
 /// The name of the terminal session `shoal attach` takes in which the

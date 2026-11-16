@@ -1278,7 +1278,8 @@ unless `[terminal] close_when_done = false` keeps it open.
 
 `shoal attach [target]` reattaches to the session of the workspace or
 [chat](#chats) named `target`, with a picker or `--session <name>` when a
-workspace has several; the picker and `shoal status` list each with the agent
+workspace has several; while a session shows its agent, the picker offers
+only those that do. The picker and `shoal status` list each with the agent
 the daemon recorded running there and mark it `attached` while a terminal shows
 it: a zmx client, a Rex app with the block's session open, or, since Herdr does
 not count its clients, the focused Herdr tab. Without a target it takes the

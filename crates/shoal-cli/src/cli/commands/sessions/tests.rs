@@ -32,3 +32,25 @@ fn an_agent_session_is_found_by_its_execution_whatever_its_name() {
     let resumed = vec![running, agent_in("@1", "stopped")];
     assert_eq!(found(resumed, "stopped"), Some(Some("stopped".into())));
 }
+
+#[test]
+fn an_attach_offers_only_the_sessions_of_the_agent_while_one_shows_it() {
+    let left = Session::open(
+        "work".into(),
+        1,
+        &Origin::created(HostName::Rex, "block:1".into()),
+    );
+    let running = agent_in("block:2", "running");
+    let executions = |sessions: &[Session]| -> Vec<Option<ExecutionId>> {
+        offered(sessions)
+            .into_iter()
+            .map(|session| session.execution.clone())
+            .collect()
+    };
+
+    assert_eq!(
+        executions(&[left.clone(), running]),
+        vec![Some("running".into())]
+    );
+    assert_eq!(executions(&[left.clone(), left]), vec![None, None]);
+}
