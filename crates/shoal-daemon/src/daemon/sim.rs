@@ -563,7 +563,7 @@ impl Manager {
         name: String,
         holder: Option<&Acquirer>,
     ) -> Result<()> {
-        let _guard = self.gates.lock_simulators().await;
+        let guard = self.gates.lock_simulators().await;
         let workspace = self.workspace(selector).await?;
         ensure!(
             workspace.state == WorkspaceState::Ready,
@@ -605,6 +605,9 @@ impl Manager {
         sim.last_used = UnixTime::now();
         self.save_sim(&sim).await?;
         self.release_simulator_access(workspace.id, name).await?;
+        // Expiry passes over the devices while another holds the lock.
+        drop(guard);
+        self.signals.simulator_went_idle();
         Ok(())
     }
 

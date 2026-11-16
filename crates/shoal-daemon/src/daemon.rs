@@ -435,7 +435,10 @@ where
 
 async fn expire_simulators(manager: Arc<Manager>) {
     loop {
-        tokio::time::sleep(SIMULATOR_SWEEP_INTERVAL).await;
+        tokio::select! {
+            () = manager.signals.simulator_idled() => {}
+            () = tokio::time::sleep(SIMULATOR_SWEEP_INTERVAL) => {}
+        }
         let _operation = manager.gates.background_pass().await;
         if let Err(error) = manager.expire_simulators().await {
             log!("simulator cleanup: {error:#}");

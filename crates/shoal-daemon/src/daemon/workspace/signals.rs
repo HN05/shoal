@@ -16,6 +16,7 @@ pub(crate) struct Signals {
     turn_retry: Notify,
     execution_unknown: Notify,
     lost_reports: Notify,
+    simulator_idle: Notify,
 }
 
 impl Signals {
@@ -109,6 +110,15 @@ impl Signals {
 
     pub(crate) fn lost_reports_woken(&self) -> Notified<'_> {
         self.lost_reports.notified()
+    }
+
+    /// Run idle simulator expiry now, since a device went idle.
+    pub(crate) fn simulator_went_idle(&self) {
+        self.simulator_idle.notify_one();
+    }
+
+    pub(crate) fn simulator_idled(&self) -> Notified<'_> {
+        self.simulator_idle.notified()
     }
 }
 
