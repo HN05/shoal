@@ -5,7 +5,7 @@
 use super::super::super::{Manager, StopRequest};
 use super::super::{Removal, STOPPED_REMOVAL, Stage};
 use crate::daemon::space_processes::WorktreeTies;
-use crate::daemon::workspace::identity::verify_owner;
+use crate::daemon::workspace::ownership::verify_admin_dir_owner;
 use crate::daemon::workspace::runner::JobStop;
 use crate::{
     daemon::events::EventCause,
@@ -219,12 +219,7 @@ impl Manager {
         if !left_by_stopped_removal(workspace, state) {
             return interrupted::forget(admin_dir).await;
         }
-        let (owned, id, recorded) = (
-            admin_dir.clone(),
-            workspace.id.clone(),
-            workspace.git_dir_id.clone(),
-        );
-        off_runtime::run(move || verify_owner(&owned, &id, recorded.as_deref())).await?;
+        verify_admin_dir_owner(workspace, admin_dir).await?;
         if interrupted::restore(&workspace.path, admin_dir).await? {
             crate::daemon::log!(
                 "restored the files an interrupted removal of {} deleted",

@@ -354,6 +354,18 @@ impl Manager {
     }
 }
 
+/// Refuse the admin directory `git_dir`, which `workspace` recorded, unless
+/// its owner marker, or for a record from before markers its identity,
+/// makes it the workspace's own, whatever its worktree holds.
+pub(super) async fn verify_admin_dir_owner(workspace: &Workspace, git_dir: &Path) -> Result<()> {
+    let (git_dir, id, recorded) = (
+        git_dir.to_owned(),
+        workspace.id.clone(),
+        workspace.git_dir_id.clone(),
+    );
+    off_runtime::run(move || verify_owner(&git_dir, &id, recorded.as_deref())).await
+}
+
 /// Refuse an admin directory that is not the workspace's own, or not the one
 /// it recorded.
 fn verify_git_dir(workspace: &Workspace, git_dir: &Path) -> Result<()> {
