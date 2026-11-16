@@ -72,3 +72,9 @@ pub(crate) fn save(db: &Connection, recorded: &Recorded) -> Result<()> {
     )?;
     Ok(())
 }
+
+/// Forget the project of the workspace `id`, once `compose down` removed it.
+pub(crate) fn delete(db: &Connection, id: &SpaceId) -> Result<()> {
+    db.execute("DELETE FROM container_projects WHERE workspace_id=?1", [id])?;
+    Ok(())
+}

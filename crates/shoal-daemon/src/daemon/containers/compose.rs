@@ -87,6 +87,14 @@ impl<'a> Compose<'a> {
         run(command, TIMEOUT).await.map(drop)
     }
 
+    /// Remove the services with their volumes, and containers the file no
+    /// longer names.
+    pub(super) async fn down(&self) -> Result<()> {
+        let mut command = self.command();
+        command.args(["down", "--volumes", "--remove-orphans"]);
+        run(command, TIMEOUT).await.map(drop)
+    }
+
     /// The services with the ports the runtime published for them.
     pub(super) async fn services(&self) -> Result<Vec<ContainerService>> {
         let mut command = self.command();

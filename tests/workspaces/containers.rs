@@ -183,3 +183,49 @@ fn an_agents_containers_stop_when_it_exits_and_the_users_keep_running() {
     assert_eq!(state("user"), "running");
     assert_eq!(commands(&fixture, &user["project"]), ["up"]);
 }
+
+#[test]
+fn removal_takes_the_project_down_with_its_volumes_even_without_its_worktree() {
+    let fixture = with_containers(CONTAINERS);
+    fixture.add("removed");
+    let deleted = fixture.add("deleted");
+    let projects: Vec<Value> = ["removed", "deleted"]
+        .into_iter()
+        .map(|name| {
+            let space = fixture.id(name);
+            fixture.ok(&["acquire", "containers", "--space", &space])["project"].clone()
+        })
+        .collect();
+    fs::remove_dir_all(deleted["path"].as_str().unwrap()).unwrap();
+
+    for name in ["removed", "deleted"] {
+        fixture.ok(&["rm", "--wait", &fixture.id(name), "--yes"]);
+    }
+    for project in &projects {
+        assert_eq!(commands(&fixture, project), ["up", "down"]);
+    }
+    let down = (compose_events(&fixture).into_iter())
+        .find(|event| event["command"] == "down")
+        .unwrap();
+    assert_eq!(
+        down["args"],
+        json!(["down", "--volumes", "--remove-orphans"])
+    );
+}
+
+#[test]
+fn a_failed_down_keeps_the_workspace_and_its_project() {
+    let fixture = with_containers(CONTAINERS);
+    fixture.add("worker");
+    let space = fixture.id("worker");
+    let project = fixture.ok(&["acquire", "containers", "--space", &space])["project"].clone();
+    fs::write(fixture.root.path().join("compose-fail"), "down").unwrap();
+    let failed = fixture.run(&["rm", "--wait", &space, "--yes"]);
+    assert!(!failed.status.success(), "{}", printed(&failed));
+    let listed = fixture.ok(&["leases", "containers", "--space", &space]);
+    assert_eq!(listed["projects"][0]["project"], project);
+
+    fs::remove_file(fixture.root.path().join("compose-fail")).unwrap();
+    fixture.ok(&["rm", "--wait", &space, "--yes"]);
+    assert_eq!(commands(&fixture, &project), ["up", "down", "down"]);
+}

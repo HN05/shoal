@@ -282,6 +282,24 @@ impl Manager {
         self.save_containers(&recorded).await
     }
 
+    /// Take the project of `workspace` down with its volumes, by its name
+    /// alone, so a deleted worktree or a changed Compose file still removes
+    /// it. A failure keeps the record, and with it the workspace.
+    pub(crate) async fn remove_containers(&self, workspace: &Workspace) -> Result<()> {
+        let _gate = self.gates.lock_containers(&workspace.id).await;
+        let Some(recorded) = self.container_project(&workspace.id).await? else {
+            return Ok(());
+        };
+        (Compose::of(&recorded.project).down().await).with_context(|| {
+            format!(
+                "the containers of {} were not removed; retaining it",
+                workspace.name
+            )
+        })?;
+        let id = workspace.id.clone();
+        self.store.write(move |tx| records::delete(tx, &id)).await
+    }
+
     /// Make the project of `workspace` the user's.
     pub(crate) async fn give_containers_to_user(&self, workspace: &SpaceId) -> Result<()> {
         let _gate = self.gates.lock_containers(workspace).await;

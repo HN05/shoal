@@ -364,8 +364,8 @@ impl Manager {
     /// Delete the worktree as the final inspection `check` decides, once a
     /// checkpoint keeps its HEAD and the unsaved files `removal` discards or
     /// promises to keep, or forget a deleted one, retaining its branch since
-    /// its contents cannot be inspected. Its simulators and Xcode data go
-    /// with it.
+    /// its contents cannot be inspected. Its containers, simulators and Xcode
+    /// data go with it.
     pub(in crate::daemon::workspace) async fn delete_worktree(
         &self,
         worktree: &WorktreeStage,
@@ -563,8 +563,9 @@ impl Manager {
             .map(Some)
     }
 
-    /// Release live resources immediately before removing the worktree. Failed
-    /// cleanup retains their ownership records so removal can be retried.
+    /// Release live resources immediately before removing the worktree, its
+    /// containers first. Failed cleanup retains their ownership records so
+    /// removal can be retried.
     /// Git cannot tell which branch a worktree it no longer lists was on, so
     /// the recorded one stays.
     async fn remove_worktree(
@@ -575,6 +576,7 @@ impl Manager {
         branch: BranchRemoval,
         registration: Registration,
     ) -> Result<WorktreeRemoval> {
+        self.remove_containers(workspace).await?;
         self.remove_simulators(&workspace.id).await?;
         match registration {
             Registration::Listed => {
