@@ -24,7 +24,6 @@ pub(super) use linux::{process_record_unavailable, read_process_stat, stat_field
 #[cfg(target_os = "macos")]
 pub(super) use macos::{parent, pid_info};
 use marks::left_execution;
-pub use marks::owned_by_workspace;
 pub(crate) use marks::started_with;
 pub(crate) use platform::executable;
 
@@ -337,35 +336,6 @@ pub async fn group_alive(group: u32) -> Result<bool> {
     })
     .await
     .context("process group worker failed")?
-}
-
-/// The live processes those of `identities` started, directly or through
-/// others, followed by the unique IDs of their lineage, so a reused PID
-/// never counts and they count after it and those between them exit; none
-/// from one whose lineage is unknown. A workspace's process among them, as
-/// [`owned_by_workspace`] tells with `wrappers`, is left out with what it
-/// started.
-pub async fn started_by(identities: &[Identity], wrappers: &[Identity]) -> Result<Vec<Identity>> {
-    let roots: HashSet<u64> = identities
-        .iter()
-        .filter_map(Identity::lineage_root)
-        .collect();
-    if roots.is_empty() {
-        return Ok(Vec::new());
-    }
-    let rows = same_user_processes().await?;
-    let wrappers = wrappers.to_vec();
-    tokio::task::spawn_blocking(move || {
-        let mut lineages = Vec::new();
-        for (pid, _, _) in &rows {
-            lineages.extend(lineage(*pid)?);
-        }
-        descendants_of(roots, lineages, |process| {
-            owned_by_workspace(process, &wrappers)
-        })
-    })
-    .await
-    .context("process lineage worker failed")?
 }
 
 /// A live, identity-verified leader establishes ownership of its group and

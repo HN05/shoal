@@ -214,20 +214,6 @@ pub(super) fn visibility_with(
     }
 }
 
-/// Whether the process `identity` names belongs to a workspace: it is one of
-/// the execution `wrappers`, or its own environment, read rather than
-/// hidden, carries a workspace's marker.
-pub fn owned_by_workspace(identity: &Identity, wrappers: &[Identity]) -> Result<bool> {
-    if wrappers.contains(identity) {
-        return Ok(true);
-    }
-    let deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
-    Ok(observe(identity.pid, deadline)?.is_some_and(|observed| {
-        observed.lineage.identity == *identity
-            && matches!(&observed.evidence, Evidence::Marked(marks) if marks.of_workspace())
-    }))
-}
-
 /// Whether the process's own environment, read rather than hidden, lacks
 /// the execution's marker: a process started without it, such as a demo,
 /// no longer belongs to the execution, nor do its descendants.
