@@ -3913,6 +3913,21 @@ fn status_finds_the_chats_that_link_a_pr() {
     agent.wait().unwrap();
 }
 
+/// A chat's watch looks its PR up on the forge first, as a workspace's
+/// does, so a PR the forge lacks is refused and left unwatched.
+#[test]
+fn a_chats_watch_of_a_pr_the_forge_lacks_is_refused() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let (mut agent, _) = fixture.run_chat("planning", &[]);
+    let space = fixture.id("planning");
+    let refused = fixture.run(&["link", "pr", "13", "assigned", "--space", &space]);
+    assert!(!refused.status.success(), "{}", printed(&refused));
+    let chats = fixture.chats();
+    assert_eq!(chats[0]["links"]["prs"], json!([]), "{chats}");
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
 #[test]
 fn a_chats_watch_reports_the_failed_step_of_a_check() {
     let fixture = Fixture::new(Forge::Forgejo, "");
@@ -4682,6 +4697,7 @@ fn a_chat_links_views_and_watches_items_as_a_workspace_does() {
             ]},
             "GET repos/team/project/actions/jobs/18345/logs":
                 {"body": "⭐ Run Tests\nboom\n⚙️ [runner]: exitcode '1': failure\n"},
+            "GET repos/team/project/pulls/9": {"body": pull(9, "open", "Fix", &[])},
         }))
     };
     respond("running");
@@ -4715,8 +4731,11 @@ fn a_chat_links_views_and_watches_items_as_a_workspace_does() {
     // The chat's record lists its links as a workspace's does.
     let chats = fixture.chats();
     let links = &chats[0]["links"];
-    // The forge does not show the PR, so it is linked without a title.
-    assert_eq!(links["prs"], json!([{"kind": "pr", "url": pr}]), "{chats}");
+    assert_eq!(
+        links["prs"],
+        json!([{"kind": "pr", "title": "Fix", "url": pr}]),
+        "{chats}"
+    );
     assert_eq!(links["related"][0]["url"], json!(run), "{chats}");
     let viewed = fixture.ok(&["view", "ci", "--space", &fixture.id("planning")]);
     assert_eq!(viewed[0]["state"], "running", "{viewed}");

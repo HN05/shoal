@@ -561,7 +561,7 @@ impl Manager {
         ensure_branch_head(workspace, item)?;
         let url = item.url.clone();
         self.set_pr_gated(
-            &SpaceSelector::id(&workspace.id),
+            &workspace.clone().into(),
             super::pr::Action::Watch {
                 url: url.into(),
                 title: Some(item.title.clone()),
@@ -665,8 +665,8 @@ impl Manager {
                     url: url.into(),
                     title,
                 };
-                self.set_pr_gated(&SpaceSelector::id(space), watch, check)
-                    .await?;
+                let space = self.link_space(&SpaceSelector::id(space)).await?;
+                self.set_pr_gated(&space, watch, check).await?;
                 Ok(Vec::new())
             }
         }

@@ -1,6 +1,6 @@
 //! Persisted opt-in PR watches and manual merge acknowledgements.
 use crate::refusal::{Reason, Refusal};
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, OptionalExtension};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
@@ -10,9 +10,8 @@ use crate::{
     daemon::{
         events::{self, EventKind},
         forge_hosts::ForgeHosts,
-        links::space::LinkSpace,
+        links::space::{LinkSpace, require_ready_space},
         spaces::removal_notices::Cleanup,
-        store,
         workspace::{Manager, PrGuard},
     },
     forge::{
@@ -64,86 +63,27 @@ impl Manager {
             .await
     }
 
+    /// Change the PR registration of the space `selector` names under its
+    /// PR gate, as [`Self::set_pr_gated`] does.
     pub async fn set_pr(&self, selector: &SpaceSelector, action: Action) -> Result<()> {
-        let space = self.link_space(selector).await?;
-        if space.worktree().is_none() {
-            return self.set_chat_pr(&space, action).await;
-        }
-        let (workspace, _guard) = self.lock_pr_gate(&SpaceSelector::id(&space.id)).await?;
-        self.set_pr_gated(
-            &SpaceSelector::id(&workspace.id),
-            action,
-            WatchCheck::Lookup,
-        )
-        .await
-    }
-
-    /// [`Self::set_pr`] for a chat, whose PR watches drive no cleanup and
-    /// whose checkout's branch is not its own.
-    async fn set_chat_pr(&self, chat: &LinkSpace, action: Action) -> Result<()> {
-        let id = chat.id.to_owned();
+        let id = self.link_space(selector).await?.id.to_owned();
         let _guard = self.gates.lock_prs([&id]).await;
-        let previous = match self.pr_registration(&id).await {
-            Ok(previous) => previous,
-            Err(_) if matches!(action, Action::Clear) => None,
-            Err(error) => return Err(error),
-        };
-        let (kind, titled) = match action {
-            Action::Clear => (None, None),
-            Action::Unwatch { url } => {
-                let kind = self.without_pr_watch(chat.origin_path(), &id, url).await?;
-                (kind, None)
-            }
-            Action::Watch { url, title } => {
-                let (_, url) = self.pr_forge(chat.origin_path(), &url).await?;
-                let titled = title.map(|title| (url.clone(), title));
-                (Some(self.adding_pr_watch(&id, url).await?), titled)
-            }
-            Action::Acknowledge => bail!("a chat has no branch whose merge it acknowledges"),
-        };
-        let change = RegistrationChange::new(
-            previous.as_ref(),
-            kind.map(|kind| Registration { kind, error: None }),
-            titled,
-        );
-        self.record_chat_registration(id, change).await
+        let space = self.link_space(&SpaceSelector::id(&id)).await?;
+        self.set_pr_gated(&space, action, WatchCheck::Lookup).await
     }
 
-    /// Applies `change` to the PR registration of the chat `id`, unless the
-    /// chat was removed meanwhile, which deleted its registration.
-    async fn record_chat_registration(
-        &self,
-        id: SpaceId,
-        change: RegistrationChange,
-    ) -> Result<()> {
-        self.store
-            .write(move |tx| record_chat_change(tx, &id, change))
-            .await
-    }
-
-    /// [`Self::set_pr`] for a caller already holding the workspace's PR gate.
+    /// Change the PR registration of `space` by `action`, for a caller
+    /// already holding the space's PR gate.
     pub(crate) async fn set_pr_gated(
         &self,
-        selector: &SpaceSelector,
+        space: &LinkSpace,
         action: Action,
         check: WatchCheck,
     ) -> Result<()> {
-        let workspace = self.workspace(selector).await?;
-        // Links serve more than cleanup; only an acknowledgement exists for it alone.
-        ensure!(
-            !matches!(action, Action::Acknowledge)
-                || self
-                    .workspace_settings(&workspace)
-                    .await?
-                    .cleanup
-                    .pr
-                    .enabled,
-            "PR cleanup is disabled by [cleanup.pr] enabled = false"
-        );
         if !matches!(action, Action::Clear | Action::Unwatch { .. }) {
-            self.verify_worktree(&workspace).await?;
+            self.verify_space(space).await?;
         }
-        let previous = match self.pr_registration(&workspace.id).await {
+        let previous = match self.pr_registration(&space.id).await {
             Ok(previous) => previous,
             Err(_) if matches!(action, Action::Clear) => None,
             Err(error) => return Err(error),
@@ -151,51 +91,63 @@ impl Manager {
         let (kind, titled) = match action {
             Action::Clear => (None, None),
             Action::Unwatch { url } => {
-                let kind = (self.without_pr_watch(&workspace.path, &workspace.id, url)).await?;
+                let kind = (self.without_pr_watch(space.origin_path(), &space.id, url)).await?;
                 (kind, None)
             }
             Action::Watch { url, title } => {
-                let (kind, url) = self.with_pr_watch(&workspace, url, check).await?;
+                let (kind, url) = self.with_pr_watch(space, url, check).await?;
                 (Some(kind), title.map(|title| (url, title)))
             }
-            Action::Acknowledge => {
-                let head = current_head(&workspace).await?;
-                (Some(RegistrationKind::Acknowledgement { head }), None)
-            }
+            Action::Acknowledge => (Some(self.merge_acknowledgement(space).await?), None),
         };
         let change = RegistrationChange::new(
             previous.as_ref(),
             kind.map(|kind| Registration { kind, error: None }),
             titled,
         );
-        let id = workspace.id;
-        self.store
-            .write(move |tx| {
-                store::require_ready(tx, &id)?;
-                change.apply(tx, &id)?;
-                Ok(())
-            })
+        let id = space.id.to_owned();
+        (self.store)
+            .write(move |tx| record_change(tx, &id, change))
             .await?;
         self.signals.wake_cleanup();
         Ok(())
     }
 
-    /// The workspace's PR watches with the PR `input` names among them, and
+    /// The acknowledgement that the branch of `space`'s worktree merged at
+    /// its HEAD; a space without a worktree has no branch of its own.
+    async fn merge_acknowledgement(&self, space: &LinkSpace) -> Result<RegistrationKind> {
+        let workspace = (space.to_workspace()).with_context(|| {
+            format!("{} has no branch whose merge it acknowledges", space.space)
+        })?;
+        // Links serve more than cleanup; only an acknowledgement exists for it alone.
+        ensure!(
+            self.workspace_settings(&workspace)
+                .await?
+                .cleanup
+                .pr
+                .enabled,
+            "PR cleanup is disabled by [cleanup.pr] enabled = false"
+        );
+        let head = current_head(&workspace).await?;
+        Ok(RegistrationKind::Acknowledgement { head })
+    }
+
+    /// The space's PR watches with the PR `input` names among them, and
     /// that PR.
     async fn with_pr_watch(
         &self,
-        workspace: &Workspace,
+        space: &LinkSpace,
         input: ItemInput,
         check: WatchCheck,
     ) -> Result<(RegistrationKind, ItemRef)> {
-        let (forge, url) = self.pr_forge(&workspace.path, &input).await?;
+        let (forge, url) = self.pr_forge(space.origin_path(), &input).await?;
         // Detect missing tools or login and invalid PRs now.
         if check == WatchCheck::Lookup {
             forge
                 .merged_commits(&self.user_account(), url.pull()?)
                 .await?;
         }
-        let kind = self.adding_pr_watch(&workspace.id, url.clone()).await?;
+        let kind = self.adding_pr_watch(&space.id, url.clone()).await?;
         Ok((kind, url))
     }
 
@@ -490,7 +442,7 @@ impl Manager {
     }
 }
 
-/// A workspace's PR registration replacing its previous one, with the title
+/// A space's PR registration replacing its previous one, with the title
 /// the caller knows of the PR it watches.
 struct RegistrationChange {
     registration: Option<Registration>,
@@ -655,20 +607,16 @@ pub(crate) fn origin<'a>(
     }
 }
 
-/// Apply `change` to the PR registration of the chat `id` in a transaction
-/// that finds the chat still recorded: a removed one has no registration
-/// to change, and writing one would outlive it.
-fn record_chat_change(
+/// Apply `change` to the PR registration of the space `id` in a transaction
+/// that finds it ready: a removed space has no registration to change, and
+/// writing one would outlive it.
+fn record_change(
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
     change: RegistrationChange,
 ) -> Result<()> {
-    ensure!(
-        super::space::is_chat(tx, id)?,
-        "the chat was removed before its PR links changed"
-    );
-    change.apply(tx, id)?;
-    Ok(())
+    require_ready_space(tx, id)?;
+    change.apply(tx, id)
 }
 
 #[cfg(test)]

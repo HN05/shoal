@@ -184,7 +184,7 @@ async fn a_chat_removed_before_its_pr_link_is_written_keeps_none() {
     // The chat's removal, which deletes its registration, ran first.
     let refused = manager
         .store
-        .write(move |tx| record_chat_change(tx, &SpaceId::from("removed-chat"), change))
+        .write(move |tx| record_change(tx, &SpaceId::from("removed-chat"), change))
         .await;
     assert!(refused.is_err());
     assert!(
