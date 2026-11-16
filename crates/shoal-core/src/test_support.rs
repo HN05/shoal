@@ -15,14 +15,33 @@ pub mod subvolumes;
 mod tests;
 
 /// The prefixes of the runner's variables that would point a test's command
-/// at the runner's Shoal, terminal and its hosts, agents or Git repository.
-const RUNNER_PREFIXES: [&str; 10] = [
-    "SHOAL_", "XDG_", "HAPPY_", "GIT_", "HERDR_", "ZMX_", "REX_", "TERM", "TMUX", "ZELLIJ",
+/// at the runner's Shoal, terminal and its hosts, agents, their provider or
+/// Git repository.
+const RUNNER_PREFIXES: [&str; 12] = [
+    "SHOAL_",
+    "XDG_",
+    "HAPPY_",
+    "GIT_",
+    "HERDR_",
+    "ZMX_",
+    "REX_",
+    "TERM",
+    "TMUX",
+    "ZELLIJ",
+    "CLAUDE",
+    "ANTHROPIC_",
 ];
 
 /// The runner's variables beyond [`RUNNER_PREFIXES`] that would point a
-/// test's command at its agents' configuration or a shell's startup files.
-const RUNNER_VARIABLES: [&str; 4] = ["CLAUDE_CONFIG_DIR", "CODEX_HOME", "BASH_ENV", "ENV"];
+/// test's command at its agents' configuration or prompt cache, or a shell's
+/// startup files.
+const RUNNER_VARIABLES: [&str; 5] = [
+    "CODEX_HOME",
+    "ENABLE_PROMPT_CACHING_1H",
+    "FORCE_PROMPT_CACHING_5M",
+    "BASH_ENV",
+    "ENV",
+];
 
 /// Run `command` from `root`, its home, without the runner's Shoal, terminal,
 /// agent or Git variables, Git configuration beyond the repository's,
