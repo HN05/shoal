@@ -16,9 +16,10 @@ use shoal_protocol::containers::ContainerProject;
 /// The label Compose gives each container of a project, holding its name.
 const PROJECT_LABEL: &str = "com.docker.compose.project";
 
-/// How long listing or reading a project's containers may take: well
-/// within the time a usage sample stays current.
-const TIMEOUT: Duration = Duration::from_secs(15);
+/// How long reading every project's containers may take: a usage sample
+/// waits for it, and with the sampling interval it stays within the time a
+/// sample stays current, however slow the runtime.
+const READ_LIMIT: Duration = Duration::from_secs(15);
 
 /// How many projects are read with the runtime at once.
 const PROJECTS_READ_AT_ONCE: usize = 4;
@@ -33,18 +34,24 @@ pub(crate) struct ContainerUsage {
 
 impl Manager {
     /// What the containers of each workspace whose project may run use, or
-    /// why its runtime could not say.
+    /// why its runtime could not say, within [`READ_LIMIT`], which stops
+    /// the runtime calls still running.
     pub(crate) async fn container_usage(&self) -> Result<Vec<(SpaceId, Result<ContainerUsage>)>> {
         let recorded = self.store.read(|db| records::list(db, None)).await?;
         let active = (recorded.into_iter()).filter(|recorded| recorded.project.state.active());
-        Ok(stream::iter(active)
+        let read = stream::iter(active)
             .map(|recorded| async move {
                 let usage = read_project(&recorded.project).await;
                 (recorded.project.workspace_id, usage)
             })
             .buffer_unordered(PROJECTS_READ_AT_ONCE)
-            .collect()
-            .await)
+            .collect();
+        (tokio::time::timeout(READ_LIMIT, read).await).with_context(|| {
+            format!(
+                "the container runtime did not answer within {} seconds",
+                READ_LIMIT.as_secs()
+            )
+        })
     }
 }
 
@@ -78,7 +85,6 @@ async fn read_stats(program: &str, containers: &[String]) -> Result<ContainerUsa
 async fn run(command: Command) -> Result<String> {
     let described = describe(&command);
     crate::subprocess::Run::new(command)
-        .timeout(TIMEOUT)
         .output()
         .await
         .context(described)

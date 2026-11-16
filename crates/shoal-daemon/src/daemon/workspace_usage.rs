@@ -48,6 +48,8 @@ pub(crate) struct WorkspaceUsages {
     /// The workspaces whose containers could not be read last time, whose
     /// failure is logged once until a reading succeeds.
     unread_containers: HashSet<SpaceId>,
+    /// No container could be read last time, which is logged once too.
+    containers_unreadable: bool,
 }
 
 impl WorkspaceUsages {
@@ -80,10 +82,16 @@ impl WorkspaceUsages {
     /// once: a runtime that cannot be read leaves its workspaces' usage as
     /// their processes'.
     fn read_containers(&mut self, readings: ContainerReadings) -> Vec<(SpaceId, ContainerUsage)> {
-        let readings = readings.unwrap_or_else(|error| {
-            log!("container usage: {error:#}");
-            Vec::new()
-        });
+        let readings = match readings {
+            Ok(readings) => readings,
+            Err(error) => {
+                if !std::mem::replace(&mut self.containers_unreadable, true) {
+                    log!("container usage: {error:#}");
+                }
+                return Vec::new();
+            }
+        };
+        self.containers_unreadable = false;
         let mut read = Vec::new();
         for (workspace, reading) in readings {
             match reading {

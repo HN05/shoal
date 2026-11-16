@@ -430,4 +430,12 @@ async fn containers_add_to_their_workspaces_usage_unless_unreadable() {
     // One its runtime could not read keeps its processes' usage.
     assert_eq!(usage("c").memory_bytes, 1024);
     assert_eq!(usage("c").cpu_percent, Some(0.0));
+
+    // A runtime that reads nothing in time leaves every workspace its own.
+    let latest = later + SAMPLE_INTERVAL;
+    let unread = Err(anyhow::anyhow!("no answer"));
+    usages.record(Ok(sample(latest, processes())), unread);
+    let usage = usages.get(&SpaceId::from("a"), latest).unwrap();
+    assert_eq!(usage.memory_bytes, 1024);
+    assert_eq!(usage.cpu_percent, Some(0.0));
 }
