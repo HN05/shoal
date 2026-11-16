@@ -395,9 +395,6 @@ impl Manager {
         self.ensure_reaches(caller, &space).await
     }
 
-    /// Name by ID the existing workspace `workspace` that `caller`'s launch
-    /// reopens for its agent, which must be one its scope reaches other
-    /// than its own.
     /// Confine a workspace start of `caller` to its own tree: below its own
     /// space unless `parent` names one below it, from a copy of a workspace
     /// it reaches, or reopening a workspace below its own, which keeps its
@@ -419,6 +416,9 @@ impl Manager {
         self.parent_below(caller, parent).await
     }
 
+    /// Name by ID the existing workspace `workspace` that `caller`'s launch
+    /// reopens for its agent, which must be one its scope reaches other
+    /// than its own.
     pub(in crate::daemon) async fn reopened_below(
         &self,
         caller: &Caller,

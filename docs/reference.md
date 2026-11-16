@@ -5482,7 +5482,7 @@ under its own ID. `agent_started`, `agent_stopped` (Shoal or a stop request
 stopped it) and `agent_exited` (it exited on its own) events add `agent`
 with its `name`, `execution_id` and `exit_code`, null for a start or stop
 and when the wrapper reported none; a start that carries out a launch adds
-its `source`, `{"kind": "manual"}` or `{"kind": "trigger", "name": …}`. `question_asked` and `question_answered`
+its `source`, `{"kind": "manual"}` for `shoal start`'s. `question_asked` and `question_answered`
 events add `question` with its `number`, `question` and `answer`.
 `approval_requested` and `approval_decided` events add `approval` with its
 `number`, `target`, `subject` and `status`. `gate_decided` events add `gate`
