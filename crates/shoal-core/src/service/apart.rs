@@ -81,12 +81,21 @@ async fn launcher() -> Vec<OsString> {
 /// by its path on this process's `PATH`; `None` where either is missing.
 fn connected_systemd_run() -> Option<Vec<OsString>> {
     let path = std::env::var_os("PATH").unwrap_or_default();
+    systemd_run_with_bus(&path, |name| std::env::var_os(name))
+}
+
+/// [`connected_systemd_run`] for the search path `path` and the variables
+/// `variable` reads.
+fn systemd_run_with_bus(
+    path: &OsStr,
+    variable: impl Fn(&str) -> Option<OsString>,
+) -> Option<Vec<OsString>> {
     let find =
-        |program: &str| find_executable(OsStr::new(program), &path).map(PathBuf::into_os_string);
+        |program: &str| find_executable(OsStr::new(program), path).map(PathBuf::into_os_string);
     let mut command = vec![find("env")?];
     command.extend(BUS_VARIABLES.iter().filter_map(|name| {
         let mut assignment = OsString::from(format!("{name}="));
-        assignment.push(std::env::var_os(name)?);
+        assignment.push(variable(name)?);
         Some(assignment)
     }));
     command.push(find(Tool::SystemdRun.program())?);
