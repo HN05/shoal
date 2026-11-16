@@ -132,7 +132,7 @@ fn simulator_retries_reuse_the_original_clean_request_through_acquisition() {
         "id": "sim-id", "udid": "device-id", "device": "Phone", "runtime": "iOS Test",
         "workspace_id": "workspace-id", "last_workspace_id": null, "lease_name": "default",
         "reason": "test allocation", "state": "leased", "last_used": 456,
-        "error": null, "installed_apps": null
+        "error": null, "installed_apps": null, "acquirer": {"kind": "user"}
     });
     let (output, requests) = acquire(
         "sim",
