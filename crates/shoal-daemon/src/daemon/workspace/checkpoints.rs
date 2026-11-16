@@ -405,9 +405,9 @@ impl Manager {
 
     /// Delete expired checkpoints and removal records, checkpoints and
     /// imported session files no workspace or removal record owns, and refs
-    /// without a checkpoint, with the loose objects only those refs kept. A
-    /// failure keeps what it concerns for the next pass and does not skip
-    /// the rest.
+    /// without a checkpoint, then prune the repository's unreachable loose
+    /// objects as its gc would. A failure keeps what it concerns for the
+    /// next pass and does not skip the rest.
     pub async fn expire_checkpoints(&self) -> Result<()> {
         let mut failed = Vec::new();
         if let Err(error) = self.store.run(|db| delete_expired_removals(db)).await {

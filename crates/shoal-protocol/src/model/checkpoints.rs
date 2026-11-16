@@ -24,8 +24,9 @@ shoal_states::states!(
 
 impl CheckpointCause {
     /// Whether the archive limit caps the unsaved files the checkpoint
-    /// keeps: only where the worktree still has them afterwards, so that
-    /// leaving them out loses nothing.
+    /// keeps: only for an agent's exit or stop, which nobody asked for and
+    /// whose files stay in the worktree. Any other checkpoint is asked for
+    /// or may hold their last copy.
     pub fn capped(self) -> bool {
         self == Self::AgentStopped
     }

@@ -3479,7 +3479,8 @@ or stop, whose files stay in the worktree, so leaving them out loses nothing:
 above it, that checkpoint keeps HEAD only, unless the files are a copy's
 starting ones, which bounds the time each agent stop spends hashing large
 untracked files and the versions a large changing file would pile up. Any other
-checkpoint may hold their last copy, so it keeps them whatever their size. A snapshot
+checkpoint is asked for or may hold their last copy, so it keeps them whatever
+their size. A snapshot
 fails when HEAD or the branch moves while it is taken, so its record's HEAD
 always matches its files. Checkpoints
 expire after `retention_days`, a copy's starting checkpoint only once the copy is
