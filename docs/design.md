@@ -20,7 +20,8 @@ browsers or store conversations, and schedules work only on its own machine:
 its agent queue, which also admits registered repositories' CI jobs, and
 triggers, config that starts agents when an event source fires, such as a
 timer. A trigger is config like every other setting, without commands that
-create or change it; each source is a module behind one interface whose
+create or change it, except that a contribution's tracked file defines none,
+since its repository's maintainers are not the user who runs it; each source is a module behind one interface whose
 firings carry a JSON input document, which filters, templates and keys read
 without knowing the source, and every firing launches through the operation
 `shoal start` uses, as the user, so the queue, `max_agents` and cleanup apply.

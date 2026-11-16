@@ -98,10 +98,15 @@ impl Manager {
         }
     }
 
-    /// The triggers the registered `repository`'s config defines.
+    /// The triggers the registered `repository`'s config defines: its
+    /// tracked file's and its local config's, or only the local config's
+    /// for a contribution, whose tracked file the user does not maintain.
     async fn repository_triggers(&self, repository: &RepositoryId) -> Result<Vec<Configured>> {
         let target = ConfigTarget::Repository(repository.clone().into());
-        let layers = self.config_layers_for(target).await?;
+        let mut layers = self.config_layers_for(target).await?;
+        if self.repository(repository).await?.contribution {
+            layers.worktree_file.triggers.clear();
+        }
         let settings = self.config().resolve(&layers)?;
         Ok((settings.triggers.iter())
             .map(|(name, trigger)| Configured {

@@ -388,6 +388,35 @@ async fn a_global_trigger_is_listed_beside_the_repositorys() {
 }
 
 #[tokio::test]
+async fn a_contribution_fires_only_its_local_configs_triggers() {
+    let (_temp, manager, repo) = with_triggers(HOURLY).await;
+    let tracked = "[triggers.upstream]\non = 'timer'\nevery = '1h'\nmode = 'chat'\n\
+                   agent = 'claude'\ntask = 'Push'\n";
+    std::fs::write(repo.path.join(".shoal.toml"), tracked).unwrap();
+    let names = |manager: &Arc<Manager>| {
+        let manager = manager.clone();
+        async move {
+            let triggers = manager.configured_triggers().await;
+            let mut names: Vec<_> = triggers.into_iter().map(|trigger| trigger.name).collect();
+            names.sort();
+            names
+        }
+    };
+    assert_eq!(names(&manager).await, ["check", "upstream"]);
+
+    let id = repo.id.clone();
+    manager
+        .store
+        .write(move |tx| {
+            tx.execute("UPDATE repositories SET contribution=1 WHERE id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert_eq!(names(&manager).await, ["check"]);
+}
+
+#[tokio::test]
 async fn a_scoped_run_follows_the_triggers_permission() {
     let (_temp, manager, repo) = with_triggers(HOURLY).await;
     let agent = chat(&manager, "agent", "chat", Some(&repo), None).await;

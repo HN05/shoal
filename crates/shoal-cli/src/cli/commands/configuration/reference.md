@@ -587,7 +587,9 @@ key_window = "10m"
 ```
 
 A trigger starts an agent when its source fires, as `shoal start` would. A
-repository's triggers start in that repository; a global trigger starts in the
+repository's triggers start in that repository, and a
+[contribution](../../../../../../docs/reference.md#contributions)'s come from
+its local config alone; a global trigger starts in the
 registered repository its `repository` names, or without one in a chat without
 a repository, which only the global file may set. A trigger is config like
 every other setting: a higher layer replaces a lower one's of the same name,
