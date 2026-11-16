@@ -1080,8 +1080,8 @@ pub(super) const REMOVAL_CHECKPOINTS: &str =
         FROM removed_workspaces WHERE json_valid(record);
     INSERT INTO checkpoint_numbers(workspace_id,last) SELECT workspace_id, 1 FROM checkpoints;
     UPDATE removed_workspaces SET record=json_remove(
-            json_set(record, '$.checkpoint', (SELECT json(checkpoints.record) FROM checkpoints
-                WHERE checkpoints.workspace_id=removed_workspaces.workspace_id)),
+            json_set(record, '$.checkpoint', json((SELECT checkpoints.record FROM checkpoints
+                WHERE checkpoints.workspace_id=removed_workspaces.workspace_id))),
             '$.branch', '$.head', '$.snapshot', '$.files_omitted')
         WHERE json_valid(record);
     DELETE FROM removed_workspaces WHERE NOT json_valid(record);";
