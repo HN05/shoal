@@ -353,5 +353,30 @@ pub async fn delete_at(repo: &Path, reference: &str, commit: &CommitId) -> Resul
     deleted.map(|_| true)
 }
 
+/// Git's own `gc.pruneExpire` when the repository sets none.
+const DEFAULT_PRUNE_EXPIRE: &str = "2.weeks.ago";
+
+/// Delete the unreachable loose objects older than the repository's
+/// `gc.pruneExpire`, as its own gc would, such as those of deleted
+/// checkpoints; none when it is `never`. Packed ones stay until that gc.
+pub async fn prune_unreachable(repo: &Path) -> Result<()> {
+    let expire = run_isolated(
+        repo,
+        &[
+            "config",
+            "--default",
+            DEFAULT_PRUNE_EXPIRE,
+            "--get",
+            "gc.pruneExpire",
+        ],
+    )
+    .await?;
+    let expire = expire.trim();
+    if expire != "never" {
+        run_isolated(repo, &["prune", &format!("--expire={expire}")]).await?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests;

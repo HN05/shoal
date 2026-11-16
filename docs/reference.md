@@ -3917,7 +3917,10 @@ keeps HEAD only. The checkpoint of an agent's exit or stop also keeps HEAD only
 when the unsaved files exceed `archive_max_mb`, unless they are a copy's
 starting files; every other checkpoint keeps them whatever their size. Checkpoints expire after
 `retention_days`, a copy's starting checkpoint only once the copy is gone; their
-numbers are never reused, so a number names one checkpoint for good.
+numbers are never reused, so a number names one checkpoint for good. Expiry
+also deletes the loose objects only expired checkpoints kept, once they are older
+than the repository's `gc.pruneExpire` (two weeks unless set), as Git's own gc
+would; objects already packed stay until that gc.
 
 `shoal restore [workspace] --checkpoint <number>` keeps the current state in a new checkpoint,
 then moves the workspace's branch to the checkpoint's HEAD and puts its files back

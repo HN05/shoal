@@ -500,6 +500,46 @@ async fn expiry_deletes_expired_and_unowned_checkpoints_and_adopts_removal_refs(
 }
 
 #[tokio::test]
+async fn expiry_prunes_the_objects_of_deleted_checkpoints_as_gc_would() {
+    let f = Fixture::new().await;
+    let manager = &f.manager;
+    git(&f.checkout, &["config", "gc.pruneExpire", "1.hour.ago"]);
+    f.write("scratch", "expired notes\n");
+    let expired = manager
+        .take_checkpoint(&manager.named("topic").await, None)
+        .await
+        .unwrap();
+    let objects = f.checkout.join(".git/objects");
+    let loose = |id: &str| objects.join(&id[..2]).join(&id[2..]);
+    let commit = expired.commit.as_str();
+    let kept = git(
+        &f.checkout,
+        &[
+            "rev-parse",
+            commit,
+            &format!("{commit}^{{tree}}"),
+            &format!("{commit}:scratch"),
+        ],
+    );
+    let kept: Vec<_> = kept.lines().map(loose).collect();
+    // Written before gc.pruneExpire, unlike an unreachable object written
+    // since; Git also keeps what a recent object reaches.
+    let old = std::time::SystemTime::now() - std::time::Duration::from_secs(2 * 3600);
+    for object in &kept {
+        fs::File::open(object).unwrap().set_modified(old).unwrap();
+    }
+    f.write("fresh", "fresh\n");
+    let fresh = loose(f.git(&["hash-object", "-w", "fresh"]).trim());
+
+    f.set_expiry(expired.number, crate::time::UnixTime::from_seconds(0))
+        .await;
+    manager.expire_checkpoints().await.unwrap();
+    assert!(checkpoint_refs(&f.checkout).is_empty());
+    assert!(kept.iter().all(|object| !object.exists()));
+    assert!(fresh.exists());
+}
+
+#[tokio::test]
 async fn a_starting_checkpoint_outlives_its_expiry_while_its_workspace_exists() {
     let f = Fixture::new().await;
     let manager = &f.manager;

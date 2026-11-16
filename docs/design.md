@@ -3483,7 +3483,15 @@ checkpoint may hold their last copy, so it keeps them whatever their size. A sna
 fails when HEAD or the branch moves while it is taken, so its record's HEAD
 always matches its files. Checkpoints
 expire after `retention_days`, a copy's starting checkpoint only once the copy is
-gone, and so do those no workspace or removal record owns.
+gone, and so do those no workspace or removal record owns. An expiry pass that
+deletes a checkpoint ref then runs `git prune` with the repository's
+`gc.pruneExpire` (Git's two weeks when unset, nothing when `never`), never a
+shorter window: large loose blobs alone never start Git's automatic gc, and the
+user's window keeps their recovery time and the objects a `git add` or a
+snapshot under way just wrote. Shoal does not repack, which would rewrite the
+user's packs, so objects already packed stay until the user's gc. Checkpoint
+objects stay in the repository's object store, since checkpoint refs also keep
+a removed workspace's HEAD reachable after its branch is deleted.
 Restoring a checkpoint reserves the `restoring` lifecycle state, which excludes
 other lifecycle operations and new executions, refuses while another execution is
 recorded or the checkpoint's HEAD or files collide with ignored ones, keeps the current state in
