@@ -75,13 +75,21 @@ async fn unassigning_its_own_takes_the_accounts_login_off() {
     let server = issue_server("open", &["ann", "agent"]);
     let account = agent_on(&server, "agent").remembering(Memory::default());
     let (repo, issue) = issue(&server);
-    assert!(repo.unassign_own(&account, &issue).await.unwrap());
+    let removal = repo.unassign_own(&account, &issue).await.unwrap().unwrap();
+    assert_eq!(
+        removal,
+        Unassignment {
+            removed: true,
+            others: vec!["ann".into()],
+        }
+    );
     let patch = r#"PATCH /api/v3/repos/team/repo/issues/7 {"assignees":["ann"]}"#;
     assert_eq!(changes(&server), [patch]);
     // Without its login there, it has nothing to take off.
-    assert!(!repo.unassign_own(&account, &issue).await.unwrap());
+    let again = repo.unassign_own(&account, &issue).await.unwrap().unwrap();
+    assert!(!again.removed);
     let none = Account::agent(Default::default(), Default::default());
-    assert!(!repo.unassign_own(&none, &issue).await.unwrap());
+    assert_eq!(repo.unassign_own(&none, &issue).await.unwrap(), None);
     assert_eq!(changes(&server).len(), 1);
 }
 

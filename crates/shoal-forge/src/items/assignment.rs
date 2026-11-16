@@ -31,6 +31,16 @@ pub struct Assignment {
     pub others: Vec<String>,
 }
 
+/// What taking the acting account's login off an issue found and did.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Unassignment {
+    /// Whether it took the login off: not when the issue lacked it, nor
+    /// when it is closed.
+    pub removed: bool,
+    /// The issue's other assignees.
+    pub others: Vec<String>,
+}
+
 /// Assigning items.
 #[shoal_forge_derive::extension(pub AssignmentRequests)]
 impl ForgeRepo {
@@ -72,36 +82,53 @@ impl ForgeRepo {
     }
 
     /// Remove the login `account` signs in as from the assignees of `issue`,
-    /// of this repository, returning whether it did: a closed issue keeps
-    /// its assignees, and an account without a login of its own there has
-    /// none to remove.
-    pub async fn unassign_own(&self, account: &Account, issue: &ItemRef) -> Result<bool> {
+    /// of this repository, unless it is closed. An account without a login
+    /// of its own there removes nothing.
+    pub async fn unassign_own(
+        &self,
+        account: &Account,
+        issue: &ItemRef,
+    ) -> Result<Option<Unassignment>> {
         issue.belongs_to(self)?;
         if !account.has_login(self) {
-            return Ok(false);
+            return Ok(None);
         }
         self.require(Capability::IssueAssignees)?;
         let login = (self.kind().own_assignee(self, account).await?)
             .context("the forge did not report the account's login")?;
-        self.unassign(account, issue, &login).await
+        take_off(self, account, issue, &login).await.map(Some)
     }
 
     /// Remove `login` from the assignees of `issue`, of this repository,
     /// returning whether it did: a closed issue keeps its assignees.
     pub async fn unassign(&self, account: &Account, issue: &ItemRef, login: &str) -> Result<bool> {
         issue.belongs_to(self)?;
-        let number = issue.issue()?;
-        let current = self.issue_details(account, number).await?.item;
-        if current.state != ItemState::Open || !has_assignee(&current, login) {
-            return Ok(false);
-        }
+        Ok(take_off(self, account, issue, login).await?.removed)
+    }
+}
+
+/// Remove `login` from the assignees of `issue`, of `repo`, as `account`,
+/// unless the issue lacks it or is closed.
+async fn take_off(
+    repo: &ForgeRepo,
+    account: &Account,
+    issue: &ItemRef,
+    login: &str,
+) -> Result<Unassignment> {
+    let number = issue.issue()?;
+    let current = repo.issue_details(account, number).await?.item;
+    let removed = current.state == ItemState::Open && has_assignee(&current, login);
+    if removed {
         let edit = Edit {
             remove_assignees: vec![login.to_owned()],
             ..Edit::default()
         };
-        (self.act(account, ItemKind::Issue, number.get(), &Action::edit(edit))).await?;
-        Ok(true)
+        (repo.act(account, ItemKind::Issue, number.get(), &Action::edit(edit))).await?;
     }
+    let others = (current.assignees.into_iter())
+        .filter(|assignee| !assignee.eq_ignore_ascii_case(login))
+        .collect();
+    Ok(Unassignment { removed, others })
 }
 
 /// Whether `login` is among the assignees of `item`; logins name the same

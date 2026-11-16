@@ -35,6 +35,15 @@ async fn an_agents_assignment_puts_the_agent_account_on() {
 }
 
 #[tokio::test]
+async fn the_users_assignment_names_the_other_assignees_before_an_agent_works_it() {
+    let fixture = agents(&["fix"], &["ann"], "").await;
+    let warnings = fixture.link(&fixture.workspaces[0]).await;
+    assert_eq!(warnings.len(), 1);
+    assert!(warnings[0].contains("ann"), "{warnings:?}");
+    assert!(fixture.changes().is_empty());
+}
+
+#[tokio::test]
 async fn the_users_assignment_to_a_space_without_an_agent_assigns_nobody() {
     let fixture = agents(&["fix"], &[], "").await;
     assert!(fixture.link(&fixture.workspaces[0]).await.is_empty());

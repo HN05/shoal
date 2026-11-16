@@ -14,7 +14,7 @@ use crate::{
     model::Assigner,
     state::QueueKind,
 };
-use shoal_forge::items::assignment::{Assignment, AssignmentRequests};
+use shoal_forge::items::assignment::AssignmentRequests;
 
 /// A space that links an issue as assigned, and who assigned it there.
 struct Linker {
@@ -85,8 +85,8 @@ impl Manager {
     /// was not settled.
     pub(super) async fn assign_linked_agent(&self, url: &ItemRef, others: bool) -> Vec<String> {
         match self.settle_issue_agent(url).await {
-            Ok(Some(assignment)) if others && !assignment.others.is_empty() => {
-                vec![super::also_assigned(url, &assignment.others)]
+            Ok(Some(assigned)) if others && !assigned.is_empty() => {
+                vec![super::also_assigned(url, &assigned)]
             }
             Ok(_) => Vec::new(),
             Err(error) => vec![unsettled(url, &error)],
@@ -94,16 +94,16 @@ impl Manager {
     }
 
     /// Put the agent account on the issue `url` while an agent works it,
-    /// and take it off once none does. Returns the assignment while one
-    /// works it.
-    async fn settle_issue_agent(&self, url: &ItemRef) -> Result<Option<Assignment>> {
+    /// and take it off once none does. Returns the issue's other assignees,
+    /// unless the agent account has no login of its own there.
+    async fn settle_issue_agent(&self, url: &ItemRef) -> Result<Option<Vec<String>>> {
         let _gate = self.gates.lock_issue_assignees(url.url()).await;
         let forge = self.item_forge(url).await?;
         let account = self.agent_account();
-        match self.agent_works_issue(url).await? {
-            true => forge.assign_own(&account, url).await,
-            false => forge.unassign_own(&account, url).await.map(|_| None),
-        }
+        Ok(match self.agent_works_issue(url).await? {
+            true => (forge.assign_own(&account, url).await?).map(|assigned| assigned.others),
+            false => (forge.unassign_own(&account, url).await?).map(|removed| removed.others),
+        })
     }
 
     /// Whether an agent works the issue `url`: that of a space linking it
