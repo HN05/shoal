@@ -11,7 +11,7 @@ use std::{os::unix::process::ExitStatusExt as _, process::ExitStatus};
 pub use copy_ignored::copy_ignored_worker;
 pub use detached::{DetachedExecution, DetachedLaunch, Wrapper, launch_detached, report_launch};
 pub(crate) use terminal::reset_input_modes;
-pub use terminal::{Terminal, clear_terminal, run_in_terminal, take_foreground};
+pub use terminal::{INPUT_MODES_RESET, Terminal, clear_terminal, run_in_terminal, take_foreground};
 
 /// An agent a tracked wrapper runs: its name, as `--agent` names it, the
 /// model and effort it runs with, and the mode it started in, which its
