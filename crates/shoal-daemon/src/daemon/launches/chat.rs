@@ -42,6 +42,7 @@ impl Manager {
         shape: &Shape,
         caller: Option<&Caller>,
     ) -> Result<ChatStart> {
+        ensure_chat_takes(&launch)?;
         if !shape.repository {
             launches::ensure_no_repository(&launch, &shape.mode)?;
         }
@@ -134,6 +135,20 @@ impl Manager {
         let place = (start.repository.as_ref(), start.workspace.as_ref());
         (self.ensure_chat_given_held(caller, &start.narrowing, place)).await
     }
+}
+
+/// Refuse what only a workspace's agent starts with: a repository's
+/// setup, which works on its setup branch, and a prompt in place of a task.
+fn ensure_chat_takes(launch: &Launch) -> Result<()> {
+    ensure!(
+        !launch.repository_setup,
+        "a repository's setup starts in a workspace on its setup branch"
+    );
+    ensure!(
+        launch.prompt.is_none(),
+        "a chat's agent starts on its task or issue; pass the prompt as its task"
+    );
+    Ok(())
 }
 
 /// The issue a chat in `mode` starts on: one the launch names, since a

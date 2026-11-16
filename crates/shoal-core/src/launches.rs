@@ -146,13 +146,31 @@ pub fn decided_target(launch: &Launch) -> Result<Option<StartTarget>> {
         .transpose()
 }
 
-/// The mode without one named: chat for a start that asks for a chat,
-/// whose agent the worker mode would not tell it is one, else the worker.
+/// The mode without one named: setup for a repository's setup, chat for a
+/// start that asks for a chat, whose agent the worker mode would not tell
+/// it is one, else the worker.
 pub fn default_mode(launch: &Launch) -> ModeName {
+    if launch.repository_setup {
+        return ModeName::SETUP;
+    }
     match launch.chat {
         true => ModeName::CHAT,
         false => ModeName::DEFAULT,
     }
+}
+
+/// Refuse `mode` for `launch` where it cannot start in it: the setup mode
+/// outside a repository's setup, which starts in no other.
+pub fn ensure_mode_fits(launch: &Launch, mode: &ModeName) -> Result<()> {
+    if !launch.repository_setup {
+        return config::modes::ensure_startable(mode);
+    }
+    ensure!(
+        *mode == ModeName::SETUP,
+        "a repository's setup starts in mode {}",
+        ModeName::SETUP
+    );
+    Ok(())
 }
 
 /// The mode for an issue labelled `labels`: the worker once `[issue]

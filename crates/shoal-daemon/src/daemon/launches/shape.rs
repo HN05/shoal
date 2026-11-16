@@ -7,7 +7,7 @@ use shoal_protocol::launches::Launch;
 
 use super::ManagerReads;
 use crate::{
-    config::{modes, modes::ModeName},
+    config::modes::ModeName,
     daemon::{scope::Caller, workspace::Manager},
     launches,
     model::SpaceKind,
@@ -29,13 +29,8 @@ impl Manager {
         launch: &Launch,
         caller: Option<&Caller>,
     ) -> Result<Shape> {
-        let mode = match &launch.mode {
-            Some(mode) => {
-                modes::ensure_startable(mode)?;
-                mode.clone()
-            }
-            None => launches::default_mode(launch),
-        };
+        let mode = (launch.mode.clone()).unwrap_or_else(|| launches::default_mode(launch));
+        launches::ensure_mode_fits(launch, &mode)?;
         let reads = ManagerReads::new(self, caller);
         let (kind, repository) = launches::shape::launch_kind(&reads, launch, &mode).await?;
         Ok(Shape {

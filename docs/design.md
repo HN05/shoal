@@ -150,7 +150,9 @@ no configuration of its own to start one as the CLI does. `QueueAgent` queues
 the worker of an existing workspace the same way, on the workspace's issue.
 Every start that does not run in the caller's terminal, a scoped caller's or
 one without a terminal, goes through one request, `Launch`, which carries
-what `shoal start` takes, as its command line gave it; the daemon records a
+what `shoal start` takes, as its command line gave it, and what another
+command's start adds, such as the subject a repository's setup gives its
+agent and the setup mode, which no other launch starts in; the daemon records a
 client's launch as `manual`, and names the source of a launch it makes
 itself. The
 daemon decides what the launch leaves out with the steps `shoal-core` shares

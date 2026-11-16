@@ -320,3 +320,14 @@ fn a_numeric_positional_may_name_the_repository_whose_modes_apply() {
         None
     );
 }
+
+#[test]
+fn only_a_repository_setup_starts_in_the_setup_mode() {
+    let setup = launch(Some("repo"), |launch| launch.repository_setup = true);
+    assert_eq!(default_mode(&setup), ModeName::SETUP);
+    ensure_mode_fits(&setup, &ModeName::SETUP).unwrap();
+    ensure_mode_fits(&setup, &ModeName::DEFAULT).unwrap_err();
+    let start = launch(Some("repo"), |_| ());
+    ensure_mode_fits(&start, &ModeName::SETUP).unwrap_err();
+    ensure_mode_fits(&start, &ModeName::PLAN).unwrap();
+}

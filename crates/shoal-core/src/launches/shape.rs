@@ -16,7 +16,8 @@ use crate::{
 /// The kind of space `launch` creates in `mode`, which must exist unless
 /// the launch asks for a chat, and whether `mode` starts it in a
 /// repository. The default mode always exists and always starts in a
-/// workspace, so it reads no settings. In the existing workspace the launch
+/// workspace, as a repository's setup does, so neither reads settings. In
+/// the existing workspace the launch
 /// names, the mode's kind decides whether the agent is the workspace's
 /// worker or a chat in its worktree.
 pub async fn launch_kind(
@@ -28,7 +29,7 @@ pub async fn launch_kind(
         let kind = kind_in_workspace(reads, launch, workspace, mode).await?;
         return Ok((kind, true));
     }
-    if *mode == ModeName::DEFAULT && !launch.chat {
+    if (*mode == ModeName::DEFAULT && !launch.chat) || launch.repository_setup {
         return Ok((SpaceKind::Workspace, true));
     }
     let settings = launch_settings(reads, launch).await?;

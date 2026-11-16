@@ -17,6 +17,7 @@ use crate::{
 
 mod blockers;
 mod chat;
+mod setup;
 mod shape;
 mod worker;
 mod workspace;
@@ -74,6 +75,7 @@ impl Manager {
         self.select_launch_spaces(&mut launch).await?;
         let shape = self.launch_shape(&launch, caller).await?;
         launches::ensure_fits(&launch, &[], shape.kind, Some(&shape.mode))?;
+        self.authorize_repository_setup(&launch, caller).await?;
         match shape.kind {
             SpaceKind::Chat => (self.launch_in_chat(launch, shape, source, caller))
                 .await

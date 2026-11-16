@@ -110,6 +110,7 @@ fn worker_request(launch: Launch, shape: Shape, source: LaunchSource) -> WorkerR
         permissions,
         now,
         task,
+        prompt,
         env,
         blockers,
         ..
@@ -120,6 +121,7 @@ fn worker_request(launch: Launch, shape: Shape, source: LaunchSource) -> WorkerR
             narrowing: permissions,
             model,
             args: task,
+            prompt,
             fork,
             env,
             now,

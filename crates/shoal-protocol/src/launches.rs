@@ -101,6 +101,14 @@ pub struct Launch {
     /// What the agent is told to do, passed on to it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub task: Vec<String>,
+    /// The agent's first message when no issue gives it one, such as the
+    /// subject `shoal repo setup` gives its agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+    /// The setup of the repository the launch starts in, whose agent alone
+    /// starts in the setup mode.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub repository_setup: bool,
     /// The directory the start is made in, whose checkout or worktree names
     /// the repository or workspace the start leaves out.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -282,6 +282,8 @@ impl StartArgs {
             blockers: self.add_blocker.clone(),
             now: self.now,
             task: Vec::new(),
+            prompt: None,
+            repository_setup: false,
             directory: None,
             env: None,
             setup_env: None,
