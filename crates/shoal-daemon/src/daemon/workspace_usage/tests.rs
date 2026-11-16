@@ -377,18 +377,57 @@ async fn readings_cover_the_processes_carrying_a_workspace_identity() {
 async fn failed_and_stalled_samples_report_nothing() {
     let start = Instant::now();
     let mut usages = WorkspaceUsages::default();
-    usages.record(Ok(sample(start, [process(10, 1, "a", 0)])));
+    usages.record(Ok(sample(start, [process(10, 1, "a", 0)])), Ok(Vec::new()));
     assert_eq!(usages.get(&SpaceId::from("a"), start).unwrap().processes, 1);
     assert_eq!(
         usages.get(&SpaceId::from("a"), start + STALE + SAMPLE_INTERVAL),
         None
     );
     let late = start + STALE + SAMPLE_INTERVAL;
-    usages.record(Ok(sample(late, [process(10, 1, "a", SECOND)])));
+    usages.record(
+        Ok(sample(late, [process(10, 1, "a", SECOND)])),
+        Ok(Vec::new()),
+    );
     assert_eq!(
         usages.get(&SpaceId::from("a"), late).unwrap().cpu_percent,
         None
     );
-    usages.record(Err(anyhow::anyhow!("unavailable")));
+    usages.record(Err(anyhow::anyhow!("unavailable")), Ok(Vec::new()));
     assert_eq!(usages.get(&SpaceId::from("a"), late), None);
+}
+
+#[tokio::test(start_paused = true)]
+async fn containers_add_to_their_workspaces_usage_unless_unreadable() {
+    let start = Instant::now();
+    let containers = |cpu_percent| ContainerUsage {
+        cpu_percent,
+        memory_bytes: 4096,
+    };
+    let readings = || {
+        Ok(vec![
+            (SpaceId::from("a"), Ok(containers(25.0))),
+            (SpaceId::from("b"), Ok(containers(5.0))),
+            (SpaceId::from("c"), Err(anyhow::anyhow!("no runtime"))),
+        ])
+    };
+    let processes = || [process(10, 1, "a", 0), process(30, 1, "c", 0)];
+    let mut usages = WorkspaceUsages::default();
+    usages.record(Ok(sample(start, processes())), readings());
+    let usage = |id: &str, now| usages.get(&SpaceId::from(id), now).unwrap();
+    // Without a previous sample, no CPU is measured, the containers' either.
+    assert_eq!(usage("a", start).memory_bytes, 1024 + 4096);
+    assert_eq!(usage("a", start).cpu_percent, None);
+
+    let later = start + SAMPLE_INTERVAL;
+    usages.record(Ok(sample(later, processes())), readings());
+    let usage = |id: &str| usages.get(&SpaceId::from(id), later).unwrap();
+    assert_eq!(usage("a").cpu_percent, Some(25.0));
+    assert_eq!(usage("a").processes, 1);
+    // A workspace with only containers running has their usage alone.
+    assert_eq!(usage("b").cpu_percent, Some(5.0));
+    assert_eq!(usage("b").memory_bytes, 4096);
+    assert_eq!(usage("b").processes, 0);
+    // One its runtime could not read keeps its processes' usage.
+    assert_eq!(usage("c").memory_bytes, 1024);
+    assert_eq!(usage("c").cpu_percent, Some(0.0));
 }

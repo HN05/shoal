@@ -113,6 +113,22 @@ fn release_stops_the_project_and_keeps_its_ports() {
 }
 
 #[test]
+fn a_workspaces_running_containers_count_in_its_usage() {
+    let fixture = with_containers(CONTAINERS);
+    fixture.add("worker");
+    let space = fixture.id("worker");
+    fixture.ok(&["acquire", "containers", "--space", &space]);
+    // The fixture's one container reads as 12.5% of a core and 1.5 GiB,
+    // which no process of the workspace adds to without an agent.
+    let usage = wait_for("the containers' usage", || {
+        let usage = fixture.ok(&["status", &space])["workspace"]["usage"].clone();
+        usage["cpu_percent"].is_number().then_some(usage)
+    });
+    assert_eq!(usage["memory_bytes"], 3 << 29);
+    assert_eq!(usage["cpu_percent"], 12.5);
+}
+
+#[test]
 fn a_failed_start_is_recorded_and_retried_by_the_next_acquire() {
     let fixture = with_containers(CONTAINERS);
     fixture.add("worker");

@@ -811,12 +811,12 @@ Its rows, like `shoal list` and workspace pickers, are aligned and marked by wha
 their status asks of you: ● your turn to answer, review or resume, ◐ an agent
 or process works, ○ quiet, ◌ changing state, or ✗ failed. Each shows the
 space's number, then names the workspace, its repository when the
-rows span several, its status, what its processes use while any run, and the
+rows span several, its status, what its processes and containers use while any run, and the
 linked issue's title or CI job, cut with `…` to fit a terminal's width. Usage counts every
 process carrying the workspace's `SHOAL_SPACE`: CPU as a percent of one
 core over the daemon's last ten-second sample, including children those
 processes have waited for, then memory, resident on Linux and the physical
-footprint on macOS. `shoal status` adds the process count, and `--json` gives
+footprint on macOS, with what its [containers](#containers) use. `shoal status` adds the process count, and `--json` gives
 `usage` in bytes and percent. The status is the
 state unless ready; for a ready workspace it is, in order of precedence,
 `queued (N)` while nothing Shoal started runs there and an agent other than
@@ -6247,8 +6247,10 @@ project's name when it has none or the file no longer reads, so a deleted
 worktree or a broken file still removes it; a failure keeps the workspace. Checkpoints keep
 no volume data: a restored workspace starts fresh containers. The record
 survives daemon restarts, during which the containers keep running, and Shoal
-never stops or removes a project it has no record of. Container CPU and memory
-count for the machine, not the workspace.
+never stops or removes a project it has no record of. A running project's CPU
+and memory count in the workspace's usage, as the runtime's `stats` reads the
+containers Compose labels with the project's name; while the runtime cannot
+read them, the usage is its processes' alone.
 
 ## Cooperative resource pools
 

@@ -1,5 +1,5 @@
 //! What each workspace's processes use, sampled on a fixed cadence from the
-//! processes carrying its identity.
+//! processes carrying its identity, with what its containers use.
 use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::{HashMap, HashSet},
@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 use tokio::time::Instant;
 
 use crate::{
-    daemon::{log, workspace::Manager},
+    daemon::{containers::ContainerUsage, log, workspace::Manager},
     model::WorkspaceUsage,
     process::{
         identity::{self, Identity},
@@ -22,6 +22,10 @@ use crate::{
 const SAMPLE_INTERVAL: Duration = Duration::from_secs(10);
 /// How late a sample may be before the sampler counts as stalled.
 const STALE: Duration = Duration::from_secs(30);
+
+/// What the containers of each workspace whose project may run use, or why
+/// its runtime could not say.
+type ContainerReadings = Result<Vec<(SpaceId, Result<ContainerUsage>)>>;
 
 /// Every workspace process with its workspace and reading at one time.
 struct Sample {
@@ -41,12 +45,16 @@ pub(crate) struct WorkspaceUsages {
     /// before it reaped a child gone by its own read shows the child's time
     /// one sample later.
     pending: HashMap<Identity, Vec<Counted>>,
+    /// The workspaces whose containers could not be read last time, whose
+    /// failure is logged once until a reading succeeds.
+    unread_containers: HashSet<SpaceId>,
 }
 
 impl WorkspaceUsages {
-    /// Add a sample. A failed or late one forgets the previous sample, so no
-    /// CPU use spans a gap in what was measured.
-    fn record(&mut self, sample: Result<Sample>) {
+    /// Add a sample with what the workspaces' containers used meanwhile. A
+    /// failed or late one forgets the previous sample, so no CPU use spans a
+    /// gap in what was measured.
+    fn record(&mut self, sample: Result<Sample>, containers: ContainerReadings) {
         match sample {
             Ok(sample) => {
                 let previous = self
@@ -54,6 +62,8 @@ impl WorkspaceUsages {
                     .take()
                     .filter(|previous| sample.time.duration_since(previous.time) <= STALE);
                 self.usage = usage(previous.as_ref(), &sample, &mut self.pending);
+                let containers = self.read_containers(containers);
+                add_containers(&mut self.usage, containers, previous.is_some());
                 self.latest = Some(sample);
             }
             Err(error) => {
@@ -64,6 +74,31 @@ impl WorkspaceUsages {
                 self.usage.clear();
             }
         }
+    }
+
+    /// The containers' usage that was read, logging each workspace's failure
+    /// once: a runtime that cannot be read leaves its workspaces' usage as
+    /// their processes'.
+    fn read_containers(&mut self, readings: ContainerReadings) -> Vec<(SpaceId, ContainerUsage)> {
+        let readings = readings.unwrap_or_else(|error| {
+            log!("container usage: {error:#}");
+            Vec::new()
+        });
+        let mut read = Vec::new();
+        for (workspace, reading) in readings {
+            match reading {
+                Ok(usage) => {
+                    self.unread_containers.remove(&workspace);
+                    read.push((workspace, usage));
+                }
+                Err(error) => {
+                    if self.unread_containers.insert(workspace.clone()) {
+                        log!("container usage of {workspace}: {error:#}");
+                    }
+                }
+            }
+        }
+        read
     }
 
     /// The processes of the latest sample, which the next one follows until
@@ -78,8 +113,8 @@ impl WorkspaceUsages {
         })
     }
 
-    /// The latest usage of the workspace `id`, while it has processes and
-    /// sampling has not stalled.
+    /// The latest usage of the workspace `id`, while it has processes or
+    /// containers and sampling has not stalled.
     pub(crate) fn get(&self, id: &SpaceId, now: Instant) -> Option<WorkspaceUsage> {
         let latest = self.latest.as_ref()?;
         if now.duration_since(latest.time) > STALE {
@@ -160,6 +195,22 @@ fn usage(
         entry.cpu_percent = (elapsed > 0.0).then(|| used as f64 * 100.0 / elapsed);
     }
     usage
+}
+
+/// Add each workspace's `containers` to its processes' `usage`, with their
+/// CPU once the processes' is `measured` over two samples.
+fn add_containers(
+    usage: &mut HashMap<SpaceId, WorkspaceUsage>,
+    containers: Vec<(SpaceId, ContainerUsage)>,
+    measured: bool,
+) {
+    for (workspace, containers) in containers {
+        let entry = usage.entry(workspace).or_default();
+        entry.memory_bytes = entry.memory_bytes.saturating_add(containers.memory_bytes);
+        if measured {
+            entry.cpu_percent = Some(entry.cpu_percent.unwrap_or(0.0) + containers.cpu_percent);
+        }
+    }
 }
 
 /// How much of `counted` a reaper's reaped time, grown by `reaped`, shows,
@@ -260,10 +311,11 @@ fn reaper<'a>(
 pub(super) async fn run(manager: Arc<Manager>) {
     loop {
         let tracked = manager.usage.with_workspaces(|usages| usages.tracked());
-        let sample = sample(&manager, tracked).await;
+        let (sample, containers) =
+            tokio::join!(sample(&manager, tracked), manager.container_usage());
         manager
             .usage
-            .with_workspaces(|usages| usages.record(sample));
+            .with_workspaces(|usages| usages.record(sample, containers));
         tokio::time::sleep(SAMPLE_INTERVAL).await;
     }
 }

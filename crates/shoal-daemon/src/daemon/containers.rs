@@ -5,6 +5,7 @@
 mod automatic;
 mod compose;
 pub(crate) mod records;
+mod stats;
 
 use std::path::Path;
 
@@ -14,6 +15,7 @@ use shoal_ids::space_ids::SpaceId;
 
 use compose::Compose;
 use records::Recorded;
+pub(crate) use stats::ContainerUsage;
 
 use super::{
     allocation::Allocation,

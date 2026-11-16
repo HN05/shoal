@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Container runtime fixture: records each `compose` call; never runs Docker or Podman."""
+"""Container runtime fixture: records each `compose` call and reads its running
+projects' stats; never runs Docker or Podman."""
 import json
 import os
 from pathlib import Path
@@ -7,6 +8,20 @@ import sys
 
 root = Path(os.environ['HOME'])
 args = sys.argv[1:]
+state_file = root / 'compose-projects.json'
+projects = json.loads(state_file.read_text()) if state_file.exists() else {}
+# Each running project has one container, its `db`, which reads as `STATS`.
+STATS = {'CPUPerc': '12.50%', 'MemUsage': '1.5GiB / 7.6GiB'}
+if args[:3] == ['ps', '--quiet', '--filter']:
+    label, _, project = args[3].rpartition('=')
+    assert label == 'label=com.docker.compose.project'
+    if projects.get(project, {}).get('state') == 'running':
+        print(f'{project}-db-1')
+    sys.exit(0)
+if args[:4] == ['stats', '--no-stream', '--format', 'json']:
+    for container in args[4:]:
+        print(json.dumps({'ID': container, 'Name': container, **STATS}))
+    sys.exit(0)
 assert args.pop(0) == 'compose'
 assert args.pop(0) == '--project-name'
 project = args.pop(0)
@@ -22,8 +37,6 @@ failing = failure.read_text().split() if failure.exists() else []
 if failing[:1] == [command] and (failing[1:] != ['with-file'] or args[:1] == ['-f']):
     print(f'injected {command} failure', file=sys.stderr)
     sys.exit(1)
-state_file = root / 'compose-projects.json'
-projects = json.loads(state_file.read_text()) if state_file.exists() else {}
 if command == 'up':
     projects[project] = {'state': 'running', 'ports': ports}
 elif command == 'stop' and project in projects:
