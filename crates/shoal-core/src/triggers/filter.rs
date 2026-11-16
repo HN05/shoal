@@ -1,6 +1,8 @@
 //! A trigger's `filter`: conditions on a firing's input document, every one
 //! of which must hold for the firing to go on. A path with `[]` holds when
 //! any value it reaches does, and `not_equals` when none equals its value.
+use std::fmt;
+
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -64,9 +66,36 @@ impl Condition {
     }
 }
 
-/// Whether every condition of `filter` holds for `input`.
-pub fn passes(filter: &[Condition], input: &Value) -> bool {
-    filter.iter().all(|condition| condition.holds(input))
+/// The first condition of `filter` that does not hold for `input`, none
+/// when every one does.
+pub fn failing<'a>(filter: &'a [Condition], input: &Value) -> Option<&'a Condition> {
+    filter.iter().find(|condition| !condition.holds(input))
+}
+
+impl fmt::Display for Condition {
+    /// Its path, operator and value, the value as JSON.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (operator, value) = match self {
+            Self {
+                equals: Some(value),
+                ..
+            } => ("equals", value.clone()),
+            Self {
+                not_equals: Some(value),
+                ..
+            } => ("not_equals", value.clone()),
+            Self {
+                any_of: Some(values),
+                ..
+            } => ("in", Value::Array(values.clone())),
+            Self {
+                starts_with: Some(prefix),
+                ..
+            } => ("starts_with", Value::String(prefix.clone())),
+            Self { exists, .. } => ("exists", Value::Bool(exists.unwrap_or(true))),
+        };
+        write!(f, "{} {operator} {value}", self.path)
+    }
 }
 
 #[cfg(test)]

@@ -3,7 +3,7 @@
 //! resume and run them.
 use anyhow::Result;
 use shoal_protocol::protocol::{ItemContext, TriggerMethod};
-use shoal_protocol::triggers::{TriggerAction, TriggerRun, TriggerStatus};
+use shoal_protocol::triggers::{Fired, TriggerStatus, WebhookRequest};
 
 use crate::connection::{Daemon, request};
 
@@ -23,35 +23,31 @@ pub async fn set_paused(
     name: String,
     paused: bool,
 ) -> Result<TriggerStatus> {
-    let action = match paused {
-        true => TriggerAction::Pause,
-        false => TriggerAction::Resume,
-    };
     request(
         daemon,
-        TriggerMethod::ActOnTrigger {
+        TriggerMethod::PauseTrigger {
             context,
             name,
-            action,
+            paused,
         },
     )
     .await
 }
 
-/// Fire the trigger `name` now: the run it made, none when its filter
-/// dropped the firing.
+/// Fire the trigger `name` now, a webhook trigger with `sample` as its
+/// request: the run it made, or the filter condition that dropped it.
 pub async fn run(
     daemon: &impl Daemon,
     context: Option<ItemContext>,
     name: String,
-) -> Result<Option<TriggerRun>> {
-    let action = TriggerAction::Run;
+    sample: Option<WebhookRequest>,
+) -> Result<Fired> {
     request(
         daemon,
-        TriggerMethod::ActOnTrigger {
+        TriggerMethod::RunTrigger {
             context,
             name,
-            action,
+            request: sample,
         },
     )
     .await

@@ -202,12 +202,19 @@ pub enum TriggerCommand {
         repository: Option<String>,
     },
     /// Fire a trigger now, through its filter, templates, key and overlap,
-    /// and print its run's outcome.
+    /// and print its run's outcome, or the filter condition that dropped it.
     Run {
         name: String,
         /// A registered repository other than the one this runs in.
         #[arg(short = 'r', long = "repo")]
         repository: Option<String>,
+        /// The body of the sample request a webhook trigger fires with,
+        /// whose signature is not checked; an empty one without it.
+        #[arg(long, value_name = "FILE")]
+        payload: Option<std::path::PathBuf>,
+        /// A header of the sample request; repeatable.
+        #[arg(long = "header", value_name = "NAME=VALUE")]
+        headers: Vec<String>,
     },
 }
 

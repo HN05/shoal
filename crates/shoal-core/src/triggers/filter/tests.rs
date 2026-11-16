@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use super::{Condition, passes};
+use super::{Condition, failing};
 
 fn condition(toml: &str) -> Condition {
     let condition: Condition = toml::from_str(toml).unwrap();
@@ -35,8 +35,11 @@ fn every_condition_must_hold() {
         condition("path = 'payload.action'\nequals = 'opened'"),
         condition("path = 'payload.labels[].name'\nequals = 'docs'"),
     ];
-    assert!(!passes(&filter, &input));
-    assert!(passes(&filter[..1], &input));
+    assert_eq!(
+        failing(&filter, &input).map(ToString::to_string).as_deref(),
+        Some(r#"payload.labels[].name equals "docs""#)
+    );
+    assert!(failing(&filter[..1], &input).is_none());
 }
 
 #[test]

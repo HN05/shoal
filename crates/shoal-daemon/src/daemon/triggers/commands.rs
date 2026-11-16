@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
 use shoal_ids::repository_ids::RepositoryId;
-use shoal_protocol::triggers::{RunOrigin, TriggerAction, TriggerRun, TriggerStatus};
+use shoal_protocol::triggers::{Fired, RunOrigin, TriggerAction, TriggerStatus, WebhookRequest};
 
 use super::{Configured, firing::Firing, state};
 use crate::{
@@ -57,19 +57,25 @@ impl Manager {
     }
 
     /// Fire the trigger `name` of the repository `context` acts in, else of
-    /// the global config, now, as `caller`'s `triggers` permission allows;
-    /// none when its filter drops the firing.
+    /// the global config, now, a webhook trigger with `request`, as
+    /// `caller`'s `triggers` permission allows.
     pub(crate) async fn run_trigger(
         self: &Arc<Self>,
         context: Option<ItemContext>,
         name: &str,
+        request: Option<WebhookRequest>,
         caller: Option<&Caller>,
-    ) -> Result<Option<TriggerRun>> {
+    ) -> Result<Fired> {
         let trigger = (self.acted_on_trigger(context, name, TriggerAction::Run, caller)).await?;
         let _firing = self.triggers.firing.lock().await;
         let now = UnixTime::now();
         let state = self.trigger_state(&trigger, now).await?;
-        let input = (trigger.trigger.source).manual_input(&trigger.name, now, state.previous());
+        let input = (trigger.trigger.source).manual_input(
+            &trigger.name,
+            now,
+            state.previous(),
+            request.as_ref(),
+        )?;
         let firing = Firing {
             origin: RunOrigin::Manual,
             input,

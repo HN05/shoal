@@ -1,9 +1,11 @@
 //! `shoal trigger`: the triggers of the repository this runs in, or that
 //! `--repo` names, beside the global config's, and pausing, resuming and
 //! running one.
-use anyhow::Result;
+use std::path::Path;
+
+use anyhow::{Context as _, Result};
 use shoal_ids::repository_ids::RepositoryId;
-use shoal_protocol::triggers::{RunOutcome, TriggerRun, TriggerStatus};
+use shoal_protocol::triggers::{Fired, RunOutcome, TriggerRun, TriggerStatus, WebhookRequest};
 
 use super::items::{current_context, named_repository};
 use crate::{
@@ -25,7 +27,15 @@ pub(in crate::cli::commands) async fn run(ctx: &Context, command: TriggerCommand
         TriggerCommand::Resume { name, repository } => {
             set_paused(ctx, name, repository, false).await
         }
-        TriggerCommand::Run { name, repository } => fire(ctx, name, repository).await,
+        TriggerCommand::Run {
+            name,
+            repository,
+            payload,
+            headers,
+        } => {
+            let sample = sample_request(payload.as_deref(), &headers)?;
+            fire(ctx, name, repository, sample).await
+        }
     }
 }
 
@@ -68,18 +78,54 @@ async fn set_paused(
     Ok(0)
 }
 
-/// Fire the trigger `name` now and print its run's outcome; a failed run
+/// Fire the trigger `name` now, a webhook trigger with `sample`, and print
+/// its run's outcome or the filter condition that dropped it; a failed run
 /// exits 1.
-async fn fire(ctx: &Context, name: String, repository: Option<String>) -> Result<i32> {
+async fn fire(
+    ctx: &Context,
+    name: String,
+    repository: Option<String>,
+    sample: Option<WebhookRequest>,
+) -> Result<i32> {
     let context = trigger_context(ctx, repository).await?;
-    let run = crate::client::triggers::run(&ctx.paths, context, name.clone()).await?;
-    let message = match &run {
-        Some(run) => format!("Trigger {name}: {}", run_text(run)),
-        None => format!("Trigger {name}: its filter dropped the firing"),
+    let fired = crate::client::triggers::run(&ctx.paths, context, name.clone(), sample).await?;
+    let message = match &fired {
+        Fired::Ran { run } => format!("Trigger {name}: {}", run_text(run)),
+        Fired::Dropped { condition } => {
+            format!(
+                "Trigger {name}: its filter dropped the firing, since {condition} does not hold"
+            )
+        }
     };
-    ctx.emit(&message, &run)?;
-    let failed = run.is_some_and(|run| run.outcome == RunOutcome::Failed);
+    ctx.emit(&message, &fired)?;
+    let failed = matches!(fired, Fired::Ran { run } if run.outcome == RunOutcome::Failed);
     Ok(i32::from(failed))
+}
+
+/// The sample request whose body is the file `payload` and whose headers
+/// `headers` gives as `NAME=VALUE`; none without either.
+fn sample_request(payload: Option<&Path>, headers: &[String]) -> Result<Option<WebhookRequest>> {
+    if payload.is_none() && headers.is_empty() {
+        return Ok(None);
+    }
+    let body = match payload {
+        Some(path) => std::fs::read_to_string(path)
+            .with_context(|| format!("read the payload {}", path.display()))?,
+        None => String::new(),
+    };
+    let headers = (headers.iter())
+        .map(|header| match header.split_once('=') {
+            Some((name, value)) if !name.trim().is_empty() => {
+                Ok((name.trim().to_owned(), value.to_owned()))
+            }
+            _ => anyhow::bail!("--header {header}: expected NAME=VALUE"),
+        })
+        .collect::<Result<_>>()?;
+    Ok(Some(WebhookRequest {
+        headers,
+        query: Vec::new(),
+        body,
+    }))
 }
 
 /// The context the triggers are of: the registered repository `repository`

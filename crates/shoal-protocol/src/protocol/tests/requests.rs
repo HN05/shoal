@@ -154,7 +154,8 @@ const REQUESTS: &[&str] = &[
     r#"{"stop_demos":{"workspace":"fix","name":"web"}}"#,
     // Triggers.
     r#"{"list_triggers":{"context":{"checkout":"r1"}}}"#,
-    r#"{"act_on_trigger":{"context":null,"name":"triage","action":"run"}}"#,
+    r#"{"pause_trigger":{"context":null,"name":"triage","paused":true}}"#,
+    r#"{"run_trigger":{"context":null,"name":"labelled","request":{"headers":[["X-Forgejo-Event","issues"]],"body":"{}"}}}"#,
     // Issues and PRs.
     r#"{"link_item":{"space":"fix","kind":"issue","item":"1","relation":"related"}}"#,
     r#"{"relink_space":{"space":"fix","links":{"issues":[{"kind":"issue","url":"https://github.com/o/r/issues/1"}],"prs":[],"opened":[],"related":[],"assignees":[{"url":"https://github.com/o/r/issues/1","account":"agent","added":true}]}}}"#,

@@ -112,6 +112,7 @@ outputs!(
     shoal_protocol::sim::Simulator,
     shoal_protocol::sim::SimulatorOverview,
     shoal_protocol::sleep::Slept,
+    shoal_protocol::triggers::Fired,
     shoal_protocol::triggers::TriggerRun,
     shoal_protocol::triggers::TriggerStatus,
     shoal_protocol::priority::Prioritized,

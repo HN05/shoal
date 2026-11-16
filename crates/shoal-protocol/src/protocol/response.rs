@@ -206,7 +206,7 @@ response_bodies! {
     Launched(crate::launches::Launched),
     Triggers(Vec<crate::triggers::TriggerStatus>),
     Trigger(crate::triggers::TriggerStatus),
-    TriggerFired(Option<crate::triggers::TriggerRun>),
+    TriggerFired(crate::triggers::Fired),
     ScopeToken(ChatScope),
     Granted(Option<crate::scope_tokens::ScopeToken>),
     Branches(Vec<crate::model::Branch>),

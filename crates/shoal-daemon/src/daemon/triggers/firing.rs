@@ -7,7 +7,7 @@ use std::sync::Arc;
 use anyhow::{Context as _, Result};
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use shoal_protocol::launches::{Launch, LaunchSource, Launched};
-use shoal_protocol::triggers::{RunOrigin, RunOutcome, TriggerRun};
+use shoal_protocol::triggers::{Fired, RunOrigin, RunOutcome, TriggerRun};
 
 use super::{
     Configured,
@@ -49,15 +49,16 @@ enum Overlapping {
 }
 
 impl Manager {
-    /// Fire `trigger` with `firing`: none when its filter drops it, else
-    /// the run it recorded.
+    /// Fire `trigger` with `firing`: the run it recorded, or the filter
+    /// condition that dropped it.
     pub(super) async fn fire_trigger(
         self: &Arc<Self>,
         trigger: &Configured,
         firing: Firing,
-    ) -> Result<Option<TriggerRun>> {
-        if !filter::passes(&trigger.trigger.filter, &firing.input.document) {
-            return Ok(None);
+    ) -> Result<Fired> {
+        if let Some(condition) = filter::failing(&trigger.trigger.filter, &firing.input.document) {
+            let condition = condition.to_string();
+            return Ok(Fired::Dropped { condition });
         }
         let (scope, name, at) = (trigger.scope(), trigger.name.clone(), firing.at);
         self.store
@@ -68,7 +69,7 @@ impl Manager {
             Err(run) => run.into(),
         };
         self.record_trigger_run(trigger, &ran).await?;
-        Ok(Some(ran.run))
+        Ok(Fired::Ran { run: ran.run })
     }
 
     /// The launch `firing` asks of `trigger`, and its key, or the run that

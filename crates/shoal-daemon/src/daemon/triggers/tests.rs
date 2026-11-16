@@ -4,7 +4,7 @@
 use std::{sync::Arc, time::Duration};
 
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
-use shoal_protocol::triggers::{RunOrigin, RunOutcome, TriggerRun};
+use shoal_protocol::triggers::{Fired, RunOrigin, RunOutcome, TriggerRun};
 
 use crate::{
     daemon::{
@@ -92,7 +92,8 @@ pub(super) async fn runs(manager: &Manager, repo: &Repository, name: &str) -> Ve
         .unwrap()
 }
 
-/// Fire the repository's trigger `name` now, as `shoal trigger run` does.
+/// Fire the repository's trigger `name` now, as `shoal trigger run` does:
+/// the run it made, none when its filter dropped it.
 async fn fire(manager: &Arc<Manager>, repo: &Repository, name: &str) -> Option<TriggerRun> {
     let trigger = (manager.configured_triggers().await.into_iter())
         .find(|trigger| trigger.repository.as_ref() == Some(&repo.id) && trigger.name == name)
@@ -102,7 +103,10 @@ async fn fire(manager: &Arc<Manager>, repo: &Repository, name: &str) -> Option<T
         input: serde_json::json!({ "trigger": name }).into(),
         at: UnixTime::now(),
     };
-    manager.fire_trigger(&trigger, firing).await.unwrap()
+    match manager.fire_trigger(&trigger, firing).await.unwrap() {
+        Fired::Ran { run } => Some(run),
+        Fired::Dropped { .. } => None,
+    }
 }
 
 pub(super) fn outcomes(runs: &[TriggerRun]) -> Vec<RunOutcome> {
@@ -473,7 +477,7 @@ async fn a_scoped_run_follows_the_triggers_permission() {
     };
 
     // The built-in modes propose it: an approval request, and no run.
-    let error = (manager.run_trigger(context(&repo), "check", Some(&caller)))
+    let error = (manager.run_trigger(context(&repo), "check", None, Some(&caller)))
         .await
         .unwrap_err();
     assert!(error.downcast_ref::<Undecided>().is_some(), "{error:#}");
@@ -483,11 +487,13 @@ async fn a_scoped_run_follows_the_triggers_permission() {
     (manager.write_local_config(&repo.id, Some(config)))
         .await
         .unwrap();
-    let run = manager
-        .run_trigger(context(&repo), "check", Some(&caller))
+    let fired = manager
+        .run_trigger(context(&repo), "check", None, Some(&caller))
         .await
-        .unwrap()
         .unwrap();
+    let Fired::Ran { run } = fired else {
+        panic!("{fired:?}");
+    };
     assert_eq!(
         (run.outcome, run.origin),
         (RunOutcome::Started, RunOrigin::Manual)

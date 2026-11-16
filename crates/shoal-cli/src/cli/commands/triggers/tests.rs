@@ -45,3 +45,24 @@ fn rows_name_where_each_trigger_is_and_what_its_last_run_did() {
         "{rows:?}"
     );
 }
+
+#[test]
+fn a_sample_request_takes_the_payload_file_and_name_value_headers() {
+    let temp = tempfile::tempdir().unwrap();
+    let payload = temp.path().join("issue.json");
+    std::fs::write(&payload, "{\"issue\":{}}").unwrap();
+
+    let headers = ["X-Forgejo-Event=issues".to_owned(), "X-Empty=".to_owned()];
+    let sample = sample_request(Some(&payload), &headers).unwrap().unwrap();
+
+    assert_eq!(sample.body, "{\"issue\":{}}");
+    assert_eq!(
+        sample.headers,
+        [
+            ("X-Forgejo-Event".to_owned(), "issues".to_owned()),
+            ("X-Empty".to_owned(), String::new())
+        ]
+    );
+    assert!(sample_request(None, &[]).unwrap().is_none());
+    assert!(sample_request(None, &["X-Forgejo-Event: issues".to_owned()]).is_err());
+}

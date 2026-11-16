@@ -70,11 +70,25 @@ impl Source {
 
     /// The input of the firing of the trigger `name` that `shoal trigger
     /// run` makes at `now`, after the firing at `previous`: a webhook's
-    /// that of an empty request.
-    pub fn manual_input(&self, name: &str, now: UnixTime, previous: UnixTime) -> Input {
+    /// that of the sample `request`, else of an empty one, whose signature
+    /// it never checks.
+    pub fn manual_input(
+        &self,
+        name: &str,
+        now: UnixTime,
+        previous: UnixTime,
+        request: Option<&WebhookRequest>,
+    ) -> Result<Input> {
         match self {
-            Self::Timer(timer) => timer.input(name, now, now, Some(previous)).into(),
-            Self::Webhook(_) => webhook::input(name, &WebhookRequest::default(), now),
+            Self::Timer(_) if request.is_some() => {
+                anyhow::bail!("{name} is a timer trigger; a sample request is a webhook trigger's")
+            }
+            Self::Timer(timer) => Ok(timer.input(name, now, now, Some(previous)).into()),
+            Self::Webhook(_) => Ok(webhook::input(
+                name,
+                request.unwrap_or(&WebhookRequest::default()),
+                now,
+            )),
         }
     }
 }

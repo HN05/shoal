@@ -52,6 +52,16 @@ states!(
     }
 );
 
+/// What became of a firing `shoal trigger run` made.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "result", rename_all = "snake_case")]
+pub enum Fired {
+    /// It reached a run.
+    Ran { run: TriggerRun },
+    /// The filter dropped it, at the first condition that did not hold.
+    Dropped { condition: String },
+}
+
 /// One run of a trigger, as its history keeps it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TriggerRun {

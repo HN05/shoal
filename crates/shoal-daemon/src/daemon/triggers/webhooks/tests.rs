@@ -1,10 +1,11 @@
 //! The webhook listener over HTTP: which requests fire their trigger, and
-//! that a daemon without `listen` opens no port.
+//! that a daemon without `listen` opens no port; and `shoal trigger run`
+//! with a sample request.
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
-use shoal_protocol::triggers::{RunOutcome, TriggerRun};
+use shoal_protocol::triggers::{Fired, RunOrigin, RunOutcome, TriggerRun, WebhookRequest};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -193,5 +194,39 @@ async fn without_listen_no_port_opens() {
             .bind_webhooks(manager.webhook_address())
             .await
             .is_none()
+    );
+}
+
+#[tokio::test]
+async fn a_sample_request_fires_unsigned_and_names_the_condition_that_drops_it() {
+    let (_temp, manager, repo) = with_triggers(LABELLED).await;
+    let context = || Some(crate::protocol::ItemContext::Checkout(repo.id.clone()));
+    let sample = |body: &str| WebhookRequest {
+        headers: vec![("X-Forgejo-Event".into(), "issues".into())],
+        query: Vec::new(),
+        body: body.to_owned(),
+    };
+
+    let unlabelled = r#"{"issue":{"number":7,"labels":[]}}"#;
+    let dropped = (manager.run_trigger(context(), "labelled", Some(sample(unlabelled)), None))
+        .await
+        .unwrap();
+    let ran = (manager.run_trigger(context(), "labelled", Some(sample(ISSUE)), None))
+        .await
+        .unwrap();
+
+    let Fired::Dropped { condition } = dropped else {
+        panic!("{dropped:?}");
+    };
+    assert!(
+        condition.starts_with("payload.issue.labels[].name"),
+        "{condition}"
+    );
+    let Fired::Ran { run } = ran else {
+        panic!("{ran:?}");
+    };
+    assert_eq!(
+        (run.outcome, run.origin),
+        (RunOutcome::Started, RunOrigin::Manual)
     );
 }

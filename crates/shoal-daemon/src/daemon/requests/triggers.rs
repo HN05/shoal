@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use shoal_protocol::space_names::SpaceSelector;
-use shoal_protocol::triggers::TriggerAction;
 
 use super::super::{
     answer::Answer,
@@ -22,23 +21,20 @@ pub(super) async fn handle(
         TriggerMethod::ListTriggers { context } => {
             Body::Triggers(manager.list_triggers(context).await?)
         }
-        TriggerMethod::ActOnTrigger {
+        TriggerMethod::PauseTrigger {
             context,
             name,
-            action: action @ (TriggerAction::Pause | TriggerAction::Resume),
-        } => {
-            let paused = action == TriggerAction::Pause;
-            Body::Trigger(
-                manager
-                    .pause_trigger(context, &name, paused, caller)
-                    .await?,
-            )
-        }
-        TriggerMethod::ActOnTrigger {
+            paused,
+        } => Body::Trigger(
+            manager
+                .pause_trigger(context, &name, paused, caller)
+                .await?,
+        ),
+        TriggerMethod::RunTrigger {
             context,
             name,
-            action: TriggerAction::Run,
-        } => Body::TriggerFired(manager.run_trigger(context, &name, caller).await?),
+            request,
+        } => Body::TriggerFired(manager.run_trigger(context, &name, request, caller).await?),
     }))
 }
 
