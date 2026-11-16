@@ -6,7 +6,7 @@ use futures_util::future::LocalBoxFuture;
 use crate::cli::{self, Cli};
 use crate::{
     WORKER_STACK, client, daemon_handoff::Handoff, env, git, paths::Paths, process, profile,
-    releases, service, stdout,
+    releases, stdout,
 };
 
 /// Runs the daemon in this process, given its state, whether its service
@@ -75,7 +75,7 @@ pub fn run(daemon: RunDaemon) {
     // SAFETY: as above; only the chat this process starts runs in the place.
     unsafe { env::take_opened_chat_place() };
     profile::start();
-    client::connection::supervise(&service::Command);
+    client::connection::supervise(&super::supervision::Command);
     run_cli(cli, daemon);
 }
 

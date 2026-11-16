@@ -12,7 +12,7 @@ impl Supervision for Command {
     }
 
     fn managed(&self, paths: &Paths) -> bool {
-        super::installed(paths)
+        crate::service::installed(paths)
     }
 
     fn waiting_for_update(&self) {
