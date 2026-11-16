@@ -80,8 +80,8 @@ fn server(ports: &[PortReservation]) -> Provided {
     }
 }
 
-/// The workspace's simulator as `SHOAL_SIM_UDID`. The lease stays with the
-/// workspace, as one `shoal acquire sim` takes does.
+/// The workspace's simulator as `SHOAL_SIM_UDID`. The daemon gives the demo
+/// the lease when an agent acquired it, so it ends with the demo.
 async fn simulator(
     ctx: &Context,
     workspace: &Workspace,

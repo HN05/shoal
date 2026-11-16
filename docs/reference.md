@@ -1717,7 +1717,7 @@ you:
 |---|---|
 | `server` | Reserves a TCP port named after the demo, or the first of `ports`, and passes it as `PORT`. Opening prints `localhost:<port>`, and over SSH the `ssh -L` command that forwards it to your machine. |
 | `web` | `server` for a page you open in a browser: opening prints `http://localhost:<port>`, or `https://` with `scheme = "https"`. |
-| `simulator` | Leases the workspace's `default` simulator as `shoal acquire sim` does (`--queue` waits for one) and passes its UDID as `SHOAL_SIM_UDID`; the command installs and launches the app and follows its log. Opening brings the device forward in Simulator, and over SSH says to view it with Screen Sharing. The lease stays with the workspace until `shoal release sim` or removal, as one the agent takes does. |
+| `simulator` | Leases the workspace's `default` simulator as `shoal acquire sim` does (`--queue` waits for one) and passes its UDID as `SHOAL_SIM_UDID`; the command installs and launches the app and follows its log. Opening brings the device forward in Simulator, and over SSH says to view it with Screen Sharing. The demo takes over the lease when an agent acquired it, so it ends with the demo; the user's stays until `shoal release sim` or removal. |
 
 `shoal demo start [NAME] [--workspace W] [--preset P] [--scheme S] [--port NAME]... [--open COMMAND] [-- COMMAND...]` starts
 the configured demo `NAME`, or the only one configured. A command after `--`
@@ -5829,9 +5829,9 @@ lease is acquired or its approval denied. `acquire repo` selects only `kind = "r
 A simulator, resource or repository lease records who acquired it. The user's,
 from an unscoped terminal, stays until `shoal release` or the workspace's
 removal. An agent's, acquired by the agent or a command it started, ends with
-the agent: once its execution exits or it is stopped, as by `shoal stop`,
-`shoal restart` or overload protection, Shoal releases the lease as
-`shoal release` does, so a simulator keeps its apps and data and a permit runs
+the agent, and a [demo's](#demos) with the demo: once its execution exits or
+it is stopped, as by `shoal stop`, `shoal restart` or overload protection,
+Shoal releases the lease as `shoal release` does, so a simulator keeps its apps and data and a permit runs
 `hooks.pre_resource_release`. A failed release keeps the lease and records a
 `release_failed` notification naming the command that releases it. The user
 acquiring an agent's lease again makes it the user's; an agent acquiring the

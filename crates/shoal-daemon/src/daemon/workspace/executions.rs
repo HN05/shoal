@@ -295,8 +295,9 @@ impl Manager {
     }
 
     /// Register an execution and issue its scope token, recording the demo it
-    /// runs and the place it runs at with it. The returned receiver fires
-    /// when the workspace asks its commands to stop.
+    /// runs, which takes over the lease its preset acquired, and the place it
+    /// runs at with it. The returned receiver fires when the workspace asks
+    /// its commands to stop.
     pub(crate) async fn begin_execution_placed(
         &self,
         selector: &SpaceSelector,
@@ -330,6 +331,7 @@ impl Manager {
             unmerge,
             _resources,
         } = preparation;
+        let launch = demo.clone();
         let record = ExecutionRecord {
             id: ExecutionId::generate(),
             kind,
@@ -341,6 +343,10 @@ impl Manager {
             place,
         };
         let registered = self.register_execution(&space_id, record).await?;
+        if let Some(launch) = &launch {
+            self.give_demo_its_leases(&registered.id, &space_id, launch)
+                .await;
+        }
         // Setup releases its Git gate before the hook; resources remain guarded
         // until pre-setup completes, while merge's gate travels with the plan.
         drop(registration_guard);

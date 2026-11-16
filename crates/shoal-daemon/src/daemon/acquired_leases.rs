@@ -1,6 +1,7 @@
 //! The simulator leases and resource permits an execution acquired, which
-//! end with it: who acquires a lease, and releasing an execution's leases
-//! through each kind's release path once it ends.
+//! end with it: who acquires a lease, the lease a demo takes over from the
+//! agent that started it, and releasing an execution's leases through each
+//! kind's release path once it ends.
 use std::collections::HashSet;
 
 use anyhow::Result;
@@ -12,7 +13,7 @@ use super::allocation::Allocation;
 use super::{log, resources, scope::Caller, workspace::Manager};
 use crate::{model::Workspace, state::WorkspaceState};
 use shoal_protocol::{
-    acquirers::Acquirer, notifications::NotificationKind, space_names::SpaceSelector,
+    acquirers::Acquirer, demos::Launch, notifications::NotificationKind, space_names::SpaceSelector,
 };
 
 /// A lease that ends with the execution that acquired it.
@@ -84,6 +85,25 @@ impl Manager {
             log!("demo of execution {execution} unreadable: {error:#}");
             false
         })
+    }
+
+    /// Give the demo `execution` of `workspace` the lease its preset
+    /// acquired for it, as `launch` records, so the lease ends with the demo
+    /// rather than with the agent that started it. A lease that cannot be
+    /// given stays the agent's.
+    pub(crate) async fn give_demo_its_leases(
+        &self,
+        execution: &ExecutionId,
+        workspace: &SpaceId,
+        launch: &Launch,
+    ) {
+        let given = self.give_simulator_to_demo(execution, workspace, launch);
+        if let Err(error) = given.await {
+            log!(
+                "the simulator lease of demo {} stays the agent's: {error:#}",
+                launch.name
+            );
+        }
     }
 
     /// Release the leases execution `id` acquired, whose processes are

@@ -123,9 +123,15 @@ impl Fixture {
     /// Record a leased simulator named `name` that `acquirer` acquired,
     /// without a device, so releasing it runs no simctl.
     async fn lease_simulator(&self, name: &str, acquirer: Acquirer) {
+        self.lease_device(name, None, acquirer).await;
+    }
+
+    /// Record a leased simulator named `name` on the device `udid`, which
+    /// releasing it would read with simctl.
+    async fn lease_device(&self, name: &str, udid: Option<&str>, acquirer: Acquirer) {
         let sim = shoal_protocol::sim::Simulator {
             id: name.into(),
-            udid: None,
+            udid: udid.map(Into::into),
             device: "phone".into(),
             runtime: "ios".into(),
             workspace_id: Some(self.workspace.id.clone()),
@@ -260,4 +266,93 @@ async fn leases_of_executions_that_ended_unreleased_are_released() {
     fixture.manager.release_leases_of_ended_executions().await;
 
     assert_eq!(fixture.simulators().await, ["running"]);
+}
+
+impl Fixture {
+    /// Start the simulator demo `name` on the device `udid` as `caller`
+    /// starts it, returning its execution and the caller its command's
+    /// requests come as.
+    async fn simulator_demo(
+        &self,
+        name: &str,
+        udid: &str,
+        caller: &Caller,
+    ) -> (ExecutionId, Caller) {
+        use crate::sessions::{HostName, Origin};
+        use shoal_protocol::demos::{Launch, Preset, SIM_UDID};
+        let launch = Launch {
+            id: name.into(),
+            name: name.into(),
+            preset: Some(Preset::Simulator),
+            open: None,
+            scheme: None,
+            environment: [(SIM_UDID.to_owned(), udid.to_owned())].into(),
+            origin: Origin::created(HostName::Zmx, name.into()),
+        };
+        let kind = crate::daemon::workspace::ExecutionKind::Command;
+        let started = self.manager.begin_execution_running(
+            self.workspace.id.as_str(),
+            None,
+            kind,
+            Some(caller),
+            Some(launch),
+        );
+        let started = started.await.unwrap();
+        let demo = (self.manager.caller(&started.plan.scope_token))
+            .await
+            .unwrap()
+            .unwrap();
+        (started.plan.id, demo)
+    }
+
+    /// Who acquired each of the workspace's simulator leases, by name.
+    async fn simulator_acquirers(&self) -> Vec<(String, Acquirer)> {
+        let sims = self.manager.list_simulators(Some(&self.workspace.id));
+        let mut leases: Vec<_> = (sims.await.unwrap().into_iter())
+            .filter_map(|sim| Some((sim.lease_name?, sim.acquirer)))
+            .collect();
+        leases.sort_by(|a, b| a.0.cmp(&b.0));
+        leases
+    }
+}
+
+/// A simulator demo an agent starts takes over the lease the agent took for
+/// it, so it outlives the agent, while the user's lease stays the user's.
+#[tokio::test]
+async fn a_simulator_demo_keeps_the_lease_its_agent_took_past_the_agent() {
+    let fixture = Fixture::new(POOL).await;
+    let (agent, caller) = fixture.agent().await;
+    let agent_acquirer = Acquirer::Agent {
+        execution_id: agent.clone(),
+    };
+    fixture
+        .lease_device("default", Some("DEMO"), agent_acquirer)
+        .await;
+    fixture
+        .lease_device("user", Some("USER"), Acquirer::User)
+        .await;
+
+    let (demo, _) = fixture.simulator_demo("app", "DEMO", &caller).await;
+    fixture.simulator_demo("other", "USER", &caller).await;
+    fixture.manager.end_test_execution(agent).await;
+
+    let demo = Acquirer::Demo { execution_id: demo };
+    assert_eq!(
+        fixture.simulator_acquirers().await,
+        [permit("default", &demo), permit("user", &Acquirer::User)]
+    );
+}
+
+/// What a demo's command acquires is the demo's, not the agent's that
+/// started it.
+#[tokio::test]
+async fn a_demos_command_acquires_for_the_demo() {
+    let fixture = Fixture::new(POOL).await;
+    let (_, caller) = fixture.agent().await;
+    let (demo, demo_caller) = fixture.simulator_demo("app", "DEMO", &caller).await;
+
+    fixture.acquire("demo", Some(&demo_caller)).await;
+
+    let demo = Acquirer::Demo { execution_id: demo };
+    assert_eq!(fixture.permits().await, [permit("demo", &demo)]);
 }

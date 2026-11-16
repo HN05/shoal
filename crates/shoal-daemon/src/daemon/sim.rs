@@ -9,6 +9,7 @@ mod simctl;
 
 use anyhow::{Result, ensure};
 use rusqlite::params;
+use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use uuid::Uuid;
 
@@ -25,8 +26,11 @@ use crate::{
     time::UnixTime,
     validate,
 };
-use shoal_protocol::acquirers::Acquirer;
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{
+    acquirers::Acquirer,
+    demos::{Launch, Preset, SIM_UDID},
+    space_names::SpaceSelector,
+};
 
 /// Operations on the client type [`Simulator`] that only the `shoal` command uses.
 trait SimulatorExt {
@@ -591,6 +595,38 @@ impl Manager {
                 Ok(released)
             })
             .await
+    }
+
+    /// Give the demo `execution` the simulator lease of the device it runs
+    /// on, as `launch` names it, when an agent acquired it for the demo, so
+    /// the lease ends with the demo rather than with the agent. The user's
+    /// lease stays the user's, and another demo's that demo's.
+    pub(crate) async fn give_simulator_to_demo(
+        &self,
+        execution: &ExecutionId,
+        workspace: &SpaceId,
+        launch: &Launch,
+    ) -> Result<()> {
+        if launch.preset != Some(Preset::Simulator) {
+            return Ok(());
+        }
+        let Some(udid) = launch.environment.get(SIM_UDID) else {
+            return Ok(());
+        };
+        let _guard = self.gates.lock_simulators().await;
+        let leased = self.list_simulators(Some(workspace)).await?.into_iter();
+        let agents = leased.filter(|sim| {
+            sim.workspace_id.as_ref() == Some(workspace)
+                && sim.udid.as_ref() == Some(udid)
+                && matches!(sim.acquirer, Acquirer::Agent { .. })
+        });
+        for mut sim in agents {
+            sim.acquirer = Acquirer::Demo {
+                execution_id: execution.to_owned(),
+            };
+            self.save_sim(&sim).await?;
+        }
+        Ok(())
     }
 
     pub async fn remove_simulators(&self, owner: &SpaceId) -> Result<()> {

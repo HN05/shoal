@@ -3006,7 +3006,9 @@ releases an execution's leases through each kind's release once its end is
 recorded or its stopped agent is proven ended while its execution waits for a
 restore, and startup releases those of executions whose end was recorded
 first. The user's lease stays until released; the user's acquire takes an
-agent's lease over, never the reverse. Ports, holds and secret grants keep
+agent's lease over, never the reverse. A demo outlives the agent that starts
+it, so a simulator demo takes over the lease an agent acquired for it, and
+what a demo's command acquires is the demo's; both end with the demo. Ports, holds and secret grants keep
 their own lifetimes. User scripts own integrations
 with the underlying resources.
 
