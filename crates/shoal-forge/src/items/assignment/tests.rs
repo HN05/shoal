@@ -52,22 +52,43 @@ async fn assigning_adds_the_accounts_login_and_names_the_other_assignees() {
     let server = issue_server("open", &["ann"]);
     let account = agent_on(&server, "agent").remembering(Memory::default());
     let (repo, issue) = issue(&server);
-    let assignment = repo.assign_own(&account, &issue).await.unwrap();
+    let assignment = repo.assign_own(&account, &issue).await.unwrap().unwrap();
     assert_eq!(
-        assignment.unwrap(),
-        Assignment {
-            login: "Agent".into(),
-            added: true,
-            others: vec!["ann".into()],
-        }
+        (
+            assignment.login.as_str(),
+            assignment.added,
+            &assignment.others[..]
+        ),
+        ("Agent", true, &["ann".to_owned()][..])
+    );
+    assert_eq!(
+        assignee_edit(&assignment.edited),
+        (vec!["ann"], vec!["Agent", "ann"])
     );
     let patch = r#"PATCH /api/v3/repos/team/repo/issues/7 {"assignees":["ann","Agent"]}"#;
     assert_eq!(changes(&server), [patch]);
 
     // Removing it leaves the other assignee.
-    assert!(repo.unassign(&account, &issue, "agent").await.unwrap());
+    let removal = repo.unassign(&account, &issue, "agent").await.unwrap();
+    assert!(removal.removed);
+    assert_eq!(
+        assignee_edit(&removal.edited),
+        (vec!["Agent", "ann"], vec!["ann"])
+    );
     let patch = r#"PATCH /api/v3/repos/team/repo/issues/7 {"assignees":["ann"]}"#;
     assert_eq!(changes(&server)[1..], [patch]);
+}
+
+/// The assignees `edited` shows before and after the edit.
+fn assignee_edit(edited: &Edited) -> (Vec<&str>, Vec<&str>) {
+    (
+        names(&edited.before.assignees),
+        names(&edited.after.assignees),
+    )
+}
+
+fn names(names: &[String]) -> Vec<&str> {
+    names.iter().map(String::as_str).collect()
 }
 
 #[tokio::test]
@@ -76,18 +97,17 @@ async fn unassigning_its_own_takes_the_accounts_login_off() {
     let account = agent_on(&server, "agent").remembering(Memory::default());
     let (repo, issue) = issue(&server);
     let removal = repo.unassign_own(&account, &issue).await.unwrap().unwrap();
+    assert!(removal.removed);
+    assert_eq!(removal.others, ["ann"]);
     assert_eq!(
-        removal,
-        Unassignment {
-            removed: true,
-            others: vec!["ann".into()],
-        }
+        assignee_edit(&removal.edited),
+        (vec!["agent", "ann"], vec!["ann"])
     );
     let patch = r#"PATCH /api/v3/repos/team/repo/issues/7 {"assignees":["ann"]}"#;
     assert_eq!(changes(&server), [patch]);
     // Without its login there, it has nothing to take off.
     let again = repo.unassign_own(&account, &issue).await.unwrap().unwrap();
-    assert!(!again.removed);
+    assert!(!again.removed && again.edited.is_empty());
     let none = Account::agent(Default::default(), Default::default());
     assert_eq!(repo.unassign_own(&none, &issue).await.unwrap(), None);
     assert_eq!(changes(&server).len(), 1);
@@ -111,7 +131,7 @@ async fn an_issue_the_account_has_already_is_left_as_it_is() {
     let account = agent_on(&server, "agent").remembering(Memory::default());
     let (repo, issue) = issue(&server);
     let assignment = repo.assign_own(&account, &issue).await.unwrap().unwrap();
-    assert!(!assignment.added);
+    assert!(!assignment.added && assignment.edited.is_empty());
     assert!(assignment.others.is_empty());
     assert!(changes(&server).is_empty());
 }
@@ -121,7 +141,13 @@ async fn a_closed_issue_is_neither_assigned_nor_unassigned() {
     let server = issue_server("closed", &["Agent"]);
     let account = agent_on(&server, "agent").remembering(Memory::default());
     let (repo, issue) = issue(&server);
-    assert!(!repo.unassign(&account, &issue, "Agent").await.unwrap());
+    assert!(
+        !repo
+            .unassign(&account, &issue, "Agent")
+            .await
+            .unwrap()
+            .removed
+    );
     let unassigned = issue_server("closed", &[]);
     let (repo, issue) = self::issue(&unassigned);
     let account = agent_on(&unassigned, "agent").remembering(Memory::default());

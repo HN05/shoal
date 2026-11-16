@@ -1,11 +1,10 @@
 //! Assigning an issue to the account that works on it, and taking that
 //! assignment back.
 use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
 
 use crate::{
     RepoRequests, account::Account, backends::Items, capability::CapabilityRequests,
-    items::action::ActionSteps,
+    items::action::ActionRequests, updates::Edited,
 };
 use shoal_forge_types::{
     ForgeRepo,
@@ -19,7 +18,7 @@ use shoal_forge_types::{
 };
 
 /// What assigning an issue to the acting account found and did.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Assignment {
     /// The login the account signs in as, as assignees name it: Bitbucket's
     /// account ID.
@@ -29,16 +28,20 @@ pub struct Assignment {
     pub added: bool,
     /// The issue's other assignees.
     pub others: Vec<String>,
+    /// What adding the login changed of the issue's details.
+    pub edited: Edited,
 }
 
 /// What taking the acting account's login off an issue found and did.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unassignment {
     /// Whether it took the login off: not when the issue lacked it, nor
     /// when it is closed.
     pub removed: bool,
     /// The issue's other assignees.
     pub others: Vec<String>,
+    /// What taking the login off changed of the issue's details.
+    pub edited: Edited,
 }
 
 /// Assigning items.
@@ -60,18 +63,22 @@ impl ForgeRepo {
         let current = self.issue_details(account, number).await?.item;
         let assigned = has_assignee(&current, &login);
         let added = !assigned && current.state == ItemState::Open;
-        if added {
-            let edit = Edit {
-                add_assignees: vec![login.clone()],
-                ..Edit::default()
-            };
-            (self.act(account, ItemKind::Issue, number.get(), &Action::edit(edit))).await?;
-        }
+        let edited = match added {
+            true => {
+                let edit = Edit {
+                    add_assignees: vec![login.clone()],
+                    ..Edit::default()
+                };
+                edit_assignees(self, account, issue, edit).await?
+            }
+            false => Edited::default(),
+        };
         let others = besides(current.assignees, &login);
         Ok(Some(Assignment {
             login,
             added,
             others,
+            edited,
         }))
     }
 
@@ -129,11 +136,16 @@ impl ForgeRepo {
         Ok(Some(login))
     }
 
-    /// Remove `login` from the assignees of `issue`, of this repository,
-    /// returning whether it did: a closed issue keeps its assignees.
-    pub async fn unassign(&self, account: &Account, issue: &ItemRef, login: &str) -> Result<bool> {
+    /// Remove `login` from the assignees of `issue`, of this repository:
+    /// a closed issue keeps its assignees.
+    pub async fn unassign(
+        &self,
+        account: &Account,
+        issue: &ItemRef,
+        login: &str,
+    ) -> Result<Unassignment> {
         issue.belongs_to(self)?;
-        Ok(take_off(self, account, issue, login).await?.removed)
+        take_off(self, account, issue, login).await
     }
 }
 
@@ -148,15 +160,35 @@ async fn take_off(
     let number = issue.issue()?;
     let current = repo.issue_details(account, number).await?.item;
     let removed = current.state == ItemState::Open && has_assignee(&current, login);
-    if removed {
-        let edit = Edit {
-            remove_assignees: vec![login.to_owned()],
-            ..Edit::default()
-        };
-        (repo.act(account, ItemKind::Issue, number.get(), &Action::edit(edit))).await?;
-    }
+    let edited = match removed {
+        true => {
+            let edit = Edit {
+                remove_assignees: vec![login.to_owned()],
+                ..Edit::default()
+            };
+            edit_assignees(repo, account, issue, edit).await?
+        }
+        false => Edited::default(),
+    };
     let others = besides(current.assignees, login);
-    Ok(Unassignment { removed, others })
+    Ok(Unassignment {
+        removed,
+        others,
+        edited,
+    })
+}
+
+/// Apply `edit` of the assignees of `issue`, of `repo`, as `account`,
+/// returning what it changed.
+async fn edit_assignees(
+    repo: &ForgeRepo,
+    account: &Account,
+    issue: &ItemRef,
+    edit: Edit,
+) -> Result<Edited> {
+    let number = issue.issue()?.get();
+    let acted = (repo.apply(account, ItemKind::Issue, number, &Action::edit(edit))).await?;
+    Ok(acted.edited)
 }
 
 /// `assignees` without `login`, whatever its case.
