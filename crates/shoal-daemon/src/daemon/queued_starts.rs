@@ -51,11 +51,15 @@ pub(super) async fn run(manager: Arc<Manager>) {
 
 /// Run the queue start worker for `start`, detached from the daemon,
 /// with the multiplexer variables of the terminal that queued it.
-#[cfg(not(test))]
 pub(crate) fn spawn_start(paths: &Paths, start: &Start) -> Result<()> {
     use crate::workers::{Worker, detached_command, internal_command};
     use anyhow::Context as _;
     use std::process::Stdio;
+
+    #[cfg(any(test, feature = "test-support"))]
+    if crate::daemon::fake_workers::faked() {
+        return fake::start(start);
+    }
 
     let argv = internal_command(
         paths,
@@ -75,16 +79,6 @@ pub(crate) fn spawn_start(paths: &Paths, start: &Start) -> Result<()> {
     tokio::spawn(async move {
         let _ = child.wait().await;
     });
-    Ok(())
-}
-
-/// Tests record starts instead of running this binary as the CLI.
-#[cfg(test)]
-pub(crate) fn spawn_start(_paths: &Paths, start: &Start) -> Result<()> {
-    tests::STARTED
-        .lock()
-        .unwrap()
-        .push((start.id.clone(), start.env.clone()));
     Ok(())
 }
 
@@ -124,5 +118,5 @@ pub(super) async fn hold(
     held
 }
 
-#[cfg(test)]
-pub(crate) mod tests;
+#[cfg(any(test, feature = "test-support"))]
+pub mod fake;

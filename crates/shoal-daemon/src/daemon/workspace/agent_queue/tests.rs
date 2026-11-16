@@ -14,7 +14,7 @@ use crate::{
     config::permissions::{PermissionChange, PermissionsConfig},
     daemon::{
         notifications::NotificationKind,
-        queued_starts::tests::STARTED,
+        queued_starts::fake::STARTED,
         test_support::{global_config, manager, repository},
         workspace::{Manager, PermissionTargets, capacity::Activity},
         workspace_files::Attacher,
