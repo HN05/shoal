@@ -15,7 +15,7 @@ use crate::{
 /// daemon does, which records it as a place Shoal created for the workspace
 /// or whose host labels it as the workspace's session.
 pub(in crate::cli) async fn closes_with(
-    paths: &crate::paths::CommandPaths,
+    paths: &crate::client::connection::CommandPaths,
     workspace: &SpaceId,
 ) -> Result<bool> {
     if closing::closes_with(paths, workspace).await {

@@ -17,9 +17,9 @@ use crate::{
         shell, terminal,
         ui::{self, Fallback},
     },
+    client::connection::CommandPaths,
     forge::items::reference::ItemInput,
     model::{SpaceRef, Workspace},
-    paths::CommandPaths,
     protocol::{
         CommitStart, CreationOptions, ItemContext,
         operations::{Prepared, QueuedLaunch},

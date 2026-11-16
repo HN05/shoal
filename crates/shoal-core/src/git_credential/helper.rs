@@ -9,7 +9,7 @@ use std::io::{Read as _, Write as _};
 
 use anyhow::Result;
 
-use crate::paths::CommandPaths;
+use crate::client::connection::CommandPaths;
 
 /// Answer Git's `operation` request on standard input.
 pub async fn answer(paths: &CommandPaths, operation: String) -> Result<i32> {

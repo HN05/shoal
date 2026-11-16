@@ -8,10 +8,10 @@ use anyhow::{Context as _, Result};
 
 use crate::client::queue;
 use crate::{
+    client::connection::CommandPaths,
     config::Effective,
     env,
     model::{QueueEntry, QueuedPlan},
-    paths::CommandPaths,
     protocol::ConfigTarget,
     start_plan::AddPlan,
     workers::{Worker, internal_command},

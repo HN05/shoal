@@ -19,7 +19,7 @@ use tokio::{
 };
 
 use crate::{
-    paths::CommandPaths,
+    client::connection::CommandPaths,
     protocol::operations::{Ended, OperationSpec, Order, Outcome, Report, Step},
 };
 pub use failures::{Failed, error};

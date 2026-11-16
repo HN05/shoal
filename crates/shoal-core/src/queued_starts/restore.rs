@@ -6,8 +6,8 @@ use std::ffi::OsString;
 use anyhow::{Context as _, Result};
 
 use crate::{
+    client::connection::CommandPaths,
     model::{PresentSpace, QueueEntry},
-    paths::CommandPaths,
     protocol::ConfigTarget,
     sessions::Origin,
     terminal::queued,

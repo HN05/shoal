@@ -22,10 +22,11 @@ use super::{
 };
 use crate::{
     client::connection,
+    client::connection::CommandPaths,
     config::permissions::Pushes,
     env,
     model::ExecutionPlan,
-    paths::{CommandPaths, Paths},
+    paths::Paths,
     process::{self, identity::Identity},
     protocol::{Body, ExecutionMethod, Reattach},
     sessions::Origin,

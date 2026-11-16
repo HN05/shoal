@@ -12,9 +12,9 @@ use anyhow::{Context as _, Result};
 use crate::{
     agent::Agent,
     chat_handoff::Handoff,
+    client::connection::CommandPaths,
     config::Effective,
     model::Repository,
-    paths::CommandPaths,
     protocol::{ChatStart, ConfigTarget},
     workers::{Worker, internal_command},
 };

@@ -9,7 +9,8 @@ use crate::{
         availability::Need,
         output::{Palette, Style},
     },
-    paths::{CommandPaths, Paths},
+    client::connection::CommandPaths,
+    paths::Paths,
 };
 
 pub struct Context {

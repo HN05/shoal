@@ -9,7 +9,7 @@ mod restore;
 use anyhow::Result;
 
 use crate::client::queue;
-use crate::{paths::CommandPaths, state::QueueKind};
+use crate::{client::connection::CommandPaths, state::QueueKind};
 use shoal_ids::queue_entry_ids::QueueEntryId;
 
 pub use chat::{ChatPlan, ChatPlanStart};

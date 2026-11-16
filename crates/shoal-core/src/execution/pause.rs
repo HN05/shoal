@@ -13,9 +13,10 @@ use super::{
     takeover,
 };
 use crate::{
+    client::connection::CommandPaths,
     config::permissions::PermissionsConfig,
     model::{ExecutionPlan, PortReservation},
-    paths::{CommandPaths, Paths},
+    paths::Paths,
     process,
     protocol::{ExecutionEvent, Protection},
 };

@@ -6,10 +6,10 @@ use anyhow::{Context as _, Result};
 
 use super::Reporter;
 use crate::{
+    client::connection::CommandPaths,
     env,
     execution::{self, MergeResult},
     model::{MergeOptions, MergePlan, MergedBranch},
-    paths::CommandPaths,
     protocol::operations::Step,
 };
 use shoal_protocol::space_names::SpaceSelector;

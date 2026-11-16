@@ -11,9 +11,9 @@ use anyhow::{Context as _, Result};
 use super::{agent_integration, args, delivery, hook_args};
 use crate::{
     agent::Agent,
+    client::connection::CommandPaths,
     config::{Effective, named_commands, templates},
     model::{Chat, ChatHome, PresentSpace, Repository, SpaceLinks, Workspace},
-    paths::CommandPaths,
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;

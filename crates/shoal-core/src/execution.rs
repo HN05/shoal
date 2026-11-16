@@ -27,7 +27,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 use std::{ffi::OsString, path::PathBuf};
 
-use crate::{env, paths::CommandPaths};
+use crate::{client::connection::CommandPaths, env};
 pub use cancellation::{cancel, cancellation};
 pub use completion::SetupVerificationFailure;
 pub use copy_ignored::copy_ignored_worker;

@@ -20,6 +20,7 @@ use crate::{
         context::Context,
         ui,
     },
+    client::connection::CommandPaths,
     execution,
     forge::{
         capability::Capability,
@@ -27,7 +28,6 @@ use crate::{
     },
     git::revert::{self as git_revert, Merge, Merged, Reverted},
     model::{Chat, PresentSpace, Workspace},
-    paths::CommandPaths,
     protocol::{ItemContext, operations::WorkspaceStart},
     removal::UnsavedWork,
     repository::Selector,

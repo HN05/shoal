@@ -2,9 +2,9 @@
 use anyhow::Result;
 
 use crate::{
+    client::connection::CommandPaths,
     forge::items::{link::LinkKind, reference::ItemInput},
     model::{LinkedItem, Relation, Workspace},
-    paths::CommandPaths,
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;

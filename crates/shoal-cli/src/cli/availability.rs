@@ -5,9 +5,9 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     cli::{list_status::ListStatus, terminal},
+    client::connection::CommandPaths,
     client::connection::Daemon,
     model::{Chat, RunningAgent, Workspace},
-    paths::CommandPaths,
     sessions::Origin,
     state::WorkspaceState,
 };

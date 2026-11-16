@@ -18,6 +18,7 @@ use crate::{
         ui::{self, Fallback},
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
+    client::connection::CommandPaths,
     config::{
         Config,
         named_commands::{self, Commands},
@@ -26,7 +27,6 @@ use crate::{
     },
     execution,
     model::Workspace,
-    paths::CommandPaths,
     protocol::ConfigTarget,
 };
 

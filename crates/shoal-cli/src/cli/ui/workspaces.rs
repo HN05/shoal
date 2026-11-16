@@ -20,8 +20,8 @@ use crate::{
         scoping::Scoping,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
+    client::connection::CommandPaths,
     model::{Chat, Workspace},
-    paths::CommandPaths,
 };
 use shoal_protocol::saved::SavedSummary;
 use shoal_protocol::space_names::SpaceSelector;

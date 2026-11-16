@@ -5,11 +5,11 @@ use anyhow::{Result, ensure};
 
 use super::{Failed, Reporter};
 use crate::{
+    client::connection::CommandPaths,
     execution,
     forge::items::reference::ItemInput,
     hooks::{self, Hook, HookKind},
     model::{QueueEntry, Workspace},
-    paths::CommandPaths,
     protocol::operations::{Failure, Preparation, Prepared, QueuedLaunch, Step},
     queued_launches,
     state::WorkspaceState,

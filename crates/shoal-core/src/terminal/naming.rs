@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use super::{Host, names_places};
 use crate::{
+    client::connection::CommandPaths,
     model::{Repository, Workspace},
-    paths::CommandPaths,
     protocol::ItemContext,
     start_plan::AddPlan,
 };

@@ -9,7 +9,8 @@ use crate::client::connection::ExitAnswer;
 use crate::client::output::daemon::{Kept, Running, Status};
 use crate::{
     cli::{client, context::Context, output::Style, progress::Spinner, ui},
-    paths::{CommandPaths, Paths},
+    client::connection::CommandPaths,
+    paths::Paths,
     protocol::{Exit, ExitRequest, ExitWhen, Work},
     service::{self, Platform},
 };

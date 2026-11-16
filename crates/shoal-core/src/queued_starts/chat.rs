@@ -7,8 +7,8 @@ use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    client::connection::CommandPaths,
     model::Repository,
-    paths::CommandPaths,
     protocol::{ChatStart, ConfigTarget},
 };
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId};

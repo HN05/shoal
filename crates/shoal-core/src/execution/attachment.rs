@@ -3,8 +3,8 @@
 use std::{io::IsTerminal, time::Duration};
 
 use crate::{
-    config::Effective, model::ExecutionPlan, paths::CommandPaths, protocol::AgentMethod,
-    sessions::Origin, terminal::Attachment,
+    client::connection::CommandPaths, config::Effective, model::ExecutionPlan,
+    protocol::AgentMethod, sessions::Origin, terminal::Attachment,
 };
 use shoal_protocol::space_names::SpaceSelector;
 

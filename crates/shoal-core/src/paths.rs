@@ -4,53 +4,14 @@
 //! apps reach that daemon whatever their build.
 use std::{
     fs,
-    ops::Deref,
     path::{Path, PathBuf},
 };
 
 use anyhow::{Result, ensure};
 
-use crate::client::connection::Daemon;
 use shoal_ids::space_ids::SpaceId;
 pub(crate) use shoal_protocol::paths::DEFAULT_STATE;
 pub use shoal_protocol::paths::{Paths, SESSION_LOG};
-use shoal_protocol::scope_tokens::ScopeToken;
-
-/// The daemon of the `shoal` command, which its requests reach with the scope
-/// token the command was handed or inherited; apps choose theirs with
-/// [`crate::client::connection::Connector`] instead.
-#[derive(Debug, Clone)]
-pub struct CommandPaths(Paths);
-
-impl From<Paths> for CommandPaths {
-    fn from(paths: Paths) -> Self {
-        Self(paths)
-    }
-}
-
-impl From<CommandPaths> for Paths {
-    fn from(paths: CommandPaths) -> Self {
-        paths.0
-    }
-}
-
-impl Deref for CommandPaths {
-    type Target = Paths;
-
-    fn deref(&self) -> &Paths {
-        &self.0
-    }
-}
-
-impl Daemon for CommandPaths {
-    fn paths(&self) -> &Paths {
-        &self.0
-    }
-
-    fn scope(&self) -> Option<ScopeToken> {
-        crate::env::scope_token()
-    }
-}
 
 /// The files and directories the daemon and the `shoal` command keep in the
 /// state directory, which apps never read.

@@ -4,7 +4,7 @@
 //! and wait.
 use shoal_ids::space_ids::SpaceNumber;
 use shoal_protocol::connection::ProtocolMismatch;
-use std::{io, sync::OnceLock, time::Duration};
+use std::{io, ops::Deref, sync::OnceLock, time::Duration};
 
 use anyhow::{Context, Result, ensure};
 use serde::de::DeserializeOwned;
@@ -82,6 +82,42 @@ impl Daemon for Connector {
 
     fn scope(&self) -> Option<ScopeToken> {
         self.scope.clone()
+    }
+}
+
+/// The daemon of the `shoal` command, which its requests reach with the scope
+/// token the command was handed or inherited; apps choose theirs with
+/// [`Connector`] instead.
+#[derive(Debug, Clone)]
+pub struct CommandPaths(Paths);
+
+impl From<Paths> for CommandPaths {
+    fn from(paths: Paths) -> Self {
+        Self(paths)
+    }
+}
+
+impl From<CommandPaths> for Paths {
+    fn from(paths: CommandPaths) -> Self {
+        paths.0
+    }
+}
+
+impl Deref for CommandPaths {
+    type Target = Paths;
+
+    fn deref(&self) -> &Paths {
+        &self.0
+    }
+}
+
+impl Daemon for CommandPaths {
+    fn paths(&self) -> &Paths {
+        &self.0
+    }
+
+    fn scope(&self) -> Option<ScopeToken> {
+        shoal_protocol::env::scope_token()
     }
 }
 

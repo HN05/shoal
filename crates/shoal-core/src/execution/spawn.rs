@@ -14,10 +14,7 @@ use tokio::process::{Child, Command};
 
 use super::{Mode, terminal::Terminal};
 use crate::{
-    config::value::Value,
-    env,
-    model::ExecutionPlan,
-    paths::{CommandPaths, Paths},
+    client::connection::CommandPaths, config::value::Value, env, model::ExecutionPlan, paths::Paths,
 };
 
 /// What an agent's or publishing child receives beyond the workspace

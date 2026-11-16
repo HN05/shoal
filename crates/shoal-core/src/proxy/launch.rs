@@ -6,7 +6,7 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{space_names::SpaceSelector, time::UnixTime};
 
-use crate::paths::CommandPaths;
+use crate::client::connection::CommandPaths;
 
 /// The header an agent names its proxy's key in, which the proxy checks.
 pub(crate) const KEY_HEADER: &str = "x-shoal-proxy-key";

@@ -20,9 +20,10 @@ pub use claim::{RecoveryClaim, claim, claim_last_session, claim_record, forget_s
 use crate::{
     agent::{Agent, ModelChoice},
     agents::AgentHome,
+    client::connection::CommandPaths,
     fsutil::atomic::{Permissions, ReplaceOptions},
     model::{ExecutionSpace, Workspace},
-    paths::{CommandPaths, Paths},
+    paths::Paths,
     process::identity::{self, Identity},
     protocol::ConfigTarget,
     sessions::Origin,

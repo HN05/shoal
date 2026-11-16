@@ -4,8 +4,8 @@
 use anyhow::Result;
 
 use crate::{
+    client::connection::CommandPaths,
     model::{QueueEntry, Workspace},
-    paths::CommandPaths,
     protocol::operations::QueuedLaunch,
 };
 use shoal_protocol::{queue::WorkerStart, space_names::SpaceSelector};

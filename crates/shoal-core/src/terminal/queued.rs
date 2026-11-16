@@ -14,10 +14,10 @@ use super::{
 };
 use crate::{
     agents::HomeRecords,
+    client::connection::CommandPaths,
     config::Effective,
     env,
     model::{PresentSpace, Repository, Workspace},
-    paths::CommandPaths,
     sessions::Origin,
     start_plan::AddPlan,
 };

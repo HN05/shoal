@@ -7,9 +7,9 @@ use std::path::Path;
 use anyhow::{Context as _, Result};
 
 use crate::{
+    client::connection::CommandPaths,
     config::Effective,
     model::Repository,
-    paths::CommandPaths,
     sessions::Origin,
     terminal::{Configured, Places},
 };

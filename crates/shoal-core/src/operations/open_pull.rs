@@ -4,10 +4,10 @@ use anyhow::Result;
 
 use super::{Failed, Reporter};
 use crate::{
+    client::connection::CommandPaths,
     forge::items::create::PullOptions,
     git,
     model::Workspace,
-    paths::CommandPaths,
     protocol::operations::{Failure, Step},
 };
 use shoal_protocol::{links::OpenOutcome, space_names::SpaceSelector};

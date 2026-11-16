@@ -13,8 +13,8 @@ use anyhow::Result;
 use crate::{
     agents::PromptWake,
     client::connection,
+    client::connection::CommandPaths,
     model::ExecutionPlan,
-    paths::CommandPaths,
     protocol::AgentMethod,
     terminal::{PromptSession, WAKE_PROMPT},
 };

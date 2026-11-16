@@ -9,8 +9,8 @@ use crate::cli::{
     },
     context::Context,
 };
+use crate::client::connection::CommandPaths;
 use crate::client::preparation::Preparing;
-use crate::paths::CommandPaths;
 use crate::protocol::operations::{Preparation, QueuedLaunch};
 
 /// What preparing the added workspace does after setup: linking `pr`, then

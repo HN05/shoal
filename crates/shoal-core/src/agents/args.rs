@@ -12,10 +12,10 @@ use anyhow::{Context as _, Result};
 use super::{AgentHome, hook_args};
 use crate::{
     agent::{Agent, ModelChoice},
+    client::connection::CommandPaths,
     config::{Config, Effective, modes},
     fsutil,
     model::{Chat, Workspace},
-    paths::CommandPaths,
 };
 
 /// The arguments that run agent `name` with `model`, refusing an agent

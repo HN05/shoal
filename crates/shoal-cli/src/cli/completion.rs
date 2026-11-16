@@ -22,6 +22,7 @@ use crate::{
         terminal, ui,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
+    client::connection::CommandPaths,
     client::leases,
     config::{
         Config,
@@ -32,7 +33,7 @@ use crate::{
     },
     env,
     model::{Chat, Workspace},
-    paths::{CommandPaths, Paths},
+    paths::Paths,
     protocol::ConfigTarget,
 };
 use shoal_ids::space_ids::SpaceNumber;

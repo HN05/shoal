@@ -1,5 +1,6 @@
 use super::notifications::NotificationKind;
 use super::*;
+use crate::client::connection::CommandPaths;
 use crate::daemon::{
     test_support::{
         install_test_script,
@@ -15,7 +16,6 @@ use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
 use crate::execution::recovery::SavedExt as _;
 use crate::model::PresentSpace;
-use crate::paths::CommandPaths;
 use crate::paths::StateFiles;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::assignments::Done;

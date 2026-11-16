@@ -23,8 +23,8 @@ use crate::{
         output::{Palette, Style},
         shell, terminal,
     },
+    client::connection::CommandPaths,
     model::{QueueEntry, Workspace},
-    paths::CommandPaths,
     protocol::{
         ConfigTarget,
         operations::{Preparation, Prepared, QueuedLaunch},

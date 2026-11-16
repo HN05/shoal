@@ -7,7 +7,9 @@ use std::{ffi::OsString, path::Path};
 use anyhow::{Context as _, Result};
 
 use super::{Beside, Configured, Host, Places, Start, current_origin, names_places, naming};
-use crate::{env, model::Workspace, paths::CommandPaths, sessions::Origin, start_plan::AddPlan};
+use crate::{
+    client::connection::CommandPaths, env, model::Workspace, sessions::Origin, start_plan::AddPlan,
+};
 
 /// Have `host` run the add worker for `plan`, the planned workspace `name`,
 /// in a new place of its `places` `beside`, `focus`ed or in the background.

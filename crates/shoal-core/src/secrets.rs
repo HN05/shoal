@@ -10,10 +10,7 @@ use std::{
     path::Path,
 };
 
-use crate::{
-    env,
-    paths::{CommandPaths, Paths},
-};
+use crate::{client::connection::CommandPaths, env, paths::Paths};
 use shoal_protocol::approvals::SecretSpecification;
 pub use shoal_protocol::secrets::Secret;
 pub(crate) use shoal_protocol::secrets::Secrets;

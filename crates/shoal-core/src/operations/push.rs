@@ -5,8 +5,8 @@ use anyhow::Result;
 
 use super::{Failed, Reporter};
 use crate::{
+    client::connection::CommandPaths,
     git,
-    paths::CommandPaths,
     protocol::operations::{Failure, Step},
 };
 use shoal_protocol::{

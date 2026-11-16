@@ -17,7 +17,8 @@ use tokio::{
 
 use crate::{
     client::connection,
-    paths::{CommandPaths, Paths},
+    client::connection::CommandPaths,
+    paths::Paths,
     process::identity::Identity,
     protocol::{
         self, Body, Control, ExecutionEvent, ExecutionMethod, Method, Protection, Reattach,

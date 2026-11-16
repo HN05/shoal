@@ -14,8 +14,8 @@ use crate::{
         ui,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
+    client::connection::CommandPaths,
     config::{Config, edit::Change, options::Entry, resolve::Stack},
-    paths::CommandPaths,
     protocol::ConfigTarget,
 };
 use shoal_protocol::space_names::SpaceSelector;
