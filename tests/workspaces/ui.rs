@@ -1166,7 +1166,7 @@ fn previous_workspace_is_remembered_per_command_and_not_for_scoped_callers() {
 }
 
 #[test]
-fn previous_space_returns_to_a_chat_the_command_acted_on() {
+fn previous_space_returns_to_a_chat_only_where_the_command_acts_on_chats() {
     let fixture = Fixture::new();
     fixture.add("first");
     let (mut agent, chat) = super::chats::start_test_chat(&fixture, "planning");
@@ -1174,6 +1174,14 @@ fn previous_space_returns_to_a_chat_the_command_acted_on() {
     fixture.ok(&["status", &fixture.id("planning")]);
     let previous = fixture.ok(&["status", "-"]);
     assert_eq!(previous["chat"]["id"], chat.as_str(), "{previous}");
+    // A command that refuses the chat keeps it out of the history its `-`
+    // reads.
+    let diff = fixture.run(&["diff", &fixture.id("first")]);
+    assert!(diff.status.success(), "{}", printed(&diff));
+    let refused = fixture.run(&["diff", &fixture.id("planning")]);
+    assert!(!refused.status.success(), "{}", printed(&refused));
+    let previous = fixture.run(&["diff", "-"]);
+    assert!(previous.status.success(), "{}", printed(&previous));
     agent.kill().unwrap();
     agent.wait().unwrap();
 }

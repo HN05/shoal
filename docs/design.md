@@ -1919,7 +1919,8 @@ may show the place before the workspace or chat exists. So `attach -` returns to
 session last detached from, not one another terminal still shows or one that ended.
 Every command records and selects workspaces and chats through the same history,
 passing over removed spaces, and `attach` over chats that no longer run, which
-have no session left; a command that refuses a chat refuses one its `-` selects.
+have no session left; a command that acts only on workspaces keeps a chat it refuses
+out of its history, so its `-` still returns to a workspace.
 `restore` uses the current workspace only when it has something to restore; its
 picker groups the workspaces with the agents and commands it would restore, the
 stopped chats and the removed workspaces and chats, since one command brings back whatever

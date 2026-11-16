@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     cli::{context::Context, ui},
     fsutil::atomic::{Permissions, ReplaceOptions},
-    model::Spaces,
+    model::{Space, Spaces},
     paths::Paths,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -136,8 +136,18 @@ fn current(spaces: &Spaces) -> Result<Vec<SpaceId>> {
 
 /// Remember that the command acted on the space `selector` names.
 pub async fn record(ctx: &Context, selector: &SpaceSelector) {
+    record_where(ctx, selector, |_| true).await;
+}
+
+/// [`record`] for a command that acts only on the spaces `accepts` takes,
+/// so one it refuses stays out of its history.
+pub async fn record_where(
+    ctx: &Context,
+    selector: &SpaceSelector,
+    accepts: impl Fn(&Space) -> bool,
+) {
     if let Some(command) = ctx.recent.as_deref() {
-        remember(ctx, command, selector, false).await;
+        remember(ctx, command, selector, false, accepts).await;
     }
 }
 
@@ -145,7 +155,7 @@ pub async fn record(ctx: &Context, selector: &SpaceSelector) {
 /// `selector` names, so `-` returns to the one it left.
 pub async fn record_move(ctx: &Context, selector: &SpaceSelector) {
     if let Some(command) = ctx.recent.as_deref() {
-        remember(ctx, command, selector, true).await;
+        remember(ctx, command, selector, true, |_| true).await;
     }
 }
 
@@ -153,18 +163,26 @@ pub async fn record_move(ctx: &Context, selector: &SpaceSelector) {
 /// `selector` names, whose agent runs or is about to, and left it running,
 /// so `attach -` returns to it whichever command showed it.
 pub async fn record_attach(ctx: &Context, selector: &SpaceSelector) {
-    remember(ctx, ATTACH, selector, false).await;
+    remember(ctx, ATTACH, selector, false, |_| true).await;
 }
 
-/// Failing to keep the history never fails the command.
-async fn remember(ctx: &Context, command: &str, selector: &SpaceSelector, from_current: bool) {
+/// Remember the space `selector` names when `accepts` takes it, and the
+/// current space first when `from_current`. Failing to keep the history
+/// never fails the command.
+async fn remember(
+    ctx: &Context,
+    command: &str,
+    selector: &SpaceSelector,
+    from_current: bool,
+    accepts: impl Fn(&Space) -> bool,
+) {
     if !keeps_history(ctx) {
         return;
     }
     let Ok(spaces) = crate::client::spaces::list(&ctx.paths).await else {
         return;
     };
-    let Some(target) = spaces.find(selector) else {
+    let Some(target) = spaces.find(selector).filter(|space| accepts(space)) else {
         return;
     };
     let current = from_current

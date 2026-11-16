@@ -916,8 +916,8 @@ workspace and the space the command runs in; `cd` also remembers the space it
 leaves, and `attach` the space of each agent session it or a launch such as
 `start` or `claude` showed here and left running, and of each place a focused
 `start` opened. `-` passes over removed spaces, and `attach -` over chats that
-no longer run; a command that refuses a chat refuses one `-` selects. Scoped
-callers keep no such history.
+no longer run; a command that acts only on workspaces keeps a chat named to it
+out of its history. Scoped callers keep no such history.
 Invalid explicit targets and other invalid arguments fail without fallback,
 before any prompt for the omitted ones; without a
 current workspace, noninteractive and JSON calls require a target. Scoped callers

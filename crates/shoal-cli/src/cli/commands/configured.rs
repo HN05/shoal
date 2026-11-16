@@ -212,7 +212,7 @@ async fn run_defined(
             SpaceSelector::Id(ui::pick_workspace(ctx, defining, "workspace").await?)
         }
     };
-    recent::record(ctx, &workspace).await;
+    ui::record_workspace(ctx, &workspace).await;
     let settings =
         shoal_workers::settings::of(&ctx.paths, ConfigTarget::Space(workspace.clone())).await?;
     let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace).await?;

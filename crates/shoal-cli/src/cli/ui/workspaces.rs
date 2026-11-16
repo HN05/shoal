@@ -58,8 +58,14 @@ pub async fn select_workspace(
     fallback: Fallback,
 ) -> Result<SpaceSelector> {
     let workspace = choose_workspace(ctx, explicit, fallback).await?;
-    recent::record(ctx, &workspace).await;
+    record_workspace(ctx, &workspace).await;
     Ok(workspace)
+}
+
+/// Remember the workspace a command that acts only on workspaces selected;
+/// a chat named to it, which it refuses, stays out of its history.
+pub(in crate::cli) async fn record_workspace(ctx: &Context, workspace: &SpaceSelector) {
+    recent::record_where(ctx, workspace, |space| space.kind().has_worktree()).await;
 }
 
 /// The workspace `explicit` names, else the current one, else one picked
@@ -77,7 +83,7 @@ pub async fn select_ready_workspace(
             SpaceSelector::Id(pick_workspace(ctx, workspaces, WORKSPACE).await?)
         }
     };
-    recent::record(ctx, &workspace).await;
+    record_workspace(ctx, &workspace).await;
     Ok(workspace)
 }
 
@@ -115,7 +121,7 @@ pub async fn select_workspaces(
         };
     }
     for workspace in &selected {
-        recent::record(ctx, workspace).await;
+        record_workspace(ctx, workspace).await;
     }
     Ok(selected)
 }
