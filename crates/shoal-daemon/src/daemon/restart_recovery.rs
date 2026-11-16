@@ -57,14 +57,14 @@ struct Unreadable {
 
 /// A wrapper that was alive during reconciliation, so it may still reattach
 /// or report its exit.
-pub(crate) struct Waiting {
+pub struct Waiting {
     execution: ExecutionId,
     wrapper: process::Identity,
 }
 
 /// What a pass left for a later one.
 #[derive(Default)]
-pub(crate) struct Pending {
+pub struct Pending {
     pub waiting: Vec<Waiting>,
     /// Some execution kept surviving processes or incomplete evidence.
     pub unresolved: bool,
@@ -168,7 +168,7 @@ impl Manager {
     /// whose processes are gone, keeping their recovery records, and of
     /// commands that never started, and notify about the stopped agents that
     /// remain uncertain.
-    pub(crate) async fn reconcile_interrupted_agents(&self) -> Result<Pending> {
+    pub async fn reconcile_interrupted_agents(&self) -> Result<Pending> {
         self.forget_earlier_boot().await?;
         let Unknown {
             interrupted,

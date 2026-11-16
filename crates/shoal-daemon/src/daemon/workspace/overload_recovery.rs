@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::watch;
 
 #[derive(Default)]
-pub(crate) struct OverloadRecovery {
+pub struct OverloadRecovery {
     /// The epoch the overload monitor last found sustained healthy readings
     /// in, if its latest readings were.
     ready: watch::Sender<Option<u64>>,
@@ -15,7 +15,7 @@ pub(crate) struct OverloadRecovery {
 
 impl OverloadRecovery {
     /// The current epoch.
-    pub(crate) fn epoch(&self) -> u64 {
+    pub fn epoch(&self) -> u64 {
         self.epoch.load(Ordering::SeqCst)
     }
 
@@ -27,7 +27,7 @@ impl OverloadRecovery {
 
     /// Publish whether the monitor's readings in `epoch` were sustained and
     /// healthy.
-    pub(crate) fn publish(&self, ready: Option<u64>) {
+    pub fn publish(&self, ready: Option<u64>) {
         self.ready.send_replace(ready);
     }
 

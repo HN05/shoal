@@ -59,7 +59,7 @@ impl Filesystem {
 }
 
 #[derive(Default)]
-pub(super) struct Monitor {
+pub struct Monitor {
     last_cleanup: Option<Instant>,
     warnings: Warnings,
 }
@@ -85,7 +85,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
 }
 
 impl Monitor {
-    pub(super) async fn check(
+    pub async fn check(
         &mut self,
         manager: &Manager,
         now: Instant,

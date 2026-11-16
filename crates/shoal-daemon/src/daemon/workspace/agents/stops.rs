@@ -161,7 +161,7 @@ impl Manager {
     /// nothing. A restart in progress owns the agent's stop, since a stop
     /// delivered before it refuses the restart, so a record beside it is
     /// one that lost and goes.
-    pub(crate) async fn agent_overload(&self, id: &ExecutionId) -> Option<Protection> {
+    pub async fn agent_overload(&self, id: &ExecutionId) -> Option<Protection> {
         let restarting = (self.executions)
             .with_agent(id, |agent| agent.restarts.current.is_some())
             .await;
@@ -176,7 +176,7 @@ impl Manager {
         })
     }
 
-    pub(crate) async fn agent_was_overloaded(&self, id: &ExecutionId) -> bool {
+    pub async fn agent_was_overloaded(&self, id: &ExecutionId) -> bool {
         self.agent_overload(id).await.is_some()
     }
 

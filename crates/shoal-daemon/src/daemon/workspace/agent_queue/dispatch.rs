@@ -135,7 +135,7 @@ impl Manager {
     /// with the restarts they started, return the starts whose setup failed
     /// to wait for it, queue the restores stopped agents request, then start
     /// the waiting entries that fit.
-    pub(crate) async fn dispatch_queue(&self) -> Result<()> {
+    pub async fn dispatch_queue(&self) -> Result<()> {
         let _gate = self.agent_queue.lock_admission().await;
         self.expire_starting_entries().await?;
         self.return_failed_starts().await?;

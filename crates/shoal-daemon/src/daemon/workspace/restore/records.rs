@@ -176,7 +176,7 @@ impl Manager {
     }
 
     /// The workspaces among [`Self::removed_spaces`].
-    pub(crate) async fn removed_workspaces(&self) -> Result<Vec<RemovedSpace>> {
+    pub async fn removed_workspaces(&self) -> Result<Vec<RemovedSpace>> {
         let mut removed = self.removed_spaces().await?;
         removed.retain(|removed| removed.workspace().is_some());
         Ok(removed)

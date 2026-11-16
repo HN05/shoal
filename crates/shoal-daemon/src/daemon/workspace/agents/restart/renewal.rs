@@ -319,7 +319,7 @@ impl Manager {
     /// before the agent registered, as a stop that cancels it or an expired
     /// start does. The restarts are read first, so a start recorded since
     /// is in the queue read after them.
-    pub(crate) async fn fail_lost_renewals(&self) -> Result<()> {
+    pub async fn fail_lost_renewals(&self) -> Result<()> {
         let starting: Vec<(ExecutionId, QueueEntryId)> = self
             .executions
             .with_restarts(|_, renewals| {

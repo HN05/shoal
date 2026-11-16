@@ -414,7 +414,7 @@ impl Manager {
     /// Shoal queues it on its own, so an agent stopped between turns waits
     /// for an update, and starts it where the agent ran. Returns whether it
     /// is queued; otherwise its record stays for `shoal restore`.
-    pub(crate) async fn queue_failed_restore(
+    pub async fn queue_failed_restore(
         &self,
         space: &PresentSpace,
         agent: &crate::agent::Agent,

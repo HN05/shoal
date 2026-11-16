@@ -42,7 +42,7 @@ impl Manager {
     /// whose `[sleep] idle` is enabled; each heavy one whose space sleeps
     /// after `shoal sleep` once that costs nothing; and those that make room
     /// for queued work. A failure in one space does not skip the others.
-    pub(crate) async fn stop_idle_agents(&self) -> Result<()> {
+    pub async fn stop_idle_agents(&self) -> Result<()> {
         // The process scan that tells agents with work in flight waits until
         // some agent would stop.
         let turns = self.reported_turns().await?;

@@ -9,7 +9,7 @@ use tokio::sync::{Mutex, MutexGuard, watch};
 
 use crate::config::Config;
 
-pub(crate) struct ConfigState {
+pub struct ConfigState {
     /// The global file as last loaded; a reload replaces it for later reads
     /// and wakes subscribers.
     config: watch::Sender<Arc<Config>>,
@@ -58,20 +58,20 @@ impl ConfigState {
 
     /// The generation of the current config. Read it before the config a
     /// reading uses, so a reload in between makes the reading stale.
-    pub(crate) fn generation(&self) -> u64 {
+    pub fn generation(&self) -> u64 {
         self.generation.load(Ordering::SeqCst)
     }
 
     /// Record the generation under which a reading found the cleanup
     /// threshold free everywhere, or that the latest one did not.
-    pub(crate) fn publish_disk_reading(&self, recovered_in: Option<u64>) {
+    pub fn publish_disk_reading(&self, recovered_in: Option<u64>) {
         let encoded = recovered_in.map_or(0, |generation| generation + 1);
         self.disk_recovered_in.store(encoded, Ordering::SeqCst);
     }
 
     /// Whether the latest reading found the cleanup threshold free everywhere
     /// under the current config; a reload waits for a new reading.
-    pub(crate) fn disk_space_recovered(&self) -> bool {
+    pub fn disk_space_recovered(&self) -> bool {
         self.disk_recovered_in.load(Ordering::SeqCst) == self.generation() + 1
     }
 }

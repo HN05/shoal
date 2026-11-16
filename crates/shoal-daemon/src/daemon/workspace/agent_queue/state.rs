@@ -25,7 +25,7 @@ use shoal_protocol::time::UnixTime;
 const ATTACH_KEEP: Duration = Duration::from_secs(60);
 
 #[derive(Default)]
-pub(crate) struct AgentQueue {
+pub struct AgentQueue {
     admission: Mutex<()>,
     /// Open holds per starting queue entry.
     holds: StdMutex<HashMap<QueueEntryId, usize>>,
@@ -106,7 +106,7 @@ const ONESHOT_PREFIX: &str = "oneshot:";
 
 impl AgentQueue {
     /// Serialize admission, so two passes cannot fill one slot.
-    pub(crate) async fn lock_admission(&self) -> MutexGuard<'_, ()> {
+    pub async fn lock_admission(&self) -> MutexGuard<'_, ()> {
         self.admission.lock().await
     }
 
@@ -200,7 +200,7 @@ impl AgentQueue {
     }
 
     /// The executions whose agent waits for its restore.
-    pub(crate) fn restore_waiters(&self) -> HashSet<ExecutionId> {
+    pub fn restore_waiters(&self) -> HashSet<ExecutionId> {
         self.restore_waiters
             .lock()
             .unwrap()

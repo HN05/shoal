@@ -159,7 +159,7 @@ impl Drop for HeldBack {
 impl Gates {
     /// Cover a background operation, so a daemon update can quiesce
     /// operations without cancelling hooks or mutations already in progress.
-    pub(crate) async fn operation(&self) -> RwLockReadGuard<'_, ()> {
+    pub async fn operation(&self) -> RwLockReadGuard<'_, ()> {
         self.background_operations.read().await
     }
 
@@ -195,7 +195,7 @@ impl Gates {
     }
 
     /// [`Self::quiesce`] when no background operation is in progress.
-    pub(crate) fn try_quiesce(&self) -> Option<OwnedRwLockWriteGuard<()>> {
+    pub fn try_quiesce(&self) -> Option<OwnedRwLockWriteGuard<()>> {
         self.background_operations.clone().try_write_owned().ok()
     }
 

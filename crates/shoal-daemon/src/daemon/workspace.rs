@@ -85,7 +85,7 @@ pub(crate) use merge::RecordChange;
 pub(crate) use ownership::VerifiedWorktree;
 pub(crate) use shutdown_stop::StoppedSpaces;
 pub(crate) use stack::record_base_changed;
-pub(crate) use stopped_work::PermissionTargets;
+pub use stopped_work::PermissionTargets;
 
 pub(crate) use tree::{
     Source, TrackedAgents, children, deciders, delegated, ensure_parent, parent, receiving_paths,
@@ -123,13 +123,13 @@ pub struct Manager {
     pub(crate) publications: super::progress::Publications,
     /// The spaces whose issues wait for the agent account to be settled.
     pub(crate) agent_settles: super::links::issue::agent_settles::AgentSettles,
-    pub(crate) config_state: config_state::ConfigState,
+    pub config_state: config_state::ConfigState,
     pub paths: Paths,
     /// Arrival order of queued resource and simulator requests.
     pub(crate) queues: super::queue::Queues,
-    pub(crate) executions: executions::Executions,
-    pub(crate) overload_recovery: overload_recovery::OverloadRecovery,
-    pub(crate) agent_queue: agent_queue::AgentQueue,
+    pub executions: executions::Executions,
+    pub overload_recovery: overload_recovery::OverloadRecovery,
+    pub agent_queue: agent_queue::AgentQueue,
     pub(crate) operations: Arc<crate::daemon::operations::Operations>,
     /// The scope tokens approved commands take their permission's actions
     /// with.

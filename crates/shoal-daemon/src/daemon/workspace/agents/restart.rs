@@ -26,7 +26,7 @@ impl Manager {
     /// Every connected agent, every execution whose wrapper is gone, which
     /// may have run one, and every agent a restart starts in a new wrapper,
     /// by the execution it ran as; connected commands are left out.
-    pub(crate) async fn running_agents(&self) -> Result<Vec<RunningAgent>> {
+    pub async fn running_agents(&self) -> Result<Vec<RunningAgent>> {
         let (executions, reported, stops) = (self.store)
             .read(|db| {
                 let executions = store::all_executions(db)?;
@@ -80,7 +80,7 @@ impl Manager {
     /// run that asks for it, which the process of the space `giver` runs
     /// when given. The agent starts again with `change` made to the
     /// permissions it was given, which that process must hold.
-    pub(crate) async fn restart_agent(
+    pub async fn restart_agent(
         &self,
         execution: &ExecutionId,
         run: Option<String>,
@@ -121,7 +121,7 @@ impl Manager {
     /// when another run restarts the agent now; it restarts the agent for
     /// `run` too. A restart whose run a daemon before this one forgot
     /// matches whichever is in progress.
-    pub(crate) async fn join_restart(
+    pub async fn join_restart(
         &self,
         execution: &ExecutionId,
         of_run: Option<String>,

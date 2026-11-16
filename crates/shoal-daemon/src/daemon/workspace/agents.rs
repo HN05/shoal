@@ -992,7 +992,7 @@ impl Manager {
 
     /// Stop one agent under `reason`: the newest one-shot run first, which
     /// has no session to lose and starts over once readings are healthy.
-    pub(crate) async fn stop_agent_for_overload(&self, reason: &str) -> bool {
+    pub async fn stop_agent_for_overload(&self, reason: &str) -> bool {
         if self.agent_queue.stop_oneshots(OneShotStop::Newest) > 0 {
             log!("{reason}: stopped a one-shot agent run");
             return true;
@@ -1004,10 +1004,7 @@ impl Manager {
     }
 
     /// Stop every running agent, since any of them may be writing.
-    pub(crate) async fn stop_agents_for_disk_space(
-        &self,
-        protection: &Protection,
-    ) -> Vec<StoppedAgent> {
+    pub async fn stop_agents_for_disk_space(&self, protection: &Protection) -> Vec<StoppedAgent> {
         self.stop_agents(protection, Select::All).await
     }
 
@@ -1326,7 +1323,7 @@ fn first_to_stop<'a>(
 }
 
 /// An agent asked to stop for protection.
-pub(crate) struct StoppedAgent {
+pub struct StoppedAgent {
     id: ExecutionId,
     pub name: crate::agent::Agent,
     pub workspace: SpaceName,

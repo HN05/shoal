@@ -22,23 +22,20 @@ impl Manager {
 
     /// The idle cleanup snapshot of the space `id`, scanning the processes
     /// in its worktree.
-    pub(crate) async fn cleanup_snapshot(&self, id: &SpaceId) -> Result<Option<Snapshot>> {
+    pub async fn cleanup_snapshot(&self, id: &SpaceId) -> Result<Option<Snapshot>> {
         let space = self.present(id).await?;
         (self.candidate_snapshot(&space, Rule::Idle, &[], &DirectoryUsers::default())).await
     }
 
     /// The merged cleanup snapshot of the space `id`.
-    pub(crate) async fn merged_snapshot(&self, id: &SpaceId) -> Result<Option<Snapshot>> {
+    pub async fn merged_snapshot(&self, id: &SpaceId) -> Result<Option<Snapshot>> {
         let space = self.present(id).await?;
         (self.candidate_snapshot(&space, Rule::Merged, &[], &DirectoryUsers::default())).await
     }
 
     /// The idle cleanup snapshot of the space `id`, or why it is not a
     /// candidate.
-    pub(crate) async fn cleanup_candidacy(
-        &self,
-        id: &SpaceId,
-    ) -> Result<Result<Snapshot, CleanupReason>> {
+    pub async fn cleanup_candidacy(&self, id: &SpaceId) -> Result<Result<Snapshot, CleanupReason>> {
         let space = self.present(id).await?;
         (self.idle_candidacy(&space, &DirectoryUsers::default())).await
     }
@@ -82,7 +79,7 @@ impl Manager {
             .map(drop)
     }
 
-    pub(crate) async fn remove_on_request(
+    pub async fn remove_on_request(
         &self,
         selector: &SpaceSelector,
         snapshot: Snapshot,

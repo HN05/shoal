@@ -11,7 +11,9 @@ mod candidacy;
 mod conversion;
 mod policy;
 mod remove;
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
+// The overload tests in `shoal-workers` read some of it.
+#[cfg_attr(not(test), allow(dead_code))]
 mod test_support;
 #[cfg(test)]
 mod tests;

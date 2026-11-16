@@ -112,7 +112,7 @@ impl Store {
         .await
     }
 
-    pub(crate) fn watch_changes(&self) -> tokio::sync::watch::Receiver<()> {
+    pub fn watch_changes(&self) -> tokio::sync::watch::Receiver<()> {
         self.worker.changed.subscribe()
     }
 

@@ -490,7 +490,7 @@ impl Manager {
 
     /// A consistent replay batch from a client's cursor, including an
     /// explicit expired or future one.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub async fn space_events(
         &self,
         after: Option<EventCursor>,

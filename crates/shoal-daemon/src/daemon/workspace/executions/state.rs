@@ -55,7 +55,7 @@ impl std::fmt::Display for Completing {
 }
 
 #[derive(Default)]
-pub(crate) struct Executions {
+pub struct Executions {
     /// Connected executions and the channel that asks their wrapper to stop.
     connections: Mutex<HashMap<ExecutionId, watch::Sender<bool>>>,
     agents: Mutex<HashMap<ExecutionId, Agent>>,
@@ -85,7 +85,7 @@ impl Executions {
     /// store work, so an execution registers either before a stop lists it or
     /// after the stop's request reached it; external commands and agent
     /// lifetimes run without it.
-    pub(crate) async fn connections(&self) -> Connections<'_> {
+    pub async fn connections(&self) -> Connections<'_> {
         Connections {
             executions: self,
             senders: self.connections.lock().await,
@@ -267,7 +267,7 @@ impl Executions {
 }
 
 /// The connections lock, held while registering or stopping executions.
-pub(crate) struct Connections<'a> {
+pub struct Connections<'a> {
     executions: &'a Executions,
     senders: MutexGuard<'a, HashMap<ExecutionId, watch::Sender<bool>>>,
 }

@@ -306,7 +306,7 @@ impl Manager {
 
     /// Resolve an ID, path, source URL, explicit name, derived name, or
     /// equivalent remote to a registered repository.
-    pub(crate) async fn repository(
+    pub async fn repository(
         &self,
         selector: impl Into<crate::repository::Selector>,
     ) -> Result<Repository> {
