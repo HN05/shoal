@@ -239,7 +239,7 @@ fn a_failed_down_keeps_the_workspace_and_its_project() {
 const SETUP: &str = "[containers]\ncompose = 'compose.yaml'\nports = ['db']\nstart = 'setup'\n";
 
 #[test]
-fn setup_starts_the_project_before_the_workspace_is_ready() {
+fn setup_starts_the_project_once_the_workspace_is_ready() {
     let fixture = with_containers(SETUP);
     let workspace = fixture.add("worker");
     assert_eq!(workspace["state"], "ready");
