@@ -289,3 +289,17 @@ async fn a_workspace_whose_file_lacks_the_checkouts_trigger_still_never_gets_its
         .collect();
     assert_eq!(names, ["API_KEY"]);
 }
+
+#[tokio::test(start_paused = true)]
+async fn a_secret_command_that_never_answers_fails_the_delivery() {
+    let secret = crate::secrets::Secret {
+        command: vec!["sleep".into(), "3600".into()],
+        ..Default::default()
+    };
+
+    let error = super::delivery::fetch_secret("HOOK", &secret)
+        .await
+        .unwrap_err();
+
+    assert!(format!("{error:#}").contains("secrets.HOOK"), "{error:#}");
+}

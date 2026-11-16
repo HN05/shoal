@@ -2,7 +2,7 @@
 //! trigger, `/webhooks/<name>` for the global config's and
 //! `/webhooks/<repository>/<name>` for a repository's; an active trigger
 //! takes it once its signature checks out, and fires in the background.
-use std::{os::unix::ffi::OsStrExt, sync::Arc};
+use std::{ffi::OsString, os::unix::ffi::OsStrExt, sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Result};
 use shoal_protocol::triggers::{RunOrigin, WebhookRequest};
@@ -12,6 +12,7 @@ use super::super::{Configured, firing::Firing};
 use crate::{
     daemon::{log, workspace::Manager},
     protocol::ConfigTarget,
+    secrets::Secret,
     time::UnixTime,
     triggers::{
         Source,
@@ -26,6 +27,23 @@ pub(in crate::daemon::triggers) enum Delivered {
     /// No active trigger takes it: none has its route, the trigger is
     /// paused or the signature is wrong, which the caller cannot tell apart.
     Refused,
+}
+
+/// How long a secret's command may take for a request, which holds a
+/// delivery permit meanwhile.
+const SECRET_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// The value of the secret `name`, which fails once its command takes
+/// longer than [`SECRET_TIMEOUT`], as one waiting for an unlock would.
+pub(super) async fn fetch_secret(name: &str, secret: &Secret) -> Result<OsString> {
+    let fetched = tokio::time::timeout(SECRET_TIMEOUT, crate::secrets::fetch(name, secret, None));
+    match fetched.await {
+        Ok(value) => value,
+        Err(_) => anyhow::bail!(
+            "secrets.{name} did not print its value within {} seconds",
+            SECRET_TIMEOUT.as_secs()
+        ),
+    }
 }
 
 /// What a route names: a repository's trigger, or the global config's.
@@ -150,7 +168,7 @@ impl Manager {
                 signed.secret
             )
         })?;
-        let value = crate::secrets::fetch(&signed.secret, secret, None).await?;
+        let value = fetch_secret(&signed.secret, secret).await?;
         Ok(signed.signature.verifies(value.as_bytes(), request, body))
     }
 
