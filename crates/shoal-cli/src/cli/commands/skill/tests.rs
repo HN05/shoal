@@ -116,61 +116,6 @@ fn packaged_skills_link_sits_beside_an_app_bundle() {
     assert_eq!(packaged_source(None, &plain.join("shoal")).unwrap(), None);
 }
 
-#[test]
-fn packaged_skills_replace_recorded_links_with_copies_that_follow_upgrades() {
-    let root = tempfile::tempdir().unwrap();
-    let directory = root.path().join("skills");
-    let source = root.path().join("package");
-    let (shoal, other) = (SKILLS[0].0, OTHER);
-    for name in [shoal, other] {
-        fs::create_dir_all(source.join(name)).unwrap();
-        fs::write(skill_file(&source, name), "version one").unwrap();
-        fs::create_dir_all(directory.join(name)).unwrap();
-    }
-    fs::write(directory.join(shoal).join("notes.md"), "keep").unwrap();
-    // An earlier version linked both skills; the user since repointed one.
-    let personal = root.path().join("personal.md");
-    fs::write(&personal, "personal").unwrap();
-    symlink(skill_file(&source, shoal), skill_file(&directory, shoal)).unwrap();
-    symlink(&personal, skill_file(&directory, other)).unwrap();
-    record(
-        &directory,
-        &[
-            (shoal, Entry::Link(skill_file(&source, shoal))),
-            (other, Entry::Link(skill_file(&source, other))),
-        ],
-    );
-    let packaged = with_other(skill_contents(Some(&source)).unwrap(), "version one");
-    let outcome = refresh(&directory, &packaged, Mode::Refresh).unwrap();
-    assert_eq!(outcome.installed, [shoal]);
-    assert_eq!(outcome.kept, [other]);
-    let installed = skill_file(&directory, shoal);
-    assert!(!installed.is_symlink());
-    assert_eq!(fs::read_to_string(&installed).unwrap(), "version one");
-    assert_eq!(
-        fs::read_link(skill_file(&directory, other)).unwrap(),
-        personal
-    );
-    assert_eq!(
-        fs::read_to_string(directory.join(shoal).join("notes.md")).unwrap(),
-        "keep"
-    );
-    assert_eq!(
-        fs::read_to_string(skill_file(&source, shoal)).unwrap(),
-        "version one"
-    );
-    // An upgraded package updates the copy on the next refresh.
-    fs::write(skill_file(&source, shoal), "version two").unwrap();
-    let packaged = with_other(skill_contents(Some(&source)).unwrap(), "version one");
-    assert!(
-        refresh(&directory, &packaged, Mode::Refresh)
-            .unwrap()
-            .changed
-    );
-    assert_eq!(fs::read_to_string(&installed).unwrap(), "version two");
-    assert!(skill_contents(Some(&root.path().join("missing"))).is_err());
-}
-
 fn record(directory: &Path, entries: &[(&str, Entry)]) {
     let mut record = Record::load(directory).unwrap().unwrap_or_default();
     for (name, entry) in entries {
@@ -185,13 +130,13 @@ fn install_replaces_skills_shoal_owns_and_keeps_user_changes() {
     let directory = root.path();
     let (shoal, other) = (SKILLS[0].0, OTHER);
     let read = |name| fs::read_to_string(skill_file(directory, name)).unwrap();
-    // Skills from before the record existed are Shoal's.
+    // A skill Shoal did not record is the user's.
     for name in [shoal, other] {
         fs::create_dir_all(directory.join(name)).unwrap();
         fs::write(skill_file(directory, name), "old").unwrap();
     }
     refresh(directory, &bundled(), Mode::Install(Changed::Keep)).unwrap();
-    assert_eq!(read(shoal), SKILLS[0].1);
+    assert_eq!(read(shoal), "old");
     // A recorded copy from an earlier version is replaced; an edited one is kept.
     fs::write(skill_file(directory, shoal), "old").unwrap();
     fs::write(skill_file(directory, other), "edited").unwrap();
@@ -254,15 +199,9 @@ fn install_removes_retired_skills_only_while_unchanged() {
     }
     let packaged = skill_contents(Some(&source)).unwrap();
     refresh(&directory, &packaged, Mode::Install(Changed::Keep)).unwrap();
-    for name in ["linked", "copied", "edited", "kept"] {
+    for name in ["copied", "edited", "kept"] {
         fs::create_dir_all(directory.join(name)).unwrap();
     }
-    // An upgraded package no longer holds the linked skill.
-    symlink(
-        skill_file(&source, "linked"),
-        skill_file(&directory, "linked"),
-    )
-    .unwrap();
     fs::write(skill_file(&directory, "copied"), "retired").unwrap();
     fs::write(directory.join("copied/notes.md"), "keep").unwrap();
     fs::write(skill_file(&directory, "edited"), "edited").unwrap();
@@ -276,7 +215,6 @@ fn install_removes_retired_skills_only_while_unchanged() {
         &directory,
         &[
             ("redirected", Entry::copy(b"retired")),
-            ("linked", Entry::Link(skill_file(&source, "linked"))),
             ("copied", Entry::copy(b"retired")),
             ("edited", Entry::copy(b"retired")),
             ("kept", Entry::Kept),
@@ -285,7 +223,6 @@ fn install_removes_retired_skills_only_while_unchanged() {
     let outcome = refresh(&directory, &packaged, Mode::Install(Changed::Keep)).unwrap();
     assert_eq!(outcome.kept, ["edited", "redirected"]);
     assert!(elsewhere.join("SKILL.md").exists());
-    assert!(!directory.join("linked").exists());
     assert_eq!(fs::read_dir(directory.join("copied")).unwrap().count(), 1);
     for name in ["edited", "kept"] {
         assert!(skill_file(&directory, name).exists());
@@ -374,28 +311,6 @@ fn diff_compares_the_installed_skill_with_this_version() {
     show_diff(&path, "edited\n").unwrap();
     show_diff(&path, "bundled\n").unwrap();
     assert!(show_diff(&root.path().join("missing"), "bundled\n").is_err());
-}
-
-#[test]
-fn a_refresh_replaces_the_skills_installed_before_the_record() {
-    let root = tempfile::tempdir().unwrap();
-    let directory = root.path();
-    for name in UNRECORDED {
-        fs::create_dir_all(directory.join(name)).unwrap();
-        fs::write(skill_file(directory, name), "earlier").unwrap();
-    }
-    fs::write(directory.join(UNRECORDED[0]).join("notes.md"), "keep").unwrap();
-    let outcome = refresh(directory, &embedded(), Mode::Refresh).unwrap();
-    assert!(outcome.changed);
-    assert_eq!(outcome.installed, [SKILLS[0].0]);
-    assert!(!skill_file(directory, UNRECORDED[0]).exists());
-    assert!(directory.join(UNRECORDED[0]).join("notes.md").exists());
-    assert!(!directory.join(UNRECORDED[1]).exists());
-    // Once the record exists, an unrecorded skill of that name is the user's.
-    fs::create_dir(directory.join(UNRECORDED[1])).unwrap();
-    fs::write(skill_file(directory, UNRECORDED[1]), "mine").unwrap();
-    refresh(directory, &embedded(), Mode::Install(Changed::Keep)).unwrap();
-    assert!(skill_file(directory, UNRECORDED[1]).exists());
 }
 
 #[test]

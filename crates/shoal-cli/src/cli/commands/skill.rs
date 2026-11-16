@@ -29,9 +29,6 @@ use record::{Entry, Record};
 
 /// Bundled skills by name; a packaged directory holds `<name>/SKILL.md` for each.
 const SKILLS: [(&str, &str); 1] = [("shoal", include_str!("skill/shoal.md"))];
-/// The skills earlier versions installed before Shoal recorded its
-/// installations, which this version no longer bundles.
-const UNRECORDED: [&str; 2] = ["shoal-worker", "shoal-orchestrator"];
 
 /// Each bundled skill's name and the contents this version installs.
 type Contents = Vec<(&'static str, String)>;
@@ -233,16 +230,13 @@ struct Outcome {
 /// skills outside them that Shoal still owns. A recorded skill whose file
 /// differs from what Shoal wrote belongs to the user, as does every skill
 /// whose directory is not a real directory, such as a link into the user's
-/// dotfiles, and an unrecorded file in a directory with a record; files from
-/// before the record existed are Shoal's. Skills are regular files, since
-/// some tools skip a linked `SKILL.md`; links earlier versions recorded
-/// become copies.
+/// dotfiles, and an unrecorded file that is not this version's. Skills are
+/// regular files, since some tools skip a linked `SKILL.md`.
 fn refresh(directory: &Path, skills: &[(&'static str, String)], mode: Mode) -> Result<Outcome> {
     let loaded = Record::load(directory)?;
     let mut installation = Installation {
         directory,
         mode,
-        recorded: loaded.is_some(),
         record: loaded.clone().unwrap_or_default(),
         outcome: Outcome::default(),
     };
@@ -253,9 +247,6 @@ fn refresh(directory: &Path, skills: &[(&'static str, String)], mode: Mode) -> R
         installation.refresh_skill(name, contents)?;
     }
     installation.retire_skills(skills)?;
-    if loaded.is_none() {
-        installation.remove_unrecorded_skills()?;
-    }
     installation.save(loaded.as_ref())?;
     Ok(installation.outcome)
 }
@@ -264,8 +255,6 @@ fn refresh(directory: &Path, skills: &[(&'static str, String)], mode: Mode) -> R
 struct Installation<'a> {
     directory: &'a Path,
     mode: Mode,
-    /// Whether Shoal had recorded its installations here before this call.
-    recorded: bool,
     record: Record,
     outcome: Outcome,
 }
@@ -298,9 +287,9 @@ impl Installation<'_> {
     /// what that file holds.
     fn owns(&self, name: &str, path: &Path, found: Found) -> Result<bool> {
         Ok(match (self.record.skills.get(name), found) {
-            // A file the record does not list is Shoal's only from before
-            // the record existed.
-            (None, _) => !self.recorded || found != Found::Other,
+            // A file the record does not list is the user's unless it is
+            // this version's.
+            (None, _) => found != Found::Other,
             // An install reclaims a kept skill that matches this version.
             (Some(Entry::Kept), _) => found != Found::Other && self.mode != Mode::Refresh,
             (Some(_), Found::Current) => true,
@@ -349,18 +338,6 @@ impl Installation<'_> {
             .with_context(|| format!("create skill directory {}", self.directory.display()))?;
         self.record.save(self.directory)
     }
-
-    /// Remove the skills Shoal installed before it recorded installations.
-    fn remove_unrecorded_skills(&mut self) -> Result<()> {
-        for name in UNRECORDED {
-            let skill = self.directory.join(name);
-            if real_directory(&skill)? && exists(&skill.join("SKILL.md"))? {
-                remove_skill(&skill)?;
-                self.outcome.changed = true;
-            }
-        }
-        Ok(())
-    }
 }
 
 /// Whether an install replaces the changed skill at `path`.
@@ -401,8 +378,8 @@ fn show_diff(path: &Path, contents: &str) -> Result<()> {
     Ok(())
 }
 
-/// Whether `directory` still holds a skill Shoal installed, now or earlier;
-/// removing every one stops automatic updates there.
+/// Whether `directory` still holds a skill Shoal installed; removing every
+/// one stops automatic updates there.
 fn holds_shoal_skills(
     directory: &Path,
     bundled: &[(&'static str, String)],
@@ -411,8 +388,7 @@ fn holds_shoal_skills(
     let names = bundled
         .iter()
         .map(|(name, _)| *name)
-        .chain(record.skills.keys().map(String::as_str))
-        .chain(UNRECORDED);
+        .chain(record.skills.keys().map(String::as_str));
     for name in names {
         if exists(&skill_file(directory, name))? {
             return Ok(true);

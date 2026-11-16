@@ -1,9 +1,5 @@
 //! What Shoal installed in one skill directory, which decides what it still owns.
-use std::{
-    collections::BTreeMap,
-    fs, io,
-    path::{Path, PathBuf},
-};
+use std::{collections::BTreeMap, fs, io, path::Path};
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -20,8 +16,6 @@ const FILE: &str = ".shoal-skills.json";
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum Entry {
-    /// A symlink to the packaged skill, which earlier versions installed.
-    Link(PathBuf),
     /// A copy of the bundled skill, by the SHA-256 of its contents.
     Sha256(String),
     /// Changed or removed by the user; only an explicit install replaces it.
@@ -42,11 +36,6 @@ impl Entry {
             Err(error) => return Err(error).with_context(|| format!("inspect {}", path.display())),
         };
         Ok(match self {
-            Self::Link(target) => {
-                metadata.is_symlink()
-                    && fs::read_link(path).with_context(|| format!("read {}", path.display()))?
-                        == *target
-            }
             Self::Sha256(_) => {
                 metadata.is_file()
                     && Self::copy(

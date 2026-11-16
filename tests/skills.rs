@@ -23,6 +23,18 @@ fn cli(home: &Path) -> Command {
 const SKILL: &[u8] = include_bytes!("../crates/shoal-cli/src/cli/commands/skill/shoal.md");
 const SKILLS: [(&str, &[u8]); 1] = [("shoal", SKILL)];
 
+/// The SHA-256 of "earlier" and of "version one", skills earlier versions
+/// installed.
+const EARLIER_DIGEST: &str = "2a51d3547c23a8de50f3e23285a0df356627ef64c300087d3b27173f08ded2a0";
+const VERSION_ONE_DIGEST: &str = "197c7c60ef8a8470a38d1a9212bdfde9cfe6fd4be910825fe6ac7880ac765d16";
+
+/// Record in `directory` that Shoal installed the `shoal` skill whose
+/// contents have the SHA-256 `digest`.
+fn record_copy(directory: &Path, digest: &str) {
+    let record = json!({"skills": {"shoal": {"sha256": digest}}});
+    fs::write(directory.join(".shoal-skills.json"), record.to_string()).unwrap();
+}
+
 fn write_skills(directory: &Path, contents: &str) {
     for (name, _) in SKILLS {
         fs::create_dir_all(directory.join(name)).unwrap();
@@ -194,10 +206,11 @@ fn skill_export_and_default_install_work_without_daemon_or_repository() {
             .unwrap(),
     );
     assert_eq!(fs::read_dir(home.path()).unwrap().count(), 0);
-    // The skill earlier versions installed without a record is replaced.
+    // The copy an earlier version recorded is replaced.
     let earlier = home.path().join(".agents/skills/shoal");
     fs::create_dir_all(&earlier).unwrap();
     fs::write(earlier.join("SKILL.md"), "earlier").unwrap();
+    record_copy(&home.path().join(".agents/skills"), EARLIER_DIGEST);
     fs::create_dir_all(home.path().join(".claude/skills")).unwrap();
     let installed: serde_json::Value = serde_json::from_slice(&success(
         cli(home.path())
@@ -244,9 +257,20 @@ fn skill_install_refreshes_only_selected_tool_and_preserves_siblings() {
     fs::write(&source, "personal source\n").unwrap();
     symlink(&source, directory.join("SKILL.md")).unwrap();
     fs::write(directory.join("notes.md"), "keep me\n").unwrap();
-    // A skill from before Shoal recorded installations is Shoal's to replace.
+    // A skill Shoal did not record is the user's until a forced install
+    // replaces it.
+    success(
+        cli(home.path())
+            .args(["skill", "install", "codex"])
+            .output()
+            .unwrap(),
+    );
+    assert_eq!(
+        fs::read_to_string(directory.join("SKILL.md")).unwrap(),
+        "personal source\n"
+    );
     for args in [
-        vec!["skill", "install", "codex"],
+        vec!["skill", "install", "codex", "--force"],
         vec!["skill", "install", "codex", "--force"],
     ] {
         success(cli(home.path()).args(&args).output().unwrap());
@@ -278,9 +302,10 @@ fn skill_install_refreshes_only_selected_tool_and_preserves_siblings() {
 fn unscoped_commands_update_installed_skills_after_upgrade() {
     let home = tempfile::tempdir().unwrap();
     let installed = home.path().join(".agents/skills");
-    // An earlier version copied the skill before Shoal recorded installations.
+    // An earlier version installed and recorded its copy of the skill.
     fs::create_dir_all(installed.join("shoal")).unwrap();
     fs::write(installed.join("shoal/SKILL.md"), "version one").unwrap();
+    record_copy(&installed, VERSION_ONE_DIGEST);
     let run = |scope: Option<&str>, args: &[&str]| {
         let mut command = cli(home.path());
         command.env("SHOAL_STATE_DIR", home.path().join("state"));

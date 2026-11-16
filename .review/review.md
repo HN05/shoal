@@ -763,8 +763,8 @@ configured command for another agent, plus proven child
   absolute; relative link targets resolve lexically against the link's
   directory. The source must hold every bundled skill and stays uncanonicalized
   so stable prefixes follow upgrades. Shoal changes or removes only skills that
-  still match its per-directory record, plus unrecorded files from earlier
-  versions, never other files in skill directories. Unscoped commands other than
+  still match its per-directory record or are this version's, never other
+  files in skill directories. Unscoped commands other than
   the daemon refresh only directories that still hold a Shoal skill. Code that
   changes user-level files outside the state directory checks
   `build::changes_user_files`, which debug builds fail unless

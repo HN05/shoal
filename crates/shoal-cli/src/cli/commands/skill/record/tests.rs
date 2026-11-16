@@ -6,11 +6,9 @@ fn entries_match_only_what_they_installed() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("SKILL.md");
     let copy = Entry::copy(b"skill");
-    let link = Entry::Link(root.path().join("packaged.md"));
     assert!(!copy.matches(&path).unwrap());
     fs::write(&path, "skill").unwrap();
     assert!(copy.matches(&path).unwrap());
-    assert!(!link.matches(&path).unwrap());
     assert!(!Entry::Kept.matches(&path).unwrap());
     fs::write(&path, "edited").unwrap();
     assert!(!copy.matches(&path).unwrap());
@@ -19,10 +17,6 @@ fn entries_match_only_what_they_installed() {
     // A link to identical contents is not the copy Shoal wrote.
     symlink(root.path().join("same.md"), &path).unwrap();
     assert!(!copy.matches(&path).unwrap());
-    assert!(!link.matches(&path).unwrap());
-    fs::remove_file(&path).unwrap();
-    symlink(root.path().join("packaged.md"), &path).unwrap();
-    assert!(link.matches(&path).unwrap());
 }
 
 #[test]
@@ -32,7 +26,6 @@ fn record_round_trips_and_rejects_unknown_contents() {
     let record = Record {
         skills: BTreeMap::from([
             ("copy".to_owned(), Entry::copy(b"skill")),
-            ("link".to_owned(), Entry::Link("/skills/SKILL.md".into())),
             ("kept".to_owned(), Entry::Kept),
         ]),
     };

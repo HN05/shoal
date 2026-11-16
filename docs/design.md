@@ -2892,7 +2892,7 @@ to a directory holding every bundled skill. Explicit paths must be absolute;
 relative link targets resolve lexically against the link's directory. Preserve
 stable installation prefixes so upgrades apply; unpackaged binaries install the
 embedded skills. Installed `SKILL.md` files are regular copies, because Codex
-skips linked ones; refresh replaces links earlier versions recorded. Homebrew launches the binary directly, without a shell.
+skips linked ones. Homebrew launches the binary directly, without a shell.
 
 ## Resource ownership
 
