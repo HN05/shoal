@@ -240,9 +240,9 @@ impl Manager {
             );
         }
         let message = format!(
-            "The {} the {} that acquired it left could not be released: {error:#}; it is yours now, and {} releases it",
-            lease.held,
+            "The {} that acquired {} ended, but releasing it failed: {error:#}; it is yours now, and {} releases it",
             lease.acquirer.kind(),
+            lease.held,
             lease.held.release_command(workspace.number),
         );
         log!("{message}");
