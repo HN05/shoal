@@ -8,7 +8,6 @@ use super::{
     super::STANDARD_STREAM, DirectoryReport, ExportDirectory, Output, repository_spaces,
     selected_spaces, warn,
 };
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
@@ -18,6 +17,7 @@ use crate::{
     transfer::ExportedSpace,
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// `shoal move export --keep`: write a copy of the space `names` names, or
 /// the current one or one a picker selects, to `file`, leaving it running: a

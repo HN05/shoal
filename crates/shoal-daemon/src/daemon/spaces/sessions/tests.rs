@@ -5,7 +5,6 @@ use std::time::Duration;
 use anyhow::{Context as _, Result};
 
 use crate::{
-    client::transcripts::ReportedSession,
     daemon::{
         test_support::{manager, repository},
         workspace::{ExecutionKind, Manager},
@@ -14,6 +13,7 @@ use crate::{
     model::Workspace,
     state::AgentState,
 };
+use shoal_protocol::transcripts::ReportedSession;
 
 /// An execution of agent `name` in `workspace` that reported `session`.
 async fn agent(

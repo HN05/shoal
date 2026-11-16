@@ -10,10 +10,11 @@ use std::{
 
 use anyhow::{Result, ensure};
 
-pub(crate) use crate::client::paths::DEFAULT_STATE;
-pub use crate::client::paths::{Paths, SESSION_LOG};
-use crate::client::{connection::Daemon, scope_tokens::ScopeToken};
+use crate::client::connection::Daemon;
 use shoal_ids::space_ids::SpaceId;
+pub(crate) use shoal_protocol::paths::DEFAULT_STATE;
+pub use shoal_protocol::paths::{Paths, SESSION_LOG};
+use shoal_protocol::scope_tokens::ScopeToken;
 
 /// The daemon of the `shoal` command, which its requests reach with the scope
 /// token the command was handed or inherited; apps choose theirs with
@@ -83,7 +84,7 @@ pub trait StateFiles {
 
     /// Where a chat started detached keeps its log and first message, named
     /// after the chat's ID, without an extension.
-    fn chat_files(&self, chat: &crate::client::model::Chat) -> PathBuf {
+    fn chat_files(&self, chat: &shoal_protocol::model::Chat) -> PathBuf {
         self.state().join("chats").join(chat.id.as_str())
     }
 

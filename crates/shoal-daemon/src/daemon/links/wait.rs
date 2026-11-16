@@ -10,7 +10,7 @@ pub(crate) use self::{
 };
 use crate::daemon::agent_messages::AgentMessage;
 
-pub(crate) use crate::client::links::Updates;
+pub(crate) use shoal_protocol::links::Updates;
 
 mod activity;
 mod background;

@@ -22,9 +22,9 @@ mod takeover;
 mod terminal;
 mod wake;
 
-use crate::client::space_names::SpaceSelector;
 use anyhow::{Context as _, Result, ensure};
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 use std::{ffi::OsString, path::PathBuf};
 
 use crate::{env, paths::CommandPaths};
@@ -147,7 +147,7 @@ pub async fn run_detached_wrapper(
 pub async fn run_demo(
     paths: &CommandPaths,
     workspace: SpaceSelector,
-    launch: crate::demos::Launch,
+    launch: shoal_protocol::demos::Launch,
     command: Vec<OsString>,
 ) -> Result<i32> {
     ensure!(!command.is_empty(), "a command is required after --");

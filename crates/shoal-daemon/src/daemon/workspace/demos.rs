@@ -12,12 +12,12 @@ use super::{
     Manager,
     executions::{Save, StopPolicy, StopRequest},
 };
-use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     demos::{Launch, Progress, Running},
     model::{Execution, PresentSpace},
     process::identity as process,
 };
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 impl Manager {
     /// The running demos of `selector`'s workspace, none of a chat's, or

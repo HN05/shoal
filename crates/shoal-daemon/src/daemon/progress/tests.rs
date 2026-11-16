@@ -186,7 +186,7 @@ async fn changes_are_journaled_once_and_outlive_a_restart() {
     assert_eq!(progress.status.as_deref(), Some("Reproduced"));
     assert_eq!(
         progress.steps,
-        [crate::client::progress::Step {
+        [shoal_protocol::progress::Step {
             name: "Reproduce".into(),
             done: true,
             blockers: Vec::new(),
@@ -323,7 +323,8 @@ async fn a_chats_progress_is_its_own_and_goes_with_it() {
 
 #[tokio::test]
 async fn a_done_summary_sets_the_status_line_with_the_completion_it_records() {
-    use crate::{client::assignments::Done, daemon::workspace_files::Attacher};
+    use crate::daemon::workspace_files::Attacher;
+    use shoal_protocol::assignments::Done;
     let (temp, manager) = manager().await;
     let [workspace] = workspaces(&manager, &temp, ["done"]).await;
     let selector = SpaceSelector::id(&workspace.id);
@@ -370,7 +371,8 @@ async fn blocker_events(manager: &Manager) -> Vec<(EventKind, String)> {
 
 #[tokio::test]
 async fn blockers_name_spaces_and_forge_items_and_are_journaled() {
-    use crate::{client::progress::RecordedBlocker, model::Blocker, state::BlockerKind};
+    use crate::{model::Blocker, state::BlockerKind};
+    use shoal_protocol::progress::RecordedBlocker;
     let (temp, manager) = manager().await;
     let [blocked, api] = workspaces(&manager, &temp, ["blocked", "api"]).await;
     let selector = SpaceSelector::id(&blocked.id);
@@ -431,7 +433,8 @@ async fn blockers_name_spaces_and_forge_items_and_are_journaled() {
 
 #[tokio::test]
 async fn completion_removes_the_spaces_blockers() {
-    use crate::{client::assignments::Done, daemon::workspace_files::Attacher, model::Blocker};
+    use crate::{daemon::workspace_files::Attacher, model::Blocker};
+    use shoal_protocol::assignments::Done;
     let (temp, manager) = manager().await;
     let [blocked] = workspaces(&manager, &temp, ["blocked"]).await;
     let selector = SpaceSelector::id(&blocked.id);

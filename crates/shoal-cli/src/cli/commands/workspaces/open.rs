@@ -3,7 +3,6 @@ use std::ffi::OsString;
 
 use anyhow::{Result, ensure};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         agents,
@@ -14,6 +13,7 @@ use crate::{
     model::Workspace,
     protocol::ConfigTarget,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Hand the named workspace, else the current directory's or a picked one,
 /// to the named desktop app, else the one [`default_app`] gives.

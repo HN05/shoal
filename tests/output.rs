@@ -432,10 +432,8 @@ fn shoal_output_json_refuses_to_prompt_on_a_terminal() {
 /// failures, with the library's types.
 #[test]
 fn a_program_reads_json_output_with_the_librarys_types() {
-    use shoal_client::{
-        model::Repository,
-        output::{daemon::Status, error::CommandError, skill::Skill},
-    };
+    use shoal_client::output::{daemon::Status, error::CommandError, skill::Skill};
+    use shoal_protocol::model::Repository;
     let added = serde_json::json!({
         "type": "repository",
         "data": {"id": "test", "path": "/test", "source": "/test", "last_used": 0}

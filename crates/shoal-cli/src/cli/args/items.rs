@@ -4,7 +4,6 @@ use clap::{Args, Subcommand, ValueEnum};
 
 use anyhow::{Result, bail, ensure};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     forge::items::{
         link::{LinkKind, Selection},
@@ -13,6 +12,7 @@ use crate::{
     model::Relation,
     reviews::ReviewId,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]

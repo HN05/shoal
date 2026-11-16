@@ -46,7 +46,7 @@ pub(crate) use proxy::{
 };
 pub use trust::forget_repository_trust;
 
-use crate::client::transcripts::AgentEnvironment;
+use shoal_protocol::transcripts::AgentEnvironment;
 
 /// What an agent needs beyond its configured command and described
 /// arguments. Each default adds nothing.
@@ -172,7 +172,7 @@ pub trait Integration: Sync {
     fn plan_change(
         &self,
         _event: &serde_json::Value,
-    ) -> Option<crate::client::progress::ProgressChange> {
+    ) -> Option<shoal_protocol::progress::ProgressChange> {
         None
     }
 

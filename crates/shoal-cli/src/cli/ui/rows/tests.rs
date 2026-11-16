@@ -515,7 +515,7 @@ fn spaces_show_a_mode_other_than_their_kinds_usual_one() {
 
 #[test]
 fn rows_show_the_steps_done_and_the_status_line_in_place_of_the_title() {
-    use crate::client::progress::Step;
+    use shoal_protocol::progress::Step;
     let step = |name: &str, done| Step {
         name: name.into(),
         done,

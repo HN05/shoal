@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, de::DeserializeOwned};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{cli::context::Context, model::Workspace};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// What `WorktreeCreate` passes besides the common fields.
 #[derive(Deserialize)]

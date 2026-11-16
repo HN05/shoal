@@ -1,6 +1,4 @@
 use super::*;
-use crate::client::assignments::Done;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{commit, global_config, manager},
@@ -11,6 +9,8 @@ use crate::{
     removal::{InspectionPolicy, UnsavedWork},
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
+use shoal_protocol::assignments::Done;
+use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;
 
 /// Queue `name` blocked by `blockers` in a repository without agent limits.

@@ -4,10 +4,10 @@
 //! explicit execution marker, ancestor PIDs, scoped ancestors' state
 //! directories and the working directories of a space's untracked processes
 //! leave this module, and the command lines [`details`] reads.
-pub use crate::client::processes::Identity;
 use crate::protocol::timing;
 use anyhow::{Context, Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
+pub use shoal_protocol::processes::Identity;
 use std::{
     collections::HashSet, ffi::OsStr, os::unix::ffi::OsStrExt, path::PathBuf, time::Duration,
 };

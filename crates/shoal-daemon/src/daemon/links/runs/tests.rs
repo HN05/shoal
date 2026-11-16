@@ -32,10 +32,10 @@ fn a_started_run_is_linked_only_where_shoal_reads_runs() -> Result<()> {
 #[tokio::test]
 async fn only_a_chat_without_a_repository_watches_runs_beyond_its_own_repository() {
     use crate::{
-        client::space_names::SpaceSelector,
         daemon::test_support::{chat, git, manager, repository},
         forge::items::link::Selection,
     };
+    use shoal_protocol::space_names::SpaceSelector;
     let (root, manager) = manager().await;
     let manager = std::sync::Arc::new(manager);
     let path = repository(root.path(), "repo");

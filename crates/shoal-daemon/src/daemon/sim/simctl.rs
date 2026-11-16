@@ -1,7 +1,7 @@
-pub(crate) use crate::client::sim::{DeviceType, Runtime};
 use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
+pub(crate) use shoal_protocol::sim::{DeviceType, Runtime};
 use std::{collections::BTreeMap, time::Duration};
 use tokio::process::Command;
 

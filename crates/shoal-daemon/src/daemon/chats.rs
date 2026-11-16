@@ -4,17 +4,15 @@
 //! repository. A chat's agent runs under the execution wrapper as an
 //! execution of the chat, which runs while its execution is recorded; the
 //! chat lasts until it is removed.
-use crate::client::scope_tokens::ScopeToken;
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
+use shoal_protocol::scope_tokens::ScopeToken;
 use std::path::Path;
 
 use anyhow::{Context as _, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use crate::client::space_names::SpaceName;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         events, spaces, store,
@@ -26,6 +24,8 @@ use crate::{
     },
     tmp_dirs,
 };
+use shoal_protocol::space_names::SpaceName;
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// Record the chat `name` in the repository's checkout, at the top, with

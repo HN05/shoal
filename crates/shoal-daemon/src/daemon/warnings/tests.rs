@@ -1,9 +1,9 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     test_support::{manager, repository},
     workspace::ExecutionKind,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn running_agents_are_warned_once_per_signal_until_the_repeat_interval() {

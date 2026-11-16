@@ -4,7 +4,6 @@ use std::{collections::BTreeMap, ffi::OsString};
 use anyhow::Result;
 
 use crate::client::output::workspaces::Revoked;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
@@ -13,11 +12,12 @@ use crate::{
     },
     model::Workspace,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(in crate::cli::commands) async fn environment(
     ctx: &Context,
     workspace: Option<SpaceSelector>,
-    revoke: Option<crate::client::scope_tokens::ScopeToken>,
+    revoke: Option<shoal_protocol::scope_tokens::ScopeToken>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     if let Some(token) = revoke {

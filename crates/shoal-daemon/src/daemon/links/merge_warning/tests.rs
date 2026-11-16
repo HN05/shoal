@@ -4,11 +4,11 @@ use std::fs;
 use rusqlite::params;
 
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     links::pr::{Registration, RegistrationKind},
     test_support::{commit, manager, repository},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A workspace whose `version`, listed as sensitive, the default branch
 /// changed too, checked once.

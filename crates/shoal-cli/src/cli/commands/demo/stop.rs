@@ -2,7 +2,6 @@
 use anyhow::Result;
 
 use crate::client::output::demo::Stopping;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
@@ -12,6 +11,7 @@ use crate::{
     demos,
     model::Workspace,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn stop(
     ctx: &Context,

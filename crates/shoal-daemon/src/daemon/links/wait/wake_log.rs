@@ -6,10 +6,10 @@ use anyhow::Result;
 
 use super::Updates;
 use crate::{
-    client::space_names::SpaceSelector,
     daemon::{log::log, workspace::Manager},
     protocol::WakeEnd,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// Log that the wake hook of the agent of the workspace or running chat

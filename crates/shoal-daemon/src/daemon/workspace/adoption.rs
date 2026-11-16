@@ -1,10 +1,10 @@
 //! Explicitly transfer a linked worktree into Shoal's normal lifecycle.
 use super::creation::{existing_base, recorded_base};
 use super::{Manager, identity::directory_identity};
-use crate::client::space_names::SpaceName;
 use crate::daemon::log;
 use crate::{fsutil::off_runtime, git, model::Workspace, state::WorkspaceState};
 use anyhow::{Context, Result, ensure};
+use shoal_protocol::space_names::SpaceName;
 use shoal_refs::{BranchName, CommitId};
 use std::path::{Path, PathBuf};
 

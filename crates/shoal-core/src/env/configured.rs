@@ -4,10 +4,8 @@ use std::{collections::BTreeMap, ffi::OsString};
 
 use anyhow::{Context as _, Result};
 
-use crate::{
-    client::space_names::SpaceSelector, model::Workspace, paths::CommandPaths,
-    protocol::ConfigTarget, repository,
-};
+use crate::{model::Workspace, paths::CommandPaths, protocol::ConfigTarget, repository};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The variables `[env]` and the workspace's temporary directory add to its
 /// tracked executions and hooks.

@@ -5,7 +5,6 @@
 use anyhow::{Result, ensure};
 
 use crate::client::output::agents::SpaceStopped;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::lifecycle::StopArgs, commands::queued_agents, context::Context, output::Style, ui,
@@ -13,6 +12,7 @@ use crate::{
     model::{PresentSpace, StoppedSpace},
     protocol::{ErrorCode, QueuedLaunches, RemoteError, UntrackedProcesses},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 mod batch;
 mod processes;

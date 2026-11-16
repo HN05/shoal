@@ -1,6 +1,5 @@
 use std::{fs, os::unix::process::CommandExt, path::Path, sync::Arc};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{manager, repository, unmarked},
@@ -11,6 +10,7 @@ use crate::{
     removal::{InspectionPolicy, UnsavedWork},
     transfer::{CarriedChatExt, ExportedSpace, Import, ManifestExt, SpaceImport},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 mod moving;
 mod transfer;

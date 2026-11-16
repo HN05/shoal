@@ -15,7 +15,6 @@ use std::{
 
 use anyhow::{Context as _, Result, ensure};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::{Agent, ModelChoice},
     agents::{
@@ -29,6 +28,7 @@ use crate::{
     protocol::ConfigTarget,
     tools::{ensure_program, program_available},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(in crate::cli) use desktop::{app, ensure_opens, hand_off};
 pub(in crate::cli) use launch::input;
@@ -111,7 +111,7 @@ pub(in crate::cli) struct ChatLaunch {
     /// repository's checkout.
     pub workspace: Option<Workspace>,
     /// The name the chat is recorded under.
-    pub name: crate::client::space_names::SpaceName,
+    pub name: shoal_protocol::space_names::SpaceName,
     /// The mode its agent starts in.
     pub mode: modes::ModeName,
     /// The permissions `--permission` gives the agent, whatever the mode's.
@@ -497,7 +497,7 @@ pub(in crate::cli) fn turn_failure(
 pub(in crate::cli) fn plan_change(
     kind: IntegrationKind,
     event: &serde_json::Value,
-) -> Option<crate::client::progress::ProgressChange> {
+) -> Option<shoal_protocol::progress::ProgressChange> {
     integration(kind).plan_change(event)
 }
 

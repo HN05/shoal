@@ -5,7 +5,6 @@ use std::ffi::OsString;
 
 use anyhow::{Context as _, Result};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     model::{PresentSpace, QueueEntry},
     paths::CommandPaths,
@@ -14,6 +13,7 @@ use crate::{
     terminal::queued,
 };
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Restore the stopped agent the admitted restore `entry` names.
 pub(super) async fn start(paths: &CommandPaths, entry: &QueueEntry) -> Result<()> {

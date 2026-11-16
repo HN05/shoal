@@ -20,12 +20,13 @@ use crate::{
         output::{self, Palette, Style},
         ui::{self, Cell, WidthLimit},
     },
-    client::{
-        approvals::{ApprovalRequest, DecisionStatus, GateStep},
-        questions::{self, Question},
-    },
+    client::questions,
     model::{Chat, ReviewMark, SpaceLinks, Workspace},
     state::WorkspaceState,
+};
+use shoal_protocol::{
+    approvals::{ApprovalRequest, DecisionStatus, GateStep},
+    questions::Question,
 };
 
 /// The inbox's items in the order it lists them, and the workspaces and
@@ -500,9 +501,9 @@ fn asleep(asleep: Option<&crate::model::Asleep>) -> String {
 }
 
 /// The first of what blocks a space, with its reason, and how many more.
-fn blocked_by(progress: Option<&crate::client::progress::Progress>) -> String {
+fn blocked_by(progress: Option<&shoal_protocol::progress::Progress>) -> String {
     let mut blockers =
-        (progress.into_iter()).flat_map(crate::client::progress::Progress::all_blockers);
+        (progress.into_iter()).flat_map(shoal_protocol::progress::Progress::all_blockers);
     let Some((_, first)) = blockers.next() else {
         return String::new();
     };

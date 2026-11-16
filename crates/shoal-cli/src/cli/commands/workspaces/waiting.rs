@@ -1,13 +1,13 @@
 //! The agent of a start whose setup failed: its preparation left it waiting
 //! in the agent queue for a retried setup, and the queue starts it once the
 //! setup succeeds, so the start frees the slot it held.
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::context::Context,
     model::{Inspection, Workspace},
     state::WorkspaceState,
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(in crate::cli::commands) struct WaitingAgent {
     /// The starting queue entry whose slot the start holds, until a failed

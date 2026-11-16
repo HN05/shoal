@@ -1,8 +1,6 @@
 //! Cooperative caller scope. The daemon validates every scoped request,
 //! including direct protocol clients; this is not a security boundary against
 //! the OS user.
-use crate::client::scope_tokens::ScopeToken;
-use crate::client::space_names::SpaceSelector;
 use crate::config::permissions::PermissionKey;
 use crate::{
     daemon::workspace::{ExecutionKind, Manager},
@@ -11,6 +9,8 @@ use crate::{
 use anyhow::{Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::scope_tokens::ScopeToken;
+use shoal_protocol::space_names::SpaceSelector;
 
 mod access;
 mod reach;

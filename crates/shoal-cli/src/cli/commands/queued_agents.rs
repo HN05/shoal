@@ -4,8 +4,7 @@
 use anyhow::Result;
 
 use super::listing::ListFilter;
-use crate::client::space_names::SpaceSelector;
-use crate::client::{queue, space_names::SpaceName};
+use crate::client::queue;
 use crate::{
     cli::{context::Context, output::Palette, ui},
     model::{Blocker, QueueEntry, QueueRequest, Workspace},
@@ -15,6 +14,8 @@ use crate::{
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceName;
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) enum Admission {
     /// Start now; the entry, when one tracks the slot, and the branch of a

@@ -3,11 +3,11 @@
 use anyhow::Result;
 
 use crate::{
-    client::agents::GitCredential,
     config::forges::Whose,
     daemon::{scope::Caller, workspace::Manager},
 };
 use shoal_forge::backends::SignIn;
+use shoal_protocol::agents::GitCredential;
 
 impl Manager {
     /// The agent token `[machine.forges]` sets for `host`, as Git names it,

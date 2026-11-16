@@ -2,7 +2,6 @@ use super::super::{
     Removal,
     tests::{fixture, removal_entries},
 };
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         events::{EventCause, EventKind},
@@ -11,6 +10,7 @@ use crate::{
     removal::{InspectionPolicy, NOTHING},
     state::WorkspaceState,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn a_removal_the_daemon_stopped_fails_its_workspace_for_shoal_rm() {

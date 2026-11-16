@@ -113,7 +113,7 @@ pub async fn working_below(
     mode: impl Into<crate::config::modes::ModeName>,
 ) -> crate::model::Workspace {
     let workspace = workspace_below(manager, repository, name, parent, Some(mode.into())).await;
-    let selector = crate::client::space_names::SpaceSelector::id(&workspace.id);
+    let selector = shoal_protocol::space_names::SpaceSelector::id(&workspace.id);
     let working = crate::state::AgentState::Working;
     (manager.set_agent_state(&selector, working, None, None))
         .await
@@ -151,7 +151,7 @@ impl Manager {
     /// `shoal restore` does.
     pub async fn restore_workspace(
         &self,
-        selector: &crate::client::space_names::SpaceSelector,
+        selector: &shoal_protocol::space_names::SpaceSelector,
     ) -> anyhow::Result<crate::model::RestoredWorkspace> {
         match self.restore_space(selector, None).await? {
             crate::model::RestoredSpace::Workspace(restored) => Ok(*restored),
@@ -162,7 +162,7 @@ impl Manager {
     /// The selector of the space named `name`, as tests name the spaces
     /// they make: a workspace, a chat, else a removed workspace, by its ID,
     /// since a name never selects one. A name no space has selects nothing.
-    pub async fn named(&self, name: &str) -> crate::client::space_names::SpaceSelector {
+    pub async fn named(&self, name: &str) -> shoal_protocol::space_names::SpaceSelector {
         let workspaces = self.list_workspaces().await.unwrap();
         let chats = self.chats().await.unwrap();
         let removed = self.removed_workspaces().await.unwrap();
@@ -180,7 +180,7 @@ impl Manager {
                     .map(|removed| removed.space_id)
             })
             .unwrap_or_else(SpaceId::generate);
-        crate::client::space_names::SpaceSelector::Id(id)
+        shoal_protocol::space_names::SpaceSelector::Id(id)
     }
 
     /// The ID of the queue entry named `name`, as tests name the entries
@@ -249,7 +249,7 @@ impl Manager {
 }
 
 /// The names of the spaces a message's result lists, as tests compare them.
-pub fn names(spaces: &[crate::client::output::messages::Recipient]) -> Vec<&str> {
+pub fn names(spaces: &[shoal_protocol::agent_messages::Recipient]) -> Vec<&str> {
     spaces.iter().map(|space| space.name.as_str()).collect()
 }
 

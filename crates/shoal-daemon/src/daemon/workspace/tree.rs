@@ -11,12 +11,12 @@ use anyhow::{Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
-use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     daemon::notifications::NotificationKind,
     model::{SpaceRef, Workspace, WorkspaceRef},
     state::WorkspaceState,
 };
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 /// Each space a removal of another takes first, as `space_id, parent_id`:
 /// the spaces below it, and the chats in a workspace's worktree, which are

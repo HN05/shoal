@@ -2,7 +2,6 @@
 //! it here, and what the package holds of each once its removal recorded it.
 use anyhow::{Context, Result, ensure};
 
-use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     daemon::{
         events::EventCause,
@@ -13,6 +12,7 @@ use crate::{
     transfer::{CarriedChat, CarriedChatExt},
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 impl Manager {
     /// The IDs of the chats that go with the space `id`, each after its

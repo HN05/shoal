@@ -1,9 +1,9 @@
 use tokio::net::UnixListener;
 
 use super::*;
-use crate::paths::Paths;
-use crate::protocol::{self, Body, Request, Response};
 use anyhow::Result;
+use shoal_protocol::paths::Paths;
+use shoal_protocol::protocol::{self, Body, Request, Response};
 
 /// A hang guard, not the behavior under test.
 async fn bounded<T>(future: impl Future<Output = T>) -> T {

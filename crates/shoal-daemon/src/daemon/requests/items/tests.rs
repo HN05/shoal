@@ -2,8 +2,8 @@ use tokio::net::UnixStream;
 
 use super::super::super::answer;
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::{daemon::workspace_files::Attacher, protocol::Response};
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn item_waits_close_unanswered_while_an_update_restarts_the_daemon() {

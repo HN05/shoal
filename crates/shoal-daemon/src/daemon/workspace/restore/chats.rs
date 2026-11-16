@@ -2,10 +2,10 @@
 //! the place it ran, with what its removal record keeps of its agent.
 use anyhow::{Context, Result, bail, ensure};
 
-use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::daemon::scope::Caller;
 use crate::daemon::workspace::Manager;
 use crate::model::{Chat, KeptChat, RemovedSpace, RestoredChat};
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 impl Manager {
     /// Record the removed chat `removed` again, stopped, in the place it

@@ -7,12 +7,12 @@ use std::fmt::Write as _;
 use anyhow::{Result, bail};
 
 use super::store;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace::Manager,
     model::Workspace,
     reviews::{Review, ReviewState, ReviewTarget},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// What a gate guards.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -2,7 +2,6 @@
 //! account of the workspace or registered checkout.
 use anyhow::{Context as _, Result, bail};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{links::space::LinkSpace, workspace::Manager},
     forge::{
@@ -21,6 +20,7 @@ use shoal_forge::{
     capability::CapabilityRequests,
     ci::checks::{CheckRequests, failed_log_summary, validate_check_name},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// Log failures stay on their CI update and never hide other activity;

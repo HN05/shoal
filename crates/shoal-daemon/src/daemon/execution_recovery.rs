@@ -14,7 +14,6 @@ use tokio::{
 };
 
 use super::workspace::{Grant, Manager, Pause, Protection, StopRequest};
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::log;
 use crate::{
     config::permissions::PermissionsConfig,
@@ -22,6 +21,7 @@ use crate::{
     model::PortReservation,
     protocol::{self, Control, ExecutionEvent, timing},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) enum Action {
     Resume(Resumed),

@@ -10,8 +10,6 @@ use rusqlite::{Connection, OptionalExtension, params};
 use shoal_refs::{BranchName, CommitId};
 
 use super::{Manager, NewWorkspace, creation::Configured, restore::RestoredFiles};
-use crate::client::space_names::SpaceName;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     git,
     model::{
@@ -22,6 +20,8 @@ use crate::{
     state::WorkspaceState,
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
+use shoal_protocol::space_names::SpaceName;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Where a copy goes.
 #[derive(Debug)]

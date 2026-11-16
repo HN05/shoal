@@ -4,7 +4,6 @@ use std::ffi::OsString;
 use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::client::output::workspaces::InChat;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::coordination::QuestionsArgs,
@@ -14,11 +13,13 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Cell, Entries, Fallback, WidthLimit},
     },
-    client::{
-        item_numbers::ItemNumber,
-        questions::{self, Ask, Question, QuestionStatus},
-    },
+    client::questions,
     installed::Executable,
+};
+use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{
+    item_numbers::ItemNumber,
+    questions::{Ask, Question, QuestionStatus},
 };
 
 pub(super) async fn run(ctx: &Context, args: QuestionsArgs) -> Result<i32> {
@@ -55,7 +56,7 @@ pub(super) async fn ask(
     wait: bool,
 ) -> Result<i32> {
     let attachments = super::messages::attachments(&attach)?;
-    crate::client::files::check_sent(&attachments)?;
+    shoal_protocol::files::check_sent(&attachments)?;
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let question = questions::ask(
         &ctx.paths,

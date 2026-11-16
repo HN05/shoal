@@ -5,7 +5,6 @@
 use anyhow::{Context, Result, ensure};
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{links::actions::Place, scope::Caller, workspace::Manager},
     forge::{
@@ -22,6 +21,7 @@ use shoal_forge::{
     account::Account,
     ci::workflow::{WorkflowRequests, is_workflow_url},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The refusal of a workspace process's request about another repository.
 pub(super) const ELSEWHERE: &str =

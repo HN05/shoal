@@ -5,20 +5,18 @@ use super::{
     acquisition::{Finish, obtain},
     workspace_overviews,
 };
+use crate::cli::{
+    args::WorkspaceScope,
+    context::{Context, optional},
+    output::{Palette, Style},
+    ui,
+};
 use crate::client::leases;
 use crate::client::output::acquisition::NotAcquired;
-use crate::client::space_names::SpaceSelector;
-use crate::{
-    cli::{
-        args::WorkspaceScope,
-        context::{Context, optional},
-        output::{Palette, Style},
-        ui,
-    },
-    client::resources::{
-        Catalog, Overview, ResourceKind, ResourceLease, ResourceRequest, WorkspaceOverview,
-    },
+use shoal_protocol::resources::{
+    Catalog, Overview, ResourceKind, ResourceLease, ResourceRequest, WorkspaceOverview,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Exit 2 means no compatible capacity or a pending or denied approval; a
 /// queued request returns only once acquired or denied.

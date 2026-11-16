@@ -10,12 +10,6 @@ use uuid::Uuid;
 mod repositories;
 pub(crate) use repositories::{borrowed, ensure_no_external_leases};
 
-pub(crate) use crate::client::resources::{
-    Catalog, CatalogPool, Definition, LockMode, Overview, PoolStatus, RepositoryView,
-    ResourceConfig, ResourceKind, ResourceLease, ResourceRequest, ResourceStatus, Scope,
-    definitions,
-};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         allocation::Allocation,
@@ -27,6 +21,12 @@ use crate::{
     },
     validate,
 };
+pub(crate) use shoal_protocol::resources::{
+    Catalog, CatalogPool, Definition, LockMode, Overview, PoolStatus, RepositoryView,
+    ResourceConfig, ResourceKind, ResourceLease, ResourceRequest, ResourceStatus, Scope,
+    definitions,
+};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Operations on the client type [`ResourceLease`] that only the `shoal` command uses.
 trait ResourceLeaseExt {

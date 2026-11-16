@@ -4,7 +4,6 @@ mod render;
 use anyhow::{Context as _, Result, ensure};
 
 use self::render::render_status;
-use crate::client::space_names::SpaceSelector;
 use crate::client::{output::status::StatusView, transcripts};
 use crate::{
     cli::{
@@ -17,6 +16,7 @@ use crate::{
     model::{SpaceDetail, SpaceTarget},
     protocol::ConfigTarget,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(in crate::cli::commands) async fn status(
     ctx: &Context,

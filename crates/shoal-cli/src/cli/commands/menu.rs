@@ -15,7 +15,6 @@ use keys::Action;
 use rows::{Row, rows};
 pub(crate) use views::View;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         Command,
@@ -26,6 +25,7 @@ use crate::{
     },
     workers::Worker,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Open the picker on `start`, or bare on the inbox unless nothing needs
 /// the user, searching for the current workspace's items when it has any.

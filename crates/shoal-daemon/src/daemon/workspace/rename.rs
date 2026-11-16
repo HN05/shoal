@@ -2,7 +2,6 @@
 mod intent;
 
 use super::Manager;
-use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use crate::{daemon::store, git, model::Workspace, state::WorkspaceState};
 use anyhow::{Result, bail, ensure};
@@ -10,6 +9,7 @@ use intent::RenameIntent;
 use rusqlite::params;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;
 
 impl Manager {

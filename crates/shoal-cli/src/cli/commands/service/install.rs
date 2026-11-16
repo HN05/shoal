@@ -43,7 +43,7 @@ pub(super) async fn install(
             true
         }
         Ok(None) => false,
-        Err(error) if error.is::<client::ProtocolMismatch>() => {
+        Err(error) if error.is::<shoal_protocol::connection::ProtocolMismatch>() => {
             // Use the service manager without speaking the incompatible protocol.
             // stop checks the installed state directory and waits for the socket
             // to become unreachable before install can replace the definition.

@@ -12,7 +12,6 @@ use super::{
     space::LinkSpace,
     wait::{OwnChange, record_received_change},
 };
-use crate::client::space_names::SpaceSelector;
 use crate::{
     config::{permissions::Opening, resolve::Effective},
     daemon::{events, reviews::gate::Gate, scope::Caller, workspace::Manager},
@@ -39,6 +38,7 @@ use shoal_forge::{
     },
     updates::Edited,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 mod accounts;
 mod open_issue;

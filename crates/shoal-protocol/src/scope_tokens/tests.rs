@@ -1,9 +1,5 @@
 use super::*;
-use crate::{
-    connection::Connector,
-    paths::Paths,
-    protocol::{ChatScope, Operation, Request, WorkspaceMethod},
-};
+use crate::protocol::{ChatScope, Operation, Request, WorkspaceMethod};
 use serde_json::json;
 
 const SECRET: &str = "5f0c3e1a-scope-secret";
@@ -25,15 +21,10 @@ fn structs_holding_a_token_never_debug_it() {
     let chat = ChatScope {
         token: ScopeToken::from(SECRET.to_owned()),
     };
-    let connector = Connector {
-        paths: Paths::new(Some("/state".into())).unwrap(),
-        scope: Some(ScopeToken::from(SECRET.to_owned())),
-    };
     for debugged in [
         format!("{reattach:?}"),
         format!("{revoke:?}"),
         format!("{chat:?}"),
-        format!("{connector:?}"),
     ] {
         assert!(!debugged.contains(SECRET), "{debugged}");
         assert!(debugged.contains("ScopeToken"), "{debugged}");

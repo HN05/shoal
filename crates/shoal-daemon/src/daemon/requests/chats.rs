@@ -9,8 +9,8 @@ use super::super::{
     scope::{Caller, Scoped, confine_target},
     workspace::Manager,
 };
-use crate::client::space_names::SpaceSelector;
 use crate::protocol::{Body, ChatMethod, ChatStart};
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,

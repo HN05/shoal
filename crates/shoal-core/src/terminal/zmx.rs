@@ -604,7 +604,7 @@ fn replacement_labels(owner: Owner<'_>) -> String {
 /// directory's name is and shortened to fit a socket path, then suffixed
 /// `-2`, `-3`, ... past sessions that already use it.
 fn free_name(label: &str, taken: &HashSet<String>) -> String {
-    let base = crate::client::space_names::directory_name(label);
+    let base = shoal_protocol::space_names::directory_name(label);
     let base: String = base.chars().take(MAX_NAME_LEN).collect();
     std::iter::once(base.clone())
         .chain((2..).map(|n| format!("{base}-{n}")))

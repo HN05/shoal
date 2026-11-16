@@ -1,10 +1,10 @@
 use std::time::Duration;
 
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     test_support::{manager, repository},
     workspace::ExecutionKind,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn only_the_agents_workspace_reports_its_attachment() {

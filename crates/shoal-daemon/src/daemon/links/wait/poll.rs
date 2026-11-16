@@ -14,7 +14,6 @@ use super::{
     items::activity_ended,
 };
 use crate::{
-    client::space_names::SpaceSelector,
     daemon::{links::space::LinkSpace, notifications::NotificationKind, workspace::Manager},
     forge::{
         items::link::{LinkKind, Selection},
@@ -29,6 +28,7 @@ use shoal_forge::{
     updates::{Snapshot, UpdateRequests},
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) const POLL_INTERVAL: Duration = Duration::from_secs(30);
 

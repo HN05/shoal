@@ -1,6 +1,3 @@
-use crate::client::progress::ProgressChange;
-use crate::client::scope_tokens::ScopeToken;
-use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::LastSessionExt;
 use crate::{
     daemon::{
@@ -11,6 +8,9 @@ use crate::{
     model::{HoldPlacer, Repository},
 };
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::progress::ProgressChange;
+use shoal_protocol::scope_tokens::ScopeToken;
+use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;
 
 async fn registered(root: &std::path::Path, manager: &Manager) -> Repository {

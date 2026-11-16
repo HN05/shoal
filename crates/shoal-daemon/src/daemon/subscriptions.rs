@@ -5,7 +5,7 @@
 mod agents;
 mod snapshot;
 
-use crate::client::scope_tokens::ScopeToken;
+use shoal_protocol::scope_tokens::ScopeToken;
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
@@ -20,10 +20,8 @@ use super::{
     scope::Caller,
     workspace::Manager,
 };
-use crate::{
-    client::{log::LogTopic, subscriptions::records::Topic},
-    protocol::{Body, ErrorCode, Response},
-};
+use crate::protocol::{Body, ErrorCode, Response};
+use shoal_protocol::{log::LogTopic, subscriptions::records::Topic};
 use snapshot::{Records, Topics};
 
 /// Lets a burst of state changes settle into one comparison.

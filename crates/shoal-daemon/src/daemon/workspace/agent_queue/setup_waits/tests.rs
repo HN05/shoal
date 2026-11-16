@@ -1,7 +1,6 @@
 use rusqlite::params;
 
 use super::super::tests::{add, limit_globally, register, request};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{notifications::NotificationKind, test_support::manager, workspace::Manager},
     model::{QueueEntry, QueueRequest, Repository, Workspace},
@@ -9,6 +8,7 @@ use crate::{
     start_plan::{AddPlan, Creation, ResolvedAddAgent},
     state::{QueueState, WorkspaceState},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The plan of a start that creates `branch` in `repository`.
 fn creating(repository: &Repository, branch: &str) -> String {

@@ -1,10 +1,10 @@
 //! Connected agent metadata is deliberately transient: a daemon restart must
 //! not turn an unknown execution into an automatic signal target.
-use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::execution::recovery::LastSessionExt;
 use rusqlite::OptionalExtension;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use std::{
     collections::{HashMap, HashSet},
     time::{Duration, Instant},

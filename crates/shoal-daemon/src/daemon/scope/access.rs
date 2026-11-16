@@ -8,7 +8,6 @@ use std::collections::HashMap;
 
 use super::Caller;
 use crate::{
-    client::space_names::SpaceSelector,
     config::permissions::PermissionKey,
     daemon::{
         approvals::ApprovalRequest, item_numbers::ItemNumber, permissions::Action,
@@ -21,6 +20,7 @@ use crate::{
     protocol::{ChatStart, operations::WorkspaceStart},
     repository::Selector,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Why a scoped caller cannot start the worker of a workspace outside its
 /// tree.

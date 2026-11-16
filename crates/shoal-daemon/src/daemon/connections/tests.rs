@@ -3,7 +3,6 @@ use std::time::Instant;
 use tokio::io::{AsyncReadExt, BufReader};
 
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::protocol::RepositoryMethod::ListRepositories;
 use crate::{
     daemon::{
@@ -18,6 +17,7 @@ use crate::{
         Response,
     },
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A hang guard, not the behavior under test.
 async fn bounded<T>(future: impl Future<Output = T>) -> T {

@@ -18,9 +18,8 @@ use std::{
 
 use anyhow::{Context as _, Result};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
-    cli::{client, context::Context, installed},
+    cli::{context::Context, installed},
     daemon_owner, env,
     model::Inspection,
     paths::Paths,
@@ -29,6 +28,7 @@ use crate::{
     terminal::{Host, PlaceState, Watched, Watches, hosts, named, origin_here},
     workers,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Who closes a watched place once its workspace is removed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -115,7 +115,7 @@ pub async fn watch(
     let lifecycle = || async {
         match workspace_lifecycle(ctx, &place.workspace).await {
             Ok(lifecycle) => Ok(Some(lifecycle)),
-            Err(error) if error.is::<client::ProtocolMismatch>() => {
+            Err(error) if error.is::<shoal_protocol::connection::ProtocolMismatch>() => {
                 match executable.take_over(installed::arguments) {
                     Some(failure) => Err(failure),
                     None => Ok(None),

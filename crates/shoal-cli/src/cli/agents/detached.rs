@@ -12,7 +12,7 @@ use anyhow::Result;
 use futures_util::future::BoxFuture;
 
 use super::{ChatLaunch, Launch};
-use crate::client::output::agents::{DetachedChat, DetachedSession};
+use crate::client::output::agents::DetachedSession;
 use crate::{
     agent::{Agent, ModelChoice},
     agents::{
@@ -25,6 +25,7 @@ use crate::{
     model::{Chat, Repository, Workspace},
     paths::Paths,
 };
+use shoal_protocol::chats::DetachedChat;
 
 /// Start `launch` as a session of `app`, detached from this terminal and
 /// tracked like any other workspace command. The CLI returns once the launch

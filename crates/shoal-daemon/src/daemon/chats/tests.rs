@@ -1,5 +1,4 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::paths::StateFiles;
 use crate::{
     daemon::{
@@ -8,6 +7,7 @@ use crate::{
     },
     model::{SpaceKind, SpaceRef},
 };
+use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;
 
 /// Chat creations and renames, and workspace parent changes, in journal
@@ -378,13 +378,13 @@ async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
     // Its log records the removal with its cause, as a workspace's does.
     let entries = (manager.space_log(
         &SpaceSelector::id(&chat.id),
-        crate::client::log::LogFilter::Entries,
+        shoal_protocol::log::LogFilter::Entries,
         50,
     ))
     .await
     .unwrap();
     let removed = entries.into_iter().rev().find_map(|entry| match entry {
-        crate::client::log::LogEntry::Event(event) => Some(event.details),
+        shoal_protocol::log::LogEntry::Event(event) => Some(event.details),
         _ => None,
     });
     let removed = removed.map(|details| (details.kind, details.cause));
@@ -873,12 +873,12 @@ async fn a_chat_s_log_shows_a_removal_that_failed() {
         .unwrap_err();
 
     let entries = manager
-        .space_log(&selector, crate::client::log::LogFilter::Entries, 50)
+        .space_log(&selector, shoal_protocol::log::LogFilter::Entries, 50)
         .await
         .unwrap();
     let removal: Vec<_> = (entries.into_iter())
         .filter_map(|entry| match entry {
-            crate::client::log::LogEntry::Event(event) => Some(event.details.kind),
+            shoal_protocol::log::LogEntry::Event(event) => Some(event.details.kind),
             _ => None,
         })
         .filter(|kind| matches!(kind, EventKind::RemovalStarted | EventKind::Retained))

@@ -1,14 +1,12 @@
 //! What commands that act on running agents print: `shoal stop`, `shoal
 //! restart` and the turn commands.
-use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::agents::Delivery;
+use shoal_protocol::space_names::SpaceName;
 
-use crate::{
-    model::QueueEntry,
-    output::{batch::Failure, outputs},
-    processes::Stopped,
-};
+use crate::output::{batch::Failure, outputs};
+use shoal_protocol::{model::QueueEntry, processes::Stopped};
 
 /// An agent, by the name of its space, a workspace or a chat, and its own,
 /// which is unknown for an execution whose wrapper is gone.
@@ -16,7 +14,7 @@ use crate::{
 pub struct Agent {
     pub space: SpaceName,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent: Option<crate::agent::Agent>,
+    pub agent: Option<shoal_protocol::agent::Agent>,
 }
 
 /// A stopped workspace's processes, or a stopped chat.
@@ -101,17 +99,17 @@ pub struct Restarted {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RestartedAgent {
     pub space: SpaceName,
-    pub agent: Option<crate::agent::Agent>,
+    pub agent: Option<shoal_protocol::agent::Agent>,
     /// Where it runs now, when its wrapper runs in a terminal host.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub place: Option<crate::sessions::Origin>,
+    pub place: Option<shoal_protocol::sessions::Origin>,
 }
 
 /// An agent a restart leaves out, by its space's name, and why.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Skipped {
     pub space: SpaceName,
-    pub agent: Option<crate::agent::Agent>,
+    pub agent: Option<shoal_protocol::agent::Agent>,
     pub reason: String,
 }
 
@@ -124,21 +122,11 @@ outputs!(
     Restarted
 );
 
-/// What an app's session did with an agent's first message, which its
-/// detached launch reports.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct Delivery {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub happy_session_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub happy_daemon_recorded: Option<bool>,
-}
-
 /// An agent session started detached in an app.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DetachedSession {
-    pub workspace: crate::model::Workspace,
-    pub agent: crate::agent::Agent,
+    pub workspace: shoal_protocol::model::Workspace,
+    pub agent: shoal_protocol::agent::Agent,
     pub execution_id: ExecutionId,
     pub pid: u32,
     pub log: std::path::PathBuf,
@@ -146,15 +134,4 @@ pub struct DetachedSession {
     pub delivery: Delivery,
 }
 
-/// A chat started detached in an app.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DetachedChat {
-    pub chat: crate::model::Chat,
-    pub execution_id: ExecutionId,
-    pub pid: u32,
-    pub log: std::path::PathBuf,
-    #[serde(flatten)]
-    pub delivery: Delivery,
-}
-
-outputs!(DetachedSession, DetachedChat);
+outputs!(DetachedSession);

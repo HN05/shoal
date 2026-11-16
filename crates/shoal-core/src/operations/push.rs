@@ -5,13 +5,13 @@ use anyhow::Result;
 
 use super::{Failed, Reporter};
 use crate::{
-    client::{
-        approvals::{ApprovalRequest, PushSpecification},
-        space_names::SpaceSelector,
-    },
     git,
     paths::CommandPaths,
     protocol::operations::{Failure, Step},
+};
+use shoal_protocol::{
+    approvals::{ApprovalRequest, PushSpecification},
+    space_names::SpaceSelector,
 };
 
 pub(super) async fn push_approved(

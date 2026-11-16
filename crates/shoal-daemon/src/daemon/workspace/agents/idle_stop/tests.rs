@@ -1,6 +1,4 @@
 use super::*;
-use crate::client::assignments::Done;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::workspace::agents::ProtectionExt;
 use crate::execution::recovery::RecordExt;
 use crate::{
@@ -16,6 +14,8 @@ use crate::{
 };
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::repository_ids::RepositoryId;
+use shoal_protocol::assignments::Done;
+use shoal_protocol::space_names::SpaceSelector;
 use shoal_schedule::priority::Priority;
 
 /// How a test workspace keeps its agent.
@@ -359,7 +359,7 @@ async fn chosen_held(manager: &Manager, execution: &ExecutionId) -> HashMap<Exec
 
 #[tokio::test]
 async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_clear() {
-    use crate::client::progress::ProgressChange;
+    use shoal_protocol::progress::ProgressChange;
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
@@ -579,7 +579,7 @@ async fn a_light_chats_idle_agent_keeps_running_once_its_cache_expires() {
 /// waiting to restore it in place once the space clears.
 #[tokio::test]
 async fn a_blocked_chats_idle_agent_stops_until_its_space_clears() {
-    use crate::client::progress::ProgressChange;
+    use shoal_protocol::progress::ProgressChange;
     let (root, manager) = manager().await;
     let (chat, execution) = idle_chat(&manager, root.path(), "chat").await;
     let blocker = crate::model::Blocker::Pr("https://github.com/team/app/pull/8".parse().unwrap());
@@ -686,7 +686,7 @@ async fn under_the_speed_schedule_a_sleeping_agent_sleeps_at_once() {
 
 /// Ask a question in `workspace`, which wakes its agent once answered.
 async fn ask(manager: &Manager, workspace: &Workspace) {
-    let ask = crate::client::questions::Ask {
+    let ask = shoal_protocol::questions::Ask {
         question: "Which database?".into(),
         recommendation: "SQLite".into(),
         reason: None,

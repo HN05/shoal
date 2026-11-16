@@ -1,7 +1,5 @@
 use super::notifications::NotificationKind;
 use super::*;
-use crate::client::assignments::Done;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     test_support::{
         install_test_script,
@@ -20,6 +18,8 @@ use crate::model::PresentSpace;
 use crate::paths::CommandPaths;
 use crate::paths::StateFiles;
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::assignments::Done;
+use shoal_protocol::space_names::SpaceSelector;
 use std::{fs, future::Future, os::unix::fs::PermissionsExt};
 
 mod agent_restart;

@@ -3,17 +3,15 @@
 //! and `rm` deletes them. Under a chat's agent they act on its chat.
 use anyhow::{Result, ensure};
 
-use crate::client::space_names::SpaceSelector;
-use crate::model::PresentSpace;
-use crate::{
-    cli::{
-        args::WorkspaceScope,
-        context::Context,
-        output::{Palette, Style},
-        ui::{self, Fallback},
-    },
-    client::files::{AttachedFile, FileSource},
+use crate::cli::{
+    args::WorkspaceScope,
+    context::Context,
+    output::{Palette, Style},
+    ui::{self, Fallback},
 };
+use crate::model::PresentSpace;
+use shoal_protocol::files::{AttachedFile, FileSource};
+use shoal_protocol::space_names::SpaceSelector;
 
 mod menu;
 
@@ -126,7 +124,7 @@ async fn check_selected(
         return Ok(());
     }
     let files = crate::client::files::list(&ctx.paths, space.clone()).await?;
-    let missing = crate::client::files::missing_selection(&files, names, ids);
+    let missing = shoal_protocol::files::missing_selection(&files, names, ids);
     ensure!(
         missing.is_empty(),
         "no attached file {}",

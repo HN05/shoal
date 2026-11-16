@@ -17,7 +17,6 @@ use tokio::{sync::Notify, time::Instant};
 
 use super::{mark_published, section, stored};
 use crate::{
-    client::space_names::SpaceSelector,
     daemon::{
         links::{space::LinkSpace, wait::linked_items},
         log, store,
@@ -26,6 +25,7 @@ use crate::{
     forge::items::link::ItemKind,
     model::Relation,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The shortest time between two publications of one space's progress.
 const INTERVAL: Duration = Duration::from_secs(60);

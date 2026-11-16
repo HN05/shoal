@@ -5,11 +5,11 @@ use rusqlite::params;
 
 use super::*;
 use crate::{
-    client::progress::{PlanStep, ProgressChange, StepState},
     daemon::test_support::{configure, git, manager, repository},
     forge::{ForgeRepo, items::link::Selection},
 };
 use shoal_forge::test_support::Server;
+use shoal_protocol::progress::{PlanStep, ProgressChange, StepState};
 
 #[test]
 fn a_space_publishes_once_an_interval_and_then_its_latest_progress() {

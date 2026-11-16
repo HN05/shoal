@@ -2,13 +2,13 @@
 //! rename`.
 use anyhow::Result;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{context::Context, terminal},
-    client::space_names::SpaceName,
     model::RenamedChat,
     protocol::ConfigTarget,
 };
+use shoal_protocol::space_names::SpaceName;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// What `shoal rename --request` asks a chat's agent.
 const NAME_REQUEST: &str = "The user asks you to rename this chat: name the work as it stands now in a few words with `shoal rename \"<name>\"`.";

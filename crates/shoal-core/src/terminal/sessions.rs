@@ -84,8 +84,8 @@ impl Session {
     }
 
     /// The session as commands print it.
-    pub fn output(self) -> crate::client::output::status::TerminalSession {
-        crate::client::output::status::TerminalSession {
+    pub fn output(self) -> shoal_protocol::sessions::TerminalSession {
+        shoal_protocol::sessions::TerminalSession {
             name: self.name,
             agent: self.agent,
             clients: self.clients,

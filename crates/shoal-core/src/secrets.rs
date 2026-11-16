@@ -10,14 +10,14 @@ use std::{
     path::Path,
 };
 
-pub use crate::client::secrets::Secret;
-pub(crate) use crate::client::secrets::Secrets;
-use crate::client::space_names::SpaceSelector;
 use crate::{
-    client::approvals::SecretSpecification,
     env,
     paths::{CommandPaths, Paths},
 };
+use shoal_protocol::approvals::SecretSpecification;
+pub use shoal_protocol::secrets::Secret;
+pub(crate) use shoal_protocol::secrets::Secrets;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// What a grant for `secret` binds: the command that fetches it and the tools
 /// it serves.
@@ -225,10 +225,8 @@ async fn confirm_grant(
     name: &str,
     secret: &Secret,
 ) -> Result<()> {
-    use crate::{
-        client::{approvals::DecisionStatus, secrets::SecretRequest},
-        protocol::{Body, SecretMethod},
-    };
+    use crate::protocol::{Body, SecretMethod};
+    use shoal_protocol::{approvals::DecisionStatus, secrets::SecretRequest};
     let workspace = std::env::var(env::WORKSPACE_ID)
         .with_context(|| format!("{tool} needs secrets.{name}, but its workspace is unknown"))?;
     let method = SecretMethod::SecretAcquire {

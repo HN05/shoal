@@ -2,7 +2,7 @@
 //! which sends the whole plan each time.
 use serde_json::Value;
 
-use crate::client::progress::{PlanStep, ProgressChange, StepState};
+use shoal_protocol::progress::{PlanStep, ProgressChange, StepState};
 
 /// The plan tool, as a hook matcher.
 pub(super) const TOOLS: &str = "update_plan";

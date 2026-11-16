@@ -26,14 +26,13 @@ pub mod wait;
 
 pub(crate) use memories::ForgeMemories;
 
-use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 
 use crate::{
-    client::links::{Linked, Unlinked},
     daemon::{
         events::{self, EventKind},
         links::{pr::Action, space::LinkSpace},
@@ -48,6 +47,7 @@ use crate::{
     state::WorkspaceState,
 };
 use shoal_forge::{ci::run_view::RunViewRequests, items::action::ActionRequests};
+use shoal_protocol::links::{Linked, Unlinked};
 
 impl Manager {
     /// Link the item `input` names with `relation`; an issue or PR linked

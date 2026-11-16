@@ -1,7 +1,6 @@
 use shoal_ids::space_ids::SpaceId;
 use std::os::unix::fs::PermissionsExt;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{manager, repository},
@@ -10,6 +9,7 @@ use crate::{
     env,
     removal::{InspectionPolicy, UnsavedWork},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn a_workspace_has_its_own_tmpdir_until_it_is_removed() {

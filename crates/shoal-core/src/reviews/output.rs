@@ -3,10 +3,14 @@
 //! run reports.
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use shoal_protocol::reviews::FailureReason;
+use shoal_protocol::reviews::FindingId;
+use shoal_protocol::reviews::FixCheck;
+use shoal_protocol::reviews::Severity;
+use shoal_protocol::reviews::Verdict;
 
-use super::{
-    FailureReason, FindingId, FixCheck, Severity, Verdict,
-    failure::{SCAN_LIMIT, classify_diagnostic, classify_envelope, classify_text, tail, truthy},
+use super::failure::{
+    SCAN_LIMIT, classify_diagnostic, classify_envelope, classify_text, tail, truthy,
 };
 
 /// The JSON schema of [`ReviewerOutput`], which the reviewer is given.

@@ -1,7 +1,6 @@
 //! A scripted forge whose issue the tests of issue links assign.
 use std::sync::{Arc, Mutex};
 
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{configure, git, manager, repository};
 use crate::{
     daemon::workspace::Manager,
@@ -10,6 +9,7 @@ use crate::{
 use serde_json::{Value, json};
 use shoal_forge::test_support::Server;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Which assignee edits the scripted forge refuses.
 #[derive(Clone, Copy, PartialEq)]

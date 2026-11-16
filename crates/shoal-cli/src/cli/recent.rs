@@ -6,7 +6,6 @@ use std::collections::BTreeMap;
 use anyhow::{Context as _, Result, ensure};
 use serde::{Deserialize, Serialize};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
@@ -19,6 +18,7 @@ use crate::{
     paths::Paths,
     sessions::HostName,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Whether `selector` is `-`, which names the previous space.
 pub fn is_previous(selector: &SpaceSelector) -> bool {

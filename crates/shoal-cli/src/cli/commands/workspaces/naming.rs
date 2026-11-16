@@ -2,7 +2,6 @@
 //! asking its agent to.
 use anyhow::{Result, ensure};
 
-use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     cli::{
         context::Context,
@@ -12,6 +11,7 @@ use crate::{
     model::RenamedWorkspace,
     protocol::ConfigTarget,
 };
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 /// What `shoal rename --request` asks the workspace's agent.
 const NAME_REQUEST: &str = "The user asks you to rename this workspace: name the work as it stands now in a few words with `shoal rename \"<name>\"`.";

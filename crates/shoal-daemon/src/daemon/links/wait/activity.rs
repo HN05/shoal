@@ -9,7 +9,6 @@ use super::{
     items::{NO_LINKED_ITEMS, followed_items, links_kind},
 };
 use crate::{
-    client::space_names::SpaceSelector,
     daemon::{links::space::require_ready_space, workspace::Manager},
     forge::{
         items::{item::ItemState, link::Selection},
@@ -19,6 +18,7 @@ use crate::{
 };
 use shoal_forge::updates::{Edited, Snapshot};
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// Record `observations` from a poll that started at `observed_at`,

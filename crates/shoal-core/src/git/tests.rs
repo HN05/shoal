@@ -245,7 +245,7 @@ async fn branch_names_follow_git_syntax() {
 
 #[test]
 fn an_approved_push_replays_its_url_and_keeps_a_missing_ref_missing() {
-    use crate::client::approvals::PushSpecification;
+    use shoal_protocol::approvals::PushSpecification;
     let push = PushSpecification {
         remote: "origin".into(),
         url: Some("git@mirror:o/r.git".into()),

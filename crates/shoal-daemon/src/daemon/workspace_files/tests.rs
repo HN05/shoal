@@ -1,9 +1,8 @@
-use crate::client::assignments::Done;
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::assignments::Done;
 use std::time::Duration;
 
 use super::{Attacher, FileSource};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         scope::Caller,
@@ -13,6 +12,7 @@ use crate::{
     execution::recovery,
     model::Workspace,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Whether permissions bind this test process; root reads and deletes past
 /// them, as in CI's containers.
@@ -869,7 +869,7 @@ async fn a_completion_hands_back_a_bounded_number_of_files() {
     let (temp, manager) = manager().await;
     let audit = workspace(&temp, &manager).await;
     // Each file exists, so only the count can refuse them.
-    let results = (0..=crate::client::files::MAX_RESULTS)
+    let results = (0..=shoal_protocol::files::MAX_RESULTS)
         .map(|n| {
             let path = temp.path().join(format!("{n}.md"));
             std::fs::write(&path, "result").unwrap();

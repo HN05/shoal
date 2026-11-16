@@ -8,7 +8,6 @@ use shoal_ids::space_ids::SpaceId;
 use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::workspace::Manager;
 use crate::{
     daemon::events::EventCause,
@@ -19,6 +18,7 @@ use crate::{
     },
     time::UnixTime,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// SQL true when the space of a removal record is gone: no space has its ID.
 const GONE: &str = "space_id NOT IN (SELECT id FROM spaces)";

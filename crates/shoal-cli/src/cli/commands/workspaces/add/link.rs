@@ -175,7 +175,7 @@ pub(in crate::cli::commands) async fn pull_creation(
 ) -> Result<()> {
     // Without a name of its own, a new workspace takes the PR's title.
     (creation.options.name).get_or_insert_with(|| {
-        crate::client::space_names::SpaceName::derive(&pull.title, "workspace")
+        shoal_protocol::space_names::SpaceName::derive(&pull.title, "workspace")
     });
     if pull.fork {
         ensure!(

@@ -13,7 +13,6 @@ use anyhow::Result;
 use rusqlite::params;
 use shoal_refs::CommitId;
 
-use crate::client::space_names::SpaceName;
 use crate::{
     daemon::{log, notifications::NotificationKind, store::json_column, workspace::Manager},
     forge::{ForgeRepo, ci::runner::JobRun, items::reference::ItemRef, numbers::PullNumber},
@@ -23,6 +22,7 @@ use crate::{
 use shoal_forge::ci::{
     checks::CheckRequests, run_action::RunActionRequests, runner::RunnerRequests,
 };
+use shoal_protocol::space_names::SpaceName;
 
 /// A job waiting in the queue for admission.
 struct WaitingEntry {

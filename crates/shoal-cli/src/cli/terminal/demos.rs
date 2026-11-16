@@ -5,11 +5,11 @@ use anyhow::{Context as _, Result};
 use crate::{
     cli::context::Context,
     config::Effective,
-    demos::Launch,
     model::Workspace,
     sessions::Origin,
     terminal::{Demo, DemoWorker, Host, current_origin, groups, named, names_places, place_env},
 };
+use shoal_protocol::demos::Launch;
 
 /// Start a demo of `workspace` in the first host that runs queued starts and
 /// keeps demos, failing with the last host's reason when none does. `worker`

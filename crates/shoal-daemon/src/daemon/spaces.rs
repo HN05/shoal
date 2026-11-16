@@ -5,10 +5,10 @@ use shoal_ids::space_ids::SpaceId;
 
 use super::{workspace::Manager, workspace_files::Attacher};
 use crate::{
-    client::{assignments::Done, space_names::SpaceSelector},
     config::Effective,
     model::{Completion, PresentSpace, SpaceKind},
 };
+use shoal_protocol::{assignments::Done, space_names::SpaceSelector};
 
 impl Manager {
     /// The settings of `space`: a workspace's own, or a chat's

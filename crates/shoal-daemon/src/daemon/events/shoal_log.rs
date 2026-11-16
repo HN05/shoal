@@ -4,11 +4,9 @@ use anyhow::Result;
 use rusqlite::{Transaction, params};
 
 use super::{EventCursor, EventKind, decode, log_entry};
+use crate::daemon::workspace::Manager;
 use crate::time::UnixTime;
-use crate::{
-    client::log::{LogEntry, LogFilter},
-    daemon::workspace::Manager,
-};
+use shoal_protocol::log::{LogEntry, LogFilter};
 
 /// How many journal rows a read of Shoal's log takes at a time.
 const BATCH: u32 = 500;

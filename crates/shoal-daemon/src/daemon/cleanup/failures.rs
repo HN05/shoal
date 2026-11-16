@@ -1,8 +1,8 @@
 //! What failed in a cleanup pass, each failure in the space it concerns
 //! where it concerns one.
-use crate::client::space_names::SpaceName;
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceName;
 use std::{collections::BTreeMap, fmt};
 
 /// A step's failures in the spaces they concern. A step returns it as

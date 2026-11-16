@@ -17,10 +17,6 @@ use std::{
 };
 use tokio::time::{Instant, sleep};
 
-pub(crate) use crate::client::cleanup::{
-    CacheCleanup, Kept, ManualCleanup, Pick, Retained, Selection,
-};
-use crate::client::space_names::SpaceName;
 use crate::{
     daemon::{
         caches::Emptying,
@@ -35,6 +31,10 @@ use crate::{
     state::WorkspaceState,
     time::UnixTime,
 };
+pub(crate) use shoal_protocol::cleanup::{
+    CacheCleanup, Kept, ManualCleanup, Pick, Retained, Selection,
+};
+use shoal_protocol::space_names::SpaceName;
 
 mod failures;
 mod grace;

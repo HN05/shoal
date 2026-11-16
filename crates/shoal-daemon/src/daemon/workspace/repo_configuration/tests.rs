@@ -1,5 +1,5 @@
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::{notifications::NotificationKind, test_support};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A registered repository and its local config's directory, which does not
 /// exist yet.

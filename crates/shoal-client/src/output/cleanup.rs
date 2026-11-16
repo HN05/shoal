@@ -1,7 +1,8 @@
 //! What `shoal cleanup` prints.
 use serde::{Deserialize, Serialize};
 
-use crate::{cleanup::ManualCleanup, model::KeptBranch, output::outputs};
+use crate::output::outputs;
+use shoal_protocol::{cleanup::ManualCleanup, model::KeptBranch};
 
 /// What a cleanup removed, or would remove in a dry run.
 #[derive(Serialize, Deserialize)]

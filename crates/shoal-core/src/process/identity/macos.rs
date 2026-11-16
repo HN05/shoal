@@ -1,8 +1,8 @@
 //! The macOS back end of process identity: processes, their lineage and
 //! their environments as `proc_info` and `sysctl` show them.
 use super::{Identity, Image, Lineage, Listed};
-use crate::client::processes::UniqueId;
 use anyhow::{Context, Result, ensure};
+use shoal_protocol::processes::UniqueId;
 use std::{
     ffi::OsStr,
     os::unix::ffi::OsStrExt,

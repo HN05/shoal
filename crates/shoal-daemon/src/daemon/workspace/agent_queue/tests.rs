@@ -8,8 +8,6 @@ use anyhow::Result;
 use rusqlite::params;
 
 use super::{Grant, OneShotStop, dispatch::START_GRACE, slots::Slot};
-use crate::client::assignments::Done;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::workspace::agents::ProtectionExt;
 use crate::protocol::operations::{Ended, Failure, OperationSpec, Preparation, Report, Step};
 use crate::{
@@ -24,6 +22,8 @@ use crate::{
     model::{QueueAdmission, QueueEntry, QueueRequest, Repository, Workspace},
     state::{ExecutionState, QueueKind, QueueState, WorkspaceState},
 };
+use shoal_protocol::assignments::Done;
+use shoal_protocol::space_names::SpaceSelector;
 use std::sync::Arc;
 
 pub(super) async fn register(
@@ -1953,7 +1953,7 @@ async fn limit_claude(
     manager: &Manager,
     repo: &Repository,
 ) -> (SpaceSelector, crate::time::UnixTime) {
-    use crate::client::executions::{ServiceLimit, UpstreamLimit};
+    use shoal_protocol::executions::{ServiceLimit, UpstreamLimit};
     let workspace = manager
         .create_workspace(&repo.id, "busy".into(), None, None, None)
         .await
@@ -1984,7 +1984,7 @@ async fn limit_claude(
 
 #[tokio::test]
 async fn a_tools_upstream_limit_holds_its_queued_agents_while_others_start() {
-    use crate::client::executions::ServiceLimit;
+    use shoal_protocol::executions::ServiceLimit;
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 3);

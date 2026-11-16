@@ -20,11 +20,11 @@ use crate::{
         list_status::ListStatus,
         output::{Palette, Style},
     },
-    client::{executions::ServiceLimit, progress::Progress},
     config::modes::ModeName,
     model::{Asleep, Chat, HeldBy, QueueEntry, Repository, ReviewMark, Workspace, WorkspaceUsage},
     state::{AgentState, QueueKind, QueueState},
 };
+use shoal_protocol::{executions::ServiceLimit, progress::Progress};
 use shoal_schedule::rank::{Dependency, InheritedRank, QueueRank, SharedArea, Tier};
 
 /// `items` joined by `separator` into lines no wider than `width`, where

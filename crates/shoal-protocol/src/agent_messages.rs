@@ -1,9 +1,23 @@
-//! What `shoal messages` prints.
-use crate::space_names::SpaceName;
-use serde::{Deserialize, Serialize};
-use shoal_ids::space_ids::{SpaceId, SpaceNumber};
+//! Messages for the agents working in a workspace, from the user or the daemon.
+use shoal_ids::space_ids::SpaceId;
+use std::path::PathBuf;
 
-use crate::output::outputs;
+use serde::{Deserialize, Serialize};
+
+use crate::space_names::SpaceName;
+
+use shoal_ids::space_ids::SpaceNumber;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentMessage {
+    pub id: i64,
+    pub created_at: crate::time::UnixTime,
+    /// Empty when the message is only its attachments.
+    pub message: String,
+    /// Shoal's copies of the files attached to the message.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<PathBuf>,
+}
 
 /// The spaces a message reached, by whether their agent receives it now or
 /// once it next runs, or they have none.
@@ -81,5 +95,3 @@ impl ReachedSpaces {
         self.workspaces.is_empty() && self.chats.is_empty()
     }
 }
-
-outputs!(Reached);

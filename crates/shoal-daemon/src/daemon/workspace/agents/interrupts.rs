@@ -6,8 +6,8 @@ use anyhow::{Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 
 use super::super::Manager;
-use crate::client::space_names::SpaceSelector;
 use crate::model::{AgentStatus, RunningAgent};
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// The agents connected in the space `selector` names, a workspace's or

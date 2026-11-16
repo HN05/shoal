@@ -10,13 +10,13 @@ use anyhow::Result;
 
 use super::JobStop;
 use super::ends::ClaimedJob;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     events::{JobEndedEvent, StoppedProcess},
     space_processes::Selection,
     workspace::{Manager, StopRequest, executions::Save},
 };
 use shoal_forge::ci::{run_view::RunViewRequests, runner::took_job};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// How long a runner may run after the forge finished its job's run, as it
 /// reports the job's end.

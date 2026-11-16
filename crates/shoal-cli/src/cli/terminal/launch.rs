@@ -1,6 +1,6 @@
 //! Starting Shoal work beside this terminal: additions, restores, tracked
 //! agents and chats, focused or in the background.
-use crate::client::space_names::{SpaceName, SpaceSelector};
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},

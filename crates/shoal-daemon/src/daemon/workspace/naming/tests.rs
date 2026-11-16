@@ -13,7 +13,7 @@ async fn a_name_is_cleaned_up_kept_on_the_record_and_returned_with_the_previous_
         .create_workspace(&repo.id, "topic".into(), None, None, None)
         .await
         .unwrap();
-    let selector = crate::client::space_names::SpaceSelector::id(&workspace.id);
+    let selector = shoal_protocol::space_names::SpaceSelector::id(&workspace.id);
 
     let renamed = manager
         .set_workspace_name(

@@ -1,7 +1,6 @@
 use std::{fs, sync::Arc};
 
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         scope::Caller,
@@ -9,6 +8,7 @@ use crate::{
     },
     removal::{InspectionPolicy, UnsavedWork},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 struct Fixture {
     _root: tempfile::TempDir,

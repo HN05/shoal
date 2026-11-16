@@ -5,7 +5,6 @@
 use anyhow::{Context, Result, bail, ensure};
 
 use super::{Manager, copies::Source};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{log, scope::Caller},
     git,
@@ -13,6 +12,7 @@ use crate::{
     state::WorkspaceState,
 };
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::space_names::SpaceSelector;
 
 mod own_work;
 mod target;

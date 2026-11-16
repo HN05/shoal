@@ -1,8 +1,8 @@
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::test_support::{manager, repository},
     removal::{InspectionPolicy, UnsavedWork},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn a_number_selects_a_workspace_or_a_chat_and_a_command_takes_its_kind() {

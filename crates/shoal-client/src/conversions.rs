@@ -4,10 +4,10 @@ use std::collections::BTreeMap;
 
 use anyhow::Result;
 
-use crate::space_names::SpaceSelector;
-use crate::{
+use crate::connection::{self, Daemon};
+use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{
     config::modes::ModeName,
-    connection::{self, Daemon},
     model::Workspace,
     protocol::{CreationOptions, OperationMethod, WorkspaceMethod, operations::StartedWorkspace},
 };

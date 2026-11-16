@@ -1,15 +1,16 @@
 //! Finding the workspace and the running demos a demo command acts on.
 use anyhow::{Result, bail};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
         ui::{self, Fallback},
     },
-    demos::{self, Running},
+    demos,
     model::Workspace,
 };
+use shoal_protocol::demos::Running;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The running demo `name` of the workspace given or chosen.
 pub(super) async fn named(

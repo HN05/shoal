@@ -1,13 +1,11 @@
 use anyhow::Result;
 
-use crate::{
-    cli::{
-        args::lifecycle::{LifecycleCommand, StopArgs},
-        commands::{cleanup, stop, transfer, turns, workspaces},
-        context::Context,
-    },
-    client::processes::Selection,
+use crate::cli::{
+    args::lifecycle::{LifecycleCommand, StopArgs},
+    commands::{cleanup, stop, transfer, turns, workspaces},
+    context::Context,
 };
+use shoal_protocol::processes::Selection;
 
 pub(in crate::cli::commands) async fn run(ctx: Context, command: LifecycleCommand) -> Result<i32> {
     match command {

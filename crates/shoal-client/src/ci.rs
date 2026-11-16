@@ -18,8 +18,8 @@ use crate::{
         },
         items::link::Selection,
     },
-    protocol::{CiMethod, ItemContext},
 };
+use shoal_protocol::protocol::{CiMethod, ItemContext};
 
 /// The newest runs in `context`'s repository that `filter` selects, or those
 /// on the head of the PR `pr`.

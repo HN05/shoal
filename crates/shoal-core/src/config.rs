@@ -30,8 +30,7 @@ use std::{
     time::Duration,
 };
 
-pub use crate::client::config::options;
-use crate::client::{connection::Daemon, protocol::ConfigTarget};
+use crate::client::connection::Daemon;
 use crate::paths::Paths;
 pub use machine::Machine;
 pub use repo::{
@@ -40,6 +39,8 @@ pub use repo::{
 };
 use repo::{ConfigLayers, RepoConfig};
 pub use resolve::Effective;
+pub use shoal_protocol::config::options;
+use shoal_protocol::protocol::ConfigTarget;
 
 /// How many tracked agents, or CI jobs, may run concurrently.
 ///

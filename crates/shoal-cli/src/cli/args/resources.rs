@@ -1,6 +1,6 @@
 //! Arguments of commands for leases and shared resources.
-use crate::client::space_names::SpaceSelector;
 use clap::{Args, Subcommand, ValueEnum};
+use shoal_protocol::space_names::SpaceSelector;
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -153,7 +153,7 @@ pub enum AcquireKind {
         member: Option<String>,
         /// Lock mode (defaults to permit for semaphores, write for rwlocks).
         #[arg(short = 'm', long, value_enum)]
-        mode: Option<crate::client::resources::LockMode>,
+        mode: Option<shoal_protocol::resources::LockMode>,
         #[command(flatten)]
         lease: LeaseOptions,
     },

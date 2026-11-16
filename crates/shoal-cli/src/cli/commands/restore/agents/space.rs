@@ -5,7 +5,6 @@ use std::path::PathBuf;
 
 use super::{commands, permission_change, picker, queue, reports, sessions, stale};
 use crate::client::output::restore::StartedRestores;
-use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::RecordExt;
 use crate::{
     cli::{context::Context, terminal},
@@ -18,6 +17,7 @@ use crate::{
     protocol::ConfigTarget,
 };
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Resume the stopped agent of the space `space` names, the `execution` one
 /// when given. The agent restores in this terminal when `here`, otherwise

@@ -304,8 +304,8 @@ pub(crate) async fn run(cli: Cli, daemon: RunDaemon) -> Result<i32> {
     };
     match dispatch(ctx, command, daemon).await {
         // An action a permission holds back waits for its approval request.
-        Err(error) => match error.downcast::<crate::client::approvals::Undecided>() {
-            Ok(crate::client::approvals::Undecided(request)) => {
+        Err(error) => match error.downcast::<shoal_protocol::approvals::Undecided>() {
+            Ok(shoal_protocol::approvals::Undecided(request)) => {
                 approvals::declined(&reporting, &request)
             }
             Err(error) => Err(error),

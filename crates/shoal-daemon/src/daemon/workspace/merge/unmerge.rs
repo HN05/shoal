@@ -6,7 +6,6 @@ use rusqlite::OptionalExtension;
 use shoal_refs::{BranchName, CommitId};
 
 use super::{clean_checkout, local_commit, records::RecordedMerge};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace::Manager,
     git::{
@@ -20,6 +19,7 @@ use crate::{
     model::{Repository, UnmergePlan, Workspace},
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// The workspace `selector` names for an unmerge, which runs in it: one

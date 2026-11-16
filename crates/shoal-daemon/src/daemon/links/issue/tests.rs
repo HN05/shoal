@@ -1,9 +1,9 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     events::{EventItem, EventKind},
     test_support::{git, manager, repository},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn association_is_persistent_idempotent_and_bound_to_the_origin() {

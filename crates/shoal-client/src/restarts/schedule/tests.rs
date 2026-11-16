@@ -1,5 +1,5 @@
 use super::*;
-use crate::{
+use shoal_protocol::{
     model::{PendingRestart, PresentSpace, Workspace},
     state::{AgentState, WorkspaceState},
 };
@@ -119,7 +119,7 @@ fn an_agent_protection_stopped_while_the_run_waited_is_skipped() {
         joins: None,
     }];
     let stopped = RunningAgent {
-        stopped: Some(crate::protocol::Protection {
+        stopped: Some(shoal_protocol::protocol::Protection {
             reason: "critical memory pressure".into(),
             resumes_when: "system load is healthy".into(),
         }),
@@ -133,7 +133,7 @@ fn an_agent_protection_stopped_while_the_run_waited_is_skipped() {
 
 #[tokio::test]
 async fn a_failed_restart_names_the_resume_and_keeps_the_daemons_error() {
-    use crate::{
+    use shoal_protocol::{
         paths::Paths,
         protocol::{self, Body, ErrorCode, Request, Response, SavedPiece},
         saved::{Saved, SavedCommand},
@@ -170,7 +170,7 @@ async fn a_failed_restart_names_the_resume_and_keeps_the_daemons_error() {
         code: ErrorCode::ScopeDenied,
         message: "refused".into(),
     };
-    let space = crate::model::PresentSpace::Workspace(workspace.clone());
+    let space = shoal_protocol::model::PresentSpace::Workspace(workspace.clone());
     let error = with_restore(&paths, &space, refused.into()).await;
     server.await.unwrap();
     assert!(format!("{error:#}").contains(&format!("shoal restore {}", workspace.number)));

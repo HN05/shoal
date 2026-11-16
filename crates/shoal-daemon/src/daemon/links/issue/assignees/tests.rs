@@ -1,11 +1,11 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::links::issue::test_support::{AGENT_TOKEN, Fixture, Refuse, USER};
 use crate::{
     model::Workspace,
     removal::{InspectionPolicy, UnsavedWork},
 };
 use serde_json::json;
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn linking_assigns_the_account_once() {

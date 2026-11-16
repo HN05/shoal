@@ -2,13 +2,13 @@ use shoal_refs::BranchName;
 use std::fs;
 
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::events::EventCause,
     daemon::test_support::{commit, git, manager, repository},
     model::CheckpointCause,
     removal::{InspectionPolicy, UnsavedWork},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The checkpoint refs in the repository, sorted.
 pub(in crate::daemon::workspace) fn checkpoint_refs(repo: &std::path::Path) -> Vec<String> {

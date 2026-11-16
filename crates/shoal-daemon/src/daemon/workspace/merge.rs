@@ -12,7 +12,6 @@ use anyhow::{Context, Result, bail, ensure};
 use shoal_refs::{BranchName, CommitId};
 
 use super::{Manager, branches::UpstreamPolicy};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     fsutil::off_runtime,
     git::{
@@ -27,6 +26,7 @@ use crate::{
         Repository, Workspace,
     },
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A workspace branch that passed every check a merge makes before it
 /// changes anything.

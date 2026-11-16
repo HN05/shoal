@@ -3,7 +3,6 @@ use shoal_ids::execution_ids::ExecutionId;
 use std::fs;
 
 use super::transfer::{exporter, import, importer, packaged_workspace};
-use crate::client::space_names::SpaceSelector;
 use crate::refusal::Reason;
 use crate::{
     daemon::{
@@ -16,6 +15,7 @@ use crate::{
     removal::UnsavedWork,
     transfer::{ExportedSpace, Import, SpaceImport},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Export `space` for a move into a new file in `directory` and read it
 /// back.

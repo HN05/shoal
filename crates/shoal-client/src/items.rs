@@ -3,7 +3,6 @@
 use anyhow::Result;
 use tokio::time::Instant;
 
-use crate::space_names::SpaceSelector;
 use crate::{
     connection::{Daemon, await_reply, request},
     forge::items::{
@@ -13,11 +12,14 @@ use crate::{
         link::{ItemKind, LinkKind, Selection},
         reference::ItemInput,
     },
+};
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{
     links::{OpenOutcome, Updates},
     model::Relation,
     protocol::{Body, ItemContext, ItemMethod},
 };
-use shoal_ids::repository_ids::RepositoryId;
 
 /// Link the `kind` item `item` names to `space` as `relation`, with the
 /// title lists show when the caller knows it.
@@ -28,7 +30,7 @@ pub async fn link(
     kind: LinkKind,
     item: ItemInput,
     title: Option<String>,
-) -> Result<crate::links::Linked> {
+) -> Result<shoal_protocol::links::Linked> {
     let method = ItemMethod::LinkItem {
         space: space.clone(),
         kind,
@@ -44,8 +46,8 @@ pub async fn link(
 pub async fn relink(
     daemon: &impl Daemon,
     space: SpaceSelector,
-    links: crate::model::SpaceLinks,
-) -> Result<crate::links::Linked> {
+    links: shoal_protocol::model::SpaceLinks,
+) -> Result<shoal_protocol::links::Linked> {
     request(daemon, ItemMethod::RelinkSpace { space, links }).await
 }
 
@@ -57,7 +59,7 @@ pub async fn unlink(
     relation: Relation,
     kind: Option<LinkKind>,
     item: Option<ItemInput>,
-) -> Result<crate::links::Unlinked> {
+) -> Result<shoal_protocol::links::Unlinked> {
     let method = ItemMethod::UnlinkItems {
         space,
         relation,
@@ -187,7 +189,7 @@ pub async fn merge(
     context: ItemContext,
     item: Option<ItemInput>,
     action: Action,
-    confirmed: Option<crate::model::ConfirmedWarning>,
+    confirmed: Option<shoal_protocol::model::ConfirmedWarning>,
 ) -> Result<Item> {
     let method = ItemMethod::ItemAction {
         context,

@@ -1,5 +1,5 @@
 use super::*;
-use crate::protocol::{ErrorCode, RemoteError, WorkPlace};
+use shoal_protocol::protocol::{ErrorCode, RemoteError, WorkPlace};
 use tokio::net::UnixListener;
 
 /// Supervision that takes the daemon recorded in the state directory's
@@ -326,7 +326,7 @@ async fn a_request_an_exiting_daemon_held_back_goes_to_the_next_daemon() -> Resu
     paths.prepare()?;
     own(&paths, "exiting")?;
     let listener = UnixListener::bind(&paths.socket)?;
-    let cancel = || crate::protocol::OperationMethod::CancelOperation { id: "op".into() };
+    let cancel = || shoal_protocol::protocol::OperationMethod::CancelOperation { id: "op".into() };
     let asking = tokio::spawn({
         let paths = paths.clone();
         async move { request::<()>(&paths, cancel()).await }
@@ -396,7 +396,7 @@ async fn exit_answering(when: ExitWhen, bodies: Vec<Body>) -> Result<(Ended, Vec
     });
     let mut reported = Vec::new();
     let request = ExitRequest {
-        exit: crate::protocol::Exit::Restart,
+        exit: shoal_protocol::protocol::Exit::Restart,
         when,
     };
     let ended = match exit(&paths, request, |work| reported.push(work.to_vec())).await? {
@@ -414,7 +414,7 @@ async fn exit_answering(when: ExitWhen, bodies: Vec<Body>) -> Result<(Ended, Vec
 
 #[tokio::test]
 async fn an_exit_that_waits_reports_the_work_until_the_daemon_agrees() -> Result<()> {
-    let exited = Body::Exited(crate::protocol::Exited {
+    let exited = Body::Exited(shoal_protocol::protocol::Exited {
         stopped_work: false,
     });
     let waits = || Body::ExitWaits(vec![Work::Other]);
@@ -446,7 +446,7 @@ async fn an_exit_that_does_not_wait_reports_the_work_that_keeps_the_daemon() -> 
 
 #[tokio::test]
 async fn an_exit_that_does_not_wait_still_waits_out_requests_and_passes() -> Result<()> {
-    let exited = Body::Exited(crate::protocol::Exited {
+    let exited = Body::Exited(shoal_protocol::protocol::Exited {
         stopped_work: false,
     });
     let bodies = vec![Body::ExitWaits(vec![Work::Other]), Body::Ok, exited];
@@ -492,7 +492,7 @@ async fn a_held_back_request_another_daemon_took_is_not_sent_again() -> Result<(
     paths.prepare()?;
     own(&paths, "exiting")?;
     let listener = UnixListener::bind(&paths.socket)?;
-    let cancel = || crate::protocol::OperationMethod::CancelOperation { id: "op".into() };
+    let cancel = || shoal_protocol::protocol::OperationMethod::CancelOperation { id: "op".into() };
     let asking = tokio::spawn({
         let paths = paths.clone();
         async move { request::<()>(&paths, cancel()).await }
@@ -514,4 +514,16 @@ async fn a_held_back_request_another_daemon_took_is_not_sent_again() -> Result<(
     let error = asking.await?.unwrap_err();
     assert!(stream_closed(&error), "{error:#}");
     Ok(())
+}
+
+#[test]
+fn connectors_never_debug_their_token() {
+    const SECRET: &str = "5f0c3e1a-scope-secret";
+    let connector = Connector {
+        paths: Paths::new(Some("/state".into())).unwrap(),
+        scope: Some(ScopeToken::from(SECRET.to_owned())),
+    };
+    let debugged = format!("{connector:?}");
+    assert!(!debugged.contains(SECRET), "{debugged}");
+    assert!(debugged.contains("ScopeToken"), "{debugged}");
 }

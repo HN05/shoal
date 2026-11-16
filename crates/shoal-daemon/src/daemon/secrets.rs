@@ -3,8 +3,6 @@
 use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::{Result, anyhow, ensure};
 
-pub(crate) use crate::client::secrets::{CatalogSecret, SecretCatalog, SecretGrant, SecretRequest};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         allocation::Allocation,
@@ -15,6 +13,10 @@ use crate::{
     model::Workspace,
     secrets::{Secret, specification},
 };
+pub(crate) use shoal_protocol::secrets::{
+    CatalogSecret, SecretCatalog, SecretGrant, SecretRequest,
+};
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     pub async fn secret_catalog(&self, selector: &SpaceSelector) -> Result<SecretCatalog> {

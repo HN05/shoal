@@ -145,11 +145,11 @@ fn an_agent_shoal_brings_back_shows_asleep_rather_than_stopped_or_queued() {
 #[test]
 fn a_blocked_workspace_ranks_below_needs_input_and_above_stopped_work() {
     let mut workspace = coordinated(AgentState::Idle);
-    workspace.progress = Some(crate::client::progress::Progress {
+    workspace.progress = Some(shoal_protocol::progress::Progress {
         status: None,
         steps: Vec::new(),
         current: None,
-        blockers: vec![crate::client::progress::RecordedBlocker {
+        blockers: vec![shoal_protocol::progress::RecordedBlocker {
             kind: crate::state::BlockerKind::Issue,
             target: "https://forge.example/o/r/issues/1".into(),
             name: "https://forge.example/o/r/issues/1".into(),

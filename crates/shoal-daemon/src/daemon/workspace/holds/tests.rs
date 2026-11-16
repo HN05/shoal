@@ -1,5 +1,4 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         scope::{self, Caller},
@@ -9,6 +8,7 @@ use crate::{
     protocol::HoldMethod,
     state::WorkspaceState,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn holds_are_idempotent_persistent_and_scoped() {

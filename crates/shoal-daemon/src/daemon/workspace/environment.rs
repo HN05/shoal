@@ -1,13 +1,13 @@
 //! A workspace's exported environment, for processes whose lifetime belongs
 //! to an external caller, with a scope token that lasts until it revokes it.
 use super::Manager;
-use crate::client::scope_tokens::ScopeToken;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{scope::tokens, store},
     env,
 };
 use anyhow::{Context, Result, ensure};
+use shoal_protocol::scope_tokens::ScopeToken;
+use shoal_protocol::space_names::SpaceSelector;
 use std::collections::BTreeMap;
 
 impl Manager {

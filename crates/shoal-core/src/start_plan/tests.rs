@@ -1,5 +1,5 @@
-use crate::client::space_names::SpaceSelector;
 use crate::protocol::operations::QueuedLaunch;
+use shoal_protocol::space_names::SpaceSelector;
 
 fn claude() -> QueuedLaunch {
     QueuedLaunch::new("claude".into())

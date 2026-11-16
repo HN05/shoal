@@ -5,10 +5,10 @@
 //! expired sleeps to free memory, and one that `shoal sleep` or queued work
 //! puts to sleep only once that costs nothing; a blocked one sleeps once its
 //! turn ends.
-use crate::client::space_names::SpaceName;
 use crate::daemon::workspace::agents::ProtectionExt;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceName;
 use std::collections::HashMap;
 
 use anyhow::Result;

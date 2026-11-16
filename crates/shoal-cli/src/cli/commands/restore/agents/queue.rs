@@ -6,8 +6,6 @@ use shoal_ids::execution_ids::ExecutionId;
 use super::super::targets::Selected;
 use super::{commands, permission_change, reports, stale};
 use crate::client::output::restore::Queued;
-use crate::client::saved::{Queuing, Restore};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{context::Context, ui},
     config::permissions::PermissionChange,
@@ -17,6 +15,8 @@ use crate::{
     terminal,
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::saved::{Queuing, Restore};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Queue the restores of the stopped agents and last sessions of the
 /// `selected` spaces this process's scope reaches, or of every such space

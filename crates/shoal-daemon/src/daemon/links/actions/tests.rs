@@ -1,5 +1,5 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn a_branch_pushed_to_a_fork_on_the_same_forge_names_the_fork_as_its_head() {

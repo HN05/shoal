@@ -1,7 +1,8 @@
 //! What a lease, hold or secret request prints when it gets nothing.
 use serde::{Deserialize, Serialize};
 
-use crate::{approvals::ApprovalRequest, leases::RefusalCode, output::outputs};
+use crate::{leases::RefusalCode, output::outputs};
+use shoal_protocol::approvals::ApprovalRequest;
 
 /// A request that acquired nothing: its capacity is busy, or it waits for
 /// or was denied an approval.

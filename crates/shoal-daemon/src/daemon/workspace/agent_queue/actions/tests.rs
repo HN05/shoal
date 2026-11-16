@@ -1,5 +1,4 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::manager,
@@ -11,6 +10,7 @@ use crate::{
     model::{Blocker, QueueRequest},
     protocol::QueuedLaunches,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The waiting entries' names in queue order.
 async fn waiting(manager: &Manager) -> Vec<String> {

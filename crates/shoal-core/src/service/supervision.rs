@@ -1,9 +1,7 @@
 //! How every process the `shoal` binary runs supervises its daemon
 //! connections.
-use crate::{
-    client::{connection::Supervision, paths::Paths, processes::Identity},
-    daemon_owner,
-};
+use crate::{client::connection::Supervision, daemon_owner};
+use shoal_protocol::{paths::Paths, processes::Identity};
 
 /// The `shoal` binary's [`Supervision`].
 pub struct Command;

@@ -2,7 +2,7 @@
 //! its daemon record and what happens when it stops.
 use std::path::PathBuf;
 
-use crate::client::executions::ExecutionKind;
+use shoal_protocol::executions::ExecutionKind;
 
 #[derive(Clone)]
 pub(super) enum Mode {
@@ -29,7 +29,9 @@ pub(super) enum Mode {
     /// The repository's configured setup command.
     Setup,
     /// A demo, restarted whenever its command exits until it is stopped.
-    Demo { launch: Box<crate::demos::Launch> },
+    Demo {
+        launch: Box<shoal_protocol::demos::Launch>,
+    },
 }
 
 impl Mode {

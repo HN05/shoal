@@ -1,7 +1,6 @@
 use serde_json::json;
 
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::workspace::runner::JobStop;
 use crate::daemon::{
     test_support::git,
@@ -9,6 +8,7 @@ use crate::daemon::{
 };
 use crate::forge::numbers::JobId;
 use shoal_forge::ci::runner::RunnerRequests;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Claim GitHub's job 11 of run 1 and report, as its runner's hook does,
 /// that the runner took a job of `run`, returning the claim and the job's

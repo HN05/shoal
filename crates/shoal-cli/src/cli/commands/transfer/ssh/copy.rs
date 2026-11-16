@@ -1,8 +1,8 @@
 //! `shoal move ssh --keep`: copy spaces to another machine's Shoal, which
 //! opens each as a new space, leaving them running here.
-use crate::client::space_names::SpaceSelector;
 use anyhow::Result;
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
+use shoal_protocol::space_names::SpaceSelector;
 
 use super::{super::export, Remote, arrived, summary};
 use crate::client::output::{restore::Reopened, transfer::Copies};

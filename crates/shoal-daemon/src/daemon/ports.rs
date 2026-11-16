@@ -10,7 +10,6 @@ use std::{
     ops::RangeInclusive,
 };
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     config::{Ports, repo::ConflictPolicy},
     daemon::{
@@ -26,6 +25,7 @@ use crate::{
     protocol::Body,
     validate,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 mod selection;
 #[cfg(test)]

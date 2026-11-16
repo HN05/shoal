@@ -7,15 +7,14 @@
 //! closed question keeps its number until the space goes so that a late
 //! answer is refused. A question an agent asked in its conversation closes
 //! the same way when the user replies there.
-use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, Transaction, named_params, params};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 use std::time::Duration;
 
-pub(crate) use crate::client::questions::{Ask, Listing, Question, QuestionStatus};
 use crate::{
     daemon::{
         agent_messages,
@@ -26,6 +25,7 @@ use crate::{
     },
     model::PresentSpace,
 };
+pub(crate) use shoal_protocol::questions::{Ask, Listing, Question, QuestionStatus};
 use status::{OPEN, StatusColumns};
 
 mod status;

@@ -1,5 +1,4 @@
 use super::WorkspaceConversion;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     config::modes::ModeName,
     daemon::{
@@ -10,6 +9,7 @@ use crate::{
     model::Repository,
     protocol::OperationMethod,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 async fn registered(root: &std::path::Path, manager: &Manager) -> Repository {
     let path = repository(root, "repo");

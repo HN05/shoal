@@ -11,7 +11,6 @@ use super::{
 };
 use crate::client::output::items::Revert;
 use crate::client::preparation::{self, NewSplit, NewWorkspace, Preparing};
-use crate::client::space_names::SpaceSelector;
 use crate::client::{forge_reads, items};
 use crate::{
     cli::{
@@ -21,7 +20,6 @@ use crate::{
         context::Context,
         ui,
     },
-    client::links::OpenOutcome,
     execution,
     forge::{
         capability::Capability,
@@ -35,6 +33,8 @@ use crate::{
     repository::Selector,
 };
 use shoal_forge::items::revert::revert_options;
+use shoal_protocol::links::OpenOutcome;
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn revert(ctx: &Context, selector: RevertedPr, args: RevertArgs) -> Result<i32> {
     let options = revert_args(args)?;
@@ -237,7 +237,7 @@ async fn finish(ctx: &Context, workspace: &Workspace) -> Result<()> {
     crate::client::assignments::mark_done(
         &ctx.paths,
         SpaceSelector::id(&space),
-        crate::client::assignments::Done {
+        shoal_protocol::assignments::Done {
             cleanup: true,
             ..Default::default()
         },

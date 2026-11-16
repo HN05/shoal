@@ -6,8 +6,6 @@ use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};
 
-use crate::client::space_names::SpaceName;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::workspace::Manager;
 use crate::refusal::{Reason, Refusal};
 use crate::{
@@ -16,6 +14,8 @@ use crate::{
     time::UnixTime,
     transfer::{CarriedSessionFile, SpaceImport},
 };
+use shoal_protocol::space_names::SpaceName;
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// Open a space another Shoal exported, as `import` describes: record

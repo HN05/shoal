@@ -5,7 +5,6 @@ use anyhow::{Result, ensure};
 
 use super::{Failed, Reporter};
 use crate::{
-    client::space_names::SpaceSelector,
     execution,
     forge::items::reference::ItemInput,
     hooks::{self, Hook, HookKind},
@@ -15,6 +14,7 @@ use crate::{
     queued_launches,
     state::WorkspaceState,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Run `steps` in `workspace`, returning it ready with the agent queued.
 pub(super) async fn prepare(

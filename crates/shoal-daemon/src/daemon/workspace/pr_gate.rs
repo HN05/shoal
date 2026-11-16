@@ -4,8 +4,8 @@ use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 
 use super::{Manager, PrGuard};
-use crate::client::space_names::SpaceSelector;
 use crate::model::Workspace;
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// The workspace `selector` names, read again once its PR gate is held.

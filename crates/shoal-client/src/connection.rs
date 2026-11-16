@@ -2,6 +2,7 @@
 //! finding the daemon, sending one request per connection with the caller's
 //! scope token, reading its reply, and the daemon's own status, reload, exit
 //! and wait.
+use shoal_protocol::connection::ProtocolMismatch;
 use std::{io, sync::OnceLock, time::Duration};
 
 use anyhow::{Context, Result, ensure};
@@ -15,7 +16,7 @@ use tokio::{
     time::{Instant, sleep, timeout},
 };
 
-use crate::{
+use shoal_protocol::{
     paths::Paths,
     processes::Identity,
     protocol::{
@@ -57,7 +58,7 @@ impl Connector {
     /// The daemon `shoal` uses: in the state directory `SHOAL_STATE_DIR`
     /// names, else the default one, with no scope token.
     pub fn new() -> Result<Self> {
-        let state = std::env::var_os(crate::env::STATE_DIR).map(Into::into);
+        let state = std::env::var_os(shoal_protocol::env::STATE_DIR).map(Into::into);
         Ok(Self {
             paths: Paths::new(state)?,
             scope: None,
@@ -106,25 +107,6 @@ static SUPERVISION: OnceLock<&'static dyn Supervision> = OnceLock::new();
 pub fn supervise(supervision: &'static dyn Supervision) {
     let _ = SUPERVISION.set(supervision);
 }
-
-/// The daemon answered with another protocol `version`.
-#[derive(Debug)]
-pub struct ProtocolMismatch {
-    pub daemon: u32,
-}
-
-impl std::fmt::Display for ProtocolMismatch {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "daemon protocol mismatch: the daemon speaks protocol {}, this Shoal {}; run `shoal daemon install` to update the managed daemon, or restart a foreground daemon with the installed version",
-            self.daemon,
-            protocol::VERSION
-        )
-    }
-}
-
-impl std::error::Error for ProtocolMismatch {}
 
 /// A daemon owns the state directory but does not answer, as when it stopped
 /// accepting connections.
@@ -399,7 +381,7 @@ pub async fn call(daemon: &impl Daemon, method: impl Into<Method>) -> Result<Bod
     } else {
         timing::REQUEST_TIMEOUT
     };
-    let _span = crate::profile::span("call", || method.name());
+    let _span = shoal_protocol::profile::span("call", || method.name());
     let (_stream, body) = timeout(duration, open(daemon, method))
         .await
         .map_err(|_| {
@@ -426,7 +408,7 @@ where
     Vec<T>: TryFrom<Body, Error = anyhow::Error>,
 {
     let method = method.into();
-    let _span = crate::profile::span("call", || method.name());
+    let _span = shoal_protocol::profile::span("call", || method.name());
     let (mut reader, body) = open_buffered(daemon, method).await?;
     let mut items = Vec::<T>::try_from(body)?;
     loop {

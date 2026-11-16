@@ -9,7 +9,6 @@ use std::{collections::BTreeMap, sync::Arc};
 use anyhow::{Context as _, Result, bail, ensure};
 
 use super::Converting;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     config::modes::ModeName,
     daemon::{
@@ -18,6 +17,7 @@ use crate::{
     model::{Chat, OpenedWorkspace, PresentSpace},
     protocol::{CreationOptions, operations::StartedWorkspace},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// What a chat becomes: a workspace on `branch`, which the issue `issue`
 /// links when given, from `base` when the branch is new, leaving out what

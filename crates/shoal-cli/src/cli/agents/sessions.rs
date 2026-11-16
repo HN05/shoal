@@ -9,16 +9,16 @@ use std::{
 
 use anyhow::{Result, ensure};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     cli::{commands::workspaces, context::Context},
-    client::transcripts::{self, AgentEnvironment},
     config::Effective,
     model::{Chat, RemovedSpace, Workspace},
     protocol::ConfigTarget,
     transfer::CarriedSessionFile,
 };
+use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::transcripts::{self, AgentEnvironment};
 
 /// Whose agents an import's session files go to.
 pub(in crate::cli) enum SessionHome<'a> {

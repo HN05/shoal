@@ -9,12 +9,12 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
-use crate::client::progress::ProgressChange;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     protocol::{AgentMethod, Body, WokenTurn},
     state::AgentState,
 };
+use shoal_protocol::progress::ProgressChange;
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,

@@ -282,7 +282,7 @@ fn a_chats_agent_runs_with_its_chats_identity_and_scope() {
             kind: crate::model::SpaceKind::Chat,
             path: "/checkout".into(),
         },
-        scope_token: crate::client::scope_tokens::ScopeToken::from("chat-token"),
+        scope_token: shoal_protocol::scope_tokens::ScopeToken::from("chat-token"),
         setup_cmd: None,
         copy_ignored: None,
         ports: Vec::new(),

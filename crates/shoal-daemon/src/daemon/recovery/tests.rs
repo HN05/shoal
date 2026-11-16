@@ -1,7 +1,7 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{git, manager, repository};
 use anyhow::Context;
+use shoal_protocol::space_names::SpaceSelector;
 use std::{sync::Arc, time::Duration};
 use tokio::time::timeout;
 

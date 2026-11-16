@@ -6,11 +6,11 @@ use rusqlite::{Connection, OptionalExtension as _, params};
 use shoal_ids::space_ids::SpaceId;
 
 use crate::{
-    client::space_names::SpaceSelector,
     daemon::workspace::Manager,
     model::{Chat, PresentSpace, SpaceKind, Workspace},
     refusal::{Reason, Refusal},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// The workspace or chat, running or stopped, `selector` names.

@@ -12,12 +12,12 @@ use anyhow::Result;
 use rusqlite::Connection;
 
 use super::limits::{Wake, Work};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace::Manager,
     execution::recovery,
     state::{QueueKind, QueueState},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// What admitted a restore.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

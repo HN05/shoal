@@ -5,9 +5,9 @@ use crate::sessions::HostName;
 use shoal_schedule::priority::Priority;
 use shoal_states::states;
 
-pub use crate::client::config::repo::{ConfigLayer, ConflictPolicy, PortDefinition};
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
+pub use shoal_protocol::config::repo::{ConfigLayer, ConflictPolicy, PortDefinition};
 use std::{
     collections::BTreeMap,
     fs,
@@ -69,7 +69,7 @@ pub struct RepoConfig {
     pub caches: BTreeMap<String, Cache>,
     /// Commands kept running for the user to try, by name.
     #[option(named)]
-    pub demos: BTreeMap<String, crate::demos::Demo>,
+    pub demos: BTreeMap<String, shoal_protocol::demos::Demo>,
     /// Machine-specific, so the global config or local config sets it, never
     /// the worktree file.
     #[option(named)]
@@ -466,7 +466,7 @@ impl RepoConfig {
         }
         .validate("agent")?;
         validate_caches(&self.caches)?;
-        crate::demos::validate(&self.demos)?;
+        shoal_protocol::demos::validate(&self.demos)?;
         crate::config::presets::validate(self.setup.presets.as_deref().unwrap_or_default())?;
         crate::secrets::validate(&self.secrets)?;
         self.setup.seed.validate()?;
@@ -480,8 +480,8 @@ impl RepoConfig {
 pub struct SimulatorsConfig {
     #[option(default = false)]
     pub requires_approval: Option<bool>,
-    #[option(default = crate::approvals::Lifetime::default())]
-    pub approval_lifetime: Option<crate::approvals::Lifetime>,
+    #[option(default = shoal_protocol::approvals::Lifetime::default())]
+    pub approval_lifetime: Option<shoal_protocol::approvals::Lifetime>,
     #[option(list)]
     pub preferred: Vec<String>,
 }

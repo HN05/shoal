@@ -1,7 +1,7 @@
 //! The daemon's answers to [`DaemonMethod`] and exit requests, and who may
 //! send them.
-use crate::client::scope_tokens::ScopeToken;
 use anyhow::Result;
+use shoal_protocol::scope_tokens::ScopeToken;
 use tokio::net::UnixStream;
 
 use super::super::{
@@ -12,13 +12,13 @@ use super::super::{
     scope::{self, Caller, Scoped},
     workspace::{Ending, Manager},
 };
-use crate::client::space_names::SpaceSelector;
 use crate::{
     config::permissions::PermissionKey,
     protocol::{
         self, Body, DaemonMethod, DaemonStatus, Exit, ExitRequest, ExitWhen, Exited, Response,
     },
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The daemon's own requests, which read how it runs.
 pub(super) async fn handle(server: &Server, method: DaemonMethod) -> Result<Answer> {

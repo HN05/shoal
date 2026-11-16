@@ -1,7 +1,6 @@
 //! Resolve issue context before workspace creation and agent launch.
 use anyhow::{Context as _, Result, bail, ensure};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{client, context::Context, ui},
     forge::{
@@ -17,6 +16,7 @@ use crate::{
     repository,
 };
 use shoal_ids::repository_ids::RepositoryId;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The explicit alternative for commands that accept `--repo` or a forge URL.
 pub(super) const REPO_OR_URL: &str = "pass --repo <repository> or a forge URL";

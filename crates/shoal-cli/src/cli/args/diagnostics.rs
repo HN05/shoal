@@ -1,6 +1,6 @@
 //! Arguments of `shoal alerts`.
-use crate::client::space_names::SpaceSelector;
 use clap::{Args, Subcommand};
+use shoal_protocol::space_names::SpaceSelector;
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]

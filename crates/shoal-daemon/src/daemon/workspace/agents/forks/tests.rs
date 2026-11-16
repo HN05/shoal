@@ -1,7 +1,6 @@
 use shoal_ids::execution_ids::ExecutionId;
 use std::time::Duration;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{manager, repository},
@@ -10,6 +9,7 @@ use crate::{
     execution::recovery,
     model::{AgentSession, Workspace},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A tracked agent `name` in `workspace`, reporting `session` when given.
 async fn agent(

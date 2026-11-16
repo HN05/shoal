@@ -3,7 +3,6 @@
 //! would work, and the facts the CLI judges its workspaces against.
 use std::collections::{HashMap, HashSet};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{list_status::ListStatus, terminal},
     client::connection::Daemon,
@@ -13,6 +12,7 @@ use crate::{
     state::WorkspaceState,
 };
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The condition a command's workspace must meet.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -257,7 +257,7 @@ impl Availability {
 /// the caller's own execution, so the caller's workspace counts only with
 /// another execution, as its inspection lists them.
 async fn busy_workspaces(daemon: &impl Daemon, workspaces: &[Workspace]) -> HashSet<SpaceId> {
-    let own = std::env::var(crate::client::env::EXECUTION_ID)
+    let own = std::env::var(shoal_protocol::env::EXECUTION_ID)
         .ok()
         .map(ExecutionId::from);
     let mut busy = HashSet::new();

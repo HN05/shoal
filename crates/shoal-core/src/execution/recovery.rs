@@ -17,10 +17,6 @@ pub mod claim;
 
 pub use claim::{RecoveryClaim, claim, claim_last_session, claim_record, forget_saved};
 
-pub(crate) use crate::client::executions::unnamed_execution;
-pub use crate::client::executions::{Copied, LastSession, Record, Stage, Stop, StoppedAgent};
-pub use crate::client::saved::{Saved, SavedCommand, SavedSession};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::{Agent, ModelChoice},
     agents::AgentHome,
@@ -32,6 +28,10 @@ use crate::{
     sessions::Origin,
     state::AgentState,
 };
+pub(crate) use shoal_protocol::executions::unnamed_execution;
+pub use shoal_protocol::executions::{Copied, LastSession, Record, Stage, Stop, StoppedAgent};
+pub use shoal_protocol::saved::{Saved, SavedCommand, SavedSession};
+use shoal_protocol::space_names::SpaceSelector;
 
 #[derive(Debug)]
 pub struct Recovery {

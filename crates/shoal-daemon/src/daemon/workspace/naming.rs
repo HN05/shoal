@@ -5,8 +5,8 @@ use rusqlite::{Connection, params};
 use shoal_ids::space_ids::SpaceId;
 
 use super::Manager;
-use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::model::RenamedWorkspace;
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 impl Manager {
     /// Give the workspace `selector` names `name`, returning it with the

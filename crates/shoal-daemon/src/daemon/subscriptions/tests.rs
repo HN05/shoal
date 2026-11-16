@@ -1,5 +1,5 @@
 use super::*;
-use crate::client::subscriptions::records::{Record, RecordKey, RecordKind};
+use shoal_protocol::subscriptions::records::{Record, RecordKey, RecordKind};
 
 fn repository(id: &str, name: &str) -> (RecordKey, (Record, serde_json::Value)) {
     let record = Record::Repository(crate::model::Repository {
@@ -46,17 +46,10 @@ fn changes_name_each_new_changed_and_removed_record() {
 }
 
 mod streams {
-    use crate::client::space_names::SpaceSelector;
     use crate::daemon::approvals::ApprovalRequestExt;
     use crate::execution::recovery::LastSessionExt;
     use crate::{
-        client::{
-            connection::Connector,
-            subscriptions::{
-                Subscription, Update,
-                records::{MessageRecipient, Record, RecordKind, Topic},
-            },
-        },
+        client::{connection::Connector, subscriptions::Subscription},
         daemon::{
             notifications::NotificationKind,
             questions::Ask,
@@ -69,6 +62,11 @@ mod streams {
         removal::{InspectionPolicy, UnsavedWork},
     };
     use shoal_ids::space_ids::SpaceId;
+    use shoal_protocol::space_names::SpaceSelector;
+    use shoal_protocol::subscriptions::{
+        Update,
+        records::{MessageRecipient, Record, RecordKind, Topic},
+    };
 
     type Subscribed = Subscription<Connector>;
 
@@ -373,10 +371,8 @@ mod streams {
 
     #[tokio::test]
     async fn a_session_an_agent_reports_reaches_a_subscription() {
-        use crate::{
-            client::transcripts::ReportedSession, daemon::workspace::ExecutionKind,
-            execution::TrackedAgent, state::AgentState,
-        };
+        use crate::{daemon::workspace::ExecutionKind, execution::TrackedAgent, state::AgentState};
+        use shoal_protocol::transcripts::ReportedSession;
         let daemon = TestDaemon::start().await;
         let manager = &daemon.manager;
         let workspace = daemon.workspace("work").await;
@@ -486,7 +482,7 @@ mod streams {
 
     #[tokio::test]
     async fn a_log_subscription_follows_one_space_within_its_scope() {
-        use crate::client::log::{LogEntry, LogFilter, LogTopic};
+        use shoal_protocol::log::{LogEntry, LogFilter, LogTopic};
         let daemon = TestDaemon::start().await;
         let own = daemon.workspace("own").await;
         let other = daemon.workspace("other").await;
@@ -533,7 +529,7 @@ mod streams {
 
     #[tokio::test]
     async fn a_log_subscription_keeps_following_its_space_after_a_rename() {
-        use crate::client::log::{LogEntry, LogFilter, LogTopic};
+        use shoal_protocol::log::{LogEntry, LogFilter, LogTopic};
         let daemon = TestDaemon::start().await;
         let own = daemon.workspace("own").await;
         let topic = LogTopic {

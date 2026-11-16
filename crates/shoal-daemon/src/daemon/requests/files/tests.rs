@@ -1,9 +1,9 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     test_support::{manager, repository},
     workspace_files::Attacher,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn long_file_listings_go_in_pages() {

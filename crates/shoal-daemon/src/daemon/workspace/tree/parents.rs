@@ -6,7 +6,6 @@ use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 
 use super::super::{Manager, NewWorkspace};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         scope::Caller,
@@ -15,6 +14,7 @@ use crate::{
     },
     model::{OpenedWorkspace, SpaceKind, Workspace},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// Give `workspace` to the space `parent` that opened it, or to the user

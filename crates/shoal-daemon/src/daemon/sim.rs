@@ -12,13 +12,12 @@ use rusqlite::params;
 use shoal_ids::space_ids::SpaceId;
 use uuid::Uuid;
 
-pub(crate) use crate::client::sim::{
+use audit::CleanRequest;
+pub(crate) use shoal_protocol::sim::{
     Profile, SimConfig, SimRequest, Simulator, SimulatorCatalog, SimulatorOverview, SimulatorState,
 };
-use audit::CleanRequest;
 use simctl::Inventory;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{allocation::Allocation, approvals, queue, scope::Caller, workspace::Manager},
     model::Workspace,
@@ -26,6 +25,7 @@ use crate::{
     time::UnixTime,
     validate,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Operations on the client type [`Simulator`] that only the `shoal` command uses.
 trait SimulatorExt {

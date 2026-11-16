@@ -6,11 +6,11 @@ use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{
-    client::{sleep::Slept, space_names::SpaceSelector},
     daemon::workspace::Manager,
     state::{AgentState, Sleep},
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::{sleep::Slept, space_names::SpaceSelector};
 
 /// How long the agent of the space `id` sleeps.
 pub(crate) fn current(db: &Connection, id: &SpaceId) -> Result<Option<Sleep>> {

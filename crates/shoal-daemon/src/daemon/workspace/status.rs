@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 
 use super::Manager;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{spaces::status::Records, store},
     forge::{
@@ -12,6 +11,7 @@ use crate::{
     model::{DiffSummary, Inspection, Selected, SelectedItem, Workspace, WorktreeStatus},
     repository,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// What the status of the workspace `selector` names shows for its

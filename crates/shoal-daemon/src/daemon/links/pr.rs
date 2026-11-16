@@ -1,12 +1,11 @@
 //! Persisted opt-in PR watches and manual merge acknowledgements.
-use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::CommitId;
 
-pub(crate) use crate::client::links::pr::{Action, Registration, RegistrationKind};
 use crate::{
     daemon::{
         events::{self, EventKind},
@@ -29,6 +28,7 @@ use crate::{
     repository,
 };
 use shoal_forge::{RepoRequests, account::Account, review::status::StatusRequests};
+pub(crate) use shoal_protocol::links::pr::{Action, Registration, RegistrationKind};
 
 pub(crate) mod titles;
 

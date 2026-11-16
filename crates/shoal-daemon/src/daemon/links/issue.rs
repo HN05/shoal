@@ -1,7 +1,7 @@
 //! Persist issue associations.
-use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
@@ -11,7 +11,6 @@ pub(crate) mod agent_settles;
 mod agents;
 mod assignees;
 
-pub(crate) use crate::client::links::issue::Registration;
 pub(crate) use crate::model::{Assigner, IssueAssignee};
 use crate::{
     daemon::{
@@ -30,6 +29,7 @@ use crate::{
 };
 pub(crate) use assignees::{AssignerOf, Dropped, of_space as assignees_of};
 use shoal_forge::{RepoRequests, items::issue::IssueRequests};
+pub(crate) use shoal_protocol::links::issue::Registration;
 
 /// An open issue a new workspace is assigned.
 #[derive(Debug, Clone)]

@@ -6,15 +6,15 @@ use std::collections::BTreeSet;
 
 use anyhow::Result;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
-    client::transcripts::{ReportedSession, SpaceSessions},
     daemon::workspace::Manager,
     execution::recovery::{self, LastSession},
     model::{Chat, PresentSpace, Workspace},
     paths::Paths,
     state::ExecutionState,
 };
+use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::transcripts::{ReportedSession, SpaceSessions};
 
 impl Manager {
     /// The sessions the agents of the workspace or chat `selector` names

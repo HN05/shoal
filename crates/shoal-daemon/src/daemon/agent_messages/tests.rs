@@ -1,5 +1,4 @@
 use super::Delivery;
-use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::LastSessionExt;
 use crate::paths::StateFiles;
 use crate::{
@@ -13,6 +12,7 @@ use crate::{
 };
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 
 async fn workspace(
     temp: &tempfile::TempDir,
@@ -259,7 +259,7 @@ async fn a_message_to_one_space_says_when_its_agent_reads_it() {
                 .unwrap()
         }
     };
-    fn ids(spaces: &crate::client::output::messages::ReachedSpaces) -> Vec<&SpaceId> {
+    fn ids(spaces: &shoal_protocol::agent_messages::ReachedSpaces) -> Vec<&SpaceId> {
         let spaces = spaces.workspaces.iter().chain(&spaces.chats);
         spaces.map(|space| &space.id).collect()
     }

@@ -9,16 +9,16 @@ use std::{
 
 use crate::client::output::error::{CommandError, ErrorDetail};
 use crate::{
-    client::{
-        approvals::{DecisionStatus, Undecided},
-        sim::SimulatorState,
-    },
     execution::SetupVerificationFailure,
     forge::{ci::check_state::CheckState, review::status::ReviewState},
     operations::Failed,
     protocol::{ErrorCode, RemoteError},
     refusal::Reason,
     state::{ExecutionState, WorkspaceState},
+};
+use shoal_protocol::{
+    approvals::{DecisionStatus, Undecided},
+    sim::SimulatorState,
 };
 
 /// The columns of the terminal `fd` writes to, or `None` when it is not one.

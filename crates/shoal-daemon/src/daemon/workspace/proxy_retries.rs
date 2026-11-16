@@ -3,12 +3,12 @@
 //! lives only in memory: the proxy lives and dies with the wrapper, so a
 //! restart that forgets it loses nothing that still runs. The reset is kept
 //! with the turn retries it holds back.
-use crate::client::space_names::SpaceSelector;
 use anyhow::Result;
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::space_names::SpaceSelector;
 
 use super::Manager;
-pub(crate) use crate::client::executions::ProxyRetry;
+pub(crate) use shoal_protocol::executions::ProxyRetry;
 
 impl Manager {
     /// Keep the retry the proxy of `execution` in space `selector`

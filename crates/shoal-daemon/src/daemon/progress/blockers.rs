@@ -5,12 +5,12 @@ use anyhow::{Context as _, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 
 use super::Plan;
-use crate::client::{
+use crate::daemon::blockers::{Lookup, Lookups, Target};
+use crate::state::BlockerKind;
+use shoal_protocol::{
     events::BlockerEvent,
     progress::{PlanStep, RecordedBlocker, Step},
 };
-use crate::daemon::blockers::{Lookup, Lookups, Target};
-use crate::state::BlockerKind;
 
 /// A blocker as the space's progress keeps it, with the step it blocks.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

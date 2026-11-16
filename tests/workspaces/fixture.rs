@@ -104,7 +104,7 @@ impl Fixture {
     pub(crate) fn connector(&self) -> shoal_client::connection::Connector {
         let state = self.root.path().join("state");
         shoal_client::connection::Connector {
-            paths: shoal_client::paths::Paths {
+            paths: shoal_protocol::paths::Paths {
                 home: self.root.path().into(),
                 socket: state.join("daemon.sock"),
                 state,

@@ -9,8 +9,8 @@
 //! its earlier runs reached. Fixed limits apply the same free disk space rule.
 use std::{path::Path, time::Duration};
 
-pub(crate) use crate::client::executions::STAGGER;
 use crate::{config::overload::Overload, fsutil, model::HeldBy, process::load};
+pub(crate) use shoal_protocol::executions::STAGGER;
 
 /// How long a new agent counts at a settled agent's memory instead of its own.
 pub(crate) const WARM_UP: Duration = Duration::from_secs(3 * 60);

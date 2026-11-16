@@ -8,9 +8,9 @@
 //! requests. Agents, renewals and stop requests are reached only through
 //! closures, which cannot await another lock, or through [`Connections`],
 //! which already holds the first.
-use crate::client::scope_tokens::ScopeToken;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::scope_tokens::ScopeToken;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     sync::{

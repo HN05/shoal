@@ -1,6 +1,5 @@
 use serde_json::json;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         scope::Caller,
@@ -10,6 +9,7 @@ use crate::{
     protocol::ItemContext,
 };
 use shoal_forge::test_support::Server;
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn agents_read_as_their_account_and_write_only_when_allowed() {

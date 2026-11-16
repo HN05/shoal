@@ -12,14 +12,14 @@ use anyhow::{Context, Result, bail, ensure};
 
 use super::Manager;
 use super::commits::NewRecord;
-use crate::client::space_names::SpaceName;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::scope::Caller;
 use crate::{
     git,
     model::{OpenedWorkspace, RemovedSpace, RestoredSpace, RestoredWorkspace},
     transfer::CarriedSessionFile,
 };
+use shoal_protocol::space_names::SpaceName;
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// Open the removed space `selector` names again, as its kind reopens,

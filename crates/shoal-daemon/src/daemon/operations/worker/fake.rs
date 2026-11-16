@@ -1,5 +1,5 @@
 //! A worker tests drive: they write its output and choose its exit.
-use crate::client::scope_tokens::ScopeToken;
+use shoal_protocol::scope_tokens::ScopeToken;
 use std::{
     collections::HashMap,
     sync::{

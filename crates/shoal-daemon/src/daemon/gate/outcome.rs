@@ -10,13 +10,13 @@ use super::{
     verdict::Verdict,
 };
 use crate::agent::Agent;
-use crate::client::{approvals::GateVerdict, events::GateEvent, time::UnixTime};
 use crate::daemon::{
     approvals::{ApprovalRequest, gated, proposals::ProposalDecision},
     events, log,
     workspace::{Manager, Source},
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_protocol::{approvals::GateVerdict, events::GateEvent, time::UnixTime};
 
 /// A verdict as the gate's records keep it.
 struct Recorded<'a> {

@@ -2,7 +2,6 @@
 //! command in it, as chosen.
 use anyhow::{Context as _, Result};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         Command, agents,
@@ -15,6 +14,7 @@ use crate::{
     },
     protocol::ConfigTarget,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 #[derive(Clone)]
 enum ExecuteChoice {

@@ -2,11 +2,11 @@
 //! kind's row extends: recording a space, changing its kind and removing it.
 //! A space's kind row goes in first, in the same transaction, so that what
 //! journals the space's creation reads both.
-use crate::client::space_names::SpaceName;
 use anyhow::Result;
 use rusqlite::{Transaction, params};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
+use shoal_protocol::space_names::SpaceName;
 
 use crate::{
     config::{modes::ModeName, permissions::PermissionsConfig},

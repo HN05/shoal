@@ -12,7 +12,6 @@ use super::{
         start_in_background,
     },
 };
-use crate::client::space_names::SpaceSelector;
 use crate::{
     agents::HomeRecords,
     config::Effective,
@@ -22,6 +21,7 @@ use crate::{
     sessions::Origin,
     start_plan::AddPlan,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Start an admitted queue entry's `plan`, the planned workspace `name`, in
 /// the background where the terminal that queued it would have.

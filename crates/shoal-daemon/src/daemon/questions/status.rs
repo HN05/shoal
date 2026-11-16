@@ -3,7 +3,8 @@
 //! withdrew it.
 use rusqlite::{Row, types::Type};
 
-use crate::{client::questions::QuestionStatus, time::UnixTime};
+use crate::time::UnixTime;
+use shoal_protocol::questions::QuestionStatus;
 
 /// The filter on a `questions` row aliased `q` that keeps open questions.
 pub(super) const OPEN: &str = "q.answer IS NULL AND q.closed_at IS NULL";

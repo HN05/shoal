@@ -5,10 +5,10 @@ use std::time::Duration;
 use anyhow::Result;
 use tokio::time::sleep;
 
-use crate::space_names::SpaceSelector;
-use crate::{
+use crate::connection::{Daemon, call, request};
+use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{
     approvals::{ApprovalRequest, DecisionStatus},
-    connection::{Daemon, call, request},
     model::{PortCatalog, PortOverview, PortRequest, PortReservation, PortSuggestion, SpaceHold},
     protocol::{Body, HoldMethod, PortMethod, ResourceMethod, SecretMethod, SimulatorMethod},
     resources::{Catalog, Overview, ResourceLease, ResourceRequest},

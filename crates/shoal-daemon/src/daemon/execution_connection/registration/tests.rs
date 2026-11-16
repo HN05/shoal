@@ -1,8 +1,8 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::execution_connection::execute;
 use crate::daemon::test_support::{manager, repository};
 use crate::state::WorkspaceState;
+use shoal_protocol::space_names::SpaceSelector;
 use tokio::{io::BufReader, sync::oneshot};
 
 async fn bounded<T>(future: impl Future<Output = T>) -> T {

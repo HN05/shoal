@@ -188,7 +188,7 @@ fn absolute_dir(name: &str, value: Option<OsString>) -> Result<Option<PathBuf>> 
 
 /// Rendered `[env]` values as a shell or another program sets them, with a
 /// preset's directories first on the configured PATH, or else `inherited`.
-pub(crate) fn export_configured(
+pub fn export_configured(
     mut values: BTreeMap<String, String>,
     inherited: Option<OsString>,
 ) -> Result<BTreeMap<String, String>> {

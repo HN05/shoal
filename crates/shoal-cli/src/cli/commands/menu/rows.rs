@@ -10,8 +10,7 @@ use anyhow::{Context as _, Result};
 
 use super::View;
 use crate::cli::commands::{inbox::Inbox, listing::ListFilter, queued_agents};
-use crate::client::space_names::SpaceSelector;
-use crate::client::{item_numbers::ItemNumber, output::inbox::Item};
+use crate::client::output::inbox::Item;
 use crate::{
     cli::{
         context::Context,
@@ -19,10 +18,13 @@ use crate::{
         scoping::Scoping,
         ui::{self, Entries, WidthLimit},
     },
-    client::notifications::{self, Notification},
+    client::notifications,
     forge::items::reference::ItemRef,
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::item_numbers::ItemNumber;
+use shoal_protocol::notifications::Notification;
+use shoal_protocol::space_names::SpaceSelector;
 
 const ADD_ENTRY: &str = "add-workspace";
 

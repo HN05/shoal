@@ -19,7 +19,6 @@ use anyhow::{Context as _, Result, ensure};
 use rusqlite::{Connection, params};
 
 use super::Start;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace::{Manager, agents},
     execution::recovery,
@@ -27,6 +26,7 @@ use crate::{
     paths::Paths,
     state::{QueueKind, QueueState},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The space a stopped agent restores in.
 #[derive(Clone)]

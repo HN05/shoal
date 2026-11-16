@@ -4,7 +4,7 @@
 //! `agent_id`, plan the subagent's own work and change nothing.
 use serde_json::Value;
 
-use crate::client::progress::{PlanStep, ProgressChange, StepState};
+use shoal_protocol::progress::{PlanStep, ProgressChange, StepState};
 
 /// The plan tools, as a hook matcher.
 pub(super) const TOOLS: &str = "TodoWrite|TaskCreate|TaskUpdate";

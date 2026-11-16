@@ -9,7 +9,6 @@ use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     agents::hook_reports,
     execution::recovery,
@@ -22,6 +21,7 @@ use crate::{
     state::{AgentState, ExecutionState, TurnFailure},
     time::UnixTime,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(crate) fn get(db: &Connection, id: &SpaceId) -> Result<Option<AgentStatus>> {
     Ok(db

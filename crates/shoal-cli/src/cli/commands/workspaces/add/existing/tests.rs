@@ -1,10 +1,10 @@
 use super::{ItemInput, new_space_flag};
 use crate::{
     cli::commands::workspaces::AddOptions,
-    client::space_names::SpaceSelector,
     protocol::CopySource,
     start_plan::{CopyCreation, Creation},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 #[test]
 fn a_start_into_a_workspaces_branch_takes_only_a_forks_parent() {

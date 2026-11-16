@@ -1,5 +1,5 @@
 use super::*;
-use crate::demos::Scheme;
+use shoal_protocol::demos::Scheme;
 
 fn launch(preset: Preset, variable: &str, value: &str) -> Launch {
     Launch {
@@ -73,7 +73,7 @@ fn simulator_demos_name_their_device_over_ssh() {
 fn web_demos_reserve_a_port_named_after_them_unless_ports_are_configured() {
     let chosen = |preset, ports: Option<Vec<String>>| Chosen {
         name: "site".into(),
-        demo: crate::demos::Demo {
+        demo: shoal_protocol::demos::Demo {
             cmd: vec!["serve".into()],
             preset,
             open: None,

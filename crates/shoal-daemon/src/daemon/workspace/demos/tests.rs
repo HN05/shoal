@@ -1,8 +1,6 @@
 use std::collections::BTreeMap;
 
 use super::*;
-use crate::client::assignments::Done;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         events::{EventItem, EventKind},
@@ -15,6 +13,8 @@ use crate::{
     protocol::DemoMethod,
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::assignments::Done;
+use shoal_protocol::space_names::SpaceSelector;
 
 fn launch(name: &str) -> Launch {
     Launch {

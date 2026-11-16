@@ -9,13 +9,13 @@ use std::{ffi::OsString, path::PathBuf};
 
 use anyhow::Result;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::{Agent, ModelChoice},
     model::{QueueRequest, Workspace},
     protocol::{CreationOptions, PullHead, operations::QueuedLaunch},
     terminal::PlaceName,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 #[derive(Default, serde::Serialize, serde::Deserialize)]
 pub struct Creation {

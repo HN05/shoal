@@ -1,5 +1,5 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
+use shoal_protocol::space_names::SpaceSelector;
 
 #[test]
 fn numstat_counts_text_and_binary_files() {

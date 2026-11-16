@@ -41,8 +41,8 @@ use crate::cli::args::{
     sessions::SessionsCommand,
     workspace::WorkspaceCommand,
 };
-use crate::client::space_names::SpaceSelector;
 use crate::config::permissions::PermissionKey;
+use shoal_protocol::space_names::SpaceSelector;
 
 #[derive(Debug, Parser)]
 #[command(

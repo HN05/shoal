@@ -1,12 +1,12 @@
 //! `shoal restart` stops an agent and starts the saved session again: in a
 //! new wrapper the agent queue starts, or in place in the same terminal.
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     model::{QueueEntry, QueueRequest},
     state::QueueState,
 };
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The execution of the workspace's only agent.
 async fn agent_execution(manager: &Manager, workspace: &crate::model::Workspace) -> ExecutionId {
@@ -331,7 +331,7 @@ async fn a_restart_in_a_new_wrapper_keeps_a_done_workspaces_completion() {
     manager
         .mark_done(
             &SpaceSelector::id(&workspace.id),
-            crate::client::assignments::Done::default(),
+            shoal_protocol::assignments::Done::default(),
             &crate::daemon::workspace_files::Attacher::User,
         )
         .await

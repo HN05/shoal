@@ -3,7 +3,6 @@
 use anyhow::{Context, Result, ensure};
 use std::path::Path;
 
-pub use crate::client::repository::*;
 use crate::{
     forge::{
         items::{link::LinkKind, reference::ItemRef},
@@ -13,6 +12,7 @@ use crate::{
     model::Repository,
     refusal::{Reason, Refusal},
 };
+pub use shoal_protocol::repository::*;
 
 /// Local checkouts use origin; clones retain their original source URL even
 /// when their checkout is temporarily unavailable. No network access is needed.

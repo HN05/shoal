@@ -8,7 +8,6 @@ use std::{
 
 use anyhow::{Result, ensure};
 
-use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     agent::{Agent, ModelChoice},
     cli::{
@@ -21,6 +20,7 @@ use crate::{
     },
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use shoal_schedule::priority::Priority;
 
 /// How the command line starts a chat.

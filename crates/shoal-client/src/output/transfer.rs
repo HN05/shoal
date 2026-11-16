@@ -3,11 +3,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    output::{batch::Failure, outputs, restore::Reopened},
-    removal::RemovalResult,
-    transfer::Manifest,
-};
+use crate::output::{batch::Failure, outputs, restore::Reopened};
+use shoal_protocol::{removal::RemovalResult, transfer::Manifest};
 
 /// A space written to a package, and its removal here.
 #[derive(Debug, Serialize, Deserialize)]

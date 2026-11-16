@@ -89,7 +89,6 @@ pub(crate) use tree::{
     set_parent, spaces_above,
 };
 
-use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use crate::{
     config::Config,
@@ -100,6 +99,7 @@ use crate::{
 use anyhow::Result;
 use rusqlite::OptionalExtension;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 use std::{collections::HashSet, sync::Arc};
 use tokio::sync::OwnedMutexGuard;
 

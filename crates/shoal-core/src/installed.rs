@@ -2,7 +2,8 @@
 //! changes the daemon protocol.
 use std::{ffi::OsString, path::PathBuf};
 
-use crate::{client::connection::ProtocolMismatch, fsutil::FileIdentity};
+use crate::fsutil::FileIdentity;
+use shoal_protocol::connection::ProtocolMismatch;
 
 /// The binary this command runs, so an upgrade that changes the daemon
 /// protocol can hand the command to the installed release.

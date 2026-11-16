@@ -13,8 +13,6 @@ use super::{
     queue::{admit_launch, failing_entry, launch_blockers},
     target::AddTarget,
 };
-use crate::client::queue::WorkerStart;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         agents,
@@ -26,6 +24,8 @@ use crate::{
     start_plan::AddPlan,
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
+use shoal_protocol::queue::WorkerStart;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Whether the plan's agent starts detached, unless `--here` asks to run it
 /// in place: for a scoped caller, whose own processes it must not be, and

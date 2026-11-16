@@ -2,7 +2,6 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use std::time::Duration;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{manager, repository},
@@ -13,6 +12,7 @@ use crate::{
     protocol::TurnEnd,
     state::AgentState,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A tracked agent `name` in `workspace`.
 async fn agent(manager: &Manager, workspace: &Workspace, name: &str) -> ExecutionId {

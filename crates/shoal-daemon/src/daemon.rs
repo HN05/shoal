@@ -73,7 +73,7 @@ pub mod workspace;
 pub mod workspace_files;
 mod workspace_usage;
 
-use crate::client::scope_tokens::ScopeToken;
+use shoal_protocol::scope_tokens::ScopeToken;
 use std::{
     panic::AssertUnwindSafe,
     sync::Arc,

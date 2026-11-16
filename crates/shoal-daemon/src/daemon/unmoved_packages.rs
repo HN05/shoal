@@ -7,10 +7,10 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, ensure};
 
 use crate::{
-    client::notifications::NotificationKind,
     daemon::{log, workspace::Manager},
     fsutil::off_runtime,
 };
+use shoal_protocol::notifications::NotificationKind;
 
 /// The directory an earlier release kept them in, in the state directory.
 const KEPT: &str = "unmoved";

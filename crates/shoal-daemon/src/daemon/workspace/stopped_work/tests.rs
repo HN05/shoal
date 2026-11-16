@@ -1,4 +1,3 @@
-use crate::client::space_names::SpaceSelector;
 use crate::paths::StateFiles;
 use crate::{
     config::permissions::{PermissionChange, PermissionsConfig},
@@ -13,6 +12,7 @@ use crate::{
     protocol::SavedAgent,
 };
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The stopped `agents`, without waiting launches.
 fn stopped_of(agents: &[SavedAgent]) -> PermissionTargets<'_> {
@@ -166,7 +166,7 @@ async fn saved_work_larger_than_a_frame_is_read_whole() {
     assert!(pages.len() > 1, "{}", pages.len());
     let pieces = pages.iter().flat_map(|page| page.as_array().unwrap());
     let json: String = pieces.map(|piece| piece.as_str().unwrap()).collect();
-    let saved: crate::client::saved::Saved = serde_json::from_str(&json).unwrap();
+    let saved: shoal_protocol::saved::Saved = serde_json::from_str(&json).unwrap();
     assert_eq!(saved.commands[0].argv, argv);
 }
 

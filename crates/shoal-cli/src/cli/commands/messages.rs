@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
@@ -15,14 +14,15 @@ use crate::{
         terminal,
         ui::{self, Fallback},
     },
-    client::{
-        agent_messages::{self, AgentMessage},
-        files::NewFile,
-        links::Updates,
-        output::messages::{Reached, ReachedSpaces, Refused},
-    },
+    client::agent_messages,
     forge::items::attach::Attachment,
     repository::Selector,
+};
+use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{
+    agent_messages::{AgentMessage, Reached, ReachedSpaces, Refused},
+    files::NewFile,
+    links::Updates,
 };
 
 /// Who `shoal messages send` reaches.
@@ -150,7 +150,7 @@ pub(super) fn attachments(args: &[String]) -> Result<Vec<NewFile>> {
             let given = Attachment::parse(arg, Path::new(""));
             let path = std::path::absolute(&given.path)
                 .with_context(|| format!("read {}", given.path.display()))?;
-            crate::client::files::check_path(&path)?;
+            shoal_protocol::files::check_path(&path)?;
             let file = NewFile {
                 path,
                 title: given.alt,

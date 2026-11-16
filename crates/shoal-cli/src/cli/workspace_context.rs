@@ -2,8 +2,8 @@
 use std::path::Path;
 
 use crate::cli::scoping::Scoping;
-use crate::client::space_names::SpaceSelector;
 use crate::model::Workspace;
+use shoal_protocol::space_names::SpaceSelector;
 
 #[derive(Clone, Copy)]
 pub enum ScopeOrder {

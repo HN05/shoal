@@ -1,5 +1,4 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::operations::fake;
 use crate::daemon::test_support::{manager, repository};
 use crate::model::{Repository, Workspace};
@@ -9,6 +8,7 @@ use crate::state::WorkspaceState;
 use futures_util::FutureExt;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 use std::sync::Arc;
 
 #[tokio::test]

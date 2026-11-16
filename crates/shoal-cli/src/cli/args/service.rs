@@ -1,5 +1,5 @@
 //! Arguments of `shoal config`, `shoal update` and `shoal daemon`.
-use crate::client::space_names::SpaceSelector;
+use shoal_protocol::space_names::SpaceSelector;
 use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Args, Subcommand};
@@ -87,7 +87,7 @@ pub struct ConfigSetupArgs {
     /// Name of the chat; defaults to setup. A chat that reopens in a new tab
     /// or a restore passes it.
     #[arg(long, hide = true)]
-    pub name: Option<crate::client::space_names::SpaceName>,
+    pub name: Option<shoal_protocol::space_names::SpaceName>,
     /// Agent session the chat continues, which shoal restore passes.
     #[arg(long, hide = true)]
     pub session: Option<shoal_ids::agent_session_ids::AgentSessionId>,

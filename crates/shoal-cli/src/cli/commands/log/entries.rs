@@ -1,13 +1,13 @@
 //! What a log line says of an entry: a short label and its details.
 use crate::{
-    client::{
-        events::{
-            EventCause, EventDetails, EventKind, FileEventKind, ShoalEventDetails, ShoalEventKind,
-        },
-        log::LogEntry,
-    },
     forge::{items::link::LinkKind, updates::UpdateKind},
     model::SpaceKind,
+};
+use shoal_protocol::{
+    events::{
+        EventCause, EventDetails, EventKind, FileEventKind, ShoalEventDetails, ShoalEventKind,
+    },
+    log::LogEntry,
 };
 
 /// The width labels are padded to: the longest one's.

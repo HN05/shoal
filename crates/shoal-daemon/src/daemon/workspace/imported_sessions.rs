@@ -16,7 +16,6 @@ use anyhow::{Context, Result};
 use rusqlite::Connection;
 
 use super::Manager;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace_files::HomeKey,
     model::{PresentSpace, RemovedSpace, Repository},
@@ -24,6 +23,7 @@ use crate::{
     transfer::{CarriedSessionFile, SessionFile, SessionSource},
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// Keep `files` for `removed`, imported here, replacing what an earlier

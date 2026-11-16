@@ -3,7 +3,6 @@ use crate::model::PresentSpace;
 use shoal_ids::execution_ids::ExecutionId;
 use std::time::Duration;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{manager, repository},
@@ -14,6 +13,7 @@ use crate::{
     sessions::{HostName, Origin},
     state::AgentState,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 async fn workspace(root: &std::path::Path, manager: &Manager) -> Workspace {
     let repo = repository(root, "repo");

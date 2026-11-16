@@ -3,7 +3,6 @@
 use anyhow::Result;
 
 use super::{super::Options, Started};
-use crate::client::space_names::SpaceName;
 use crate::{
     agent::Agent,
     cli::{
@@ -11,9 +10,10 @@ use crate::{
         commands::chat::{Narrowing, Relaunch, Topic},
         context::Context,
     },
-    client::output::chat::{QueuedChat, StartedChat},
     protocol::ChatStart,
 };
+use shoal_protocol::chats::{QueuedChat, StartedChat};
+use shoal_protocol::space_names::SpaceName;
 
 /// The start the daemon carries out for the chat about `topic` with
 /// `options`, run by `agent` under `name`: the chat its `shoal start` makes,

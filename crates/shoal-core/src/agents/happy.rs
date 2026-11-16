@@ -11,12 +11,12 @@ use super::{
     detached::{App, Delivered, Prepared, Session},
     trust::TrustFile,
 };
-use crate::client::output::agents::Delivery;
 use crate::{
     ai::IntegrationKind,
     config,
     happy::{self, Agent},
 };
+use shoal_protocol::agents::Delivery;
 
 /// `happy-<agent>`: the agent in a detached Happy session.
 pub(super) struct Happy(Agent);

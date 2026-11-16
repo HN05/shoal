@@ -1,5 +1,5 @@
-use crate::client::space_names::SpaceSelector;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 use std::os::unix::ffi::OsStringExt;
 
 use clap::Parser;

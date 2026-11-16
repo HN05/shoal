@@ -5,10 +5,6 @@ use std::collections::HashSet;
 use anyhow::Result;
 
 use crate::{
-    client::{
-        output::messages::{Reached, ReachedSpaces, Recipient, Refused, RefusedSpace},
-        space_names::SpaceSelector,
-    },
     daemon::{
         workspace::Manager,
         workspace_files::{Attacher, NewFile},
@@ -18,6 +14,10 @@ use crate::{
     state::WorkspaceState,
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_protocol::{
+    agent_messages::{Reached, ReachedSpaces, Recipient, Refused, RefusedSpace},
+    space_names::SpaceSelector,
+};
 
 impl Manager {
     /// [`Self::send_to`] to the space `selector` names; the

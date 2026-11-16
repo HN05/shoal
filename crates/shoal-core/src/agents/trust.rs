@@ -10,11 +10,11 @@ use serde_json::json;
 use super::{ADDED, AgentEnvironment, integration};
 use crate::{
     ai::IntegrationKind,
-    client::transcripts::Environments,
     env,
     fsutil::atomic::{self, Permissions, ReplaceOptions},
     model::Repository,
 };
+use shoal_protocol::transcripts::Environments;
 
 /// A tool's config file that records the directories it trusts, so a
 /// launch never stops at the tool's trust dialog. Updates are best effort and

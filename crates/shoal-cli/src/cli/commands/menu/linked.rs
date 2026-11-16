@@ -1,7 +1,6 @@
 //! Viewing one of the issues and PRs a space links.
 use anyhow::{Context as _, Result, ensure};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         Command,
@@ -13,6 +12,7 @@ use crate::{
     model::{LinkedItem, PresentSpace},
     refusal::{Reason, Refusal},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// View one of the issues and PRs the space `workspace` names links, or
 /// open it in the browser, as chosen.

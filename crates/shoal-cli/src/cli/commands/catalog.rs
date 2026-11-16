@@ -13,7 +13,7 @@ use crate::cli::{
     ui::{self, Fallback},
 };
 use crate::client::output::{Output, catalog::Catalog};
-use crate::client::space_names::SpaceSelector;
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn show(
     ctx: &Context,

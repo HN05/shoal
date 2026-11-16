@@ -2,8 +2,8 @@
 use anyhow::{Context, Result, bail, ensure};
 use toml_edit::{DocumentMut, Item, Key, Table, Value};
 
-pub use crate::client::config::edit::Change;
 use crate::config::permissions::{Acting, PermissionKey, Permissions};
+pub use shoal_protocol::config::edit::Change;
 
 /// Apply `changes` in order, so settings that are only valid together are
 /// validated once, after the last one.

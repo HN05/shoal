@@ -5,7 +5,6 @@ use crate::transfer::ManifestExt;
 use anyhow::{Result, ensure};
 
 use super::Prepared;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{events::EventCause, workspace::Manager},
     execution::recovery::{self, Copied, Record, StoppedAgent},
@@ -14,6 +13,7 @@ use crate::{
     transfer::Manifest,
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// The workspace or running chat `selector` names, refusing a removed

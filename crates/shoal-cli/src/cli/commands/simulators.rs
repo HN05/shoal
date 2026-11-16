@@ -3,17 +3,15 @@ use anyhow::Result;
 use shoal_ids::execution_ids::ExecutionId;
 
 use super::acquisition::{Finish, obtain};
-use crate::client::leases;
-use crate::client::space_names::SpaceSelector;
-use crate::{
-    cli::{
-        args::WorkspaceScope,
-        context::{Context, optional},
-        output::{Palette, Style},
-        ui,
-    },
-    client::sim::{AuditEntry, SimRequest, Simulator, SimulatorCatalog, SimulatorOverview},
+use crate::cli::{
+    args::WorkspaceScope,
+    context::{Context, optional},
+    output::{Palette, Style},
+    ui,
 };
+use crate::client::leases;
+use shoal_protocol::sim::{AuditEntry, SimRequest, Simulator, SimulatorCatalog, SimulatorOverview};
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn fetch_catalog(
     ctx: &Context,

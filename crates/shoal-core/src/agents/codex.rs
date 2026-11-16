@@ -75,7 +75,7 @@ impl Integration for Codex {
         Wake::Prompt
     }
 
-    fn plan_change(&self, event: &Value) -> Option<crate::client::progress::ProgressChange> {
+    fn plan_change(&self, event: &Value) -> Option<shoal_protocol::progress::ProgressChange> {
         plan::change(event)
     }
 

@@ -515,7 +515,7 @@ fn branch_names_are_preserved_with_portable_directories() {
         let workspace = fixture.add(branch);
         assert_eq!(workspace["branch"], branch);
         // The name is the branch as given, the directory a portable form.
-        let name = shoal_client::space_names::SpaceName::derive(branch, "workspace");
+        let name = shoal_protocol::space_names::SpaceName::derive(branch, "workspace");
         assert_eq!(workspace["name"], name.as_str(), "{branch}");
         let path = Path::new(workspace["path"].as_str().unwrap());
         assert_eq!(path.file_name().unwrap(), directory);

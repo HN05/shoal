@@ -1,7 +1,6 @@
 //! The worktree's part of cleanup candidacy: its commands and leases, its
 //! Git state and files, and the processes working in it.
 use super::super::super::Manager;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::cleanup::{Rule, Tree},
     fsutil::off_runtime,
@@ -13,6 +12,7 @@ use crate::{
 };
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;
 use std::{collections::HashMap, path::Path};
 

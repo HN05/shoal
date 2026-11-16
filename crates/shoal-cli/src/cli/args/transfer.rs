@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use clap::{Args, Subcommand};
 
 use crate::cli::args::ConfirmationArgs;
-use crate::client::space_names::SpaceSelector;
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
+use shoal_protocol::space_names::SpaceSelector;
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]

@@ -1,9 +1,10 @@
 //! What `shoal catalog` prints.
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    model::PortCatalog, output::outputs, resources::Catalog as ResourceCatalog,
-    secrets::SecretCatalog, sim::SimulatorCatalog,
+use crate::output::outputs;
+use shoal_protocol::{
+    model::PortCatalog, resources::Catalog as ResourceCatalog, secrets::SecretCatalog,
+    sim::SimulatorCatalog,
 };
 
 /// Every kind's catalog for one workspace.

@@ -1,12 +1,12 @@
 //! The entry a `shoal queue` command acts on, named or picked.
 use anyhow::{Context as _, Result, ensure};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{commands::queued_agents, context::Context, ui},
     model::QueueEntry,
     state::{QueueKind, QueueState},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The waiting entries in queue order.
 pub(super) async fn waiting(ctx: &Context) -> Result<Vec<QueueEntry>> {

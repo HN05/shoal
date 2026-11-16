@@ -3,7 +3,7 @@
 //! failed jobs' logs, in the order they were selected.
 use crate::forge::items::reference::ItemInput;
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
+use shoal_protocol::views::Viewed;
 
 use crate::{
     connection::{self, Daemon},
@@ -16,18 +16,12 @@ use crate::{
         items::link::{LinkKind, Selection},
         review::view::ItemView,
     },
-    model::SelectedItem,
     output::view::{RunRead, Shown, ShownItem, ShownRun},
+};
+use shoal_protocol::{
+    model::SelectedItem,
     protocol::{CiMethod, ItemContext, ItemMethod},
 };
-
-/// The items a selection named, in order, and the views of the issues and
-/// PRs among them, in the same order.
-#[derive(Serialize, Deserialize)]
-pub struct Viewed {
-    pub items: Vec<SelectedItem>,
-    pub views: Vec<ItemView>,
-}
 
 /// The items `selection` names in `context`, each as the forge reports it
 /// now, in selection order: issues and PRs with their comments when

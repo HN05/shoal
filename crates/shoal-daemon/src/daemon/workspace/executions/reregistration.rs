@@ -1,11 +1,11 @@
 //! A running execution's wrapper registers again after continuing from the
 //! installed binary: it gets a new plan and records what its registration
 //! records.
-use crate::client::scope_tokens::ScopeToken;
 use anyhow::{Context, Result};
 use rusqlite::OptionalExtension;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::scope_tokens::ScopeToken;
 
 use super::{
     super::{Manager, places::ExecutionPlace},

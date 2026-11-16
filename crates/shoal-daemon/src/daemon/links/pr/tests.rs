@@ -1,7 +1,7 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use serde_json::json;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn unwatch_removes_only_the_selected_pr_even_when_cleanup_is_disabled() {

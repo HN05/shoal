@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         notifications::NotificationKind,
@@ -10,6 +9,7 @@ use crate::{
     model::Repository,
     removal::{InspectionPolicy, UnsavedWork},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A clone registered in place and then marked as a contribution. Its
 /// path is canonical, as a clone's under `root_dir` is.

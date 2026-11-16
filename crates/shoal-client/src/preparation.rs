@@ -9,8 +9,11 @@ use anyhow::{Context as _, Result};
 use crate::{
     connection::{self, Daemon},
     forge::items::reference::ItemInput,
-    model::Workspace,
     operations::{Followed, Following},
+};
+use shoal_ids::queue_entry_ids::QueueEntryId;
+use shoal_protocol::{
+    model::Workspace,
     protocol::{
         CopySource, CreationOptions, OperationMethod,
         operations::{
@@ -22,7 +25,6 @@ use crate::{
     space_names::SpaceSelector,
     state::WorkspaceState,
 };
-use shoal_ids::queue_entry_ids::QueueEntryId;
 
 /// A workspace for the daemon to open and prepare in an operation.
 pub struct NewWorkspace {

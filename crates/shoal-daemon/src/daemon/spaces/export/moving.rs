@@ -7,7 +7,6 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, ensure};
 
 use super::{Prepared, ensure_exportable, packaged_record};
-use crate::client::space_names::SpaceSelector;
 use crate::transfer::ManifestExt;
 use crate::{
     daemon::workspace::{Manager, StopRequest},
@@ -18,6 +17,7 @@ use crate::{
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// Stop the agents of the space `selector` names, saving their

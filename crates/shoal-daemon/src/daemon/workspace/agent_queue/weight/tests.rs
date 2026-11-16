@@ -2,7 +2,6 @@ use std::collections::HashSet;
 
 use rusqlite::params;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{global_config, manager},
@@ -13,6 +12,7 @@ use crate::{
     state::{ExecutionState, QueueState},
 };
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn a_light_agent_holds_no_slot_and_starts_beside_full_limits() {

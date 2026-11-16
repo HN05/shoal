@@ -1,7 +1,6 @@
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::internal::InternalCommand,
@@ -15,6 +14,7 @@ use crate::{
     execution::TrackedAgent,
     sessions::HostName,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand) -> Result<i32> {
     match command {

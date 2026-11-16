@@ -1,13 +1,14 @@
 use super::*;
-use crate::client::assignments::Done;
 use crate::daemon::links::issue::test_support::{AGENT_TOKEN, Fixture};
 use crate::daemon::{workspace::ExecutionKind, workspace_files::Attacher};
 use crate::execution::recovery::RecordExt;
 use crate::paths::StateFiles;
 use crate::removal::{InspectionPolicy, UnsavedWork};
-use crate::{client::executions::Stage, execution::TrackedAgent, model::Workspace};
+use crate::{execution::TrackedAgent, model::Workspace};
 use serde_json::json;
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::assignments::Done;
+use shoal_protocol::executions::Stage;
 
 /// A fixture whose agent account has a token, under `config`.
 async fn agents(names: &[&str], assignees: &[&str], config: &str) -> Fixture {

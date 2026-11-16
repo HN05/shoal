@@ -6,7 +6,7 @@ use std::ffi::{OsStr, OsString};
 
 use anyhow::Result;
 
-use crate::client::space_names::SpaceSelector;
+use shoal_protocol::space_names::SpaceSelector;
 
 use crate::client::output::configured::CommandDefinition;
 use crate::{
@@ -146,7 +146,7 @@ async fn selected_workspace<'a>(
         true => SpaceSelector::Id(recent::previous(ctx).await?),
         false => selector,
     };
-    let spaces = crate::client::model::Spaces {
+    let spaces = shoal_protocol::model::Spaces {
         workspaces: workspaces.to_vec(),
         chats: Vec::new(),
     };

@@ -2,11 +2,11 @@ use crate::model::PresentSpace;
 use std::{fs, sync::Arc};
 
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     test_support::{commit, git, manager, repository},
     workspace::restore::tests::checkpoint_refs,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 struct Fixture {
     _root: tempfile::TempDir,

@@ -9,7 +9,6 @@ use std::{
 use anyhow::{Context as _, Result, ensure};
 
 use super::{ChatPlace, Narrowing, Options, Topic, issue, launch::begin};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{agents::ChatRepository, context::Context, ui},
     config::Effective,
@@ -18,6 +17,7 @@ use crate::{
     protocol::{ChatStart, ConfigTarget},
     repository,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// What a chat starts as: its mode, and the issue it starts on, if any,
 /// where `Some(None)` asks for one.

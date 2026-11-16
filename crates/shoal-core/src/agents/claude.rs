@@ -112,7 +112,7 @@ impl Integration for Claude {
         })
     }
 
-    fn plan_change(&self, event: &Value) -> Option<crate::client::progress::ProgressChange> {
+    fn plan_change(&self, event: &Value) -> Option<shoal_protocol::progress::ProgressChange> {
         plan::change(event)
     }
 }

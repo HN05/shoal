@@ -1,4 +1,3 @@
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         events::{EventCause, EventItem, EventKind},
@@ -7,6 +6,7 @@ use crate::{
     model::WorkspaceRef,
     removal::{InspectionPolicy, UnsavedWork},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 fn reference(workspace: &crate::model::Workspace) -> WorkspaceRef {
     WorkspaceRef {

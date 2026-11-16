@@ -21,9 +21,7 @@ use anyhow::{Context, Result, bail};
 use rusqlite::params;
 
 use super::{Registration, runner_labels};
-use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
-    client::resources::ResourceRequest,
     config::Runner,
     daemon::{
         allocation::Allocation,
@@ -39,6 +37,8 @@ use shoal_forge::{
     RepoRequests,
     ci::runner::{Installation, JobCommand, JobLaunch, RunnerRequests},
 };
+use shoal_protocol::resources::ResourceRequest;
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 /// The name of the lease a job holds from the repository's permit pool.
 const PERMIT: &str = "ci-job";

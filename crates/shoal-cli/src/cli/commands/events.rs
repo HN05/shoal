@@ -1,10 +1,11 @@
 //! `shoal internal events`: the integration stream that never consumes user notifications.
 use crate::{
     cli::{context::Context, installed::arguments_with},
-    client::events::{EventCursor, EventItem, Events},
+    client::events::Events,
     installed::Executable,
 };
 use anyhow::Result;
+use shoal_protocol::events::{EventCursor, EventItem};
 
 pub(super) async fn run(ctx: &Context, follow: bool, after: Option<EventCursor>) -> Result<i32> {
     let executable = Executable::current();

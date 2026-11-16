@@ -1,4 +1,3 @@
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         notifications::NotificationKind,
@@ -9,6 +8,7 @@ use crate::{
     model::{Chat, Workspace},
     state::AgentState,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A repository with a workspace named `worker` and a chat whose process is
 /// this test.

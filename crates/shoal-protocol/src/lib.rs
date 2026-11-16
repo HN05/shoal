@@ -1,0 +1,53 @@
+//! The Shoal daemon's protocol: its requests and responses, the types they
+//! carry, and the logic over them that needs no connection. The daemon, the
+//! code it shares with the CLI, and `shoal-client`'s operations use it.
+pub mod agent;
+pub mod agent_messages;
+pub mod agents;
+pub mod approvals;
+pub mod assignments;
+pub mod chats;
+pub mod cleanup;
+pub mod config;
+pub mod connection;
+pub mod demos;
+pub mod env;
+pub mod events;
+pub mod executions;
+pub mod files;
+pub mod integrations;
+pub mod item_numbers;
+pub mod links;
+pub mod log;
+pub mod model;
+pub mod notifications;
+pub mod paths;
+pub mod priority;
+pub mod processes;
+pub mod profile;
+pub mod progress;
+pub mod protocol;
+pub mod questions;
+pub mod queue;
+pub mod recovery;
+pub mod removal;
+pub mod repository;
+pub mod resources;
+pub mod reviews;
+pub mod saved;
+pub mod scope_tokens;
+pub mod secrets;
+pub mod service;
+pub mod sessions;
+pub mod sim;
+pub mod sleep;
+pub mod space_names;
+pub mod state;
+pub mod subscriptions;
+pub mod time;
+pub mod transcripts;
+pub mod transfer;
+pub mod validate;
+pub mod views;
+
+use shoal_forge_types as forge;

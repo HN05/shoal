@@ -7,7 +7,6 @@ mod read;
 use anyhow::Result;
 
 pub(super) use self::read::{render_run, view};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::ci::CiCommand,
@@ -23,6 +22,7 @@ use crate::{
     protocol::ItemContext,
 };
 use shoal_forge::capability::CapabilityRequests;
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn run(ctx: &Context, command: CiCommand) -> Result<i32> {
     match command {

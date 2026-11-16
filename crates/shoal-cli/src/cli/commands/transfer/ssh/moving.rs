@@ -9,7 +9,6 @@ use super::{
 };
 use crate::cli::commands::restore::agents::queue::{Stopped, restore_stopped, saved_executions};
 use crate::client::output::{restore::Reopened, transfer::Moves};
-use crate::client::space_names::SpaceSelector;
 use crate::transfer::ExportedSpace;
 use crate::{
     cli::{context::Context, ui},
@@ -18,6 +17,7 @@ use crate::{
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::space_names::SpaceSelector;
 use std::collections::BTreeSet;
 
 /// Move `spaces` to `remote` once each one can end here, asking once where

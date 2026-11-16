@@ -4,13 +4,13 @@ use std::ffi::OsString;
 
 use clap::Subcommand;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     cli::args::{AgentParser, SpaceTargets, permission_assignment},
     sessions::HostName,
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
+use shoal_protocol::space_names::SpaceSelector;
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -195,10 +195,10 @@ pub enum DemoCommand {
         name: Option<String>,
         /// How the demo reaches the user, replacing the configured preset.
         #[arg(long, value_enum)]
-        preset: Option<crate::demos::Preset>,
+        preset: Option<shoal_protocol::demos::Preset>,
         /// A web demo's URL scheme, replacing the configured one; http by default.
         #[arg(long, value_enum)]
-        scheme: Option<crate::demos::Scheme>,
+        scheme: Option<shoal_protocol::demos::Scheme>,
         /// Shell command `shoal demo NAME` runs instead of opening the demo.
         #[arg(long, value_name = "COMMAND")]
         open: Option<String>,

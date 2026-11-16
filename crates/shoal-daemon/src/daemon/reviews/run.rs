@@ -15,7 +15,6 @@ use super::{
     reviewer::{self, Ended, Files, Reviewer},
     store,
 };
-use crate::client::{space_names::SpaceSelector, time::UnixTime};
 use crate::{
     agent::{Agent, ModelChoice},
     config::{Effective, templates},
@@ -32,6 +31,7 @@ use crate::{
 };
 use shoal_forge::review::view::ViewRequests;
 use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_protocol::{space_names::SpaceSelector, time::UnixTime};
 
 /// Where earlier versions kept the runs, in the state directory.
 const OLD_RUNS: &str = "reviews";

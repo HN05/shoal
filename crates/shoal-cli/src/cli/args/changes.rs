@@ -4,7 +4,6 @@ use std::{ffi::OsString, path::PathBuf};
 use clap::{Args, Subcommand};
 use shoal_refs::BranchName;
 
-use crate::client::space_names::SpaceSelector;
 use crate::forge::numbers::CommentId;
 use crate::{
     agent::Agent,
@@ -13,6 +12,7 @@ use crate::{
     },
     reviews::{FindingId, OutcomeKind, ReviewId},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]

@@ -1,6 +1,4 @@
 use super::*;
-use crate::client::assignments::Done;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         links::pr::Action,
@@ -10,6 +8,8 @@ use crate::{
     model::CleanupReason,
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::assignments::Done;
+use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;
 use std::{fs, sync::Arc};
 

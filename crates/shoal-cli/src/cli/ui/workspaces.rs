@@ -9,8 +9,6 @@ use super::{
     Cell, Entries, chat_entries, pick, pick_many, picker_width, require_argument, rows_with_status,
     status_cell,
 };
-use crate::client::saved::SavedSummary;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::WorkspaceScope,
@@ -25,6 +23,8 @@ use crate::{
     model::{Chat, Workspace},
     paths::CommandPaths,
 };
+use shoal_protocol::saved::SavedSummary;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// How to choose a workspace when the command line names none.
 #[derive(Clone, Copy)]

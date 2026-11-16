@@ -3,7 +3,6 @@ use anyhow::{Context as _, Result, ensure};
 use sha2::{Digest as _, Sha256};
 
 use super::{about, ensure_scope_token, list_requests, show_request, submit};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::approvals::Decision,
@@ -12,9 +11,10 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Entries, WidthLimit},
     },
-    client::approvals::{ApprovalRequest, DecisionStatus, ProposalDecision},
     workers::Worker,
 };
+use shoal_protocol::approvals::{ApprovalRequest, DecisionStatus, ProposalDecision};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Open the chosen request; Ctrl-A approves and Ctrl-D denies the
 /// highlighted one in place, with the outcome shown in the list.

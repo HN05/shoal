@@ -1,10 +1,10 @@
 use super::*;
-use crate::client::assignments::Done;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     test_support::{manager, repository},
     workspace_files::Attacher,
 };
+use shoal_protocol::assignments::Done;
+use shoal_protocol::space_names::SpaceSelector;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[tokio::test]

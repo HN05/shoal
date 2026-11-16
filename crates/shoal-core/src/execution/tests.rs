@@ -1,8 +1,6 @@
 use super::*;
-use crate::{
-    client::connection::ProtocolMismatch,
-    protocol::{self, Body, ErrorCode, RemoteError, Request, Response},
-};
+use crate::protocol::{self, Body, ErrorCode, RemoteError, Request, Response};
+use shoal_protocol::connection::ProtocolMismatch;
 use tokio::net::UnixListener;
 
 /// What `setup` returns when the daemon answers its first request with

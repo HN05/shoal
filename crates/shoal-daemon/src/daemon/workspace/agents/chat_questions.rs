@@ -6,11 +6,11 @@ use anyhow::{Context, Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 
 use super::Manager;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::questions::{Turn, set_chat_mark},
     model::{Chat, PresentSpace, Workspace},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// Mark the current turn of the agent of the space `selector` names, a

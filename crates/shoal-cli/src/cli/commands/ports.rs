@@ -2,7 +2,6 @@
 use anyhow::{Result, ensure};
 
 use crate::client::output::leases::Suggested;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::WorkspaceScope,
@@ -13,6 +12,7 @@ use crate::{
     client::leases::{self, PortAcquisition},
     model::{PortCatalog, PortOverview, PortRequest, PortReservation},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 use super::workspace_overviews;
 

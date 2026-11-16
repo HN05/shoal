@@ -11,11 +11,11 @@ use super::super::{
     scope::{Caller, Scoped, denied},
     workspace::{self, Manager},
 };
-use crate::client::{events::EventCursor, space_names::SpaceSelector};
 use crate::config::permissions::PermissionKey;
 use crate::protocol::{
     self, Body, ConfigTarget, ErrorCode, RepositoryLayers, Response, WorkspaceMethod,
 };
+use shoal_protocol::{events::EventCursor, space_names::SpaceSelector};
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,

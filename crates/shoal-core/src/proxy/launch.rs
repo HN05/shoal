@@ -1,10 +1,10 @@
 //! The proxy a tracked agent's wrapper runs, the key its requests name,
 //! and the reports it sends the daemon.
-use crate::client::{space_names::SpaceSelector, time::UnixTime};
 use anyhow::Context;
 use anyhow::Result;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::{space_names::SpaceSelector, time::UnixTime};
 
 use crate::paths::CommandPaths;
 
@@ -117,7 +117,7 @@ pub(super) async fn send_from(
     if !origin.upgraded.load(Ordering::Relaxed) {
         match crate::client::connection::call(paths, report).await {
             Ok(_) => return true,
-            Err(error) if error.is::<crate::client::connection::ProtocolMismatch>() => {
+            Err(error) if error.is::<shoal_protocol::connection::ProtocolMismatch>() => {
                 origin.upgraded.store(true, Ordering::Relaxed);
             }
             Err(_) => return false,
@@ -237,7 +237,7 @@ pub(super) struct Sent {
     /// When the upstream refuses requests until.
     reset: Option<UnixTime>,
     /// The limit the upstream is under, with when it was sent.
-    limit: Option<(crate::client::executions::UpstreamLimit, UnixTime)>,
+    limit: Option<(shoal_protocol::executions::UpstreamLimit, UnixTime)>,
 }
 
 /// How often a limit the proxy keeps meeting is sent again, so the daemon
@@ -291,7 +291,7 @@ impl Reporter {
         attempt: u32,
         wait: std::time::Duration,
     ) {
-        let retry = crate::client::executions::ProxyRetry {
+        let retry = shoal_protocol::executions::ProxyRetry {
             failure,
             attempt,
             next_at: self.after(wait),
@@ -320,7 +320,7 @@ impl Reporter {
             return;
         };
         let now = (self.now)();
-        let limit = crate::client::executions::UpstreamLimit {
+        let limit = shoal_protocol::executions::UpstreamLimit {
             limit,
             until: wait.map(|wait| now + wait),
         };
@@ -334,7 +334,7 @@ impl Reporter {
     }
 
     /// Whether the daemon took the upstream's `limit`.
-    async fn limit_sent(&self, limit: Option<crate::client::executions::UpstreamLimit>) -> bool {
+    async fn limit_sent(&self, limit: Option<shoal_protocol::executions::UpstreamLimit>) -> bool {
         self.send(crate::protocol::AgentMethod::ReportUpstreamLimit {
             workspace: SpaceSelector::id(&self.workspace),
             execution: self.execution.clone(),
@@ -360,7 +360,7 @@ impl Reporter {
         }
     }
 
-    async fn retried(&self, retry: Option<crate::client::executions::ProxyRetry>) -> bool {
+    async fn retried(&self, retry: Option<shoal_protocol::executions::ProxyRetry>) -> bool {
         self.send(crate::protocol::AgentMethod::ReportProxyRetry {
             workspace: SpaceSelector::id(&self.workspace),
             execution: self.execution.clone(),
@@ -431,8 +431,10 @@ fn turn_failure(failure: shoal_proxy::Failure) -> crate::state::TurnFailure {
 }
 
 /// The limit of its upstream a proxy failure shows, if any.
-fn service_limit(failure: shoal_proxy::Failure) -> Option<crate::client::executions::ServiceLimit> {
-    use crate::client::executions::ServiceLimit;
+fn service_limit(
+    failure: shoal_proxy::Failure,
+) -> Option<shoal_protocol::executions::ServiceLimit> {
+    use shoal_protocol::executions::ServiceLimit;
     use shoal_proxy::Failure;
     match failure {
         Failure::RateLimited => Some(ServiceLimit::RateLimited),

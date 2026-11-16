@@ -6,11 +6,9 @@ use super::{
     lookup::{find, running, scope},
     presets,
 };
-use crate::client::space_names::SpaceSelector;
-use crate::{
-    cli::{context::Context, output::Palette, terminal, ui},
-    demos::Running,
-};
+use crate::cli::{context::Context, output::Palette, terminal, ui};
+use shoal_protocol::demos::Running;
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn open(
     ctx: &Context,

@@ -7,7 +7,6 @@ use anyhow::{Context, Result};
 use shoal_ids::repository_ids::RepositoryId;
 
 use crate::{
-    client::space_names::SpaceSelector,
     config::{
         Config,
         permissions::{self, PermissionChange, Permissions, PermissionsConfig, SpaceMode},
@@ -16,6 +15,7 @@ use crate::{
     model::{Chat, PresentSpace, SpaceKind, Workspace},
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// The permissions `caller` acts under in the registered repository

@@ -5,7 +5,7 @@ use anyhow::Result;
 use super::lookup::named;
 use crate::cli::{context::Context, terminal};
 use crate::client::output::demo::{Screen, Sent};
-use crate::client::space_names::SpaceSelector;
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn screen(
     ctx: &Context,

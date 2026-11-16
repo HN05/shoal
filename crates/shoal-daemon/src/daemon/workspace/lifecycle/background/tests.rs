@@ -1,11 +1,11 @@
 use super::super::tests::{fixture, fixture_with_hook, fixture_with_removal_hook};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{notifications::NotificationKind, scope::Caller},
     removal::{NOTHING, UnsavedWork},
     state::WorkspaceState,
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 
 fn everything() -> UnsavedWork {
     UnsavedWork::Confirmed {

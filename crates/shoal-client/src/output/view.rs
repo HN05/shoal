@@ -3,10 +3,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     forge::{ci::run_view::RunView, items::link::LinkKind, review::view::ItemView},
-    model::Relation,
     output::outputs,
-    reviews::Review,
 };
+use shoal_protocol::{model::Relation, reviews::Review};
 
 /// What `shoal view` shows of one selected item.
 #[derive(Serialize, Deserialize)]

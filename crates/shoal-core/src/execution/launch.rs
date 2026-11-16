@@ -20,9 +20,8 @@ use super::{
     supervise::{Outcome, Saving, supervise},
     takeover, wake,
 };
-use crate::client::space_names::SpaceSelector;
 use crate::{
-    client::{approvals::Undecided, connection},
+    client::connection,
     config::permissions::Pushes,
     env,
     model::ExecutionPlan,
@@ -32,6 +31,8 @@ use crate::{
     sessions::Origin,
     workers::{Worker, internal_command},
 };
+use shoal_protocol::approvals::Undecided;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A tracked execution the daemon recorded, with the command it runs next and
 /// what that command receives.

@@ -10,8 +10,6 @@ use std::path::PathBuf;
 use anyhow::Result;
 use rusqlite::Transaction;
 
-pub(crate) use crate::client::agent_messages::AgentMessage;
-use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     daemon::{
         notifications::NotificationKind,
@@ -20,6 +18,8 @@ use crate::{
     },
     model::PresentSpace,
 };
+pub(crate) use shoal_protocol::agent_messages::AgentMessage;
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 mod recipients;
 mod settle;

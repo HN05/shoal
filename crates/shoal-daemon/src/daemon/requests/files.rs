@@ -8,8 +8,8 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
-use crate::client::space_names::SpaceSelector;
 use crate::protocol::{Body, FileMethod};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Every answer lists files, which no limit keeps to one frame, so each is
 /// sent in pages.

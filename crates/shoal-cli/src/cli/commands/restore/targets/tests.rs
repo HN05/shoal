@@ -1,7 +1,7 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::model::Workspace;
 use crate::time::UnixTime;
+use shoal_protocol::space_names::SpaceSelector;
 
 fn spaces() -> Spaces {
     let workspace: Workspace = serde_json::from_value(serde_json::json!({

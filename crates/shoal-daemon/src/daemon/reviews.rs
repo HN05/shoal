@@ -12,12 +12,12 @@ use anyhow::{Context, Result, bail, ensure};
 use tokio::sync::watch;
 
 use super::{log, workspace::Manager};
-use crate::client::{space_names::SpaceSelector, time::UnixTime};
 use crate::{
     agent::Agent,
     config::Effective,
     reviews::{FindingId, Outcome, Review, ReviewId, ReviewTarget},
 };
+use shoal_protocol::{space_names::SpaceSelector, time::UnixTime};
 
 mod delivery;
 mod false_positives;

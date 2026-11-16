@@ -9,7 +9,6 @@ use super::{
     chat,
     workspaces::{self, link::AddInput},
 };
-use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     cli::{
@@ -26,6 +25,7 @@ use crate::{
     protocol::ConfigTarget,
     start_plan::{CopyCreation, Creation},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn run(ctx: &Context, mut args: StartArgs) -> Result<i32> {
     let handoff = args.handoff.take();

@@ -8,7 +8,6 @@ use std::time::Duration;
 use anyhow::{Result, bail, ensure};
 
 use crate::client::queue;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         commands::{queued_agents, sessions},
@@ -17,6 +16,7 @@ use crate::{
     model::QueueEntry,
     state::{QueueKind, QueueState},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// How long to wait for the agent's session, which setup comes before.
 pub(in crate::cli::commands) const WAIT: Duration = Duration::from_secs(600);

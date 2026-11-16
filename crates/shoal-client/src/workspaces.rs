@@ -8,11 +8,13 @@ use std::{collections::BTreeMap, path::PathBuf};
 use anyhow::Result;
 use serde::de::DeserializeOwned;
 
-use crate::space_names::SpaceSelector;
 use crate::{
     chats,
-    config::hooks::HookKind,
     connection::{Daemon, call, pages, request},
+};
+use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{
+    config::hooks::HookKind,
     model::{
         Blocker, ConflictCheck, DiffBase, Inspection, MergePreview, OwnedPlace, PresentSpace,
         Refreshed, RenamedWorkspace, SpaceStatus, SpaceTarget, Spaces, UntrackedWorktree,
@@ -162,7 +164,7 @@ pub async fn rename(
 pub async fn set_name(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
-    name: crate::space_names::SpaceName,
+    name: shoal_protocol::space_names::SpaceName,
 ) -> Result<RenamedWorkspace> {
     request(
         daemon,
@@ -305,9 +307,9 @@ pub async fn close_owned_place(
 pub async fn launch_permissions(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
-    mode: crate::config::modes::ModeName,
-    narrowing: crate::config::permissions::PermissionsConfig,
-) -> Result<crate::config::permissions::Permissions> {
+    mode: shoal_protocol::config::modes::ModeName,
+    narrowing: shoal_protocol::config::permissions::PermissionsConfig,
+) -> Result<shoal_protocol::config::permissions::Permissions> {
     let method = WorkspaceMethod::LaunchPermissions {
         workspace,
         mode,
@@ -320,8 +322,8 @@ pub async fn launch_permissions(
 /// action in the registered repository `repository`.
 pub async fn held_permissions(
     daemon: &impl Daemon,
-    repository: Option<crate::repository::Selector>,
-) -> Result<crate::config::permissions::Permissions> {
+    repository: Option<shoal_protocol::repository::Selector>,
+) -> Result<shoal_protocol::config::permissions::Permissions> {
     request(daemon, WorkspaceMethod::HeldPermissions { repository }).await
 }
 
@@ -334,14 +336,14 @@ pub async fn environment(
     inherited: Option<std::ffi::OsString>,
 ) -> Result<BTreeMap<String, String>> {
     let values = request(daemon, WorkspaceMethod::WorkspaceEnv { workspace }).await?;
-    crate::env::export_configured(values, inherited)
+    shoal_protocol::env::export_configured(values, inherited)
 }
 
 /// Revoke the environment `token` handed out for `workspace`.
 pub async fn revoke_environment(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
-    token: crate::scope_tokens::ScopeToken,
+    token: shoal_protocol::scope_tokens::ScopeToken,
 ) -> Result<()> {
     request(
         daemon,

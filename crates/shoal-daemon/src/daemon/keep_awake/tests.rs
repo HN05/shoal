@@ -1,6 +1,6 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{manager, repository};
+use shoal_protocol::space_names::SpaceSelector;
 
 async fn has_work(manager: &Manager) -> bool {
     manager.agents_have_work().await.unwrap()

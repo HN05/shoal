@@ -5,7 +5,6 @@ use anyhow::{Context as _, Result, ensure};
 use shoal_ids::space_ids::SpaceId;
 
 use crate::{
-    client::assignments::Done,
     daemon::{
         notifications::{About, NotificationKind},
         progress, questions,
@@ -18,6 +17,7 @@ use crate::{
     },
     model::{Chat, Completion, PresentSpace},
 };
+use shoal_protocol::assignments::Done;
 
 impl Manager {
     /// Record `done` for the chat `selector` names, at its checkout's HEAD,

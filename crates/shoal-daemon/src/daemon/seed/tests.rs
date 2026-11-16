@@ -1,9 +1,9 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{
     commit, git, install_test_script, manager, native_cloning, repository,
 };
 use crate::state::WorkspaceState;
+use shoal_protocol::space_names::SpaceSelector;
 use std::path::PathBuf;
 
 fn modified(path: &Path) -> std::time::SystemTime {

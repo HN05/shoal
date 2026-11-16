@@ -8,15 +8,12 @@ use futures_util::{StreamExt, stream::FuturesUnordered};
 use tokio::time::{Instant, sleep, sleep_until};
 
 use super::plan::{Restart, running_agents, skip_reason, stopped_reason};
-use crate::{
-    agents,
+use crate::{agents, connection::Daemon, output::agents::Skipped, saved};
+use shoal_protocol::{
     config::permissions::PermissionChange,
-    connection::Daemon,
     executions::STAGGER,
     model::{PresentSpace, RunningAgent},
-    output::agents::Skipped,
     protocol::{ErrorCode, RemoteError},
-    saved,
     sessions::Origin,
     space_names::{SpaceName, SpaceSelector},
 };

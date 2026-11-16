@@ -2,7 +2,6 @@
 use anyhow::{Result, ensure};
 
 use crate::client::output::workspaces::Bases;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::changes::BaseCommand,
@@ -12,6 +11,7 @@ use crate::{
     model::{SpaceKind, SpaceRef, Workspace, WorkspaceRef},
     refusal::{Reason, Refusal},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn run(
     ctx: &Context,

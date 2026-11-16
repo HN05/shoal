@@ -7,7 +7,6 @@ mod picker;
 pub(super) use picker::{decide_row, print_rows};
 
 use super::EXIT_BUSY;
-use crate::client::space_names::SpaceSelector;
 use crate::client::{leases::RefusalCode, output::acquisition::NotAcquired};
 use crate::{
     cli::{
@@ -16,13 +15,14 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Cell},
     },
-    client::{
-        approvals::{
-            self, ApprovalRequest, DecisionStatus, Duplicate, GateStep, ProposalDecision,
-            Specification,
-        },
-        item_numbers::ItemNumber,
+    client::approvals,
+};
+use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{
+    approvals::{
+        ApprovalRequest, DecisionStatus, Duplicate, GateStep, ProposalDecision, Specification,
     },
+    item_numbers::ItemNumber,
 };
 
 pub(super) async fn run(ctx: &Context, args: ApprovalsArgs) -> Result<i32> {

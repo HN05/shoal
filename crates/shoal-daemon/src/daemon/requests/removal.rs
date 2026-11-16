@@ -9,14 +9,14 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
-use crate::client::space_names::SpaceSelector;
 use crate::{
-    client::processes::Selection,
     model::{PresentSpace, StoppedSpace},
     process::identity,
     protocol::{Body, QueuedLaunches, RemovalMethod, UntrackedProcesses},
     removal::InspectionPolicy,
 };
+use shoal_protocol::processes::Selection;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Whether `method` moves a space through a lifecycle state that an exit
 /// would interrupt, which an exit that waits for work in progress holds back.

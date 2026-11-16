@@ -364,7 +364,7 @@ impl Manager {
             return Ok(());
         }
         let env = crate::terminal::detached_start_environment(chat.origin.as_ref());
-        let selector = crate::client::space_names::SpaceSelector::id(id);
+        let selector = shoal_protocol::space_names::SpaceSelector::id(id);
         (self
             .start_stopped_restore(&selector, &chat.execution, env)
             .await)
@@ -405,7 +405,7 @@ impl Manager {
         // The hints select the space by its number, which it keeps as the
         // other kind, since names select nothing.
         let (name, number) = match self
-            .space(&crate::client::space_names::SpaceSelector::id(id))
+            .space(&shoal_protocol::space_names::SpaceSelector::id(id))
             .await
         {
             Ok(space) => (space.name().clone(), space.number()),

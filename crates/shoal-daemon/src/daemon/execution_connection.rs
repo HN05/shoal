@@ -23,7 +23,6 @@ use super::{
         places::ExecutionPlace,
     },
 };
-use crate::client::space_names::SpaceSelector;
 use crate::{
     execution::TrackedAgent,
     model::PresentSpace,
@@ -31,6 +30,7 @@ use crate::{
     protocol::{self, Body, Control, ErrorCode, ExecutionEvent, Protection, Reattach, Response},
 };
 use registration::Registered;
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) struct ExecutionContext {
     pub space: SpaceSelector,

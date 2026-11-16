@@ -5,7 +5,6 @@ use std::{sync::Arc, time::Duration};
 use tokio::{io::BufReader, net::UnixStream, task::JoinHandle};
 
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         execution_connection::{ExecutionContext, execute},
@@ -17,6 +16,7 @@ use crate::{
     model::Workspace,
     protocol::{self, Body, Control, ExecutionEvent, Response},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 async fn bounded<T>(future: impl Future<Output = T>) -> T {
     tokio::time::timeout(Duration::from_secs(60), future)

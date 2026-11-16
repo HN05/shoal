@@ -178,7 +178,8 @@ async fn administering_shoal_follows_the_admin_permission() {
 
 #[tokio::test]
 async fn releasing_the_user_s_hold_follows_the_user_holds_permission() {
-    use crate::{client::space_names::SpaceSelector, model::HoldPlacer};
+    use crate::model::HoldPlacer;
+    use shoal_protocol::space_names::SpaceSelector;
 
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
@@ -310,11 +311,11 @@ async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
 #[tokio::test]
 async fn deleting_a_pr_s_branch_follows_the_merge_permission() {
     use crate::{
-        client::space_names::SpaceSelector,
         daemon::scope::Scoped,
         forge::items::{action::Action as ItemAction, link::ItemKind},
         protocol::{ItemContext, ItemMethod},
     };
+    use shoal_protocol::space_names::SpaceSelector;
 
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
@@ -413,7 +414,8 @@ async fn a_decider_without_a_repository_decides_as_the_action_s_repository_allow
 
 #[tokio::test]
 async fn an_approval_to_release_a_hold_covers_only_the_space_it_names() {
-    use crate::{client::space_names::SpaceSelector, model::HoldPlacer};
+    use crate::model::HoldPlacer;
+    use shoal_protocol::space_names::SpaceSelector;
 
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");

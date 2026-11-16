@@ -4,7 +4,6 @@
 use anyhow::{Context as _, Result, bail, ensure};
 
 use super::record::ConvertedChat;
-use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery;
 use crate::{
     config::modes::ModeName,
@@ -14,6 +13,7 @@ use crate::{
     state::WorkspaceState,
 };
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// Record that the workspace `selector` names becomes a chat in `mode`,

@@ -3,7 +3,6 @@
 //! user names a registered repository to act in without a workspace.
 use anyhow::{Result, ensure};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{context::Context, ui},
     env,
@@ -12,6 +11,7 @@ use crate::{
     protocol::ItemContext,
     repository::{self, NotRegistered},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// What is missing when nothing gives a non-interactive command its space
 /// or repository.

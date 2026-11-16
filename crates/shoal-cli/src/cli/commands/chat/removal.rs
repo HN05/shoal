@@ -4,9 +4,9 @@ use anyhow::Result;
 
 use crate::{
     cli::context::Context,
-    client::output::chat::RemovedChat,
     model::{Chat, Spaces},
 };
+use shoal_protocol::chats::RemovedChat;
 
 /// What removing `chat` takes besides it, as `spaces` shows: the spaces
 /// below it, with the chats in their worktrees, its running agent and its
@@ -49,7 +49,7 @@ pub(in crate::cli::commands) fn message(removed: &str, chat: &RemovedChat) -> St
         [] => removed.to_owned(),
         children => format!(
             "{removed}; also removed {}",
-            crate::client::space_names::join(children, ", ")
+            shoal_protocol::space_names::join(children, ", ")
         ),
     }
 }

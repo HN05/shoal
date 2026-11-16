@@ -1,4 +1,5 @@
 use serde_json::json;
+use shoal_protocol::reviews::FailureReason;
 
 use super::*;
 

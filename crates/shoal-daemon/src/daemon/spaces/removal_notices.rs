@@ -3,7 +3,6 @@
 use anyhow::Result;
 
 use crate::{
-    client::space_names::SpaceName,
     daemon::{
         events::EventCause,
         log,
@@ -13,6 +12,7 @@ use crate::{
     model::{PresentSpace, SpaceKind, SpaceRef, Workspace},
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceName;
 
 /// A space a cleanup removed or retained.
 #[derive(Debug, Clone, Copy)]

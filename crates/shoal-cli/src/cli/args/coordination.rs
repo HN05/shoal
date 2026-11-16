@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use clap::{Args, Subcommand};
 
-use crate::client::item_numbers::ItemNumber;
-use crate::client::space_names::SpaceSelector;
+use shoal_protocol::item_numbers::ItemNumber;
+use shoal_protocol::space_names::SpaceSelector;
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]

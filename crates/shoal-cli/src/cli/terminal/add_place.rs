@@ -1,6 +1,6 @@
 //! The place a host opened for an addition: the add worker that runs there,
 //! and how the place hosts the workspace it adds.
-use crate::client::space_names::SpaceSelector;
+use shoal_protocol::space_names::SpaceSelector;
 use std::path::Path;
 
 use anyhow::{Context as _, Result};

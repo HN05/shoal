@@ -2,9 +2,9 @@
 use super::super::restore::agents::queue::{Stopped, restore_stopped, saved_executions};
 use crate::cli::commands::restore::agents::reports::QueuedExt;
 use crate::client::output::restore::Queued;
-use crate::client::space_names::SpaceSelector;
 use crate::config_file::ConfigExt;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 use std::{
     collections::BTreeSet,
     path::{Path, PathBuf},

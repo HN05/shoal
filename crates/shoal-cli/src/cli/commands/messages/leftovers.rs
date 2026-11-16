@@ -2,7 +2,7 @@
 //! chat, processes its commands left running, and how to stop them.
 use std::time::Duration;
 
-use crate::client::{processes::Leftover, time::UnixTime};
+use shoal_protocol::{processes::Leftover, time::UnixTime};
 
 /// The longest command a notice shows of a leftover.
 const COMMAND_LIMIT: usize = 80;

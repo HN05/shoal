@@ -3,7 +3,6 @@ use anyhow::{Context as _, Result};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::create::CopyArgs,
@@ -12,6 +11,7 @@ use crate::{
     },
     protocol::CopySource,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// What a start or split copies.
 pub(super) struct Copied {

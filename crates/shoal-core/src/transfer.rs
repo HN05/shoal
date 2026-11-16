@@ -2,11 +2,11 @@
 //! there, which `shoal move import` opens. Every package holds the space's
 //! removal record, its agents with their sessions and the sessions' files;
 //! a workspace's also holds a Git bundle of its checkpoint.
-use crate::client::space_names::SpaceName;
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::space_names::SpaceName;
 use std::{
     collections::BTreeSet,
     io::{BufRead, Read, Write},
@@ -15,20 +15,21 @@ use std::{
 
 use anyhow::{Context, Result, ensure};
 
-pub use crate::client::transfer::{
+pub use carried::{CarriedChatExt, carried_chats};
+pub use shoal_protocol::transfer::{
     CarriedChat, CarriedSessionFile, ExportedSpace, Manifest, PackagedSpace, SessionFile, Sessions,
     SpaceImport,
 };
-pub use carried::{CarriedChatExt, carried_chats};
 
 mod carried;
 use crate::{
-    client::transcripts::{self, Environments},
     config::Effective,
     execution::recovery::{Copied, LastSession, Record, StoppedAgent},
     git::{self, default_branch::DefaultBranchLookup},
     model::{RemovedKind, RemovedSpace, Repository},
 };
+use shoal_protocol::transcripts;
+use shoal_protocol::transcripts::Environments;
 
 /// The first line of a package names its format and the version of it,
 /// the lowest that reads the package, so an older Shoal imports what it

@@ -10,12 +10,12 @@ use super::{
     Settings,
     labels::{self, Labelled},
 };
-use crate::client::{events::EventKind, time::UnixTime};
 use crate::{
     daemon::{progress, store},
     forge::{items::link::LinkKind, updates::SnapshotState},
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_protocol::{events::EventKind, time::UnixTime};
 use shoal_schedule::{
     priority::Priority,
     rank::Tier,

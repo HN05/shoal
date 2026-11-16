@@ -9,7 +9,7 @@
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension as _, params};
 
-use crate::client::space_names::SpaceName;
+use shoal_protocol::space_names::SpaceName;
 
 pub(super) fn names_from_titles(db: &Connection) -> Result<()> {
     let chat_renamed = drop_rename_triggers(db)?;

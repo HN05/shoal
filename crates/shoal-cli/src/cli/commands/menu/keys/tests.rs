@@ -3,7 +3,7 @@ use crate::cli::{
     Command,
     args::lifecycle::{LifecycleCommand, StopArgs},
 };
-use crate::client::space_names::SpaceSelector;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The stop key on a chat row stops the chat and the spaces below it.
 #[test]

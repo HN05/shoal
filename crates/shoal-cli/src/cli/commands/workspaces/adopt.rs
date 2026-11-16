@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context as _, Result, ensure};
 
 use super::recovery::{issues, reconcile};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         commands::repositories,
@@ -13,11 +12,12 @@ use crate::{
         output::{Palette, Style},
         shell, ui,
     },
-    client::recovery::{DirectoryState, ReconcileOptions},
     git,
     model::Workspace,
     repository,
 };
+use shoal_protocol::recovery::{DirectoryState, ReconcileOptions};
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(in crate::cli::commands) async fn adopt(
     ctx: &Context,

@@ -7,8 +7,6 @@ use crate::client::output::{
     batch::Failure,
     restore::{Queued, Reopened, StartedRestores},
 };
-use crate::client::saved::Queuing;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{commands::turns::Continuation, context::Context, ui},
     config::permissions::PermissionChange,
@@ -17,6 +15,8 @@ use crate::{
 };
 use anyhow::{Context as _, Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::saved::Queuing;
+use shoal_protocol::space_names::SpaceSelector;
 
 use super::targets::Selected;
 

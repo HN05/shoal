@@ -1,6 +1,6 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::manager;
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn repeated_conflicts_collapse_until_read_and_completed_events_never_do() {
@@ -551,7 +551,7 @@ async fn a_message_to_the_user_sends_a_limited_number_of_files() {
         .unwrap();
     let shot = temp.path().join("shot.png");
     std::fs::write(&shot, "png").unwrap();
-    let files = vec![NewFile::from(shot); crate::client::files::MAX_SENT + 1];
+    let files = vec![NewFile::from(shot); shoal_protocol::files::MAX_SENT + 1];
     let sent = manager
         .send_message(
             &SpaceSelector::id(&workspace.id),

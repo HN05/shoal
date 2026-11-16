@@ -6,11 +6,11 @@ use anyhow::{Result, bail};
 
 use super::agents::setups::FailedSetup;
 use crate::client::output::restore::{Restorable, StoppedWorkspace};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{args::SpaceTargets, context::Context, ui},
     model::{Chat, PresentSpace, RemovedSpace, Spaces},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The space a `shoal restore` target names.
 #[derive(Debug, PartialEq)]

@@ -12,8 +12,8 @@ use anyhow::Result;
 use tokio::{net::UnixListener, task::JoinSet, time::timeout};
 
 use super::{install_test_script, isolated_test, manager, repository};
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::{Server, connections, serve, store, workspace::Manager};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A hang guard, not a deadline for process scans on a shared CI host. Its
 /// panic names the caller, so a hang shows which exchange never finished.

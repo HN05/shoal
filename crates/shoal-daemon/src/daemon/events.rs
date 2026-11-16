@@ -7,12 +7,12 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
 use super::{log, workspace::Manager};
-pub(crate) use crate::client::events::{
+use crate::time::UnixTime;
+pub(crate) use shoal_protocol::events::{
     AgentEvent, AlertEvent, ApprovalEvent, EventCause, EventCursor, EventDetails, EventItem,
     EventKind, FileEvent, FileEventDetails, JobEndedEvent, ShoalEvent, ShoalEventDetails,
     ShoalEventKind, SpaceEvent, StoppedProcess,
 };
-use crate::time::UnixTime;
 
 /// A journal row as stored: file events carry the space's identity in
 /// place of its fields, and Shoal's own events no space.
@@ -46,8 +46,8 @@ fn decode(id: EventCursor, created_at: UnixTime, record: &str) -> Result<EventIt
 }
 
 /// The log entry of the journal's `item`; a gap is none.
-fn log_entry(item: EventItem) -> Option<crate::client::log::LogEntry> {
-    use crate::client::log::LogEntry;
+fn log_entry(item: EventItem) -> Option<shoal_protocol::log::LogEntry> {
+    use shoal_protocol::log::LogEntry;
     Some(match item {
         EventItem::Event(event) => LogEntry::Event(event),
         EventItem::File(event) => LogEntry::File(event),
@@ -289,7 +289,7 @@ fn record_with(
 pub(crate) fn record_progress(
     db: &Connection,
     id: &SpaceId,
-    progress: &crate::client::progress::Progress,
+    progress: &shoal_protocol::progress::Progress,
 ) -> Result<()> {
     record_with(db, id, EventKind::ProgressChanged, "progress", progress)
 }
@@ -299,7 +299,7 @@ pub(crate) fn record_blocker(
     db: &Connection,
     id: &SpaceId,
     kind: EventKind,
-    blocker: &crate::client::events::BlockerEvent,
+    blocker: &shoal_protocol::events::BlockerEvent,
 ) -> Result<()> {
     ensure!(matches!(
         kind,
@@ -369,7 +369,7 @@ fn record_shoal(db: &Connection, details: &ShoalEventDetails) -> Result<()> {
 pub(crate) fn record_approval(
     db: &Connection,
     kind: EventKind,
-    request: &crate::client::approvals::ApprovalRequest,
+    request: &shoal_protocol::approvals::ApprovalRequest,
 ) -> Result<()> {
     ensure!(matches!(
         kind,
@@ -388,8 +388,8 @@ pub(crate) fn record_approval(
 /// transaction that records it.
 pub(crate) fn record_gate(
     db: &Connection,
-    request: &crate::client::approvals::ApprovalRequest,
-    gate: &crate::client::events::GateEvent,
+    request: &shoal_protocol::approvals::ApprovalRequest,
+    gate: &shoal_protocol::events::GateEvent,
 ) -> Result<()> {
     record_with(db, &request.space_id, EventKind::GateDecided, "gate", gate)
 }

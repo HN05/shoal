@@ -6,15 +6,15 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
 use super::{SimRequest, Simulator};
-pub(crate) use crate::client::sim::{
-    AuditEntry, CleanAction, CleanRequest, CleanRequestStatus, EvictedDevice,
-};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{allocation::Allocation, approvals::DecisionStatus, workspace::Manager},
     model::Workspace,
     time::UnixTime,
 };
+pub(crate) use shoal_protocol::sim::{
+    AuditEntry, CleanAction, CleanRequest, CleanRequestStatus, EvictedDevice,
+};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Operations on the client type [`CleanRequest`] that only the `shoal` command uses.
 pub(crate) trait CleanRequestExt {

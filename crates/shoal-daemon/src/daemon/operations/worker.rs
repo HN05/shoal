@@ -2,7 +2,7 @@
 //! from the daemon as queued agents are, reading its order on standard
 //! input, with what it and its processes write relayed as the operation's
 //! output.
-use crate::client::scope_tokens::ScopeToken;
+use shoal_protocol::scope_tokens::ScopeToken;
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use futures_util::future::BoxFuture;

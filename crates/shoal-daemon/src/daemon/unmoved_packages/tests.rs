@@ -1,6 +1,7 @@
 use std::fs;
 
-use crate::{client::notifications::NotificationKind, daemon::test_support::manager};
+use crate::daemon::test_support::manager;
+use shoal_protocol::notifications::NotificationKind;
 
 /// The messages of the unread notifications of moved packages.
 async fn moved_notices(manager: &crate::daemon::workspace::Manager) -> Vec<String> {

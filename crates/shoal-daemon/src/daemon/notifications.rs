@@ -7,11 +7,11 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};
 
-pub(crate) use crate::client::notifications::{Cleared, Notification, NotificationKind, Sent};
-use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::daemon::log;
 use crate::daemon::workspace::{Manager, Source};
 use crate::daemon::workspace_files::{self, Attacher, FileSource, NewFile, SentFile, sent_files};
+pub(crate) use shoal_protocol::notifications::{Cleared, Notification, NotificationKind, Sent};
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 /// Rows kept before older read notifications are pruned; unread ones stay.
 const RETAINED: usize = 500;

@@ -3,18 +3,11 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    output::outputs,
+use crate::output::outputs;
+use shoal_protocol::{
     protocol::{DaemonStatus, Work},
     sessions::HostName,
 };
-
-/// A service definition, as `shoal daemon install --dry-run` prints it.
-#[derive(Serialize, Deserialize)]
-pub struct Definition {
-    pub path: PathBuf,
-    pub content: String,
-}
 
 /// An installed daemon service, running.
 #[derive(Debug, Serialize, Deserialize)]
@@ -73,12 +66,4 @@ pub struct ConfigInstalled {
     pub daemon_reloaded: bool,
 }
 
-outputs!(
-    Definition,
-    Installed,
-    Status,
-    Running,
-    Kept,
-    Reloaded,
-    ConfigInstalled
-);
+outputs!(Installed, Status, Running, Kept, Reloaded, ConfigInstalled);

@@ -10,7 +10,6 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     agents::PromptWake,
     client::connection,
@@ -19,6 +18,7 @@ use crate::{
     protocol::AgentMethod,
     terminal::{PromptSession, WAKE_PROMPT},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Prompts the agent until dropped, when the agent's process ends.
 pub(super) struct Waker(tokio::task::JoinHandle<()>);

@@ -7,9 +7,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result, anyhow, bail};
 use shoal_refs::{BranchName, CommitId};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
-    client::links::PushOutcome,
     config::permissions::{Permission, PermissionSource, Pushes},
     daemon::{
         approvals::{
@@ -25,6 +23,8 @@ use crate::{
     model::Workspace,
     protocol::operations::OperationSpec,
 };
+use shoal_protocol::links::PushOutcome;
+use shoal_protocol::space_names::SpaceSelector;
 
 use super::proposals::{Proposed, Proposer, proposal};
 

@@ -1,9 +1,9 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{install_test_script, manager, repository};
 use crate::daemon::workspace::agents::ProtectionExt;
 use crate::execution::recovery::RecordExt;
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::space_names::SpaceSelector;
 use std::{fs, future::Future, sync::Arc};
 use tokio::time::sleep;
 

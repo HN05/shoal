@@ -1,10 +1,9 @@
-use crate::client::space_names::SpaceName;
 use crate::git::existing_branch::BranchExt;
 use shoal_ids::repository_ids::RepositoryId;
+use shoal_protocol::space_names::SpaceName;
 use shoal_refs::{BranchName, CommitId};
 use std::{fs, path::PathBuf, sync::Arc};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         scope,
@@ -15,6 +14,7 @@ use crate::{
     protocol::{DaemonMethod, ExecutionMethod, Operation, RemovalMethod, WorkspaceMethod},
     removal::InspectionPolicy,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 struct Fixture {
     root: tempfile::TempDir,

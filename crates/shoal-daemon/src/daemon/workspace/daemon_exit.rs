@@ -10,9 +10,9 @@ use super::{
     executions::{Save, StopRequest},
     shutdown_stop::Shutdown,
 };
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::workspace::runner::JobStop;
 use crate::protocol::{Exit, QueuedLaunches};
+use shoal_protocol::space_names::SpaceSelector;
 use std::collections::HashSet;
 
 /// What becomes of running work as the daemon exits.

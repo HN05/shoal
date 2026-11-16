@@ -10,9 +10,7 @@ use std::{
 
 use serde_json::{Value, json};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
-    client::resources::ResourceRequest,
     daemon::{
         notifications::NotificationKind,
         test_support::{configure, git, manager, repository},
@@ -23,6 +21,8 @@ use crate::{
     state::{QueueKind, QueueState},
 };
 use shoal_forge::{RepoRequests, ci::runner::JobCommand, test_support::Server};
+use shoal_protocol::resources::ResourceRequest;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A test launch's command and the execution standing in for it.
 type Launched = (JobCommand, StartedExecution);

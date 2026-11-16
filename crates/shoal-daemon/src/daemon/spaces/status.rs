@@ -5,12 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
-    client::{
-        executions::{ProxyRetry, TurnRetry},
-        links::{issue, pr::Registration},
-    },
     config::permissions::Permissions,
     daemon::{
         approvals,
@@ -25,6 +20,11 @@ use crate::{
     repository,
 };
 use shoal_forge::{RepoRequests, account::Account, items::issue::IssueRequests};
+use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{
+    executions::{ProxyRetry, TurnRetry},
+    links::{issue, pr::Registration},
+};
 
 /// What a space records about its links and work, which its status shows
 /// with their state on the forge.

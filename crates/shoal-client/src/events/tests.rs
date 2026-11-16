@@ -1,5 +1,5 @@
 use super::*;
-use crate::{
+use shoal_protocol::{
     paths::Paths,
     protocol::{Method, Operation, Request},
 };

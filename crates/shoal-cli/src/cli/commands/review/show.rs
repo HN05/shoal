@@ -3,7 +3,6 @@
 use anyhow::Result;
 
 use crate::client::reviews;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
@@ -14,6 +13,7 @@ use crate::{
     installed::Executable,
     reviews::{Finding, Posted, Review, ReviewId, ReviewState, ReviewTarget, Severity},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// List the reviews of the space, a chat's those of its linked PRs, else
 /// the repository's, else every one, newest first.

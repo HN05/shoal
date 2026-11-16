@@ -3,7 +3,7 @@
 //! markers. The section is Shoal's, so a
 //! later update replaces what anyone wrote between them; the rest of the
 //! body stays as it was, byte for byte.
-use crate::client::progress::{Progress, RecordedBlocker};
+use shoal_protocol::progress::{Progress, RecordedBlocker};
 
 const START: &str = "<!-- shoal:progress -->";
 const END: &str = "<!-- /shoal:progress -->";

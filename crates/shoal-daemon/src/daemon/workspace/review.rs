@@ -10,7 +10,6 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, params};
 
 use super::{GuardMode, Manager};
-use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     config::Effective,
     daemon::{
@@ -28,6 +27,7 @@ use crate::{
     model::{Chat, ReadyMarks, Repository, ReviewMark, SkippedPr},
 };
 use pulls::Pulls;
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 mod pulls;
 

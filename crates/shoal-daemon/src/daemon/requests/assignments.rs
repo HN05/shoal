@@ -8,8 +8,8 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::{Manager, PermissionTargets},
 };
-use crate::client::space_names::SpaceSelector;
 use crate::protocol::{AssignmentMethod, Body};
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,

@@ -4,7 +4,6 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_refs::BranchName;
 use std::{fs, path::Path, sync::Arc};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{commit, git, manager, repository},
@@ -17,6 +16,7 @@ use crate::{
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn exporter() -> (
     tempfile::TempDir,

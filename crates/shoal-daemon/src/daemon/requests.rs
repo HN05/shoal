@@ -24,8 +24,8 @@ mod secrets;
 mod simulators;
 mod subscriptions;
 pub(super) mod workspaces;
-use crate::client::scope_tokens::ScopeToken;
 use anyhow::Result;
+use shoal_protocol::scope_tokens::ScopeToken;
 
 use super::{Server, answer::Answer, scope::Caller};
 use crate::protocol::Operation;

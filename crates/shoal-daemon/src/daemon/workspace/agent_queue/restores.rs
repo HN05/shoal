@@ -1,17 +1,17 @@
 //! Restores a stopped agent's waiting wrapper carries out: queuing one,
 //! waiting for its admission, and keeping, returning or removing its entry.
-use crate::client::space_names::SpaceSelector;
 use anyhow::{Context, Result, bail};
 use rusqlite::{OptionalExtension, params};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 
 use super::{
     Grant,
     store::{WaitingRestore, record_waiting_restore},
 };
-use crate::client::time::UnixTime;
 use crate::{daemon::workspace::Manager, state::QueueState};
+use shoal_protocol::time::UnixTime;
 
 impl Manager {
     /// Queue the automatic restore of `execution`, an agent that protection

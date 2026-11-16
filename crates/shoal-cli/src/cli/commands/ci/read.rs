@@ -2,7 +2,6 @@
 //! logs of failed ones.
 use anyhow::{Context as _, Result};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::items::ItemArgs,
@@ -21,6 +20,7 @@ use crate::{
     protocol::ItemContext,
 };
 use shoal_forge::ci::run_view::validate_filter;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Show the run `items` selects after `ci` with the log tails of its failed
 /// jobs, only the log of `job`, or open it in the browser.

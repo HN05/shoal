@@ -14,11 +14,11 @@ mod source;
 mod target;
 mod waiting;
 
-use crate::client::space_names::SpaceSelector;
 pub(in crate::cli::commands) use agent::AgentLaunch;
 pub(in crate::cli::commands) use branch::owning_workspace;
 pub(in crate::cli::commands) use existing::start_worker;
 pub(in crate::cli) use finish::execute_add;
+use shoal_protocol::space_names::SpaceSelector;
 use std::ffi::OsString;
 
 use anyhow::{Result, ensure};

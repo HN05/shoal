@@ -1,9 +1,8 @@
-use crate::client::scope_tokens::ScopeToken;
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::scope_tokens::ScopeToken;
 use std::time::Duration;
 
 use super::{Entry, RETAIN, fake};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{manager, repository},
@@ -15,6 +14,7 @@ use crate::{
         Stream,
     },
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A generous guard against a hang; no test waits this long when it passes.
 const HANG: Duration = Duration::from_secs(60);

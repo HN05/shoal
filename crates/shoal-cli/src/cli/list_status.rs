@@ -2,10 +2,10 @@
 //! it, and the marker that starts each row.
 use crate::{
     cli::output::{Palette, Style},
-    client::progress::Progress,
     model::{Chat, QueueEntry, Workspace},
     state::{AgentState, QueueState, Sleep, WorkspaceState},
 };
+use shoal_protocol::progress::Progress;
 
 /// What a list row shows a workspace, chat or queued agent doing. Its value name
 /// is the row's label in kebab case. Lists sort spaces by it in declaration

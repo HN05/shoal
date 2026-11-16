@@ -5,10 +5,8 @@ use std::collections::{HashMap, HashSet};
 use anyhow::Result;
 use rusqlite::{Connection, params};
 
-use crate::{
-    client::space_names::{directory_name, suffixed_directory},
-    forge::repo::remote_url::source_name,
-};
+use crate::forge::repo::remote_url::source_name;
+use shoal_protocol::space_names::{directory_name, suffixed_directory};
 
 /// Name each recorded chat, and the chats of journal events, after its
 /// repository and number as lists showed them.

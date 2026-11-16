@@ -1,6 +1,6 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{manager, repository};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A running chat in a repository whose completions request no cleanup.
 async fn chat(manager: &std::sync::Arc<Manager>, root: &std::path::Path) -> Chat {

@@ -1,6 +1,6 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{manager, repository};
+use shoal_protocol::space_names::SpaceSelector;
 use tokio::io::BufReader;
 
 async fn bounded<T>(future: impl std::future::Future<Output = T>) -> T {

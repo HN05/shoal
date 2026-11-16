@@ -6,8 +6,8 @@ use anyhow::Result;
 use rusqlite::{Connection, params};
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 
-pub(crate) use crate::client::item_numbers::{ItemKind, ItemNumber};
 use crate::refusal::{Reason, Refusal};
+pub(crate) use shoal_protocol::item_numbers::{ItemKind, ItemNumber};
 
 /// The number of the space `id`, a workspace or a chat.
 pub(crate) fn space_number(db: &Connection, id: &SpaceId) -> Result<SpaceNumber> {

@@ -3,7 +3,6 @@ use std::ffi::OsString;
 
 use anyhow::{Context as _, Result};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         commands::configured,
@@ -13,6 +12,7 @@ use crate::{
     execution,
     protocol::ConfigTarget,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(in crate::cli::commands) async fn exec(
     ctx: &Context,

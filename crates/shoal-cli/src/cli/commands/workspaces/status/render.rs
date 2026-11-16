@@ -8,10 +8,10 @@ use crate::{
         output::{Palette, Style},
         ui,
     },
-    client::links::pr::RegistrationKind,
     forge::review::status::PrStatus,
     model::{AgentStatus, Chat, Completion, SpaceDetail, SpaceStatus, WorktreeStatus},
 };
+use shoal_protocol::links::pr::RegistrationKind;
 
 pub(super) fn render_status(view: &StatusView, json: bool) {
     let palette = Palette::stdout(json);
@@ -539,7 +539,7 @@ fn render_pr(pr: &PrStatus, palette: Palette) {
 }
 
 /// A request the agent's proxy waits to retry as `status` shows it.
-fn proxy_retry_label(retry: &crate::client::executions::ProxyRetry) -> String {
+fn proxy_retry_label(retry: &shoal_protocol::executions::ProxyRetry) -> String {
     let now = crate::time::UnixTime::now();
     format!(
         "{} (attempt {} failed), next attempt in {}s",
@@ -562,7 +562,7 @@ fn prompt_cache_label(expires_at: crate::time::UnixTime) -> String {
 }
 
 /// A pending retry of the agent's failed turn as `status` shows it.
-fn turn_retry_label(retry: &crate::client::executions::TurnRetry) -> String {
+fn turn_retry_label(retry: &shoal_protocol::executions::TurnRetry) -> String {
     let (failure, attempt) = (retry.failure.describe(), retry.attempt);
     if retry.delivered {
         format!("{failure} (attempt {attempt}), agent asked to continue")

@@ -1,7 +1,6 @@
-use crate::client::assignments::Done;
+use shoal_protocol::assignments::Done;
 use std::{fs, sync::Arc};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{manager, repository},
@@ -11,6 +10,7 @@ use crate::{
     model::Workspace,
     time::UnixTime,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A workspace whose repository gives cleanup a grace period that cannot
 /// end during the test.

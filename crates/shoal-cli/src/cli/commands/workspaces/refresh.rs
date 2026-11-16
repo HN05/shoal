@@ -4,7 +4,6 @@
 use anyhow::{Result, bail};
 
 use super::setup_workspace;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
@@ -13,6 +12,7 @@ use crate::{
     },
     model::Refreshed,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(in crate::cli::commands) async fn refresh(
     ctx: &Context,

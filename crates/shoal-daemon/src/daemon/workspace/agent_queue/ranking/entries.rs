@@ -6,13 +6,13 @@ use anyhow::{Context, Result};
 use rusqlite::Connection;
 
 use super::super::state::WaitingOneShot;
-use crate::client::time::UnixTime;
 use crate::{
     forge::ci::runner::Trigger,
     model::QueuedJob,
     state::{QueueKind, QueueState},
 };
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_protocol::time::UnixTime;
 use shoal_schedule::{
     priority::Priority,
     rank::Tier,

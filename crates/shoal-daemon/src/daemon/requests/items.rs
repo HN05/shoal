@@ -9,13 +9,13 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
-use crate::client::space_names::SpaceSelector;
 use crate::{
     config::permissions::PermissionKey,
     forge::items::action::Action,
     protocol::{self, Body, ItemContext, ItemMethod, ViewPiece},
 };
 use shoal_ids::repository_ids::RepositoryId;
+use shoal_protocol::space_names::SpaceSelector;
 
 #[cfg(test)]
 mod tests;
@@ -227,7 +227,7 @@ pub(super) async fn handle(
         ItemMethod::RelinkSpace { space, links } => {
             let id = manager.link_space(&space).await?.id().to_owned();
             let warnings = manager.relink_space(&id, &links, caller).await;
-            Body::Linked(crate::client::links::Linked {
+            Body::Linked(shoal_protocol::links::Linked {
                 title_error: None,
                 warnings,
             })

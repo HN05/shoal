@@ -8,8 +8,6 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 
 use super::{Manager, creation::Configured, restore::RestoredFiles};
-use crate::client::space_names::SpaceName;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::scope::Caller,
     git,
@@ -19,6 +17,8 @@ use crate::{
     protocol::{CommitStart, CreationOptions, PullHead},
     state::WorkspaceState,
 };
+use shoal_protocol::space_names::SpaceName;
+use shoal_protocol::space_names::SpaceSelector;
 use tokio::sync::OwnedMutexGuard;
 
 /// The commit a workspace at a commit starts at, what it was made for, and

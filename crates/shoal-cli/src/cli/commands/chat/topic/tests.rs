@@ -1,5 +1,5 @@
-use crate::client::space_names::SpaceSelector;
 use clap::Parser as _;
+use shoal_protocol::space_names::SpaceSelector;
 use std::{ffi::OsString, path::Path};
 
 use super::*;

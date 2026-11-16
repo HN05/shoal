@@ -1,7 +1,6 @@
 //! `shoal merge`: the operation that merges a workspace's branch.
 use anyhow::Result;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         commands::operations,
@@ -12,6 +11,7 @@ use crate::{
     model::{MergeConfirmation, MergeOptions, MergedBranch},
     protocol::{ConfigTarget, operations::OperationSpec},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// `push` overrides `[merge] push` when given, and `yes` skips the
 /// confirmation a merge asks for when it pushes or brings the default branch

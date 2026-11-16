@@ -6,12 +6,12 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::repository_ids::RepositoryId;
 
 use super::blockers;
-use crate::client::time::UnixTime;
 use crate::{
     model::{ChatQueueRequest, QueueEntry, QueueRequest},
     state::{QueueKind, QueueState},
 };
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
+use shoal_protocol::time::UnixTime;
 
 /// A waiting row of the queue.
 pub(super) struct QueuedRow {
@@ -31,7 +31,7 @@ pub(super) struct QueuedRow {
     /// The mode a launch's agent starts in.
     pub mode: Option<crate::config::modes::ModeName>,
     /// The agent it starts.
-    pub agent: crate::client::agent::Agent,
+    pub agent: shoal_protocol::agent::Agent,
 }
 
 /// The waiting rows of the queue, in order.
@@ -76,8 +76,8 @@ pub(super) struct Launch {
 
 /// What a launch asks for, a workspace's or a chat's, as its row records it.
 pub(super) struct LaunchRequest {
-    pub name: crate::client::space_names::SpaceName,
-    pub agent: crate::client::agent::Agent,
+    pub name: shoal_protocol::space_names::SpaceName,
+    pub agent: shoal_protocol::agent::Agent,
     pub mode: Option<crate::config::modes::ModeName>,
     pub narrowing: crate::config::permissions::PermissionsConfig,
     pub issue_title: Option<String>,
@@ -196,7 +196,7 @@ pub(super) fn opens_existing_branch(plan: &str) -> bool {
 /// The parents the launches of new spaces name with `--parent`, by entry.
 pub(super) fn planned_parents(
     db: &rusqlite::Connection,
-) -> Result<Vec<(QueueEntryId, crate::client::space_names::SpaceSelector)>> {
+) -> Result<Vec<(QueueEntryId, shoal_protocol::space_names::SpaceSelector)>> {
     let mut statement =
         db.prepare("SELECT id,plan FROM agent_queue WHERE kind=?1 AND plan IS NOT NULL")?;
     let rows = statement.query_map([QueueKind::Launch], |row| {

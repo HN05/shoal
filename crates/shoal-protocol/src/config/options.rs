@@ -52,8 +52,6 @@ pub struct Entry {
     pub file: Option<PathBuf>,
 }
 
-crate::output::outputs!(Entry);
-
 pub fn key(prefix: &str, name: &str) -> String {
     if prefix.is_empty() {
         name.to_owned()

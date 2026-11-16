@@ -6,7 +6,6 @@ use std::{collections::BTreeMap, ffi::OsString, time::Duration};
 use anyhow::{Context as _, Result, bail, ensure};
 
 use super::{lookup::running, presets, screen::last_lines, stop::stop_named};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
@@ -14,12 +13,14 @@ use crate::{
         terminal,
         ui::{self, Fallback},
     },
-    demos::{self, Demo, Launch, Preset, Progress, Running},
+    demos,
     model::Workspace,
     protocol::ConfigTarget,
     sessions::Origin,
     workers::{Worker, internal_command},
 };
+use shoal_protocol::demos::{Demo, Launch, Preset, Progress, Running};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The name an ad hoc demo takes when the agent gives none.
 const DEFAULT_NAME: &str = "demo";
@@ -32,7 +33,7 @@ const START_LIMIT: Duration = Duration::from_secs(120);
 /// What `shoal demo start` replaces in the configured demo.
 pub(super) struct Overrides {
     pub preset: Option<Preset>,
-    pub scheme: Option<crate::demos::Scheme>,
+    pub scheme: Option<shoal_protocol::demos::Scheme>,
     pub open: Option<String>,
     pub ports: Vec<String>,
 }
@@ -144,7 +145,7 @@ fn choose(
 ) -> Result<Chosen> {
     if !command.is_empty() {
         let name = name.unwrap_or_else(|| DEFAULT_NAME.to_owned());
-        crate::demos::validate_name(&name)?;
+        shoal_protocol::demos::validate_name(&name)?;
         let demo = configured.get(&name).cloned().unwrap_or_else(|| Demo {
             cmd: Vec::new(),
             preset: None,

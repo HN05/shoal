@@ -1,6 +1,5 @@
 //! Agent names and the models they run with, independent of the
 //! integrations that launch them.
-
 /// What `add --agent` and `agent.default` start: an AI tool, a configured
 /// command, or a name an integration serves. Parsing validates the name;
 /// a record loads the name it holds unchanged, so one saved before names

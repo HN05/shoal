@@ -11,7 +11,7 @@ mod stop;
 use anyhow::{Result, ensure};
 
 use crate::cli::{args::sessions::DemoCommand, context::Context};
-use crate::client::space_names::SpaceSelector;
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn run(
     ctx: &Context,
@@ -26,7 +26,7 @@ pub(super) async fn run(
     );
     // Before a picker opens or anything is stopped or replaced.
     if let Some(name) = requested_name(command.as_ref(), name.as_deref()) {
-        crate::demos::validate_name(name)?;
+        shoal_protocol::demos::validate_name(name)?;
     }
     match command {
         None => open::open(ctx, name, workspace).await,

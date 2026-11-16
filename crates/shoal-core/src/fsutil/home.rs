@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub use crate::client::paths::home_dir;
+pub use shoal_protocol::paths::home_dir;
 
 /// Expand a leading `~` path component, without resolving users or symlinks.
 pub fn expand_home(path: &Path, home: &Path) -> PathBuf {

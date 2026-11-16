@@ -4,10 +4,10 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_refs::BranchName;
 use std::path::Path;
 
-use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
+use shoal_protocol::space_names::SpaceSelector;
 
 use super::Manager;
 use crate::{

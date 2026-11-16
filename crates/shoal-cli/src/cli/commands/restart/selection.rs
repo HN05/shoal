@@ -2,11 +2,11 @@
 use anyhow::{Result, ensure};
 
 use crate::client::restarts::{Selection, running_agents};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{args::SpaceTargets, context::Context, ui},
     model::{PresentSpace, Spaces},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// `--all` selects every workspace and chat but the caller's own, names
 /// select theirs, and neither the picker. The daemon lists only the agents

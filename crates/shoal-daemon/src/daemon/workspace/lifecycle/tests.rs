@@ -1,9 +1,6 @@
 use super::super::Manager;
 use super::worktree::removal_options;
 use super::*;
-use crate::client::assignments::Done;
-use crate::client::log::{LogEntry, LogFilter};
-use crate::client::space_names::SpaceSelector;
 use crate::paths::StateFiles;
 use crate::{
     daemon::{
@@ -23,6 +20,9 @@ use crate::{
     state::WorkspaceState,
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::assignments::Done;
+use shoal_protocol::log::{LogEntry, LogFilter};
+use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;
 use std::{fs, sync::Arc};
 

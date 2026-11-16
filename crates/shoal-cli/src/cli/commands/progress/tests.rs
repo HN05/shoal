@@ -26,7 +26,7 @@ fn steps_number_from_one_and_mark_the_current_step() {
     let progress = Progress {
         status: None,
         steps: (1..=10)
-            .map(|at| crate::client::progress::Step {
+            .map(|at| shoal_protocol::progress::Step {
                 name: format!("Step {at}"),
                 done: at < 3,
                 blockers: Vec::new(),
@@ -52,7 +52,7 @@ fn an_invalid_status_line_is_refused_before_anything_changes() {
 
 #[test]
 fn blocked_steps_list_their_blockers_below_them() {
-    let blocker = crate::client::progress::RecordedBlocker {
+    let blocker = shoal_protocol::progress::RecordedBlocker {
         kind: crate::state::BlockerKind::Pr,
         target: "https://forge.example/o/r/pulls/8".into(),
         name: "https://forge.example/o/r/pulls/8".into(),
@@ -61,7 +61,7 @@ fn blocked_steps_list_their_blockers_below_them() {
     };
     let progress = Progress {
         status: None,
-        steps: vec![crate::client::progress::Step {
+        steps: vec![shoal_protocol::progress::Step {
             name: "Fix".into(),
             done: false,
             blockers: vec![blocker],

@@ -1,5 +1,4 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         approvals::proposals::PR,
@@ -7,6 +6,7 @@ use crate::{
     },
     forge::items::create::NewPull,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A workspace whose repository holds its agents' pushes back, and its
 /// agent as a scoped caller.

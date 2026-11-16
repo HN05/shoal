@@ -4,16 +4,14 @@
 use anyhow::{Context as _, Result, ensure};
 
 use super::{add, cells, remove};
-use crate::client::space_names::SpaceSelector;
-use crate::{
-    cli::{
-        args::WorkspaceScope,
-        context::Context,
-        output::Palette,
-        ui::{self, Key, KeyBindings, WidthLimit},
-    },
-    client::files::AttachedFile,
+use crate::cli::{
+    args::WorkspaceScope,
+    context::Context,
+    output::Palette,
+    ui::{self, Key, KeyBindings, WidthLimit},
 };
+use shoal_protocol::files::AttachedFile;
+use shoal_protocol::space_names::SpaceSelector;
 
 const ADD_ENTRY: &str = "add-file";
 

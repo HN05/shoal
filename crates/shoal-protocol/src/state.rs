@@ -1,5 +1,4 @@
 //! Shoal enums whose persisted and wire spellings remain stable.
-
 use shoal_states::states;
 
 states!(WorkspaceState: Variants {

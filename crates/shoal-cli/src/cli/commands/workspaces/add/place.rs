@@ -7,7 +7,6 @@ use std::ffi::OsString;
 use anyhow::Result;
 
 use super::finish::{holding, report_queued_in};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     cli::{agents, commands::queued_agents, context::Context, terminal},
@@ -16,6 +15,7 @@ use crate::{
     queued_launches,
     start_plan::{AddPlan, ResolvedAddAgent},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The launch of the agent that starts in this process.
 pub(super) struct HereLaunch {

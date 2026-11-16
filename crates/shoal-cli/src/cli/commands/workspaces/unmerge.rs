@@ -1,7 +1,6 @@
 //! `shoal unmerge`: the operation that undoes a workspace's local merge.
 use anyhow::Result;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         commands::operations,
@@ -11,6 +10,7 @@ use crate::{
     model::Unmerged,
     protocol::operations::OperationSpec,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Undo the latest local merge of `workspace`'s branch into the default branch.
 pub(in crate::cli::commands) async fn unmerge(

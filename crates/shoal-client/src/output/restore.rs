@@ -1,11 +1,11 @@
 //! What `shoal restore` prints.
-use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::space_names::SpaceName;
 
-use crate::{
+use crate::output::{agents::Agent, batch::Failure, outputs};
+use shoal_protocol::{
     model::{Chat, PresentSpace, QueueEntry, RemovedSpace, Workspace},
-    output::{agents::Agent, batch::Failure, outputs},
     saved::SavedSummary,
 };
 

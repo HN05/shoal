@@ -9,7 +9,6 @@ use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use super::{About, AgentMessage, Delivery, MAX_UNREAD, MAX_UNREAD_BYTES, Unread};
 use crate::{
-    client::space_names::{SpaceName, label},
     daemon::{
         notifications::{self, NotificationKind},
         workspace_files,
@@ -17,6 +16,7 @@ use crate::{
     state::WorkspaceState,
 };
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
+use shoal_protocol::space_names::{SpaceName, label};
 
 /// Queue `message` with the files `attachments` Shoal has copied for the
 /// agent of the space `space_id`, `about` another space when it concerns

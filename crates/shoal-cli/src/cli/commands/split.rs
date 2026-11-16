@@ -5,7 +5,6 @@
 use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
 
-use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::client::{
     output::split::Child,
     preparation::{self, NewSplit, Preparing},
@@ -28,6 +27,7 @@ use crate::{
     refusal::{Reason, Refusal},
     state::WorkspaceState,
 };
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 use super::issues::Issue;
 

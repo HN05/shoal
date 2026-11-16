@@ -1,9 +1,9 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::test_support::{manager, repository},
     state::WorkspaceState,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn reverts_keep_the_reverted_base_and_skip_workspaces_being_removed() {

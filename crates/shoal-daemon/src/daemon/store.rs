@@ -10,11 +10,11 @@ use shoal_ids::space_ids::SpaceId;
 use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 use crate::{
-    client::{sim::CleanRequestStatus, space_names::SpaceName},
     forge::items::reference::ItemRef,
     model::{Execution, LinkedItem, PortReservation, Relation, Repository, SpaceLinks, Workspace},
     state::{ExecutionState, WorkspaceState},
 };
+use shoal_protocol::{sim::CleanRequestStatus, space_names::SpaceName};
 
 #[cfg(test)]
 mod benchmark;
@@ -167,7 +167,7 @@ pub fn free_directory(db: &Connection, base: &str) -> Result<String> {
         .filter_map(|path| std::path::Path::new(path).file_name())
         .collect();
     let free = (1_u64..)
-        .map(|suffix| crate::client::space_names::suffixed_directory(base, suffix))
+        .map(|suffix| shoal_protocol::space_names::suffixed_directory(base, suffix))
         .find(|candidate| !taken.contains(std::ffi::OsStr::new(candidate)));
     Ok(free.expect("an unused suffix exists"))
 }
@@ -244,7 +244,7 @@ pub fn ensure_branch_available(
         )
         .optional()?;
     if let Some((number, name)) = owner {
-        let owner = crate::client::space_names::label(number, &name);
+        let owner = shoal_protocol::space_names::label(number, &name);
         return Err(Refusal::new(
             Reason::NameTaken,
             format!("branch is already owned by workspace {owner}"),

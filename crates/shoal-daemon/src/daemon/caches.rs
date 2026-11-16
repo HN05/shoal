@@ -3,12 +3,12 @@
 use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
 
-pub(crate) use crate::client::cleanup::Emptying;
 use crate::{
     caches::Layout,
     daemon::{store, workspace::Manager},
     model::Repository,
 };
+pub(crate) use shoal_protocol::cleanup::Emptying;
 
 impl Manager {
     /// Empty the repository's shared caches unless a tracked execution in one

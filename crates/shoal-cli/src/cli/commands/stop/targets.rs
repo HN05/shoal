@@ -1,8 +1,8 @@
 //! Which spaces a stop takes, and refusing them before any stops.
 use anyhow::{Context as _, Result, ensure};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{cli::context::Context, model::PresentSpace};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The spaces, workspaces or chats, that `selectors` name, each once, and
 /// with `children` each followed by the spaces below it, which a stop of it

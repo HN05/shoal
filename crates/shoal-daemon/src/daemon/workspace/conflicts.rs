@@ -4,7 +4,6 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 
 use super::Manager;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     git::{
         self,
@@ -13,6 +12,7 @@ use crate::{
     },
     model::{ChangedOnBothSides, ConflictCheck, Workspace},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(crate) mod recorded;
 

@@ -5,7 +5,6 @@ use std::ffi::{OsStr, OsString};
 use anyhow::Result;
 
 use super::Launch;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     agents::{Integration, ensure_available},
@@ -13,6 +12,7 @@ use crate::{
     config::{Effective, named_commands},
     execution,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Run `launch` as a tracked agent in its workspace, in a session this
 /// terminal attaches to where the terminal keeps agents in sessions.

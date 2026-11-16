@@ -6,7 +6,6 @@ use rusqlite::{Connection, OptionalExtension, params};
 use shoal_ids::space_ids::SpaceId;
 
 use super::{GuardMode, Manager, ResourceGuard};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     config::permissions::PermissionKey,
     daemon::{
@@ -22,6 +21,7 @@ use crate::{
     model::{HoldPlacer, PresentSpace, SpaceHold},
     validate,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// Hold the space as `placed_by`; repeating a held name keeps the hold

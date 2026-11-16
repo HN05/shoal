@@ -4,13 +4,13 @@
 use anyhow::{Result, ensure};
 
 use super::Output;
-use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     cli::{context::Context, ui},
     model::{Chat, PresentSpace, SpaceHold, SpaceKind, SpaceRef, Spaces},
     removal::{RemovalCheck, UnsavedWork},
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 /// A space that passed its export check, with the spaces its removal takes
 /// first and the chats among them that go with it, which its export ends
@@ -33,7 +33,7 @@ pub(in super::super) enum Ending {
 }
 
 impl Checked {
-    pub(super) fn name(&self) -> &crate::client::space_names::SpaceName {
+    pub(super) fn name(&self) -> &shoal_protocol::space_names::SpaceName {
         match &self.space {
             Ending::Workspace(check) => &check.workspace.name,
             Ending::Chat(chat) => &chat.name,

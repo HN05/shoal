@@ -10,13 +10,13 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, ensure};
 use tokio::sync::OwnedMutexGuard;
 
-use crate::client::space_names::SpaceSelector;
 use crate::refusal::Reason;
 use crate::{
     daemon::{scope::Caller, workspace::Manager},
     model::{Chat, HandedBack, PresentSpace, Repository, Workspace},
     state::WorkspaceState,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(crate) mod layout;
 mod records;
@@ -28,7 +28,7 @@ pub(crate) use records::{
 
 use layout::{Kept, Layout};
 
-pub(crate) use crate::client::files::{
+pub(crate) use shoal_protocol::files::{
     AttachedFile, Attacher, FileSource, NewFile, SentFile, check_path, check_sent,
     missing_selection,
 };

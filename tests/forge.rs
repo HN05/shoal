@@ -388,10 +388,9 @@ fn apps_read_forge_items_through_the_daemon() {
         connection::Connector,
         forge_reads,
         output::view::{Shown, ShownItem},
-        paths::Paths,
-        protocol::ItemContext,
         views,
     };
+    use shoal_protocol::{paths::Paths, protocol::ItemContext};
     let fixture = Fixture::new(Forge::Forgejo, AGENT_TOKEN);
     let mut responses = failed_check_responses();
     let mut pr = pull(8, "open", "Fix", &[]);

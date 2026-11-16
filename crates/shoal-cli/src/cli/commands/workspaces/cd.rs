@@ -3,7 +3,7 @@ use anyhow::{Result, ensure};
 
 use crate::cli::{context::Context, recent, shell, ui};
 use crate::client::output::workspaces::Directory;
-use crate::client::space_names::SpaceSelector;
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(in crate::cli::commands) async fn cd(
     ctx: &Context,

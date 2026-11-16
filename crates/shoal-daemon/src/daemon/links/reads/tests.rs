@@ -1,9 +1,9 @@
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::test_support::{git, manager, repository},
     forge::items::link::{LinkKind, Selection},
     protocol::ItemContext,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn a_stopped_chat_reads_in_its_repositorys_checkout() {

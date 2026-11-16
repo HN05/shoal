@@ -73,7 +73,7 @@ impl Manager {
     /// The name of a new workspace's directory made from `from`, such as
     /// its branch, that no workspace's directory has.
     async fn free_directory(&self, from: &str) -> Result<String> {
-        let base = crate::client::space_names::directory_name(from);
+        let base = shoal_protocol::space_names::directory_name(from);
         self.store
             .run(move |db| store::free_directory(db, &base))
             .await

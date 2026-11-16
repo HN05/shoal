@@ -4,7 +4,6 @@ use super::store::{
 };
 use super::text::RequestText;
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::resources::{Definition, LockMode, Scope};
 use crate::daemon::{
     item_numbers::{self, ItemNumber},
@@ -13,6 +12,7 @@ use crate::daemon::{
 };
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, Params, params};
+use shoal_protocol::space_names::SpaceSelector;
 
 fn resource(mode: LockMode) -> Specification {
     let definition = Definition {

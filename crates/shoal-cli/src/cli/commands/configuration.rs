@@ -5,7 +5,6 @@ use crate::client::output::{
     config::{Edited, Reference},
     daemon::Reloaded,
 };
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         client,
@@ -19,6 +18,7 @@ use crate::{
     paths::CommandPaths,
     protocol::ConfigTarget,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The configuration reference bundled with this release, readable without
 /// network access.

@@ -7,7 +7,6 @@ use rusqlite::{Connection, params};
 use shoal_ids::space_ids::SpaceId;
 
 use crate::{
-    client::space_names::SpaceSelector,
     daemon::{links::space::LinkSpace, notifications::NotificationKind, workspace::Manager},
     execution::recovery,
     forge::items::reference::ItemRef,
@@ -15,6 +14,7 @@ use crate::{
     state::QueueKind,
 };
 use shoal_forge::items::assignment::AssignmentRequests;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A space that links an issue as assigned, and who assigned it there.
 struct Linker {

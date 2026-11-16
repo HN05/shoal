@@ -8,12 +8,10 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
-    client::{
-        sleep::{self, Slept},
-        space_names::SpaceSelector,
-    },
+    client::sleep,
     state::Sleep,
 };
+use shoal_protocol::{sleep::Slept, space_names::SpaceSelector};
 
 /// Let the agent of the space `space` names, else the current one, sleep
 /// as `sleep` says, or with none end its sleep and wake it.

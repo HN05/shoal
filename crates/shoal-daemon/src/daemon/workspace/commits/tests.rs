@@ -5,7 +5,6 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 use std::path::Path;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         scope::{Caller, ScopedExecution},
@@ -15,6 +14,7 @@ use crate::{
     protocol::{CommitStart, WorkspaceMethod},
     state::WorkspaceState,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 async fn create(
     manager: &super::Manager,
@@ -908,7 +908,7 @@ async fn a_restored_workspace_at_a_commit_cuts_a_name_an_older_shoal_recorded() 
     assert_eq!(reopened.branch, None);
     assert_eq!(
         reopened.name,
-        crate::client::space_names::SpaceName::derive(&legacy, "workspace")
+        shoal_protocol::space_names::SpaceName::derive(&legacy, "workspace")
     );
     assert_eq!(reopened.name.as_str().chars().count(), 40);
 }

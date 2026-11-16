@@ -3,8 +3,8 @@
 //! there. Chats in its worktree are not its agents and never count.
 use anyhow::{Result, bail};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{daemon::workspace::Manager, execution::recovery, model::Workspace};
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// Refuse a launch in `workspace` while it has an agent of its own: a

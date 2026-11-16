@@ -9,7 +9,6 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
 use crate::client::output::agents::{Agent, Continued, Interrupted};
-use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     cli::{agents, context::Context, terminal, ui},
     model::{PresentSpace, RunningAgent},
@@ -17,6 +16,7 @@ use crate::{
     sessions::Origin,
     state::AgentState,
 };
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 /// `shoal stop --interrupt`: cancel the running turns of the agents in the
 /// `selected` spaces, workspaces or chats, leaving agents without one alone.

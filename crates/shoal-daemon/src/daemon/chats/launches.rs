@@ -6,10 +6,8 @@
 //! whose agent waits is recorded at once, and the answer names its entry.
 use anyhow::{Context as _, Result, ensure};
 
-use crate::client::{scope_tokens::ScopeToken, space_names::SpaceName};
 use crate::{
     agents::{NO_AGENT, checked_agent},
-    client::output::chat::{QueuedChat, StartedChat},
     config::{Effective, modes::ModeName},
     daemon::{scope::Caller, workspace::Manager},
     model::{ChatHome, ChatQueueRequest, QueueAdmission, SpaceKind},
@@ -17,6 +15,8 @@ use crate::{
 };
 use shoal_core::queued_starts::{ChatPlan, ChatPlanStart};
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_protocol::chats::{QueuedChat, StartedChat};
+use shoal_protocol::{scope_tokens::ScopeToken, space_names::SpaceName};
 
 impl Manager {
     /// Start the chat `start` describes for `caller` in a background place,
@@ -162,7 +162,7 @@ impl Manager {
         let workspace = start.workspace.as_ref();
         let chat = (self.start_new_chat(start.repository.clone(), workspace, new)).await?;
         if let Err(error) = self.attach_chat(entry, &chat.id).await {
-            let selector = crate::client::space_names::SpaceSelector::id(&chat.id);
+            let selector = shoal_protocol::space_names::SpaceSelector::id(&chat.id);
             if let Err(removal) = self.remove_chat(&selector, Some(Vec::new())).await {
                 crate::daemon::log!("chat {} kept without its launch: {removal:#}", chat.id);
             }
@@ -311,7 +311,7 @@ async fn run_worker(
     let scoped = token.is_some();
     tests::STARTED.lock().unwrap().push((start.clone(), scoped));
     Ok(StartedChat::Background(
-        crate::client::output::chat::BackgroundChat {
+        shoal_protocol::chats::BackgroundChat {
             chat: start.name.clone().unwrap_or_else(|| "chat".into()),
             agent: start.agent.clone().context("the start names no agent")?,
             repository: None,

@@ -9,7 +9,6 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::{Context as _, Result, ensure};
 
-use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     agents::{check_queued_launch, resolve_launch},
     config::Effective,
@@ -31,6 +30,7 @@ use crate::{
     repository::Selector,
     state::WorkspaceState,
 };
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 /// Name a new workspace without a name of its own after `issue`'s title,
 /// as every start does, whoever sends it; options apply only to a new

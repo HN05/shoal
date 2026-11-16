@@ -17,8 +17,6 @@ use super::{
     wake::{UNWATCHED_WAKE_DELAY, WakePhase},
     *,
 };
-use crate::client::assignments::Done;
-use crate::client::space_names::SpaceSelector;
 use crate::time::UnixTime;
 use crate::{
     daemon::{
@@ -39,6 +37,8 @@ use crate::{
 use shoal_forge::updates::{Edited, Snapshot};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::assignments::Done;
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     async fn wait_prs(&self, selector: &str, seconds: Option<u64>) -> Result<Updates> {

@@ -6,13 +6,13 @@ use std::{ffi::OsString, path::PathBuf};
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     model::Repository,
     paths::CommandPaths,
     protocol::{ChatStart, ConfigTarget},
 };
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId};
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 /// What the queue's start of a chat launch runs, which a launch of a new
 /// workspace's plan tells apart by its `chat_start`.

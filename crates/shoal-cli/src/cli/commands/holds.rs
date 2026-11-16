@@ -4,7 +4,6 @@ use anyhow::{Result, ensure};
 use super::acquisition::Finish;
 use crate::client::leases;
 use crate::client::output::acquisition::Released;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::WorkspaceScope,
@@ -14,6 +13,7 @@ use crate::{
     },
     model::{HoldPlacer, PresentSpace, SpaceHold},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Exit 2 means a pending or denied approval: a scoped process holding its
 /// own space asks its coordinator or the user first.

@@ -7,7 +7,6 @@ use std::io::{IsTerminal, Write};
 
 use anyhow::{Result, ensure};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::diagnostics::AlertsArgs,
@@ -17,9 +16,11 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Fallback},
     },
-    client::notifications::{self, Notification, Watch},
+    client::notifications::{self, Watch},
     installed::Executable,
 };
+use shoal_protocol::notifications::Notification;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// List the notifications `args` ask for, marking them read unless they
 /// keep them unread.
@@ -100,7 +101,7 @@ pub(super) async fn send(
     attach: Vec<String>,
 ) -> Result<i32> {
     let attachments = super::messages::attachments(&attach)?;
-    crate::client::files::check_sent(&attachments)?;
+    shoal_protocol::files::check_sent(&attachments)?;
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let sender_chat = crate::env::chat();
     let sent =

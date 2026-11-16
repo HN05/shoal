@@ -4,7 +4,6 @@
 use super::{
     Manager, NewWorktreeOptions, branches, identity, ownership::owns_git_dir, restore, stack, tree,
 };
-use crate::client::space_names::SpaceName;
 use crate::{
     config::Config,
     daemon::{spaces, store},
@@ -17,6 +16,7 @@ use crate::{
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::params;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceName;
 use shoal_refs::BranchName;
 use tokio::sync::OwnedMutexGuard;
 

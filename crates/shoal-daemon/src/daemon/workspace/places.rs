@@ -8,11 +8,11 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
 use super::Manager;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     model::Chat,
     sessions::{Origin, PlaceOwnership},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Where an execution runs in a terminal host, as its wrapper reports it.
 pub(crate) struct ExecutionPlace {

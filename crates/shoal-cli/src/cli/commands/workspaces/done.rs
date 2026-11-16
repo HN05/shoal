@@ -4,7 +4,6 @@ use shoal_ids::space_ids::SpaceId;
 
 use crate::client::assignments;
 use crate::client::output::workspaces::Withdrawn;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
@@ -12,6 +11,7 @@ use crate::{
     },
     model::{Completion, PresentSpace},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The space `space` names, else the current chat or workspace, else a
 /// picked one: a running chat's ID, or else a workspace.
@@ -47,7 +47,7 @@ pub(in crate::cli::commands) async fn undone(
 pub(in crate::cli::commands) async fn done(
     ctx: &Context,
     space: Option<SpaceSelector>,
-    done: assignments::Done,
+    done: shoal_protocol::assignments::Done,
 ) -> Result<i32> {
     let selected = selected(ctx, space).await?;
     let space = match &selected {

@@ -12,7 +12,6 @@ use super::{
     waiting::{AfterSetup, follow_add_setup},
 };
 use crate::client::preparation::{self, NewWorkspace, Preparing, Unprepared};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         agents,
@@ -35,6 +34,7 @@ use crate::{
     state::QueueState,
 };
 use shoal_ids::{agent_session_ids::AgentSessionId, queue_entry_ids::QueueEntryId};
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(in crate::cli) async fn execute_add(ctx: &Context, plan: AddPlan) -> Result<i32> {
     let target = AddTarget {

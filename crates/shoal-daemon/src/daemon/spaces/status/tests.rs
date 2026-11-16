@@ -1,8 +1,8 @@
 use crate::{
-    client::files::Attacher,
     daemon::notifications::NotificationKind,
     model::{SpaceDetail, SpaceStatus},
 };
+use shoal_protocol::files::Attacher;
 
 #[tokio::test]
 async fn status_counts_only_the_spaces_own_unread_notifications() {
@@ -90,7 +90,7 @@ async fn status_counts_the_spaces_own_open_questions() {
         )
         .await
         .unwrap();
-    let ask = crate::client::questions::Ask {
+    let ask = shoal_protocol::questions::Ask {
         question: "Use SQLite?".into(),
         recommendation: "yes".into(),
         reason: None,
@@ -129,13 +129,14 @@ async fn status_counts_the_spaces_own_open_questions() {
 
 #[tokio::test]
 async fn a_chats_status_shows_its_agents_retries() {
-    use crate::{client::executions::ProxyRetry, state::TurnFailure, time::UnixTime};
+    use crate::{state::TurnFailure, time::UnixTime};
+    use shoal_protocol::executions::ProxyRetry;
     let (_temp, manager) = crate::daemon::test_support::manager().await;
     let chat = crate::daemon::test_support::chat(&manager, "talk", "chat", None, None).await;
     let execution = manager.workspace_executions(&chat.id).await.unwrap()[0]
         .id
         .clone();
-    let selector = crate::client::space_names::SpaceSelector::id(&chat.id);
+    let selector = shoal_protocol::space_names::SpaceSelector::id(&chat.id);
     let retry = ProxyRetry {
         failure: TurnFailure::Overloaded,
         attempt: 2,

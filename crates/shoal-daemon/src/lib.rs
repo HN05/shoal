@@ -16,10 +16,11 @@ use shoal_core::{
 #[cfg(not(test))]
 use shoal_core::workers;
 
+#[cfg(test)]
 use shoal_client as client;
-use shoal_client::time;
-use shoal_client::{agent, demos, model, protocol, state, validate};
 use shoal_forge_types as forge;
+use shoal_protocol::time;
+use shoal_protocol::{agent, demos, model, protocol, state, validate};
 use shoal_subprocess as subprocess;
 
 /// Run the daemon in this process, given its state, whether its service

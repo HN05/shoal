@@ -13,7 +13,6 @@ use anyhow::{Context as _, Result};
 use clap::{Command, CommandFactory};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 
-use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     agent::Agent,
     cli::{
@@ -37,6 +36,7 @@ use crate::{
     protocol::ConfigTarget,
 };
 use shoal_ids::space_ids::SpaceNumber;
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 /// What was already typed on the command line when completion was requested.
 #[derive(Default)]
@@ -382,7 +382,7 @@ impl Typed {
             let requests = crate::client::approvals::list(&paths, None).await?;
             return Ok(requests
                 .iter()
-                .filter(|r| r.status == crate::client::approvals::DecisionStatus::Pending)
+                .filter(|r| r.status == shoal_protocol::approvals::DecisionStatus::Pending)
                 .map(|r| {
                     CompletionCandidate::new(r.number.to_string())
                         .help(Some(super::commands::approval_summary(r).into()))

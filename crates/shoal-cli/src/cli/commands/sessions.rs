@@ -5,7 +5,6 @@ use anyhow::{Context as _, Result, bail, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         agents,
@@ -20,6 +19,7 @@ use crate::{
     sessions::Origin,
     terminal::Session,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn attach(
     ctx: &Context,
@@ -303,7 +303,7 @@ impl Target {
         }
     }
 
-    fn name(&self) -> &crate::client::space_names::SpaceName {
+    fn name(&self) -> &shoal_protocol::space_names::SpaceName {
         match self {
             Self::Workspace(inspection) => &inspection.workspace.name,
             Self::Chat(chat) => &chat.name,

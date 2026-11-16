@@ -3,15 +3,15 @@
 //! and dies with the wrapper, which reports them again.
 use std::{collections::HashMap, time::Duration};
 
-use crate::client::space_names::SpaceSelector;
-use crate::client::{agent::Agent, executions::ServiceLimit};
 use crate::time::UnixTime;
 use anyhow::Result;
 use rusqlite::OptionalExtension;
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{agent::Agent, executions::ServiceLimit};
 
 use super::Manager;
-pub(crate) use crate::client::executions::UpstreamLimit;
+pub(crate) use shoal_protocol::executions::UpstreamLimit;
 
 /// How long a limit whose upstream named no end stands after it was last
 /// reported: a new agent does not run into it at once, and one finds out

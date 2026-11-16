@@ -2,9 +2,9 @@
 //! workspace or chat, how it came, and the removed workspaces and removed chats
 //! whose files stay. A space is gone when neither a workspace nor a chat has
 //! its ID; its row in `removed_space_files` says how long its files stay.
-use crate::client::space_names::SpaceName;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceName;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;

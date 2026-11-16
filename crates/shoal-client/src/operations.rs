@@ -6,12 +6,10 @@ use std::collections::BTreeMap;
 use anyhow::Result;
 use tokio::{io::BufReader, net::UnixStream};
 
-use crate::{
-    connection::{self, Daemon},
-    protocol::{
-        Body, OperationMethod, Responses,
-        operations::{Ended, OperationEvent, OperationSpec, Report, Started},
-    },
+use crate::connection::{self, Daemon};
+use shoal_protocol::protocol::{
+    Body, OperationMethod, Responses,
+    operations::{Ended, OperationEvent, OperationSpec, Report, Started},
 };
 
 /// What following an operation reports, ending in `E`, how it ended.

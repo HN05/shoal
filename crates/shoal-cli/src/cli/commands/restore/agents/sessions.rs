@@ -6,13 +6,13 @@ use std::ffi::OsString;
 
 use super::{commands, queue, reports};
 use crate::client::output::restore::{RestoredAgent, StartedRestores};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{context::Context, terminal, ui},
     execution::recovery::{Saved, SavedSession},
     model::PresentSpace,
     protocol::ConfigTarget,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Resume each space's stopped work, reporting it with what `resumed` holds
 /// already. Commands without an agent to receive them, as none restoring

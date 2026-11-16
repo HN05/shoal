@@ -9,7 +9,6 @@ use super::{
     proposals::OpenOutcome,
     space::LinkSpace,
 };
-use crate::client::space_names::SpaceSelector;
 use crate::{
     config::permissions::{Opening, Pushes},
     daemon::{scope::Caller, workspace::Manager},
@@ -21,6 +20,7 @@ use shoal_forge::{
     conventions,
     items::revert::{NewRevert, RevertRequests, revert_options},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// Have the forge open the revert of the merged PR `input` names, or of

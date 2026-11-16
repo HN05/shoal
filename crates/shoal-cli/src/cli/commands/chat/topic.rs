@@ -4,7 +4,6 @@
 use std::ffi::OsString;
 
 use super::Options;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         agents::ChatRepository,
@@ -14,6 +13,7 @@ use crate::{
     forge::items::reference::ItemRef,
     model::{ChatHome, Repository, SpaceLinks, Workspace},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// What a chat is about beyond its repository, and how it reopens in a new tab.
 pub(in crate::cli::commands) struct Topic {

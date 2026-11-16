@@ -2,14 +2,15 @@
 //! waiting, and the hold that keeps a starting entry's slot.
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::queue_entry_ids::QueueEntryId;
+use shoal_protocol::queue::WorkerStart;
 use std::{collections::BTreeMap, time::Duration};
 
 use anyhow::Result;
 use tokio::{io::AsyncReadExt as _, sync::oneshot};
 
-use crate::space_names::SpaceSelector;
-use crate::{
-    connection::{Daemon, open, request, stream_closed},
+use crate::connection::{Daemon, open, request, stream_closed};
+use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{
     model::{ChatQueueRequest, QueueAdmission, QueueEntry, QueueRequest, QueuedPlan},
     protocol::QueueMethod,
 };
@@ -28,16 +29,6 @@ pub async fn add(daemon: &impl Daemon, request: QueueRequest) -> Result<QueueAdm
 pub async fn add_chat(daemon: &impl Daemon, request: ChatQueueRequest) -> Result<QueueAdmission> {
     let request = Box::new(request);
     self::request(daemon, QueueMethod::QueueChat { request }).await
-}
-
-/// The worker of an existing workspace for the daemon to queue and start
-/// detached: what its launch asks for, what it waits for and the PR it
-/// links as it starts.
-pub struct WorkerStart {
-    pub workspace: SpaceSelector,
-    pub launch: crate::protocol::operations::LaunchRequest,
-    pub blockers: Vec<crate::model::Blocker>,
-    pub pr: Option<crate::forge::items::reference::ItemInput>,
 }
 
 /// Queue the worker `start` describes, which the daemon resolves under its

@@ -1,15 +1,11 @@
 //! An app's calls through `shoal_client`, as the user and as a
 //! workspace's agent, against a daemon on an isolated state directory.
-use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::daemon::approvals::ApprovalRequestExt;
 use crate::{
     client::{
-        approvals::ApprovalRequest,
         connection::{self, Connector},
         operations::{Followed, Following},
         preparation::{self, NewSplit, NewWorkspace},
-        questions::Question,
-        removal::{RemovalCheck, RemovalResult, UnsavedWork},
     },
     config::repo::ConflictPolicy,
     daemon::{
@@ -34,6 +30,12 @@ use crate::{
     state::WorkspaceState,
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+use shoal_protocol::{
+    approvals::ApprovalRequest,
+    questions::Question,
+    removal::{RemovalCheck, RemovalResult, UnsavedWork},
+};
 use shoal_refs::BranchName;
 
 use super::{HANG, TestDaemon};
@@ -186,7 +188,7 @@ async fn done_renames_and_links_go_through_the_protocol() {
         relation: Relation::Related,
         title: Some("Report".into()),
     };
-    connection::request::<crate::client::links::Linked>(&app, link)
+    connection::request::<shoal_protocol::links::Linked>(&app, link)
         .await
         .unwrap();
     let unlink = || ItemMethod::UnlinkItems {
@@ -195,11 +197,11 @@ async fn done_renames_and_links_go_through_the_protocol() {
         kind: Some(LinkKind::Issue),
         item: Some("40".parse().unwrap()),
     };
-    connection::request::<crate::client::links::Unlinked>(&app, unlink())
+    connection::request::<shoal_protocol::links::Unlinked>(&app, unlink())
         .await
         .unwrap();
     assert_eq!(
-        code(connection::request::<crate::client::links::Unlinked>(&app, unlink()).await),
+        code(connection::request::<shoal_protocol::links::Unlinked>(&app, unlink()).await),
         ErrorCode::NotFound
     );
 }
@@ -365,12 +367,14 @@ async fn an_app_queues_an_agent_once_it_can_run() {
     let error = (connection::request::<QueueEntry>(&agent, queue_worker(child.id.as_str(), now)))
         .await
         .unwrap_err();
-    let Some(crate::client::approvals::Undecided(request)) = error.downcast_ref() else {
+    let Some(shoal_protocol::approvals::Undecided(request)) = error.downcast_ref() else {
         panic!("expected an approval request: {error:#}");
     };
     assert_eq!(
         request.target,
-        crate::client::approvals::Target::Action(crate::config::permissions::PermissionKey::Limits)
+        shoal_protocol::approvals::Target::Action(
+            crate::config::permissions::PermissionKey::Limits
+        )
     );
     let child: QueueEntry = connection::request(&agent, queue_worker(child.id.as_str(), probe()))
         .await
@@ -395,7 +399,7 @@ async fn a_worker_without_an_agent_or_task_takes_the_default_on_its_issue() {
         relation: Relation::Assigned,
         title: Some("Report".into()),
     };
-    connection::request::<crate::client::links::Linked>(&app, link)
+    connection::request::<shoal_protocol::links::Linked>(&app, link)
         .await
         .unwrap();
     let launch = LaunchRequest::new(None);

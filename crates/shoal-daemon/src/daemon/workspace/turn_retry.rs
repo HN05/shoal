@@ -11,18 +11,18 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
 
-pub(crate) use crate::client::executions::TurnRetry;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
+pub(crate) use shoal_protocol::executions::TurnRetry;
 
 use self::unretried::Unretried;
 use super::Manager;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{agent_messages, log, store},
     model::PresentSpace,
     state::{AgentState, TurnFailure},
     time::UnixTime,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) mod unretried;
 

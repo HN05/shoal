@@ -1,5 +1,4 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::sessions::PlaceOwnership;
 use crate::{
     daemon::test_support::{manager, repository},
@@ -9,6 +8,7 @@ use crate::{
 };
 use futures_util::future::BoxFuture;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 use std::{
     path::Path,
     sync::{

@@ -1,8 +1,8 @@
 //! The command lines that start Shoal's workers: the hidden `internal`
 //! commands the daemon, the execution wrapper and the CLI run in their own
 //! processes.
-use crate::client::space_names::SpaceSelector;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -94,7 +94,7 @@ pub enum Worker<'a> {
         host: HostName,
         close_in: Option<HostName>,
     },
-    /// A demo's wrapper; `launch` is its JSON [`crate::demos::Launch`].
+    /// A demo's wrapper; `launch` is its JSON [`shoal_protocol::demos::Launch`].
     Demo {
         workspace: &'a SpaceId,
         launch: &'a str,

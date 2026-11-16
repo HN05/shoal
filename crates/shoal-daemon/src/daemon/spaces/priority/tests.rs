@@ -76,9 +76,9 @@ fn bare() -> crate::daemon::operations::starts::Preparing<crate::protocol::opera
 
 #[tokio::test]
 async fn a_started_or_split_workspace_records_the_priority_it_is_given() {
-    use crate::client::protocol::CreationOptions;
     use crate::daemon::operations::starts::{Opening, Split};
     use crate::protocol::operations::WorkspaceStart;
+    use shoal_protocol::protocol::CreationOptions;
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -163,9 +163,9 @@ async fn a_scoped_caller_that_names_no_priority_gives_its_own_when_lower() {
 
 #[tokio::test]
 async fn a_reopened_workspace_keeps_its_priority_unless_one_is_asked_for() {
-    use crate::client::protocol::CreationOptions;
     use crate::daemon::operations::starts::Opening;
     use crate::protocol::operations::WorkspaceStart;
+    use shoal_protocol::protocol::CreationOptions;
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager

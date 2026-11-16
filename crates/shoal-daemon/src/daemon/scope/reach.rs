@@ -47,7 +47,7 @@ impl Manager {
     pub(in crate::daemon) async fn ensure_selected_reached(
         &self,
         caller: &Caller,
-        selector: Option<&mut crate::client::space_names::SpaceSelector>,
+        selector: Option<&mut shoal_protocol::space_names::SpaceSelector>,
     ) -> Result<()> {
         match selector {
             Some(selector) => {

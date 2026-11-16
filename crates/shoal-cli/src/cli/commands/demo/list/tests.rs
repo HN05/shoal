@@ -1,6 +1,6 @@
 use super::*;
-use crate::demos::{Demo, Launch, Running};
 use crate::time::UnixTime;
+use shoal_protocol::demos::{Demo, Launch, Running};
 
 fn demo(cmd: &[&str]) -> Demo {
     Demo {

@@ -1,10 +1,10 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::time::UnixTime;
 use crate::{
     daemon::test_support::{manager, repository},
     state::TurnFailure,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn a_reported_retry_shows_until_the_proxy_or_its_execution_ends() {

@@ -1,6 +1,5 @@
 //! Trees that mix workspaces and chats: every walk passes spaces of either
 //! kind alike.
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::approvals::ApprovalRequestExt;
 use crate::{
     daemon::{
@@ -15,6 +14,7 @@ use crate::{
 };
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A workspace `root` with an agent, a chat below it running as the
 /// returned process, and a workspace `worker` with an agent below the chat.
@@ -558,7 +558,7 @@ async fn a_scoped_process_restarts_only_the_chats_below_its_space() {
         .id
         .clone();
     for (caller, allowed) in [(&root.id, true), (&chat.id, false), (&worker.id, false)] {
-        let token = crate::client::scope_tokens::ScopeToken::from(caller.as_str());
+        let token = shoal_protocol::scope_tokens::ScopeToken::from(caller.as_str());
         let space_id = caller.clone();
         let scope = crate::daemon::scope::Caller {
             space_id,

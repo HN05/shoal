@@ -1,12 +1,12 @@
 use std::{fs, path::PathBuf, sync::Arc};
 
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::test_support::{commit, git, manager, repository},
     model::{BranchTarget, Repository},
     removal::{InspectionPolicy, UnsavedWork},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A registered repository whose `origin` has its main branch, and a clone
 /// of that remote for pushing as someone else would.

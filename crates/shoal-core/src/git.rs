@@ -364,7 +364,7 @@ pub(crate) fn clear_bare_flag_command(path: &Path) -> String {
 /// Build the tracked command that runs a push the user approved: the
 /// approved object to the approved ref, replacing only the commit the remote
 /// had when it was requested.
-pub fn approved_push_command(push: &crate::client::approvals::PushSpecification) -> Vec<OsString> {
+pub fn approved_push_command(push: &shoal_protocol::approvals::PushSpecification) -> Vec<OsString> {
     let mut command = vec![OsString::from(Tool::Git.program()), "push".into()];
     if let Some(replaces) = &push.replaces {
         command.push(format!("--force-with-lease={}:{replaces}", push.destination).into());

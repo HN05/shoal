@@ -10,10 +10,10 @@ use crate::{
         context::Context,
         installed::{arguments, replace_option, with_flag, without_option},
     },
-    client::{links::Updates, space_names::SpaceSelector},
     installed::Executable,
     protocol::WakeEnd,
 };
+use shoal_protocol::{links::Updates, space_names::SpaceSelector};
 
 /// Claude Code's `asyncRewake` `Stop` hook: wait for the next messages or
 /// item activity of the agent's workspace or chat, then exit 2, which starts

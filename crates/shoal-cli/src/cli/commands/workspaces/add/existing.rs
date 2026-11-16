@@ -16,7 +16,6 @@ use super::{
     source::load_linked_issue,
     target::AddTarget,
 };
-use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     cli::{commands::issues, context::Context},
@@ -25,6 +24,7 @@ use crate::{
     protocol::CreationOptions,
     start_plan::{AddPlan, Creation, ResolvedAddAgent},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Start `agent`, else on a terminal a picked one, as the worker of the
 /// existing `workspace`, with `args` forwarded as any start forwards them,

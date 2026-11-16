@@ -3,12 +3,12 @@
 //! waits for a retried setup.
 use anyhow::Result;
 
-use crate::client::{queue::WorkerStart, space_names::SpaceSelector};
 use crate::{
     model::{QueueEntry, Workspace},
     paths::CommandPaths,
     protocol::operations::QueuedLaunch,
 };
+use shoal_protocol::{queue::WorkerStart, space_names::SpaceSelector};
 
 /// Queue `launch` in `workspace`, which the daemon checks under the
 /// workspace's settings, for the agent queue to start detached, linking

@@ -7,7 +7,7 @@ pub(crate) mod tmux;
 pub(crate) mod zellij;
 pub(crate) mod zmx;
 
-pub use crate::client::sessions::{HostName, Origin, PlaceClose, PlaceOwnership};
+pub use shoal_protocol::sessions::{HostName, Origin, PlaceClose, PlaceOwnership};
 
 use anyhow::Result;
 use futures_util::future::BoxFuture;

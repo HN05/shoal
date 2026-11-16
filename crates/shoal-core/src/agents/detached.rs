@@ -7,8 +7,8 @@ use std::{ffi::OsString, path::Path};
 use anyhow::Result;
 use futures_util::future::BoxFuture;
 
-use crate::client::output::agents::Delivery;
 use crate::{agent::ModelChoice, config::Effective, paths::Paths};
+use shoal_protocol::agents::Delivery;
 
 /// An app that runs agent sessions apart from any terminal.
 pub trait App: Sync {

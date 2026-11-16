@@ -3,12 +3,12 @@
 use anyhow::{Result, ensure};
 
 use crate::client::output::agents::StoppedProcesses;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{context::Context, ui},
-    client::processes::{Selection, Stopped},
     model::PresentSpace,
 };
+use shoal_protocol::processes::{Selection, Stopped};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Stop the processes Shoal does not track that `selection` takes, of each
 /// space `selectors` names, else of the current chat or workspace, else of

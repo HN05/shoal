@@ -11,10 +11,10 @@ use anyhow::{Context as _, Result, ensure};
 use crate::{
     agents::trust::{CLAUDE_CODE, CODEX, TrustFile},
     cli::{args::workspace::DesktopApp, context::Context},
-    client::transcripts::AgentEnvironment,
     env, execution,
     model::Workspace,
 };
+use shoal_protocol::transcripts::AgentEnvironment;
 
 #[cfg(test)]
 mod tests;

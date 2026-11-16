@@ -1,9 +1,9 @@
 use super::{Failed, error, failure};
 use crate::{
-    client::approvals::Undecided,
     execution::SetupVerificationFailure,
     protocol::{ErrorCode, RemoteError, operations::Failure},
 };
+use shoal_protocol::approvals::Undecided;
 
 #[test]
 fn failures_come_back_as_the_errors_their_commands_handle() {

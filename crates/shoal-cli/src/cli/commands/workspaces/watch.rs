@@ -6,7 +6,7 @@ use tokio::time::Instant;
 
 use crate::cli::{commands::messages, context::Context};
 use crate::client::items;
-use crate::client::space_names::SpaceSelector;
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(in crate::cli::commands) async fn watch_items(
     ctx: &Context,

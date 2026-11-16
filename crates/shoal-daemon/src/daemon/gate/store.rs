@@ -4,9 +4,9 @@ use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::agent::Agent;
-use crate::client::{approvals::GateVerdict, time::UnixTime};
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::{approvals::GateVerdict, time::UnixTime};
 
 /// A subject's saved session.
 #[derive(Debug, Clone, PartialEq, Eq)]

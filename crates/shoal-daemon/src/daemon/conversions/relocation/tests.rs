@@ -7,7 +7,6 @@ pub(crate) static RESUMED: Mutex<Vec<SpaceId>> = Mutex::new(Vec::new());
 /// Notified once a relocation pass has listed the pending conversions.
 pub(crate) static LISTED: tokio::sync::Notify = tokio::sync::Notify::const_new();
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     config::modes::ModeName,
     daemon::{
@@ -19,6 +18,7 @@ use crate::{
     model::Workspace,
     state::AgentState,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A chat of a new repository, whose agent `process` reported session
 /// `s1`, converted into a workspace on `fix-login`.
@@ -28,7 +28,7 @@ async fn converted(
 ) -> (
     Workspace,
     ProcessGroup,
-    crate::client::scope_tokens::ScopeToken,
+    shoal_protocol::scope_tokens::ScopeToken,
 ) {
     let path = repository(root, "repo");
     let repo = manager

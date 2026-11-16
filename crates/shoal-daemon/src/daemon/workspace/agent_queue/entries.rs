@@ -13,16 +13,16 @@ use super::{
     dispatch::Start,
     store::{self, ENTRY_COLUMNS, Launch, entry, insert_launch, opens_existing_branch},
 };
-use crate::client::{
-    space_names::{SpaceName, SpaceSelector},
-    time::UnixTime,
-};
 use crate::{
     daemon::{notifications::NotificationKind, scope::Caller, workspace::Manager},
     model::{PresentSpace, QueueAdmission, QueueEntry, QueueRequest, QueuedPlan, Workspace},
     state::{QueueKind, QueueState},
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
+use shoal_protocol::{
+    space_names::{SpaceName, SpaceSelector},
+    time::UnixTime,
+};
 use shoal_schedule::{rank::QueueRank, scheduler::Ranked};
 
 impl Manager {

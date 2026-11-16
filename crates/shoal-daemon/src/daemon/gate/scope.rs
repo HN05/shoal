@@ -3,9 +3,9 @@
 //! change nothing. It ends with the run.
 use std::{collections::BTreeMap, ffi::OsString};
 
-use crate::client::scope_tokens::ScopeToken;
 use crate::daemon::{operations::Operations, scope::Caller, workspace::Manager};
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::scope_tokens::ScopeToken;
 
 /// A read-only scope that ends when dropped.
 pub(super) struct RunScope<'a> {

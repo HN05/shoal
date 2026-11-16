@@ -12,16 +12,9 @@ use std::io::{BufRead as _, Write as _};
 
 use anyhow::{Context as _, Result, bail};
 
-use crate::{
-    client::{
-        approvals::{self, PushSpecification},
-        links::PushOutcome,
-        space_names::SpaceSelector,
-    },
-    git,
-    model::Workspace,
-    paths::CommandPaths,
-    tools::Tool,
+use crate::{client::approvals, git, model::Workspace, paths::CommandPaths, tools::Tool};
+use shoal_protocol::{
+    approvals::PushSpecification, links::PushOutcome, space_names::SpaceSelector,
 };
 
 /// Answer Git for a push to `remote`, by name or URL, whose real URL is

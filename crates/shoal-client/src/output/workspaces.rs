@@ -1,12 +1,12 @@
 //! What workspace commands print.
-use crate::space_names::SpaceName;
+use shoal_protocol::space_names::SpaceName;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{
+use crate::output::{batch::Failure, outputs};
+use shoal_protocol::{
     model::{Completion, SpaceHold, WorkspaceRef},
-    output::{batch::Failure, outputs},
     removal::RemovalResult,
 };
 
@@ -48,7 +48,7 @@ pub struct BackgroundRemoval {
 pub struct Removals {
     pub removed: Vec<Removed>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub chats: Vec<crate::output::chat::RemovedChat>,
+    pub chats: Vec<shoal_protocol::chats::RemovedChat>,
     pub failed: Vec<Failure>,
 }
 
@@ -83,7 +83,7 @@ pub struct Bases {
 pub struct Registered {
     pub registered: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub relation: Option<crate::model::Relation>,
+    pub relation: Option<shoal_protocol::model::Relation>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
 }
@@ -101,7 +101,7 @@ pub struct StartedBeside {
     /// The name the workspace is planned under.
     pub workspace: SpaceName,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent: Option<crate::agent::Agent>,
+    pub agent: Option<shoal_protocol::agent::Agent>,
 }
 
 outputs!(

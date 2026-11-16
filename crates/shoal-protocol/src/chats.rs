@@ -1,9 +1,10 @@
-//! What chat commands print.
+//! Chats as the daemon starts and removes them for a client.
+use crate::agents::Delivery;
 use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
 use shoal_ids::repository_ids::RepositoryId;
 
-use crate::output::outputs;
+use shoal_ids::execution_ids::ExecutionId;
 
 /// A chat started in a background place.
 #[derive(Debug, Serialize, Deserialize)]
@@ -42,7 +43,16 @@ pub struct QueuedChat {
 pub enum StartedChat {
     Queued(Box<QueuedChat>),
     Background(BackgroundChat),
-    Detached(Box<crate::output::agents::DetachedChat>),
+    Detached(Box<crate::chats::DetachedChat>),
 }
 
-outputs!(BackgroundChat, QueuedChat, RemovedChat, StartedChat);
+/// A chat started detached in an app.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DetachedChat {
+    pub chat: crate::model::Chat,
+    pub execution_id: ExecutionId,
+    pub pid: u32,
+    pub log: std::path::PathBuf,
+    #[serde(flatten)]
+    pub delivery: Delivery,
+}

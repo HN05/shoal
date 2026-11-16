@@ -1,6 +1,6 @@
 use super::*;
-use crate::client::approvals::GateVerdict;
 use crate::daemon::test_support::manager;
+use shoal_protocol::approvals::GateVerdict;
 
 #[tokio::test]
 async fn sessions_replace_each_other_and_denials_leave_failures_out() {

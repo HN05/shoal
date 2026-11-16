@@ -11,10 +11,10 @@ use crate::{
         trust::{TrustFile, repository_trust_paths},
     },
     cli::{commands::workspaces, context::Context},
-    client::transcripts::AgentEnvironment,
     env,
     model::{ChatHome, Repository, Workspace},
 };
+use shoal_protocol::transcripts::AgentEnvironment;
 
 /// Whose agents ran with a config location: a workspace's, or a chat's in
 /// the repository's checkout.

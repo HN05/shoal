@@ -2,33 +2,17 @@
 //! changes, on a connection of their own. A daemon restart closes the
 //! connection; the subscription subscribes again and reports the new
 //! snapshot as a resync.
-pub mod records;
+use shoal_protocol::subscriptions::Update;
+use shoal_protocol::subscriptions::records::{Record, Topic};
 
 use anyhow::Result;
 use tokio::{io::BufReader, net::UnixStream};
 
-use crate::{
-    connection::{self, Daemon},
+use crate::connection::{self, Daemon};
+use shoal_protocol::{
     log::LogTopic,
     protocol::{Body, Responses, SubscriptionMethod},
 };
-use records::{Record, RecordKey, Topic};
-
-/// What a subscription reports.
-#[derive(Debug, Clone)]
-pub enum Update {
-    /// Every record the subscription covers, as it is now. `resynced` marks
-    /// a snapshot after a reconnect, which replaces everything known before:
-    /// a record it lacks was removed meanwhile.
-    Snapshot {
-        records: Vec<Record>,
-        resynced: bool,
-    },
-    /// A record was added or changed.
-    Changed(Box<Record>),
-    /// A record was removed.
-    Removed(RecordKey),
-}
 
 /// A subscription to the records of some topics.
 pub struct Subscription<D> {

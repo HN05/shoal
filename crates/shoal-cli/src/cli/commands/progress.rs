@@ -11,10 +11,11 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Fallback},
     },
-    client::{
-        progress::{self, PlanStep, Progress, ProgressChange, RecordedBlocker, StepState},
-        space_names::SpaceSelector,
-    },
+    client::progress,
+};
+use shoal_protocol::{
+    progress::{PlanStep, Progress, ProgressChange, RecordedBlocker, StepState},
+    space_names::SpaceSelector,
 };
 
 /// The blocker `shoal progress` adds or removes.
@@ -55,7 +56,7 @@ pub(super) async fn run(
 /// picked or changed.
 fn changes(status: Option<String>, steps: bool) -> Result<Vec<ProgressChange>> {
     if let Some(status) = status.as_deref().filter(|status| !status.is_empty()) {
-        progress::validate_line("status lines", status)?;
+        shoal_protocol::progress::validate_line("status lines", status)?;
     }
     let mut changes = Vec::new();
     if steps {
@@ -81,7 +82,7 @@ fn blocker_change(flags: BlockerFlags) -> Result<Option<ProgressChange>> {
     Ok(match (add, remove) {
         (Some(add), _) => {
             let reason = reason.context("--add-blocker needs --reason")?;
-            progress::validate_line("blocker reasons", &reason)?;
+            shoal_protocol::progress::validate_line("blocker reasons", &reason)?;
             Some(ProgressChange::AddBlocker {
                 blocker: super::blockers::parse(&add)?,
                 step,
@@ -126,7 +127,7 @@ pub(super) async fn report_plan(
 fn single_lines(change: ProgressChange) -> Option<ProgressChange> {
     let step = |step: PlanStep| {
         Some(PlanStep {
-            name: progress::step_name(&step.name)?,
+            name: shoal_protocol::progress::step_name(&step.name)?,
             ..step
         })
     };
@@ -142,7 +143,7 @@ fn single_lines(change: ProgressChange) -> Option<ProgressChange> {
             removed,
         } => ProgressChange::StepChanged {
             key,
-            name: name.and_then(|name| progress::step_name(&name)),
+            name: name.and_then(|name| shoal_protocol::progress::step_name(&name)),
             state,
             removed,
         },
@@ -195,7 +196,7 @@ fn task(line: &str) -> Result<PlanStep> {
         _ => bail!("expected `[ ]` or `[x]` after the list marker"),
     };
     let name = name.trim();
-    progress::validate_line("step names", name)?;
+    shoal_protocol::progress::validate_line("step names", name)?;
     Ok(PlanStep {
         name: name.to_owned(),
         state,

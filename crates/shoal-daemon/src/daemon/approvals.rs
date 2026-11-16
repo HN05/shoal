@@ -11,13 +11,13 @@ mod routing;
 mod store;
 mod text;
 
-pub(crate) use crate::client::approvals::{
+pub(crate) use routing::governing;
+pub(crate) use shoal_protocol::approvals::{
     ActionSpecification, ApprovalRequest, DecisionStatus, GateStep, HoldSpecification, Lifetime,
     MERGE, MergeSpecification, PortSpecification, PushSpecification, ResourceSpecification,
     SecretSpecification, SimulatorSpecification, Specification, Target, Undecided,
     UnmergeSpecification,
 };
-pub(crate) use routing::governing;
 pub use store::{ReasonRequired, check, current, release, request_action};
 pub(crate) use store::{pending_count, release_decided_by};
 

@@ -6,7 +6,6 @@ use shoal_ids::space_ids::SpaceId;
 use std::path::{Path, PathBuf};
 
 use super::{GuardMode, Manager, ResourceGuard};
-use crate::client::{assignments::Done, space_names::SpaceSelector};
 use crate::{
     config::Effective,
     daemon::{
@@ -16,6 +15,7 @@ use crate::{
     hooks::{self, Hook, HookKind},
     model::{Completion, HandedBack, PresentSpace, Workspace},
 };
+use shoal_protocol::{assignments::Done, space_names::SpaceSelector};
 
 impl Manager {
     /// The completion the space `id` recorded, a workspace's or a chat's.

@@ -6,9 +6,9 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::Result;
 
-use crate::{
+use crate::connection::{Daemon, call, pages, request};
+use shoal_protocol::{
     config::edit::Change,
-    connection::{Daemon, call, pages, request},
     model::{
         Branch, BranchTarget, CheckoutSync, KeptBranch, LocalConfigEdit, MovedRepository,
         Repository, RepositoryMoves, RepositoryRemoval, SyncedRepository,

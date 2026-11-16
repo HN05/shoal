@@ -1,5 +1,5 @@
 //! The daemon's answers to [`SubscriptionMethod`] requests, and who may send them.
-use crate::client::scope_tokens::ScopeToken;
+use shoal_protocol::scope_tokens::ScopeToken;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -10,8 +10,8 @@ use super::super::{
     subscriptions,
     workspace::Manager,
 };
-use crate::client::space_names::SpaceSelector;
 use crate::protocol::SubscriptionMethod;
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) fn handle(
     manager: &Arc<Manager>,

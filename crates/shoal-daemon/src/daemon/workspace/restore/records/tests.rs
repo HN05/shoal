@@ -1,6 +1,6 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{chat, manager, repository};
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn a_removed_chat_keeps_a_record_of_how_and_where_it_ran() {

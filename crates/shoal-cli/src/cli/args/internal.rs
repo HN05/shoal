@@ -4,8 +4,8 @@ use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Args, Subcommand};
 
-use crate::client::{events::EventCursor, space_names::SpaceSelector};
 use crate::{cli::commands, sessions::HostName, workers};
+use shoal_protocol::{events::EventCursor, space_names::SpaceSelector};
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -24,7 +24,7 @@ pub enum InternalCommand {
         workspace: Option<SpaceSelector>,
         /// Revoke a previously exported scope token.
         #[arg(long)]
-        revoke: Option<crate::client::scope_tokens::ScopeToken>,
+        revoke: Option<shoal_protocol::scope_tokens::ScopeToken>,
     },
     /// Print a view's rows for the bare `shoal` picker to reload.
     MenuRows { view: commands::menu::View },

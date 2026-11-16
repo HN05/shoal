@@ -1,7 +1,8 @@
 //! What `shoal run` lists of the configured commands.
 use serde::{Deserialize, Serialize};
 
-use crate::{config::repo::ConfigLayer, output::outputs};
+use crate::output::outputs;
+use shoal_protocol::config::repo::ConfigLayer;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CommandDefinition {

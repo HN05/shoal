@@ -9,7 +9,6 @@ use std::{
 
 use anyhow::Result;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     agents::hook_reports::{Report, Sending},
     ai::IntegrationKind,
@@ -23,6 +22,7 @@ use crate::{
     protocol::TurnEnd,
     state::{AgentState, TurnFailure},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Report `state` for the agent of the space this runs in, which ends a
 /// turn of an agent with integration `ends_turn` when one is named.

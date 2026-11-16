@@ -16,9 +16,9 @@ use std::{
 use tokio::sync::{Mutex, MutexGuard, Notify, futures::Notified, watch};
 
 use super::Grant;
-use crate::client::time::UnixTime;
 use crate::model::HeldBy;
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
+use shoal_protocol::time::UnixTime;
 
 /// How long a waiting chat launch stays out of admission for the caller
 /// that records its chat, should the caller never attach it.

@@ -3,15 +3,13 @@
 use anyhow::Result;
 
 use super::acquisition::{Finish, obtain};
-use crate::client::leases;
-use crate::client::space_names::SpaceSelector;
-use crate::{
-    cli::{
-        context::Context,
-        output::{Palette, Style},
-    },
-    client::secrets::{SecretCatalog, SecretGrant, SecretRequest},
+use crate::cli::{
+    context::Context,
+    output::{Palette, Style},
 };
+use crate::client::leases;
+use shoal_protocol::secrets::{SecretCatalog, SecretGrant, SecretRequest};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Exit 2 means a pending or denied approval; a queued request returns only
 /// once approved or denied.

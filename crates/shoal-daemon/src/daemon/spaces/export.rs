@@ -7,9 +7,7 @@ use crate::transfer::ManifestExt;
 use anyhow::{Context, Result, ensure};
 use shoal_ids::space_ids::SpaceId;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
-    client::transcripts::Environments,
     config::Effective,
     daemon::{events::EventCause, workspace::Manager},
     execution::recovery::{LastSession, StoppedAgent},
@@ -23,6 +21,8 @@ use crate::{
     transfer::{ExportedSpace, Manifest, SessionSource},
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
+use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::transcripts::Environments;
 
 mod carried;
 mod copy;

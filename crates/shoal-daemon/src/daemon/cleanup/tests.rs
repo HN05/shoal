@@ -1,9 +1,9 @@
 use super::*;
-use crate::client::assignments::Done;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::{notifications::NotificationKind, workspace_files::Attacher};
 use crate::model::PresentSpace;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::assignments::Done;
+use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;
 
 #[test]

@@ -4,8 +4,8 @@ use super::marks::{
 };
 use super::platform::parent;
 use super::*;
-use crate::client::processes::UniqueId;
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::processes::UniqueId;
 use std::collections::HashMap;
 
 #[test]

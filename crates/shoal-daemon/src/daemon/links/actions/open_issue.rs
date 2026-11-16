@@ -7,7 +7,6 @@ use std::path::Path;
 
 use anyhow::{Context as _, Result, bail};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     config::{
         permissions::{Opening, OtherRepositories, Permissions},
@@ -41,6 +40,7 @@ use shoal_forge::{
         create::{CreateRequests, Created},
     },
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Why `--link` is refused outside a workspace or chat.
 const LINK_NEEDS_SPACE: &str =

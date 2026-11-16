@@ -1,6 +1,6 @@
 use super::*;
-use crate::client::executions::ServiceLimit;
 use crate::daemon::test_support::{manager, repository};
+use shoal_protocol::executions::ServiceLimit;
 
 #[test]
 fn a_limit_stands_until_its_named_end_or_for_a_while_without_one() {

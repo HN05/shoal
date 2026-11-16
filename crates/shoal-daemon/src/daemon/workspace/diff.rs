@@ -3,8 +3,8 @@ use anyhow::{Context, Result, ensure};
 use shoal_refs::CommitId;
 
 use super::Manager;
-use crate::client::space_names::SpaceSelector;
 use crate::{git, model::DiffBase};
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// The commit `shoal diff` compares against: the fork point from the

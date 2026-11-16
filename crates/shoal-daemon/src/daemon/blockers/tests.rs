@@ -1,15 +1,15 @@
 use super::*;
 use crate::{
-    client::{
-        assignments::Done,
-        events::{BlockerEvent, EventKind},
-        progress::{ProgressChange, RecordedBlocker},
-    },
     daemon::{
         events::EventItem,
         test_support::{manager, repository},
     },
     model::{Blocker, Workspace},
+};
+use shoal_protocol::{
+    assignments::Done,
+    events::{BlockerEvent, EventKind},
+    progress::{ProgressChange, RecordedBlocker},
 };
 
 const ISSUE: &str = "https://github.com/team/app/issues/7";

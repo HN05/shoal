@@ -1,6 +1,6 @@
 //! A daemon serving the protocol on the socket of a temporary state
 //! directory, for tests that connect to it the way the CLI and apps do.
-use crate::client::scope_tokens::ScopeToken;
+use shoal_protocol::scope_tokens::ScopeToken;
 use std::{sync::Arc, time::Duration};
 
 use tokio::{
@@ -9,12 +9,12 @@ use tokio::{
 };
 
 use super::{Server, connections::Capacity, workspace::Manager};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     client::connection::Connector,
     daemon::test_support::{git, manager, repository},
     model::{Repository, Workspace},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A generous guard against a hang; no test waits this long when it passes.
 pub(crate) const HANG: Duration = Duration::from_secs(60);

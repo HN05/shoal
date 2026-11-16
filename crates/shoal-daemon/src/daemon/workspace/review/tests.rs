@@ -1,5 +1,4 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         events::{EventItem, EventKind},
@@ -10,6 +9,7 @@ use crate::{
     protocol::AssignmentMethod,
 };
 use shoal_forge::test_support::Server;
+use shoal_protocol::space_names::SpaceSelector;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},

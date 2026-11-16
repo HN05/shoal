@@ -2,8 +2,7 @@
 //! unavailability with. Only known phrases count, so a review that discusses
 //! rate limits is never taken for one that hit them.
 use serde_json::Value;
-
-use super::FailureReason;
+use shoal_protocol::reviews::FailureReason;
 
 /// The most of a text or diagnostic stream that is read.
 pub(super) const SCAN_LIMIT: usize = 64 * 1024;

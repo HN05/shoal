@@ -8,7 +8,6 @@ use super::{
     ApprovalRequest, ApprovalRequestExt, DecisionStatus, Specification, Target, proposals,
     store::{CANDIDATES, by_key, decode_record, record_row, write_record},
 };
-use crate::client::space_names::SpaceSelector;
 use crate::{
     config::permissions::PermissionKey,
     daemon::{
@@ -20,6 +19,7 @@ use crate::{
         workspace::Manager,
     },
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The permissions that govern `request`, each of which a coordinator needs
 /// as `direct` to approve it instead of a grant, and whose narrowest value

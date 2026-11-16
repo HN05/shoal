@@ -9,7 +9,6 @@ use shoal_ids::space_ids::SpaceId;
 
 use crate::{
     agent::Agent,
-    client::scope_tokens::ScopeToken,
     config::{modes::ModeName, permissions::PermissionsConfig},
     daemon::{
         approvals::{ApprovalRequest, release_decided_by},
@@ -20,6 +19,7 @@ use crate::{
     sessions::Origin,
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_protocol::scope_tokens::ScopeToken;
 
 /// A conversion whose agent still runs where the space was, until its turn
 /// ends.

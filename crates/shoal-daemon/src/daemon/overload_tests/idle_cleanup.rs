@@ -2,9 +2,9 @@
 //! its workspace from no cleanup; removal cancels it and keeps the agent for
 //! `shoal restore`.
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::{daemon::workspace_files::Attacher, model::CleanupReason, state::AgentState};
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn cleanup_removes_a_workspace_whose_idle_agent_waits_for_an_update() {

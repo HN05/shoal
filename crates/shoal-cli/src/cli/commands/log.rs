@@ -11,10 +11,11 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Fallback},
     },
-    client::{
-        log::{LogEntry, LogFilter, LogTopic},
-        subscriptions::{Subscription, Update, records::Record},
-    },
+    client::subscriptions::Subscription,
+};
+use shoal_protocol::{
+    log::{LogEntry, LogFilter, LogTopic},
+    subscriptions::{Update, records::Record},
 };
 
 mod entries;
@@ -84,7 +85,7 @@ struct Printer<'a> {
     palette: Palette,
     date: Option<String>,
     /// The newest entry printed.
-    last: Option<crate::client::events::EventCursor>,
+    last: Option<shoal_protocol::events::EventCursor>,
 }
 
 impl<'a> Printer<'a> {

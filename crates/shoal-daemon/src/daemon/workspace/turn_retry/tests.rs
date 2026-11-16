@@ -1,12 +1,11 @@
-use crate::client::assignments::Done;
 use crate::paths::StateFiles;
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::assignments::Done;
 use std::time::Duration;
 
 use anyhow::Context;
 
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         notifications::NotificationKind,
@@ -15,6 +14,7 @@ use crate::{
     },
     model::Workspace,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 #[test]
 fn waits_double_from_half_a_minute_to_a_quarter_hour_spread_a_fifth() {

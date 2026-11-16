@@ -10,7 +10,6 @@ use std::path::Path;
 use anyhow::{Context, Result, bail};
 use rusqlite::Connection;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     config::Effective,
     daemon::{store, workspace::Manager},
@@ -19,6 +18,7 @@ use crate::{
     protocol::ItemContext,
 };
 use shoal_forge::RepoRequests;
+use shoal_protocol::space_names::SpaceSelector;
 
 #[allow(
     clippy::large_enum_variant,
@@ -43,7 +43,7 @@ impl LinkSpace {
         }
     }
 
-    pub(crate) fn name(&self) -> &crate::client::space_names::SpaceName {
+    pub(crate) fn name(&self) -> &shoal_protocol::space_names::SpaceName {
         match self {
             Self::Workspace(workspace) => &workspace.name,
             Self::Chat { chat, .. } => &chat.name,

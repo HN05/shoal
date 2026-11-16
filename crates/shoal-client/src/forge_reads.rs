@@ -4,7 +4,6 @@
 use crate::forge::items::reference::ItemInput;
 use anyhow::{Context, Result};
 
-use crate::space_names::SpaceSelector;
 use crate::{
     connection::{Daemon, joined, pages, request},
     forge::{
@@ -24,6 +23,9 @@ use crate::{
         raw::RawRequest,
         review::{reviewers::Reviewer, thread::Thread},
     },
+};
+use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{
     model::{Blocker, MergeWarning, Selected},
     protocol::{DownloadPiece, ItemContext, ItemMethod},
 };

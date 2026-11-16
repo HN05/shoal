@@ -19,10 +19,11 @@ use shoal_core::{
 };
 
 use shoal_client as client;
-use shoal_client::time;
-use shoal_client::{agent, demos, model, protocol, state, validate};
+use shoal_client::demos;
 use shoal_core::WORKER_STACK;
 use shoal_forge_types as forge;
+use shoal_protocol::time;
+use shoal_protocol::{agent, model, protocol, state, validate};
 use shoal_subprocess as subprocess;
 
 pub use cli::entry::{RunDaemon, run};

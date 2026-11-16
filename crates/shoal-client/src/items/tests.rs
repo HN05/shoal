@@ -6,7 +6,7 @@ fn deadline(seconds: u64) -> tokio::time::Instant {
 
 #[tokio::test]
 async fn item_wait_continues_on_the_replacement_daemon() {
-    use crate::{
+    use shoal_protocol::{
         links::Updates,
         paths::Paths,
         protocol::{self, Body, ErrorCode, ItemMethod, Method, Operation, Request, Response},
@@ -86,7 +86,7 @@ async fn item_wait_continues_on_the_replacement_daemon() {
 
 #[tokio::test(start_paused = true)]
 async fn item_wait_ends_at_its_deadline_while_the_daemon_is_away() {
-    use crate::{
+    use shoal_protocol::{
         paths::Paths,
         protocol::{self, ItemMethod, Method, Operation, Request},
     };

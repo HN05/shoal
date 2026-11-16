@@ -5,12 +5,12 @@ use std::path::PathBuf;
 use anyhow::{Context as _, Result};
 
 use crate::client::reviews;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::context::Context,
     model::Chat,
     reviews::{FindingId, Outcome, ReviewId},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Cancel review `id`, else the space's queued or running one: a chat's is
 /// that of one of its linked PRs.

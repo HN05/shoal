@@ -1,4 +1,3 @@
-use crate::client::{progress::ProgressChange, space_names::SpaceSelector};
 use crate::{
     config::modes::ModeName,
     daemon::{
@@ -9,6 +8,7 @@ use crate::{
     },
     model::Repository,
 };
+use shoal_protocol::{progress::ProgressChange, space_names::SpaceSelector};
 use shoal_refs::BranchName;
 use std::path::Path;
 
@@ -163,7 +163,7 @@ async fn the_chats_open_questions_stay_with_the_space() {
     let repo = registered(root.path(), &manager).await;
     let talk = chat(&manager, "talk", "worker", Some(&repo), None).await;
     let selector = SpaceSelector::id(&talk.id);
-    let ask = crate::client::questions::Ask {
+    let ask = shoal_protocol::questions::Ask {
         question: "Which database?".into(),
         recommendation: "SQLite".into(),
         reason: None,

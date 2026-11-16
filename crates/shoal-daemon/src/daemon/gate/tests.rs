@@ -1,14 +1,14 @@
 use std::{path::PathBuf, sync::Arc};
 
 use super::*;
-use crate::client::{links::PushOutcome, notifications::NotificationKind};
-use crate::client::{scope_tokens::ScopeToken, space_names::SpaceSelector};
 use crate::daemon::{
     approvals::PushSpecification,
     scope::Caller,
     test_support::{commit, configure, install_test_script, manager, repository},
 };
 use crate::model::Workspace;
+use shoal_protocol::{links::PushOutcome, notifications::NotificationKind};
+use shoal_protocol::{scope_tokens::ScopeToken, space_names::SpaceSelector};
 
 /// A fake gate agent: it records each run as `new` or `resume <session>`,
 /// the latest resumed run's prompt in `resumed`, its scope token and state

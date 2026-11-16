@@ -6,7 +6,6 @@ use anyhow::{Context, Result, ensure};
 use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace::{Manager, conflicts::recorded},
     forge::{
@@ -23,6 +22,7 @@ use crate::{
     protocol::ItemContext,
 };
 use shoal_forge::{RepoRequests, items::action::ActionRequests};
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// The warning for merging the PR `input` names in the repository of

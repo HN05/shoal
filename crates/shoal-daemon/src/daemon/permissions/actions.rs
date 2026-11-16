@@ -2,10 +2,10 @@
 //! where its space's permission for the key is `direct`, once a decision
 //! approves it where it is `propose`, and not at all where it is `deny`.
 //! The user takes every one.
-use crate::client::scope_tokens::ScopeToken;
 use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
+use shoal_protocol::scope_tokens::ScopeToken;
 use std::{
     collections::HashMap,
     sync::{Mutex, PoisonError},
@@ -128,7 +128,7 @@ impl Manager {
         &self,
         caller: &Caller,
         starting: &str,
-        selector: &crate::client::space_names::SpaceSelector,
+        selector: &shoal_protocol::space_names::SpaceSelector,
     ) -> Result<()> {
         let space = self.space(selector).await?;
         let start = format!(
@@ -145,7 +145,7 @@ impl Manager {
     /// is in; none for a chat without one.
     pub(crate) async fn space_repository(
         &self,
-        selector: &crate::client::space_names::SpaceSelector,
+        selector: &shoal_protocol::space_names::SpaceSelector,
     ) -> Result<Option<RepositoryId>> {
         Ok(self.space(selector).await?.repository_id().cloned())
     }

@@ -7,8 +7,9 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
-    client::{priority, space_names::SpaceSelector},
+    client::priority,
 };
+use shoal_protocol::space_names::SpaceSelector;
 use shoal_schedule::priority::Priority;
 
 /// Set `value` on the space `space` names, else the current one.

@@ -5,12 +5,12 @@ use shoal_refs::BranchName;
 use std::sync::Arc;
 
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::model::Workspace;
 use crate::{
     daemon::test_support::{configure, install_test_script, manager, repository, until_tests_end},
     reviews::{FailureReason, ReviewState, Severity},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 const REVIEW: &str = r#"{"summary":"One problem.","verdict":"comment","checked":[],
 "findings":[{"path":"tracked","line":1,"severity":"should-fix","title":"Unclear","body":"Name it."}]}"#;

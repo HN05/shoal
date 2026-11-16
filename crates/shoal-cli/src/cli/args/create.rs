@@ -3,7 +3,6 @@ use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Args, Subcommand};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     cli::args::{
@@ -14,6 +13,7 @@ use crate::{
     },
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
+use shoal_protocol::space_names::SpaceSelector;
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -232,7 +232,7 @@ pub struct StartArgs {
     /// to the linked issue's or PR's title, else a workspace's branch, or
     /// for a chat "<repo> <mode>", or "<workspace name> chat" with --in.
     #[arg(long)]
-    pub name: Option<crate::client::space_names::SpaceName>,
+    pub name: Option<shoal_protocol::space_names::SpaceName>,
     #[command(flatten)]
     pub copy: CopyArgs,
     #[command(flatten)]

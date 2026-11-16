@@ -9,13 +9,13 @@ use crate::{
         output::{Palette, Style},
         ui,
     },
-    client::cleanup::{Emptying, ManualCleanup, Pick, Selection},
     model::KeptBranch,
 };
+use shoal_protocol::cleanup::{Emptying, ManualCleanup, Pick, Selection};
 
 use super::branches;
 use crate::client::output::cleanup::Report;
-use crate::client::space_names::SpaceSelector;
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn run(
     ctx: &Context,

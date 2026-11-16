@@ -7,7 +7,6 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_refs::{BranchName, CommitId};
 use std::path::PathBuf;
 
-pub(crate) use crate::client::links::{OpenOutcome, Proposed};
 use crate::{
     config::resolve::Effective,
     daemon::{
@@ -41,6 +40,7 @@ use shoal_forge::{
         create::CreateRequests,
     },
 };
+pub(crate) use shoal_protocol::links::{OpenOutcome, Proposed};
 
 /// Operations on the client type [`OpenOutcome`] that only the `shoal` command uses.
 pub(crate) trait OpenOutcomeExt {

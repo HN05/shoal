@@ -6,8 +6,6 @@ use std::ffi::OsString;
 use anyhow::Result;
 
 use super::{AddOptions, target::AddTarget};
-use crate::client::space_names::SpaceName;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         commands::{issues, repositories},
@@ -18,6 +16,8 @@ use crate::{
     terminal::PlaceName,
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceName;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// `creation` with its path resolved against the current directory.
 pub(super) fn absolute(ctx: &Context, mut creation: Creation) -> Result<Creation> {

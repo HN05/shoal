@@ -7,7 +7,6 @@ use std::{ffi::OsString, path::Path};
 use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::client::preparation::{self, NewWorkspace};
-use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     agent::{Agent, ModelChoice},
     cli::{
@@ -28,6 +27,7 @@ use crate::{
     protocol::{ConfigTarget, CreationOptions, ItemContext, operations::WorkspaceStart},
     reviews::ReviewTarget,
 };
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 /// The configured command a manual review runs.
 const MANUAL: &str = "review";

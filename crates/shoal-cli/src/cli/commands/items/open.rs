@@ -3,18 +3,18 @@
 use anyhow::Result;
 
 use super::{content::read_content, context::select_open_context};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{args::changes::OpenPullArgs, commands::operations, context::Context, ui},
-    client::{
-        approvals::Target,
-        links::{OpenOutcome, Proposed},
-    },
     forge::items::{
         create::{NewIssue, PullOptions},
         item::Opened,
     },
     protocol::operations::OperationSpec,
+};
+use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{
+    approvals::Target,
+    links::{OpenOutcome, Proposed},
 };
 
 pub(super) async fn open_pr(

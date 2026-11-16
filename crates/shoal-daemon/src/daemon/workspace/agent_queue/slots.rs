@@ -8,13 +8,13 @@ use anyhow::Result;
 use rusqlite::params;
 
 use super::weight::Light;
-use crate::client::time::UnixTime;
 use crate::{
     config::modes::ModeName,
     daemon::workspace::{Manager, capacity::Activity},
     state::{ExecutionState, QueueKind, QueueState},
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::time::UnixTime;
 
 /// One used slot.
 pub(crate) struct Slot {

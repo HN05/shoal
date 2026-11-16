@@ -2,9 +2,9 @@
 //! keeps to restore, and its untracked processes.
 use anyhow::Result;
 
-use crate::space_names::SpaceSelector;
-use crate::{
-    connection::{Daemon, request},
+use crate::connection::{Daemon, request};
+use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{
     model::{PresentSpace, StoppedSpace},
     processes::{Selection, Stopped},
     protocol::{QueuedLaunches, RemovalMethod, UntrackedProcesses},

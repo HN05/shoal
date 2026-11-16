@@ -80,7 +80,7 @@ fn start_options_are_checked_before_anything_is_chosen() {
     assert!(overrides(Some(" "), &[]).validate().is_err());
     let https = |preset| Overrides {
         preset: Some(preset),
-        scheme: Some(crate::demos::Scheme::Https),
+        scheme: Some(shoal_protocol::demos::Scheme::Https),
         open: None,
         ports: Vec::new(),
     };

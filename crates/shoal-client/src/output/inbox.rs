@@ -1,11 +1,11 @@
 //! What `shoal inbox` prints.
 use serde::{Deserialize, Serialize};
 
-use crate::{
+use crate::output::outputs;
+use shoal_protocol::{
     approvals::ApprovalRequest,
     demos::Running,
     model::{Chat, CheckoutSync, ReviewMark, UntrackedWorktree, Workspace},
-    output::outputs,
     questions::Question,
 };
 

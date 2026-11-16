@@ -33,7 +33,7 @@ pub(in crate::cli::commands) async fn run(
                 return questions::ask_in_chat(&ctx, space).await;
             }
             // Clap requires the question and recommendation without --in-chat.
-            let ask = crate::client::questions::Ask {
+            let ask = shoal_protocol::questions::Ask {
                 question: question.unwrap_or_default(),
                 recommendation: recommend.unwrap_or_default(),
                 reason,
@@ -160,7 +160,7 @@ pub(in crate::cli::commands) async fn run(
             if undo {
                 workspaces::undone(&ctx, space).await
             } else {
-                let done = crate::client::assignments::Done {
+                let done = shoal_protocol::assignments::Done {
                     cleanup,
                     integrated,
                     keep_demos,

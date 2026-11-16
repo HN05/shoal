@@ -1,12 +1,12 @@
 use super::{Attacher, FileSource, chat, workspace};
-use crate::client::assignments::Done;
-use crate::client::space_names::SpaceSelector;
 use crate::{
-    client::events::{EventItem, FileEventDetails, FileEventKind},
     daemon::{test_support::manager, workspace::Manager},
     model::SpaceKind,
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::assignments::Done;
+use shoal_protocol::events::{EventItem, FileEventDetails, FileEventKind};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The journal's file events, oldest first.
 async fn file_events(manager: &Manager) -> Vec<FileEventDetails> {

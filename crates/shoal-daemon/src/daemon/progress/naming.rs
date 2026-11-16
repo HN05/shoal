@@ -5,10 +5,6 @@ use anyhow::{Context as _, Result, ensure};
 
 use super::{Change, blockers::Named};
 use crate::{
-    client::{
-        progress::{ProgressChange, RecordedBlocker},
-        space_names::SpaceSelector,
-    },
     daemon::workspace::Manager,
     forge::{
         ForgeRepo,
@@ -19,6 +15,10 @@ use crate::{
     },
     model::{Blocker, PresentSpace},
     state::BlockerKind,
+};
+use shoal_protocol::{
+    progress::{ProgressChange, RecordedBlocker},
+    space_names::SpaceSelector,
 };
 
 impl Manager {

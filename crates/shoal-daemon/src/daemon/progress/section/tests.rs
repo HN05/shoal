@@ -1,5 +1,5 @@
 use super::*;
-use crate::client::progress::Step;
+use shoal_protocol::progress::Step;
 
 fn progress(status: Option<&str>, steps: &[(&str, bool)]) -> Progress {
     Progress {
@@ -40,7 +40,7 @@ fn a_section_shows_the_status_line_and_the_steps() {
 
 #[test]
 fn a_section_shows_what_blocks_the_space_and_each_step() {
-    let blocker = |reason: &str| crate::client::progress::RecordedBlocker {
+    let blocker = |reason: &str| shoal_protocol::progress::RecordedBlocker {
         kind: crate::state::BlockerKind::Space,
         target: "id".into(),
         name: "api".into(),

@@ -24,7 +24,7 @@ use crate::{
     model::SpaceKind,
 };
 
-pub use crate::client::config::modes::ModeName;
+pub use shoal_protocol::config::modes::ModeName;
 
 /// The rule a local review's style comes from, after its fixed instructions.
 pub const REVIEW_RULE: &str = "review";

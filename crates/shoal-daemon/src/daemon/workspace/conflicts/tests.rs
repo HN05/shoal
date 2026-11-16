@@ -1,8 +1,8 @@
 use shoal_refs::BranchName;
 use std::{fs, path::Path};
 
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{commit, git, manager, repository};
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn conflicts_compare_committed_head_with_the_default_or_named_branch() {

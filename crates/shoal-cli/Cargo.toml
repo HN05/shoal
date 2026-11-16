@@ -18,11 +18,12 @@ libc.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"
-shoal-client = { workspace = true, features = ["clap"] }
+shoal-client.workspace = true
 shoal-core.workspace = true
 shoal-forge.workspace = true
 shoal-forge-types = { workspace = true, features = ["clap"] }
 shoal-ids.workspace = true
+shoal-protocol = { workspace = true, features = ["clap"] }
 shoal-refs.workspace = true
 shoal-schedule.workspace = true
 shoal-subprocess.workspace = true
@@ -32,8 +33,8 @@ toml.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }
 
 [dev-dependencies]
-shoal-client = { workspace = true, features = ["test-support"] }
 shoal-core = { workspace = true, features = ["test-support"] }
 shoal-forge = { workspace = true, features = ["test-support"] }
 shoal-ids = { workspace = true, features = ["test-support"] }
+shoal-protocol = { workspace = true, features = ["test-support"] }
 tokio = { workspace = true, features = ["test-util"] }

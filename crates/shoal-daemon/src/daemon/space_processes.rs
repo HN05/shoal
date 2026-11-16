@@ -6,8 +6,6 @@ use std::path::PathBuf;
 
 use anyhow::{Result, ensure};
 
-pub(crate) use crate::client::processes::{Selection, Stopped};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{events::StoppedProcess, leftovers::COMMAND_LIMIT, store, workspace::Manager},
     fsutil::off_runtime,
@@ -21,6 +19,8 @@ use crate::{
     },
     state::WorkspaceState,
 };
+pub(crate) use shoal_protocol::processes::{Selection, Stopped};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Operations on the client type [`Selection`] that only the `shoal` command uses.
 trait SelectionExt {

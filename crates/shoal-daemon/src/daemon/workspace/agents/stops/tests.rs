@@ -1,10 +1,10 @@
 use super::*;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     test_support::{manager, repository},
     workspace::{ExecutionKind, StartedExecution, StopRequest},
 };
 use crate::state::AgentState;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A tracked idle agent that can resume, in a new workspace.
 async fn idle_agent(manager: &Manager, root: &tempfile::TempDir) -> StartedExecution {

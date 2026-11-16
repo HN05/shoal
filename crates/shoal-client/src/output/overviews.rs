@@ -2,7 +2,8 @@
 //! leases` without a workspace.
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-use crate::{model::Workspace, output::Output};
+use crate::output::Output;
+use shoal_protocol::model::Workspace;
 
 /// One workspace's report, or why it could not be made.
 #[derive(Serialize, Deserialize)]

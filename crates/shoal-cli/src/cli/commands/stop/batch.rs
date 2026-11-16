@@ -3,12 +3,12 @@ use anyhow::Result;
 use futures_util::future::join_all;
 
 use crate::client::output::agents::{CancelledRun, StoppedSpaces};
-use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     cli::{context::Context, ui},
     model::{PresentSpace, QueueEntry},
     protocol::QueuedLaunches,
 };
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 use super::{
     cancelled_run_message, continue_hint, other_processes, other_processes_stop, removed_launches,

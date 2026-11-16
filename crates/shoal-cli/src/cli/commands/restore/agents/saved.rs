@@ -2,8 +2,8 @@
 use anyhow::{Result, ensure};
 
 use super::super::targets::Selected;
-use crate::client::space_names::SpaceSelector;
 use crate::{cli::context::Context, execution::recovery::Saved, model::PresentSpace};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The stopped work and last sessions of the `selected` spaces, or of every
 /// space with any, as [`saved_work`] keeps them for `forget`.

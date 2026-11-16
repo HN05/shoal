@@ -1,13 +1,11 @@
 //! What `shoal demo` prints.
-use crate::space_names::SpaceName;
 use serde::{Deserialize, Serialize};
+use shoal_protocol::space_names::SpaceName;
 
 use std::collections::BTreeMap;
 
-use crate::{
-    demos::{Demo, Running},
-    output::outputs,
-};
+use crate::output::outputs;
+use shoal_protocol::demos::{Demo, Running};
 
 /// Configured and running demos, as `shoal demo ls --json` prints them.
 #[derive(Serialize, Deserialize)]

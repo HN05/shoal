@@ -8,7 +8,6 @@ use anyhow::{Context as _, Result};
 use super::agents::queue::Stopped;
 use super::checkpoints::branch_label;
 use crate::client::output::restore::{Queued, Reopened};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
@@ -18,6 +17,7 @@ use crate::{
     model::{PresentSpace, RemovedSpace, RestoredChat, RestoredSpace, RestoredWorkspace},
     state::WorkspaceState,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Open each of the `removed` spaces again, in the order given, so a
 /// workspace opens before a chat in its worktree: link its PRs and set up a

@@ -1,7 +1,6 @@
 use shoal_ids::repository_ids::RepositoryId;
 use std::{fs, path::PathBuf, sync::Arc};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         approvals::{DecisionStatus, Specification, Undecided},
@@ -11,6 +10,7 @@ use crate::{
     },
     model::{MergeOptions, Unmerged, Workspace},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 struct Fixture {
     root: tempfile::TempDir,

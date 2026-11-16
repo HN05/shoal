@@ -4,7 +4,6 @@
 //! deleted.
 use super::super::super::{Manager, StopRequest};
 use super::super::{Removal, Stage};
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::space_processes::WorktreeTies;
 use crate::daemon::workspace::runner::JobStop;
 use crate::{
@@ -21,6 +20,7 @@ use crate::{
     },
 };
 use anyhow::{Result, bail, ensure};
+use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;
 use std::{
     collections::BTreeMap,
@@ -72,7 +72,7 @@ impl WorktreeRemoval {
     /// first.
     pub(crate) fn with_children(
         self,
-        children: Vec<crate::client::space_names::SpaceName>,
+        children: Vec<shoal_protocol::space_names::SpaceName>,
     ) -> RemovalResult {
         RemovalResult {
             removed: self.removed,

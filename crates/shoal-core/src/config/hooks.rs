@@ -1,5 +1,5 @@
 //! The command a config sets for each hook.
-pub use crate::client::config::hooks::*;
+pub use shoal_protocol::config::hooks::*;
 
 use super::{Settings, repo::RepoConfig};
 

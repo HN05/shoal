@@ -1,7 +1,8 @@
 //! What issue and PR commands print.
 use serde::{Deserialize, Serialize};
 
-use crate::{forge::items::item::Opened, model::Workspace, output::outputs};
+use crate::{forge::items::item::Opened, output::outputs};
+use shoal_protocol::model::Workspace;
 
 /// A revert and, when Git made it, the workspace its branch is in.
 #[derive(Serialize, Deserialize)]

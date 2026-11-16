@@ -2,14 +2,14 @@
 //! parents and scope, listing them and removing them.
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::chats::{RemovedChat, StartedChat};
 
-use crate::space_names::SpaceName;
-use crate::space_names::SpaceSelector;
+use shoal_protocol::space_names::SpaceName;
+use shoal_protocol::space_names::SpaceSelector;
 
-use crate::{
-    connection::{Daemon, request},
+use crate::connection::{Daemon, request};
+use shoal_protocol::{
     model::{Chat, ChatHome, RenamedChat},
-    output::chat::{RemovedChat, StartedChat},
     protocol::{ChatMethod, ChatScope, ChatStart},
     repository::Selector,
     scope_tokens::ScopeToken,
@@ -30,10 +30,10 @@ pub async fn launch(daemon: &impl Daemon, start: ChatStart) -> Result<StartedCha
 #[derive(Clone, Copy)]
 pub struct NewChat<'a> {
     pub name: &'a SpaceName,
-    pub agent: &'a crate::agent::Agent,
-    pub mode: &'a crate::config::modes::ModeName,
+    pub agent: &'a shoal_protocol::agent::Agent,
+    pub mode: &'a shoal_protocol::config::modes::ModeName,
     /// The permissions `--permission` gives the agent, whatever the mode's.
-    pub narrowing: crate::config::permissions::PermissionsConfig,
+    pub narrowing: shoal_protocol::config::permissions::PermissionsConfig,
     /// The space it goes below; a scoped caller's daemon puts it below the
     /// caller's own space without one.
     pub parent: Option<&'a SpaceSelector>,
@@ -90,7 +90,7 @@ pub async fn check_parent(
 /// `root_dir`, where a chat without a repository runs, prepared as
 /// registering a repository prepares it.
 pub async fn root(daemon: &impl Daemon) -> Result<std::path::PathBuf> {
-    let root: crate::protocol::ChatRoot = request(daemon, ChatMethod::ChatRoot).await?;
+    let root: shoal_protocol::protocol::ChatRoot = request(daemon, ChatMethod::ChatRoot).await?;
     Ok(root.path)
 }
 

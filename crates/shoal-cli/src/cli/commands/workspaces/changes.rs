@@ -3,7 +3,6 @@ use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
@@ -11,6 +10,7 @@ use crate::{
     },
     execution, git,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(in crate::cli::commands) async fn diff(
     ctx: &Context,

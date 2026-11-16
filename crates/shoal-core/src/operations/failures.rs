@@ -1,10 +1,10 @@
 //! An operation's typed failures, as the worker reports them and as the
 //! errors its commands handled before.
 use crate::{
-    client::approvals::Undecided,
     execution::SetupVerificationFailure,
     protocol::{RemoteError, operations::Failure},
 };
+use shoal_protocol::approvals::Undecided;
 
 /// A failure the operation reported that no other error type carries.
 #[derive(Debug)]

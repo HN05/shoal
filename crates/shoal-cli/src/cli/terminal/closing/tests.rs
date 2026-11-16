@@ -341,9 +341,9 @@ async fn inspect(
     let temp = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(temp.path());
     paths.prepare().unwrap();
-    let mut saved = crate::client::saved::Saved::default();
+    let mut saved = shoal_protocol::saved::Saved::default();
     if stopped {
-        saved.commands.push(crate::client::saved::SavedCommand {
+        saved.commands.push(shoal_protocol::saved::SavedCommand {
             id: "command".into(),
             path: "command.json".into(),
             argv: vec!["true".into()],

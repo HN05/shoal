@@ -6,8 +6,8 @@
 pub(crate) mod starts;
 mod worker;
 
-use crate::client::scope_tokens::ScopeToken;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::scope_tokens::ScopeToken;
 use std::{
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
     sync::{Arc, Mutex, PoisonError},
@@ -19,12 +19,12 @@ use tokio::sync::watch;
 use uuid::Uuid;
 
 use super::{scope::Caller, workspace::Manager};
-use crate::client::space_names::SpaceSelector;
 use crate::protocol::operations::{
     Ended, Failure, OperationEvent, OperationKind, OperationSpec, Order, Progress, Report, Step,
     Stream,
 };
 use crate::refusal::{Reason, Refusal};
+use shoal_protocol::space_names::SpaceSelector;
 #[cfg(test)]
 pub(crate) use worker::fake;
 

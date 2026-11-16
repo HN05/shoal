@@ -1,6 +1,5 @@
 use super::*;
 use crate::{
-    client::{assignments::Done, space_names::SpaceSelector},
     config::modes::ModeName,
     daemon::{
         test_support::{chat, configure, manager, repository},
@@ -9,6 +8,7 @@ use crate::{
     model::{Repository, Workspace},
     state::{AgentState, Sleep},
 };
+use shoal_protocol::{assignments::Done, space_names::SpaceSelector};
 
 const HOUR: Duration = Duration::from_secs(3600);
 

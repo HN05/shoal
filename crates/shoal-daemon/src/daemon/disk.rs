@@ -24,13 +24,13 @@ use super::{
     warnings::{self, Signal, Warnings},
     workspace::{Manager, Protection, agent_queue::OneShotStop},
 };
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::log;
 use crate::{
     caches::Layout,
     config::overload::Disk,
     model::{PresentSpace, Repository, Workspace},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Each pass inspects every workspace, so a pass that could not free enough
 /// space repeats at the idle sweep's pace.

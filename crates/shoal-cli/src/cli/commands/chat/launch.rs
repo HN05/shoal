@@ -10,8 +10,6 @@ use super::{
     ChatPlace, Options, Topic,
     agent::{chat_agent, check_model},
 };
-use crate::client::output::chat::BackgroundChat;
-use crate::client::space_names::{SpaceName, SpaceSelector};
 use crate::{
     agent::Agent,
     cli::{
@@ -22,6 +20,8 @@ use crate::{
     config::Effective,
     model::{Chat, ChatHome},
 };
+use shoal_protocol::chats::BackgroundChat;
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 mod admission;
 mod command;

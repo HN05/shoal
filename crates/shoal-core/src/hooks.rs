@@ -7,12 +7,12 @@ use tokio::process::Command;
 
 pub use crate::config::hooks::{HookDirectory, HookKind};
 use crate::{
-    client::resources::ResourceLease,
     env,
     model::{Chat, Workspace},
     paths::Paths,
     protocol::timing,
 };
+use shoal_protocol::resources::ResourceLease;
 
 /// Whose identity a hook carries and where it runs: a workspace's, in its
 /// worktree, or a chat's, in its repository's registered checkout.

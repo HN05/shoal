@@ -1,19 +1,20 @@
 //! The agents running in a space: the state and turns their hooks report,
 //! the user's interrupts, and the sessions they run.
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
+use shoal_protocol::agents::GitCredential;
+
 use shoal_ids::execution_ids::ExecutionId;
 
-use crate::space_names::SpaceSelector;
-use crate::{
+use crate::connection::{Daemon, request};
+use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{
     config::permissions::PermissionChange,
-    connection::{Daemon, request},
     model::{AgentSession, AgentStatus, PendingRestart, RunningAgent},
     protocol::{AgentMethod, ExecutionMethod, TurnEnd, WakeEnd, WokenTurn},
     sessions::Origin,
     state::{AgentState, TurnFailure},
 };
-use shoal_ids::agent_session_ids::AgentSessionId;
 
 /// Record `state` for the agent of `workspace`, running `session`, as a
 /// hook `made` it; `turn_end` reports the turn that ended with it.
@@ -118,22 +119,6 @@ pub async fn restart(
 /// The agents connected in `space`, a workspace or a running chat.
 pub async fn running(daemon: &impl Daemon, space: SpaceSelector) -> Result<Vec<RunningAgent>> {
     request(daemon, AgentMethod::SpaceAgents { space }).await
-}
-
-/// A login Git sends over HTTPS. Its `Debug` leaves out the password.
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GitCredential {
-    pub username: String,
-    pub password: String,
-}
-
-impl std::fmt::Debug for GitCredential {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("GitCredential")
-            .field("username", &self.username)
-            .finish_non_exhaustive()
-    }
 }
 
 /// The caller's login for Git over HTTPS to `host`, or none.

@@ -3,10 +3,10 @@ use anyhow::Result;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_refs::BranchName;
 
-pub use crate::client::removal::{
+use crate::{fsutil::off_runtime, git, model::Workspace, process};
+pub use shoal_protocol::removal::{
     BranchOutcome, NOTHING, RemovalCheck, RemovalResult, UnsavedWork,
 };
-use crate::{fsutil::off_runtime, git, model::Workspace, process};
 use std::path::Path;
 
 #[cfg(test)]

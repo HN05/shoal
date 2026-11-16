@@ -27,6 +27,7 @@ shoal-forge = { path = "crates/shoal-forge" }
 shoal-forge-derive = { path = "crates/shoal-forge-derive" }
 shoal-forge-types = { path = "crates/shoal-forge-types" }
 shoal-ids = { path = "crates/shoal-ids" }
+shoal-protocol = { path = "crates/shoal-protocol" }
 shoal-proxy = { path = "crates/shoal-proxy" }
 shoal-refs = { path = "crates/shoal-refs" }
 shoal-schedule = { path = "crates/shoal-schedule" }
@@ -59,9 +60,10 @@ libc.workspace = true
 rusqlite = { workspace = true, features = ["bundled"] }
 serde_json.workspace = true
 sha2 = "0.11"
-shoal-client = { workspace = true, features = ["test-support"] }
+shoal-client.workspace = true
 shoal-core = { path = "crates/shoal-core", features = ["test-support"] }
 shoal-forge = { workspace = true, features = ["test-support"] }
+shoal-protocol = { workspace = true, features = ["test-support"] }
 socket2 = "0.6"
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "net", "io-util", "process", "rt", "rt-multi-thread", "signal", "sync", "time"] }

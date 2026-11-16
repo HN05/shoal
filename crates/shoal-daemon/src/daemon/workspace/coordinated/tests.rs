@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use super::super::{ExecutionKind, Manager};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::test_support::{manager, repository},
     execution::TrackedAgent,
     model::{CleanupReason, Workspace},
     state::AgentState,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A workspace `parent` and a workspace split from it.
 async fn split_child(manager: &Manager, root: &std::path::Path) -> (Workspace, Workspace) {
@@ -255,7 +255,8 @@ async fn idle_cleanup_keeps_a_stopped_chat_while_its_coordinator_runs() {
 
 #[tokio::test]
 async fn a_blocked_child_tells_its_coordinator_rather_than_the_user() {
-    use crate::{client::progress::ProgressChange, daemon::notifications::NotificationKind};
+    use crate::daemon::notifications::NotificationKind;
+    use shoal_protocol::progress::ProgressChange;
     let (root, manager) = manager().await;
     let (parent, child) = split_child(&manager, root.path()).await;
     let started = start_agent(&manager, &parent).await;

@@ -9,13 +9,14 @@ use serde::{Deserialize, Serialize};
 use shoal_ids::space_ids::SpaceId;
 
 use super::{notifications::NotificationKind, workspace::Manager};
-use crate::client::{
-    events::{BlockerEvent, EventKind},
-    progress::{self, MAX_STEPS, PlanStep, Progress, ProgressChange, RecordedBlocker, StepState},
-    space_names::SpaceSelector,
-};
 use crate::model::PresentSpace;
 use crate::time::UnixTime;
+use shoal_protocol::progress;
+use shoal_protocol::{
+    events::{BlockerEvent, EventKind},
+    progress::{MAX_STEPS, PlanStep, Progress, ProgressChange, RecordedBlocker, StepState},
+    space_names::SpaceSelector,
+};
 
 mod blockers;
 mod clearing;

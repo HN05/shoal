@@ -7,14 +7,14 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::{EventCursor, EventKind, decode, log_entry};
 use crate::time::UnixTime;
 use crate::{
-    client::{
-        log::{LogEntry, LogFilter, LogTopic},
-        space_names::SpaceSelector,
-    },
     config::permissions::PermissionKey,
     daemon::{permissions::Action, scope::Caller, workspace::Manager},
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::{
+    log::{LogEntry, LogFilter, LogTopic},
+    space_names::SpaceSelector,
+};
 
 /// How far a removed space's log looks up for a space that still exists,
 /// through the spaces removed above it.

@@ -1,6 +1,6 @@
 use super::*;
-use crate::time::UnixTime;
-use crate::{
+use shoal_protocol::time::UnixTime;
+use shoal_protocol::{
     model::{AgentStatus, PendingRestart, Workspace},
     state::WorkspaceState,
 };
@@ -116,7 +116,7 @@ fn a_named_workspace_without_the_agent_is_reported() {
 /// An agent of `workspace` that protection stopped, waiting for its restore.
 fn protection_stopped(workspace: &Workspace) -> RunningAgent {
     RunningAgent {
-        stopped: Some(crate::protocol::Protection {
+        stopped: Some(shoal_protocol::protocol::Protection {
             reason: "critical memory pressure".into(),
             resumes_when: "system load is healthy".into(),
         }),

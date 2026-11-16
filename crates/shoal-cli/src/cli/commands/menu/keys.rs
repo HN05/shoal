@@ -4,7 +4,6 @@ use anyhow::{Context as _, Result, ensure};
 
 use super::{Choice, View, execute::execute_command, linked::view_command, rows::Row};
 use crate::cli::commands::{approvals, service};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         Command,
@@ -25,6 +24,7 @@ use crate::{
     model::PresentSpace,
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// What a key of the picker does.
 #[derive(Clone, Copy, PartialEq, Eq)]

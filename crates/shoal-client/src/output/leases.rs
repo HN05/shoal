@@ -1,9 +1,9 @@
 //! What `shoal leases` prints.
 use serde::{Deserialize, Serialize};
 
-use crate::{
+use crate::output::outputs;
+use shoal_protocol::{
     model::{PortOverview, PortSuggestion, Workspace},
-    output::outputs,
     resources::Overview,
     sim::SimulatorOverview,
 };

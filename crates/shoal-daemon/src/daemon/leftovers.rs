@@ -10,8 +10,6 @@ use std::{
 
 use anyhow::Result;
 
-pub(crate) use crate::client::processes::Leftover;
-use crate::client::{space_names::SpaceSelector, time::UnixTime};
 use crate::{
     daemon::{space_processes::WorktreeTies, workspace::Manager},
     fsutil::off_runtime,
@@ -24,6 +22,8 @@ use crate::{
         },
     },
 };
+pub(crate) use shoal_protocol::processes::Leftover;
+use shoal_protocol::{space_names::SpaceSelector, time::UnixTime};
 
 /// The most leftovers one delivery or status names; the rest follow in
 /// later deliveries.

@@ -2,7 +2,6 @@
 //! them, and answer their findings.
 use anyhow::Result;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::changes::ReviewCommand,
@@ -12,6 +11,7 @@ use crate::{
     model::{Chat, PresentSpace},
     reviews::{Review, ReviewTarget},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 mod answer;
 pub(super) mod show;

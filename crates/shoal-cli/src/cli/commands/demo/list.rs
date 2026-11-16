@@ -5,16 +5,16 @@ use anyhow::Result;
 
 use super::lookup::{running, scope};
 use crate::client::output::demo::Listing;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
         output::{Palette, Style},
         ui,
     },
-    demos::Preset,
     protocol::ConfigTarget,
 };
+use shoal_protocol::demos::Preset;
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn list(ctx: &Context, workspace: Option<SpaceSelector>) -> Result<i32> {
     let workspace = scope(ctx, workspace).await?;

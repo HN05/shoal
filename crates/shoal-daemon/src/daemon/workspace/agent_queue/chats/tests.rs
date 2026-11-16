@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 
-use crate::client::{output::chat::StartedChat, space_names::SpaceSelector};
 use crate::{
     daemon::{
         test_support::{global_config, manager},
@@ -13,6 +12,7 @@ use crate::{
     protocol::ChatStart,
     state::QueueState,
 };
+use shoal_protocol::{chats::StartedChat, space_names::SpaceSelector};
 
 /// A machine of one agent slot with a heavy chat mode `pair` and a light
 /// one `chat`, and the workspace launch `busy` holding the slot. Its

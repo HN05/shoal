@@ -1,5 +1,4 @@
 //! A chat without a repository acting in each registered repository.
-use crate::client::space_names::SpaceSelector;
 use crate::{
     config::permissions::Opening,
     daemon::{
@@ -11,6 +10,7 @@ use crate::{
     protocol::{ItemContext, ItemMethod},
     test_support::repository,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Register a repository for each of `names`.
 async fn repositories(

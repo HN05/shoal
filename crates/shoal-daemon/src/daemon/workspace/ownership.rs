@@ -7,12 +7,12 @@ use super::{
     },
     paths::matches_recorded_worktree_path,
 };
-use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use crate::{fsutil::off_runtime, git, model::Workspace, state::WorkspaceState};
 use anyhow::{Context, Result, ensure};
 use rusqlite::params;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;
 use std::{
     fs,

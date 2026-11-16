@@ -4,15 +4,13 @@
 use anyhow::{Context as _, Result, bail};
 
 use super::{ChatPlace, Launch, Started};
-use crate::client::{
-    queue::{self, Hold},
-    space_names::SpaceSelector,
-};
+use crate::client::queue::{self, Hold};
 use crate::{
     cli::context::Context,
     model::{Chat, ChatQueueRequest, QueueEntry},
     queued_starts::{ChatPlan, ChatPlanStart},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Launch {
     /// Ask the agent queue to admit this chat's agent, unless the launch
@@ -98,7 +96,7 @@ impl Launch {
             }
         };
         crate::cli::agents::link_chat(ctx, &chat, &self.chat.links).await;
-        let queued = crate::client::output::chat::QueuedChat {
+        let queued = shoal_protocol::chats::QueuedChat {
             chat,
             entry,
             waiting,

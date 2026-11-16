@@ -2072,12 +2072,10 @@ fn already_closed_issues_are_rejected_before_creating_workspaces() {
 
 #[test]
 fn an_apps_creation_rejects_a_closed_issue_before_creating_a_workspace() {
-    use shoal_client::{
-        connection,
-        protocol::{
-            OperationMethod,
-            operations::{StartedWorkspace, WorkspaceStart},
-        },
+    use shoal_client::connection;
+    use shoal_protocol::protocol::{
+        OperationMethod,
+        operations::{StartedWorkspace, WorkspaceStart},
     };
     let runtime = tokio::runtime::Runtime::new().unwrap();
     {
@@ -2108,12 +2106,10 @@ fn an_apps_creation_rejects_a_closed_issue_before_creating_a_workspace() {
 
 #[test]
 fn an_apps_workspace_on_an_issue_takes_its_title_without_a_name() {
-    use shoal_client::{
-        connection,
-        protocol::{
-            OperationMethod,
-            operations::{StartedWorkspace, WorkspaceStart},
-        },
+    use shoal_client::connection;
+    use shoal_protocol::protocol::{
+        OperationMethod,
+        operations::{StartedWorkspace, WorkspaceStart},
     };
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let fixture = issue_fixture("github.com");
@@ -2152,6 +2148,8 @@ fn an_apps_agent_keeps_waiting_for_a_failed_setup_until_a_hook_passes_there() {
     use shoal_client::{
         connection::request,
         operations::{Followed, Following},
+    };
+    use shoal_protocol::{
         protocol::{
             OperationMethod,
             operations::{
@@ -2242,8 +2240,8 @@ fn an_apps_agent_keeps_waiting_for_a_failed_setup_until_a_hook_passes_there() {
 
 #[test]
 fn an_app_follows_the_setup_of_a_workspace_it_creates() {
-    use shoal_client::{
-        operations::{Followed, Following},
+    use shoal_client::operations::{Followed, Following};
+    use shoal_protocol::{
         protocol::{
             ErrorCode, OperationMethod,
             operations::{Ended, Outcome, Progress, StartedWorkspace, Step, WorkspaceStart},

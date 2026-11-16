@@ -4,15 +4,15 @@ use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 
 use super::{chat, workspaces};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
         ui::{self, Fallback},
     },
-    client::space_names::SpaceName,
     model::PresentSpace,
 };
+use shoal_protocol::space_names::SpaceName;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Rename the space `space` selects, else the space this runs in or a
 /// picked one.

@@ -10,7 +10,6 @@ use rusqlite::{Connection, OptionalExtension, params};
 use shoal_refs::BranchName;
 
 use super::Manager;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{log, scope::Caller, workspace_files::HomeKey},
     git,
@@ -19,6 +18,7 @@ use crate::{
     time::UnixTime,
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// `shoal checkpoint`: keep the workspace's current state.

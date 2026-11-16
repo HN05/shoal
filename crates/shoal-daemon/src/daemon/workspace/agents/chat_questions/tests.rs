@@ -1,7 +1,6 @@
 use shoal_ids::execution_ids::ExecutionId;
 use std::{sync::Arc, time::Duration};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{manager, repository},
@@ -11,6 +10,7 @@ use crate::{
     model::Workspace,
     protocol::TurnEnd,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A workspace with a tracked agent, its execution's ID, and another
 /// workspace.

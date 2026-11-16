@@ -2,10 +2,9 @@
 //! workspaces and of chats alike.
 use anyhow::Result;
 
-use crate::{
-    connection::Daemon,
+use crate::{connection::Daemon, output::agents::Skipped};
+use shoal_protocol::{
     model::{PendingRestart, PresentSpace, RunningAgent},
-    output::agents::Skipped,
     state::AgentState,
 };
 
@@ -58,7 +57,7 @@ impl Selection {
     /// cannot restart or already run again. Agents protection stopped wait
     /// for their restore and are left out, and reported as skipped when
     /// their space was named and runs no other.
-    pub fn plan(self, agent: Option<&crate::agent::Agent>) -> Plan {
+    pub fn plan(self, agent: Option<&shoal_protocol::agent::Agent>) -> Plan {
         let mut plan = Plan {
             restarts: Vec::new(),
             skipped: Vec::new(),
@@ -147,7 +146,7 @@ pub async fn running_agents(daemon: &impl Daemon) -> Result<Vec<RunningAgent>> {
 /// it has are those of `stopped`, which protection stopped.
 fn absent_reason(
     space: &str,
-    agent: Option<&crate::agent::Agent>,
+    agent: Option<&shoal_protocol::agent::Agent>,
     stopped: &[RunningAgent],
 ) -> String {
     if let Some(reason) = stopped

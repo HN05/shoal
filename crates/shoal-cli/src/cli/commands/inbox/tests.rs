@@ -27,27 +27,27 @@ fn a_lone_sync_failure_names_its_repository() {
 
 #[test]
 fn a_question_notes_its_recommendation_and_files() {
-    let file = |id, name: &str| crate::client::files::SentFile {
+    let file = |id, name: &str| shoal_protocol::files::SentFile {
         id,
         name: name.into(),
         title: None,
         path: format!("/files/{name}").into(),
     };
-    let question = crate::client::questions::Question {
-        number: crate::client::item_numbers::ItemNumber {
+    let question = shoal_protocol::questions::Question {
+        number: shoal_protocol::item_numbers::ItemNumber {
             space: 2.into(),
             item: 3,
         },
         space_id: "w1".into(),
         space: "cache".into(),
         created_at: UnixTime::from_seconds(0),
-        ask: crate::client::questions::Ask {
+        ask: shoal_protocol::questions::Ask {
             question: "Which layout?".into(),
             recommendation: "A".into(),
             reason: None,
             choices: Vec::new(),
         },
-        status: crate::client::questions::QuestionStatus::Open,
+        status: shoal_protocol::questions::QuestionStatus::Open,
         in_chat: false,
         files: vec![file(1, "a.png"), file(2, "b.png")],
     };

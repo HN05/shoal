@@ -4,13 +4,13 @@ use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 
 use super::{Host, names_places};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     model::{Repository, Workspace},
     paths::CommandPaths,
     protocol::ItemContext,
     start_plan::AddPlan,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The name of the place hosting a workspace, with the repository and issue
 /// filled in, rendered once the branch is known.

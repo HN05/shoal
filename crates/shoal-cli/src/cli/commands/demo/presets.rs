@@ -7,7 +7,6 @@ use anyhow::{Context as _, Result};
 
 use super::start::Chosen;
 use crate::client::leases::{self, Acquisition, PortAcquisition};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         commands::{
@@ -16,11 +15,12 @@ use crate::{
         },
         context::Context,
     },
-    client::sim::{SimRequest, Simulator},
     config::repo::ConflictPolicy,
-    demos::{Launch, PORT, Preset, SIM_UDID},
     model::{PortRequest, PortReservation, Workspace},
 };
+use shoal_protocol::demos::{Launch, PORT, Preset, SIM_UDID};
+use shoal_protocol::sim::{SimRequest, Simulator};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The workspace's lease `shoal acquire sim` takes by default, so the demo
 /// shows the device the agent installed on.

@@ -2,11 +2,11 @@
 //! reports to the daemon while the agent runs.
 use std::{io::IsTerminal, time::Duration};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     config::Effective, model::ExecutionPlan, paths::CommandPaths, protocol::AgentMethod,
     sessions::Origin, terminal::Attachment,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// How often the wrapper reads whether a terminal shows the agent and
 /// reports it. Unchanged readings are reported too, so a restarted daemon

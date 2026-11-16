@@ -1,6 +1,4 @@
 use super::*;
-use crate::client::assignments::Done;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     ports::PortRequest,
     test_support::{install_test_script, manager, repository},
@@ -11,6 +9,8 @@ use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
 use crate::model::PresentSpace;
 use futures_util::FutureExt;
+use shoal_protocol::assignments::Done;
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn agent_exit_hook_reports_disconnects_and_skips_removing_workspaces() {

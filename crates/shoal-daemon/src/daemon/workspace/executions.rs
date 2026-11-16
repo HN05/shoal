@@ -7,8 +7,6 @@ mod reregistration;
 mod stopping;
 
 use super::{GuardMode, Manager, ResourceGuard, places::ExecutionPlace};
-use crate::client::scope_tokens::ScopeToken;
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::log;
 use crate::{
     config::repo::Cache,
@@ -30,6 +28,8 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, Transaction, params};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::scope_tokens::ScopeToken;
+use shoal_protocol::space_names::SpaceSelector;
 use std::{
     collections::{BTreeMap, HashSet},
     path::{Path, PathBuf},
@@ -42,8 +42,8 @@ mod state;
 #[cfg(test)]
 mod tests;
 
-pub use crate::client::executions::ExecutionKind;
 pub(crate) use completion::agent_execution_space;
+pub use shoal_protocol::executions::ExecutionKind;
 pub(crate) use state::{Completing, Connections, Executions};
 pub(super) use stopping::StopPolicy;
 pub use stopping::{Save, StopRequest, UnprovenStop};

@@ -8,7 +8,6 @@ use super::{
     secrets, simulators, workspace_overviews,
 };
 use crate::client::output::leases::{Held, Leases, Releases};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::{
@@ -19,13 +18,14 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Fallback},
     },
-    client::{
-        approvals::{ApprovalRequest, Specification, Target},
-        leases,
-        resources::{LockMode, ResourceKind, ResourceRequest},
-        sim::SimRequest,
-    },
+    client::leases,
     model::PortRequest,
+};
+use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{
+    approvals::{ApprovalRequest, Specification, Target},
+    resources::{LockMode, ResourceKind, ResourceRequest},
+    sim::SimRequest,
 };
 
 pub(super) async fn acquire(

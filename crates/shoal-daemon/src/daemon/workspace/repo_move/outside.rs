@@ -9,9 +9,9 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::params;
 
 use super::Running;
-use crate::client::space_names::SpaceName;
 use crate::{daemon::workspace::Manager, fsutil, model::Execution, tmp_dirs};
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceName;
 
 /// A chat without a repository: its ID and name, the `root_dir` it runs
 /// in, its temporary directory, attached files and the session files an

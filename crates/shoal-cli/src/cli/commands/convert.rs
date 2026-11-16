@@ -7,7 +7,6 @@ use shoal_refs::BranchName;
 use super::issues::Issue;
 use crate::client::output::convert::Converted;
 use crate::client::preparation::Preparing;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::create::BranchArgs,
@@ -20,6 +19,7 @@ use crate::{
     model::{SpaceKind, Workspace},
     protocol::{CreationOptions, ItemContext},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Turn the chat `space` names, or the one this runs in, into a workspace
 /// on the branch `branch` names, set it up, and report it.

@@ -6,7 +6,6 @@ use shoal_ids::space_ids::SpaceId;
 use std::fmt;
 
 use super::{ApprovalRequest, DecisionStatus, Lifetime, MERGE, Target, proposals};
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         events::{self, EventKind},
@@ -17,6 +16,7 @@ use crate::{
     },
     model::PresentSpace,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A stored request's key, record, active flag, numbers, and whether its
 /// space is gone, which only a proposed issue outlives.

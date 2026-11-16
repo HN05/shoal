@@ -4,13 +4,13 @@ use anyhow::Result;
 
 use super::{Failed, Reporter};
 use crate::{
-    client::{links::OpenOutcome, space_names::SpaceSelector},
     forge::items::create::PullOptions,
     git,
     model::Workspace,
     paths::CommandPaths,
     protocol::operations::{Failure, Step},
 };
+use shoal_protocol::{links::OpenOutcome, space_names::SpaceSelector};
 
 /// Verify the worktree before anything leaves it, push without forcing
 /// unless the `push` permission holds the push back for the user, then let

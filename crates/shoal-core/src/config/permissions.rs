@@ -4,11 +4,11 @@
 //! `propose` < `gate` < `direct`.
 use anyhow::Result;
 
-pub use crate::client::config::permissions::*;
 use crate::config::{
     Settings, modes,
     options::{Merge, Options},
 };
+pub use shoal_protocol::config::permissions::*;
 
 /// The permissions of a space in `mode` under `settings`, before the tree
 /// narrows them; a space without a recorded mode has `[permissions]` and

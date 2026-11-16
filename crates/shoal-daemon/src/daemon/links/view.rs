@@ -4,7 +4,6 @@ use anyhow::Result;
 
 use super::{reads::ReadPlace, space::LinkSpace};
 use crate::{
-    client::views::Viewed,
     daemon::{scope::Caller, workspace::Manager},
     forge::{
         ForgeRepo,
@@ -18,6 +17,7 @@ use crate::{
     protocol::ItemContext,
 };
 use shoal_forge::{account::Account, ci::checks::CheckRequests, review::view::ViewRequests};
+use shoal_protocol::views::Viewed;
 
 impl Manager {
     /// The items `selection` names in `context`, each issue and PR among

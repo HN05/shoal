@@ -1,11 +1,11 @@
 use super::*;
-use crate::client::scope_tokens::ScopeToken;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{scope, test_support},
     protocol::{ExecutionMethod, NotificationMethod, Operation, WorkspaceMethod},
     state::WorkspaceState,
 };
+use shoal_protocol::scope_tokens::ScopeToken;
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn exported_scopes_are_persistent_independent_and_untracked() {

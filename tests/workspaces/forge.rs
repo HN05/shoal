@@ -2367,11 +2367,11 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     // An app's request for the head with an agent that can run is refused
     // before anything is created, since the head holds no agent of its own.
     let before = fixture.ok(&["list"]);
-    let start = shoal_client::protocol::OperationMethod::StartWorkspace {
+    let start = shoal_protocol::protocol::OperationMethod::StartWorkspace {
         repository: fixture.repo.to_str().unwrap().into(),
-        start: shoal_client::protocol::operations::WorkspaceStart::PullHead {
+        start: shoal_protocol::protocol::operations::WorkspaceStart::PullHead {
             url: url.parse().unwrap(),
-            head: shoal_client::protocol::PullHead {
+            head: shoal_protocol::protocol::PullHead {
                 number: shoal_client::forge::numbers::PullNumber::new(8),
                 reference: "refs/pull/8/head".into(),
                 commit: first.clone().into(),
@@ -2386,7 +2386,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
         issue: None,
         pr: Some(url.parse().unwrap()),
         agent: Some(Box::new(
-            shoal_client::protocol::operations::LaunchRequest::new(Some("reviewer".into())),
+            shoal_protocol::protocol::operations::LaunchRequest::new(Some("reviewer".into())),
         )),
         waiting: None,
         env: None,
@@ -2396,7 +2396,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
         tokio::runtime::Runtime::new()
             .unwrap()
             .block_on(shoal_client::connection::request::<
-                shoal_client::protocol::operations::StartedWorkspace,
+                shoal_protocol::protocol::operations::StartedWorkspace,
             >(&fixture.connector(), start));
     assert!(refused.is_err(), "expected a refusal: {refused:?}");
     assert_eq!(fixture.ok(&["list"]), before);
@@ -2492,9 +2492,9 @@ fn an_apps_workspace_linking_a_pr_takes_its_title_without_a_name() {
     let pull = forgejo_pull(7, "open", "fix", &"7".repeat(40));
     script_api(fixture.root.path(), "repos/team/project/pulls/7", &pull);
     fixture.ok(&["list"]);
-    let start = shoal_client::protocol::OperationMethod::StartWorkspace {
+    let start = shoal_protocol::protocol::OperationMethod::StartWorkspace {
         repository: fixture.repo.to_str().unwrap().into(),
-        start: shoal_client::protocol::operations::WorkspaceStart::Name("app-pr".into()),
+        start: shoal_protocol::protocol::operations::WorkspaceStart::Name("app-pr".into()),
         base: Some("HEAD".into()),
         path: None,
         git_profile: None,
@@ -2515,7 +2515,7 @@ fn an_apps_workspace_linking_a_pr_takes_its_title_without_a_name() {
     let started = tokio::runtime::Runtime::new()
         .unwrap()
         .block_on(shoal_client::connection::request::<
-            shoal_client::protocol::operations::StartedWorkspace,
+            shoal_protocol::protocol::operations::StartedWorkspace,
         >(&fixture.connector(), start))
         .unwrap();
 

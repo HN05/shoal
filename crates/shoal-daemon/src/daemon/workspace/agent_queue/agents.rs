@@ -2,7 +2,6 @@
 //! and `shoal start` queue one in a ready workspace.
 use anyhow::{Context as _, Result};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     agents::resolve_launch,
     daemon::workspace::Manager,
@@ -11,6 +10,7 @@ use crate::{
     protocol::operations::{LaunchIssue, LaunchRequest},
     start_plan::queued_agent_request,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// Queue the worker of the ready `workspace` that `launch` asks for,

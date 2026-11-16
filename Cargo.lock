@@ -1264,6 +1264,7 @@ dependencies = [
  "shoal-core",
  "shoal-daemon",
  "shoal-forge",
+ "shoal-protocol",
  "socket2",
  "tempfile",
  "tokio",
@@ -1290,6 +1291,7 @@ dependencies = [
  "shoal-forge",
  "shoal-forge-types",
  "shoal-ids",
+ "shoal-protocol",
  "shoal-refs",
  "shoal-schedule",
  "shoal-subprocess",
@@ -1304,19 +1306,14 @@ name = "shoal-client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base64",
- "clap",
  "futures-util",
- "rusqlite",
  "serde",
  "serde_json",
- "shoal-config-derive",
  "shoal-forge-types",
  "shoal-ids",
- "shoal-refs",
+ "shoal-protocol",
  "shoal-schedule",
  "shoal-states",
- "shoal-time",
  "tempfile",
  "tokio",
  "toml",
@@ -1356,6 +1353,7 @@ dependencies = [
  "shoal-forge",
  "shoal-forge-types",
  "shoal-ids",
+ "shoal-protocol",
  "shoal-proxy",
  "shoal-refs",
  "shoal-schedule",
@@ -1386,6 +1384,7 @@ dependencies = [
  "shoal-forge",
  "shoal-forge-types",
  "shoal-ids",
+ "shoal-protocol",
  "shoal-refs",
  "shoal-schedule",
  "shoal-subprocess",
@@ -1446,6 +1445,29 @@ version = "0.1.0"
 dependencies = [
  "rusqlite",
  "serde",
+ "uuid",
+]
+
+[[package]]
+name = "shoal-protocol"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64",
+ "clap",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "shoal-config-derive",
+ "shoal-forge-types",
+ "shoal-ids",
+ "shoal-refs",
+ "shoal-schedule",
+ "shoal-states",
+ "shoal-time",
+ "tempfile",
+ "tokio",
+ "toml",
  "uuid",
 ]
 

@@ -1,12 +1,12 @@
 //! Arguments of `shoal approvals`.
 use clap::{Args, Subcommand, ValueEnum};
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::args::{BodyArgs, issue_input},
-    client::item_numbers::ItemNumber,
     forge::items::reference::ItemInput,
 };
+use shoal_protocol::item_numbers::ItemNumber;
+use shoal_protocol::space_names::SpaceSelector;
 
 #[derive(Debug, Default, Args)]
 pub struct ApprovalsArgs {

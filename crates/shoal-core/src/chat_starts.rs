@@ -9,7 +9,6 @@ use std::{path::PathBuf, process::Stdio};
 
 use anyhow::{Context as _, Result};
 
-use crate::client::{output::chat::BackgroundChat, space_names::SpaceName};
 use crate::{
     agent::Agent,
     chat_handoff::Handoff,
@@ -19,6 +18,7 @@ use crate::{
     protocol::{ChatStart, ConfigTarget},
     workers::{Worker, internal_command},
 };
+use shoal_protocol::{chats::BackgroundChat, space_names::SpaceName};
 
 /// Start the chat whose resolved start the daemon writes to standard input,
 /// reporting it on standard output. Its agent takes the slot of the queue

@@ -1,6 +1,4 @@
 use super::*;
-use crate::client::assignments::Done;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         scope::{self, Caller},
@@ -12,6 +10,8 @@ use crate::{
     removal::{InspectionPolicy, UnsavedWork},
 };
 use shoal_ids::space_ids::SpaceNumber;
+use shoal_protocol::assignments::Done;
+use shoal_protocol::space_names::SpaceSelector;
 use std::sync::Arc;
 
 async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
@@ -1070,7 +1070,7 @@ async fn a_question_sends_a_limited_number_of_files() {
     let (root, manager, workspace) = fixture().await;
     let shot = root.path().join("shot.png");
     std::fs::write(&shot, "png").unwrap();
-    let files = vec![NewFile::from(shot); crate::client::files::MAX_SENT + 1];
+    let files = vec![NewFile::from(shot); shoal_protocol::files::MAX_SENT + 1];
     let asked = manager
         .ask_question(
             &SpaceSelector::id(&workspace.id),

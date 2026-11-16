@@ -3,7 +3,7 @@ use crate::time::UnixTime;
 
 fn question(text: &str, in_chat: bool) -> Question {
     Question {
-        number: crate::client::item_numbers::ItemNumber {
+        number: shoal_protocol::item_numbers::ItemNumber {
             space: 2.into(),
             item: 3,
         },
@@ -20,7 +20,7 @@ fn question(text: &str, in_chat: bool) -> Question {
             reason: None,
             choices: Vec::new(),
         },
-        status: crate::client::questions::QuestionStatus::Open,
+        status: shoal_protocol::questions::QuestionStatus::Open,
         in_chat,
         files: Vec::new(),
     }
@@ -46,7 +46,7 @@ fn questions_show_the_files_sent_with_them() {
     asked.files = ["a.png", "b.png"]
         .into_iter()
         .zip(1..)
-        .map(|(name, id)| crate::client::files::SentFile {
+        .map(|(name, id)| shoal_protocol::files::SentFile {
             id,
             name: name.into(),
             title: None,

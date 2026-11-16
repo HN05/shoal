@@ -18,7 +18,6 @@ use std::collections::HashSet;
 use anyhow::{Context as _, Result};
 use rusqlite::params;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         notifications::NotificationKind,
@@ -32,6 +31,7 @@ use crate::{
     state::{ExecutionState, QueueKind, QueueState},
 };
 use shoal_forge::ci::run_action::RunActionRequests;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// A job the runner claimed.
 #[derive(Debug, Clone)]

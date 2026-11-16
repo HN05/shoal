@@ -10,7 +10,6 @@ use std::{
 use anyhow::{Context as _, Result, ensure};
 
 use crate::client::output::transfer::Exported;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
@@ -20,6 +19,7 @@ use crate::{
     removal::{RemovalResult, UnsavedWork},
     transfer::ExportedSpace,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 use super::STANDARD_STREAM;
 
@@ -314,7 +314,7 @@ pub(super) struct PlannedExport {
 }
 
 impl PlannedExport {
-    pub(super) fn name(&self) -> &crate::client::space_names::SpaceName {
+    pub(super) fn name(&self) -> &shoal_protocol::space_names::SpaceName {
         self.check.name()
     }
 

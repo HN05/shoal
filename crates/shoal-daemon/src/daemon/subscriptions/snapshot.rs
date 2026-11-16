@@ -1,20 +1,13 @@
 //! The records a subscription covers, as they are now: those of the topics
 //! it asked for that its caller may read.
-use crate::client::space_names::SpaceName;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceName;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use anyhow::Result;
 
 use super::agents;
 use crate::{
-    client::{
-        log::LogTopic,
-        subscriptions::records::{
-            Check, Link, LookupError, Message, MessageRecipient, Record, RecordKey,
-            ReportedSessions, Topic, WorkspaceRecord,
-        },
-    },
     daemon::{
         agent_messages::AgentMessage,
         approvals::DecisionStatus,
@@ -25,6 +18,13 @@ use crate::{
     model::{Chat, PresentSpace, Relation, Workspace},
 };
 use shoal_forge::updates::Snapshot;
+use shoal_protocol::{
+    log::LogTopic,
+    subscriptions::records::{
+        Check, Link, LookupError, Message, MessageRecipient, Record, RecordKey, ReportedSessions,
+        Topic, WorkspaceRecord,
+    },
+};
 
 /// Records by key, each with its JSON, which tells a changed one apart.
 pub(super) type Records = BTreeMap<RecordKey, (Record, serde_json::Value)>;

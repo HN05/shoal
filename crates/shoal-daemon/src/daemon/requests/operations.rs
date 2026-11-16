@@ -1,5 +1,5 @@
 //! The daemon's answers to [`OperationMethod`] requests, and who may send them.
-use crate::client::scope_tokens::ScopeToken;
+use shoal_protocol::scope_tokens::ScopeToken;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -15,12 +15,12 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::{Manager, NewWorkspace},
 };
-use crate::client::space_names::SpaceSelector;
 use crate::protocol::{
     Body, ErrorCode, OperationMethod, Response,
     operations::{Started, WorkspaceStart},
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Whether `method` starts a workspace or an operation, whose worker an
 /// exit would cut off, which an exit that waits for work in progress holds

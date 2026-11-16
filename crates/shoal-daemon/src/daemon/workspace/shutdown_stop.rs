@@ -8,7 +8,6 @@ use anyhow::Result;
 use futures_util::future::join_all;
 
 use super::{Manager, StopRequest};
-use crate::client::space_names::SpaceSelector;
 use crate::daemon::workspace::runner::JobStop;
 use crate::{
     daemon::{
@@ -19,6 +18,7 @@ use crate::{
     model::PresentSpace,
     protocol::QueuedLaunches,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// What shuts down, which the stop and the user's notifications name.
 #[derive(Clone, Copy)]

@@ -1,6 +1,6 @@
 use super::*;
-use crate::client::progress::{ProgressChange, StepState};
 use crate::time::UnixTime;
+use shoal_protocol::progress::{ProgressChange, StepState};
 
 fn step(name: &str, state: StepState, key: Option<&str>) -> PlanStep {
     PlanStep {

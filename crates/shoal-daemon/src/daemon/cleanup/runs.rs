@@ -2,13 +2,11 @@
 //! naming them, or that failed in a new way.
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use crate::{
-    client::space_names::SpaceName,
-    daemon::{
-        events::{ShoalEventDetails, ShoalEventKind},
-        workspace::Manager,
-    },
+use crate::daemon::{
+    events::{ShoalEventDetails, ShoalEventKind},
+    workspace::Manager,
 };
+use shoal_protocol::space_names::SpaceName;
 
 /// The spaces automatic cleanup removed since the log last recorded a pass.
 #[derive(Default)]

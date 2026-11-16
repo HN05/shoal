@@ -3,7 +3,6 @@ use anyhow::{Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 use std::collections::HashSet;
 
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace::{Manager, StopRequest},
     fsutil::off_runtime,
@@ -11,8 +10,9 @@ use crate::{
     process::{execution::Processes, identity as process},
     state::{ExecutionState, WorkspaceState},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
-pub(crate) use crate::client::recovery::{
+pub(crate) use shoal_protocol::recovery::{
     DirectoryState, ExecutionReport, ReconcileOptions, Report,
 };
 #[cfg(test)]

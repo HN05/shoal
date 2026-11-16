@@ -3,7 +3,6 @@ use anyhow::{Result, bail, ensure};
 
 use super::recovery::{issues, reconcile};
 use super::waiting::WaitingAgent;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         commands::operations,
@@ -11,10 +10,7 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Fallback},
     },
-    client::{
-        preparation::{self, Preparing, Unprepared},
-        recovery::ReconcileOptions,
-    },
+    client::preparation::{self, Preparing, Unprepared},
     env,
     model::{QueueEntry, Workspace},
     paths::CommandPaths,
@@ -22,6 +18,8 @@ use crate::{
     removal::UnsavedWork,
     state::WorkspaceState,
 };
+use shoal_protocol::recovery::ReconcileOptions;
+use shoal_protocol::space_names::SpaceSelector;
 
 pub(in crate::cli::commands) async fn setup(
     ctx: &Context,

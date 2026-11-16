@@ -9,8 +9,8 @@
 //! too. The handoff is a private directory that the place's command names,
 //! never the place's environment, which a shell left there after the chat
 //! would keep.
-use crate::client::scope_tokens::ScopeToken;
 use crate::protocol::ChatStart;
+use shoal_protocol::scope_tokens::ScopeToken;
 use std::{
     fs::File,
     path::{Path, PathBuf},

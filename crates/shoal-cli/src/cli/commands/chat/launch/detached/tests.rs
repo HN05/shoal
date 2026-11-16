@@ -1,4 +1,4 @@
-use crate::client::space_names::SpaceSelector;
+use shoal_protocol::space_names::SpaceSelector;
 use shoal_schedule::priority::Priority;
 
 use super::*;

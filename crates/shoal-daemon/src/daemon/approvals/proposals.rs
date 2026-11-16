@@ -1,24 +1,24 @@
 //! Issues and PRs a scoped caller proposed instead of opening them. The user
 //! approves a proposal, with any edits, and the daemon opens it; a decided
 //! proposal is no longer stored.
-use crate::client::space_names::SpaceName;
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, Transaction, params};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceName;
 use std::path::Path;
 
 use super::{
     ApprovalRequest, DecisionStatus, Specification, Target,
     store::{COLUMNS, by_key, current, decode_record, list, record_row, retire, write_record},
 };
-pub(crate) use crate::client::approvals::{
-    Duplicate, Finding, ISSUE, IssueSpecification, PR, ProposalDecision, PullSpecification,
-    PushSpecification,
-};
 use crate::daemon::{item_numbers, links::space::require_ready_space, store};
 use crate::forge::items::attach::Attachment;
 use shoal_forge::items::attach;
+pub(crate) use shoal_protocol::approvals::{
+    Duplicate, Finding, ISSUE, IssueSpecification, PR, ProposalDecision, PullSpecification,
+    PushSpecification,
+};
 
 /// A stored proposal, and whether this call recorded it.
 pub type Recorded = (ApprovalRequest, bool);

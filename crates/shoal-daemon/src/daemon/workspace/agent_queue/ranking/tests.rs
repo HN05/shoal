@@ -3,7 +3,6 @@ use std::collections::HashSet;
 use rusqlite::params;
 
 use super::*;
-use crate::client::{resources::Scope, space_names::SpaceSelector};
 use crate::{
     daemon::{
         scope::Caller,
@@ -16,6 +15,7 @@ use crate::{
     model::{Blocker, QueueRequest},
     state::QueueState,
 };
+use shoal_protocol::{resources::Scope, space_names::SpaceSelector};
 use shoal_schedule::{
     priority::Priority,
     rank::{Dependency, InheritedRank, QueueRank, SharedArea, Tier},
@@ -550,7 +550,7 @@ async fn a_queued_restore_reads_when_its_agents_prompt_cache_expires() {
         .collect();
     assert_eq!(
         caches,
-        [Some(crate::client::time::UnixTime::from_seconds(500))]
+        [Some(shoal_protocol::time::UnixTime::from_seconds(500))]
     );
 }
 

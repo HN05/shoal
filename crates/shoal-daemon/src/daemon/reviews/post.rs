@@ -8,7 +8,6 @@ use anyhow::Result;
 use shoal_refs::CommitId;
 
 use super::store;
-use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{log, workspace::Manager},
     forge::{
@@ -23,6 +22,7 @@ use shoal_forge::{
     items::action::ActionRequests,
     review::{diff::DiffRequests, submit::HeadMoved},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// Post finished review `review` on its PR when its target asks to, and

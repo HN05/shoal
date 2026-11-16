@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 use crate::{
-    client::subscriptions::records::{ActivityState, AgentActivity},
     daemon::{
         store::{self, AgentExecution},
         workspace::Manager,
@@ -16,6 +15,7 @@ use crate::{
     model::{QueueEntry, Workspace},
     state::{AgentState, ExecutionState, QueueState},
 };
+use shoal_protocol::subscriptions::records::{ActivityState, AgentActivity};
 
 /// What the daemon knows of the agents of every workspace.
 pub(super) struct Agents {
