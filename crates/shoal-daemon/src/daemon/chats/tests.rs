@@ -21,7 +21,7 @@ async fn chat_events(manager: &Manager) -> Vec<String> {
         .into_iter()
         .filter_map(|item| match item {
             EventItem::Event(event)
-                if event.details.space_kind == SpaceKind::Chat
+                if event.details.space.kind() == SpaceKind::Chat
                     && matches!(event.details.kind, EventKind::Created | EventKind::Renamed) =>
             {
                 Some(format!("{} {}", event.details.kind, event.details.name))

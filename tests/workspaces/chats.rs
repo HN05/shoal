@@ -811,7 +811,7 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     assert_eq!(started["type"], "event");
     assert_eq!(started["repository_id"], id);
     assert_eq!(started["name"], CHAT_NAME);
-    assert!(started["path"].is_null(), "{started}");
+    assert_eq!(started.get("path"), None, "{started}");
     let chat_id = started["space_id"].as_str().unwrap();
     // It tells its session apart from a later one under the name before
     // recording the chat there.

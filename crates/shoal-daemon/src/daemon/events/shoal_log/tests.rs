@@ -12,17 +12,17 @@ const JOURNAL: &str = "
     INSERT INTO space_events(space_id,record) VALUES
         (NULL,json_object('kind','daemon_started','version','1.0.0')),
         ('fix-id',json_object('kind','created','space_id','fix-id','space_kind','workspace',
-            'name','fix')),
+            'name','fix','path','/fix')),
         ('fix-id',json_object('kind','agent_state','space_id','fix-id','space_kind','workspace',
-            'name','fix',
+            'name','fix','path','/fix',
             'agent_state',json_object('state','working'))),
         ('fix-id',json_object('kind','removed','space_id','fix-id','space_kind','workspace',
-            'name','fix','cause','idle')),
+            'name','fix','path','/fix','cause','idle')),
         (NULL,json_object('kind','cleanup_ran','removed',json_array('fix'))),
         ('fix-id',json_object('kind','created','space_id','fix-id','space_kind','workspace',
-            'name','fix')),
+            'name','fix','path','/fix')),
         ('fix-id',json_object('kind','restored','space_id','fix-id','space_kind','workspace',
-            'name','fix')),
+            'name','fix','path','/fix')),
         (NULL,json_object('kind','config_reloaded','error','expected a table'));";
 
 /// Each entry as its space's name and kind, or Shoal's kind alone.

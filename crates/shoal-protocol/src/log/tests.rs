@@ -54,3 +54,19 @@ fn an_entry_keeps_the_journal_lines_json() {
     assert_eq!(value["space_kind"], "workspace");
     assert_eq!(value["agent"]["exit_code"], 3);
 }
+
+#[test]
+fn only_a_workspace_s_entry_has_a_path_and_branch() {
+    let workspace = serde_json::to_value(event("created", serde_json::json!({}))).unwrap();
+    assert_eq!(
+        (&workspace["path"], &workspace["branch"]),
+        (&"/fix".into(), &"fix".into())
+    );
+    let chat = serde_json::json!({
+        "type": "event", "id": 7, "created_at": 1, "kind": "created",
+        "space_id": "c", "space_kind": "chat", "repository_id": null, "name": "plan",
+        "cause": null, "error": null,
+    });
+    let entry: LogEntry = serde_json::from_value(chat.clone()).unwrap();
+    assert_eq!(serde_json::to_value(entry).unwrap(), chat);
+}

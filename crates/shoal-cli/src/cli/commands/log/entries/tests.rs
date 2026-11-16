@@ -6,9 +6,11 @@ fn event(record: serde_json::Value) -> LogEntry {
         "repository_id": "r", "name": "fix", "path": "/fix", "branch": "fix",
         "cause": null, "error": null,
     });
-    base.as_object_mut()
-        .unwrap()
-        .extend(record.as_object().unwrap().clone());
+    let fields = base.as_object_mut().unwrap();
+    fields.extend(record.as_object().unwrap().clone());
+    if fields["space_kind"] == "chat" {
+        fields.retain(|key, _| key != "path" && key != "branch");
+    }
     serde_json::from_value(base).unwrap()
 }
 
@@ -34,7 +36,7 @@ fn details_name_what_each_entry_is_about() {
     );
     assert_eq!(
         details(serde_json::json!({"kind": "created", "space_kind": "chat",
-            "path": null, "branch": null, "base_ref": null, "base_workspace": null,
+            "base_ref": null, "base_workspace": null,
             "agent": {"name": "codex", "execution_id": null, "exit_code": null},
             "parent": {"id": "p", "name": "plan-auth", "kind": "workspace"}})),
         "codex, parent plan-auth"
@@ -91,6 +93,27 @@ fn details_name_what_each_entry_is_about() {
             "stopped": [{"pid": 41, "command": "sh -c loop"}], "omitted": 3}})
         ),
         "rust, run 2765; stopped 41 sh -c loop, 3 more"
+    );
+}
+
+#[test]
+fn a_conversion_names_what_the_space_became() {
+    let converted = |record: serde_json::Value| {
+        let mut record = record;
+        record["kind"] = "converted".into();
+        details(record)
+    };
+    assert_eq!(
+        converted(serde_json::json!({})),
+        "to workspace on fix at /fix"
+    );
+    assert_eq!(
+        converted(serde_json::json!({"branch": null})),
+        "to workspace at /fix"
+    );
+    assert_eq!(
+        converted(serde_json::json!({"space_kind": "chat"})),
+        "to chat"
     );
 }
 

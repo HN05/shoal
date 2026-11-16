@@ -147,7 +147,7 @@ states!(EventKind {
     /// A space below the space was removed.
     ChildRemoved => "child_removed",
     /// The chat became a workspace, or the workspace a chat, as its
-    /// `space_kind` says; `path` and `branch` are the new workspace's.
+    /// `space_kind` says, with the fields of the kind it became.
     Converted => "converted",
     /// Shoal ended the workspace's CI job, whose runner kept running after
     /// the forge finished the job's run.
@@ -211,15 +211,11 @@ pub struct EventDetails {
     pub kind: EventKind,
     pub space_id: SpaceId,
     /// What the space was when it recorded the event.
-    pub space_kind: SpaceKind,
+    #[serde(flatten)]
+    pub space: EventSpace,
     /// Null for a chat without a repository.
     pub repository_id: Option<RepositoryId>,
     pub name: SpaceName,
-    /// Null for a chat.
-    pub path: Option<PathBuf>,
-    /// Observed branch for branch changes; null for a chat and a detached
-    /// HEAD.
-    pub branch: Option<BranchName>,
     pub cause: Option<EventCause>,
     pub error: Option<String>,
     /// The ref a workspace started from, such as `refs/heads/main`, on its
@@ -289,6 +285,35 @@ pub struct EventDetails {
     /// The blocker added, removed or cleared.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocker: Option<Box<BlockerEvent>>,
+}
+
+/// The kind of space that recorded an event, with what only that kind has.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "space_kind", rename_all = "snake_case")]
+pub enum EventSpace {
+    Workspace {
+        path: PathBuf,
+        /// Observed branch for branch changes; null for a detached HEAD.
+        branch: Option<BranchName>,
+    },
+    Chat,
+}
+
+impl EventSpace {
+    pub fn kind(&self) -> SpaceKind {
+        match self {
+            Self::Workspace { .. } => SpaceKind::Workspace,
+            Self::Chat => SpaceKind::Chat,
+        }
+    }
+
+    /// A workspace's branch; none for a chat and a detached HEAD.
+    pub fn branch(&self) -> Option<&BranchName> {
+        match self {
+            Self::Workspace { branch, .. } => branch.as_ref(),
+            Self::Chat => None,
+        }
+    }
 }
 
 /// Distinguish an absent field from an explicit null.

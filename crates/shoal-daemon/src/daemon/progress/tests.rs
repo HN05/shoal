@@ -300,7 +300,7 @@ async fn a_chats_progress_is_its_own_and_goes_with_it() {
         .collect();
     assert_eq!(events.len(), 1);
     assert_eq!(
-        (&events[0].space_id, events[0].space_kind),
+        (&events[0].space_id, events[0].space.kind()),
         (&chat.id, SpaceKind::Chat)
     );
     assert_eq!(events[0].repository_id.as_ref(), Some(&repo.id));

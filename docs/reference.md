@@ -5596,8 +5596,9 @@ Scoped callers cannot read events.
 Each JSON line has `type: "event"`, an increasing `id`, Unix-seconds `created_at`,
 the UUID of the space it records as `space_id`, `space_kind` (`workspace` or
 `chat`, as the space was then), `repository_id` (null for a chat without a
-repository), `name`, `path` and `branch` (null for a chat), `kind`, `cause`, and
-`error`. Kinds are `created`, `ready`, `setup_failed`,
+repository), `name`, a workspace's `path` and `branch` (null for a detached
+HEAD), which a chat's events leave out, `kind`, `cause`, and `error`. A
+`converted` event names the kind the space became, with that kind's fields. Kinds are `created`, `ready`, `setup_failed`,
 `completed`, `undone`, `removed`, `retained`, `branch_changed`, `review_ready`,
 `review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity`, `parent_changed`, `demo_started`, `demo_stopped`, `simulator_acquired`, `simulator_released`, `renamed`, `restored`, `agent_started`, `agent_stopped`, `agent_exited`, `question_asked`, `question_answered`, `approval_requested`, `approval_decided`, `gate_decided`, `alert_sent`, `progress_changed`, `child_created`, `child_removed` and `job_ended`. Review events add a `review` object with the mark's `kind` and
 `url`, both null for a workspace mark. Link events add a `link`

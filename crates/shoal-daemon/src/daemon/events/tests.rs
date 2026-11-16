@@ -195,7 +195,7 @@ async fn branch_observations_preserve_ownership_and_scope_denies_events() {
         .iter()
         .filter_map(|e| match e {
             EventItem::Event(e) if e.details.kind == EventKind::BranchChanged => {
-                Some(e.details.branch.as_ref().map(BranchName::as_str))
+                Some(e.details.space.branch().map(BranchName::as_str))
             }
             _ => None,
         })
@@ -394,10 +394,12 @@ async fn an_agent_ends_once_whether_a_stop_or_its_exit_reports_it() {
         .run(move |db| {
             db.execute_batch(
                 "INSERT INTO repositories(id,path,source,last_used) VALUES ('r','/r','/r',1);
+                 BEGIN;
+                 INSERT INTO workspaces(id,path,branch,state)
+                     VALUES ('w','/work','worker','ready');
                  INSERT INTO spaces(id,kind,repository_id,name)
                      VALUES ('w','workspace','r','worker');
-                 INSERT INTO workspaces(id,path,branch,state)
-                     VALUES ('w','/work','worker','ready');",
+                 COMMIT;",
             )?;
             for (kind, agent) in &recorded {
                 record_agent(db, &SpaceId::from("w"), *kind, agent)?;

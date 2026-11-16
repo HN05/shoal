@@ -14,20 +14,20 @@ const JOURNAL: &str = "
     COMMIT;
     INSERT INTO space_events(space_id,record) VALUES
         ('fix-id',json_object('kind','created','space_id','fix-id','space_kind','workspace',
-            'name','fix')),
+            'name','fix','path','/fix')),
         ('fix-id',json_object('kind','agent_started','space_id','fix-id','space_kind','workspace',
-            'name','fix',
+            'name','fix','path','/fix',
             'agent',json_object('name','claude','execution_id','e','exit_code',NULL))),
         ('fix-id',json_object('kind','agent_state','space_id','fix-id','space_kind','workspace',
-            'name','fix',
+            'name','fix','path','/fix',
             'agent_state',json_object('state','working'))),
         ('fix-id',json_object('kind','agent_exited','space_id','fix-id','space_kind','workspace',
-            'name','fix',
+            'name','fix','path','/fix',
             'agent',json_object('name','claude','execution_id','e','exit_code',0))),
         ('fix-id',json_object('kind','removed','space_id','fix-id','space_kind','workspace',
-            'name','fix','cause','manual')),
+            'name','fix','path','/fix','cause','manual')),
         ('plan',json_object('kind','child_removed','space_id','plan','space_kind','workspace',
-            'name','plan',
+            'name','plan','path','/plan',
             'child',json_object('id','fix-id','name','fix','kind','workspace')));";
 
 fn kinds(entries: &[LogEntry]) -> Vec<EventKind> {

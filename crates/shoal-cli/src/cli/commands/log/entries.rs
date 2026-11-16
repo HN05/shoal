@@ -5,7 +5,8 @@ use crate::{
 };
 use shoal_protocol::{
     events::{
-        EventCause, EventDetails, EventKind, FileEventKind, ShoalEventDetails, ShoalEventKind,
+        EventCause, EventDetails, EventKind, EventSpace, FileEventKind, ShoalEventDetails,
+        ShoalEventKind,
     },
     log::LogEntry,
 };
@@ -105,11 +106,7 @@ fn event_line(event: &EventDetails) -> (String, String) {
         EventKind::Retained => fixed("Removal failed", error(event)),
         EventKind::BranchChanged => fixed(
             "Branch changed",
-            (event
-                .branch
-                .clone()
-                .unwrap_or_else(|| "detached HEAD".into()))
-            .into(),
+            (event.space.branch()).map_or_else(|| "detached HEAD".into(), ToString::to_string),
         ),
         EventKind::BaseChanged => fixed("Base changed", base(event)),
         EventKind::ParentChanged => fixed("Parent changed", parent(event)),
@@ -175,9 +172,15 @@ fn created(event: &EventDetails) -> String {
 
 /// What the space became: a chat, or a workspace on its branch at its path.
 fn converted(event: &EventDetails) -> String {
-    match (&event.branch, &event.path) {
-        (Some(branch), Some(path)) => format!("to workspace on {branch} at {}", path.display()),
-        _ => "to chat".to_owned(),
+    match &event.space {
+        EventSpace::Workspace {
+            path,
+            branch: Some(branch),
+        } => format!("to workspace on {branch} at {}", path.display()),
+        EventSpace::Workspace { path, branch: None } => {
+            format!("to workspace at {}", path.display())
+        }
+        EventSpace::Chat => "to chat".to_owned(),
     }
 }
 

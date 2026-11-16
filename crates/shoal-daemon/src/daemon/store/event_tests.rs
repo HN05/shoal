@@ -542,7 +542,7 @@ fn chat_events_reach_the_journal_under_the_chat() -> Result<()> {
     for (space, event) in &events {
         assert_eq!(*space, "c");
         assert_eq!(event.space_id.as_str(), "c");
-        assert_eq!(event.space_kind, crate::model::SpaceKind::Chat);
+        assert_eq!(event.space, shoal_protocol::events::EventSpace::Chat);
         assert_eq!(event.name, "planner");
     }
     for (_, record) in &rows {
@@ -558,6 +558,7 @@ fn chat_events_reach_the_journal_under_the_chat() -> Result<()> {
 
 #[test]
 fn stored_chat_events_lose_their_path_and_branch() -> Result<()> {
+    use shoal_protocol::events::EventSpace;
     let mut db = Connection::open_in_memory()?;
     migrate_to(&mut db, 211)?;
     let chat = serde_json::json!({"kind": "renamed", "space_id": "c", "space_kind": "chat",
@@ -581,6 +582,17 @@ fn stored_chat_events_lose_their_path_and_branch() -> Result<()> {
         .map(|record| Ok(serde_json::from_str(&record?)?))
         .collect::<Result<Vec<serde_json::Value>>>()?;
     assert_eq!(records, [chat, workspace]);
+    let spaces: Vec<_> = journal(&db)?.into_iter().map(|event| event.space).collect();
+    assert_eq!(
+        spaces,
+        [
+            EventSpace::Chat,
+            EventSpace::Workspace {
+                path: "/fix".into(),
+                branch: None
+            }
+        ]
+    );
     Ok(())
 }
 
@@ -635,7 +647,11 @@ fn renames_questions_and_children_reach_their_spaces_logs() -> Result<()> {
                 EventKind::Renamed => Some(format!(
                     "{} {}",
                     event.name,
-                    event.branch.map(String::from).unwrap_or_default()
+                    event
+                        .space
+                        .branch()
+                        .map(ToString::to_string)
+                        .unwrap_or_default()
                 )),
                 EventKind::QuestionAsked | EventKind::QuestionAnswered => event
                     .question
@@ -744,7 +760,7 @@ fn the_journal_names_every_space_it_recorded_by_its_id_and_kind() -> Result<()> 
             Ok((
                 event.kind,
                 event.space_id.to_string(),
-                event.space_kind,
+                event.space.kind(),
                 event.name.to_string(),
             ))
         })
@@ -772,8 +788,8 @@ fn the_journal_names_every_space_it_recorded_by_its_id_and_kind() -> Result<()> 
         Some("claude")
     );
     assert_eq!(
-        (created.path, created.branch, created.base_ref),
-        (None, None, None)
+        (created.space, created.base_ref),
+        (shoal_protocol::events::EventSpace::Chat, None)
     );
     let file: FileEventDetails = serde_json::from_str(&rows[4].3)?;
     assert_eq!(

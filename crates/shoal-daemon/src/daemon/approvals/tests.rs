@@ -34,12 +34,14 @@ fn resource(mode: LockMode) -> Specification {
 fn owners(db: &Connection) -> Result<()> {
     db.execute_batch(
         "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+            BEGIN;
+            INSERT INTO workspaces(id,path,branch,state)
+                VALUES ('owner','/work','worker','ready'),
+                ('other','/other','other','ready');
             INSERT INTO spaces(id,kind,repository_id,name)
                 VALUES ('owner','workspace','repo','worker'),
                 ('other','workspace','repo','other');
-            INSERT INTO workspaces(id,path,branch,state)
-                VALUES ('owner','/work','worker','ready'),
-                ('other','/other','other','ready');",
+            COMMIT;",
     )?;
     Ok(())
 }
