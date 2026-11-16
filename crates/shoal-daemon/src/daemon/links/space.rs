@@ -54,13 +54,8 @@ impl LinkSpace {
     /// `space` acting in its own repository, which may have been removed
     /// meanwhile; a chat without one is refused.
     pub(crate) fn own(space: Space) -> Result<Self> {
-        let repository = (space.repository_id.clone()).with_context(|| {
-            format!(
-                "chat {} has no repository of its own; name the repository with --repo or an \
-                 issue or PR URL",
-                space.name
-            )
-        })?;
+        let repository =
+            (space.repository_id.clone()).with_context(|| no_own_repository(&space.name))?;
         Ok(Self {
             space,
             repository,
@@ -258,13 +253,7 @@ impl Manager {
     /// The registered checkout of `chat`'s repository, where its item
     /// requests act; a chat without a repository has none.
     pub(crate) async fn chat_own_checkout(&self, chat: &Chat) -> Result<Repository> {
-        (self.chat_repository(chat).await?).with_context(|| {
-            format!(
-                "chat {} has no repository of its own; name the repository with --repo or an \
-                 issue or PR URL",
-                chat.name
-            )
-        })
+        (self.chat_repository(chat).await?).with_context(|| no_own_repository(&chat.name))
     }
 
     /// The settings of the space: a workspace's own, or a chat's
@@ -283,6 +272,15 @@ impl Manager {
             .context("forge actions need an origin remote")?;
         self.forge(&remote).await
     }
+}
+
+/// The refusal of a request that needs the repository of the chat `name`,
+/// which has none of its own.
+fn no_own_repository(name: &shoal_protocol::space_names::SpaceName) -> String {
+    format!(
+        "chat {name} has no repository of its own; name the repository with --repo or an issue \
+         or PR URL"
+    )
 }
 
 /// Refuse a name `found` lists several registered repositories for,
