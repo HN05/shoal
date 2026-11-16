@@ -35,6 +35,14 @@ pub(super) fn cursor_record(
     Ok(Some(record))
 }
 
+/// The spaces whose watch cursors have a record of the item at `url`.
+pub(super) fn cursor_spaces(db: &rusqlite::Connection, url: &str) -> Result<Vec<SpaceId>> {
+    Ok(db
+        .prepare("SELECT space_id FROM pr_activity WHERE url=?1")?
+        .query_map([url], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 /// Store `record` as the item's record on the workspace's watch cursor.
 pub(super) fn save_cursor_record(
     db: &rusqlite::Connection,

@@ -5,7 +5,10 @@ use rusqlite::OptionalExtension;
 
 use super::{
     branch_report::{BranchReport, branch_report, watches_branch},
-    cursor::{all_pending, cursor_record, pending_updates, save_cursor_record, save_pending},
+    cursor::{
+        all_pending, cursor_record, cursor_spaces, pending_updates, save_cursor_record,
+        save_pending,
+    },
     items::{NO_LINKED_ITEMS, followed_items, links_kind},
 };
 use crate::{
@@ -234,11 +237,7 @@ pub(in crate::daemon::links) fn record_shoal_change(
     if edited.is_empty() {
         return Ok(());
     }
-    let spaces = db
-        .prepare("SELECT space_id FROM pr_activity WHERE url=?1")?
-        .query_map([url], |row| row.get(0))?
-        .collect::<rusqlite::Result<Vec<SpaceId>>>()?;
-    for id in spaces {
+    for id in cursor_spaces(db, url)? {
         let change = OwnChange {
             url,
             authored: Vec::new(),
