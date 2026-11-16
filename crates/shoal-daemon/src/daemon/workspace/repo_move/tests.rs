@@ -838,7 +838,8 @@ async fn a_root_move_stops_the_chats_without_a_repository_and_takes_their_files(
 
     assert_eq!(fs::read_link(&root)?, Path::new(".shoal.noindex"));
     let moved = manager.chat_by_id(&chat.id).await?.context("no chat")?;
-    assert_eq!(moved.root_dir.as_deref(), Some(root.as_path()));
+    // The chat still runs in the configured root, now a link.
+    assert_eq!(moved.root_dir, chat.root_dir);
     assert_eq!(fs::read_to_string(tmp.join("notes"))?, "kept");
     assert!(!root.join(".tmp/leftover").exists());
     Ok(())

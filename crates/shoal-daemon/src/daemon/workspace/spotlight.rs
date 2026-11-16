@@ -88,15 +88,19 @@ impl Plan {
         Ok(locations)
     }
 
-    /// Refuse a root that would still hold files once the repository
-    /// directories `moving` leave it, since it could not become the link.
+    /// Refuse a root that would still hold files once the directories
+    /// `moving` leave it, since it could not become the link. `moving` may
+    /// name the root through a link, as the configured `root_dir` does.
     pub(super) fn ensure_linkable(&self, moving: &[&Path]) -> Result<()> {
         let Some(root) = &self.link else {
             return Ok(());
         };
+        let moving = (moving.iter())
+            .map(|path| with_canonical_parent(path))
+            .collect::<Result<Vec<_>>>()?;
         let left: Vec<_> = entries(root)?
             .into_iter()
-            .filter(|path| !moving.contains(&path.as_path()) && !is_finder_metadata(path))
+            .filter(|path| !moving.contains(path) && !is_finder_metadata(path))
             .map(|path| path.display().to_string())
             .collect();
         ensure!(

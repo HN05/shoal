@@ -63,6 +63,10 @@ fn an_excluded_root_holding_files_is_linked_once_they_leave() {
     let plan = plan(&root, Layout::Excluded).unwrap();
     plan.ensure_linkable(&[&repo]).unwrap();
     assert!(plan.ensure_linkable(&[]).is_err());
+    // A directory named through a link to the root leaves it all the same.
+    let alias = parent.join("alias");
+    std::os::unix::fs::symlink(&root, &alias).unwrap();
+    plan.ensure_linkable(&[&alias.join("repo")]).unwrap();
 
     plan.apply().unwrap();
     assert_eq!(plan.destination().unwrap(), parent.join(".shoal.noindex"));
