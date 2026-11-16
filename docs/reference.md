@@ -780,8 +780,9 @@ shoal run --workspace 3 -- cargo test
 shoal edit 3                             # Open in $VISUAL/$EDITOR or the edit command
 shoal open 3 --app claude                # Claude desktop app (macOS)
 shoal open 3 --app codex                 # Codex desktop app
-shoal open --app t3                      # Running T3 Code desktop app; current workspace or picker
+shoal open --app t3                      # Running T3 Code desktop app; current space or picker
 shoal open 3                             # app.default, else the only installed app, else a picker
+shoal open 5 --app codex                 # A chat, in the worktree or checkout it runs in
 shoal start --in 3 -a claude             # Start workspace 3's own agent, on its issue
 shoal start --in -a codex                # The current workspace's, else a picked one's
 shoal start --in 3 -a happy-codex        # Detached Happy session for the Happy app
@@ -1671,7 +1672,9 @@ next launch. `shoal run <name>` for a `[commands]`
 shortcut remains a plain command invocation without agent prompts or exit
 notifications, expanding `{prompt}` to an empty string.
 
-`shoal open` without `--app` opens the workspace's [`app.default`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#desktop-apps),
+`shoal open` hands a space to a desktop app in the directory its agent works
+in: a workspace's worktree, the worktree or checkout a chat runs in, or
+`root_dir` for a chat without a repository. Without `--app` it opens the space's [`app.default`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#desktop-apps),
 else the only
 installed desktop app, and on a terminal offers a picker when several are
 installed. `--app codex|t3` runs

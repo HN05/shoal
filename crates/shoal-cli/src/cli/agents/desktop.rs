@@ -1,4 +1,4 @@
-//! Desktop apps a workspace is handed to, and how each opens it; they run
+//! Desktop apps a space is handed to, and how each opens it; they run
 //! untracked.
 use std::{
     ffi::{OsStr, OsString},
@@ -12,14 +12,14 @@ use crate::{
     agents::trust::{CLAUDE_CODE, CODEX, TrustFile},
     cli::{args::space::DesktopApp, context::Context},
     env, execution,
-    model::Workspace,
+    model::{Repository, Space},
 };
 use shoal_protocol::transcripts::AgentEnvironment;
 
 #[cfg(test)]
 mod tests;
 
-/// A desktop app and how its launcher opens a workspace in it.
+/// A desktop app and how its launcher opens a directory in it.
 pub(in crate::cli) struct App {
     /// What messages call the app.
     pub name: &'static str,
@@ -31,7 +31,7 @@ pub(in crate::cli) struct App {
     /// The config file in which the app records trusted directories.
     pub trust: Option<&'static TrustFile>,
     /// Refuse forwarded arguments the app cannot open with on this host,
-    /// before a workspace is picked.
+    /// before a space is picked.
     pub check: fn(&[OsString]) -> Result<()>,
     /// The launcher's arguments that open a directory with the forwarded
     /// arguments.
@@ -106,7 +106,7 @@ fn app_subcommand(directory: &Path, args: Vec<OsString>) -> Vec<OsString> {
 fn macos_without_arguments(args: &[OsString]) -> Result<()> {
     ensure!(
         cfg!(target_os = "macos"),
-        "the Claude app opens workspaces only on macOS"
+        "the Claude app opens spaces only on macOS"
     );
     ensure!(args.is_empty(), "the Claude app takes no arguments");
     Ok(())
@@ -132,22 +132,30 @@ fn percent_encode(bytes: &[u8]) -> String {
         .collect()
 }
 
-/// Hand `workspace` to desktop `app` with `args`, untracked, trusting it
-/// first in the app's trust file, when it has one.
+/// Hand `space` to desktop `app` with `args`, untracked, in the directory
+/// its agent works in. An app with a trust file trusts that directory
+/// first, as `repository`'s agents do when the space has one.
 pub(in crate::cli) async fn hand_off(
     ctx: &Context,
-    workspace: &Workspace,
+    space: &Space,
+    repository: Option<&Repository>,
     app: &App,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    ensure!(workspace.path.is_dir(), "workspace directory is missing");
-    let args = (app.args)(&workspace.path, args);
+    let directory = space.workdir.path();
+    ensure!(
+        directory.is_dir(),
+        "the directory of space {} is missing: {}",
+        space.label(),
+        directory.display()
+    );
+    let args = (app.args)(directory, args);
     if let Some(trust) = app.trust {
-        // The app runs with this process's environment, not the workspace's.
+        // The app runs with this process's environment, not the space's.
         let environment = AgentEnvironment::inherited(&ctx.paths.home);
-        super::trust::workspace(trust, ctx, workspace, &environment).await;
+        super::trust::directory(trust, &environment, repository, directory);
     }
-    run_launcher(app, &workspace.path, args).await
+    run_launcher(app, directory, args).await
 }
 
 /// Refuse an `app` that cannot open with `args`: its check refuses them or

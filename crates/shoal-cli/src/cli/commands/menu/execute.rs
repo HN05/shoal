@@ -69,7 +69,7 @@ pub(super) async fn execute_command(
             ..Default::default()
         }))),
         ExecuteChoice::App(app) => Command::Space(SpaceCommand::Open {
-            workspace,
+            space: workspace,
             app: Some(app),
             args: vec![],
         }),

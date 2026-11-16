@@ -1,7 +1,7 @@
-//! `shoal open`: handing a workspace to a desktop app.
+//! `shoal open`: handing a space to a desktop app.
 use std::ffi::OsString;
 
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{
@@ -10,39 +10,60 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
-    model::Workspace,
+    model::{Repository, Space},
     protocol::ConfigTarget,
 };
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Hand the named workspace, else the current directory's or a picked one,
-/// to the named desktop app, else the one [`default_app`] gives.
+/// Hand the named space, else the current directory's or a picked one, to
+/// the named desktop app, else the one [`default_app`] gives.
 pub(in crate::cli::commands) async fn open(
     ctx: &Context,
-    workspace: Option<SpaceSelector>,
+    space: Option<SpaceSelector>,
     name: Option<DesktopApp>,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    // A named app that cannot open is refused before a workspace is picked.
+    // A named app that cannot open is refused before a space is picked.
     if let Some(name) = name {
         agents::ensure_opens(agents::app(name), &args)?;
     }
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
-        .await?
-        .workspace;
+    let selector = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
+    let space = read(ctx, &selector).await?;
     let app = agents::app(match name {
         Some(name) => name,
-        None => default_app(ctx, &workspace).await?,
+        None => default_app(ctx, &space.id).await?,
     });
     agents::ensure_opens(app, &args)?;
-    agents::hand_off(ctx, &workspace, app, args).await
+    let repository = repository(ctx, &space).await?;
+    agents::hand_off(ctx, &space, repository.as_ref(), app, args).await
 }
 
-/// The app `shoal open` opens in `workspace` without `--app`: its
+/// The space `selector` names, among those the caller sees.
+async fn read(ctx: &Context, selector: &SpaceSelector) -> Result<Space> {
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
+    spaces
+        .find(selector)
+        .with_context(|| format!("no space {selector}"))
+}
+
+/// The registered repository `space` belongs to; none for a chat without
+/// one.
+async fn repository(ctx: &Context, space: &Space) -> Result<Option<Repository>> {
+    let Some(id) = &space.repository_id else {
+        return Ok(None);
+    };
+    let repositories = crate::client::repositories::list(&ctx.paths).await?;
+    let repository = (repositories.into_iter())
+        .find(|repository| repository.id == *id)
+        .with_context(|| format!("the repository of space {} is missing", space.label()))?;
+    Ok(Some(repository))
+}
+
+/// The app `shoal open` opens in space `id` without `--app`: its
 /// `app.default`, else the only one installed, else one the user picks.
-async fn default_app(ctx: &Context, workspace: &Workspace) -> Result<DesktopApp> {
-    let target = ConfigTarget::Space(SpaceSelector::id(&workspace.id));
+async fn default_app(ctx: &Context, id: &SpaceId) -> Result<DesktopApp> {
+    let target = ConfigTarget::Space(SpaceSelector::id(id));
     let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
     match settings.app.default {
         Some(name) => Ok(name),

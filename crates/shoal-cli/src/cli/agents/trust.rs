@@ -1,7 +1,11 @@
 //! The trust entries a CLI launch adds for the directories its agent works
 //! in, in the config files [`TrustFile`] edits, and those a repository's
 //! removal or move cleans up.
-use std::{collections::BTreeMap, ffi::OsString, path::PathBuf};
+use std::{
+    collections::BTreeMap,
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 use anyhow::Context as _;
 
@@ -106,11 +110,22 @@ pub(super) async fn chat(
         keep_config_location(file, ctx, Holder::Repository(repository), &configured).await;
     }
     let environment = AgentEnvironment::new(&ctx.paths.home, &configured);
+    directory(file, &environment, repository, home.path());
+}
+
+/// Trust `directory` for the tool of `file` running with `environment`: the
+/// trust paths of `repository` for it, or the directory alone without one.
+pub(super) fn directory(
+    file: &TrustFile,
+    environment: &AgentEnvironment<'_>,
+    repository: Option<&Repository>,
+    directory: &Path,
+) {
     let paths = match repository {
-        Some(repository) => repository_trust_paths(repository, home.path()),
-        None => vec![home.path().to_owned()],
+        Some(repository) => repository_trust_paths(repository, directory),
+        None => vec![directory.to_owned()],
     };
-    warn(file.trust(&environment, &paths));
+    warn(file.trust(environment, &paths));
 }
 
 /// The workspace's repository trust paths, or the workspace alone when its

@@ -1232,6 +1232,125 @@ fn open_hands_workspaces_to_desktop_apps_without_cli_flags_or_execution_records(
     assert!(!output.status.success(), "{}", printed(&output));
 }
 
+/// Where a desktop app opened and the directories its config trusts.
+type HandOff = (PathBuf, std::collections::BTreeSet<PathBuf>);
+
+/// A fixture whose chat agent hands its chat to the Codex app with
+/// `shoal open`, whose stub records where it opened and what it trusts.
+fn chat_opening_fixture() -> Fixture {
+    let fixture = Fixture::with_config(Some(
+        "[agents.claude]\ncommand = ['sh', '-c', '. \"$HOME/chat-agent.sh\"', 'agent']\n",
+    ));
+    let home = fixture.root.path();
+    fs::write(
+        home.join("chat-agent.sh"),
+        format!(
+            "echo \"$SHOAL_CHAT\" > \"$HOME/chat-id\"\n\
+             '{}' open --app codex < /dev/null > /dev/null 2> \"$HOME/open-error\"\n\
+             echo $? > \"$HOME/open-status\"\n",
+            support::shoal_binary(),
+        ),
+    )
+    .unwrap();
+    install_test_script(
+        home.join("bin/codex"),
+        "#!/bin/sh\npwd -P > \"$HOME/codex-dir\"\nmv \"$HOME/.codex/config.toml\" \"$HOME/codex-config\"\n",
+    );
+    fixture
+}
+
+/// What `shoal open --app codex` hands the app for the chat `start`, run
+/// from `here`, starts: as the chat's agent runs it, then as the user runs it
+/// naming the chat.
+fn chat_hand_offs(fixture: &Fixture, here: &Path, start: &[&str]) -> [HandOff; 2] {
+    let home = fixture.root.path();
+    let (output, transcript) =
+        fixture.interactive_command(fixture.command().current_dir(here).args(start), "");
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
+    let status = fs::read_to_string(home.join("open-status")).unwrap();
+    let error = fs::read_to_string(home.join("open-error")).unwrap();
+    assert_eq!(status.trim(), "0", "{error}");
+    let in_chat = hand_off(home);
+    let chat = fs::read_to_string(home.join("chat-id")).unwrap();
+    let output = fixture
+        .command()
+        .args(["open", "--app", "codex", chat.trim()])
+        .env("PATH", fixture.restricted_path(&home.join("bin")))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", printed(&output));
+    [in_chat, hand_off(home)]
+}
+
+/// The [`HandOff`] the stub Codex app recorded in `home`.
+fn hand_off(home: &Path) -> HandOff {
+    let directory = fs::read_to_string(home.join("codex-dir")).unwrap();
+    let config: toml::Value =
+        toml::from_str(&fs::read_to_string(home.join("codex-config")).unwrap()).unwrap();
+    let trusted = (config["projects"].as_table().unwrap().keys())
+        .map(|path| fs::canonicalize(path).unwrap())
+        .collect();
+    (PathBuf::from(directory.trim_end()), trusted)
+}
+
+/// The registered checkout and workspaces directory of the fixture's
+/// repository, which its chats' launches trust.
+fn repository_trust(fixture: &Fixture) -> std::collections::BTreeSet<PathBuf> {
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
+    ["path", "workspaces_dir"]
+        .into_iter()
+        .map(|key| fs::canonicalize(repository[key].as_str().unwrap()).unwrap())
+        .collect()
+}
+
+#[test]
+fn open_hands_a_chat_in_a_checkout_to_a_desktop_app_there() {
+    let fixture = chat_opening_fixture();
+    let start = ["start", "--mode", "chat", "--here", "--agent", "claude"];
+    let hand_offs = chat_hand_offs(&fixture, &fixture.repo, &start);
+    let checkout = fs::canonicalize(&fixture.repo).unwrap();
+    for hand_off in hand_offs {
+        assert_eq!(hand_off, (checkout.clone(), repository_trust(&fixture)));
+    }
+}
+
+#[test]
+fn open_hands_a_chat_in_a_worktree_to_a_desktop_app_there() {
+    let fixture = chat_opening_fixture();
+    let workspace = fixture.add("worker");
+    let worktree = fs::canonicalize(workspace["path"].as_str().unwrap()).unwrap();
+    let id = fixture.id("worker");
+    let start = [
+        "start", "--in", &id, "--mode", "chat", "--here", "--agent", "claude",
+    ];
+    let hand_offs = chat_hand_offs(&fixture, fixture.root.path(), &start);
+    for hand_off in hand_offs {
+        assert_eq!(hand_off, (worktree.clone(), repository_trust(&fixture)));
+    }
+}
+
+#[test]
+fn open_hands_a_chat_without_a_repository_to_a_desktop_app_in_root_dir() {
+    let fixture = chat_opening_fixture();
+    let start = [
+        "start",
+        "--mode",
+        "orchestrate",
+        "--here",
+        "--agent",
+        "claude",
+    ];
+    let hand_offs = chat_hand_offs(&fixture, fixture.root.path(), &start);
+    let root = fs::canonicalize(fixture.root.path().join("shoal")).unwrap();
+    for hand_off in hand_offs {
+        assert_eq!(hand_off, (root.clone(), [root.clone()].into()));
+    }
+}
+
 #[test]
 fn trust_entries_follow_the_config_directories_env_gives_agents() {
     // A launch can fail after trust is written, here at its diff base.
