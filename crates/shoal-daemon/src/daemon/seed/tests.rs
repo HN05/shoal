@@ -2,6 +2,7 @@ use super::*;
 use crate::daemon::test_support::{
     commit, git, install_test_script, manager, native_cloning, repository,
 };
+use crate::presets::Preset;
 use crate::state::WorkspaceState;
 use shoal_protocol::space_names::SpaceSelector;
 use std::path::PathBuf;
@@ -205,15 +206,27 @@ async fn a_preset_builds_and_keeps_its_tool_outputs() {
     let log = fs::read_to_string(layout.log()).unwrap();
     let built = layout.worktree().join("target/debug/libseeded.rlib");
     assert!(built.is_file(), "{log}");
+    // The first build resets what an earlier one could have left.
+    assert!(log.starts_with("$ rustc -vV\n"), "{log}");
+    assert!(log.contains("$ cargo clean --workspace\n"), "{log}");
     if !native_cloning(layout.root()) {
         return assert_clone_refused(&manager, &layout).await;
     }
-    assert!(Snapshot::open(&layout).unwrap().is_some(), "{log}");
+    let snapshot = Snapshot::open(&layout).unwrap().unwrap();
+    assert!(snapshot.toolchains[&Preset::Cargo].starts_with("rustc "));
     let workspace = manager
         .create_workspace(&repo.id, "feature".into(), None, None, None)
         .await
         .unwrap();
     assert!(workspace.path.join("target/debug").is_dir());
+
+    // A change to the code alone builds on the outputs.
+    fs::write(checkout.join("src/lib.rs"), "pub fn f() {}\n").unwrap();
+    commit(&checkout, "src/lib.rs");
+    manager.refresh_seeds().await;
+    let log = fs::read_to_string(layout.log()).unwrap();
+    assert!(!log.contains("cargo clean"), "{log}");
+    assert!(log.contains("$ cargo clippy --all-targets\n"), "{log}");
 }
 
 /// A repository whose checkout configures `script` as its seed.

@@ -3,8 +3,14 @@
 //! them: a workspace without a seed still builds, only from scratch.
 use shoal_ids::repository_ids::RepositoryId;
 use std::{
-    collections::BTreeMap, ffi::OsString, fs, io::Write as _, path::Path, process::Stdio,
-    sync::Arc, time::Duration,
+    collections::BTreeMap,
+    ffi::OsString,
+    fs,
+    io::{Read as _, Seek as _, Write as _},
+    path::Path,
+    process::Stdio,
+    sync::Arc,
+    time::Duration,
 };
 
 use anyhow::{Context, Result, bail, ensure};
@@ -33,7 +39,7 @@ use crate::{
     model::{Repository, Workspace},
     seed::{
         Layout, Snapshot, Staged,
-        build::{self, Build, Step},
+        build::{self, Build, Previous, Step, Toolchains},
     },
 };
 
@@ -192,23 +198,26 @@ impl Manager {
         }
         // Under the gate, which keeps cache emptying out until the build ends.
         crate::caches::directories(repo, &plan.caches)?;
+        let previous = previous_build(layout, tip).await?;
         log!("seed build for {} at {tip}", repo.path.display());
-        run_build(
+        let toolchains = run_build(
             plan,
+            previous.as_ref(),
             &layout.worktree(),
             &layout.log(),
             slot.cancel.subscribe(),
         )
         .await?;
-        self.freeze_seed(repo, layout, plan, build).await?;
+        self.freeze_seed(repo, layout, plan, build, toolchains)
+            .await?;
         // The new snapshot needs its own spare.
         self.seeds.want_spare();
         Ok(())
     }
 
-    /// Replace the snapshot with the outputs the seed worktree built, cloning
-    /// them while clones of the current snapshot go on and deleting the
-    /// replaced one once nothing reads it. The caller holds the build slot,
+    /// Replace the snapshot with the outputs the seed worktree built with
+    /// `toolchains`, cloning them while clones of the current snapshot go on
+    /// and deleting the replaced one once nothing reads it. The caller holds the build slot,
     /// which keeps every other change to the snapshots out.
     async fn freeze_seed(
         &self,
@@ -216,22 +225,25 @@ impl Manager {
         layout: &Layout,
         plan: &Plan,
         build: &(CommitId, String),
+        toolchains: Toolchains,
     ) -> Result<()> {
         let staged = Snapshot::stage(layout, &plan.paths).await?;
-        self.install_snapshot(repo, layout, staged, build).await?;
+        self.install_snapshot(repo, layout, staged, build, toolchains)
+            .await?;
         let retired = layout.clone();
         off_runtime::run(move || retired.remove_retired()).await
     }
 
-    /// Make `staged` the snapshot of the seed worktree built at `tip`,
-    /// checked under the Git gate while the repository is available, once
-    /// the clones of the current snapshot end.
+    /// Make `staged` the snapshot of the seed worktree built at `tip` with
+    /// `toolchains`, checked under the Git gate while the repository is
+    /// available, once the clones of the current snapshot end.
     async fn install_snapshot(
         &self,
         repo: &Repository,
         layout: &Layout,
         staged: Staged,
         (tip, settings): &(CommitId, String),
+        toolchains: Toolchains,
     ) -> Result<()> {
         let slot = self.seeds.slot(&repo.id);
         let _snapshot = slot.snapshot.write().await;
@@ -243,7 +255,13 @@ impl Manager {
             "the seed worktree moved during its build"
         );
         let files = git::seed::unmodified_files(&worktree).await?;
-        staged.install(layout, tip.to_owned().into(), settings.to_owned(), files)
+        staged.install(
+            layout,
+            tip.to_owned().into(),
+            settings.to_owned(),
+            toolchains,
+            files,
+        )
     }
 
     /// Give each repository's current snapshot a spare clone of its outputs,
@@ -452,6 +470,27 @@ impl Manager {
     }
 }
 
+/// What the current snapshot was built from, with the files changed between
+/// its commit and `tip`, or `None` without a snapshot. The caller holds the
+/// build slot, which keeps the snapshot from changing.
+async fn previous_build(layout: &Layout, tip: &CommitId) -> Result<Option<Previous>> {
+    let Some(snapshot) = Snapshot::open(layout)? else {
+        return Ok(None);
+    };
+    let worktree = layout.worktree();
+    let commit = snapshot.commit.as_str();
+    let changed = if git::has_commit(&worktree, commit).await? {
+        Some(git::seed::changed_between(&worktree, commit, tip.as_str()).await?)
+    } else {
+        None
+    };
+    Ok(Some(Previous {
+        settings: snapshot.settings,
+        toolchains: snapshot.toolchains,
+        changed,
+    }))
+}
+
 async fn check_out_seed(repo: &Repository, layout: &Layout, tip: &CommitId) -> Result<()> {
     layout.claim()?;
     let worktree = layout.worktree();
@@ -534,19 +573,33 @@ impl Drop for SeedStop {
     }
 }
 
-/// Run the seed build's commands in its worktree, in order, writing their
-/// output to `log`, until one fails, the build times out or `cancel` is set.
+/// Run the seed build in its worktree, writing its output to `log`: name
+/// each preset's toolchain, reset the outputs `previous` left that this build
+/// would not reuse, then run the build's commands in order, until one fails,
+/// the build times out or `cancel` is set. Returns the toolchains.
 async fn run_build(
     plan: &Plan,
+    previous: Option<&Previous>,
     worktree: &Path,
     log: &Path,
     cancel: watch::Receiver<bool>,
-) -> Result<()> {
+) -> Result<Toolchains> {
     let mut steps = Steps::new(plan, worktree, log, cancel)?;
-    for step in plan.build.steps() {
+    let toolchains = identify_toolchains(&mut steps, &plan.build).await?;
+    let resets = plan.build.resets(previous, &plan.settings()?, &toolchains);
+    for step in plan.build.steps(&resets) {
         steps.run(&step).await?;
     }
-    Ok(())
+    Ok(toolchains)
+}
+
+/// Run each preset's toolchain command and keep what it printed.
+async fn identify_toolchains(steps: &mut Steps<'_>, build: &Build) -> Result<Toolchains> {
+    let mut toolchains = Toolchains::new();
+    for (preset, step) in build.toolchain_steps() {
+        toolchains.insert(preset, steps.capture(&step).await?);
+    }
+    Ok(toolchains)
 }
 
 /// Runs a seed build's commands one at a time in its worktree, each in the
@@ -582,6 +635,19 @@ impl<'a> Steps<'a> {
         writeln!(self.output, "$ {}", step.label)?;
         let stdout = self.output.try_clone()?;
         self.wait(step, &stdout).await
+    }
+
+    /// Run `step` and return what it printed to standard output, which the
+    /// log gets too.
+    async fn capture(&mut self, step: &Step) -> Result<String> {
+        writeln!(self.output, "$ {}", step.label)?;
+        let mut stdout = tempfile::tempfile()?;
+        let waited = self.wait(step, &stdout).await;
+        let mut printed = Vec::new();
+        stdout.seek(std::io::SeekFrom::Start(0))?;
+        stdout.read_to_end(&mut printed)?;
+        self.output.write_all(&printed)?;
+        waited.map(|()| String::from_utf8_lossy(&printed).into_owned())
     }
 
     /// Run `step`, its standard output to `stdout` and its errors to the

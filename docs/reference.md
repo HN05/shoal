@@ -3426,6 +3426,15 @@ and the seed passes none after `--`. To fail on warnings, use Cargo's
 `build.warnings` instead, as in `CARGO_BUILD_WARNINGS=deny cargo clippy
 --all-targets`.
 
+Cargo keeps the outputs of every earlier build of a crate whose build inputs
+changed, so the seed first runs `cargo clean --workspace`, which deletes the
+workspace crates' outputs and keeps third-party ones, when its toolchain
+(`rustc -vV` in the seed worktree) or settings changed since the build the
+snapshot holds, the snapshot is missing or its commit is gone, or the new
+commit changes `Cargo.lock`, a `Cargo.toml`, `rust-toolchain`,
+`rust-toolchain.toml` or `.cargo/config.toml`. Other refreshes build on the
+outputs they have.
+
 Cargo keeps separate builds of the workspace's crates for each
 wrapper, so a Cargo command run without the preset's environment, such as from
 a shell `shoal internal env` did not set up, builds them from scratch.

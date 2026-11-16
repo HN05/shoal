@@ -1225,6 +1225,14 @@ discards incremental state built under other options, so the seed passes none
 and serves clippy runs that fail on warnings through Cargo's `build.warnings`
 instead; a step without them also denies nothing, so a default branch with
 warnings still seeds.
+Cargo never deletes the outputs of a unit whose hash changed, which
+releases, lockfile and toolchain updates and crate moves do, so the seed
+`target` would keep every earlier build and each freeze, spare and clone would
+copy them. The Cargo seed therefore runs `cargo clean --workspace` first, which
+keeps third-party units, when its toolchain, settings or a file those hashes
+read has changed since the snapshot's build, and only then: most refreshes
+rebuild a few crates incrementally, while one that changes unit hashes rebuilds
+most of the workspace anyway.
 A seed serves the workspace crates only if their incremental state survives
 the move, but rustc reuses it only under the same compiler options, which
 include the working directory, and reuses generated code only for the same

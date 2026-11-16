@@ -71,6 +71,41 @@ impl Preset {
         }
     }
 
+    /// The command that deletes what the seed build made of the repository's
+    /// own code, run before a build whose outputs would otherwise keep
+    /// earlier builds beside it. Cargo never deletes a unit whose hash
+    /// changed; its clean keeps third-party units.
+    pub fn reset_command(self) -> Option<&'static [&'static str]> {
+        match self {
+            Self::Cargo => Some(&["cargo", "clean", "--workspace"]),
+            _ => None,
+        }
+    }
+
+    /// The command whose output names the toolchain the seed builds with.
+    pub fn toolchain_command(self) -> Option<&'static [&'static str]> {
+        match self {
+            Self::Cargo => Some(&["rustc", "-vV"]),
+            _ => None,
+        }
+    }
+
+    /// The worktree-relative files whose change makes the seed build run
+    /// [`Self::reset_command`] first; a leading `**/` names the file in any
+    /// directory.
+    pub fn reset_files(self) -> &'static [&'static str] {
+        match self {
+            Self::Cargo => &[
+                "Cargo.lock",
+                "**/Cargo.toml",
+                "rust-toolchain",
+                "rust-toolchain.toml",
+                ".cargo/config.toml",
+            ],
+            _ => &[],
+        }
+    }
+
     /// The worktree-relative seed output new workspaces start with, if the
     /// build keeps one inside the worktree.
     pub fn seed_output(self) -> Option<&'static str> {

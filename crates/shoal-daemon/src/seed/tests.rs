@@ -85,7 +85,7 @@ async fn freeze_with(
     files: Vec<String>,
 ) -> Result<()> {
     let staged = Snapshot::stage_with(copy, volumes, layout, paths).await?;
-    staged.install(layout, commit.into(), "s".into(), files)?;
+    staged.install(layout, commit.into(), "s".into(), Toolchains::new(), files)?;
     layout.remove_retired()
 }
 
@@ -518,4 +518,34 @@ async fn a_new_worktree_takes_the_spare_instead_of_cloning() {
         .await
         .unwrap();
     assert!(!layout.has_spare());
+}
+
+#[test]
+fn a_manifest_records_each_preset_s_toolchain() {
+    let root = tempfile::tempdir().unwrap();
+    let layout = Layout::new(root.path(), &"repo".into());
+    fs::create_dir_all(layout.snapshot()).unwrap();
+    // A manifest from before Shoal recorded toolchains has none.
+    let manifest = layout.snapshot().join(MANIFEST);
+    fs::write(
+        &manifest,
+        r#"{"commit":"c1","settings":"s","paths":[],"times":[]}"#,
+    )
+    .unwrap();
+    let snapshot = Snapshot::open(&layout).unwrap().unwrap();
+    assert!(snapshot.toolchains.is_empty());
+
+    let toolchains = Toolchains::from([(crate::presets::Preset::Cargo, "rustc 1.100\n".into())]);
+    let recorded = Snapshot {
+        toolchains,
+        ..snapshot
+    };
+    let text = serde_json::to_string(&recorded).unwrap();
+    assert!(
+        text.contains(r#""toolchains":{"cargo":"rustc 1.100\n"}"#),
+        "{text}"
+    );
+    fs::write(&manifest, text).unwrap();
+    let read = Snapshot::open(&layout).unwrap().unwrap();
+    assert_eq!(read.toolchains, recorded.toolchains);
 }

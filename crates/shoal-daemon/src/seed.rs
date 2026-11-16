@@ -27,6 +27,8 @@ use crate::{
 
 pub mod build;
 
+use build::Toolchains;
+
 const MANIFEST: &str = "manifest.json";
 const OUTPUTS: &str = "outputs";
 const SPARE: &str = "spare";
@@ -176,6 +178,10 @@ pub struct Snapshot {
     pub commit: CommitId,
     /// Identifies the effective settings the outputs were built with.
     pub settings: String,
+    /// The toolchains the outputs were built with; snapshots from before
+    /// Shoal recorded them have none.
+    #[serde(default)]
+    pub toolchains: Toolchains,
     paths: Vec<String>,
     times: Vec<(String, u64, u32)>,
 }
@@ -389,9 +395,9 @@ pub struct Staged {
 }
 
 impl Staged {
-    /// Make the staged outputs, built from `commit` under `settings`, the
-    /// snapshot. `files` are the tracked files whose content matches
-    /// `commit`; only their times are recorded. The replaced snapshot, with
+    /// Make the staged outputs, built from `commit` under `settings` with
+    /// `toolchains`, the snapshot. `files` are the tracked files whose
+    /// content matches `commit`; only their times are recorded. The replaced snapshot, with
     /// its spare, waits for [`Layout::remove_retired`]. Callers exclude
     /// readers.
     pub fn install(
@@ -399,6 +405,7 @@ impl Staged {
         layout: &Layout,
         commit: String,
         settings: String,
+        toolchains: Toolchains,
         files: Vec<String>,
     ) -> Result<()> {
         layout.ensure_owned()?;
@@ -406,6 +413,7 @@ impl Staged {
         let snapshot = Snapshot {
             commit: commit.into(),
             settings,
+            toolchains,
             paths: self.paths,
             times: modification_times(&layout.worktree(), files)?,
         };
