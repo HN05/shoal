@@ -12,8 +12,6 @@ use tokio::{
 };
 
 use super::{Server, connections::Capacity, workspace::Manager};
-#[cfg(test)]
-use crate::client::connection::Connector;
 use crate::{
     daemon::test_support::{git, manager, repository},
     model::{Repository, Workspace},
@@ -71,21 +69,6 @@ impl TestDaemon {
         self.accepting = accept(&self.manager);
     }
 
-    /// Requests as the user.
-    #[cfg(test)]
-    pub fn connector(&self) -> Connector {
-        Connector {
-            paths: self.manager.paths.clone(),
-            scope: None,
-        }
-    }
-
-    /// Requests as the agent of `workspace`.
-    #[cfg(test)]
-    pub async fn scoped(&self, workspace: &Workspace) -> Connector {
-        self.connector().scope(self.scope_token(workspace).await)
-    }
-
     pub async fn scope_token(&self, workspace: &Workspace) -> ScopeToken {
         let environment = self
             .manager
@@ -139,6 +122,3 @@ fn accept(manager: &Arc<Manager>) -> JoinHandle<()> {
         }
     })
 }
-
-#[cfg(test)]
-mod tests;

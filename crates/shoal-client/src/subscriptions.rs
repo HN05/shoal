@@ -106,3 +106,6 @@ async fn resubscribe(
 ) -> Result<(Responses<BufReader<UnixStream>>, Vec<Record>)> {
     connection::after_restart(|| subscribe(daemon, topics, log)).await
 }
+
+#[cfg(test)]
+mod tests;

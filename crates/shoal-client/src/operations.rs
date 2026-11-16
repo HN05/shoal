@@ -79,3 +79,6 @@ pub async fn cancel(daemon: &impl Daemon, id: String) -> Result<()> {
 pub async fn report(daemon: &impl Daemon, id: String, report: Report) -> Result<()> {
     connection::request(daemon, OperationMethod::ReportProgress { id, report }).await
 }
+
+#[cfg(test)]
+mod tests;

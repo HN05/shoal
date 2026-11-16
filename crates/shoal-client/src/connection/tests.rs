@@ -544,3 +544,5 @@ fn connectors_never_debug_their_token() {
     assert!(!debugged.contains(SECRET), "{debugged}");
     assert!(debugged.contains("ScopeToken"), "{debugged}");
 }
+
+mod requests;

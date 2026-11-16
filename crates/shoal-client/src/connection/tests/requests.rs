@@ -1,54 +1,29 @@
-//! An app's calls through `shoal_client`, as the user and as a
-//! workspace's agent, against a daemon on an isolated state directory.
-use crate::daemon::approvals::ApprovalRequestExt;
-use crate::{
-    client::{
-        connection::{self, Connector},
-        operations::{Followed, Following},
-        preparation::{self, NewSplit, NewWorkspace},
-    },
-    config::repo::ConflictPolicy,
-    daemon::{
-        approvals::{Lifetime, PortSpecification, Specification, Target},
-        operations::fake,
-        questions::Ask,
-        workspace_files::Attacher,
-    },
-    forge::items::link::LinkKind,
-    model::{
-        Completion, Inspection, QueueEntry, Relation, Repository, SyncedRepository, Workspace,
-    },
-    protocol::{
-        ApprovalMethod, AssignmentMethod, Body, ChatStart, ErrorCode, HoldMethod, ItemMethod,
-        OperationMethod, QuestionMethod, QueueMethod, RemoteError, RemovalMethod, RepositoryMethod,
-        WorkspaceMethod,
-        operations::{
-            Ended, Failure, LaunchRequest, OperationSpec, Progress, Report, StartedWorkspace,
-            WorkspaceStart,
-        },
-    },
-    state::WorkspaceState,
-};
+//! Requests an app sends, as the user and as a workspace's agent, to a
+//! daemon on an isolated state directory.
+use crate::connection::{self, Connector};
+use crate::forge::items::link::LinkKind;
+use crate::test_daemon::{Connect as _, code, queued_plan, start_workspace};
+use shoal_core::config::repo::ConflictPolicy;
+use shoal_daemon::test_daemon::ApprovalRequestExt as _;
+use shoal_daemon::test_daemon::{TestDaemon, fake};
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::launches::{Launch, LaunchSource, Launched, SpaceChoice, StartTarget};
-use shoal_protocol::space_names::{SpaceName, SpaceSelector};
-use shoal_protocol::{
-    approvals::ApprovalRequest,
-    questions::Question,
-    removal::{RemovalCheck, RemovalResult, UnsavedWork},
+use shoal_protocol::approvals::{
+    ApprovalRequest, Lifetime, PortSpecification, Specification, Target,
 };
+use shoal_protocol::files::Attacher;
+use shoal_protocol::model::{
+    Completion, Inspection, QueueEntry, Relation, Repository, SyncedRepository, Workspace,
+};
+use shoal_protocol::protocol::operations::LaunchRequest;
+use shoal_protocol::protocol::{
+    ApprovalMethod, AssignmentMethod, Body, ErrorCode, HoldMethod, ItemMethod, OperationMethod,
+    QuestionMethod, QueueMethod, RemovalMethod, RepositoryMethod, WorkspaceMethod,
+    operations::{OperationSpec, StartedWorkspace, WorkspaceStart},
+};
+use shoal_protocol::questions::{Ask, Question};
+use shoal_protocol::removal::{RemovalCheck, RemovalResult, UnsavedWork};
+use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;
-
-use super::{HANG, TestDaemon};
-
-/// The code `result` failed with.
-fn code<T: std::fmt::Debug>(result: anyhow::Result<T>) -> ErrorCode {
-    let error = result.unwrap_err();
-    match error.downcast_ref::<RemoteError>() {
-        Some(remote) => remote.code.clone(),
-        None => panic!("expected a refusal: {error:#}"),
-    }
-}
 
 async fn inspect(daemon: &Connector, workspace: &str) -> anyhow::Result<Workspace> {
     let method = WorkspaceMethod::InspectWorkspace {
@@ -307,21 +282,12 @@ fn queue_worker(workspace: &str, launch: LaunchRequest) -> QueueMethod {
     }
 }
 
-/// The plan the daemon queued with `entry`.
-async fn queued_plan(daemon: &TestDaemon, entry: &QueueEntry) -> serde_json::Value {
-    let plan = daemon.manager.queued_plan(&entry.id).await.unwrap().plan;
-    serde_json::from_str(&plan).unwrap()
-}
-
 #[tokio::test]
 async fn an_app_queues_an_agent_once_it_can_run() {
     let daemon = TestDaemon::start().await;
     // An agent whose command is installed wherever the tests run.
-    crate::daemon::test_support::configure(
-        &daemon.manager,
-        "[agents.probe]\ncommand = [\"true\"]\n",
-    )
-    .await;
+    shoal_daemon::test_daemon::configure(&daemon.manager, "[agents.probe]\ncommand = [\"true\"]\n")
+        .await;
     let worker = daemon.workspace("worker").await;
     let app = daemon.connector();
     let queue = |agent: &str| {
@@ -374,7 +340,7 @@ async fn an_app_queues_an_agent_once_it_can_run() {
     assert_eq!(
         request.target,
         shoal_protocol::approvals::Target::Action(
-            crate::config::permissions::PermissionKey::Limits
+            shoal_core::config::permissions::PermissionKey::Limits
         )
     );
     let child: QueueEntry = connection::request(&agent, queue_worker(child.id.as_str(), probe()))
@@ -384,167 +350,9 @@ async fn an_app_queues_an_agent_once_it_can_run() {
 }
 
 #[tokio::test]
-async fn a_launch_in_a_workspace_queues_its_worker_on_the_launchs_task() {
-    let daemon = TestDaemon::start().await;
-    crate::daemon::test_support::configure(
-        &daemon.manager,
-        "[agent]\ndefault = \"probe\"\n[agents.probe]\ncommand = [\"true\"]\n",
-    )
-    .await;
-    let parent = daemon.workspace("parent").await;
-    let app = daemon.connector();
-    let launch = |workspace: &Workspace, agent: Option<&str>| Launch {
-        in_workspace: Some(SpaceChoice::Space(SpaceSelector::id(&workspace.id))),
-        agent: agent.map(Into::into),
-        task: vec!["Fix the build".into()],
-        ..Launch::default()
-    };
-    let worker = |launched| match launched {
-        Launched::Worker(worker) => *worker,
-        launched => panic!("expected a worker: {launched:?}"),
-    };
-    let send =
-        |connector, launch| async move { crate::client::launches::launch(connector, launch).await };
-    let queued = worker(send(&app, launch(&parent, Some("probe"))).await.unwrap());
-    assert_eq!(queued.workspace.id, parent.id);
-    let entry = queued.entry.unwrap();
-    assert_eq!(entry.agent, "probe");
-    let plan: crate::start_plan::AddPlan =
-        serde_json::from_value(queued_plan(&daemon, &entry).await).unwrap();
-    assert_eq!(plan.args, ["Fix the build"]);
-    // Without an agent of its own, it starts none, as a start without a
-    // terminal to pick one does, whatever `agent.default` names.
-    let none = worker(send(&app, launch(&parent, None)).await.unwrap());
-    assert!(none.entry.is_none());
-
-    // A workspace's agent starts the workers of the workspaces below its
-    // own only.
-    let split = WorkspaceMethod::SplitWorkspace {
-        workspace: SpaceSelector::id(&parent.id),
-        name: "child".into(),
-        base: Some("HEAD".into()),
-        options: Default::default(),
-    };
-    let child = connection::request::<Workspace>(&app, split).await.unwrap();
-    let agent = daemon.scoped(&parent).await;
-    let own = send(&agent, launch(&parent, Some("probe"))).await;
-    assert_eq!(code(own), ErrorCode::ScopeDenied);
-    let below = worker(send(&agent, launch(&child, Some("probe"))).await.unwrap());
-    assert_eq!(below.entry.unwrap().agent, "probe");
-}
-
-/// A launch of a new workspace in the test daemon's repository on `branch`.
-fn workspace_launch(daemon: &TestDaemon, branch: &str) -> Launch {
-    Launch {
-        target: Some(StartTarget::Repository(daemon.repository.id.to_string())),
-        branch: Some(branch.into()),
-        ..Launch::default()
-    }
-}
-
-#[tokio::test]
-async fn a_launch_opens_a_new_workspace_and_prepares_it() {
-    let daemon = TestDaemon::start().await;
-    crate::daemon::test_support::configure(
-        &daemon.manager,
-        "[agents.probe]\ncommand = [\"true\"]\n",
-    )
-    .await;
-    let app = daemon.connector();
-    let launch = Launch {
-        agent: Some("probe".into()),
-        ..workspace_launch(&daemon, "new")
-    };
-    let launched = crate::client::launches::launch(&app, launch).await.unwrap();
-    let Launched::Workspace(started) = launched else {
-        panic!("expected a workspace: {launched:?}");
-    };
-    assert_eq!(
-        started.workspace.branch.as_ref().map(|b| b.as_str()),
-        Some("new")
-    );
-    let worker = fake::take(&started.operation);
-    let OperationSpec::Prepare { steps, .. } = worker.order.spec.clone() else {
-        panic!("expected a preparation: {:?}", worker.order);
-    };
-    // Its agent queues once the workspace is set up, as the launch made it.
-    let agent = steps.agent.unwrap();
-    assert_eq!(agent.agent, "probe");
-    assert_eq!(agent.source, Some(LaunchSource::Manual));
-    worker.exit(1);
-}
-
-#[tokio::test]
-async fn a_launch_that_starts_now_waits_for_none_of_its_blockers() {
-    let daemon = TestDaemon::start().await;
-    crate::daemon::test_support::configure(
-        &daemon.manager,
-        "[agents.probe]\ncommand = [\"true\"]\n",
-    )
-    .await;
-    let blocker = daemon.workspace("blocker").await;
-    let launch = Launch {
-        agent: Some("probe".into()),
-        blockers: vec![blocker.id.to_string()],
-        now: true,
-        ..workspace_launch(&daemon, "now")
-    };
-    let app = daemon.connector();
-    let launched = crate::client::launches::launch(&app, launch).await.unwrap();
-    let Launched::Workspace(started) = launched else {
-        panic!("expected a workspace: {launched:?}");
-    };
-    fake::take(&started.operation).exit(1);
-}
-
-#[tokio::test]
-async fn a_launch_refuses_what_it_cannot_start_before_it_creates_anything() {
-    let daemon = TestDaemon::start().await;
-    let app = daemon.connector();
-    let refused = [
-        (
-            Launch {
-                agent: Some("missing".into()),
-                ..workspace_launch(&daemon, "unknown-agent")
-            },
-            "\"missing\"",
-        ),
-        (
-            Launch {
-                target: Some("https://other.example/team/repo/issues/7".parse().unwrap()),
-                ..Launch::default()
-            },
-            "shoal repo add https://other.example/team/repo",
-        ),
-        (
-            Launch {
-                agent: Some("codex".into()),
-                blockers: vec!["missing".into()],
-                ..workspace_launch(&daemon, "blocked")
-            },
-            "neither a space nor a queued agent",
-        ),
-    ];
-    for (launch, refusal) in refused {
-        let error = crate::client::launches::launch(&app, launch)
-            .await
-            .unwrap_err();
-        assert!(format!("{error:#}").contains(refusal), "{error:#}");
-    }
-    assert!(
-        daemon
-            .manager
-            .visible_workspaces(None)
-            .await
-            .unwrap()
-            .is_empty()
-    );
-}
-
-#[tokio::test]
 async fn a_worker_without_an_agent_or_task_takes_the_default_on_its_issue() {
     let daemon = TestDaemon::start().await;
-    crate::daemon::test_support::configure(
+    shoal_daemon::test_daemon::configure(
         &daemon.manager,
         "[agent]\ndefault = \"probe\"\n[agents.probe]\ncommand = [\"true\"]\n",
     )
@@ -574,134 +382,6 @@ async fn a_worker_without_an_agent_or_task_takes_the_default_on_its_issue() {
             .is_some_and(|url| url.ends_with("/40")),
         "{plan}"
     );
-}
-
-/// Follow operation `id` from its start to its end.
-async fn follow(app: &Connector, id: &str) -> Ended {
-    let mut following = Following::open(app, id.into(), 0).await.unwrap();
-    tokio::time::timeout(HANG, async {
-        loop {
-            if let Followed::Ended(ended) = following.next().await.unwrap() {
-                return ended;
-            }
-        }
-    })
-    .await
-    .unwrap()
-}
-
-/// A request to start workspace `start` of the test repository from HEAD.
-fn start_workspace(daemon: &TestDaemon, start: WorkspaceStart) -> OperationMethod {
-    OperationMethod::StartWorkspace {
-        repository: daemon.repository.id.clone().into(),
-        start,
-        base: Some("HEAD".into()),
-        path: None,
-        git_profile: None,
-        parent: None,
-        options: Default::default(),
-        issue: None,
-        pr: None,
-        agent: None,
-        waiting: None,
-        env: None,
-        queue_entry: None,
-    }
-}
-
-#[tokio::test]
-async fn a_created_workspace_is_prepared_in_an_operation_the_app_follows() {
-    let daemon = TestDaemon::start().await;
-    let app = daemon.connector();
-    let create = start_workspace(&daemon, WorkspaceStart::Name("api".into()));
-    let started: StartedWorkspace = connection::request(&app, create).await.unwrap();
-    assert_eq!(started.workspace.name, "api");
-    assert!(!started.reused);
-    let worker = fake::take(&started.operation);
-    let OperationSpec::Prepare { workspace, steps } = worker.order.spec.clone() else {
-        panic!("expected a preparation: {:?}", worker.order);
-    };
-    assert_eq!(workspace, SpaceSelector::id(&started.workspace.id));
-    assert!(steps.post_setup && steps.pr.is_none() && steps.agent.is_none());
-    let failure = Failure::SetupFailed {
-        message: "setup command exited with status 2".into(),
-    };
-    let report = Report::Ended(Ended::Failed(failure));
-    daemon
-        .manager
-        .report_operation(&started.operation, report, None)
-        .await
-        .unwrap();
-    worker.exit(0);
-    let Ended::Failed(failure) = follow(&app, &started.operation).await else {
-        panic!("expected the failure");
-    };
-    assert_eq!(failure.code(), ErrorCode::SetupFailed);
-}
-
-#[tokio::test]
-async fn an_app_creates_a_workspace_and_follows_its_setup_to_a_typed_failure() {
-    let daemon = TestDaemon::start().await;
-    let app = daemon.connector();
-    let fail = async |operation: &str, failure| {
-        let report = Report::Ended(Ended::Failed(failure));
-        let manager = &daemon.manager;
-        manager
-            .report_operation(operation, report, None)
-            .await
-            .unwrap();
-    };
-    let repository = daemon.repository.id.clone().into();
-    let new = NewWorkspace {
-        base: Some("HEAD".into()),
-        ..NewWorkspace::new(repository, WorkspaceStart::Name("api".into()))
-    };
-    let preparing = preparation::create(&app, new, Default::default())
-        .await
-        .unwrap();
-    let mut worker = fake::take(preparing.operation());
-    worker.stdout("installing").await;
-    // A failed setup command leaves the workspace failed.
-    (daemon.manager)
-        .set_state(&preparing.workspace().id, WorkspaceState::Failed, None)
-        .await
-        .unwrap();
-    let message = "setup command exited with status 2".to_owned();
-    fail(preparing.operation(), Failure::SetupFailed { message }).await;
-    worker.exit(0);
-    let mut lines = Vec::new();
-    let progress = |progress| match progress {
-        Progress::Output { line, .. } => lines.push(line),
-        Progress::Step { .. } => {}
-    };
-    let finished = tokio::time::timeout(HANG, preparing.finish(progress));
-    let unprepared = finished.await.unwrap().unwrap().unwrap_err();
-    assert_eq!(lines, ["installing"]);
-    assert_eq!(unprepared.workspace.name, "api");
-    assert!(matches!(unprepared.failure, Failure::SetupFailed { .. }));
-    assert!(!unprepared.set_up(), "setup awaits a retry");
-    // A split whose post-setup hook fails after setup left it ready.
-    let parent = daemon.workspace("parent").await;
-    let split = NewSplit {
-        base: Some("HEAD".into()),
-        ..NewSplit::new(SpaceSelector::id(&parent.id), Some("child".into()))
-    };
-    let preparing = preparation::create(&app, split, Default::default())
-        .await
-        .unwrap();
-    let worker = fake::take(preparing.operation());
-    let child = preparing.workspace().id.clone();
-    (daemon.manager)
-        .set_state(&child, WorkspaceState::Ready, None)
-        .await
-        .unwrap();
-    let message = "post_setup exited with 1".to_owned();
-    fail(preparing.operation(), Failure::HookFailed { message }).await;
-    worker.exit(0);
-    let finished = tokio::time::timeout(HANG, preparing.finish(|_| {}));
-    let unprepared = finished.await.unwrap().unwrap().unwrap_err();
-    assert_eq!(unprepared.workspace.id, child);
-    assert!(unprepared.set_up(), "the hook failed after setup");
 }
 
 #[tokio::test]
@@ -871,8 +551,8 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
     assert_eq!(code(inspect(&app, "child").await), ErrorCode::NotFound);
     // A mode only a file beside the global config defines is one.
     let paths = &daemon.manager.paths;
-    crate::test_support::write_global_config(paths, "[agents.fake]\ncommand = ['sh']\n");
-    crate::test_support::write_beside_global_config(paths, "modes/triage.md", "Label it.");
+    shoal_core::test_support::write_global_config(paths, "[agents.fake]\ncommand = ['sh']\n");
+    shoal_core::test_support::write_beside_global_config(paths, "modes/triage.md", "Label it.");
     daemon.manager.reload_config().await.unwrap();
     let in_file_mode = split(Some(launch("fake", Some("triage"))));
     let started: StartedWorkspace = connection::request(&agent, in_file_mode).await.unwrap();
@@ -900,7 +580,7 @@ async fn a_start_without_an_agent_queues_the_configured_default() {
         .unwrap_err();
     assert!(format!("{error:#}").contains("agent.default"), "{error:#}");
     assert_eq!(code(inspect(&app, "unnamed").await), ErrorCode::NotFound);
-    crate::daemon::test_support::configure(
+    shoal_daemon::test_daemon::configure(
         &daemon.manager,
         "[agent]\ndefault = \"probe\"\n[agents.probe]\ncommand = [\"true\"]\n",
     )
@@ -914,96 +594,20 @@ async fn a_start_without_an_agent_queues_the_configured_default() {
     worker.exit(1);
 }
 
-/// The resolved starts the daemon ran its chat start worker for, each with
-/// whether the worker acts with the caller's scope.
-fn launched_chats() -> Vec<(ChatStart, bool)> {
-    crate::daemon::chats::launches::fake::STARTED
-        .lock()
-        .unwrap()
-        .clone()
-}
-
-#[tokio::test]
-async fn an_app_starts_a_chat_whose_agent_and_mode_the_daemon_resolves() {
-    let daemon = TestDaemon::start().await;
-    let app = daemon.connector();
-    let start = || Launch {
-        target: Some(StartTarget::Repository(
-            daemon.repository.path.to_str().unwrap().into(),
-        )),
-        chat: true,
-        task: vec!["Read the build".into()],
-        ..Default::default()
-    };
-    let error = crate::client::launches::launch(&app, start())
-        .await
-        .unwrap_err();
-    assert!(format!("{error:#}").contains("agent.default"), "{error:#}");
-    assert!(launched_chats().is_empty());
-    crate::daemon::test_support::configure(
-        &daemon.manager,
-        "[agent]\ndefault = \"probe\"\n[agents.probe]\ncommand = [\"true\"]\n",
-    )
-    .await;
-    (crate::client::launches::launch(&app, start()))
-        .await
-        .unwrap();
-    let [(launched, scoped)] = launched_chats().try_into().unwrap();
-    assert!(!scoped);
-    assert_eq!(launched.agent, Some("probe".into()));
-    assert_eq!(launched.mode, Some(crate::model::chat_mode()));
-    let repository = launched.repository.as_ref().map(|named| named.value());
-    assert_eq!(repository, Some(daemon.repository.id.as_str()));
-    assert_eq!(launched.parent, None);
-    assert_eq!(launched.args, ["Read the build"]);
-    // Without a name of its own, a chat in the checkout takes its
-    // repository's and its mode's.
-    let named = format!("{} chat", crate::repository::name(&daemon.repository));
-    assert_eq!(launched.name.as_ref().map(SpaceName::as_str), Some(&*named));
-}
-
-#[tokio::test]
-async fn a_scoped_app_starts_chats_below_its_own_space() {
-    let daemon = TestDaemon::start().await;
-    crate::daemon::test_support::configure(
-        &daemon.manager,
-        "[agents.probe]\ncommand = [\"true\"]\n",
-    )
-    .await;
-    let parent = daemon.workspace("parent").await;
-    let other = daemon.workspace("other").await;
-    let agent = daemon.scoped(&parent).await;
-    let start = |parent: Option<SpaceSelector>| Launch {
-        target: Some(StartTarget::Repository(daemon.repository.id.to_string())),
-        chat: true,
-        agent: Some("probe".into()),
-        parent,
-        ..Default::default()
-    };
-    let launch = |launch| crate::client::launches::launch(&agent, launch);
-    let outside = start(Some(SpaceSelector::id(&other.id)));
-    assert!(launch(outside).await.is_err());
-    launch(start(None)).await.unwrap();
-    // The worker records it with the caller's scope, below the caller.
-    let [(launched, scoped)] = launched_chats().try_into().unwrap();
-    assert!(scoped);
-    assert_eq!(launched.parent, None);
-}
-
 #[tokio::test]
 async fn a_chat_parent_in_another_repository_is_refused_before_the_chat_starts() {
     let daemon = TestDaemon::start().await;
     let app = daemon.connector();
     let parent = daemon.workspace("parent").await;
     let root = tempfile::tempdir().unwrap();
-    let other = crate::daemon::test_support::repository(root.path(), "other");
+    let other = shoal_core::test_support::repository(root.path(), "other");
     let other = daemon
         .manager
         .register_repository(other.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let check = |repository: &Repository, workspace: Option<&SpaceId>, parent: &SpaceId| {
-        crate::protocol::ChatMethod::CheckChatParent {
+        shoal_protocol::protocol::ChatMethod::CheckChatParent {
             repository: Some(repository.id.clone().into()),
             workspace: workspace.map(SpaceSelector::id),
             parent: Some(SpaceSelector::id(parent)),
@@ -1019,7 +623,11 @@ async fn a_chat_parent_in_another_repository_is_refused_before_the_chat_starts()
     // A workspace that is not ready takes no child, chat or workspace.
     let failed = daemon.workspace("failed").await;
     (daemon.manager)
-        .set_state(&failed.id, crate::state::WorkspaceState::Failed, None)
+        .set_state(
+            &failed.id,
+            shoal_protocol::state::WorkspaceState::Failed,
+            None,
+        )
         .await
         .unwrap();
     assert!(refused(check(&daemon.repository, None, &failed.id)).await);
@@ -1090,7 +698,7 @@ async fn a_launch_a_chat_queued_opens_its_workspace_in_the_chats_scope() {
     let token = daemon.manager.chat_scope(&chat.id).await.unwrap();
     let agent = daemon.connector().scope(token);
     let queue = QueueMethod::QueueAdd {
-        request: Box::new(crate::model::QueueRequest {
+        request: Box::new(shoal_protocol::model::QueueRequest {
             source: None,
             issue_labels: Vec::new(),
             priority: None,
@@ -1108,7 +716,8 @@ async fn a_launch_a_chat_queued_opens_its_workspace_in_the_chats_scope() {
             blockers: Vec::new(),
         }),
     };
-    let admission: crate::model::QueueAdmission = connection::request(&agent, queue).await.unwrap();
+    let admission: shoal_protocol::model::QueueAdmission =
+        connection::request(&agent, queue).await.unwrap();
     // The daemon starts it, as it starts a launch in an existing workspace.
     assert!(!admission.start);
     let entry = admission.entry.unwrap();
@@ -1143,49 +752,11 @@ async fn a_launch_a_chat_queued_opens_its_workspace_in_the_chats_scope() {
 }
 
 #[tokio::test]
-async fn following_ends_once_the_followers_scope_token_is_revoked() {
-    let daemon = TestDaemon::start().await;
-    let own = daemon.workspace("own").await;
-    let merge = OperationMethod::StartOperation {
-        spec: OperationSpec::Merge {
-            workspace: SpaceSelector::id(&own.id),
-            options: Default::default(),
-        },
-        env: None,
-    };
-    let started: crate::protocol::operations::Started =
-        connection::request(&daemon.connector(), merge)
-            .await
-            .unwrap();
-    let mut worker = fake::take(&started.id);
-    let token = daemon.scope_token(&own).await;
-    let agent = daemon.connector().scope(token.clone());
-    let mut following = Following::open(&agent, started.id.clone(), 0)
-        .await
-        .unwrap();
-    worker.stdout("one").await;
-    let first = following.next().await.unwrap();
-    assert!(matches!(first, Followed::Event(_)), "{first:?}");
-    daemon
-        .manager
-        .revoke_workspace_environment(&SpaceSelector::id(&own.id), token)
-        .await
-        .unwrap();
-    worker.stdout("two").await;
-    let error = following.next().await.unwrap_err();
-    assert_eq!(
-        error.downcast_ref::<RemoteError>().unwrap().code,
-        ErrorCode::ScopeDenied
-    );
-    worker.exit(0);
-}
-
-#[tokio::test]
 async fn a_scoped_start_takes_no_queue_entry_of_another_launch() {
     let daemon = TestDaemon::start().await;
     daemon
         .manager
-        .publish_config(crate::daemon::test_support::global_config(
+        .publish_config(shoal_core::test_support::global_config(
             "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false",
         ));
     let parent = daemon.workspace("parent").await;
@@ -1201,7 +772,7 @@ async fn a_scoped_start_takes_no_queue_entry_of_another_launch() {
         .unwrap();
     // The child's start holds a slot it has yet to open a workspace for,
     // which the parent's scope reaches.
-    let request = crate::model::QueueRequest {
+    let request = shoal_protocol::model::QueueRequest {
         source: None,
         issue_labels: Vec::new(),
         priority: None,
@@ -1218,7 +789,7 @@ async fn a_scoped_start_takes_no_queue_entry_of_another_launch() {
         starts_in_caller: true,
         blockers: Vec::new(),
     };
-    let caller = crate::daemon::scope::Caller {
+    let caller = shoal_daemon::test_daemon::Caller {
         space_id: child.id.clone(),
         execution: None,
         granted: None,
@@ -1247,7 +818,7 @@ async fn a_scoped_start_takes_the_queue_entry_of_the_launch_it_starts_itself() {
     let daemon = TestDaemon::start().await;
     daemon
         .manager
-        .publish_config(crate::daemon::test_support::global_config(
+        .publish_config(shoal_core::test_support::global_config(
             "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false",
         ));
     let chat = daemon
@@ -1262,7 +833,7 @@ async fn a_scoped_start_takes_the_queue_entry_of_the_launch_it_starts_itself() {
         .unwrap();
     let token = daemon.manager.chat_scope(&chat.id).await.unwrap();
     let agent = daemon.connector().scope(token);
-    let request = crate::model::QueueRequest {
+    let request = shoal_protocol::model::QueueRequest {
         source: None,
         issue_labels: Vec::new(),
         priority: None,
@@ -1282,7 +853,8 @@ async fn a_scoped_start_takes_the_queue_entry_of_the_launch_it_starts_itself() {
     let add = QueueMethod::QueueAdd {
         request: Box::new(request),
     };
-    let admission: crate::model::QueueAdmission = connection::request(&agent, add).await.unwrap();
+    let admission: shoal_protocol::model::QueueAdmission =
+        connection::request(&agent, add).await.unwrap();
     assert!(admission.start);
     let own = admission.entry.unwrap();
     let mut create = start_workspace(&daemon, WorkspaceStart::Name("api".into()));

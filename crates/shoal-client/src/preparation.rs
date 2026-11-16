@@ -329,3 +329,6 @@ impl Unprepared {
         self.workspace.state == WorkspaceState::Ready
     }
 }
+
+#[cfg(test)]
+mod tests;

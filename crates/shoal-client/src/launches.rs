@@ -11,3 +11,6 @@ pub async fn launch(daemon: &impl Daemon, launch: Launch) -> Result<Launched> {
     let launch = Box::new(launch);
     request(daemon, LaunchMethod::Launch { launch }).await
 }
+
+#[cfg(test)]
+mod tests;

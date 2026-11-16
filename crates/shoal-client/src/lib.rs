@@ -37,6 +37,8 @@ pub mod saved;
 pub mod sleep;
 pub mod stopping;
 pub mod subscriptions;
+#[cfg(test)]
+mod test_daemon;
 pub mod transcripts;
 pub mod transfer;
 pub mod triggers;
@@ -44,3 +46,6 @@ pub mod views;
 pub mod workspaces;
 
 pub use shoal_forge_types as forge;
+
+#[cfg(test)]
+shoal_core::forget_runner_repository!();
