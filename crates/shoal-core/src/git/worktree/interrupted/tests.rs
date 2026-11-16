@@ -36,7 +36,7 @@ async fn a_stopped_removal_gets_its_link_and_tracked_files_back() {
     let root = tempfile::tempdir().unwrap();
     let (_repo, workspace, admin) = worktree(root.path()).await;
     let link = std::fs::read_to_string(workspace.join(".git")).unwrap();
-    mark(&admin, link).await.unwrap();
+    mark(&admin, &workspace, link).await.unwrap();
     delete_partway(&workspace);
     assert!(restore(&workspace, &admin).await.unwrap());
     assert_eq!(git(&workspace, &["status", "--porcelain"]), "");
@@ -44,6 +44,23 @@ async fn a_stopped_removal_gets_its_link_and_tracked_files_back() {
     assert!(!workspace.join("target").exists());
     // The removal is forgotten once its files are back.
     assert!(!restore(&workspace, &admin).await.unwrap());
+}
+
+/// Tracked files missing before the removal began are someone's change,
+/// which stays, as the removal had consent to delete it.
+#[tokio::test]
+async fn deletions_from_before_the_removal_stay() {
+    let root = tempfile::tempdir().unwrap();
+    let (_repo, workspace, admin) = worktree(root.path()).await;
+    std::fs::remove_file(workspace.join("src/lib.rs")).unwrap();
+    let link = std::fs::read_to_string(workspace.join(".git")).unwrap();
+    mark(&admin, &workspace, link).await.unwrap();
+    delete_partway(&workspace);
+    assert!(restore(&workspace, &admin).await.unwrap());
+    assert_eq!(
+        git(&workspace, &["status", "--porcelain"]),
+        " D src/lib.rs\n"
+    );
 }
 
 /// Files deleted while no removal ran are someone's change, which stays.
@@ -86,7 +103,7 @@ async fn another_checkout_at_the_path_is_refused() {
         .await
         .unwrap();
     let link = std::fs::read_to_string(workspace.join(".git")).unwrap();
-    mark(&admin, link).await.unwrap();
+    mark(&admin, &workspace, link).await.unwrap();
     std::fs::copy(other.join(".git"), workspace.join(".git")).unwrap();
     std::fs::remove_file(workspace.join("tracked")).unwrap();
     assert!(restore(&workspace, &admin).await.is_err());
@@ -122,7 +139,7 @@ async fn a_directory_left_where_the_worktree_moved_from_is_refused() {
     let root = tempfile::tempdir().unwrap();
     let (repo, workspace, admin) = worktree(root.path()).await;
     let link = std::fs::read_to_string(workspace.join(".git")).unwrap();
-    mark(&admin, link).await.unwrap();
+    mark(&admin, &workspace, link).await.unwrap();
     let moved = root.path().join("moved");
     git(
         &repo,

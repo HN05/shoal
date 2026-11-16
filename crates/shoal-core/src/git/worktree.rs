@@ -148,7 +148,7 @@ async fn mark_removal(path: &Path, link: Option<&str>) -> Result<Option<PathBuf>
     else {
         return Ok(None);
     };
-    interrupted::mark(&admin_dir, text.to_owned()).await?;
+    interrupted::mark(&admin_dir, path, text.to_owned()).await?;
     Ok(Some(admin_dir))
 }
 

@@ -1595,7 +1595,8 @@ async fn cut_short_removal(
 ) -> PathBuf {
     let link = fs::read_to_string(workspace.path.join(".git")).unwrap();
     let admin_dir = workspace.git_dir.clone().unwrap();
-    fs::write(admin_dir.join("shoal-removal"), link).unwrap();
+    let marker = serde_json::json!({"link": link, "deleted_before": []});
+    fs::write(admin_dir.join("shoal-removal"), marker.to_string()).unwrap();
     fs::remove_file(workspace.path.join("tracked")).unwrap();
     if let Some(error) = failure {
         if error.starts_with(STOPPED_REMOVAL) {
