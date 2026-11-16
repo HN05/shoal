@@ -550,8 +550,10 @@ at startup, so that systemd's stop of the service after the daemon exited or
 failed to start leaves agents, places and CI jobs running for the next daemon.
 `KillMode=process` is rejected: it would leave them in the stopped service's
 control group, which the next start reports as left over, sharing its memory
-accounting and OOM kills. A live daemon's SIGTERM still stops agents; where no
-scope can start, workers start directly.
+accounting and OOM kills. A live daemon's SIGTERM still stops agents. Where
+the daemon's startup finds that no scope can start, workers start directly; a
+start that `systemd-run` fails later is not retried directly, since its exit
+status cannot be told from the worker's own.
 Managed daemons record their stable executable path before startup work and restart
 after a replacement, including one during startup, once daemon operations are idle
 and no setup or merge runs; commands reattach.
