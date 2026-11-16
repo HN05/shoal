@@ -49,6 +49,7 @@ pub async fn restore(path: &Path, admin_dir: &Path) -> Result<bool> {
         return Ok(false);
     };
     if off_runtime::is_dir(path).await? {
+        ensure_registered_at(admin_dir, path).await?;
         restore_link(path, link).await?;
         ensure_linked_to(path, admin_dir).await?;
         restore_tracked_files(path).await?;
@@ -57,11 +58,36 @@ pub async fn restore(path: &Path, admin_dir: &Path) -> Result<bool> {
     Ok(true)
 }
 
+/// Whether the marker in `admin_dir` says a removal of its worktree began
+/// and has not been forgotten.
+pub async fn began(admin_dir: &Path) -> Result<bool> {
+    Ok(marked_link(admin_dir).await?.is_some())
+}
+
 /// The `.git` link text the marker in `admin_dir` keeps; `None` when no
 /// removal began.
 async fn marked_link(admin_dir: &Path) -> Result<Option<String>> {
     let marker = admin_dir.join(MARKER);
     off_runtime::run(move || Ok(fsutil::read_optional(&marker)?)).await
+}
+
+/// Refuse to touch the directory at `path` unless the admin directory
+/// `admin_dir` names it as its worktree, as Git records in its `gitdir`
+/// file, relative to it when `worktree.useRelativePaths` is set.
+async fn ensure_registered_at(admin_dir: &Path, path: &Path) -> Result<()> {
+    let gitdir = admin_dir.join("gitdir");
+    let text = off_runtime::run(move || {
+        std::fs::read_to_string(&gitdir).with_context(|| format!("read {}", gitdir.display()))
+    })
+    .await?;
+    let named = admin_dir.join(text.trim_end_matches('\n'));
+    anyhow::ensure!(
+        super::resolved(&named).await == super::resolved(&path.join(".git")).await,
+        "{} is no longer the worktree of {}",
+        path.display(),
+        admin_dir.display()
+    );
+    Ok(())
 }
 
 /// Write the `.git` link of the worktree at `path` back with `link` unless

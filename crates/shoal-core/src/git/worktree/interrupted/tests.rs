@@ -114,3 +114,26 @@ async fn a_stopped_removal_fails_with_the_worktree_whole() {
     assert_eq!(git(&workspace, &["status", "--porcelain"]), "");
     assert!(!restore(&workspace, &admin).await.unwrap());
 }
+
+/// A directory at the path of a worktree Git moved away is not the one
+/// whose removal stopped, so it gets no `.git` link.
+#[tokio::test]
+async fn a_directory_left_where_the_worktree_moved_from_is_refused() {
+    let root = tempfile::tempdir().unwrap();
+    let (repo, workspace, admin) = worktree(root.path()).await;
+    let link = std::fs::read_to_string(workspace.join(".git")).unwrap();
+    mark(&admin, link).await.unwrap();
+    let moved = root.path().join("moved");
+    git(
+        &repo,
+        &[
+            "worktree",
+            "move",
+            workspace.to_str().unwrap(),
+            moved.to_str().unwrap(),
+        ],
+    );
+    std::fs::create_dir(&workspace).unwrap();
+    assert!(restore(&workspace, &admin).await.is_err());
+    assert!(!workspace.join(".git").exists());
+}

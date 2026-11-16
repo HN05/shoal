@@ -543,8 +543,9 @@ disabled: `git worktree add` on a new or existing branch, at a commit, or withou
 checking files out for a copy, and `git worktree remove`, then `git branch -D` when
 the removal decision deletes the branch. Before `git worktree remove`, Shoal
 marks the worktree's admin directory; a removal stopped partway checks the
-`.git` link and tracked files it deleted out again, or the next removal does, so
-that no decision reads Shoal's own deletions as unsaved work. Typed removal outcomes preserve
+`.git` link and tracked files it deleted out again, or startup or the next removal
+does once the admin directory proves the worktree is the workspace's, so that no
+decision reads Shoal's own deletions as unsaved work. Typed removal outcomes preserve
 unfamiliar strings; only confirmed branch deletion sets the response deletion
 flag. Invoke external tools with argument arrays. Captured subprocesses share optional deadlines, whose
 error names the command line and directory, and a

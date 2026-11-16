@@ -5,6 +5,7 @@
 use super::super::super::{Manager, StopRequest};
 use super::super::{Removal, Stage};
 use crate::daemon::space_processes::WorktreeTies;
+use crate::daemon::workspace::identity::verify_owner;
 use crate::daemon::workspace::runner::JobStop;
 use crate::{
     daemon::events::EventCause,
@@ -195,11 +196,24 @@ impl Manager {
     /// Put back the `.git` link and tracked files that an earlier removal of
     /// `workspace`, stopped before Git finished, deleted and did not put
     /// back itself, as when the daemon stopped meanwhile, so that its
-    /// inspection does not take them for unsaved work.
-    async fn restore_interrupted_removal(&self, workspace: &Workspace) -> Result<()> {
+    /// inspection does not take them for unsaved work. Only the recorded
+    /// admin directory, marked as this workspace's, says that one began.
+    pub(in crate::daemon::workspace) async fn restore_interrupted_removal(
+        &self,
+        workspace: &Workspace,
+    ) -> Result<()> {
         let Some(admin_dir) = &workspace.git_dir else {
             return Ok(());
         };
+        if !git::worktree::interrupted::began(admin_dir).await? {
+            return Ok(());
+        }
+        let (owned, id, recorded) = (
+            admin_dir.clone(),
+            workspace.id.clone(),
+            workspace.git_dir_id.clone(),
+        );
+        off_runtime::run(move || verify_owner(&owned, &id, recorded.as_deref())).await?;
         if git::worktree::interrupted::restore(&workspace.path, admin_dir).await? {
             crate::daemon::log!(
                 "restored the files an interrupted removal of {} deleted",
