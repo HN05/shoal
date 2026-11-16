@@ -16,7 +16,6 @@ rusqlite = { workspace = true, features = ["bundled"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"
-shoal-client.workspace = true
 shoal-core.workspace = true
 shoal-forge.workspace = true
 shoal-forge-types = { workspace = true, features = ["rusqlite"] }
@@ -38,6 +37,7 @@ rustix = { version = "1", features = ["fs"] }
 zbus = { version = "6", default-features = false, features = ["tokio", "proxy"] }
 
 [dev-dependencies]
+shoal-client.workspace = true
 shoal-core = { workspace = true, features = ["test-support"] }
 shoal-forge = { workspace = true, features = ["test-support"] }
 shoal-ids = { workspace = true, features = ["test-support"] }
