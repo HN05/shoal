@@ -410,7 +410,10 @@ async fn an_agent_ending_during_a_stop_releases_its_leases_once_the_stop_ends() 
     (manager.set_state(&fixture.workspace.id, reserved, None))
         .await
         .unwrap();
-    manager.release_leases_of_ended_executions().await.unwrap();
+    manager
+        .release_ended_leases_of(&fixture.workspace.id)
+        .await
+        .unwrap();
     assert_eq!(fixture.permits().await, []);
 }
 

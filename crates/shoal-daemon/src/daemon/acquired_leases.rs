@@ -132,13 +132,25 @@ impl Manager {
     /// workspace was in another lifecycle operation then, such as a stop,
     /// and those the daemon stopped before releasing.
     pub(crate) async fn release_leases_of_ended_executions(&self) -> Result<()> {
+        self.release_ended_leases(|_| true).await
+    }
+
+    /// [`Self::release_leases_of_ended_executions`] for the leases of
+    /// `workspace` alone, as its stop leaves them.
+    pub(crate) async fn release_ended_leases_of(&self, workspace: &SpaceId) -> Result<()> {
+        self.release_ended_leases(|lease| lease.workspace == *workspace)
+            .await
+    }
+
+    /// Release the leases `selects` among those whose acquirer ended.
+    async fn release_ended_leases(&self, selects: impl Fn(&Acquired) -> bool) -> Result<()> {
         // The leases first: an execution exists before it acquires one, so
         // the executions read after hold every lease read here that is live.
         let leases = self.acquired_leases().await?;
         let executions = self.store.read(|db| recorded_executions(db)).await?;
         let ended = leases
             .into_iter()
-            .filter(|lease| has_ended(&lease.acquirer, &executions));
+            .filter(|lease| selects(lease) && has_ended(&lease.acquirer, &executions));
         for lease in ended {
             self.release_acquired_lease(lease).await;
         }
