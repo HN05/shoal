@@ -14,6 +14,7 @@ use crate::{
         ui::{self, ModeChoice},
     },
     config::Effective,
+    launches::LaunchReads,
     protocol::ConfigTarget,
 };
 
@@ -36,15 +37,11 @@ pub(super) async fn detached(ctx: &Context, args: &StartArgs) -> Result<Option<E
 /// The settings of the registered repository `args` name without asking,
 /// else the global config's.
 async fn launch_settings(ctx: &Context, args: &StartArgs) -> Result<Effective> {
-    match mode_repository(ctx, args).await? {
-        Some(repo) => {
-            let target = ConfigTarget::Repository(repo.id.into());
-            crate::config::settings(&ctx.paths, target).await
-        }
-        None => {
-            crate::config::Config::load_with_templates(&ctx.paths)?.resolve(&Default::default())
-        }
-    }
+    let target = match mode_repository(ctx, args).await? {
+        Some(repo) => ConfigTarget::Repository(repo.id.into()),
+        None => ConfigTarget::Global,
+    };
+    workspaces::DaemonReads(ctx).settings(target).await
 }
 
 /// Have the daemon start the new workspace `args` ask for in `mode`, which

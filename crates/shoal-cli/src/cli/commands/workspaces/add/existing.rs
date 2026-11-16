@@ -62,7 +62,10 @@ pub(in crate::cli::commands) async fn start_worker(
     let mode = choose_add_mode(ctx, &settings, options.mode.take()).await?;
     let agent = choose_add_agent(&settings, AgentLaunch::Add(agent)).await?;
     let agent = resolve_add_agent(ctx, &settings, agent, options.model.clone()).await?;
-    let launches = starts_detached(ctx, agent.agent.is_some(), &options)
+    // Without an agent, the start reopens the workspace here, as a new
+    // workspace's start without one opens it.
+    let launches = agent.agent.is_some()
+        && starts_detached(ctx, true, &options)
         && !starts_here(&settings, agent.agent.as_ref()).await?;
     if launches {
         let picked = (mode, agent);
