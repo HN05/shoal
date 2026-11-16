@@ -34,7 +34,9 @@ pub(super) async fn run(
             crate::client::workspaces::set_base(&ctx.paths, workspace.clone(), base).await?
         }
         None => find(
-            &crate::client::workspaces::list(&ctx.paths).await?,
+            &crate::client::spaces::list(&ctx.paths)
+                .await?
+                .into_workspaces(),
             &workspace,
         )?
         .clone(),
@@ -67,7 +69,9 @@ fn find<'a>(workspaces: &'a [Workspace], selector: &SpaceSelector) -> Result<&'a
 
 /// Choose another workspace of the same repository as the base.
 async fn pick(ctx: &Context, selector: &SpaceSelector) -> Result<String> {
-    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+    let workspaces = crate::client::spaces::list(&ctx.paths)
+        .await?
+        .into_workspaces();
     let workspace = find(&workspaces, selector)?;
     let candidates: Vec<_> = workspaces
         .iter()

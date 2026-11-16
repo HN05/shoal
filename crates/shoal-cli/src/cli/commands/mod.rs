@@ -134,7 +134,9 @@ async fn workspace_overviews<T: Output + serde::de::DeserializeOwned>(
     request: impl AsyncFn(&Workspace) -> Result<T>,
     render: impl Fn(&T, Palette),
 ) -> Result<i32> {
-    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+    let workspaces = crate::client::spaces::list(&ctx.paths)
+        .await?
+        .into_workspaces();
     let overviews = collect_workspace_overviews(&workspaces, request).await;
     let failed = overviews.iter().any(WorkspaceOverviewResult::is_failed);
     ctx.show(&overviews, |overviews| {

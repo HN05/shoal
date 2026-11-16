@@ -376,7 +376,7 @@ fn tracked_execution_requests_require_a_known_kind() {
 fn extraction_preserves_wire_shapes() {
     for (wire, expected) in [
         (json!({"type": "ok"}), "Ok"),
-        (json!({"type": "workspaces", "data": []}), "Workspaces"),
+        (json!({"type": "spaces", "data": []}), "Spaces"),
         (
             json!({"type": "layered_config", "data": {"worktree_file": {}, "local_config": {}}}),
             "LayeredConfig",
@@ -392,7 +392,11 @@ fn extraction_preserves_wire_shapes() {
         assert_eq!(serde_json::to_value(&body).unwrap(), wire);
         match expected {
             "Ok" => <()>::try_from(body).unwrap(),
-            "Workspaces" => assert!(Vec::<Workspace>::try_from(body).unwrap().is_empty()),
+            "Spaces" => assert!(
+                Vec::<crate::model::Space>::try_from(body)
+                    .unwrap()
+                    .is_empty()
+            ),
             "LayeredConfig" => {
                 RepositoryLayers::try_from(body).unwrap();
             }
@@ -421,10 +425,10 @@ fn stream_payloads_and_acknowledgements_preserve_remote_errors() {
         assert_eq!(remote.code, ErrorCode::ScopeDenied);
         assert_eq!(remote.message, "denied");
     }
-    let error = <()>::try_from(Body::Workspaces(vec![])).unwrap_err();
+    let error = <()>::try_from(Body::Spaces(vec![])).unwrap_err();
     assert_eq!(
         error.to_string(),
-        "unexpected daemon response; expected Ok, received Workspaces"
+        "unexpected daemon response; expected Ok, received Spaces"
     );
 }
 

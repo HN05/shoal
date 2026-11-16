@@ -130,7 +130,9 @@ fn command(ctx: &Context) -> Result<&str> {
 /// The most recent of the workspaces and `chats` in `command`'s history
 /// other than the current workspace and chat.
 async fn previous_among(ctx: &Context, command: &str, chats: &[Chat]) -> Result<Option<SpaceId>> {
-    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+    let workspaces = crate::client::spaces::list(&ctx.paths)
+        .await?
+        .into_workspaces();
     let current_chat = crate::env::chat();
     let current: Vec<&SpaceId> = ui::current_workspace(&workspaces)?
         .map(|workspace| &workspace.id)
@@ -175,7 +177,10 @@ pub async fn record_chat_attach(ctx: &Context, selector: &SpaceSelector) {
     if !keeps_history(ctx) {
         return;
     }
-    let Ok(chats) = crate::client::chats::recorded(&ctx.paths).await else {
+    let Ok(chats) = crate::client::spaces::list(&ctx.paths)
+        .await
+        .map(shoal_protocol::model::Spaces::into_chats)
+    else {
         return;
     };
     let named = |chat: &&Chat| selector.selects(&chat.id, chat.number);
@@ -188,7 +193,10 @@ pub async fn record_chat_attach(ctx: &Context, selector: &SpaceSelector) {
 /// Shoal started there records as its place once it runs; none before or
 /// when the chats cannot be listed.
 pub async fn session_chat(ctx: &Context, host: HostName, session: &str) -> Option<Chat> {
-    let chats = crate::client::chats::list(&ctx.paths).await.ok()?;
+    let chats = crate::client::spaces::list(&ctx.paths)
+        .await
+        .map(shoal_protocol::model::Spaces::into_running_chats)
+        .ok()?;
     let places = crate::cli::commands::sessions::chat_places(&ctx.paths, &chats).await;
     let (id, _) = (places.iter()).find(|(_, place)| place.host == host && place.id() == session)?;
     chats.into_iter().find(|chat| chat.id == *id)
@@ -199,7 +207,10 @@ async fn remember(ctx: &Context, command: &str, selector: &SpaceSelector, from_c
     if !keeps_history(ctx) {
         return;
     }
-    let Ok(workspaces) = crate::client::workspaces::list(&ctx.paths).await else {
+    let Ok(workspaces) = crate::client::spaces::list(&ctx.paths)
+        .await
+        .map(shoal_protocol::model::Spaces::into_workspaces)
+    else {
         return;
     };
     let Some(target) = WorkspaceContext::from_directory(&workspaces, None).resolve(

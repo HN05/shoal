@@ -139,7 +139,9 @@ pub(super) async fn select_add_creation(
 async fn pick_add_branch(ctx: &Context, target: &AddTarget) -> Result<String> {
     let branches =
         crate::client::repositories::branches(&ctx.paths, target.selector.clone()).await?;
-    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+    let workspaces = crate::client::spaces::list(&ctx.paths)
+        .await?
+        .into_workspaces();
     let repo = target.repository(ctx).await?;
     let entries = branches
         .into_iter()

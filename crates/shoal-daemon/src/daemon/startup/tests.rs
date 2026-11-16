@@ -45,7 +45,7 @@ async fn startup_answers_status_with_its_step_and_serves_other_requests_after() 
     let (unblock, blocked) = oneshot::channel::<()>();
     let audit = startup.step("auditing worktrees", blocked);
     let clients = async {
-        let waiting = send(&socket, 7, WorkspaceMethod::ListWorkspaces).await;
+        let waiting = send(&socket, 7, WorkspaceMethod::ListSpaces).await;
         let wake = AgentMethod::AwaitAgentWake {
             workspace: "w".into(),
             due: false,
@@ -71,7 +71,7 @@ async fn startup_answers_status_with_its_step_and_serves_other_requests_after() 
     audited.unwrap();
     let (_listener, _connections) = startup.finish(crate::daemon::tests::server(manager)).await;
     let served = reply(waiting).await;
-    assert!(matches!(served, Body::Workspaces(_)), "{served:?}");
+    assert!(matches!(served, Body::Spaces(_)), "{served:?}");
 }
 
 #[tokio::test(start_paused = true)]

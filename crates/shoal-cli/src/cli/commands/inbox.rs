@@ -71,7 +71,8 @@ impl Inbox {
             crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
             "a workspace process that cleared its scope token cannot list the inbox"
         );
-        let mut workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+        let spaces = crate::client::spaces::list(&ctx.paths).await?;
+        let mut workspaces = spaces.workspaces();
         let stopped = ui::stopped_workspaces(&ctx.paths).await;
         let existing: HashSet<SpaceId> = workspaces.iter().map(|w| w.id.clone()).collect();
         workspaces.retain(|w| {
@@ -79,7 +80,7 @@ impl Inbox {
         });
         // Scoped processes see the chats of their own tree. A stopped chat
         // keeps its open questions.
-        let mut chats = crate::client::chats::recorded(&ctx.paths).await?;
+        let mut chats = spaces.into_chats();
         chats.retain(|chat| filter.keeps_chat(chat));
         let questions = questions::list(&ctx.paths, None).await?.questions;
         let requests = crate::client::approvals::list(&ctx.paths, None).await?;

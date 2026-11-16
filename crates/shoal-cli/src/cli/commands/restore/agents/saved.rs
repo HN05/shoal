@@ -44,7 +44,7 @@ async fn stopped_in(
 /// [`saved_work`] keeps them for `forget`. A done assignment needs no
 /// agent, so its space is included only to `forget`.
 async fn stopped_work(ctx: &Context, forget: bool) -> Result<Vec<(Space, Saved)>> {
-    let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
     let mut stopped = Vec::new();
     for space in crate::cli::scoping::Scoping::inherited(&ctx.paths.state).reached_below(spaces) {
         if space.done() && !forget {

@@ -32,7 +32,9 @@ struct Remove {
 /// worktree's creation.
 pub(super) async fn create(ctx: &Context) -> Result<i32> {
     let input: Create = hook_input()?;
-    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+    let workspaces = crate::client::spaces::list(&ctx.paths)
+        .await?
+        .into_workspaces();
     let parent = enclosing(&workspaces, &input.cwd)?.id.clone();
     let start =
         crate::client::preparation::NewSplit::new(SpaceSelector::id(&parent), Some(input.name));
@@ -49,7 +51,9 @@ pub(super) async fn create(ctx: &Context) -> Result<i32> {
 /// Code the worktree is gone, which is what it needs: Shoal owns the removal.
 pub(super) async fn remove(ctx: &Context) -> Result<i32> {
     let input: Remove = hook_input()?;
-    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+    let workspaces = crate::client::spaces::list(&ctx.paths)
+        .await?
+        .into_workspaces();
     match rooted_at(&workspaces, &input.worktree_path) {
         // Its subagent may already have finished it.
         Some(child) if done_at_head(ctx, child).await? => Ok(0),

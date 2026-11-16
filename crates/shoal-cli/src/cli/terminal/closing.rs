@@ -431,8 +431,9 @@ async fn workspace_lifecycle(ctx: &Context, workspace: &SpaceId) -> Result<Lifec
         }),
         Ok(_) => Ok(Lifecycle::Active),
         Err(error) => {
-            if crate::client::workspaces::list(&ctx.paths)
+            if crate::client::spaces::list(&ctx.paths)
                 .await?
+                .into_workspaces()
                 .iter()
                 .any(|item| item.id == *workspace)
             {

@@ -95,6 +95,27 @@ impl Spaces {
             .collect()
     }
 
+    /// The workspaces among them, given up.
+    pub fn into_workspaces(self) -> Vec<Workspace> {
+        (self.0.into_iter())
+            .filter_map(|space| space.into_workspace().ok())
+            .collect()
+    }
+
+    /// The chats among them, running or stopped, given up.
+    pub fn into_chats(self) -> Vec<Chat> {
+        (self.0.into_iter())
+            .filter_map(|space| space.into_chat().ok())
+            .collect()
+    }
+
+    /// The chats among them whose agent runs, given up.
+    pub fn into_running_chats(self) -> Vec<Chat> {
+        let mut chats = self.into_chats();
+        chats.retain(|chat| chat.running);
+        chats
+    }
+
     /// The spaces right below the space `id`.
     fn children(&self, id: &SpaceId) -> Vec<SpaceRef> {
         (self.iter().find(|space| space.id == *id))

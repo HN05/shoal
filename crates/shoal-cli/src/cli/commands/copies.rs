@@ -32,7 +32,9 @@ pub(super) async fn source(ctx: &Context, args: CopyArgs) -> Result<Option<Copie
     }
     let selector =
         ui::select_workspace(ctx, args.copy.flatten(), Fallback::CurrentDirectory).await?;
-    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+    let workspaces = crate::client::spaces::list(&ctx.paths)
+        .await?
+        .into_workspaces();
     let live = (workspaces.into_iter())
         .find(|workspace| selector.selects(&workspace.id, workspace.number));
     let (workspace, repository, named) = match live {

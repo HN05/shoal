@@ -96,7 +96,7 @@ impl Operation {
                     WorkspaceMethod::CheckCreation { .. }
                         | WorkspaceMethod::CheckBranchName { .. }
                         | WorkspaceMethod::CheckBlockers { .. }
-                        | WorkspaceMethod::ListWorkspaces
+                        | WorkspaceMethod::ListSpaces
                         | WorkspaceMethod::UntrackedWorktrees
                         | WorkspaceMethod::FindSpaces { .. }
                         | WorkspaceMethod::InspectWorkspace { .. }

@@ -107,7 +107,7 @@ impl Target {
     /// picker of the workspaces and the chats with sessions or an agent that
     /// sleeps or is stopped.
     async fn resolve(ctx: &Context, name: Option<SpaceSelector>) -> Result<Self> {
-        let chats = crate::client::chats::recorded(&ctx.paths).await?;
+        let chats = crate::client::spaces::list(&ctx.paths).await?.into_chats();
         let running: Vec<Chat> = (chats.iter())
             .filter(|chat| chat.running)
             .cloned()
@@ -156,7 +156,9 @@ impl Target {
             .into_iter()
             .filter(|chat| attachable.contains(&chat.id) || !chat.running || chat.asleep.is_some())
             .collect();
-        let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+        let workspaces = crate::client::spaces::list(&ctx.paths)
+            .await?
+            .into_workspaces();
         let id = ui::pick_space(ctx, workspaces, &chats, "workspace").await?;
         Self::space(ctx, chats, id).await
     }
@@ -171,7 +173,7 @@ impl Target {
 
     /// The chat or workspace with the ID `id`, as it is now.
     async fn by_id(ctx: &Context, id: SpaceId) -> Result<Self> {
-        let chats = crate::client::chats::recorded(&ctx.paths).await?;
+        let chats = crate::client::spaces::list(&ctx.paths).await?.into_chats();
         Self::space(ctx, chats, id).await
     }
 

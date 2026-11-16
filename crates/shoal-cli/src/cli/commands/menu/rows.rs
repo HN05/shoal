@@ -329,7 +329,9 @@ async fn inbox_rows(ctx: &Context) -> Result<Entries> {
 /// unless workspace processes ask.
 async fn space_rows(ctx: &Context, scoping: Scoping) -> Result<Entries> {
     let repos = ui::repository_choices(crate::client::repositories::list(&ctx.paths).await?).await;
-    let mut workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+    let mut workspaces = crate::client::spaces::list(&ctx.paths)
+        .await?
+        .into_workspaces();
     let palette = Palette::picker();
     let statuses = ui::Statuses {
         stopped: ui::stopped_workspaces(&ctx.paths).await,

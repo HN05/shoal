@@ -25,7 +25,7 @@ use shoal_protocol::space_names::SpaceSelector;
 
 /// The records of the space `selector` names.
 pub async fn records(paths: &CommandPaths, selector: &SpaceSelector) -> Result<HomeRecords> {
-    let spaces = crate::client::workspaces::spaces(paths).await?;
+    let spaces = crate::client::spaces::list(paths).await?;
     match spaces
         .find(selector)
         .with_context(|| format!("no space {selector}"))?

@@ -61,7 +61,7 @@ fn selection(args: &CleanupArgs, spaces: Pick, caches: Pick) -> Selection {
 /// The IDs of the spaces `selectors` name, which a cleanup request selects
 /// spaces by, since names repeat.
 async fn space_ids(ctx: &Context, selectors: &[SpaceSelector]) -> Result<Vec<String>> {
-    let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
     (selectors.iter())
         .map(|selector| {
             let space = spaces

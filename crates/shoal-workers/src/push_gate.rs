@@ -281,7 +281,7 @@ fn one_line(message: &str) -> String {
 /// The workspace the push comes from: the one Git runs in, else the
 /// caller's own, which a workspace's scope lists first.
 async fn workspace(paths: &CommandPaths) -> Result<SpaceSelector> {
-    let workspaces = crate::client::workspaces::list(paths).await?;
+    let workspaces = crate::client::spaces::list(paths).await?.into_workspaces();
     let cwd = crate::fsutil::current_dir::current_directory()?;
     let current = cwd.and_then(|cwd| Workspace::innermost(&workspaces, &cwd));
     let own = || {

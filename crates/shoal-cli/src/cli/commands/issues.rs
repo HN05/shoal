@@ -48,7 +48,9 @@ pub(super) async fn current_repository_id(
     let Some(root) = current_root().await? else {
         return Ok(None);
     };
-    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+    let workspaces = crate::client::spaces::list(&ctx.paths)
+        .await?
+        .into_workspaces();
     Ok(repository::at_root(&root, repos, &workspaces).cloned())
 }
 

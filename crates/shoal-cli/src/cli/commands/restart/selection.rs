@@ -13,7 +13,7 @@ use shoal_protocol::space_names::SpaceSelector;
 /// a scoped caller may restart.
 pub(super) async fn load(ctx: &Context, targets: SpaceTargets) -> Result<Selection> {
     let named = !targets.all && !targets.space.is_empty();
-    let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
     let spaces = match targets.all {
         true => crate::cli::scoping::Scoping::inherited(&ctx.paths.state).reached_below(spaces),
         false => {

@@ -225,6 +225,21 @@ impl Manager {
         Ok(request)
     }
 
+    /// The spaces `caller` sees: the workspaces its scope reaches, then
+    /// the chats it reaches, running or stopped; all of them unscoped.
+    pub(in crate::daemon) async fn visible_spaces(
+        &self,
+        caller: Option<&Caller>,
+    ) -> Result<Vec<Space>> {
+        let root = self.reach_root(caller).await?;
+        let workspaces = self.visible_workspaces(root.as_ref()).await?;
+        let chats = self.visible_chats(caller).await?;
+        let workspaces = workspaces.into_iter().map(Space::from);
+        Ok(workspaces
+            .chain(chats.into_iter().map(Space::from))
+            .collect())
+    }
+
     /// The chats `caller` may see: those its scope reaches, or all of them
     /// for an unscoped caller.
     pub(in crate::daemon) async fn visible_chats(

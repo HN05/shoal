@@ -151,7 +151,7 @@ async fn confirmation(ctx: &Context, space: Option<&SpaceSelector>) -> Result<Op
 /// The name of the workspace where an agent or command runs, or of the
 /// running chat, that `selector` names.
 async fn running_space(ctx: &Context, selector: &SpaceSelector) -> Result<Option<String>> {
-    let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
     Ok(
         match spaces.find(selector).map(crate::model::Space::by_kind) {
             Some(ByKind::Workspace(workspace)) => {

@@ -56,7 +56,9 @@ pub(super) async fn choose(ctx: &Context, start: Option<View>) -> Result<Choice>
 /// An exact search for the current workspace's name when `entries` hold
 /// items of it.
 async fn current_items(ctx: &Context, entries: &Entries) -> Result<Option<String>> {
-    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+    let workspaces = crate::client::spaces::list(&ctx.paths)
+        .await?
+        .into_workspaces();
     let Some(current) = ui::current_workspace(&workspaces)? else {
         return Ok(None);
     };

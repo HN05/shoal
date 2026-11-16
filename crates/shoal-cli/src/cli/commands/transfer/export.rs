@@ -228,7 +228,7 @@ async fn export_space(
     yes: bool,
     output: &Output,
 ) -> Result<ExportedSpace> {
-    let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
     let check = check_export(ctx, space, output, &spaces).await?;
     check.ensure_children_exported(&[])?;
     confirm_ending(ctx, yes, format!("Export {}", check.label()), &[&check])?;
@@ -284,17 +284,11 @@ pub(super) async fn repository_spaces(ctx: &Context, repository: String) -> Resu
     let repositories = crate::client::repositories::list(&ctx.paths).await?;
     let repo =
         crate::repository::select(&repositories, ui::repository_selector(repository)?).await?;
-    let workspaces = crate::client::workspaces::list(&ctx.paths)
-        .await?
-        .into_iter()
-        .filter(|workspace| workspace.repository() == &repo.id)
-        .map(Space::from);
-    let chats = crate::client::chats::list(&ctx.paths)
-        .await?
-        .into_iter()
-        .filter(|chat| chat.repository_id.as_ref() == Some(&repo.id))
-        .map(Space::from);
-    let mut spaces: Vec<Space> = workspaces.chain(chats).collect();
+    let listed = crate::client::spaces::list(&ctx.paths).await?;
+    let mut spaces: Vec<Space> = (listed.0.into_iter())
+        .filter(|space| space.repository_id.as_ref() == Some(&repo.id))
+        .filter(|space| space.worktree().is_some() || space.running)
+        .collect();
     ensure!(
         !spaces.is_empty(),
         "{} has no spaces to export",
@@ -344,7 +338,7 @@ pub(super) async fn check_exports(
     heading: &str,
     operation: Operation,
 ) -> Result<Vec<PlannedExport>> {
-    let tree = crate::client::workspaces::spaces(&ctx.paths).await?;
+    let tree = crate::client::spaces::list(&ctx.paths).await?;
     let spaces = exported_alone(spaces, &tree);
     let mut planned = Vec::new();
     let mut refusals = Vec::new();

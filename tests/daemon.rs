@@ -875,8 +875,8 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
         ),
         (
             vec!["alerts", "--follow"],
-            json!({"type": "workspaces", "data": []}),
-            "expected Ok, received Workspaces",
+            json!({"type": "spaces", "data": []}),
+            "expected Ok, received Spaces",
         ),
         (
             vec!["alerts", "--follow"],
@@ -930,13 +930,13 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
             loop {
                 let stream = support::fake_daemon::accept(&listener);
                 let request = support::fake_daemon::answer(stream, |request| {
-                    if request["method"] == "list_workspaces" {
-                        json!({"type": "workspaces", "data": []})
+                    if request["method"] == "list_spaces" {
+                        json!({"type": "spaces", "data": []})
                     } else {
                         body.clone()
                     }
                 });
-                if request["method"] != "list_workspaces" {
+                if request["method"] != "list_spaces" {
                     break;
                 }
             }
@@ -1023,8 +1023,7 @@ fn inbox_reads_untracked_worktrees_failing_syncs_over_several_frames_and_failing
                 other => panic!("unexpected method {other}"),
             };
             let reply = match method.as_str() {
-                "list_workspaces" => json!({"type": "workspaces", "data": []}),
-                "list_chats" => json!({"type": "chats", "data": []}),
+                "list_spaces" => json!({"type": "spaces", "data": []}),
                 "list_questions" => {
                     json!({"type": "questions", "data": {"questions": [], "omitted": 0}})
                 }

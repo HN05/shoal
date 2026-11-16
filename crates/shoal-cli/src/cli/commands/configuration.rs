@@ -166,7 +166,9 @@ async fn target(ctx: &Context, explicit: Option<SpaceSelector>) -> Result<Config
     if let Some(workspace) = explicit {
         return Ok(ConfigTarget::Space(workspace));
     }
-    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+    let workspaces = crate::client::spaces::list(&ctx.paths)
+        .await?
+        .into_workspaces();
     let scoping = Scoping::of_workspace();
     let cwd = match scoping {
         Scoping::Scoped => None,

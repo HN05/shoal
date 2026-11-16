@@ -851,8 +851,8 @@ fn a_chat_opens_issues_and_acts_on_its_linked_items() {
         (&opened["url"], &opened["linked"]),
         (&json!(url), &json!(true))
     );
-    let chats = fixture.request(json!("list_chats"));
-    let links = &chats["data"][0]["links"];
+    let chats = fixture.chats();
+    let links = &chats[0]["links"];
     assert_eq!(links["issues"][0]["url"], json!(url), "{chats}");
     assert_eq!(links["opened"], json!([]), "{chats}");
     // An action without an item acts on the chat's linked issue.
@@ -902,8 +902,8 @@ fn a_chat_marks_its_pr_ready_whatever_its_head_or_itself() {
     let url = format!("{}/pulls/9", fixture.web);
     assert_eq!(marks.as_array().map(Vec::len), Some(1), "{marks}");
     assert_eq!(marks[0]["url"], json!(url), "{marks}");
-    let chats = fixture.request(json!("list_chats"));
-    let recorded = chats["data"][0]["review"].as_array();
+    let chats = fixture.chats();
+    let recorded = chats[0]["review"].as_array();
     assert_eq!(recorded.map(Vec::len), Some(1), "{chats}");
     assert_eq!(recorded.unwrap()[0]["url"], json!(url), "{chats}");
     fixture.ok(&[
@@ -913,8 +913,8 @@ fn a_chat_marks_its_pr_ready_whatever_its_head_or_itself() {
         "--space",
         &fixture.id("planning"),
     ]);
-    let chats = fixture.request(json!("list_chats"));
-    assert_eq!(chats["data"][0].get("review"), None, "{chats}");
+    let chats = fixture.chats();
+    assert_eq!(chats[0].get("review"), None, "{chats}");
     agent.kill().unwrap();
     agent.wait().unwrap();
 }
@@ -4494,8 +4494,8 @@ fn a_chat_runs_ci_on_the_default_branch_and_acts_on_its_linked_prs_runs() {
         writes(&fixture),
         [json!([dispatch, {"ref": "main", "inputs": {}, "return_run_info": true}])]
     );
-    let chats = fixture.request(json!("list_chats"));
-    let opened = &chats["data"][0]["links"]["opened"];
+    let chats = fixture.chats();
+    let opened = &chats[0]["links"]["opened"];
     assert_eq!(opened[0]["url"], started["url"], "{chats}");
 
     // A linked PR's head is where its runs and checks are.
@@ -4713,8 +4713,8 @@ fn a_chat_links_views_and_watches_items_as_a_workspace_does() {
         .collect();
     assert_eq!(urls, [&json!(pr), &json!(run)], "{selected}");
     // The chat's record lists its links as a workspace's does.
-    let chats = fixture.request(json!("list_chats"));
-    let links = &chats["data"][0]["links"];
+    let chats = fixture.chats();
+    let links = &chats[0]["links"];
     // The forge does not show the PR, so it is linked without a title.
     assert_eq!(links["prs"], json!([{"kind": "pr", "url": pr}]), "{chats}");
     assert_eq!(links["related"][0]["url"], json!(run), "{chats}");
@@ -5657,8 +5657,8 @@ fn a_chats_proposed_issue_opens_from_its_checkout_on_approval() {
         .map(|write| write[0].clone())
         .collect();
     assert_eq!(posted, [json!("POST repos/team/project/issues")]);
-    let chats = fixture.request(json!("list_chats"));
-    let links = &chats["data"][0]["links"];
+    let chats = fixture.chats();
+    let links = &chats[0]["links"];
     assert_eq!(links["issues"][0]["url"], json!(url), "{chats}");
     assert_eq!(links["opened"], json!([]), "{chats}");
     let told: Vec<_> = (fixture

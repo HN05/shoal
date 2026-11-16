@@ -121,8 +121,9 @@ async fn commit_owner(
 ) -> Result<(crate::repository::Selector, Option<SpaceSelector>)> {
     match ui::choose_workspace(ctx, workspace, Fallback::CurrentDirectoryOnly).await {
         Ok(parent) => {
-            let repository = crate::client::workspaces::list(&ctx.paths)
+            let repository = crate::client::spaces::list(&ctx.paths)
                 .await?
+                .into_workspaces()
                 .into_iter()
                 .find(|workspace| parent.selects(&workspace.id, workspace.number))
                 .and_then(|workspace| workspace.repository_id)

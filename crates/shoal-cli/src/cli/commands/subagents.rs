@@ -44,7 +44,9 @@ fn hook_input() -> String {
 /// The brief for a subagent starting as `input` describes.
 async fn brief(ctx: &Context, input: &str) -> Result<String> {
     let start: Start = serde_json::from_str(input).context("read the hook's input")?;
-    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+    let workspaces = crate::client::spaces::list(&ctx.paths)
+        .await?
+        .into_workspaces();
     let own = own_workspace(ctx, &workspaces).await?;
     let child = super::worktree_hooks::enclosing(&workspaces, &start.cwd)
         .ok()

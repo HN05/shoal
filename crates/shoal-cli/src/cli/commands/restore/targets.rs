@@ -69,7 +69,7 @@ impl Selected {
         if targets.all {
             return Ok(Some(Self::default()));
         }
-        let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
+        let spaces = crate::client::spaces::list(&ctx.paths).await?;
         let stopped = stopped_chats(&spaces);
         let removed = removed_spaces(ctx, &spaces, &targets.space).await?;
         let entries = match targets.space.is_empty() {

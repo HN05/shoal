@@ -56,7 +56,6 @@ pub(super) async fn handle(
         ChatMethod::RemoveChat { chat, children } => {
             Body::RemovedChat(manager.remove_chat(&chat, children).await?)
         }
-        ChatMethod::ListChats => Body::Chats(manager.visible_chats(caller).await?),
         ChatMethod::CheckChatParent {
             repository,
             workspace,
@@ -113,7 +112,6 @@ impl Scoped for ChatMethod {
         caller: &Caller,
     ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
-            ChatMethod::ListChats => None,
             // A scoped caller starts chats only in its own tree, below its
             // own space unless it names one below it, in a worktree of its
             // tree, and runs each in the session it starts, with its scope.

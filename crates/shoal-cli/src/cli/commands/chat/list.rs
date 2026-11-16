@@ -35,7 +35,7 @@ pub(in crate::cli::commands) async fn listed(
     ctx: &Context,
     filter: &ListFilter,
 ) -> Result<Vec<Chat>> {
-    let mut chats = crate::client::chats::recorded(&ctx.paths).await?;
+    let mut chats = crate::client::spaces::list(&ctx.paths).await?.into_chats();
     chats.retain(|chat| filter.keeps_chat(chat));
     Ok(chats)
 }

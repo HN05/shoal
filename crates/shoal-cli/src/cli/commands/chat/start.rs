@@ -227,8 +227,9 @@ async fn chosen_workspace(ctx: &Context, selector: Option<SpaceSelector>) -> Res
 /// The workspace `selector` names, by number, ID or name, refused before
 /// anything is asked unless a chat may run in it; the daemon checks again.
 async fn hosting_workspace(ctx: &Context, selector: &SpaceSelector) -> Result<Workspace> {
-    let workspace = crate::client::workspaces::list(&ctx.paths)
+    let workspace = crate::client::spaces::list(&ctx.paths)
         .await?
+        .into_workspaces()
         .into_iter()
         .find(|workspace| selector.selects(&workspace.id, workspace.number))
         .with_context(|| format!("no space {selector}"))?;

@@ -5,8 +5,8 @@ use crate::{
     config::repo::ConfigLayers,
     model::{Chat, OwnedPlace, RunningAgent},
     protocol::{
-        self, Body, ChatMethod, ConfigTarget, ExecutionMethod, Method, Operation, RepositoryLayers,
-        Request, Response, WorkspaceMethod,
+        self, Body, ConfigTarget, ExecutionMethod, Method, Operation, RepositoryLayers, Request,
+        Response, WorkspaceMethod,
     },
     sessions::{HostName, Origin},
     state::WorkspaceState,
@@ -180,11 +180,12 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
             let mut layers = ConfigLayers::default();
             layers.local_config.terminal.herdr.enabled = Some(workspace != "w5");
             Body::LayeredConfig(RepositoryLayers::of(&layers).unwrap())
-        } else if matches!(
-            request.method,
-            Method::Operation(Operation::Chat(ChatMethod::ListChats))
-        ) {
-            Body::Chats(vec![Chat {
+        } else {
+            assert!(matches!(
+                request.method,
+                Method::Operation(Operation::Workspace(WorkspaceMethod::ListSpaces))
+            ));
+            let chat = Chat {
                 narrowing: Default::default(),
                 mode: Some("chat".into()),
                 number: 7.into(),
@@ -210,13 +211,11 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                     tmp_dir: None,
                     completion: None,
                 },
-            }])
-        } else {
-            assert!(matches!(
-                request.method,
-                Method::Operation(Operation::Workspace(WorkspaceMethod::ListWorkspaces))
-            ));
-            Body::Workspaces(attach_workspaces(root))
+            };
+            let workspaces = attach_workspaces(root)
+                .into_iter()
+                .map(crate::model::Space::from);
+            Body::Spaces(workspaces.chain([chat.into()]).collect())
         };
         protocol::write(&mut stream, &Response::new(request.id, body)).await?;
     }

@@ -44,8 +44,8 @@ const REQUESTS: &[&str] = &[
     r#"{"adopt_workspace":{"repository":"app","path":"/work/fix","copy":false}}"#,
     r#"{"rename_branch":{"workspace":"fix","branch":"fix-2"}}"#,
     r#"{"convert_to_chat":{"workspace":"fix","mode":"plan"}}"#,
-    r#""list_workspaces""#,
     r#""untracked_worktrees""#,
+    r#""list_spaces""#,
     r#"{"find_spaces":{"target":{"item":{"kind":"pr","input":"7"}}}}"#,
     r#"{"rename_space":{"space":"3","name":"Login retries"}}"#,
     r#"{"space_places":{"space":"fix"}}"#,
@@ -128,7 +128,6 @@ const REQUESTS: &[&str] = &[
     // Chats.
     r#"{"start_chat":{"repository":"app","name":"app-chat","agent":"claude"}}"#,
     r#"{"launch":{"launch":{"target":"app","in":{"space":"3"},"mode":"chat","agent":"claude","task":["Read the build"]}}}"#,
-    r#""list_chats""#,
     r#"{"remove_chat":{"chat":"app-chat"}}"#,
     r#"{"check_chat_parent":{"repository":"app","workspace":"fix","parent":"7"}}"#,
     r#"{"chat_scope":{"chat":"chat-id"}}"#,

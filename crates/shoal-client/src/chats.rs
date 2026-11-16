@@ -99,18 +99,6 @@ pub async fn place(daemon: &impl Daemon, chat: &Chat, origin: Origin) -> Result<
     request(daemon, ChatMethod::PlaceChat { chat, origin }).await
 }
 
-/// Running chats.
-pub async fn list(daemon: &impl Daemon) -> Result<Vec<Chat>> {
-    let mut chats = recorded(daemon).await?;
-    chats.retain(|chat| chat.running);
-    Ok(chats)
-}
-
-/// Running and stopped chats.
-pub async fn recorded(daemon: &impl Daemon) -> Result<Vec<Chat>> {
-    request(daemon, ChatMethod::ListChats).await
-}
-
 /// Remove the chat `chat`, by ID or name, stopping its agent: first the
 /// spaces below it, of which `children`, when given, are the IDs the caller
 /// saw and the only ones it takes.

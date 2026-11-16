@@ -19,7 +19,9 @@ impl LaunchReads for DaemonReads<'_> {
     }
 
     async fn workspaces(&self) -> Result<Vec<Workspace>> {
-        crate::client::workspaces::list(&self.0.paths).await
+        crate::client::spaces::list(&self.0.paths)
+            .await
+            .map(shoal_protocol::model::Spaces::into_workspaces)
     }
 
     /// The global config's settings read here, at launch, else the

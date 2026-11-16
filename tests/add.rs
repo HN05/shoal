@@ -63,7 +63,7 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             ],
             vec![
                 "list_repositories",
-                "list_workspaces",
+                "list_spaces",
                 "layered_config test",
                 "queue_add now=false starts_in_caller=true",
                 "start_workspace",
@@ -150,7 +150,7 @@ fn a_scoped_start_here_takes_its_own_slot_without_skipping_the_limits() {
         daemon.methods(),
         [
             "list_repositories",
-            "list_workspaces",
+            "list_spaces",
             "layered_config test",
             "queue_add now=false starts_in_caller=true",
             "start_workspace",
@@ -327,7 +327,7 @@ impl FakeDaemon {
                     "issue_details" => json!({"type": "error", "data": {
                         "code": "operation_failed", "message": "issue number must be positive"
                     }}),
-                    "list_workspaces" => json!({"type": "workspaces", "data": []}),
+                    "list_spaces" => json!({"type": "spaces", "data": []}),
                     "queue_add" => {
                         let queued = &request["method"]["queue_add"]["request"];
                         let (now, caller) = (&queued["now"], &queued["starts_in_caller"]);

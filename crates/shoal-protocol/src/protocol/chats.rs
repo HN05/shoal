@@ -45,7 +45,6 @@ pub enum ChatMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         queue_entry: Option<shoal_ids::queue_entry_ids::QueueEntryId>,
     },
-    ListChats,
     /// Remove the chat `chat`, by ID or name, stopping its agent: first
     /// the spaces below it, of which `children`, when given, are the IDs the
     /// caller saw and the only ones it takes.
@@ -67,9 +66,7 @@ pub enum ChatMethod {
     },
     /// The scope token the agent of the chat `chat`, by ID, carries, which
     /// confines it to the chat and the spaces below it.
-    ChatScope {
-        chat: SpaceSelector,
-    },
+    ChatScope { chat: SpaceSelector },
     /// Record `origin` as the place the chat `chat`, recorded before its
     /// queued agent started, now runs in, unless it has one: a place Shoal
     /// opened for it becomes the chat's, as for a chat recorded there.

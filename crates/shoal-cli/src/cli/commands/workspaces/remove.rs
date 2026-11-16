@@ -32,7 +32,7 @@ pub(in crate::cli::commands) async fn remove(ctx: &Context, args: RmArgs) -> Res
         return Ok(code);
     }
     let selected = ui::select_spaces(ctx, names, true).await?;
-    let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
     let (chats, workspaces) = named_chats(&spaces, selected);
     let checks = check_removals(ctx, workspaces, yes).await?;
     if !yes {
@@ -183,7 +183,7 @@ async fn remove_each(
 
 /// Whether the workspace `check` inspected still exists.
 async fn present(ctx: &Context, check: &RemovalCheck) -> Result<bool> {
-    let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
     Ok(spaces
         .find(&SpaceSelector::id(&check.workspace.id))
         .is_some())

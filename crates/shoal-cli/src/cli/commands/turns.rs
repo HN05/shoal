@@ -101,7 +101,7 @@ impl Continuation {
         selected: Vec<T>,
         space: impl Fn(&T) -> SpaceSelector,
     ) -> Result<(Self, Vec<T>)> {
-        let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
+        let spaces = crate::client::spaces::list(&ctx.paths).await?;
         let mut targets = Vec::new();
         let mut rest = Vec::new();
         for item in selected {

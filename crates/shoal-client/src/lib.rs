@@ -35,6 +35,7 @@ pub mod restarts;
 pub mod reviews;
 pub mod saved;
 pub mod sleep;
+pub mod spaces;
 pub mod stopping;
 pub mod subscriptions;
 #[cfg(test)]

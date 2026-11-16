@@ -57,8 +57,7 @@ pub fn space_id(root: &Path, name: &str) -> String {
         response["data"].as_array().cloned().unwrap_or_default()
     };
     let named = |space: &&Value| space["name"] == name;
-    let found = (listed("list_workspaces").iter().find(named))
-        .or(listed("list_chats").iter().find(named))
+    let found = (listed("list_spaces").iter().find(named))
         .map(|space| space["id"].clone())
         .or_else(|| {
             (listed("removed_spaces").iter().find(named))

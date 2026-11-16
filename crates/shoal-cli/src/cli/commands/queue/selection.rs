@@ -53,7 +53,7 @@ async fn named(ctx: &Context, selector: String) -> Result<String> {
     let Ok(space) = SpaceSelector::parse(&selector) else {
         return Ok(selector);
     };
-    let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
     let Some(space) = spaces.find(&space) else {
         return Ok(selector);
     };

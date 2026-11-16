@@ -117,10 +117,12 @@ pub enum WorkspaceMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         mode: Option<crate::config::modes::ModeName>,
     },
-    ListWorkspaces,
     /// Git worktrees under repositories' Shoal directories that no
     /// workspace owns; in pages.
     UntrackedWorktrees,
+    /// Every space the caller sees, workspaces and chats, running or
+    /// stopped.
+    ListSpaces,
     /// The spaces that link an item or the workspaces that hold a resource.
     FindSpaces {
         target: crate::model::SpaceTarget,

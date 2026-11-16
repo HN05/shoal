@@ -108,7 +108,9 @@ async fn load_issue(ctx: &Context, chat: &SpaceSelector, input: &ItemInput) -> R
 /// The branch name the issue linked to the chat `chat` gives, refusing a
 /// chat without one.
 async fn linked_issue_branch(ctx: &Context, chat: &SpaceSelector) -> Result<String> {
-    let chats = crate::client::chats::list(&ctx.paths).await?;
+    let chats = crate::client::spaces::list(&ctx.paths)
+        .await?
+        .into_running_chats();
     let linked = (chats.iter())
         .find(|candidate| chat.selects(&candidate.id, candidate.number))
         .and_then(|chat| Some(chat.links.issue()?.url.clone()))

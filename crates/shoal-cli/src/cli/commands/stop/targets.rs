@@ -12,7 +12,7 @@ pub(in crate::cli::commands) async fn resolve(
     selectors: Vec<SpaceSelector>,
     children: bool,
 ) -> Result<Vec<Space>> {
-    let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
     let mut found: Vec<Space> = Vec::new();
     for selector in selectors {
         let space = (spaces.find(&selector)).with_context(|| format!("no space {selector}"))?;

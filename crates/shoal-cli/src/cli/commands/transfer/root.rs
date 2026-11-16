@@ -46,7 +46,7 @@ pub(super) async fn run(ctx: &Context, args: RootArgs) -> Result<()> {
     let before = Registrations::load(ctx).await?;
     let moves = plan_moves(ctx, root.clone(), regular_dir).await?;
     if !confirmed && !(moves.repositories.is_empty() && moves.chats.is_empty()) {
-        let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
+        let spaces = crate::client::spaces::list(&ctx.paths).await?;
         ensure!(
             ui::confirm(ctx, &plan(&moves, &spaces), "--yes")?,
             "repository move canceled"
@@ -176,7 +176,9 @@ impl Registrations {
     async fn load(ctx: &Context) -> Result<Self> {
         Ok(Self {
             repositories: crate::client::repositories::list(&ctx.paths).await?,
-            workspaces: crate::client::workspaces::list(&ctx.paths).await?,
+            workspaces: crate::client::spaces::list(&ctx.paths)
+                .await?
+                .into_workspaces(),
         })
     }
 }

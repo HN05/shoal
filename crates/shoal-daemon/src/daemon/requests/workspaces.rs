@@ -190,10 +190,7 @@ pub(super) async fn handle(
                 .convert_to_chat(&workspace, mode.unwrap_or_else(crate::model::chat_mode))
                 .await?,
         ),
-        WorkspaceMethod::ListWorkspaces => {
-            let root = manager.reach_root(caller).await?;
-            Body::Workspaces(manager.visible_workspaces(root.as_ref()).await?)
-        }
+        WorkspaceMethod::ListSpaces => Body::Spaces(manager.visible_spaces(caller).await?),
         WorkspaceMethod::UntrackedWorktrees => {
             let listed = manager.untracked_worktrees().await;
             return Ok(Answer::pages(listed, Body::UntrackedWorktrees));
@@ -378,7 +375,7 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::LayeredConfig {
                 target: ConfigTarget::Global,
             } => None,
-            WorkspaceMethod::ListWorkspaces | WorkspaceMethod::FindSpaces { .. } => None,
+            WorkspaceMethod::ListSpaces | WorkspaceMethod::FindSpaces { .. } => None,
             // The handler answers with the caller's own space's.
             WorkspaceMethod::HeldPermissions { .. } => None,
             WorkspaceMethod::SetBaseWorkspace { workspace, .. }

@@ -58,7 +58,7 @@ pub(super) async fn release(
 /// workspaces then the chats.
 pub(super) async fn list(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
     let Some(space) = ui::select_space_filter(ctx, scope).await? else {
-        let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
+        let spaces = crate::client::spaces::list(&ctx.paths).await?;
         ctx.show(&spaces.0, |spaces| {
             for space in spaces {
                 outln!(

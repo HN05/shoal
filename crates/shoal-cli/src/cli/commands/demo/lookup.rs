@@ -60,7 +60,9 @@ pub(super) async fn scope(
             Some(ui::select_workspace(ctx, None, Fallback::CurrentDirectoryOnly).await?)
         }
         None => {
-            let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+            let workspaces = crate::client::spaces::list(&ctx.paths)
+                .await?
+                .into_workspaces();
             ui::current_workspace(&workspaces)?.map(|workspace| SpaceSelector::id(&workspace.id))
         }
     };

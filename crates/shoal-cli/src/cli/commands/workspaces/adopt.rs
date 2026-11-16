@@ -56,8 +56,9 @@ pub(in crate::cli::commands) async fn adopt(
 /// Shoal cannot verify, which adopting it again reclaims.
 async fn unverified_workspace_at(ctx: &Context, path: &Path) -> Result<Option<Workspace>> {
     let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_owned());
-    let Some(workspace) = crate::client::workspaces::list(&ctx.paths)
+    let Some(workspace) = crate::client::spaces::list(&ctx.paths)
         .await?
+        .into_workspaces()
         .into_iter()
         .find(|workspace| workspace.path == path)
     else {

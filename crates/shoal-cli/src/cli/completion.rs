@@ -301,7 +301,7 @@ impl Typed {
             .build()
         {
             let layer = runtime.block_on(live(async {
-                let workspaces = crate::client::workspaces::list(&paths).await?;
+                let workspaces = crate::client::spaces::list(&paths).await?.into_workspaces();
                 let cwd = std::env::current_dir().ok();
                 let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
                 let workspace = context
@@ -402,7 +402,7 @@ impl Typed {
                 })
                 .collect());
         }
-        let workspaces = crate::client::workspaces::list(&paths).await?;
+        let workspaces = crate::client::spaces::list(&paths).await?.into_workspaces();
         if let Target::Workspaces(need) | Target::Spaces(need) = target {
             let availability = availability::load(need, &paths, &workspaces).await;
             let mut candidates: Vec<_> = workspaces
@@ -438,7 +438,7 @@ impl Typed {
                 })
                 .collect();
             candidates.extend(stopped_chat_candidates(
-                crate::client::chats::recorded(&paths).await?,
+                crate::client::spaces::list(&paths).await?.into_chats(),
             ));
             let removed = crate::client::removal::removed(&paths).await?;
             candidates.extend(removed.into_iter().map(|space| {
@@ -533,8 +533,9 @@ fn chat_candidate(chat: &Chat, kind: &str) -> CompletionCandidate {
 
 /// Every chat `need` offers, a stopped one described as such.
 async fn chat_candidates(paths: &CommandPaths, need: Need) -> Result<Vec<CompletionCandidate>> {
-    Ok(crate::client::chats::recorded(paths)
+    Ok(crate::client::spaces::list(paths)
         .await?
+        .into_chats()
         .iter()
         .filter(|chat| need.offers_chat(chat))
         .map(|chat| {
@@ -586,7 +587,9 @@ fn target_of(id: &str, parent: &str, name: &str, need: Need) -> Option<Target> {
 
 /// The running chats with an agent session.
 async fn session_chat_candidates(paths: &CommandPaths) -> Result<Vec<CompletionCandidate>> {
-    let chats = crate::client::chats::list(paths).await?;
+    let chats = crate::client::spaces::list(paths)
+        .await?
+        .into_running_chats();
     let places = super::commands::sessions::chat_places(paths, &chats).await;
     let places: Vec<_> = places.iter().map(|(id, place)| (id, place)).collect();
     let attachable = terminal::session_owners(&places);

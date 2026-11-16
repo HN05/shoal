@@ -109,6 +109,15 @@ impl Base {
         self.request_as(method, None)
     }
 
+    /// The chats the daemon records, running or stopped, as an array.
+    pub fn chats(&self) -> Value {
+        let spaces = self.request(json!("list_spaces"));
+        (spaces["data"].as_array().unwrap().iter())
+            .filter(|space| space["kind"] == "chat")
+            .cloned()
+            .collect()
+    }
+
     /// The daemon's answer to `method` from a caller with `scope`, or the user.
     pub fn request_as(&self, method: Value, scope: Option<&str>) -> Value {
         let root = self.root.path();
@@ -196,16 +205,16 @@ impl Base {
     pub fn end_chat_agent(&self, id: &str) {
         fs::write(self.root.path().join(format!("exit-{id}")), "").unwrap();
         support::wait::wait_until("the chat's agent exited", || {
-            let chats = self.request(json!("list_chats"));
-            (chats["data"].as_array().unwrap().iter())
+            let chats = self.chats();
+            (chats.as_array().unwrap().iter())
                 .any(|chat| chat["id"] == id && chat["running"] == false)
         });
     }
 
     /// The ID of the chat `name`, once the daemon tracks its agent.
     fn tracked_chat(&self, name: &str) -> Option<String> {
-        let chats = self.request(json!("list_chats"));
-        let chat = (chats["data"].as_array()?.iter()).find(|chat| chat["name"] == name)?;
+        let chats = self.chats();
+        let chat = (chats.as_array()?.iter()).find(|chat| chat["name"] == name)?;
         let id = chat["id"].as_str()?.to_owned();
         let agents = self.request(json!("list_agents"));
         let tracked = (agents["data"].as_array()?.iter()).any(|agent| agent["space_id"] == id);

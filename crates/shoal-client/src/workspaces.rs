@@ -8,17 +8,13 @@ use std::{collections::BTreeMap, path::PathBuf};
 use anyhow::Result;
 use serde::de::DeserializeOwned;
 
-use crate::{
-    chats,
-    connection::{Daemon, call, pages, request},
-};
+use crate::connection::{Daemon, call, pages, request};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     config::hooks::HookKind,
     model::{
         Blocker, ConflictCheck, DiffBase, Inspection, MergePreview, OwnedPlace, Refreshed,
-        RenamedSpace, Space, SpacePlaces, SpaceStatus, SpaceTarget, Spaces, UntrackedWorktree,
-        Workspace,
+        RenamedSpace, Space, SpacePlaces, SpaceStatus, SpaceTarget, UntrackedWorktree, Workspace,
     },
     protocol::{CommitStart, ConfigTarget, CreationOptions, RepositoryLayers, WorkspaceMethod},
     repository::Selector,
@@ -30,24 +26,12 @@ pub async fn inspect(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<I
     request(daemon, WorkspaceMethod::InspectWorkspace { workspace }).await
 }
 
-/// Workspaces visible to this caller; the daemon filters scoped requests.
-pub async fn list(daemon: &impl Daemon) -> Result<Vec<Workspace>> {
-    request(daemon, WorkspaceMethod::ListWorkspaces).await
-}
-
-/// The workspaces and chats, running or stopped, visible to this caller.
-pub async fn spaces(daemon: &impl Daemon) -> Result<Spaces> {
-    let workspaces = list(daemon).await?.into_iter().map(Space::from);
-    let chats = chats::recorded(daemon).await?.into_iter().map(Space::from);
-    Ok(workspaces.chain(chats).collect())
-}
-
 /// The workspace or chat `selector` names, by number, ID or name.
 pub async fn present_space(
     daemon: &impl Daemon,
     selector: &SpaceSelector,
 ) -> Result<Option<Space>> {
-    Ok(spaces(daemon).await?.find(selector))
+    Ok(crate::spaces::list(daemon).await?.find(selector))
 }
 
 /// A workspace whose creation [`check_creation`] checks: on the new branch

@@ -80,7 +80,7 @@ fn ensure_fits(args: &StartArgs, kind: SpaceKind, mode: Option<&modes::ModeName>
 
 /// The ID of the space `selector` names, by number or ID.
 async fn space_id(ctx: &Context, selector: &SpaceSelector) -> Result<SpaceId> {
-    let space = crate::client::workspaces::spaces(&ctx.paths)
+    let space = crate::client::spaces::list(&ctx.paths)
         .await?
         .find(selector);
     Ok(space.with_context(|| format!("no space {selector}"))?.id)

@@ -142,7 +142,7 @@ pub(super) async fn queued_chat(ctx: &Context) -> Result<Option<Chat>> {
     let Some(space) = space else {
         return Ok(None);
     };
-    let chats = crate::client::chats::recorded(&ctx.paths).await?;
+    let chats = crate::client::spaces::list(&ctx.paths).await?.into_chats();
     let chat = chats.into_iter().find(|chat| chat.id == space);
     chat.context("the chat recorded for the queued agent is gone")
         .map(Some)

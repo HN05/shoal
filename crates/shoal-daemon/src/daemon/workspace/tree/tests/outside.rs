@@ -350,7 +350,7 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
     assert_eq!(listed.len(), 2);
     let visible = manager.visible_repositories(Some(&caller)).await.unwrap();
     assert_eq!(visible.len(), 2);
-    let mut workspaces = WorkspaceMethod::ListWorkspaces;
+    let mut workspaces = WorkspaceMethod::ListSpaces;
     crate::daemon::scope::authorize(&manager, Some(&token), &mut workspaces)
         .await
         .unwrap();

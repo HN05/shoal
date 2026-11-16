@@ -258,8 +258,9 @@ async fn pull_request(
         )
         .await;
     }
-    let owner = crate::client::workspaces::list(&ctx.paths)
+    let owner = crate::client::spaces::list(&ctx.paths)
         .await?
+        .into_workspaces()
         .into_iter()
         .find(|workspace| {
             workspace.repository() == &repo.id
@@ -313,8 +314,9 @@ async fn pull_request(
             if code != 0 {
                 return Ok(code);
             }
-            crate::client::workspaces::list(&ctx.paths)
+            crate::client::spaces::list(&ctx.paths)
                 .await?
+                .into_workspaces()
                 .into_iter()
                 .find(|workspace| {
                     workspace.repository() == &repo.id

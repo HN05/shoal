@@ -137,7 +137,9 @@ pub(super) async fn request(ctx: &Context, space: Option<SpaceSelector>) -> Resu
 /// workspace or a picked space.
 async fn chosen_space(ctx: &Context, space: Option<SpaceSelector>) -> Result<SpaceSelector> {
     if space.is_none() && ui::current_chat(&None).is_none() {
-        let chats = crate::client::chats::list(&ctx.paths).await?;
+        let chats = crate::client::spaces::list(&ctx.paths)
+            .await?
+            .into_running_chats();
         if let Some(chat) = super::sessions::checkout_chat(ctx, &chats).await? {
             return Ok(SpaceSelector::Id(chat.id));
         }

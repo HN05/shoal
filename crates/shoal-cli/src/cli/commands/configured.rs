@@ -125,7 +125,10 @@ fn defined_globally(ctx: &Context, name: &str) -> Result<bool> {
 
 /// The daemon's workspaces; none without a running daemon.
 async fn running_workspaces(ctx: &Context) -> Result<Vec<Workspace>> {
-    match crate::client::workspaces::list(&ctx.paths).await {
+    match crate::client::spaces::list(&ctx.paths)
+        .await
+        .map(shoal_protocol::model::Spaces::into_workspaces)
+    {
         Err(error) if client::is_unreachable(&error) => Ok(Vec::new()),
         workspaces => workspaces,
     }

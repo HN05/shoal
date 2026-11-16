@@ -11,7 +11,7 @@ use tokio::{
 
 fn workspace(index: usize) -> Value {
     json!({
-        "id": index.to_string(), "repository_id": "repo",
+        "id": index.to_string(), "kind": "workspace", "repository_id": "repo",
         "name": format!("workspace-{index:02}"), "path": "/unused",
         "branch": "branch", "state": "ready",
         "workdir": {"kind": "worktree", "path": "/unused", "workspace": {
@@ -34,11 +34,11 @@ async fn reply(stream: &mut UnixStream, request: &Value, kind: &str, data: Value
 async fn overview_responses(listener: UnixListener, noun: &str, count: usize) {
     let (mut stream, _) = listener.accept().await.unwrap();
     let request = read(&mut stream).await;
-    assert_eq!(request["method"], "list_workspaces");
+    assert_eq!(request["method"], "list_spaces");
     reply(
         &mut stream,
         &request,
-        "workspaces",
+        "spaces",
         (0..count).map(workspace).collect(),
     )
     .await;
