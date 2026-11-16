@@ -1415,7 +1415,7 @@ fn agents_wait_for_the_answer_to_their_question() {
         "agents cannot answer: {}",
         printed(&output)
     );
-    let renamed = fixture.rename("asker", "renamed");
+    let renamed = fixture.rename_branch("asker", "renamed");
     assert_eq!(renamed["data"]["branch"], "renamed", "{renamed}");
     fixture.ok(&["questions", &id, "--answer", "2"]);
     let output = asker.wait_with_output().unwrap();

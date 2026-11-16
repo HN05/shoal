@@ -90,7 +90,7 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
         [workspace["id"].as_str().unwrap()],
     )
     .unwrap();
-    let denied = fixture.rename("original", "blocked");
+    let denied = fixture.rename_branch("original", "blocked");
     assert_eq!(denied["type"], "error");
     assert_eq!(
         fixture.ok(&["status", &fixture.id("original")])["workspace"]["branch"],
@@ -145,7 +145,7 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
     fixture.ok(&["done", &fixture.id("original")]);
     let before = fixture.ok(&["status", &fixture.id("original")]);
     assert!(before["pr_cleanup"]["head"].is_string(), "{before}");
-    let response = fixture.rename("original", "feature/topic");
+    let response = fixture.rename_branch("original", "feature/topic");
     assert_eq!(response["type"], "workspace", "{response}");
     let renamed = &response["data"];
     assert_eq!(renamed["name"], "original");
@@ -237,7 +237,7 @@ fn workspace_rename_refuses_taken_branches_and_recovers_git_failure() {
         "0123456789abcdef0123456789abcdef01234567",
         "taken/child",
     ] {
-        let response = fixture.rename("original", branch);
+        let response = fixture.rename_branch("original", branch);
         assert_eq!(response["type"], "error", "{branch}: {response}");
         assert_eq!(
             fixture.ok(&["status", &fixture.id("original")])["workspace"],
@@ -249,14 +249,26 @@ fn workspace_rename_refuses_taken_branches_and_recovers_git_failure() {
         );
     }
     git(path, &["switch", "--detach"]);
-    assert_eq!(fixture.rename("original", "new-name")["type"], "error");
+    assert_eq!(
+        fixture.rename_branch("original", "new-name")["type"],
+        "error"
+    );
     git(path, &["switch", "original"]);
-    assert_eq!(fixture.rename("original", "original")["type"], "workspace");
-    assert_eq!(fixture.rename("original", "new-name")["type"], "workspace");
-    assert_eq!(fixture.rename("original", "new/name")["type"], "workspace");
+    assert_eq!(
+        fixture.rename_branch("original", "original")["type"],
+        "workspace"
+    );
+    assert_eq!(
+        fixture.rename_branch("original", "new-name")["type"],
+        "workspace"
+    );
+    assert_eq!(
+        fixture.rename_branch("original", "new/name")["type"],
+        "workspace"
+    );
     // A branch another workspace's directory is named after is fine too.
     assert_eq!(
-        fixture.rename("original", "other/name")["type"],
+        fixture.rename_branch("original", "other/name")["type"],
         "workspace"
     );
     fixture.ok(&["rm", "--wait", &fixture.id("original"), "--yes"]);

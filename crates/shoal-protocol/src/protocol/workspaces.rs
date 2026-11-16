@@ -104,7 +104,8 @@ pub enum WorkspaceMethod {
         path: std::path::PathBuf,
         copy: bool,
     },
-    RenameWorkspace {
+    /// Rename the workspace's Git branch, leaving the space's name alone.
+    RenameBranch {
         workspace: SpaceSelector,
         branch: String,
     },

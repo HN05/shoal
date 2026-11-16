@@ -149,7 +149,7 @@ async fn done_renames_and_links_go_through_the_protocol() {
     let completion: Completion = connection::request(&app, done).await.unwrap();
     assert!(!completion.head.as_str().is_empty());
     assert!(inspect(&app, workspace.id.as_str()).await.unwrap().done);
-    let rename = |branch: &str| WorkspaceMethod::RenameWorkspace {
+    let rename = |branch: &str| WorkspaceMethod::RenameBranch {
         workspace: SpaceSelector::id(&workspace.id),
         branch: branch.into(),
     };

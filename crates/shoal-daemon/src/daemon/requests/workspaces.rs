@@ -180,9 +180,9 @@ pub(super) async fn handle(
             path,
             copy,
         } => Body::Workspace(manager.adopt_workspace(&repository, &path, copy).await?),
-        WorkspaceMethod::RenameWorkspace { workspace, branch } => Body::Workspace(
+        WorkspaceMethod::RenameBranch { workspace, branch } => Body::Workspace(
             manager
-                .rename_workspace(&workspace, &branch, caller.and_then(|c| c.execution_id()))
+                .rename_branch(&workspace, &branch, caller.and_then(|c| c.execution_id()))
                 .await?,
         ),
         WorkspaceMethod::ConvertToChat { workspace, mode } => Body::Workspace(
@@ -384,7 +384,7 @@ impl Scoped for WorkspaceMethod {
             WorkspaceMethod::SetBaseWorkspace { workspace, .. }
             | WorkspaceMethod::SetWorkspaceName { workspace, .. }
             | WorkspaceMethod::SpacePlaces { space: workspace }
-            | WorkspaceMethod::RenameWorkspace { workspace, .. }
+            | WorkspaceMethod::RenameBranch { workspace, .. }
             | WorkspaceMethod::ConvertToChat { workspace, .. }
             | WorkspaceMethod::SplitWorkspace { workspace, .. }
             | WorkspaceMethod::CreateCommitWorkspace {

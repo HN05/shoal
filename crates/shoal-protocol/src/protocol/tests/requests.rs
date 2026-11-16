@@ -42,7 +42,7 @@ const REQUESTS: &[&str] = &[
     r#"{"check_branch_name":{"name":"fix"}}"#,
     r#"{"check_blockers":{"repository":"app","blockers":[{"space":"fix"},{"issue":"https://forge.example/team/app/issues/1"}]}}"#,
     r#"{"adopt_workspace":{"repository":"app","path":"/work/fix","copy":false}}"#,
-    r#"{"rename_workspace":{"workspace":"fix","branch":"fix-2"}}"#,
+    r#"{"rename_branch":{"workspace":"fix","branch":"fix-2"}}"#,
     r#"{"convert_to_chat":{"workspace":"fix","mode":"plan"}}"#,
     r#""list_workspaces""#,
     r#""untracked_worktrees""#,

@@ -1,4 +1,5 @@
-//! Reconcile durable rename intent with Git without replaying a ref mutation.
+//! Renaming a workspace's Git branch, reconciling durable rename intent
+//! with Git without replaying a ref mutation.
 mod intent;
 
 use super::Manager;
@@ -13,7 +14,7 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;
 
 impl Manager {
-    pub async fn rename_workspace(
+    pub async fn rename_branch(
         &self,
         selector: &SpaceSelector,
         branch: &str,

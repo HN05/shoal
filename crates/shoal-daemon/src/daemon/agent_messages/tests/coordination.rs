@@ -481,7 +481,7 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
     // The worker is renamed and a new workspace takes its name before the
     // chat is removed.
     manager
-        .rename_workspace(&SpaceSelector::id(&worker.id), "renamed", None)
+        .rename_branch(&SpaceSelector::id(&worker.id), "renamed", None)
         .await
         .unwrap();
     let successor = manager

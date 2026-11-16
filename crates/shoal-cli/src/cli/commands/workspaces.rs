@@ -1,6 +1,7 @@
 //! CLI workspace workflows; all state mutations go through the daemon.
 mod add;
 mod adopt;
+mod branch_rename;
 mod cd;
 mod changes;
 mod done;
@@ -13,7 +14,6 @@ mod recovery;
 mod refresh;
 mod removal;
 mod remove;
-mod rename;
 mod run;
 mod setup;
 mod status;
@@ -27,6 +27,7 @@ pub(super) use add::{
     launch_args, launch_workspace, leaves_caller, link, start_worker,
 };
 pub(super) use adopt::adopt;
+pub(super) use branch_rename::rename_branch;
 pub(super) use cd::cd;
 pub(super) use changes::{conflicts, diff};
 pub(super) use done::{done, undone};
@@ -39,7 +40,6 @@ pub(super) use open::open;
 pub(super) use refresh::refresh;
 pub(super) use removal::{ensure_batch_removable, leaving};
 pub(super) use remove::remove;
-pub(super) use rename::rename;
 pub(super) use run::{edit, exec};
 pub(super) use setup::{SetUp, follow_setup, run_post_setup, setup, setup_workspace, skip_setup};
 pub(super) use status::status;

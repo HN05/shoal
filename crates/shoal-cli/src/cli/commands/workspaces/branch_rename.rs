@@ -7,13 +7,14 @@ use crate::cli::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-pub(in crate::cli::commands) async fn rename(
+pub(in crate::cli::commands) async fn rename_branch(
     ctx: &Context,
     workspace: Option<SpaceSelector>,
     branch: String,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let renamed = crate::client::workspaces::rename(&ctx.paths, workspace.clone(), branch).await?;
+    let renamed =
+        crate::client::workspaces::rename_branch(&ctx.paths, workspace.clone(), branch).await?;
     ctx.show(&renamed, |workspace| {
         outln!(
             "Renamed the branch of {} to {}",

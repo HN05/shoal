@@ -932,7 +932,7 @@ async fn withdrawing_after_a_rename_still_takes_back_the_notification() {
         .await
         .unwrap();
     manager
-        .rename_workspace(&SpaceSelector::id(&workspace.id), "renamed", None)
+        .rename_branch(&SpaceSelector::id(&workspace.id), "renamed", None)
         .await
         .unwrap();
     manager

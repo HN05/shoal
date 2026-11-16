@@ -255,7 +255,7 @@ async fn chats_and_workspaces_may_share_a_name() {
         .unwrap();
     assert_eq!(talk.name, "talk");
     let renamed = manager
-        .rename_workspace(&SpaceSelector::id(&worker.id), "renamed", None)
+        .rename_branch(&SpaceSelector::id(&worker.id), "renamed", None)
         .await
         .unwrap();
     assert_eq!(

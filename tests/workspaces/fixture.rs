@@ -136,11 +136,9 @@ impl Fixture {
         self.ok(&["repo", "config", repository])
     }
 
-    pub(crate) fn rename(&self, workspace: &str, branch: &str) -> Value {
+    pub(crate) fn rename_branch(&self, workspace: &str, branch: &str) -> Value {
         let workspace = self.id(workspace);
-        self.request(
-            serde_json::json!({"rename_workspace":{"workspace":workspace,"branch":branch}}),
-        )
+        self.request(serde_json::json!({"rename_branch":{"workspace":workspace,"branch":branch}}))
     }
 
     pub(crate) fn add_github_origin(&self) {

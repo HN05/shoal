@@ -274,7 +274,7 @@ async fn senders_withdraw_their_own_messages_until_shown() {
     // workspace taking its name gets none of them.
     let unread = send("PR #14 is ready to merge").await;
     let renamed = manager
-        .rename_workspace(&SpaceSelector::id(&sender.id), "renamed", None)
+        .rename_branch(&SpaceSelector::id(&sender.id), "renamed", None)
         .await
         .unwrap();
     // The renamed workspace keeps its directory, so the new one needs another.
@@ -325,7 +325,7 @@ async fn a_message_stays_its_sender_s_through_a_rename_while_it_is_recorded() {
     // the message is recorded.
     let about = About::space(&sender.name, &sender.id);
     manager
-        .rename_workspace(&SpaceSelector::id(&sender.id), "renamed", None)
+        .rename_branch(&SpaceSelector::id(&sender.id), "renamed", None)
         .await
         .unwrap();
     let path = Some(temp.path().join("successor"));

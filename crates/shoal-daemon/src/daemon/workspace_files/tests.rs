@@ -908,7 +908,7 @@ async fn kept_results_answer_to_the_name_the_workspace_had_when_removed() {
         .await
         .unwrap();
     let renamed = manager
-        .rename_workspace(&SpaceSelector::id(&audit.id), "renamed", None)
+        .rename_branch(&SpaceSelector::id(&audit.id), "renamed", None)
         .await
         .unwrap();
     manager

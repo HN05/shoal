@@ -33,7 +33,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ChangesCommand)
 async fn branch(ctx: &Context, command: BranchCommand) -> Result<i32> {
     match command {
         BranchCommand::Rename { workspace, branch } => {
-            workspaces::rename(ctx, workspace, branch).await
+            workspaces::rename_branch(ctx, workspace, branch).await
         }
         BranchCommand::Base { command, workspace } => base::run(ctx, command, workspace).await,
     }

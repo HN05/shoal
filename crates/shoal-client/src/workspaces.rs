@@ -148,16 +148,12 @@ pub async fn adopt(
 }
 
 /// Rename `workspace`'s branch to `branch`.
-pub async fn rename(
+pub async fn rename_branch(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
     branch: String,
 ) -> Result<Workspace> {
-    request(
-        daemon,
-        WorkspaceMethod::RenameWorkspace { workspace, branch },
-    )
-    .await
+    request(daemon, WorkspaceMethod::RenameBranch { workspace, branch }).await
 }
 
 /// Give `workspace` the name `name`.
