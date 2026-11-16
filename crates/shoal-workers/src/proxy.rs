@@ -14,7 +14,7 @@ pub(crate) struct Running {
     /// Where it forwards requests, which a restore compares with where its
     /// command's would go.
     pub(crate) upstream: String,
-    /// The key the agent names in [`KEY_HEADER`], which the proxy answers
+    /// The key the agent names in [`shoal_core::proxy::KEY_HEADER`], which the proxy answers
     /// only with.
     pub(crate) key: String,
     /// A directory only the user can read, for what the agent's launch

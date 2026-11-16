@@ -11,7 +11,7 @@ pub const KEY_HEADER: &str = "x-shoal-proxy-key";
 /// key, for an agent that names a variable rather than a value: the
 /// environment is the agent's alone, while any local user can read its
 /// command line.
-pub const KEY_VARIABLE: &str = "SHOAL_PROXY_KEY";
+pub(crate) const KEY_VARIABLE: &str = "SHOAL_PROXY_KEY";
 
 #[cfg(test)]
 mod tests;
