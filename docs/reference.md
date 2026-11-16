@@ -709,10 +709,10 @@ worktrees can still be removed through normal cleanup.
 
 `shoal rename [SPACE] NAME` gives a workspace or chat a new name, which its
 agent may choose to say what the work is. The tabs, windows and blocks Shoal
-opens for the space show it, and setting it renames those already open,
-wherever the command runs, while they still show the label Shoal gave them; one
-the user named keeps its label. The worktree directory, branch and zmx session
-keep their names. Scoped callers may rename their own space.
+opens for the space show it, and setting it renames those already open and
+those its agents run in, wherever the command runs, while they still show the
+label Shoal gave them; one the user named keeps its label. The worktree
+directory, branch and zmx session keep their names. Scoped callers may rename their own space.
 `shoal rename --request [SPACE]` sends the space's agent an
 [agent message](#agent-messages) asking it to choose the name and set it; it is
 refused while no agent runs there. `shoal rename` without arguments picks a
