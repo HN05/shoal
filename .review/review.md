@@ -41,7 +41,10 @@ instead of the PR delivery guidance below.
   snapshot, a `match` on `machine.schedule` inside the ranking, and admission
   outside the daemon.
 - The CLI (`crates/shoal-cli`) and the daemon (`crates/shoal-daemon`) depend
-  on neither each other; the `shoal` package's `main` joins them. Code they
+  on neither each other; the `shoal` package's `main` joins them. Flag a
+  dependency of the daemon, even a dev-dependency, on a crate that calls the
+  daemon, and a daemon test that calls it through one, which belongs in that
+  crate's tests, starting the daemon through its `test-support` feature. Code they
   share lives in `crates/shoal-core`, which names neither, makes no daemon
   calls and depends on no Shoal crate but `shoal-config-derive`,
   `shoal-forge`, `shoal-forge-types`, `shoal-ids`, `shoal-protocol`,
@@ -56,7 +59,7 @@ instead of the PR delivery guidance below.
   depends on no Shoal crate but `shoal-client`, `shoal-core`,
   `shoal-forge-types`, `shoal-ids`, `shoal-protocol`, `shoal-proxy` and
   `shoal-refs`. Flag a daemon call in core, a callback core takes that calls
-  the daemon, and a dependency of core or the daemon's own code on
+  the daemon, and a dependency of core on
   `shoal-workers`.
 - Forge requests live in `crates/shoal-forge`, and the forge data the
   protocol carries, with the logic that reads it without a request or the

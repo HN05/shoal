@@ -133,8 +133,11 @@ for delivering a PR, under Committing near the end, decide when work is done.
   define typed names, that every crate shares; none depends on a Shoal crate.
 - The CLI lives in `crates/shoal-cli` and the daemon in `crates/shoal-daemon`,
   neither of which depends on the other, so an edit in one rebuilds neither
-  the other nor its tests. The `shoal` package is only `main`, which runs the
-  CLI and passes it the daemon for `shoal daemon run`. Code both use, directly
+  the other nor its tests. Nor does the daemon depend on a crate that calls
+  the daemon, even as a dev-dependency: a test that drives a daemon through
+  such a crate lives in that crate's tests and starts the daemon through its
+  `test-support` feature. The `shoal` package is only `main`,
+  which runs the CLI and passes it the daemon for `shoal daemon run`. Code both use, directly
   or through code they call, lives in `crates/shoal-core`, in a top-level
   module named for what it does; it names neither the CLI nor the daemon,
   makes no daemon calls and depends on no Shoal crate but

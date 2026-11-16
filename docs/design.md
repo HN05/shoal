@@ -82,8 +82,11 @@ which makes no daemon calls, but not on each other; the CLI also depends on
 `shoal-client` and on `shoal-workers`, the execution wrapper and the workers
 that run in the processes Shoal starts and call the daemon. The binary-only
 `shoal` package joins them.
-Changing the CLI rebuilds neither the daemon nor `shoal-core`, and changing
-the daemon neither the CLI nor `shoal-core`. Commands print only the
+Changing the CLI rebuilds neither the daemon nor `shoal-core`, changing
+the daemon neither the CLI nor `shoal-core`, and changing `shoal-client` or
+`shoal-workers` neither the daemon nor its tests: the daemon depends on no
+crate that calls the daemon, and the tests that call one through such a crate
+live in it, starting the daemon through its `test-support` feature. Commands print only the
 library's types with `--json`, which a development build checks read back, so
 a program that runs `shoal --json` parses the output with them. The protocol
 keeps no
