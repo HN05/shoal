@@ -196,7 +196,8 @@ async fn searched(
         let endpoint = format!(
             "search/issues?q={query}&sort=created&order=desc&per_page={SEARCH_PAGE}&page={page}"
         );
-        let response = repo.send(account, &Request::get(endpoint)).await?;
+        let request = Request::get(endpoint).counted_against("search");
+        let response = repo.send(account, &request).await?;
         let items = response["items"]
             .as_array()
             .context("GitHub's search returned no item list")?;

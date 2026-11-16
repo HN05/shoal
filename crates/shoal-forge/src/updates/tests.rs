@@ -363,6 +363,7 @@ fn saved_combined_verdicts_match_the_same_verdicts_by_reviewer() {
 fn a_rate_limited_lookup_leaves_the_snapshot_incomplete_without_failing() {
     let limit = RateLimited {
         host: "forge.example".into(),
+        limit: None,
         until: UnixTime::from_seconds(1),
     };
     let mut snapshot = Snapshot::default();

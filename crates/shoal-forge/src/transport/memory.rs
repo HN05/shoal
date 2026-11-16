@@ -11,7 +11,7 @@ use serde_json::Value;
 use shoal_time::UnixTime;
 
 use crate::transport::{
-    limits::{Limit, RateLimited, limit},
+    limits::{Limit, RateLimited, limit as reported_limit},
     response::{Headed, Response},
 };
 
@@ -29,8 +29,9 @@ struct State {
     reads: HashMap<String, Read>,
     /// Counts recalls and reads, ordering them by last use.
     uses: u64,
-    /// Until when each host limits requests.
-    limits: HashMap<String, UnixTime>,
+    /// Until when each host limits requests: all of them, or those that
+    /// count against a limit of their own.
+    limits: HashMap<(String, Option<&'static str>), UnixTime>,
 }
 
 struct Read {
@@ -41,37 +42,52 @@ struct Read {
 }
 
 impl Memory {
-    /// Refuse a request to `host` at `now` while the forge limits them.
-    pub(crate) fn check_limit(&self, host: &str, now: UnixTime) -> Result<(), RateLimited> {
+    /// Refuse a request to `host` that counts against `limit`, besides the
+    /// limit every request shares, at `now` while the forge limits either.
+    pub(crate) fn check_limit(
+        &self,
+        host: &str,
+        limit: Option<&'static str>,
+        now: UnixTime,
+    ) -> Result<(), RateLimited> {
         let mut state = self.lock();
-        match state.limits.get(host) {
-            Some(&until) if until > now => Err(RateLimited {
-                host: host.to_owned(),
-                until,
-            }),
-            Some(_) => {
-                state.limits.remove(host);
-                Ok(())
+        for limit in std::iter::once(None).chain(limit.map(Some)) {
+            let key = (host.to_owned(), limit);
+            match state.limits.get(&key) {
+                Some(&until) if until > now => {
+                    return Err(RateLimited {
+                        host: host.to_owned(),
+                        limit,
+                        until,
+                    });
+                }
+                Some(_) => {
+                    state.limits.remove(&key);
+                }
+                None => {}
             }
-            None => Ok(()),
         }
+        Ok(())
     }
 
-    /// Record the limit `response` from `host` reports at `now`, and refuse
-    /// the response when the forge refused the request.
+    /// Record the limit `response` from `host` reports at `now` for the
+    /// requests that count against `limit`, and refuse the response when
+    /// the forge refused the request.
     pub(crate) fn observe_limit(
         &self,
         host: &str,
+        limit: Option<&'static str>,
         response: &impl Headed,
         now: UnixTime,
     ) -> Result<(), RateLimited> {
-        let Some(limit) = limit(response, now) else {
+        let Some(reported) = reported_limit(response, now) else {
             return Ok(());
         };
-        self.lock().limits.insert(host.to_owned(), limit.until());
-        match limit {
+        (self.lock().limits).insert((host.to_owned(), limit), reported.until());
+        match reported {
             Limit::Refused(until) => Err(RateLimited {
                 host: host.to_owned(),
+                limit,
                 until,
             }),
             Limit::Exhausted(_) => Ok(()),

@@ -45,36 +45,64 @@ fn requests_wait_until_a_refusal_or_exhausted_limit_resets() {
     refused.status = 429;
     let limited = RateLimited {
         host: "forge.example".into(),
+        limit: None,
         until: now + seconds(30),
     };
     assert_eq!(
-        memory.observe_limit("forge.example", &refused, now),
+        memory.observe_limit("forge.example", None, &refused, now),
         Err(limited.clone())
     );
     assert_eq!(
-        memory.check_limit("forge.example", now + seconds(29)),
+        memory.check_limit("forge.example", None, now + seconds(29)),
         Err(limited)
     );
-    assert_eq!(memory.check_limit("other.example", now), Ok(()));
+    assert_eq!(memory.check_limit("other.example", None, now), Ok(()));
     assert_eq!(
-        memory.check_limit("forge.example", now + seconds(30)),
+        memory.check_limit("forge.example", None, now + seconds(30)),
         Ok(())
     );
     // The last request before the reset succeeds; the next one waits.
     let exhausted = response(&[("x-ratelimit-remaining", "0"), ("x-ratelimit-reset", "60")]);
     assert_eq!(
-        memory.observe_limit("forge.example", &exhausted, now),
+        memory.observe_limit("forge.example", None, &exhausted, now),
         Ok(())
     );
     assert!(
         memory
-            .check_limit("forge.example", now + seconds(59))
+            .check_limit("forge.example", None, now + seconds(59))
             .is_err()
     );
     assert_eq!(
-        memory.observe_limit("forge.example", &response(&[]), now),
+        memory.observe_limit("forge.example", None, &response(&[]), now),
         Ok(())
     );
+}
+
+#[test]
+fn a_limit_of_its_own_holds_back_only_the_requests_it_counts() {
+    let memory = Memory::default();
+    let now = UnixTime::from_seconds(1_800_000_000);
+    let exhausted = response(&[("x-ratelimit-remaining", "0"), ("x-ratelimit-reset", "60")]);
+    assert_eq!(
+        memory.observe_limit("forge.example", Some("search"), &exhausted, now),
+        Ok(())
+    );
+    assert_eq!(memory.check_limit("forge.example", None, now), Ok(()));
+    assert_eq!(
+        memory.check_limit("forge.example", Some("other"), now),
+        Ok(())
+    );
+    let refused = memory.check_limit("forge.example", Some("search"), now);
+    assert_eq!(
+        refused.map_err(|limited| limited.limit),
+        Err(Some("search"))
+    );
+    // The limit every request shares holds back those with one of their own.
+    memory
+        .observe_limit("forge.example", None, &exhausted, now)
+        .unwrap();
+    let refused = memory.check_limit("forge.example", Some("other"), now);
+    assert_eq!(refused.map_err(|limited| limited.limit), Err(None));
 }
 
 #[test]

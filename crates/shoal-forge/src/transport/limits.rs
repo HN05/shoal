@@ -16,10 +16,12 @@ const MAX_WAIT: Duration = Duration::from_secs(3600);
 /// A reset header above this counts Unix seconds rather than seconds from now.
 const UNIX_RESET: i64 = 1_000_000_000;
 
-/// A forge refused, or would refuse, the account's requests until `until`.
+/// A forge refused, or would refuse, the account's requests until `until`:
+/// those that count against `limit`, or all of them without one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RateLimited {
     pub host: String,
+    pub limit: Option<&'static str>,
     pub until: UnixTime,
 }
 
@@ -32,12 +34,19 @@ impl RateLimited {
 
 impl std::fmt::Display for RateLimited {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{} limits requests for another {} seconds",
-            self.host,
-            self.wait_from(UnixTime::now()).as_secs().max(1)
-        )
+        let wait = self.wait_from(UnixTime::now()).as_secs().max(1);
+        match self.limit {
+            Some(limit) => write!(
+                f,
+                "{} limits {limit} requests for another {wait} seconds",
+                self.host
+            ),
+            None => write!(
+                f,
+                "{} limits requests for another {wait} seconds",
+                self.host
+            ),
+        }
     }
 }
 

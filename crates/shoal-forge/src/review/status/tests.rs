@@ -8,6 +8,7 @@ fn rate_limited_checks_are_reported_as_unread() {
     let snapshot = Snapshot {
         limited: Some(crate::transport::limits::RateLimited {
             host: "forge.example".into(),
+            limit: None,
             until: UnixTime::MAX,
         }),
         ..Snapshot::default()

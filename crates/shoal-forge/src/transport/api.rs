@@ -47,6 +47,9 @@ pub(crate) struct Request {
     pub max_bytes: usize,
     /// Whether it changes something on the forge, which needs a login.
     pub changes: bool,
+    /// The rate limit of its own the forge counts it against besides the
+    /// one every request shares, such as GitHub's for searches.
+    pub limit: Option<&'static str>,
 }
 
 /// A file a request sends: as a multipart form's `field`, or as the raw
@@ -82,6 +85,7 @@ impl Request {
             redirects: false,
             max_bytes: MAX_RESPONSE_BYTES,
             changes,
+            limit: None,
         }
     }
 
@@ -113,6 +117,13 @@ impl Request {
     /// Refuse a response longer than `bytes`.
     pub fn limited(mut self, bytes: usize) -> Self {
         self.max_bytes = bytes;
+        self
+    }
+
+    /// Count it against the forge's rate limit `limit`, which limits it
+    /// apart from other requests.
+    pub fn counted_against(mut self, limit: &'static str) -> Self {
+        self.limit = Some(limit);
         self
     }
 
@@ -240,23 +251,25 @@ impl ForgeRepo {
         if request.changes {
             account.require_login(self)?;
         }
-        self.limited(account, self.kind().send(self, account, request))
-            .await
+        let kind = self.kind();
+        let exchange = kind.send(self, account, request);
+        self.limited(account, request.limit, exchange).await
     }
 
     /// The response `exchange` gets as `account`, refused without starting
-    /// it while the forge limits the account's requests, and recording the
-    /// limit the response reports.
+    /// it while the forge limits the account's requests, or those that count
+    /// against `limit`, and recording the limit the response reports.
     pub(crate) async fn limited<T: Headed>(
         &self,
         account: &Account,
+        limit: Option<&'static str>,
         exchange: impl Future<Output = Result<T>>,
     ) -> Result<T> {
         let memory = account.memory();
-        memory.check_limit(&self.host, UnixTime::now())?;
+        memory.check_limit(&self.host, limit, UnixTime::now())?;
         let response = exchange.await?;
         // Relative limits count from the response, which may have taken a while.
-        memory.observe_limit(&self.host, &response, UnixTime::now())?;
+        memory.observe_limit(&self.host, limit, &response, UnixTime::now())?;
         Ok(response)
     }
 

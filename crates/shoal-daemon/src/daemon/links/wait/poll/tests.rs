@@ -6,6 +6,7 @@ fn a_rate_limited_poll_waits_for_the_limit_but_at_least_the_interval() {
     let limit = |until| {
         anyhow::Error::new(shoal_forge::transport::limits::RateLimited {
             host: "forge.example".into(),
+            limit: None,
             until,
         })
         .context("GET issues/8")
@@ -39,6 +40,7 @@ async fn a_rate_limited_watch_keeps_polling_after_the_limit() {
             0 => Err(anyhow::Error::new(
                 shoal_forge::transport::limits::RateLimited {
                     host: "forge.example".into(),
+                    limit: None,
                     until: UnixTime::EPOCH,
                 },
             )),

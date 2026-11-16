@@ -24,7 +24,7 @@ impl ForgeRepo {
         self.check_download(url)?;
         let kind = self.kind();
         let fetched = kind.download(self, account, url);
-        async { self.limited(account, fetched).await?.into_download() }
+        async { self.limited(account, None, fetched).await?.into_download() }
             .await
             .with_context(|| format!("download {url}"))
     }

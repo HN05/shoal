@@ -66,6 +66,7 @@ fn permission_errors_and_remaining_requests_are_not_limits() {
 fn limits_are_found_among_an_errors_causes() {
     let limited = RateLimited {
         host: "forge.example".into(),
+        limit: None,
         until: UnixTime::from_seconds(1),
     };
     let error = anyhow::Error::new(limited.clone()).context("GET issues/1");
@@ -77,6 +78,7 @@ fn limits_are_found_among_an_errors_causes() {
 fn a_limit_waits_until_it_ends_and_not_after() {
     let limited = RateLimited {
         host: "forge.example".into(),
+        limit: None,
         until: UnixTime::from_seconds(1_600),
     };
     assert_eq!(
