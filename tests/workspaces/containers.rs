@@ -243,6 +243,8 @@ fn setup_starts_the_project_before_the_workspace_is_ready() {
     assert_eq!(project["state"], "running");
     assert_eq!(project["acquirer"]["kind"], "user");
     assert_eq!(commands(&fixture, &project["project"]), ["up"]);
+    let status = fixture.ok(&["status", &space]);
+    assert_eq!(status["containers"]["project"], project["project"]);
 }
 
 #[test]

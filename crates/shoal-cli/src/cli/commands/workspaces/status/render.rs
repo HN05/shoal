@@ -353,7 +353,7 @@ fn render_asleep(asleep: Option<&crate::model::Asleep>, number: shoal_ids::space
     }
 }
 
-/// The ports, simulators and resources the workspace holds.
+/// The ports, simulators, containers and resources the workspace holds.
 fn render_leases(status: &WorktreeStatus, palette: Palette) {
     outln!("Ports:         {}", status.ports.len());
     for port in &status.ports {
@@ -369,6 +369,15 @@ fn render_leases(status: &WorktreeStatus, palette: Palette) {
             palette.simulator_state(simulator.state),
             simulator.device,
             simulator.runtime
+        );
+    }
+
+    if let Some(project) = &status.containers {
+        outln!(
+            "Containers:    {}  {}  acquired by {}",
+            project.project,
+            project.state,
+            project.acquirer.kind()
         );
     }
 

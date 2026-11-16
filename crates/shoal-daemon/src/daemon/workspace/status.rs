@@ -45,6 +45,7 @@ impl Manager {
         workspace.usage = self.workspace_usage(&workspace.id);
         workspace.job = self.workspace_job(&workspace.id).await?;
         simulators.retain(|simulator| simulator.workspace_id.as_ref() == Some(&workspace.id));
+        let containers = self.container_project(&workspace.id).await?;
         let (leftover_count, leftovers) = self.leftovers.of(&workspace.id);
         let sync = self.checkout_sync(&workspace.repository_id);
         // A worktree Git cannot read shows none, as `diff_error` says why.
@@ -63,6 +64,7 @@ impl Manager {
             ports,
             resources,
             simulators,
+            containers: containers.map(|recorded| recorded.project),
             setup_finished,
             diff,
             diff_error,

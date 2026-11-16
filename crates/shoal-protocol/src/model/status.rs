@@ -164,6 +164,9 @@ pub struct WorktreeStatus {
     pub ports: Vec<PortReservation>,
     pub resources: Vec<ResourceLease>,
     pub simulators: Vec<Simulator>,
+    /// Its Compose project.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub containers: Option<crate::containers::ContainerProject>,
     pub setup_finished: bool,
     pub diff: Option<DiffSummary>,
     pub diff_error: Option<String>,
