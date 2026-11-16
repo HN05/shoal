@@ -16,10 +16,16 @@ direct resource access; filesystem restrictions are future work.
 
 Caller-specific integration stays outside the daemon core: Superlogical owns terminals;
 Macraft owns VM/container provisioning. Shoal does not provision tools, manage
-browsers, store conversations, or schedule work beyond its own machine's agent
-queue, which also admits registered repositories' CI jobs: which machine a
-space starts on or moves to is placement, an app's to build on `shoal move`
-and the protocol. `shoal start` and `shoal open`
+browsers or store conversations, and schedules work only on its own machine:
+its agent queue, which also admits registered repositories' CI jobs, and
+triggers, config that starts agents when an event source fires, such as a
+timer. A trigger is config like every other setting, without commands that
+create or change it; each source is a module behind one interface whose
+firings carry a JSON input document, which filters, templates and keys read
+without knowing the source, and every firing launches through the operation
+`shoal start` uses, as the user, so the queue, `max_agents` and cleanup apply.
+Which machine a space starts on or moves to is placement, an app's to build on
+`shoal move` and the protocol. `shoal start` and `shoal open`
 are thin launchers around the generic execution path; CLI launcher argument arrays are configurable defaults; session and desktop
 adapters retain their tool-specific setup. Shoal does not switch the user's or
 daemon's login. `[secrets]` names
