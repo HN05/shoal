@@ -11,7 +11,7 @@ use std::{
 use crate::{env, paths::Paths};
 use shoal_protocol::approvals::SecretSpecification;
 pub use shoal_protocol::secrets::Secret;
-pub(crate) use shoal_protocol::secrets::Secrets;
+pub use shoal_protocol::secrets::Secrets;
 
 /// What a grant for `secret` binds: the command that fetches it and the tools
 /// it serves.
@@ -124,6 +124,20 @@ fn write_launchers(secrets: &Secrets, paths: &Paths) -> Result<tempfile::TempDir
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
     }
     Ok(directory)
+}
+
+/// The secrets `settings` give agents: every one but those a webhook
+/// trigger of `settings` or of the global `config` signs requests with,
+/// which would let an agent sign its own and start spaces as the user.
+pub fn for_agents(config: &crate::config::Config, settings: &crate::config::Settings) -> Secrets {
+    let triggers = (settings.triggers.values()).chain(config.triggers().values());
+    let signing: BTreeSet<&str> = triggers
+        .filter_map(|trigger| trigger.signing_secret())
+        .collect();
+    (settings.secrets.iter())
+        .filter(|(name, _)| !signing.contains(name.as_str()))
+        .map(|(name, secret)| (name.clone(), secret.clone()))
+        .collect()
 }
 
 /// [`env::SECRET_ENV`] after adding `names` to the inherited ones.

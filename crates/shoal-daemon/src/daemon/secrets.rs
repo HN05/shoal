@@ -21,11 +21,8 @@ use shoal_protocol::space_names::SpaceSelector;
 impl Manager {
     pub async fn secret_catalog(&self, selector: &SpaceSelector) -> Result<SecretCatalog> {
         let workspace = self.workspace(selector).await?;
-        let secrets = self
-            .workspace_settings(&workspace)
-            .await?
-            .into_settings()
-            .secrets
+        let settings = self.workspace_settings(&workspace).await?;
+        let secrets = crate::secrets::for_agents(&self.config(), &settings)
             .into_iter()
             .map(|(name, secret)| CatalogSecret {
                 name,
@@ -104,11 +101,8 @@ impl Manager {
         name: &str,
         source: Option<&SecretSpecification>,
     ) -> Result<Secret> {
-        let secret = self
-            .workspace_settings(workspace)
-            .await?
-            .into_settings()
-            .secrets
+        let settings = self.workspace_settings(workspace).await?;
+        let secret = crate::secrets::for_agents(&self.config(), &settings)
             .remove(name)
             .ok_or_else(|| anyhow!("secrets.{name} is not configured for this workspace"))?;
         ensure!(

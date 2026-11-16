@@ -625,7 +625,8 @@ The `webhook` source fires for each request to its route on the
 HMAC-SHA256 of its body under that [secret](#secrets)'s value, in hex, where
 `signature` says: `forgejo` in `X-Forgejo-Signature`, `github` in
 `X-Hub-Signature-256` after `sha256=`, or `hmac-sha256` in the header
-`signature_header` names.
+`signature_header` names. A secret a webhook trigger signs with reaches no agent, as
+its environment or through a tool, so that no agent can sign a request.
 Lengths of time, such as `every`, `catch_up` and `key_window`, are whole
 numbers each followed by `s`, `m`, `h`, `d` or `w`, largest first, as in
 `1h30m`. A firing missed while the daemon was stopped or the machine slept runs

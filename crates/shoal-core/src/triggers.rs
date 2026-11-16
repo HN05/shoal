@@ -93,6 +93,18 @@ impl Source {
     }
 }
 
+impl Trigger {
+    /// The `[secrets]` entry its requests sign with, if any.
+    pub fn signing_secret(&self) -> Option<&str> {
+        match &self.source {
+            Source::Webhook(webhook) => {
+                (webhook.signed.as_ref()).map(|signed| signed.secret.as_str())
+            }
+            Source::Timer(_) => None,
+        }
+    }
+}
+
 states!(
     #[derive(Default)]
     /// What a firing that would start a new space does while the space of

@@ -611,7 +611,8 @@ async fn prepare_agent_launch(
     )
     .await?;
     let secrets = if has_agent {
-        shoal_core::secrets::Launch::prepare(&settings.secrets, paths).await?
+        let secrets = shoal_core::secrets::for_agents(&config, &settings);
+        shoal_core::secrets::Launch::prepare(&secrets, paths).await?
     } else {
         Default::default()
     };

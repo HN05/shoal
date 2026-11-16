@@ -89,3 +89,25 @@ async fn apply_records_the_names_hooks_drop() {
     let names: Vec<_> = names.to_str().unwrap().split(':').collect();
     assert!(names.contains(&"A_TOKEN") && names.contains(&"B_TOKEN"));
 }
+
+#[test]
+fn agents_never_receive_a_secret_a_webhook_signs_with() {
+    let config = crate::config::Config::from_toml(
+        "[secrets.GLOBAL_HOOK]\ncommand = ['true']\n[secrets.API_KEY]\ncommand = ['true']\n\
+         [secrets.REPO_HOOK]\ncommand = ['true']\n\
+         [triggers.forge]\non = 'webhook'\nsecret = 'GLOBAL_HOOK'\nsignature = 'forgejo'\n",
+    )
+    .unwrap();
+    let layers = crate::config::repo::ConfigLayers {
+        local_config: crate::config::repo::parse(
+            "[triggers.issues]\non = 'webhook'\nsecret = 'REPO_HOOK'\nsignature = 'github'\n",
+        )
+        .unwrap(),
+        ..Default::default()
+    };
+    let settings = config.resolve(&layers).unwrap();
+
+    let agents = for_agents(&config, &settings);
+
+    assert_eq!(agents.keys().collect::<Vec<_>>(), ["API_KEY"]);
+}
