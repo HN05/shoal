@@ -61,7 +61,7 @@ impl Scoped for FileMethod {
             | FileMethod::RemoveFiles {
                 space: Some(space), ..
             } => {
-                if manager.workspace(space).await.is_ok() {
+                if manager.space(space).await.is_ok() {
                     return Ok(Some(space));
                 }
                 narrow_to_removed(manager, caller, space).await?;
@@ -74,9 +74,9 @@ impl Scoped for FileMethod {
     }
 }
 
-/// Point `workspace` at the removed workspace it names, whose results a
-/// caller may reach when the workspace was split from the caller's own or
-/// one below it.
+/// Point `workspace` at the removed space it names, whose results a
+/// caller may reach when the space was below the caller's own or one below
+/// it.
 async fn narrow_to_removed(
     manager: &Manager,
     caller: &Caller,

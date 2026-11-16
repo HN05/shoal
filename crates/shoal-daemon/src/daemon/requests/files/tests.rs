@@ -103,3 +103,30 @@ async fn deleting_by_name_needs_a_workspace() {
         1
     );
 }
+
+#[tokio::test]
+async fn a_chats_agent_lists_and_deletes_its_own_chats_files() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = crate::daemon::test_support::chat(&manager, "talk", "chat", Some(&repo), None).await;
+    let token = manager.chat_scope(&chat.id).await.unwrap();
+    for method in [
+        FileMethod::ListFiles {
+            space: SpaceSelector::id(&chat.id),
+        },
+        FileMethod::RemoveFiles {
+            space: Some(SpaceSelector::id(&chat.id)),
+            names: Vec::new(),
+            ids: Vec::new(),
+        },
+    ] {
+        let mut method = crate::protocol::Operation::File(method);
+        crate::daemon::scope::authorize(&manager, Some(&token), &mut method)
+            .await
+            .unwrap();
+    }
+}
