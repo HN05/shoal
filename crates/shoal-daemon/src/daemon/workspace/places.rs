@@ -185,7 +185,7 @@ impl Manager {
         let space = self.space(selector).await?;
         if let Some((owner, _)) = self.place_owner(place).await? {
             return Ok(if owner == space.id {
-                PlaceOwnership::Workspace
+                PlaceOwnership::Space
             } else {
                 PlaceOwnership::Elsewhere
             });
@@ -194,7 +194,7 @@ impl Manager {
             .labels_session(place.host, place.id(), &space.id)
             .await?;
         Ok(if labelled {
-            PlaceOwnership::Workspace
+            PlaceOwnership::Space
         } else {
             PlaceOwnership::Unknown
         })

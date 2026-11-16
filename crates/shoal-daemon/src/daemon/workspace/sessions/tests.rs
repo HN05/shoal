@@ -705,7 +705,7 @@ async fn a_session_closes_with_the_workspace_its_host_labels_it_for() -> Result<
                 &Origin::created(HostName::Zmx, "labelled".into())
             )
             .await?
-            == PlaceOwnership::Workspace
+            == PlaceOwnership::Space
     );
     assert!(
         manager
@@ -714,7 +714,7 @@ async fn a_session_closes_with_the_workspace_its_host_labels_it_for() -> Result<
                 &Origin::created(HostName::Zmx, "labelled".into())
             )
             .await?
-            != PlaceOwnership::Workspace
+            != PlaceOwnership::Space
     );
     assert!(
         manager
@@ -723,7 +723,7 @@ async fn a_session_closes_with_the_workspace_its_host_labels_it_for() -> Result<
                 &Origin::created(HostName::Zmx, "unlabelled".into())
             )
             .await?
-            != PlaceOwnership::Workspace
+            != PlaceOwnership::Space
     );
     assert!(
         manager
@@ -732,7 +732,7 @@ async fn a_session_closes_with_the_workspace_its_host_labels_it_for() -> Result<
                 &Origin::created(HostName::Rex, "labelled".into())
             )
             .await?
-            != PlaceOwnership::Workspace
+            != PlaceOwnership::Space
     );
     Ok(())
 }
@@ -777,7 +777,7 @@ async fn panes_of_different_servers_under_one_id_are_different_places() -> Resul
         manager
             .place_ownership(&SpaceSelector::id(&workspace.id), &on("first"))
             .await?
-            == PlaceOwnership::Workspace
+            == PlaceOwnership::Space
     );
     // A variable of the pane's that names no server leaves it the same place.
     let mut shell = on("first");
@@ -786,19 +786,19 @@ async fn panes_of_different_servers_under_one_id_are_different_places() -> Resul
         manager
             .place_ownership(&SpaceSelector::id(&workspace.id), &shell)
             .await?
-            == PlaceOwnership::Workspace
+            == PlaceOwnership::Space
     );
     assert!(
         manager
             .place_ownership(&SpaceSelector::id(&taker.id), &on("first"))
             .await?
-            != PlaceOwnership::Workspace
+            != PlaceOwnership::Space
     );
     assert!(
         manager
             .place_ownership(&SpaceSelector::id(&workspace.id), &users)
             .await?
-            != PlaceOwnership::Workspace
+            != PlaceOwnership::Space
     );
     manager.close_owned_places(Some(taker.id.clone())).await;
     assert!(host.closed()?.is_empty());

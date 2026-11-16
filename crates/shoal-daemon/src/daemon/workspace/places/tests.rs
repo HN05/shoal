@@ -157,7 +157,7 @@ async fn a_place_closes_with_the_workspace_its_record_names() -> Result<()> {
                 &Origin::created(HostName::Herdr, "w1:p9".into())
             )
             .await?
-            == PlaceOwnership::Workspace
+            == PlaceOwnership::Space
     );
     assert!(
         manager
@@ -166,7 +166,7 @@ async fn a_place_closes_with_the_workspace_its_record_names() -> Result<()> {
                 &Origin::created(HostName::Herdr, "w1:p9".into())
             )
             .await?
-            != PlaceOwnership::Workspace
+            != PlaceOwnership::Space
     );
     assert!(
         manager
@@ -175,7 +175,7 @@ async fn a_place_closes_with_the_workspace_its_record_names() -> Result<()> {
                 &Origin::created(HostName::Rex, "w1:p9".into())
             )
             .await?
-            != PlaceOwnership::Workspace
+            != PlaceOwnership::Space
     );
     // A place the daemon does not know is no one's it knows of.
     assert_eq!(

@@ -91,7 +91,7 @@ impl Origin {
 pub enum PlaceOwnership {
     /// The space's: its record names the space, or its host labels it as
     /// the space's session, so the space's removal closes it.
-    Workspace,
+    Space,
     /// Another space's agent took it over.
     Elsewhere,
     /// Neither recorded nor labelled, as a place opened before Shoal

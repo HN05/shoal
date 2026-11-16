@@ -24,7 +24,7 @@ pub(in crate::cli) async fn closes_with(
     match current_place().await {
         Some(place) => Ok(
             crate::client::workspaces::place_ownership(paths, space, &place).await?
-                == crate::sessions::PlaceOwnership::Workspace,
+                == crate::sessions::PlaceOwnership::Space,
         ),
         None => Ok(false),
     }

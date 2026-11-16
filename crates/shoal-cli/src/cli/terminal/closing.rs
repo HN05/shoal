@@ -165,7 +165,7 @@ pub async fn watch(
 /// not know is the watcher's.
 async fn at_removal(ctx: &Context, workspace: &SpaceId, record: &Origin) -> Option<AtRemoval> {
     match crate::client::workspaces::place_ownership(&ctx.paths, workspace, record).await {
-        Ok(PlaceOwnership::Workspace | PlaceOwnership::Elsewhere) => Some(AtRemoval::Daemon),
+        Ok(PlaceOwnership::Space | PlaceOwnership::Elsewhere) => Some(AtRemoval::Daemon),
         Ok(PlaceOwnership::Unknown) => Some(AtRemoval::Watcher),
         Err(_) => None,
     }
