@@ -47,6 +47,10 @@ impl Manager {
             planned.blockers.is_empty() || planned.agent.agent.is_some(),
             "--add-blocker queues an agent; name one with --agent"
         );
+        // A launch that starts now waits for nothing, what it names included.
+        if launch.now {
+            planned.blockers.clear();
+        }
         if planned.agent.agent.is_some() && !launch.now {
             let issue = (planned.issue.as_ref()).map(super::plan::issue_url);
             if let Some(issue) = issue {

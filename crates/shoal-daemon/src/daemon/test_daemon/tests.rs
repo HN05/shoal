@@ -478,6 +478,31 @@ async fn a_launch_opens_a_new_workspace_and_prepares_it() {
 }
 
 #[tokio::test]
+async fn a_launch_that_starts_now_waits_for_none_of_its_blockers() {
+    let daemon = TestDaemon::start().await;
+    crate::daemon::test_support::configure(
+        &daemon.manager,
+        "[agents.probe]\ncommand = [\"true\"]\n",
+    )
+    .await;
+    let blocker = daemon.workspace("blocker").await;
+    let launch = Launch {
+        agent: Some("probe".into()),
+        blockers: vec![blocker.id.to_string()],
+        now: true,
+        ..workspace_launch(&daemon, "now")
+    };
+    let app = daemon.connector();
+    let launched = crate::client::launches::launch(&app, launch, LaunchSource::Manual)
+        .await
+        .unwrap();
+    let Launched::Workspace(started) = launched else {
+        panic!("expected a workspace: {launched:?}");
+    };
+    fake::take(&started.operation).exit(1);
+}
+
+#[tokio::test]
 async fn a_launch_refuses_what_it_cannot_start_before_it_creates_anything() {
     let daemon = TestDaemon::start().await;
     let app = daemon.connector();
