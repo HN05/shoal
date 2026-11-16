@@ -108,7 +108,8 @@ impl Manager {
             Some(_) => "pass --repo <repository> or a forge URL",
             None => "pass <repository>",
         };
-        (self.directory_repository(launch, &repos, caller).await?)
+        let reads = super::ManagerReads::new(self, caller);
+        (launches::shape::directory_repository(&reads, launch, &repos).await?)
             .with_context(|| format!("no current registered repository; {hint}"))
     }
 

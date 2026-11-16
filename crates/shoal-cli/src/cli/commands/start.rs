@@ -2,12 +2,11 @@
 //! told, whether it starts in a repository and, unless the command says
 //! otherwise, whether it starts in a workspace or a chat.
 use anyhow::{Context as _, Result, ensure};
-use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::{agent_session_ids::AgentSessionId, space_ids::SpaceId};
 
 use super::{
     chat,
-    workspaces::{self, link::AddInput},
+    workspaces::{self, DaemonReads, link::AddInput},
 };
 use crate::{
     agent::Agent,
@@ -21,11 +20,11 @@ use crate::{
         permissions::{PermissionChange, PermissionsConfig},
     },
     launches,
-    model::{AgentSession, SpaceKind},
+    model::{AgentSession, Repository, SpaceKind},
     protocol::ConfigTarget,
     start_plan::{CopyCreation, Creation},
 };
-use shoal_protocol::launches::{IssueChoice, StartTarget};
+use shoal_protocol::launches::{IssueChoice, Launch, StartTarget};
 use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn run(ctx: &Context, mut args: StartArgs) -> Result<i32> {
@@ -254,56 +253,15 @@ async fn checked_repository(
     Ok(selector)
 }
 
-/// The kind of space the start creates, the kind of `mode`, which must
-/// exist before anything is created, unless the start [`asks_chat`], and
-/// whether `mode` starts it in a repository. The default mode always exists
-/// and always starts in a workspace, so it asks the daemon nothing; a
-/// chat's start checks a mode found nowhere here itself once it has the
-/// repository. With `--in`, the mode's kind decides whether the agent is the
-/// workspace's worker or a chat in its worktree, which belongs to its
-/// repository either way.
+/// The kind of space the start creates and whether `mode` starts it in a
+/// repository, as [`launches::shape::launch_kind`] decides it for the
+/// daemon too.
 async fn shape(
     ctx: &Context,
     args: &StartArgs,
     mode: &modes::ModeName,
 ) -> Result<(SpaceKind, bool)> {
-    if args.in_workspace.is_some() {
-        return in_workspace_kind(ctx, args, mode)
-            .await
-            .map(|kind| (kind, true));
-    }
-    let asks_chat = args.asks_chat();
-    if *mode == modes::ModeName::DEFAULT && !asks_chat {
-        return Ok((SpaceKind::Workspace, true));
-    }
-    let settings = mode_settings(ctx, args).await?;
-    let found = modes::get(&settings.modes, mode);
-    if asks_chat {
-        return Ok((SpaceKind::Chat, found.map_or(true, |mode| mode.repository)));
-    }
-    let found = found?;
-    Ok((found.kind, found.repository))
-}
-
-/// The role of the agent `--in` starts in `mode`: the workspace's worker
-/// for a mode that starts in a workspace, else a chat in its worktree, as a
-/// start that [`asks_chat`] gets whatever the mode. A mode without a
-/// repository is refused.
-async fn in_workspace_kind(
-    ctx: &Context,
-    args: &StartArgs,
-    mode: &modes::ModeName,
-) -> Result<SpaceKind> {
-    let settings = mode_settings(ctx, args).await?;
-    let found = modes::get(&settings.modes, mode)?;
-    ensure!(
-        found.repository,
-        "mode {mode} starts a chat without a repository, which --in cannot"
-    );
-    Ok(match args.asks_chat() {
-        true => SpaceKind::Chat,
-        false => found.kind,
-    })
+    launches::shape::launch_kind(&DaemonReads(ctx), &located(args)?, mode).await
 }
 
 /// The kind of space a start that [`asks_chat`] asks for, whatever the
@@ -312,65 +270,24 @@ fn asked_kind(args: &StartArgs) -> Option<SpaceKind> {
     args.asks_chat().then_some(SpaceKind::Chat)
 }
 
-/// The settings whose modes decide the kind: the workspace's `--in` names,
-/// else the workspace that already has the branch `--branch` names, which
-/// the start goes into as `--in` does, else the repository's
-/// [`mode_repository`] finds, else the global config's. Nothing is asked.
+/// The settings whose modes decide the kind, as
+/// [`launches::shape::launch_settings`] finds them. Nothing is asked.
 async fn mode_settings(ctx: &Context, args: &StartArgs) -> Result<Effective> {
-    if let Some(Some(workspace)) = &args.in_workspace {
-        let target = ConfigTarget::Space(workspace.clone());
-        return crate::config::settings(&ctx.paths, target).await;
-    }
-    match mode_repository(ctx, args).await? {
-        Some(id) => {
-            let target = match branch_workspace(ctx, args, &id).await? {
-                Some(workspace) => ConfigTarget::Space(SpaceSelector::Id(workspace)),
-                None => ConfigTarget::Repository(id.into()),
-            };
-            crate::config::settings(&ctx.paths, target).await
-        }
-        None => {
-            crate::config::Config::load_with_templates(&ctx.paths)?.resolve(&Default::default())
-        }
-    }
+    launches::shape::launch_settings(&DaemonReads(ctx), &located(args)?).await
 }
 
-/// The ID of the workspace of `repository` that already has the branch
-/// `--branch` names, if any.
-async fn branch_workspace(
-    ctx: &Context,
-    args: &StartArgs,
-    repository: &RepositoryId,
-) -> Result<Option<SpaceId>> {
-    let Some(branch) = &args.branch else {
-        return Ok(None);
-    };
-    let repos = crate::client::repositories::list(&ctx.paths).await?;
-    let Some(repo) = repos.iter().find(|repo| repo.id == *repository) else {
-        return Ok(None);
-    };
-    let owner = workspaces::owning_workspace(ctx, repo, branch).await?;
-    Ok(owner.map(|workspace| workspace.id))
+/// The registered repository `args` name, or the one their item URL or the
+/// current checkout or workspace belongs to, without asking.
+async fn mode_repository(ctx: &Context, args: &StartArgs) -> Result<Option<Repository>> {
+    launches::shape::launch_repository(&DaemonReads(ctx), &located(args)?).await
 }
 
-/// The ID of the registered repository `--repo` or the positional argument
-/// names, else of the one an issue or item URL belongs to, else of the
-/// current checkout or workspace, without asking.
-async fn mode_repository(ctx: &Context, args: &StartArgs) -> Result<Option<RepositoryId>> {
-    let repos = crate::client::repositories::list(&ctx.paths).await?;
-    let launch = args.launch();
-    let named = (args.repository_override.as_deref()).or(launches::positional_repository(&launch));
-    if let Some(Ok(selector)) = named.map(|named| ui::repository_selector(named.to_owned()))
-        && let Ok(repo) = crate::repository::select(&repos, selector).await
-    {
-        return Ok(Some(repo.id.clone()));
-    }
-    for item in launches::linked_items(&launch) {
-        if let Ok(Some(repo)) = crate::repository::registered_for_item(&repos, item).await {
-            return Ok(Some(repo.id.clone()));
-        }
-    }
-    super::issues::current_repository_id(ctx, &repos).await
+/// The launch `args` ask for, made in this process's directory.
+fn located(args: &StartArgs) -> Result<Launch> {
+    Ok(Launch {
+        directory: ui::current_directory()?,
+        ..args.launch()
+    })
 }
 
 /// Start the agent in a new or reopened workspace, or, for a start that

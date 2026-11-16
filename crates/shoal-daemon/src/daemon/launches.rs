@@ -8,9 +8,11 @@ use shoal_protocol::launches::{Launch, LaunchSource, Launched, SpaceChoice};
 use shoal_protocol::space_names::SpaceSelector;
 
 use crate::{
+    config::Effective,
     daemon::{scope::Caller, workspace::Manager},
-    launches,
-    model::SpaceKind,
+    launches::{self, LaunchReads},
+    model::{Repository, SpaceKind, Workspace},
+    protocol::ConfigTarget,
 };
 
 mod blockers;
@@ -18,6 +20,46 @@ mod chat;
 mod shape;
 mod worker;
 mod workspace;
+
+/// Shoal's state as a launch for `caller` reads it.
+pub(super) struct ManagerReads<'a> {
+    manager: &'a Manager,
+    caller: Option<&'a Caller>,
+}
+
+impl<'a> ManagerReads<'a> {
+    fn new(manager: &'a Manager, caller: Option<&'a Caller>) -> Self {
+        Self { manager, caller }
+    }
+}
+
+impl LaunchReads for ManagerReads<'_> {
+    async fn repositories(&self) -> Result<Vec<Repository>> {
+        self.manager.repositories().await
+    }
+
+    async fn workspaces(&self) -> Result<Vec<Workspace>> {
+        let root = self.manager.reach_root(self.caller).await?;
+        self.manager.visible_workspaces(root.as_ref()).await
+    }
+
+    async fn settings(&self, target: ConfigTarget) -> Result<Effective> {
+        let layers = self.manager.config_layers_for(target).await?;
+        (self.manager.config()).resolve_with_template_files(&layers, &self.manager.paths)
+    }
+
+    async fn check_opens(
+        &self,
+        repository: &crate::repository::Selector,
+        existing: &str,
+    ) -> Result<()> {
+        let options = crate::daemon::workspace::NewWorktreeOptions::default();
+        (self
+            .manager
+            .check_creation(repository, None, Some(existing), options))
+        .await
+    }
+}
 
 impl Manager {
     /// Start an agent as `launch`, which `source` made, asks for `caller`.

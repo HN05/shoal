@@ -152,9 +152,7 @@ impl Manager {
         reads: &ManagerReads<'_>,
         hint: &str,
     ) -> Result<Repository> {
-        let id = (self
-            .directory_repository(launch, repos, reads.caller)
-            .await?)
+        let id = (crate::launches::shape::directory_repository(reads, launch, repos).await?)
             .with_context(|| format!("no current registered repository; {hint}"))?;
         self.repository(id).await
     }

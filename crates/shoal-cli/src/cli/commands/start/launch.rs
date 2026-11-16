@@ -37,7 +37,10 @@ pub(super) async fn detached(ctx: &Context, args: &StartArgs) -> Result<Option<E
 /// else the global config's.
 async fn launch_settings(ctx: &Context, args: &StartArgs) -> Result<Effective> {
     match mode_repository(ctx, args).await? {
-        Some(id) => crate::config::settings(&ctx.paths, ConfigTarget::Repository(id.into())).await,
+        Some(repo) => {
+            let target = ConfigTarget::Repository(repo.id.into());
+            crate::config::settings(&ctx.paths, target).await
+        }
         None => {
             crate::config::Config::load_with_templates(&ctx.paths)?.resolve(&Default::default())
         }

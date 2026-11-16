@@ -7,6 +7,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceName;
 use shoal_refs::BranchName;
 
+use super::LaunchReads;
 use crate::{
     forge::{ForgeRepo, PullRequest, items::reference::ItemRef},
     git,
@@ -15,24 +16,6 @@ use crate::{
     start_plan::Creation,
     state::WorkspaceState,
 };
-
-/// What settling a launch's workspace reads of Shoal's state: the CLI asks
-/// the daemon, which reads its own.
-// Only Shoal's own crates implement and await it.
-#[allow(async_fn_in_trait)]
-pub trait LaunchReads {
-    /// The workspaces the caller sees.
-    async fn workspaces(&self) -> Result<Vec<Workspace>>;
-
-    /// Refuse what opening the existing branch `existing` in the repository
-    /// `repository` names would refuse, such as a local branch of its name
-    /// that does not track it.
-    async fn check_opens(
-        &self,
-        repository: &crate::repository::Selector,
-        existing: &str,
-    ) -> Result<()>;
-}
 
 /// The longest branch an issue names, and the most title words it takes.
 const BRANCH_NAME_LEN: usize = 32;

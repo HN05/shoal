@@ -9,10 +9,10 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
-use super::shape::Shape;
+use super::{ManagerReads, shape::Shape};
 use crate::{
     daemon::{scope::Caller, workspace::Manager},
-    launches::{self as fits, workspace::LaunchReads},
+    launches as fits,
     model::{Repository, SpaceKind, Workspace},
     start_plan::Creation,
 };
@@ -21,31 +21,6 @@ mod copy;
 mod plan;
 mod start;
 mod target;
-
-/// Shoal's state as a launch for `caller` reads it.
-pub(super) struct ManagerReads<'a> {
-    manager: &'a Manager,
-    caller: Option<&'a Caller>,
-}
-
-impl LaunchReads for ManagerReads<'_> {
-    async fn workspaces(&self) -> Result<Vec<Workspace>> {
-        let root = self.manager.reach_root(self.caller).await?;
-        self.manager.visible_workspaces(root.as_ref()).await
-    }
-
-    async fn check_opens(
-        &self,
-        repository: &crate::repository::Selector,
-        existing: &str,
-    ) -> Result<()> {
-        let options = crate::daemon::workspace::NewWorktreeOptions::default();
-        (self
-            .manager
-            .check_creation(repository, None, Some(existing), options))
-        .await
-    }
-}
 
 impl Manager {
     /// Start the agent of `launch`, which `source` made and `shape` starts
@@ -57,10 +32,7 @@ impl Manager {
         source: LaunchSource,
         caller: Option<&Caller>,
     ) -> Result<Launched> {
-        let reads = ManagerReads {
-            manager: self,
-            caller,
-        };
+        let reads = ManagerReads::new(self, caller);
         let (mut creation, copied) = self.launch_creation(&launch, caller).await?;
         let target =
             (self.workspace_target(&launch, &mut creation, copied.as_ref(), &reads)).await?;

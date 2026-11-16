@@ -2,16 +2,34 @@
 use anyhow::Result;
 
 use crate::{
-    cli::context::Context, client::workspaces::PlannedWorkspace, launches::workspace::LaunchReads,
-    model::Workspace,
+    cli::context::Context,
+    client::workspaces::PlannedWorkspace,
+    config::Effective,
+    launches::LaunchReads,
+    model::{Repository, Workspace},
+    protocol::ConfigTarget,
 };
 
 /// The daemon's state as this process reads it.
 pub(in crate::cli::commands) struct DaemonReads<'a>(pub &'a Context);
 
 impl LaunchReads for DaemonReads<'_> {
+    async fn repositories(&self) -> Result<Vec<Repository>> {
+        crate::client::repositories::list(&self.0.paths).await
+    }
+
     async fn workspaces(&self) -> Result<Vec<Workspace>> {
         crate::client::workspaces::list(&self.0.paths).await
+    }
+
+    /// The global config's settings read here, at launch, else the
+    /// repository layer the daemon reads over them.
+    async fn settings(&self, target: ConfigTarget) -> Result<Effective> {
+        match target {
+            ConfigTarget::Global => crate::config::Config::load_with_templates(&self.0.paths)?
+                .resolve(&Default::default()),
+            target => crate::config::settings(&self.0.paths, target).await,
+        }
     }
 
     async fn check_opens(
