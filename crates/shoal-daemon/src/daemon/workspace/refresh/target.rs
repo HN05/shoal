@@ -73,7 +73,7 @@ impl Manager {
         if let Some(copied) = &workspace.copied_from {
             return self.copy_target(workspace, copied, caller).await;
         }
-        let repo = self.repository(&workspace.repository_id).await?;
+        let repo = self.repository(workspace.repository()).await?;
         match (&workspace.branch, &workspace.at) {
             (Some(branch), _) => branch_target(&repo, workspace, branch).await,
             (None, Some(at)) => match &at.made_for {

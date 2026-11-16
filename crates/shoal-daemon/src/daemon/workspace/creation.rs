@@ -189,19 +189,16 @@ impl Manager {
             Some(given) => given.checked()?,
             None => SpaceName::derive(&name, "workspace"),
         };
-        let record = Workspace::new_record(
+        let mut workspace = Workspace::record(
+            id.unwrap_or_else(SpaceId::generate),
             repo.id.clone(),
             name,
             path,
             Some(branch),
             WorkspaceState::Preparing,
         );
-        let workspace = Workspace {
-            id: id.unwrap_or(record.id),
-            setup_skipped: options.skip_setup,
-            disposable: options.disposable,
-            ..record
-        };
+        workspace.setup_skipped = options.skip_setup;
+        workspace.disposable = options.disposable;
         let converted_mode = converts.as_ref().map(|converting| converting.mode.clone());
         let placement = match converts {
             Some(converting) => Placement::Replacing(Box::new(converting)),
@@ -336,7 +333,7 @@ impl Manager {
                 };
                 store::ensure_branch_available(
                     tx,
-                    &record.repository_id,
+                    record.repository(),
                     record.branch.as_ref().map(BranchName::as_str),
                     replaced,
                 )?;
@@ -362,7 +359,7 @@ impl Manager {
                         "Git worktree is already owned by {}; restore its recorded path", workspace.name);
                 }
                 let base_workspace = match &base_branch {
-                    Some(branch) => stack::owner(tx, &record.repository_id, branch)?,
+                    Some(branch) => stack::owner(tx, record.repository(), branch)?,
                     None => None,
                 };
                 // Recorded first, so the workspace's creation names it.
@@ -371,7 +368,7 @@ impl Manager {
                         !removing.reserved(parent),
                         "the space the workspace would go below is being removed"
                     );
-                    tree::ensure_parent(tx, Some(&record.repository_id), &record.id, parent)?;
+                    tree::ensure_parent(tx, record.repository_id.as_ref(), &record.id, parent)?;
                     tree::set_parent(tx, &record.id, Some(parent))?;
                 }
                 tx.execute(
@@ -401,7 +398,7 @@ impl Manager {
                     Placement::Below(_) => spaces::records::record(tx, &spaces::records::NewSpace {
                         id: &record.id,
                         kind: SpaceKind::Workspace,
-                        repository_id: Some(&record.repository_id),
+                        repository_id: record.repository_id.as_ref(),
                         name: &record.name,
                         number: record.number,
                         mode: record.mode.as_ref(),

@@ -7,7 +7,7 @@
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::scope_tokens::ScopeToken;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -20,7 +20,10 @@ use crate::{
         workspace::{self, Manager},
     },
     fsutil::off_runtime,
-    model::{Chat, Repository, SpaceKind, SpaceLinks, SpaceRef, Workspace, WorkspaceRef},
+    model::{
+        Chat, ChatPart, Repository, SpaceKind, SpaceLinks, SpaceRef, Workdir, Workspace,
+        WorkspaceRef,
+    },
     tmp_dirs,
 };
 use shoal_protocol::space_names::SpaceName;
@@ -70,8 +73,8 @@ impl Manager {
             origin: origin.clone(),
             parent: None,
         };
-        let repository = Some(workspace.repository_id.clone());
-        let chat = (self.record_new_chat(repository, Some(workspace_ref(&workspace)), new)).await?;
+        let repository = workspace.repository_id.clone();
+        let chat = (self.record_new_chat(repository, Some(&workspace), new)).await?;
         self.run_chat_agent(chat, origin).await
     }
 
@@ -101,7 +104,7 @@ impl Manager {
         let agent = crate::execution::TrackedAgent {
             name: chat.agent.clone().context("the chat names no agent")?,
             model: Default::default(),
-            mode: chat.mode.clone(),
+            mode: chat.agent_mode(),
             narrowing: chat.narrowing,
         };
         let id = started.plan.id.clone();
@@ -135,18 +138,17 @@ impl Manager {
         mut new: NewChat,
     ) -> Result<Chat> {
         new.name = new.name.checked()?;
-        let (repository, workspace) = match (workspace, repository) {
-            (Some(selector), _) => {
-                let workspace = self.chat_workspace(selector).await?;
-                (
-                    Some(workspace.repository_id.clone()),
-                    Some(workspace_ref(&workspace)),
-                )
-            }
-            (None, Some(repository)) => (Some(self.repository(repository).await?.id), None),
-            (None, None) => (None, None),
+        let workspace = match workspace {
+            Some(selector) => Some(self.chat_workspace(selector).await?),
+            None => None,
         };
-        self.record_new_chat(repository, workspace, new).await
+        let repository = match (&workspace, repository) {
+            (Some(workspace), _) => workspace.repository_id.clone(),
+            (None, Some(repository)) => Some(self.repository(repository).await?.id),
+            (None, None) => None,
+        };
+        self.record_new_chat(repository, workspace.as_ref(), new)
+            .await
     }
 
     /// Refuse the permissions `given` to a new chat in the repository or
@@ -162,7 +164,7 @@ impl Manager {
             return Ok(());
         };
         let repository = match place {
-            (_, Some(workspace)) => Some(self.chat_workspace(workspace).await?.repository_id),
+            (_, Some(workspace)) => self.chat_workspace(workspace).await?.repository_id,
             (Some(repository), None) => Some(self.repository(repository.clone()).await?.id),
             (None, None) => None,
         };
@@ -219,7 +221,7 @@ impl Manager {
     async fn record_new_chat(
         &self,
         repository: Option<RepositoryId>,
-        workspace: Option<WorkspaceRef>,
+        workspace: Option<&Workspace>,
         new: NewChat,
     ) -> Result<Chat> {
         let NewChat {
@@ -238,24 +240,25 @@ impl Manager {
             number: SpaceNumber::default(),
             repository_id: (home.repository.as_ref()).map(|repository| repository.id.clone()),
             name,
-            agent: Some(agent),
-            mode,
+            mode: Some(mode),
             narrowing,
-            workspace,
-            started_at,
-            tmp_dir: None,
-            root_dir: home.root_dir.clone(),
             running: false,
             links: SpaceLinks::default(),
             review: Vec::new(),
             holds: Vec::new(),
-            completion: None,
             agent_state: None,
             progress: None,
             sleep: None,
             asleep: None,
             parent: None,
             children: Vec::new(),
+            workdir: home.workdir(workspace)?,
+            part: ChatPart {
+                agent: Some(agent),
+                started_at,
+                tmp_dir: None,
+                completion: None,
+            },
         };
         self.record_chat(chat, home, parent, priority, origin).await
     }
@@ -276,7 +279,7 @@ impl Manager {
             },
             None => ChatHome {
                 repository: None,
-                root_dir: chat.root_dir.clone(),
+                root_dir: chat.workdir.root_dir().map(Into::into),
                 _registry: Some(self.gates.lock_registry().await),
             },
         };
@@ -390,8 +393,9 @@ impl Manager {
 
     /// `chat` with its agent, of which the store records `stored`.
     fn with_agent(&self, chat: Chat, stored: spaces::sessions::StoredAgents) -> Result<Chat> {
-        let agent = self.agent_from(&chat.id, stored)?;
-        Ok(Chat { agent, ..chat })
+        let mut chat = chat;
+        chat.agent = self.agent_from(&chat.id, stored)?;
+        Ok(chat)
     }
 
     /// The chats running or stopped in the worktree of the workspace `id`,
@@ -481,9 +485,9 @@ impl Manager {
     /// registered checkout, or the `root_dir` a chat without a repository
     /// started in.
     pub(crate) async fn chat_checkout_path(&self, chat: &Chat) -> Result<std::path::PathBuf> {
-        match (self.chat_repository(chat).await?, &chat.root_dir) {
+        match (self.chat_repository(chat).await?, chat.workdir.root_dir()) {
             (Some(repository), _) => Ok(repository.path),
-            (None, Some(root_dir)) => Ok(root_dir.clone()),
+            (None, Some(root_dir)) => Ok(root_dir.to_owned()),
             (None, None) => self.config().root_dir(&self.paths),
         }
     }
@@ -513,7 +517,7 @@ impl Manager {
         repository: Option<&Repository>,
         chat: &Chat,
     ) -> Result<Option<std::path::PathBuf>> {
-        (self.tmp_layout(repository, chat.root_dir.as_deref()))
+        (self.tmp_layout(repository, chat.workdir.root_dir()))
             .map(|layout| layout.prepare(&chat.id))
             .transpose()
     }
@@ -541,21 +545,32 @@ pub struct NewChat {
     pub priority: Option<shoal_schedule::priority::Priority>,
 }
 
-/// The reference a chat's record gives to the workspace it runs in.
-fn workspace_ref(workspace: &Workspace) -> WorkspaceRef {
-    WorkspaceRef {
-        id: workspace.id.clone(),
-        name: workspace.name.clone(),
-        branch: workspace.branch.clone(),
-    }
-}
-
 /// Where a new chat keeps its temporary directory, and the registry gate a
 /// chat without a repository is recorded under.
 struct ChatHome<'a> {
     repository: Option<Repository>,
     root_dir: Option<std::path::PathBuf>,
     _registry: Option<tokio::sync::MutexGuard<'a, ()>>,
+}
+
+impl ChatHome<'_> {
+    /// Where a chat here works: the worktree of `workspace` when given,
+    /// else the repository's checkout, else the `root_dir`.
+    fn workdir(&self, workspace: Option<&Workspace>) -> Result<Workdir> {
+        Ok(match (workspace, &self.repository, &self.root_dir) {
+            (Some(workspace), ..) => Workdir::Worktree {
+                workspace: workspace.reference(),
+                path: workspace.path.clone(),
+            },
+            (None, Some(repository), _) => Workdir::Checkout {
+                path: repository.path.clone(),
+            },
+            (None, None, Some(root_dir)) => Workdir::RootDir {
+                path: root_dir.clone(),
+            },
+            (None, None, None) => bail!("a chat without a repository needs a root_dir"),
+        })
+    }
 }
 
 /// Insert `chat` unless the repository or the workspace it runs in is being
@@ -566,7 +581,7 @@ fn insert(
     mut chat: Chat,
     parent: Option<(SpaceId, super::spaces::Removing)>,
 ) -> Result<Chat> {
-    let workspace = chat.workspace.as_ref().map(|workspace| &workspace.id);
+    let workspace = chat.workdir.workspace().map(|workspace| &workspace.id);
     ensure_place_free(tx, chat.repository_id.as_ref(), workspace)?;
     // Checked with the record, so a removal that began while the start
     // waited finds the chat below the parent or refuses it; recorded first,
@@ -581,7 +596,7 @@ fn insert(
         params![
             chat.id,
             workspace,
-            (chat.root_dir.as_deref()).map(|root| root.to_string_lossy().into_owned()),
+            (chat.workdir.root_dir()).map(|root| root.to_string_lossy().into_owned()),
         ],
     )?;
     chat.number = spaces::records::record(
@@ -592,7 +607,7 @@ fn insert(
             repository_id: chat.repository_id.as_ref(),
             name: &chat.name,
             number: SpaceNumber::default(),
-            mode: Some(&chat.mode),
+            mode: chat.mode.as_ref(),
             narrowing: &chat.narrowing,
             created_at: chat.started_at,
         },
@@ -650,7 +665,8 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
                     space.created_at AS started_at,repositories.workspaces_dir,
                     space_completion.record AS completion,
                     workspaces.id AS workspace_id,home.name AS workspace_name,
-                    workspaces.branch,space.number,space.mode,chats.root_dir,space.narrowing
+                    workspaces.branch,workspaces.path AS worktree,repositories.path AS checkout,
+                    space.number,space.mode,chats.root_dir,space.narrowing
              FROM chats JOIN spaces space ON space.id=chats.id
                 LEFT JOIN repositories ON repositories.id=space.repository_id
                 LEFT JOIN workspaces ON workspaces.id=chats.workspace_id
@@ -661,9 +677,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
     .query_map([], |row| {
         let id: SpaceId = row.get("id")?;
         let repository_id: Option<RepositoryId> = row.get("repository_id")?;
-        let root_dir = row
-            .get::<_, Option<String>>("root_dir")?
-            .map(std::path::PathBuf::from);
+        let root_dir = row.get::<_, Option<String>>("root_dir")?.map(PathBuf::from);
         let directory = row.get::<_, Option<String>>("workspaces_dir")?;
         let tmp_dir = match (&repository_id, directory) {
             (Some(repository_id), Some(directory)) => {
@@ -678,34 +692,28 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
             number: row.get("number")?,
             repository_id,
             name: row.get("name")?,
-            agent: None,
             mode: row.get("mode")?,
             narrowing: store::json_column(row, "narrowing")?.unwrap_or_default(),
-            workspace: match row.get::<_, Option<SpaceId>>("workspace_id")? {
-                Some(id) => Some(WorkspaceRef {
-                    id,
-                    name: row.get("workspace_name")?,
-                    branch: row.get("branch")?,
-                }),
-                None => None,
-            },
-            started_at: row.get("started_at")?,
-            tmp_dir,
-            root_dir,
             running: row.get("running")?,
             links: SpaceLinks::default(),
             review: Vec::new(),
             holds: Vec::new(),
-            // An unreadable record fails the cleanup that reads it, for that
-            // chat alone, rather than every listing of chats.
-            completion: (row.get::<_, Option<String>>("completion")?)
-                .and_then(|record| serde_json::from_str(&record).ok()),
             agent_state: None,
             progress: None,
             sleep: None,
             asleep: None,
             parent: None,
             children: Vec::new(),
+            workdir: workdir(row, root_dir)?,
+            part: ChatPart {
+                agent: None,
+                started_at: row.get("started_at")?,
+                tmp_dir,
+                // An unreadable record fails the cleanup that reads it, for
+                // that chat alone, rather than every listing of chats.
+                completion: (row.get::<_, Option<String>>("completion")?)
+                    .and_then(|record| serde_json::from_str(&record).ok()),
+            },
         })
     })?
     .collect::<rusqlite::Result<Vec<Chat>>>()?
@@ -723,6 +731,31 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
         Ok(chat)
     })
     .collect()
+}
+
+/// Where the chat of `row` works: the worktree it runs in, its repository's
+/// checkout, or the `root_dir` it started in.
+fn workdir(row: &rusqlite::Row<'_>, root_dir: Option<PathBuf>) -> rusqlite::Result<Workdir> {
+    if let Some(id) = row.get::<_, Option<SpaceId>>("workspace_id")? {
+        return Ok(Workdir::Worktree {
+            workspace: WorkspaceRef {
+                id,
+                name: row.get("workspace_name")?,
+                branch: row.get("branch")?,
+            },
+            path: PathBuf::from(row.get::<_, String>("worktree")?),
+        });
+    }
+    if let Some(checkout) = row.get::<_, Option<String>>("checkout")? {
+        return Ok(Workdir::Checkout {
+            path: PathBuf::from(checkout),
+        });
+    }
+    let path = root_dir.ok_or_else(|| {
+        let error = anyhow::anyhow!("a chat without a repository records no root_dir");
+        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Null, error.into())
+    })?;
+    Ok(Workdir::RootDir { path })
 }
 
 /// Delete the record of the chat `id`, just started, which never ran, since

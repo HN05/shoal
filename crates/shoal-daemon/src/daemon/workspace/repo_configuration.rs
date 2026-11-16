@@ -94,7 +94,7 @@ impl Manager {
         let Some(command) = kind.command(&settings) else {
             return Ok(None);
         };
-        let repository = self.repository(&workspace.repository_id).await?;
+        let repository = self.repository(workspace.repository()).await?;
         // The caller renders the hook's [env], whose caches only the daemon
         // creates, with the temporary directory, which is gone after removal.
         crate::caches::directories(&repository, &settings.caches)?;
@@ -140,7 +140,7 @@ impl Manager {
                 (file, None)
             }
         };
-        let layers = self.config_layers(&workspace.repository_id, file).await?;
+        let layers = self.config_layers(workspace.repository(), file).await?;
         let signing_secrets =
             (self.withheld_signing_secrets(workspace, &layers.local_config)).await;
         Ok(ConfigLayers {
@@ -161,10 +161,7 @@ impl Manager {
         workspace: &Workspace,
         local: &RepoConfig,
     ) -> BTreeSet<String> {
-        match self
-            .checkout_signing_secrets(&workspace.repository_id)
-            .await
-        {
+        match self.checkout_signing_secrets(workspace.repository()).await {
             Ok(signing) => signing,
             Err(error) => {
                 crate::daemon::log!(
@@ -406,7 +403,7 @@ impl Manager {
         settings: &Effective,
         with_tmp_dir: bool,
     ) -> Result<BTreeMap<String, std::ffi::OsString>> {
-        let repository = self.repository(&workspace.repository_id).await?;
+        let repository = self.repository(workspace.repository()).await?;
         let ports = self
             .list_ports(Some(&SpaceSelector::id(&workspace.id)))
             .await?;

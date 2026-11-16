@@ -37,7 +37,7 @@ impl Manager {
         if matches!(target, Target::DefaultBranch) {
             self.sync_default_branch(&workspace).await;
         }
-        let (repo, _git) = self.lock_repository(&workspace.repository_id).await?;
+        let (repo, _git) = self.lock_repository(workspace.repository()).await?;
         let reserved = self
             .reserve_lifecycle(&workspace.id, WorkspaceState::Updating)
             .await?;
@@ -62,7 +62,7 @@ impl Manager {
     /// failure for status to show, after which the refresh goes on with the
     /// local default branch as the checkout has it.
     async fn sync_default_branch(&self, workspace: &Workspace) {
-        let repository = (&workspace.repository_id).into();
+        let repository = (workspace.repository()).into();
         if let Err(error) = self.sync_repository(&repository).await {
             log!(
                 "refresh of {} goes on with the local default branch: {error:#}",

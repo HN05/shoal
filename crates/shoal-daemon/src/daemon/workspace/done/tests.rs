@@ -18,7 +18,7 @@ async fn completion_without_a_hook_allows_concurrent_resource_hooks() {
     let (_root, manager, workspace) = fixture().await;
     manager
         .write_local_config(
-            &workspace.repository_id,
+            workspace.repository(),
             Some("[cleanup.done]\nenabled = false\n".into()),
         )
         .await
@@ -37,7 +37,7 @@ async fn completion_without_a_hook_allows_concurrent_resource_hooks() {
         .unwrap();
     manager
         .write_local_config(
-            &workspace.repository_id,
+            workspace.repository(),
             Some("hooks.post_done = '/usr/bin/true'\n[cleanup.done]\nenabled = false\n".into()),
         )
         .await
@@ -81,7 +81,7 @@ async fn completion_without_a_hook_allows_concurrent_resource_hooks() {
 #[tokio::test]
 async fn completion_persists_and_cleanup_overrides_the_repository_default() {
     let (_root, manager, workspace) = fixture().await;
-    let repo = manager.repository(&workspace.repository_id).await.unwrap();
+    let repo = manager.repository(workspace.repository()).await.unwrap();
     assert!(
         manager
             .mark_done(
@@ -156,7 +156,7 @@ async fn repeating_an_unchanged_completion_is_refused() {
     let (_root, manager, workspace) = fixture().await;
     manager
         .write_local_config(
-            &workspace.repository_id,
+            workspace.repository(),
             Some("[cleanup.done]\nenabled = false\n".into()),
         )
         .await
@@ -251,7 +251,7 @@ async fn repeating_a_completion_reruns_a_configured_hook() {
     );
     manager
         .write_local_config(
-            &workspace.repository_id,
+            workspace.repository(),
             Some(format!(
                 "hooks.post_done = '{}'\n[cleanup.done]\nenabled = false\n",
                 hook.display()
@@ -298,7 +298,7 @@ async fn completion_without_cleanup_blocks_idle_and_pr_cleanup_until_requested()
     let (_root, manager, workspace) = fixture().await;
     manager
         .write_local_config(
-            &workspace.repository_id,
+            workspace.repository(),
             Some("[cleanup.done]\nenabled = false\n".into()),
         )
         .await
@@ -406,7 +406,7 @@ async fn completion_retains_dirty_unpushed_and_newer_work() {
     reopened.sweep_completed().await.unwrap();
     assert!(!workspace.path.exists());
     // A branch whose commits a remote has goes with the workspace.
-    let repo = reopened.repository(&workspace.repository_id).await.unwrap();
+    let repo = reopened.repository(workspace.repository()).await.unwrap();
     assert_eq!(git(&repo.path, &["branch", "--list", "finished"]), "");
     reopened.store.shutdown().await;
 }
@@ -425,7 +425,7 @@ async fn completion_rechecks_work_after_removal_hooks() {
     install_test_script(&hook, "#!/bin/sh\nprintf 'preserve me' > new-work\n");
     manager
         .write_local_config(
-            &workspace.repository_id,
+            workspace.repository(),
             Some(format!("hooks.pre_remove = '{}'\n", hook.display())),
         )
         .await
@@ -450,7 +450,7 @@ async fn completion_rechecks_work_after_removal_hooks() {
 async fn a_removal_holds_only_its_own_workspaces_gate() {
     let (root, manager, workspace) = fixture().await;
     let other = manager
-        .create_workspace(&workspace.repository_id, "other".into(), None, None, None)
+        .create_workspace(workspace.repository(), "other".into(), None, None, None)
         .await
         .unwrap();
     let (started, release) = (root.path().join("started"), root.path().join("release"));
@@ -465,7 +465,7 @@ async fn a_removal_holds_only_its_own_workspaces_gate() {
     );
     manager
         .write_local_config(
-            &workspace.repository_id,
+            workspace.repository(),
             Some(format!("hooks.pre_remove = '{}'\n", hook.display())),
         )
         .await
@@ -821,7 +821,7 @@ async fn completion_cleans_up_commits_the_start_branch_took_unchanged() {
     manager.sweep_completed().await.unwrap();
     assert!(!workspace.path.exists());
     // Neither a remote nor the default branch has its commits.
-    let repo = manager.repository(&workspace.repository_id).await.unwrap();
+    let repo = manager.repository(workspace.repository()).await.unwrap();
     assert_ne!(git(&repo.path, &["branch", "--list", "part"]), "");
 }
 
@@ -863,7 +863,7 @@ async fn completion_retains_commits_the_start_branch_took_adapted() {
     );
     manager.sweep_completed().await.unwrap();
     assert!(!workspace.path.exists());
-    let repo = manager.repository(&workspace.repository_id).await.unwrap();
+    let repo = manager.repository(workspace.repository()).await.unwrap();
     assert_ne!(git(&repo.path, &["branch", "--list", "part"]), "");
 }
 
@@ -944,7 +944,7 @@ async fn stacked_fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace, Works
     let (root, manager, base) = fixture().await;
     let workspace = manager
         .create_workspace(
-            &base.repository_id,
+            base.repository(),
             "part".into(),
             base.branch.clone().map(String::from),
             None,
@@ -1073,7 +1073,7 @@ async fn a_parents_completion_takes_its_unheld_children_whatever_their_work() {
         assert!(!gone.path.exists(), "{}", gone.name);
     }
     // Its commit stays on the kept branch, its unsaved file in a checkpoint.
-    let repo = manager.repository(&parent.repository_id).await.unwrap();
+    let repo = manager.repository(parent.repository()).await.unwrap();
     assert_eq!(
         git(&repo.path, &["branch", "--list", "dirty"]).trim(),
         "dirty"
@@ -1110,7 +1110,7 @@ async fn a_held_parents_completion_takes_the_chats_below_it_deepest_first() {
             parent: Some(above),
         };
         let chat = manager
-            .start_new_chat(Some(parent.repository_id.clone().into()), None, start)
+            .start_new_chat(Some(parent.repository().clone().into()), None, start)
             .await
             .unwrap();
         let chat = manager.run_chat_agent(chat, None).await.unwrap();
@@ -1151,7 +1151,7 @@ async fn children_stay_while_their_parents_completion_does_not_stand() {
     // Without cleanup the completion leaves them.
     manager
         .write_local_config(
-            &parent.repository_id,
+            parent.repository(),
             Some("[cleanup.done]\nenabled = false\n".into()),
         )
         .await
@@ -1228,7 +1228,7 @@ async fn an_unreadable_ancestor_completion_leaves_other_completions_to_their_cle
         .await
         .unwrap();
     let other = manager
-        .create_workspace(&parent.repository_id, "other".into(), None, None, None)
+        .create_workspace(parent.repository(), "other".into(), None, None, None)
         .await
         .unwrap();
     manager
@@ -1389,7 +1389,7 @@ async fn a_summary_ends_the_notice_and_each_done_replaces_it() {
     let (_root, manager, workspace) = fixture().await;
     manager
         .write_local_config(
-            &workspace.repository_id,
+            workspace.repository(),
             Some("[cleanup.done]\nenabled = false\n".into()),
         )
         .await

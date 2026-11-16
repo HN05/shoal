@@ -37,9 +37,10 @@ pub(super) async fn source(ctx: &Context, args: CopyArgs) -> Result<Option<Copie
         .find(|workspace| selector.selects(&workspace.id, workspace.number));
     let (workspace, repository, named) = match live {
         Some(workspace) => (
-            workspace.id,
-            workspace.repository_id,
+            workspace.id.clone(),
+            workspace.repository().clone(),
             workspace
+                .part
                 .branch
                 .map_or_else(|| workspace.name.to_string(), String::from),
         ),

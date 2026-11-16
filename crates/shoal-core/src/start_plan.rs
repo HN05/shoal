@@ -200,7 +200,7 @@ pub fn queued_agent_request(
     plan.creation.pr = pr;
     Ok(QueueRequest {
         priority: None,
-        repository: (&workspace.repository_id).into(),
+        repository: workspace.repository().into(),
         name: workspace.name.clone(),
         agent,
         mode: plan.mode.clone(),
@@ -280,7 +280,7 @@ impl AddPlan {
             source: _,
         } = launch;
         Ok(Self {
-            repository: (&workspace.repository_id).into(),
+            repository: workspace.repository().into(),
             creation: Creation {
                 existing: workspace.branch.clone().map(String::from),
                 ..Default::default()
@@ -314,7 +314,7 @@ impl AddPlan {
             || crate::git::strip_local(existing) == Some(branch.as_str())
             || existing.ends_with(&format!("/{branch}"));
         self.workspace.as_ref().is_none_or(|id| *id == workspace.id)
-            && self.repository.value() == workspace.repository_id
+            && self.repository.value() == *workspace.repository()
             && self.creation.branch.is_none()
             && self.creation.path.is_none()
             && names_branch

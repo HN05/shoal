@@ -85,7 +85,7 @@ async fn a_copy_takes_its_sources_files_again_and_keeps_what_it_had() {
     let output = fs::read_to_string(copy.path.join("build/output")).unwrap();
     assert_eq!(output, "ignored\n");
     assert_eq!(git(&copy.path, &["rev-parse", "copy"]).trim(), committed);
-    let now = refreshed.workspace.copied_from.unwrap();
+    let now = refreshed.workspace.part.copied_from.unwrap();
     assert_ne!(now.starting_checkpoint, started.starting_checkpoint);
     assert_eq!(now.head, committed);
     // A checkpoint still keeps what it had, which restore returns to.

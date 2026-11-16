@@ -13,7 +13,10 @@ fn workspace(index: usize) -> Value {
     json!({
         "id": index.to_string(), "repository_id": "repo",
         "name": format!("workspace-{index:02}"), "path": "/unused",
-        "branch": "branch", "state": "ready"
+        "branch": "branch", "state": "ready",
+        "workdir": {"kind": "worktree", "path": "/unused", "workspace": {
+            "id": index.to_string(), "name": format!("workspace-{index:02}"), "branch": "branch",
+        }},
     })
 }
 

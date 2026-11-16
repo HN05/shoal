@@ -421,10 +421,8 @@ async fn a_chats_lost_report_counts_only_from_the_agent_it_runs() {
     // A restore runs another agent.
     manager.end_executions(&chat.id).await;
     let chat = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
-    let restored = crate::model::Chat {
-        agent: Some("claude".into()),
-        ..chat.clone()
-    };
+    let mut restored = chat.clone();
+    restored.agent = Some("claude".into());
     manager.run_chat_agent(restored, None).await.unwrap();
     manager.recover_lost_reports().await;
 

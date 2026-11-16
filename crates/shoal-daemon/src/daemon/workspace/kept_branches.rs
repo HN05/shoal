@@ -67,7 +67,7 @@ impl Manager {
         else {
             return Ok(());
         };
-        let repo = self.repository(&workspace.repository_id).await?;
+        let repo = self.repository(workspace.repository()).await?;
         let default = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)
             .await
             .ok();
@@ -315,8 +315,8 @@ impl Manager {
             .list_workspaces()
             .await?
             .into_iter()
-            .filter(|workspace| workspace.repository_id == *repository_id)
-            .filter_map(|workspace| workspace.branch)
+            .filter(|workspace| workspace.repository() == repository_id)
+            .filter_map(|workspace| workspace.part.branch)
             .collect())
     }
 }

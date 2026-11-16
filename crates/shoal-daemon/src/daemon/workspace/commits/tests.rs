@@ -91,7 +91,7 @@ async fn a_workspace_at_a_commit_has_no_branch_and_is_named_after_its_start() {
     assert_eq!(tagged.name, "v1.4.0");
     assert_eq!(tagged.directory_name(), "v1-4-0");
     assert_eq!(
-        tagged.at.unwrap().made_for,
+        tagged.at.clone().unwrap().made_for,
         Some(MadeFor::Ref("v1.4.0".into()))
     );
     assert_eq!(head(&tagged.path).0, first);
@@ -105,7 +105,7 @@ async fn a_workspace_at_a_commit_has_no_branch_and_is_named_after_its_start() {
     .await
     .unwrap();
     assert_eq!(bare.name, first[..7]);
-    assert_eq!(bare.at.unwrap().made_for, None);
+    assert_eq!(bare.part.at.unwrap().made_for, None);
 }
 
 #[tokio::test]
@@ -189,7 +189,7 @@ async fn a_pr_head_is_fetched_from_the_ref_its_forge_serves() {
     let workspace = create(&manager, &repo.id, None, pull(&fork)).await.unwrap();
     assert_eq!(workspace.name, "pr-812");
     assert_eq!(
-        workspace.at.unwrap().made_for,
+        workspace.at.clone().unwrap().made_for,
         Some(MadeFor::Pr(PullNumber::new(812)))
     );
     assert_eq!(head(&workspace.path), (fork, String::new()));
@@ -221,7 +221,7 @@ async fn a_child_at_its_parents_branch_starts_at_the_parents_commit_without_stac
     .unwrap();
     assert_eq!(head(&child.path).0, head(&parent.path).0);
     assert_eq!(
-        child.parent.map(|parent| parent.id),
+        child.parent.clone().map(|parent| parent.id),
         Some(parent.id.clone())
     );
     assert_eq!(child.base_workspace, None);
@@ -448,7 +448,7 @@ async fn a_prs_workspace_is_reused_and_moved_to_its_new_head_unless_it_has_work(
     let second = push_head("second");
     let moved = open(second.clone()).await.unwrap();
     assert_eq!(moved.workspace.id, opened.workspace.id);
-    assert_eq!(moved.workspace.at.unwrap().commit, second);
+    assert_eq!(moved.workspace.at.clone().unwrap().commit, second);
     assert_eq!(
         moved.workspace.base_commit.as_ref().map(CommitId::as_str),
         Some(second.as_str())

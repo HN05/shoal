@@ -43,7 +43,7 @@ impl Scoping {
         let own = crate::env::own_space();
         let home = (spaces.chats.iter())
             .find(|chat| own.as_ref() == Some(&chat.id))
-            .and_then(|chat| chat.workspace.as_ref())
+            .and_then(|chat| chat.workdir.workspace())
             .map(|workspace| workspace.id.clone());
         every
             .filter(|space| Some(space.id()) != own.as_ref() && Some(space.id()) != home.as_ref())

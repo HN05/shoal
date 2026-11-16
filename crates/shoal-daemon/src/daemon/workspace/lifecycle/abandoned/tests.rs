@@ -33,7 +33,7 @@ async fn a_removal_the_daemon_stopped_fails_its_workspace_for_shoal_rm() {
     let failed = manager.workspace_by_id(&workspace.id).await.unwrap();
     assert_eq!(failed.state, WorkspaceState::Failed);
     let hint = format!("shoal rm {}", workspace.number);
-    assert!(failed.error.unwrap().contains(&hint));
+    assert!(failed.part.error.unwrap().contains(&hint));
     assert_eq!(
         removal_entries(&manager, &selector).await,
         [
@@ -76,7 +76,7 @@ async fn a_removal_whose_work_ends_early_fails_its_workspace() {
 
     assert_eq!(failed.state, WorkspaceState::Failed);
     let hint = format!("shoal rm {}", workspace.number);
-    assert!(failed.error.unwrap().contains(&hint));
+    assert!(failed.part.error.unwrap().contains(&hint));
     // It ended before it began its work, which records the start.
     assert_eq!(
         removal_entries(&manager, &selector).await,

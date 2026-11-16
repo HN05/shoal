@@ -62,7 +62,7 @@ impl<'a> Listed<'a> {
 
     fn repository(&self) -> Option<&'a RepositoryId> {
         match self {
-            Self::Workspace(workspace) => Some(&workspace.repository_id),
+            Self::Workspace(workspace) => workspace.repository_id.as_ref(),
             Self::Chat(chat) => chat.repository_id.as_ref(),
             Self::Queued(entry) => entry.repository_id.as_ref(),
         }

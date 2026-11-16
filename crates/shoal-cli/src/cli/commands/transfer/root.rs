@@ -203,14 +203,14 @@ async fn retrust(ctx: &Context, before: &Registrations) {
         let paths: Vec<_> = before
             .workspaces
             .iter()
-            .filter(|workspace| workspace.repository_id == old.id)
+            .filter(|workspace| workspace.repository() == &old.id)
             .map(|workspace| workspace.path.clone())
             .collect();
         agents::cleanup_moved_trust(ctx, old, &paths).await;
         for workspace in after
             .workspaces
             .iter()
-            .filter(|workspace| workspace.repository_id == old.id)
+            .filter(|workspace| workspace.repository() == &old.id)
         {
             agents::trust_saved(ctx, workspace).await;
         }

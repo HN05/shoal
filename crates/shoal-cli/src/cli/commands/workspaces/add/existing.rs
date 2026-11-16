@@ -52,7 +52,7 @@ pub(in crate::cli::commands) async fn start_worker(
         .await?
         .workspace;
     let target = AddTarget {
-        selector: (&workspace.repository_id).into(),
+        selector: (workspace.repository()).into(),
         repositories: tokio::sync::OnceCell::new(),
     };
     let blockers = named_blockers(ctx, &target, &options.blockers).await?;
@@ -147,7 +147,7 @@ fn worker_plan(
     args: Vec<OsString>,
 ) -> AddPlan {
     AddPlan {
-        repository: (&workspace.repository_id).into(),
+        repository: (workspace.repository()).into(),
         creation: Creation {
             existing: workspace.branch.clone().map(String::from),
             options: CreationOptions {

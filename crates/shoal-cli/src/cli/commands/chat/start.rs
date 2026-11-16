@@ -261,7 +261,7 @@ pub(in crate::cli::commands) async fn workspace_repository(
     crate::client::repositories::list(&ctx.paths)
         .await?
         .into_iter()
-        .find(|repo| repo.id == workspace.repository_id)
+        .find(|repo| repo.id == *workspace.repository())
         .with_context(|| format!("the repository of workspace {} is missing", workspace.name))
 }
 

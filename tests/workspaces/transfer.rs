@@ -407,7 +407,7 @@ fn move_ssh_takes_the_chat_in_a_workspace_with_it() {
     assert_eq!(here.ok(&["list", "--chats"]), serde_json::json!([]));
     let chats = there.ok(&["list", "--chats"]);
     assert_eq!(
-        (&chats[0]["id"], &chats[0]["workspace"]["id"]),
+        (&chats[0]["id"], &chats[0]["workdir"]["workspace"]["id"]),
         (&chat["id"], &workspace["id"]),
         "{chats}"
     );
@@ -1354,7 +1354,7 @@ fn a_workspace_moves_with_the_chat_in_its_worktree() {
     assert_eq!(
         (
             &chats[0]["id"],
-            &chats[0]["workspace"]["id"],
+            &chats[0]["workdir"]["workspace"]["id"],
             &chats[0]["running"]
         ),
         (&chat["id"], &workspace["id"], &Value::from(false)),

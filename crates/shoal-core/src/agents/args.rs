@@ -162,7 +162,8 @@ pub fn chat_dir_args(
 /// The directory of the global config beside `home` when `chat` sets it up,
 /// as a setup chat without a repository does.
 fn global_config_dir(chat: &Chat, home: &Path) -> Option<PathBuf> {
-    let sets_up_global = chat.mode == modes::ModeName::SETUP && chat.repository_id.is_none();
+    let sets_up_global =
+        chat.mode.as_ref() == Some(&modes::ModeName::SETUP) && chat.repository_id.is_none();
     sets_up_global
         .then(|| launch_config_dir(&Config::path_for_home(home)))
         .flatten()

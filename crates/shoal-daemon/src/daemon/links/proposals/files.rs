@@ -119,7 +119,7 @@ impl Manager {
         match &request.repository_id {
             Some(repository) => Some(repository.clone()),
             None => (self.workspace_by_id(&request.space_id).await.ok())
-                .map(|workspace| workspace.repository_id),
+                .and_then(|workspace| workspace.repository_id),
         }
     }
 

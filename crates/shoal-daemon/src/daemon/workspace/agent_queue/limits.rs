@@ -488,7 +488,7 @@ impl Manager {
                 self.list_workspaces()
                     .await?
                     .into_iter()
-                    .map(|workspace| workspace.path),
+                    .map(|workspace| workspace.part.path),
             )
             .collect())
     }

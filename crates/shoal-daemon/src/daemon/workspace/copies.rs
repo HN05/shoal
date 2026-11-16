@@ -338,20 +338,18 @@ impl Manager {
             commit: source.head.clone(),
             made_for: None,
         });
-        let record = Workspace {
-            base_commit: ((source.base_commit.clone()).or_else(|| Some(source.head.clone()))),
-            base_ref: source.base_ref.clone(),
-            at,
-            setup_skipped: new.options.skip_setup,
-            disposable: new.options.disposable,
-            ..Workspace::new_record(
-                repo.id.clone(),
-                name,
-                path,
-                branch.clone(),
-                WorkspaceState::Preparing,
-            )
-        };
+        let mut record = Workspace::new_record(
+            repo.id.clone(),
+            name,
+            path,
+            branch.clone(),
+            WorkspaceState::Preparing,
+        );
+        record.base_commit = (source.base_commit.clone()).or_else(|| Some(source.head.clone()));
+        record.base_ref = source.base_ref.clone();
+        record.at = at;
+        record.setup_skipped = new.options.skip_setup;
+        record.disposable = new.options.disposable;
         let base_branch = branch.and(source.base_branch.clone());
         self.insert_workspace(record, base_branch, new.parent.clone(), chosen)
             .await
@@ -487,13 +485,13 @@ impl Manager {
 /// `workspace` as a copy starts from it at `head` with `files`.
 fn live_source(workspace: Workspace, head: CommitId, files: SourceFiles) -> Source {
     Source {
+        repository_id: workspace.repository().clone(),
         workspace_id: workspace.id,
-        repository_id: workspace.repository_id,
         name: workspace.name.into(),
-        branch: workspace.branch,
-        base_ref: workspace.base_ref,
-        base_commit: workspace.base_commit,
-        base_branch: (workspace.base_workspace.and_then(|base| base.branch)),
+        branch: workspace.part.branch,
+        base_ref: workspace.part.base_ref,
+        base_commit: workspace.part.base_commit,
+        base_branch: (workspace.part.base_workspace.and_then(|base| base.branch)),
         head,
         files,
     }

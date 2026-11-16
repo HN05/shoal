@@ -64,7 +64,8 @@ fn a_chat_in_a_workspace_names_the_workspace() {
     let chat: crate::model::Chat = serde_json::from_value(serde_json::json!({
         "id": "c", "repository_id": "r1", "name": "worker-chat", "agent": "claude",
         "running": true, "started_at": 0,
-        "workspace": {"id": "w", "name": "worker", "branch": "worker"},
+        "workdir": {"kind": "worktree", "path": "/worker",
+                    "workspace": {"id": "w", "name": "worker", "branch": "worker"}},
     }))
     .unwrap();
     let inbox = Inbox {
@@ -81,6 +82,7 @@ fn a_chat_in_a_workspace_names_the_workspace() {
 #[test]
 fn a_chat_item_shows_its_mode_in_its_own_column() {
     let chat: crate::model::Chat = serde_json::from_value(serde_json::json!({
+        "workdir": {"kind": "checkout", "path": "/repo"},
         "id": "c", "repository_id": "r1", "name": "repo-plan-7", "agent": "claude",
         "mode": "plan", "running": true, "started_at": 0,
     }))
@@ -98,6 +100,7 @@ fn a_chat_item_shows_its_mode_in_its_own_column() {
 fn a_running_chat_whose_agent_needs_input_is_listed() {
     let chat = |id: &str, state: &str, running: bool| -> crate::model::Chat {
         serde_json::from_value(serde_json::json!({
+            "workdir": {"kind": "checkout", "path": "/repo"},
             "id": id, "repository_id": "r1", "name": id, "agent": "claude",
             "running": running, "started_at": 0,
             "agent_state": {"state": state, "since": 0},
@@ -123,6 +126,7 @@ fn a_running_chat_whose_agent_needs_input_is_listed() {
 fn a_chat_shoal_brings_back_is_listed_asleep_with_what_wakes_it() {
     let chat = |id: &str, asleep: serde_json::Value| -> crate::model::Chat {
         serde_json::from_value(serde_json::json!({
+            "workdir": {"kind": "checkout", "path": "/repo"},
             "id": id, "number": 4, "repository_id": "r1", "name": id, "agent": "claude",
             "running": true, "started_at": 0, "asleep": asleep,
         }))
@@ -157,6 +161,7 @@ fn marks_wait_in_the_inbox_only_while_their_agent_is_not_working() {
     let agent = |state: &str| serde_json::json!({"state": state, "since": 0});
     let workspace = |id: &str, state: &str| -> crate::model::Workspace {
         let mut workspace: crate::model::Workspace = serde_json::from_value(serde_json::json!({
+            "workdir": {"kind": "worktree", "path": "/w", "workspace": {"id": id, "name": id, "branch": id}},
             "id": id, "repository_id": "r1", "name": id, "path": "/w", "branch": id,
             "state": "ready", "agent_state": agent(state),
         }))
@@ -166,6 +171,7 @@ fn marks_wait_in_the_inbox_only_while_their_agent_is_not_working() {
     };
     let chat = |id: &str, state: &str| -> crate::model::Chat {
         let mut chat: crate::model::Chat = serde_json::from_value(serde_json::json!({
+            "workdir": {"kind": "checkout", "path": "/repo"},
             "id": id, "repository_id": "r1", "name": id, "agent": "claude",
             "running": true, "started_at": 0, "agent_state": agent(state),
         }))

@@ -41,6 +41,7 @@ pub(in crate::cli::commands) async fn edit(
         crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
             .await?
             .workspace
+            .part
             .path
             .into(),
     );

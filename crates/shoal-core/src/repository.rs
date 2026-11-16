@@ -327,7 +327,7 @@ pub fn at_root<'a>(
     }
     (workspaces.iter())
         .find(|workspace| workspace.path == root)
-        .map(|workspace| &workspace.repository_id)
+        .map(|workspace| workspace.repository())
 }
 
 /// The selector `value` names: a path, canonical once it exists, else a

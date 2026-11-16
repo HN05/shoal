@@ -90,7 +90,7 @@ impl Manager {
             .list_workspaces()
             .await?
             .into_iter()
-            .map(|w| w.path)
+            .map(|w| w.part.path)
             .collect();
         let seed = crate::seed::Layout::new(root, &repo.id);
         let verified_seed = crate::daemon::seed::is_seed_worktree(repo, &seed)

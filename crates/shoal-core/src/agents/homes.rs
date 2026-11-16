@@ -166,7 +166,7 @@ impl HomeRecords {
                 repository,
                 workspace,
             } => {
-                let home = match (workspace, repository, &chat.root_dir) {
+                let home = match (workspace, repository, chat.workdir.root_dir()) {
                     (Some(workspace), ..) => ChatHome::Workspace(workspace),
                     (None, Some(repository), _) => ChatHome::Checkout(repository),
                     (None, None, Some(root)) => ChatHome::Root(root),

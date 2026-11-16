@@ -626,7 +626,7 @@ async fn requested_candidacy(
         Err(reason) => reason,
     };
     if let Some(workspace) = space.worktree()
-        && !manager.default_branch_fresh(&workspace.repository_id).await
+        && !manager.default_branch_fresh(workspace.repository()).await
     {
         return Ok(Err(reason));
     }

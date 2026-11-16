@@ -1656,7 +1656,11 @@ fn a_workspace_agent_starts_a_chat_in_its_own_worktree() {
     assert!(reader.status.success(), "{}", printed(&reader));
     let chats = fixture.ok(&["list", "--chats"]);
     assert_eq!(chats[0]["parent"]["id"], parent.as_str(), "{chats}");
-    assert_eq!(chats[0]["workspace"]["id"], parent.as_str(), "{chats}");
+    assert_eq!(
+        chats[0]["workdir"]["workspace"]["id"],
+        parent.as_str(),
+        "{chats}"
+    );
 }
 
 /// A chat between two workspaces decides for and coordinates the workspace
@@ -1868,7 +1872,7 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
     let chats = fixture.ok(&["list", "--chats"]);
     let chat = &chats[0];
     assert_eq!(chat["name"], "worker chat", "{chats}");
-    assert_eq!(chat["workspace"]["name"], "worker", "{chats}");
+    assert_eq!(chat["workdir"]["workspace"]["name"], "worker", "{chats}");
     let id = chat["id"].as_str().unwrap();
     assert_eq!(fs::read_to_string(home.join("chat-id")).unwrap().trim(), id);
 

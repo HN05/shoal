@@ -434,7 +434,8 @@ fn a_chat_in_a_workspace_shows_the_workspace() {
     let chat: Chat = serde_json::from_value(serde_json::json!({
         "id": "c", "number": 4, "repository_id": "a", "name": "worker-chat", "agent": "claude",
         "running": true, "started_at": 0,
-        "workspace": {"id": "w", "name": "worker", "branch": "worker"},
+        "workdir": {"kind": "worktree", "path": "/worker",
+                    "workspace": {"id": "w", "name": "worker", "branch": "worker"}},
     }))
     .unwrap();
     let plain = Palette::stdout(true);
@@ -449,6 +450,7 @@ fn a_chat_in_a_workspace_shows_the_workspace() {
 fn a_chat_shows_its_agents_turn_state_with_its_marker() {
     let chat = |agent_state: serde_json::Value, running: bool| -> Chat {
         serde_json::from_value(serde_json::json!({
+            "workdir": {"kind": "checkout", "path": "/repo"},
             "id": "c", "number": 4, "repository_id": "a", "name": "talk", "agent": "claude",
             "running": running, "started_at": 0, "agent_state": agent_state,
         }))
@@ -482,7 +484,8 @@ fn spaces_show_a_mode_other_than_their_kinds_usual_one() {
     let chat: Chat = serde_json::from_value(serde_json::json!({
         "id": "c", "number": 4, "repository_id": "a", "name": "repo-plan-7", "agent": "claude",
         "mode": "plan", "running": true, "started_at": 0,
-        "workspace": {"id": "w", "name": "worker", "branch": "worker"},
+        "workdir": {"kind": "worktree", "path": "/worker",
+                    "workspace": {"id": "w", "name": "worker", "branch": "worker"}},
     }))
     .unwrap();
     let mut worker = workspace("a", "worker", "worker", WorkspaceState::Ready);

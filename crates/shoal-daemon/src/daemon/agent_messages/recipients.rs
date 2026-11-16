@@ -120,7 +120,7 @@ impl Manager {
         let mut workspaces = self.list_workspaces_within(below).await?;
         workspaces.retain(|workspace| {
             Some(&workspace.id) != below
-                && repository.is_none_or(|repository| *repository == workspace.repository_id)
+                && repository.is_none_or(|repository| repository == workspace.repository())
                 && workspace.state != WorkspaceState::Removing
         });
         Ok(workspaces)

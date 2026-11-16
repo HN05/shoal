@@ -269,7 +269,7 @@ async fn a_chat_lists_no_demos_of_its_own() {
     let (first, _) = workspaces(&manager, temp.path()).await;
     let chat = manager
         .start_chat(
-            first.repository_id.clone().into(),
+            first.repository().clone().into(),
             "planning".into(),
             "claude".into(),
             None,

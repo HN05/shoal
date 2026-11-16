@@ -269,6 +269,7 @@ fn a_copy_of_the_guidance_opening_repeats_it() {
 
 fn workspace() -> crate::model::Workspace {
     serde_json::from_value(serde_json::json!({
+        "workdir": {"kind": "worktree", "path": "/work/topic", "workspace": {"id": "id", "name": "topic", "branch": "topic"}},
         "id": "id", "repository_id": "repo", "name": "topic", "branch": "topic",
         "path": "/work/topic", "state": "ready", "created_at": 0, "updated_at": 0,
     }))

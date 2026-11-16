@@ -7,9 +7,13 @@ fn chat(name: &str, workspace: Option<&str>) -> Chat {
     serde_json::from_value(serde_json::json!({
         "id": name, "repository_id": "repo", "name": name, "agent": "claude",
         "started_at": 0, "session": "session",
-        "workspace": workspace.map(|workspace| serde_json::json!({
-            "id": workspace, "name": workspace, "branch": workspace,
-        })),
+        "workdir": match workspace {
+            Some(workspace) => serde_json::json!({
+                "kind": "worktree", "path": format!("/{workspace}"),
+                "workspace": {"id": workspace, "name": workspace, "branch": workspace},
+            }),
+            None => serde_json::json!({"kind": "checkout", "path": "/repo"}),
+        },
     }))
     .unwrap()
 }
@@ -85,6 +89,7 @@ fn a_child_sharing_its_parents_name_is_not_taken_as_exported() {
 fn a_batch_ends_the_chats_that_go_with_a_space_with_it_and_spaces_below_first() {
     let below = |id, kind| space(id, id, kind);
     let child: Chat = serde_json::from_value(serde_json::json!({
+        "workdir": {"kind": "checkout", "path": "/repo"},
         "id": "child", "repository_id": "repo", "name": "child", "agent": "claude",
         "started_at": 0, "session": "session",
         "parent": below("worker", SpaceKind::Workspace),

@@ -466,7 +466,7 @@ async fn a_subject_resumes_its_session_and_another_subject_starts_one() {
 async fn a_gate_run_in_the_repository_directory_holds_back_its_move_and_removal() {
     let fixture = fixture().await;
     let manager = &fixture.manager;
-    let repository = fixture.workspace.repository_id.clone();
+    let repository = fixture.workspace.repository().clone();
     manager.ensure_no_gate_runs_in(&repository).await.unwrap();
     let registered = manager.repository(&repository).await.unwrap();
     let runs = crate::shoal_dirs::ShoalDir::of(&registered, crate::shoal_dirs::Contents::GateRuns)

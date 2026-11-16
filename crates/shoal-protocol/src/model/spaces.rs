@@ -1,6 +1,9 @@
 //! Spaces of either kind: the spaces a caller sees and references to them.
 use super::{Chat, SpaceLinks, Workspace};
+
+mod record;
 use crate::space_names::{SpaceName, SpaceSelector};
+pub use record::{Space, SpacePart, Workdir};
 use serde::{Deserialize, Serialize};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
@@ -54,10 +57,10 @@ pub enum SpaceTarget {
 }
 
 /// A space as it exists: a workspace or a chat, running or stopped, which
-/// share one namespace of IDs and names. JSON gives its record with its
-/// `kind`.
+/// share one namespace of IDs and names. JSON gives its record, which names
+/// its `kind`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(untagged)]
 #[allow(
     clippy::large_enum_variant,
     reason = "a lookup's result, read once by the request that made it"
@@ -97,7 +100,7 @@ impl PresentSpace {
     /// Its repository; none for a chat without one.
     pub fn repository_id(&self) -> Option<&RepositoryId> {
         match self {
-            Self::Workspace(workspace) => Some(&workspace.repository_id),
+            Self::Workspace(workspace) => Some(workspace.repository()),
             Self::Chat(chat) => chat.repository_id.as_ref(),
         }
     }
@@ -130,7 +133,7 @@ impl PresentSpace {
     pub fn root_dir(&self) -> Option<&std::path::Path> {
         match self {
             Self::Workspace(_) => None,
-            Self::Chat(chat) => chat.root_dir.as_deref(),
+            Self::Chat(chat) => chat.workdir.root_dir(),
         }
     }
 
@@ -153,11 +156,13 @@ impl PresentSpace {
                     repository: true,
                 })
             }
-            Self::Chat(chat) => Some(crate::config::permissions::SpaceMode {
-                name: &chat.mode,
-                kind: SpaceKind::Chat,
-                repository: chat.repository_id.is_some(),
-            }),
+            Self::Chat(chat) => {
+                (chat.mode.as_ref()).map(|name| crate::config::permissions::SpaceMode {
+                    name,
+                    kind: SpaceKind::Chat,
+                    repository: chat.repository_id.is_some(),
+                })
+            }
         }
     }
 
@@ -245,7 +250,7 @@ impl Spaces {
     pub fn taken_with(&self, id: &SpaceId) -> Vec<SpaceRef> {
         let first = |id: &SpaceId| -> Vec<SpaceRef> {
             let mut resident: Vec<SpaceRef> = (self.chats.iter())
-                .filter(|chat| chat.workspace.as_ref().is_some_and(|w| w.id == *id))
+                .filter(|chat| (chat.workdir.workspace()).is_some_and(|w| w.id == *id))
                 .map(|chat| SpaceRef {
                     id: chat.id.clone(),
                     name: chat.name.clone(),

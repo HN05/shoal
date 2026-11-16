@@ -123,7 +123,7 @@ impl Manager {
     async fn validate_merge(&self, selector: &SpaceSelector, push: bool) -> Result<MergeSource> {
         let workspace = self.workspace(selector).await?;
         self.ensure_merging_enabled(&workspace).await?;
-        let repo = self.repository(&workspace.repository_id).await?;
+        let repo = self.repository(workspace.repository()).await?;
         ensure!(
             off_runtime::is_dir(&workspace.path).await?,
             "workspace directory is missing: {}",

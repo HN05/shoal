@@ -86,7 +86,7 @@ async fn a_branch_merge_warns_only_at_the_checked_head() {
 #[tokio::test]
 async fn a_branch_merge_ignores_a_check_against_a_base_workspaces_branch() {
     let (_root, manager, workspace) = changed_on_both_sides().await;
-    let repo_id = workspace.repository_id.clone();
+    let repo_id = workspace.repository().clone();
     let base = manager
         .create_workspace(&repo_id, "base".into(), None, None, None)
         .await
@@ -104,7 +104,7 @@ async fn a_branch_merge_ignores_a_check_against_a_base_workspaces_branch() {
         .check_conflicts(&SpaceSelector::id(&workspace.id), None)
         .await
         .unwrap();
-    assert_eq!(Some(check.target), base.branch.map(String::from));
+    assert_eq!(Some(check.target), base.part.branch.map(String::from));
     assert_eq!(check.changed_on_both_sides, ["version"]);
     assert!(
         manager
@@ -167,7 +167,7 @@ async fn a_pr_finds_the_record_of_the_workspace_that_links_it() {
 #[tokio::test]
 async fn a_merge_is_refused_once_its_warning_is_not_the_one_confirmed() {
     let (_root, manager, workspace) = changed_on_both_sides().await;
-    let checkout = manager.repository(&workspace.repository_id).await.unwrap();
+    let checkout = manager.repository(workspace.repository()).await.unwrap();
     crate::daemon::test_support::git(
         &checkout.path,
         &["remote", "add", "origin", "https://github.com/team/repo"],
@@ -265,7 +265,7 @@ async fn a_confirmed_merge_keeps_the_pr_whose_warning_it_read() {
         &format!("[machine.forges.\"{host}\"]\ntype = \"forgejo\"\nuser_token = \"user\"\n"),
     )
     .await;
-    let checkout = manager.repository(&workspace.repository_id).await.unwrap();
+    let checkout = manager.repository(workspace.repository()).await.unwrap();
     let origin = format!("http://{host}/team/repo");
     crate::daemon::test_support::git(&checkout.path, &["remote", "add", "origin", &origin]);
     let first = format!("http://{host}/team/repo/pulls/1");

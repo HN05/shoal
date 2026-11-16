@@ -233,7 +233,7 @@ impl Manager {
     ) -> Result<Option<Workspace>> {
         let made_for = Some(MadeFor::Pr(number));
         Ok(self.list_workspaces().await?.into_iter().find(|workspace| {
-            workspace.repository_id == *repository_id
+            workspace.repository() == repository_id
                 && workspace.at.as_ref().is_some_and(|at| {
                     at.made_for == made_for || workspace.links.prs.iter().any(|pr| pr.url == *url)
                 })
@@ -308,7 +308,7 @@ impl Manager {
         reference: Option<&str>,
     ) -> Result<()> {
         let workspace = self.workspace_by_id(id).await?;
-        let (repo, _guard) = self.lock_repository(&workspace.repository_id).await?;
+        let (repo, _guard) = self.lock_repository(workspace.repository()).await?;
         let reserved = self
             .reserve_lifecycle(&workspace.id, WorkspaceState::Updating)
             .await?;
@@ -432,17 +432,14 @@ impl Manager {
         options: CreationOptions,
     ) -> Result<Workspace> {
         let path = self.new_workspace_path(repo, directory, None).await?;
-        let record =
-            Workspace::new_record(repo.id.clone(), name, path, None, WorkspaceState::Preparing);
-        let workspace = Workspace {
-            id: new.id.unwrap_or(record.id),
-            base_commit: Some(at.commit.clone()),
-            base_ref: diff_ref,
-            at: Some(at),
-            setup_skipped: options.skip_setup,
-            disposable: options.disposable,
-            ..record
-        };
+        let id = new.id.unwrap_or_else(SpaceId::generate);
+        let state = WorkspaceState::Preparing;
+        let mut workspace = Workspace::record(id, repo.id.clone(), name, path, None, state);
+        workspace.base_commit = Some(at.commit.clone());
+        workspace.base_ref = diff_ref;
+        workspace.at = Some(at);
+        workspace.setup_skipped = options.skip_setup;
+        workspace.disposable = options.disposable;
         self.insert_workspace(workspace, None, new.parent, true)
             .await
     }

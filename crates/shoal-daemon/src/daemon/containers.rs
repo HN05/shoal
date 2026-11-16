@@ -327,7 +327,7 @@ impl Manager {
             if recorded.project.state != ContainerState::Failed {
                 return Ok(());
             }
-            let worktree = self.workspace_by_id(workspace).await?.path;
+            let worktree = self.workspace_by_id(workspace).await?.part.path;
             self.compose(&recorded.project, Some(&worktree))
                 .await?
                 .stop()

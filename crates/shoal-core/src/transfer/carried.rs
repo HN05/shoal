@@ -11,7 +11,10 @@ use super::{CarriedChat, Sessions};
 /// of them. A chat below a workspace below it goes with that workspace.
 pub fn carried_chats(chats: &[Chat], space: &SpaceId) -> Vec<SpaceId> {
     let goes = |chat: &Chat, carried: &[SpaceId]| {
-        let in_worktree = (chat.workspace.as_ref()).is_some_and(|workspace| &workspace.id == space);
+        let in_worktree = chat
+            .workdir
+            .workspace()
+            .is_some_and(|workspace| &workspace.id == space);
         let below = (chat.parent.as_ref())
             .is_some_and(|parent| &parent.id == space || carried.contains(&parent.id));
         in_worktree || below

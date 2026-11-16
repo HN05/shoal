@@ -120,7 +120,7 @@ impl Manager {
             }
             PresentSpace::Chat(chat) => {
                 let recorded = chat.narrowing;
-                let mode = mode.clone();
+                let mode = Some(mode.clone());
                 (PresentSpace::Chat(Chat { mode, ..chat }), recorded)
             }
         };
@@ -138,7 +138,7 @@ impl Manager {
         mode: &crate::config::modes::ModeName,
         narrowing: PermissionsConfig,
     ) -> Result<Permissions> {
-        let repository = workspace.repository_id.clone();
+        let repository = workspace.repository().clone();
         let mode = SpaceMode {
             name: mode,
             kind: SpaceKind::Workspace,

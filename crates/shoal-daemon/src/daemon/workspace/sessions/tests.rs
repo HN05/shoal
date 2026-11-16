@@ -163,7 +163,7 @@ async fn removal_closes_every_owned_session_and_orphan_sweep_preserves_live_owne
     for missing in [false, true] {
         let (_root, manager, workspace, host) = fixture().await?;
         let other = manager
-            .create_workspace(&workspace.repository_id, "kept".into(), None, None, None)
+            .create_workspace(workspace.repository(), "kept".into(), None, None, None)
             .await?;
         host.add("agent", workspace.id.as_str())?;
         host.add("shell", workspace.id.as_str())?;
@@ -553,7 +553,7 @@ async fn an_agent_of_another_workspace_takes_over_a_block_shoal_created() -> Res
 
     let (_root, manager, workspace, host) = rex_fixture(&["shared"]).await?;
     let taker = manager
-        .create_workspace(&workspace.repository_id, "taker".into(), None, None, None)
+        .create_workspace(workspace.repository(), "taker".into(), None, None, None)
         .await?;
     host.add("shared", workspace.id.as_str())?;
     let _started = manager
@@ -638,7 +638,7 @@ async fn a_nested_command_or_a_chat_leaves_the_owner_of_a_block() -> Result<()> 
 
     let (_root, manager, workspace, host) = rex_fixture(&["parent", "chatted"]).await?;
     let child = manager
-        .create_workspace(&workspace.repository_id, "child".into(), None, None, None)
+        .create_workspace(workspace.repository(), "child".into(), None, None, None)
         .await?;
     host.add("parent", workspace.id.as_str())?;
     host.add("chatted", workspace.id.as_str())?;
@@ -669,7 +669,7 @@ async fn a_nested_command_or_a_chat_leaves_the_owner_of_a_block() -> Result<()> 
     chat_place.owned = false;
     manager
         .start_chat(
-            workspace.repository_id.clone().into(),
+            workspace.repository().clone().into(),
             "chat".into(),
             "claude".into(),
             Some(chat_place),
@@ -695,7 +695,7 @@ async fn a_nested_command_or_a_chat_leaves_the_owner_of_a_block() -> Result<()> 
 async fn a_session_closes_with_the_workspace_its_host_labels_it_for() -> Result<()> {
     let (_root, manager, workspace, host) = fixture().await?;
     let other = manager
-        .create_workspace(&workspace.repository_id, "other".into(), None, None, None)
+        .create_workspace(workspace.repository(), "other".into(), None, None, None)
         .await?;
     host.add("labelled", workspace.id.as_str())?;
     assert!(
@@ -743,7 +743,7 @@ async fn panes_of_different_servers_under_one_id_are_different_places() -> Resul
 
     let (_root, manager, workspace, host) = fixture_for("herdr").await?;
     let taker = manager
-        .create_workspace(&workspace.repository_id, "taker".into(), None, None, None)
+        .create_workspace(workspace.repository(), "taker".into(), None, None, None)
         .await?;
     let on = |server: &str| {
         let mut pane = Origin::created(HostName::Herdr, "w1:p1".into());
@@ -813,7 +813,7 @@ async fn a_session_its_host_labels_closes_through_the_host_without_a_record() ->
 
     let (_root, manager, workspace, host) = fixture().await?;
     let other = manager
-        .create_workspace(&workspace.repository_id, "other".into(), None, None, None)
+        .create_workspace(workspace.repository(), "other".into(), None, None, None)
         .await?;
     host.add("labelled", workspace.id.as_str())?;
     let session = Origin::created(HostName::Zmx, "labelled".into());
@@ -844,7 +844,7 @@ async fn chat_in(
         crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let chat = manager
         .start_chat(
-            workspace.repository_id.clone().into(),
+            workspace.repository().clone().into(),
             name.into(),
             "claude".into(),
             Some(place),
@@ -952,7 +952,7 @@ async fn a_chat_that_fails_to_start_leaves_its_place_as_it_found_it() -> Result<
     host.add("taken", workspace.id.as_str())?;
     host.add("opened", workspace.id.as_str())?;
     // A temporary directory Shoal does not own keeps chats from starting.
-    let directory = (manager.repository(&workspace.repository_id).await?)
+    let directory = (manager.repository(workspace.repository()).await?)
         .workspaces_dir
         .context("the repository has no workspaces directory")?
         .join(".tmp");

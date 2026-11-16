@@ -79,7 +79,7 @@ impl Manager {
         if off_runtime::exists(&workspace.path).await? {
             self.verify_removed_worktree(&workspace).await?;
         }
-        let repo = self.repository(&workspace.repository_id).await?;
+        let repo = self.repository(workspace.repository()).await?;
         let default_branch =
             crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)
                 .await

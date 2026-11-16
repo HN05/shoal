@@ -80,6 +80,7 @@ fn a_done_chat_that_is_stopped_is_finished() {
         serde_json::from_value(serde_json::json!({
             "id": "c", "name": "talk", "agent": "claude",
             "started_at": 0, "completion": completion,
+            "workdir": {"kind": "root_dir", "path": "/root"},
         }))
         .expect("a chat record")
     };
@@ -209,6 +210,7 @@ fn a_working_agent_outranks_its_ready_mark_in_every_space() {
     workspace.review = vec![mark()];
     let mut chat: Chat = serde_json::from_value(serde_json::json!({
         "id": "c", "name": "talk", "agent": "claude", "running": true, "started_at": 0,
+        "workdir": {"kind": "root_dir", "path": "/root"},
     }))
     .expect("a chat record");
     chat.review = vec![mark()];

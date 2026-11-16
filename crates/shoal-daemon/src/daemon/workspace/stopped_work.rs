@@ -171,7 +171,7 @@ impl Manager {
         giver: Option<&SpaceId>,
     ) -> Result<crate::model::QueueEntry> {
         let workspace = self.workspace(selector).await?;
-        let repository = Some(workspace.repository_id.clone());
+        let repository = workspace.repository_id.clone();
         let space = crate::model::PresentSpace::Workspace(workspace.clone());
         (self.ensure_change_held(giver, &space, change, repository.as_ref())).await?;
         let launch = self.launch_awaiting_setup(&workspace.id).await?;

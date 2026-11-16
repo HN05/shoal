@@ -89,7 +89,7 @@ pub async fn place_name(paths: &CommandPaths, workspace: &Workspace) -> Result<P
     let repositories = crate::client::repositories::list(paths).await?;
     let repo = repositories
         .iter()
-        .find(|repo| repo.id == workspace.repository_id)
+        .find(|repo| repo.id == *workspace.repository())
         .context("repository is no longer registered")?;
     let issue = match workspace.links.issue() {
         Some(linked) => {

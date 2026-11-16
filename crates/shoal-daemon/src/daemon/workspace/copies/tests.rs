@@ -58,7 +58,7 @@ impl Fixture {
             workspace: SpaceSelector::id(&self.source.id),
             checkpoint,
         };
-        let repository = (&self.source.repository_id).into();
+        let repository = (self.source.repository()).into();
         (self.manager)
             .create_copy(repository, &source, place, NewWorkspace::default())
             .await
@@ -101,7 +101,7 @@ async fn a_copy_takes_the_files_and_diff_base_of_its_source() {
         (&copy.base_commit, &copy.base_ref),
         (&f.source.base_commit, &f.source.base_ref)
     );
-    let copied = copy.copied_from.unwrap();
+    let copied = copy.part.copied_from.unwrap();
     assert_eq!(copied.workspace.unwrap().id, f.source.id);
     assert_eq!(
         (copied.checkpoint, copied.starting_checkpoint),
@@ -157,7 +157,7 @@ async fn a_copy_on_a_typed_branch_is_refused_rather_than_suffixed() {
             ..NewWorkspace::default()
         };
         let place = CopyPlace::Branch(Some(branch.into()));
-        let repository = (&f.source.repository_id).into();
+        let repository = (f.source.repository()).into();
         f.manager.create_copy(repository, &source, place, new)
     };
     typed("taken").await.unwrap_err();
@@ -168,7 +168,7 @@ async fn a_copy_on_a_typed_branch_is_refused_rather_than_suffixed() {
 #[tokio::test]
 async fn a_copy_takes_the_suffix_its_branch_takes_on_a_parent_component() {
     let f = Fixture::new().await;
-    let repository = f.source.repository_id.clone();
+    let repository = f.source.repository().clone();
     let source = (f.manager)
         .create_workspace(&repository, "fix/thing".into(), None, None, None)
         .await
@@ -242,7 +242,7 @@ async fn a_copy_starts_from_a_checkpoint_of_a_live_or_removed_workspace() {
         "untracked\n"
     );
     assert_eq!(
-        live.copied_from.unwrap().checkpoint,
+        live.part.copied_from.unwrap().checkpoint,
         Some(checkpoint.number)
     );
 
@@ -262,7 +262,7 @@ async fn a_copy_starts_from_a_checkpoint_of_a_live_or_removed_workspace() {
         .await
         .unwrap();
     assert_eq!(git(&removed.path, &["diff", "HEAD"]), kept);
-    let copied = removed.copied_from.unwrap();
+    let copied = removed.copied_from.clone().unwrap();
     assert_eq!(copied.workspace, None, "the source is removed");
     assert_eq!(copied.checkpoint, Some(checkpoint.number));
     assert_eq!(removed.base_ref, f.source.base_ref);
@@ -359,7 +359,7 @@ async fn agents_copy_only_live_workspaces_of_their_own_tree() {
     let f = Fixture::new().await;
     let manager = &f.manager;
     let other = manager
-        .create_workspace(&f.source.repository_id, "other".into(), None, None, None)
+        .create_workspace(f.source.repository(), "other".into(), None, None, None)
         .await
         .unwrap();
     let child = manager
@@ -490,7 +490,7 @@ async fn a_copy_of_a_renamed_workspace_at_a_commit_branches_from_its_commit() {
     let detached = f
         .manager
         .create_commit_workspace(
-            (&f.source.repository_id).into(),
+            (f.source.repository()).into(),
             None,
             crate::protocol::CommitStart::Revision(None),
             Default::default(),
@@ -508,7 +508,7 @@ async fn a_copy_of_a_renamed_workspace_at_a_commit_branches_from_its_commit() {
     };
 
     let copy = (f.manager.create_copy(
-        (&f.source.repository_id).into(),
+        (f.source.repository()).into(),
         &source,
         CopyPlace::Branch(None),
         NewWorkspace::default(),

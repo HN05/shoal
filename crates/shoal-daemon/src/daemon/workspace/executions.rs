@@ -523,7 +523,7 @@ impl Manager {
         let preparation = match self.space(selector).await? {
             PresentSpace::Workspace(workspace) => {
                 // Its temporary directory goes in the repository's directory.
-                self.reserve_repository_directory(&workspace.repository_id)
+                self.reserve_repository_directory(workspace.repository())
                     .await?;
                 let preparation = self
                     .prepare_execution_kind(&workspace, kind, caller, merge)
@@ -549,7 +549,7 @@ impl Manager {
         match kind {
             ExecutionKind::Command => Ok(PreparedExecution::default()),
             ExecutionKind::Merge => {
-                let guard = self.gates.lock_git(&workspace.repository_id).await;
+                let guard = self.gates.lock_git(workspace.repository()).await;
                 let merge = self
                     .prepare_merge(
                         &SpaceSelector::id(&workspace.id),
@@ -566,7 +566,7 @@ impl Manager {
                 })
             }
             ExecutionKind::Unmerge => {
-                let guard = self.gates.lock_git(&workspace.repository_id).await;
+                let guard = self.gates.lock_git(workspace.repository()).await;
                 let unmerge = self
                     .prepare_unmerge(&SpaceSelector::id(&workspace.id))
                     .await?;
@@ -582,9 +582,9 @@ impl Manager {
             ExecutionKind::Setup => {
                 // Not before the seed build, which creation applies last.
                 (self.gates)
-                    .wait_for_creation(&workspace.repository_id, &workspace.id)
+                    .wait_for_creation(workspace.repository(), &workspace.id)
                     .await;
-                let git_guard = self.gates.lock_git(&workspace.repository_id).await;
+                let git_guard = self.gates.lock_git(workspace.repository()).await;
                 self.ensure_no_pending_rename(&workspace.id).await?;
                 let setup_cmd = self.workspace_hook(workspace, HookKind::Setup).await?;
                 let pre_setup = self.workspace_hook(workspace, HookKind::PreSetup).await?;

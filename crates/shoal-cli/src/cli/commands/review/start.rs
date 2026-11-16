@@ -262,7 +262,7 @@ async fn pull_request(
         .await?
         .into_iter()
         .find(|workspace| {
-            workspace.repository_id == repo.id
+            workspace.repository() == &repo.id
                 && workspace.branch.as_ref().map(BranchName::as_str) == Some(pull.head.as_str())
         });
     let workspace = match owner {
@@ -317,7 +317,7 @@ async fn pull_request(
                 .await?
                 .into_iter()
                 .find(|workspace| {
-                    workspace.repository_id == repo.id
+                    workspace.repository() == &repo.id
                         && workspace.branch.as_ref().map(BranchName::as_str)
                             == Some(pull.head.as_str())
                 })

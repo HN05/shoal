@@ -813,7 +813,11 @@ async fn restore_keeps_the_recorded_base_and_its_stack() {
         .unwrap();
     assert_eq!(restored.base_ref.as_deref(), Some("refs/heads/lower"));
     assert_eq!(
-        restored.base_workspace.map(|base| base.name).as_deref(),
+        restored
+            .part
+            .base_workspace
+            .map(|base| base.name)
+            .as_deref(),
         Some("lower")
     );
 }

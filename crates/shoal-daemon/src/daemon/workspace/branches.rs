@@ -132,8 +132,8 @@ impl Manager {
             self.list_workspaces()
                 .await?
                 .into_iter()
-                .filter(|workspace| workspace.repository_id == repo.id)
-                .filter_map(|workspace| workspace.branch),
+                .filter(|workspace| workspace.repository() == &repo.id)
+                .filter_map(|workspace| workspace.part.branch),
         );
         Ok(taken)
     }
@@ -204,8 +204,8 @@ impl Manager {
     /// Whether the freshly fetched default branch already has the
     /// workspace's HEAD changes, whatever commits carry them.
     pub(crate) async fn default_branch_has_head(&self, workspace: &Workspace) -> Result<bool> {
-        self.fetch_default_branch(&workspace.repository_id).await?;
-        let repo = self.repository(&workspace.repository_id).await?;
+        self.fetch_default_branch(workspace.repository()).await?;
+        let repo = self.repository(workspace.repository()).await?;
         let default = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await?;
         git::status::default_branch_retains_head(&workspace.path, &default).await
     }
@@ -473,7 +473,7 @@ impl Manager {
             .list_workspaces()
             .await?
             .into_iter()
-            .find(|w| w.repository_id == repo.id && w.branch.as_ref() == Some(&branch.name))
+            .find(|w| w.repository() == &repo.id && w.branch.as_ref() == Some(&branch.name))
         else {
             ensure_not_checked_out(&repo.path, &branch.name).await?;
             return Ok(OpenTarget::Create(branch));

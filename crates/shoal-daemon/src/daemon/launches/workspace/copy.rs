@@ -42,9 +42,9 @@ impl Manager {
             .find(|workspace| selector.selects(&workspace.id, workspace.number));
         let (workspace, repository, named) = match live {
             Some(workspace) => (
-                workspace.id,
-                workspace.repository_id,
-                (workspace.branch).map_or_else(|| workspace.name.to_string(), String::from),
+                workspace.id.clone(),
+                workspace.repository().clone(),
+                (workspace.part.branch).map_or_else(|| workspace.name.to_string(), String::from),
             ),
             None if launch.checkpoint.is_some() => self.removed_copy(&selector, caller).await?,
             None => anyhow::bail!("no workspace {selector}"),

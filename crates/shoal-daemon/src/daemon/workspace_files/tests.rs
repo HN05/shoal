@@ -549,7 +549,7 @@ async fn deleting_every_workspaces_files_spares_active_ones() {
     let (temp, manager) = manager().await;
     let idle = workspace(&temp, &manager).await;
     let create =
-        |name: &str| manager.create_workspace(&idle.repository_id, name.into(), None, None, None);
+        |name: &str| manager.create_workspace(idle.repository(), name.into(), None, None, None);
     let active = create("active").await.unwrap();
     // An execution whose end the daemon could not confirm may still run.
     let unresolved = create("unresolved").await.unwrap();
@@ -666,7 +666,7 @@ async fn results_outlive_removal_as_long_as_its_record() {
 
     // The parent's processes reach the removed child's results; others do not.
     let sibling = manager
-        .create_workspace(&parent.repository_id, "sibling".into(), None, None, None)
+        .create_workspace(parent.repository(), "sibling".into(), None, None, None)
         .await
         .unwrap();
     for (token, workspace, allowed) in [("parent", &parent, true), ("sibling", &sibling, false)] {
@@ -1063,7 +1063,7 @@ async fn files_that_fail_to_go_with_their_repository_stay_recorded() {
     // The copy's directory refuses to give it up.
     let directory = added[0].path.parent().unwrap().to_owned();
     std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o500)).unwrap();
-    let repo = manager.repository(&workspace.repository_id).await.unwrap();
+    let repo = manager.repository(workspace.repository()).await.unwrap();
     let deleted = manager.delete_repository_files(&repo).await;
     std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700)).unwrap();
     assert!(deleted.is_err(), "the copy could not be deleted");
@@ -1086,7 +1086,7 @@ async fn chat(
 ) -> crate::model::Chat {
     manager
         .start_chat(
-            workspace.repository_id.clone().into(),
+            workspace.repository().clone().into(),
             name.into(),
             "claude".into(),
             None,
@@ -1409,7 +1409,7 @@ async fn a_disposable_workspaces_files_outlive_it_for_the_retention_period() {
     let receiver = workspace(&temp, &manager).await;
     let disposable = manager
         .create_workspace_with(
-            &receiver.repository_id,
+            receiver.repository(),
             "scratch".into(),
             None,
             crate::daemon::workspace::NewWorkspace {

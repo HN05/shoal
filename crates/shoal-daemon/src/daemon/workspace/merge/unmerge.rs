@@ -49,7 +49,7 @@ impl Manager {
     /// until the tracked execution completes.
     pub async fn prepare_unmerge(&self, selector: &SpaceSelector) -> Result<UnmergePlan> {
         let workspace = self.workspace(selector).await?;
-        let repo = self.repository(&workspace.repository_id).await?;
+        let repo = self.repository(workspace.repository()).await?;
         let default =
             git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?;
         let branch = workspace.require_branch("unmerging")?.clone();

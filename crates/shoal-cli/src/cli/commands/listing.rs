@@ -43,7 +43,7 @@ impl ListFilter {
     /// `shown` are the statuses the workspace's row shows, one of which
     /// the status filter must keep.
     pub(super) fn keeps_workspace(&self, workspace: &Workspace, shown: &[ListStatus]) -> bool {
-        self.keeps_repository(&workspace.repository_id)
+        self.keeps_repository(workspace.repository())
             && shown.iter().any(|status| self.keeps_status(*status))
     }
 

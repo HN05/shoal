@@ -163,7 +163,7 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager, "receiver").await;
     let other = manager
-        .create_workspace(&workspace.repository_id, "other".into(), None, None, None)
+        .create_workspace(workspace.repository(), "other".into(), None, None, None)
         .await
         .unwrap();
     manager
@@ -237,16 +237,15 @@ async fn a_message_to_one_space_says_when_its_agent_reads_it() {
     let (temp, manager) = manager().await;
     let running = workspace(&temp, &manager, "running").await;
     let _execution = run_agent(&manager, &running).await;
-    let create = |name: &str| {
-        manager.create_workspace(&running.repository_id, name.into(), None, None, None)
-    };
+    let create =
+        |name: &str| manager.create_workspace(running.repository(), name.into(), None, None, None);
     let queued = create("queued").await.unwrap();
     // Queued without the check that claude is on PATH, which CI lacks.
     let launch = crate::protocol::operations::QueuedLaunch::new("claude".into());
     let request = crate::start_plan::queued_agent_request(&queued, launch, None).unwrap();
     manager.queue_add(request).await.unwrap();
     let without = create("without").await.unwrap();
-    let repo = manager.repository(&running.repository_id).await.unwrap();
+    let repo = manager.repository(running.repository()).await.unwrap();
     let chat =
         crate::daemon::test_support::chat(&manager, "planning", "chat", Some(&repo), None).await;
     let send = |id: &SpaceId| {
@@ -298,11 +297,11 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
         .await
         .unwrap();
     let sibling = manager
-        .create_workspace(&parent.repository_id, "sibling".into(), None, None, None)
+        .create_workspace(parent.repository(), "sibling".into(), None, None, None)
         .await
         .unwrap();
     let idle = manager
-        .create_workspace(&parent.repository_id, "idle".into(), None, None, None)
+        .create_workspace(parent.repository(), "idle".into(), None, None, None)
         .await
         .unwrap();
     let elsewhere = repository(temp.path(), "elsewhere");
@@ -321,8 +320,8 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
     // Chats run with this process as their agent.
     let mut chats = Vec::new();
     for (repository, name) in [
-        (&parent.repository_id, "planning"),
-        (&parent.repository_id, "sender"),
+        (parent.repository(), "planning"),
+        (parent.repository(), "sender"),
         (&elsewhere.id, "other"),
     ] {
         let chat = manager
@@ -362,7 +361,7 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
             vec!["other", "planning"]
         )
     );
-    let reached = send(Some(&parent.repository_id), None).await.now;
+    let reached = send(parent.repository_id.as_ref(), None).await.now;
     assert_eq!(names(&reached.workspaces), ["child", "parent", "sibling"]);
     // The sending chat is left out.
     assert_eq!(names(&reached.chats), ["planning"]);
@@ -401,7 +400,7 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
         )
         .await;
     for (repository, allowed) in [
-        (Some(&parent.repository_id), true),
+        (Some(parent.repository()), true),
         (Some(&elsewhere.id), false),
         (None, true),
     ] {
@@ -425,9 +424,8 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
     let (temp, manager) = manager().await;
     let running = workspace(&temp, &manager, "running").await;
     let _execution = run_agent(&manager, &running).await;
-    let create = |name: &str| {
-        manager.create_workspace(&running.repository_id, name.into(), None, None, None)
-    };
+    let create =
+        |name: &str| manager.create_workspace(running.repository(), name.into(), None, None, None);
     let stopped = create("stopped").await.unwrap();
     let queued = create("queued").await.unwrap();
     let without = create("without").await.unwrap();
@@ -489,7 +487,7 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
     for name in ["planning", "paused"] {
         manager
             .start_chat(
-                running.repository_id.clone().into(),
+                running.repository().clone().into(),
                 name.into(),
                 "claude".into(),
                 None,
@@ -583,7 +581,7 @@ async fn attached_files_are_copied_beside_the_workspaces_until_removal() {
     };
     assert_eq!(std::fs::read_to_string(copy).unwrap(), "panic");
     assert_eq!(copy.file_name(), file.file_name());
-    let repo = manager.repository(&workspace.repository_id).await.unwrap();
+    let repo = manager.repository(workspace.repository()).await.unwrap();
     let workspaces_dir = repo.workspaces_dir.as_deref().unwrap();
     assert!(copy.starts_with(workspaces_dir.join(".attachments").join(&workspace.id)));
 
@@ -641,7 +639,7 @@ async fn a_refused_message_leaves_no_copies() {
             .await
             .is_err()
     );
-    let repo = manager.repository(&workspace.repository_id).await.unwrap();
+    let repo = manager.repository(workspace.repository()).await.unwrap();
     let attachments = repo.workspaces_dir.unwrap().join(".attachments");
     assert!(!attachments.join(&workspace.id).exists());
 }
@@ -655,9 +653,9 @@ async fn an_attached_send_waits_for_the_files_gate() {
     // Another send, a removal or a move holds the gate.
     let held = manager
         .gates
-        .lock_message_files(&workspace.repository_id)
+        .lock_message_files(workspace.repository())
         .await;
-    let gate = manager.gates.message_files_gate(&workspace.repository_id);
+    let gate = manager.gates.message_files_gate(workspace.repository());
     let send = tokio::spawn({
         let (manager, id) = (manager.clone(), workspace.id.clone());
         async move {
@@ -686,7 +684,7 @@ async fn an_attached_send_waits_for_the_files_gate() {
             .unwrap()
             .is_empty()
     );
-    let repo = manager.repository(&workspace.repository_id).await.unwrap();
+    let repo = manager.repository(workspace.repository()).await.unwrap();
     let attachments = repo.workspaces_dir.unwrap().join(".attachments");
     assert!(!attachments.join(&workspace.id).exists());
     drop(held);
@@ -706,9 +704,9 @@ async fn a_send_waiting_through_removal_leaves_no_files() {
     std::fs::write(&file, "panic").unwrap();
     let held = manager
         .gates
-        .lock_message_files(&workspace.repository_id)
+        .lock_message_files(workspace.repository())
         .await;
-    let gate = manager.gates.message_files_gate(&workspace.repository_id);
+    let gate = manager.gates.message_files_gate(workspace.repository());
     let send = tokio::spawn({
         let (manager, id) = (manager.clone(), workspace.id.clone());
         async move {
@@ -745,7 +743,7 @@ async fn a_send_waiting_through_removal_leaves_no_files() {
     drop(held);
     assert!(removal.await.unwrap().unwrap().removed);
     assert!(send.await.unwrap().is_err());
-    let repo = manager.repository(&workspace.repository_id).await.unwrap();
+    let repo = manager.repository(workspace.repository()).await.unwrap();
     let attachments = repo.workspaces_dir.unwrap().join(".attachments");
     assert!(!attachments.join(&workspace.id).exists());
 }

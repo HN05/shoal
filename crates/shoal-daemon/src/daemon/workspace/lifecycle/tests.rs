@@ -121,7 +121,7 @@ async fn removal_check_counts_only_its_executions_without_inspection_details() {
     for missing in [false, true] {
         let (_root, manager, workspace) = fixture().await;
         let other = manager
-            .create_workspace(&workspace.repository_id, "other".into(), None, None, None)
+            .create_workspace(workspace.repository(), "other".into(), None, None, None)
             .await
             .unwrap();
         corrupt_completion(&manager, &workspace).await;
@@ -301,8 +301,8 @@ async fn removal_waiting_for_creation_keeps_what_creation_recorded() {
     let base = (workspace.base_ref.clone(), workspace.base_commit.clone());
     assert!(base.0.is_some() && base.1.is_some());
     // Creation holds the Git gate and has yet to record the base.
-    let creating = manager.gates.lock_git(&workspace.repository_id).await;
-    let gate = manager.gates.git_gate(&workspace.repository_id);
+    let creating = manager.gates.lock_git(workspace.repository()).await;
+    let gate = manager.gates.git_gate(workspace.repository());
     let id = workspace.id.clone();
     manager
         .store
@@ -616,7 +616,7 @@ async fn removal_keeps_files_it_promised_to_restore_when_the_checkpoint_cannot()
 #[tokio::test]
 async fn removal_of_a_detached_head_without_unpushed_commits_keeps_the_branch() {
     let (_root, manager, workspace) = fixture().await;
-    let repo = manager.repository(&workspace.repository_id).await.unwrap();
+    let repo = manager.repository(workspace.repository()).await.unwrap();
     let head = git(&workspace.path, &["rev-parse", "HEAD"]);
     git(&workspace.path, &["switch", "--detach"]);
 
@@ -1033,7 +1033,7 @@ async fn removal_stops_processes_its_post_remove_hook_leaves() {
 #[tokio::test]
 async fn removal_deletes_a_branch_a_remote_has_and_keeps_unpushed_work() {
     let (root, manager, unpushed) = fixture().await;
-    let repo = manager.repository(&unpushed.repository_id).await.unwrap();
+    let repo = manager.repository(unpushed.repository()).await.unwrap();
     let pushed = manager
         .create_workspace(&repo.id, "pushed".into(), None, None, None)
         .await
@@ -1082,7 +1082,7 @@ async fn removal_deletes_a_branch_a_remote_has_and_keeps_unpushed_work() {
 #[tokio::test]
 async fn branch_removal_uses_the_inspected_default_branch() {
     let (_root, manager, workspace) = fixture().await;
-    let repo = manager.repository(&workspace.repository_id).await.unwrap();
+    let repo = manager.repository(workspace.repository()).await.unwrap();
     for (inspected_default, later_default, delete) in [
         (
             "main",
@@ -1644,7 +1644,7 @@ async fn a_failed_retry_keeps_the_stopped_removal_pending() {
         .unwrap_err();
     let retained = manager.workspace_by_id(&workspace.id).await.unwrap();
     assert_eq!(retained.state, WorkspaceState::Failed);
-    let error = retained.error.unwrap_or_default();
+    let error = retained.part.error.unwrap_or_default();
     assert!(error.starts_with(STOPPED_REMOVAL), "{error}");
     assert!(admin_dir.join("shoal-removal").exists());
 }

@@ -1,12 +1,7 @@
 //! Chat records and where a chat runs.
-use super::{
-    AgentStatus, Completion, Repository, ReviewMark, SpaceHold, SpaceLinks, SpaceRef, Workspace,
-    WorkspaceRef,
-};
-use crate::space_names::SpaceName;
+use super::{Completion, Repository, Space, Workspace};
 use serde::{Deserialize, Serialize};
 use shoal_ids::repository_ids::RepositoryId;
-use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 
 /// The mode of a chat recorded without one.
 pub fn chat_mode() -> crate::config::modes::ModeName {
@@ -15,89 +10,32 @@ pub fn chat_mode() -> crate::config::modes::ModeName {
 
 /// An agent the user talks with in a repository's registered checkout, or
 /// in a workspace's worktree without being its agent, until it is removed.
+pub type Chat = Space<ChatPart>;
+
+/// What only a chat has: its agent, its temporary directory and its
+/// completion.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Chat {
-    pub id: SpaceId,
-    /// Unique among the spaces that exist, workspaces and chats; freed when
-    /// it goes.
-    #[serde(default)]
-    pub number: SpaceNumber,
-    /// The repository it belongs to; none for a chat that manages the
-    /// spaces of every repository.
-    pub repository_id: Option<RepositoryId>,
-    /// The label people read, which other spaces may share.
-    pub name: SpaceName,
+#[serde(tag = "kind", rename = "chat")]
+pub struct ChatPart {
     /// Its agent: the one its execution runs, else the one it saved last,
     /// else the one its queued launch starts; none once its saved sessions
     /// were discarded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<crate::agent::Agent>,
-    /// The mode its agent started in, which its restores keep.
-    #[serde(default = "chat_mode")]
-    pub mode: crate::config::modes::ModeName,
-    /// The permissions `--permission` gave its agent, which apply as
-    /// given whatever its mode's.
-    #[serde(
-        default,
-        skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
-    )]
-    pub narrowing: crate::config::permissions::PermissionsConfig,
-    /// The workspace whose worktree it runs in; none for a chat in the
-    /// registered checkout.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workspace: Option<WorkspaceRef>,
     pub started_at: crate::time::UnixTime,
     /// Its own directory for temporary files, which goes with it; none in a
     /// repository without a directory.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tmp_dir: Option<std::path::PathBuf>,
-    /// The `root_dir` a chat without a repository started in, where it runs
-    /// and keeps its temporary directory however `root_dir` changes later.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub root_dir: Option<std::path::PathBuf>,
-    /// Whether its agent runs: an execution of it is recorded. A stopped
-    /// chat keeps what its agent's stop saved for `shoal restore`, as a
-    /// workspace does.
-    #[serde(default)]
-    pub running: bool,
-    /// The issues, PRs and CI runs it links.
-    #[serde(default)]
-    pub links: SpaceLinks,
-    /// Its ready-for-review marks, on its linked items or on itself.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub review: Vec<ReviewMark>,
-    /// What keeps it from cleanup until released.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub holds: Vec<SpaceHold>,
     /// What `shoal done` recorded, until `shoal done --undo`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub completion: Option<Completion>,
-    /// The turn state its running agent last reported.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent_state: Option<AgentStatus>,
-    /// Where its agent is in its work, as it last reported.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub progress: Option<crate::progress::Progress>,
-    /// How long its agent sleeps, which keeps Shoal from waking it for
-    /// having stayed idle.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sleep: Option<crate::state::Sleep>,
-    /// Why Shoal put its stopped agent to sleep and what wakes it, while
-    /// Shoal brings that agent back on its own.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub asleep: Option<crate::model::Asleep>,
-    /// The space above it.
-    #[serde(default)]
-    pub parent: Option<SpaceRef>,
-    /// The spaces below it.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub children: Vec<SpaceRef>,
 }
 
 impl Chat {
-    /// Its number with its name, as text that names it does.
-    pub fn label(&self) -> String {
-        crate::space_names::label(self.number, &self.name)
+    /// The mode its agent started in, which its restores keep.
+    pub fn agent_mode(&self) -> crate::config::modes::ModeName {
+        self.mode.clone().unwrap_or_else(chat_mode)
     }
 }
 
@@ -125,7 +63,7 @@ impl<'a> ChatHome<'a> {
     pub fn repository_id(self) -> Option<&'a RepositoryId> {
         match self {
             Self::Checkout(repository) => Some(&repository.id),
-            Self::Workspace(workspace) => Some(&workspace.repository_id),
+            Self::Workspace(workspace) => Some(workspace.repository()),
             Self::Root(_) => None,
         }
     }

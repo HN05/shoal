@@ -283,7 +283,7 @@ async fn a_workspace_made_for_a_branch_moves_to_its_tip_and_one_at_a_tag_stays()
         (refreshed.target.as_str(), refreshed.to.as_str()),
         ("topic", tip.as_str())
     );
-    assert_eq!(refreshed.workspace.at.unwrap().commit, tip);
+    assert_eq!(refreshed.workspace.part.at.unwrap().commit, tip);
     assert_eq!(head(&topic.path), tip);
     let tag = f.refresh(&tagged).await.unwrap();
     assert_eq!((tag.target.as_str(), tag.up_to_date), ("tag v1", true));
@@ -340,7 +340,7 @@ async fn a_prs_workspace_at_a_commit_moves_to_the_head_its_forge_reports() {
         (refreshed.target.as_str(), refreshed.to.as_str()),
         ("PR #9's head", second.as_str())
     );
-    assert_eq!(refreshed.workspace.at.unwrap().commit, second);
+    assert_eq!(refreshed.workspace.part.at.unwrap().commit, second);
     assert_eq!(head(&opened.workspace.path), second);
 }
 

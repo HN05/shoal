@@ -51,7 +51,7 @@ impl Manager {
         };
         let removed = RemovedSpace {
             space_id: workspace.id.clone(),
-            repository_id: Some(workspace.repository_id.clone()),
+            repository_id: workspace.repository_id.clone(),
             name: workspace.name.clone(),
             expires_at: checkpoint.expires_at,
             parent,
@@ -115,10 +115,10 @@ impl Manager {
             expires_at,
             kind: RemovedKind::Chat {
                 chat: Box::new(KeptChat {
-                    mode: chat.mode,
+                    mode: (chat.mode).unwrap_or_else(crate::model::chat_mode),
                     narrowing: chat.narrowing,
-                    workspace: chat.workspace,
-                    root_dir: chat.root_dir,
+                    workspace: chat.workdir.workspace().cloned(),
+                    root_dir: chat.workdir.root_dir().map(Into::into),
                 }),
             },
         };

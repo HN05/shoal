@@ -120,8 +120,11 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
     };
     let stopped = Chat {
         running: false,
-        agent: None,
         children: vec![worker],
+        part: crate::model::ChatPart {
+            agent: None,
+            ..ending.part.clone()
+        },
         ..ending.clone()
     };
     assert_eq!(
@@ -759,8 +762,8 @@ async fn a_chat_in_a_workspace_names_it_and_runs_only_while_its_worktree_is_ther
         branch: workspace.branch.clone(),
     });
     assert_eq!(
-        (&chat.repository_id, &chat.workspace),
-        (&Some(repo.id.clone()), &named)
+        (&chat.repository_id, chat.workdir.workspace()),
+        (&Some(repo.id.clone()), named.as_ref())
     );
     // The chat is no child of the workspace, whose agent it is not.
     let recorded = manager.workspace_by_id(&workspace.id).await.unwrap();
@@ -770,7 +773,7 @@ async fn a_chat_in_a_workspace_names_it_and_runs_only_while_its_worktree_is_ther
     manager.end_executions(&chat.id).await;
     let stopped = manager.chats().await.unwrap();
     assert!(!stopped[0].running);
-    assert_eq!(stopped[0].workspace, named);
+    assert_eq!(stopped[0].workdir.workspace().cloned(), named);
 
     let moved = temp.path().join("moved");
     std::fs::rename(&workspace.path, &moved).unwrap();
@@ -779,7 +782,10 @@ async fn a_chat_in_a_workspace_names_it_and_runs_only_while_its_worktree_is_ther
     std::fs::rename(&moved, &workspace.path).unwrap();
     restore().await.unwrap();
     let restored = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
-    assert_eq!((restored.running, restored.workspace), (true, named));
+    assert_eq!(
+        (restored.running, restored.workdir.workspace().cloned()),
+        (true, named)
+    );
 }
 
 #[tokio::test]
@@ -833,9 +839,9 @@ async fn a_chat_records_the_mode_its_agent_started_in() {
         .start_new_chat(Some(repo.id.clone().into()), None, start)
         .await
         .unwrap();
-    assert_eq!(chat.mode, "plan");
+    assert_eq!(chat.agent_mode(), "plan");
     let chats = manager.chats().await.unwrap();
-    assert_eq!(chats[0].mode, "plan");
+    assert_eq!(chats[0].agent_mode(), "plan");
 }
 
 #[tokio::test]

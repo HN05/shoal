@@ -97,7 +97,7 @@ pub(in crate::cli) async fn run_in_background(
     let Some(places) = host.places() else {
         return Ok(None);
     };
-    let repo = groups::Repo::Id(workspace.repository_id.as_str());
+    let repo = groups::Repo::Id(workspace.repository().as_str());
     let origin = groups::beside(&ctx.paths, &host, &repo, &workspace.path).await?;
     let beside = host.beside(origin.as_ref());
     start_in_background(&ctx.paths, &host, places, beside, workspace, args).await?;
@@ -141,7 +141,7 @@ pub(in crate::cli) async fn run_agent(
     let Some(run) = AgentRun::of(&current) else {
         return Ok(None);
     };
-    let repo = groups::Repo::Id(workspace.repository_id.as_str());
+    let repo = groups::Repo::Id(workspace.repository().as_str());
     let origin = groups::beside(&ctx.paths, &current, &repo, &workspace.path).await?;
     let beside = current.beside(origin.as_ref());
     let worker = agent_worker(ctx, &current, workspace, agent, records, command)?;

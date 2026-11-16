@@ -81,7 +81,7 @@ impl Manager {
             });
         };
         let permissions = self
-            .caller_permissions(caller, &workspace.repository_id)
+            .caller_permissions(caller, workspace.repository())
             .await?;
         Ok(permissions.push)
     }

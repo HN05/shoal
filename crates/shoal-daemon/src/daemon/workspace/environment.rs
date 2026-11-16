@@ -16,13 +16,13 @@ impl Manager {
         selector: &SpaceSelector,
     ) -> Result<BTreeMap<String, String>> {
         let workspace = self.workspace(selector).await?;
-        self.reserve_repository_directory(&workspace.repository_id)
+        self.reserve_repository_directory(workspace.repository())
             .await?;
-        let _guard = self.gates.lock_git(&workspace.repository_id).await;
+        let _guard = self.gates.lock_git(workspace.repository()).await;
         let workspace = self.workspace_by_id(&workspace.id).await?;
         self.verify_worktree(&workspace).await?;
         let settings = self.workspace_settings(&workspace).await?.into_settings();
-        let repository = self.repository(&workspace.repository_id).await?;
+        let repository = self.repository(workspace.repository()).await?;
         let caches = crate::caches::directories(&repository, &settings.caches)?;
         let tmp_dir = crate::tmp_dirs::directory(&repository, &workspace.id)?;
         let configured = settings.env;

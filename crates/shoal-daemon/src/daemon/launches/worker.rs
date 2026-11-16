@@ -81,7 +81,7 @@ impl Manager {
         request: &WorkerRequest,
         caller: Option<&Caller>,
     ) -> Result<Vec<Blocker>> {
-        let repository = &workspace.repository_id;
+        let repository = workspace.repository();
         let mut blockers = (self.named_blockers(repository, &request.blockers, caller)).await?;
         let on_issue = request.launch.args.is_empty() && request.launch.prompt.is_none();
         if request.launch.now {

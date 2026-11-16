@@ -63,7 +63,7 @@ impl Manager {
         );
         let agents = self.copied_agents(&workspace.id).await?;
         let copied = super::packaged_record(&self.paths, &workspace, checkpoint, agents);
-        let repo = self.repository(&workspace.repository_id).await?;
+        let repo = self.repository(workspace.repository()).await?;
         let mut manifest = Manifest::of(Some(&repo), copied).await?;
         manifest.copy = Some(Copied {
             earlier_files: number.is_some(),

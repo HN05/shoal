@@ -269,7 +269,7 @@ async fn asking_again_returns_an_undelivered_answer_then_asks_anew() {
 async fn questions_take_the_smallest_free_number_of_their_space() {
     let (_root, manager, workspace) = fixture().await;
     let other = manager
-        .create_workspace(&workspace.repository_id, "other".into(), None, None, None)
+        .create_workspace(workspace.repository(), "other".into(), None, None, None)
         .await
         .unwrap();
     let mut numbers = Vec::new();
@@ -371,7 +371,7 @@ async fn a_wait_returns_the_answer() {
     assert_eq!(answered.status.answer(), Some("Postgres"));
 
     let other = manager
-        .create_workspace(&workspace.repository_id, "other".into(), None, None, None)
+        .create_workspace(workspace.repository(), "other".into(), None, None, None)
         .await
         .unwrap();
     assert!(
@@ -470,7 +470,7 @@ async fn open_questions_keep_the_workspace_and_removal_deletes_them() {
 async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
     let (_root, manager, workspace) = fixture().await;
     let other = manager
-        .create_workspace(&workspace.repository_id, "other".into(), None, None, None)
+        .create_workspace(workspace.repository(), "other".into(), None, None, None)
         .await
         .unwrap();
     manager
@@ -849,7 +849,7 @@ async fn withdrawing_a_displayed_question_refuses_a_reused_number() {
 async fn withdrawing_closes_a_question_and_takes_back_its_unread_notification() {
     let (_root, manager, workspace) = fixture().await;
     let other = manager
-        .create_workspace(&workspace.repository_id, "other".into(), None, None, None)
+        .create_workspace(workspace.repository(), "other".into(), None, None, None)
         .await
         .unwrap();
     let question = manager

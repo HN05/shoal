@@ -114,7 +114,7 @@ async fn a_chat_without_a_repository_keeps_its_temporary_directory_in_root_dir()
         .await;
     let listed = manager.chat_by_id(&master.id).await.unwrap().unwrap();
     assert_eq!(listed.tmp_dir, Some(tmp_dir.clone()));
-    assert_eq!(listed.root_dir, Some(root_dir.clone()));
+    assert_eq!(listed.workdir.root_dir(), Some(root_dir.as_path()));
     let directory = manager.chat_checkout_path(&listed).await.unwrap();
     assert_eq!(directory, root_dir);
     let space = crate::model::PresentSpace::Chat(listed);

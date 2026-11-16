@@ -47,7 +47,7 @@ impl Manager {
         simulators.retain(|simulator| simulator.workspace_id.as_ref() == Some(&workspace.id));
         let containers = self.container_project(&workspace.id).await?;
         let (leftover_count, leftovers) = self.leftovers.of(&workspace.id);
-        let sync = self.checkout_sync(&workspace.repository_id);
+        let sync = self.checkout_sync(workspace.repository());
         // A worktree Git cannot read shows none, as `diff_error` says why.
         let changed = self.current_changed_on_both_sides(&workspace);
         let changed_on_both_sides = self

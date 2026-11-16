@@ -201,7 +201,7 @@ pub fn chat_entries(chats: &[Chat], palette: Palette, width: Option<usize>) -> E
 /// line, else its agent.
 fn chat_row(chat: &Chat, depth: usize, palette: Palette) -> (String, [Cell; 8]) {
     let status = ListStatus::of_chat(chat);
-    let place = chat.workspace.as_ref();
+    let place = chat.workdir.workspace();
     (
         status.marker(palette),
         [
@@ -286,7 +286,7 @@ pub fn workspace_mode_cell(workspace: &Workspace) -> Cell {
 
 /// A chat's mode, left out for `chat`.
 pub fn chat_mode_cell(chat: &Chat) -> Cell {
-    mode_cell(Some(&chat.mode), &crate::model::chat_mode())
+    mode_cell(chat.mode.as_ref(), &crate::model::chat_mode())
 }
 
 /// A space's number, as the first cell of its row.
@@ -502,7 +502,7 @@ pub fn mark_label(mark: &ReviewMark) -> String {
 /// Repositories are `(id, name)` pairs.
 fn repository_column(workspaces: &[Workspace], repositories: &[(String, String)]) -> Vec<String> {
     repository_cells(
-        workspaces.iter().map(|w| Some(&w.repository_id)),
+        workspaces.iter().map(|w| w.repository_id.as_ref()),
         repositories,
     )
 }

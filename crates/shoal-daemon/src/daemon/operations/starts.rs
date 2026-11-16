@@ -262,7 +262,7 @@ impl Manager {
             parent: Some(parent.id.clone()),
             ..Default::default()
         };
-        let repository = Selector::from(parent.repository_id.clone());
+        let repository = Selector::from(parent.repository().clone());
         (self.create_copy(repository, &copy, CopyPlace::Branch(name), new)).await
     }
 
@@ -345,7 +345,7 @@ impl Manager {
                 let repository = self.repository(repository).await?;
                 let workspace = self.workspace(&workspace).await?;
                 ensure!(
-                    workspace.repository_id == repository.id,
+                    workspace.repository() == &repository.id,
                     "workspace {} is not in the requested repository",
                     workspace.name
                 );

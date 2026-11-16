@@ -215,9 +215,9 @@ impl Manager {
         let mut workspace = Cow::Borrowed(workspace);
         let _created = if manual && workspace.state == WorkspaceState::Preparing {
             (self.gates)
-                .wait_for_creation(&workspace.repository_id, &workspace.id)
+                .wait_for_creation(workspace.repository(), &workspace.id)
                 .await;
-            let created = self.gates.lock_git(&workspace.repository_id).await;
+            let created = self.gates.lock_git(workspace.repository()).await;
             workspace = Cow::Owned(self.workspace_by_id(&workspace.id).await?);
             Some(created)
         } else {

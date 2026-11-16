@@ -212,7 +212,7 @@ impl Manager {
         start: &ChatStart,
     ) -> Result<Option<RepositoryId>> {
         Ok(match (&start.workspace, &start.repository) {
-            (Some(workspace), _) => Some(self.chat_workspace(workspace).await?.repository_id),
+            (Some(workspace), _) => self.chat_workspace(workspace).await?.repository_id,
             (None, Some(repository)) => Some(self.repository(repository.clone()).await?.id),
             (None, None) => None,
         })

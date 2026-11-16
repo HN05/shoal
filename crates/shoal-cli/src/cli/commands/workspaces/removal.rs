@@ -66,7 +66,7 @@ async fn escape_destination(ctx: &Context, workspace: &Workspace) -> Result<Opti
     let repository = crate::client::repositories::list(&ctx.paths)
         .await?
         .into_iter()
-        .find(|r| r.id == workspace.repository_id)
+        .find(|r| r.id == *workspace.repository())
         .and_then(|r| r.workspaces_dir)
         .filter(|p| p.is_dir());
     Ok(Some(repository.unwrap_or_else(|| ctx.paths.home.clone())))

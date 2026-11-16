@@ -391,43 +391,26 @@ pub fn repository(row: &Row<'_>) -> rusqlite::Result<Repository> {
 pub const WORKSPACE_COLUMNS: &str = "id,number,repository_id,name,mode,narrowing,path,branch,start_commit,made_for,state,error,base_commit,base_ref,git_dir,git_dir_id,setup_skipped,disposable";
 
 pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
-    Ok(Workspace {
-        holds: Vec::new(),
-        review: Vec::new(),
-        latest_review: None,
-        agent_state: None,
-        progress: None,
-        sleep: None,
-        asleep: None,
-        coordinator_state: None,
-        base_workspace: None,
-        stacked_workspaces: Vec::new(),
-        parent: None,
-        children: Vec::new(),
-        links: SpaceLinks::default(),
-        running: false,
-        done: false,
-        usage: None,
-        job: None,
-        setup_skipped: row.get("setup_skipped")?,
-        disposable: row.get("disposable")?,
-        id: row.get("id")?,
-        number: row.get("number")?,
-        repository_id: row.get("repository_id")?,
-        name: row.get("name")?,
-        mode: row.get("mode")?,
-        narrowing: json_column(row, "narrowing")?.unwrap_or_default(),
-        path: PathBuf::from(row.get::<_, String>("path")?),
-        branch: row.get("branch")?,
-        at: starting_commit(row)?,
-        copied_from: None,
-        state: row.get("state")?,
-        error: row.get("error")?,
-        base_commit: row.get("base_commit")?,
-        base_ref: row.get("base_ref")?,
-        git_dir: row.get::<_, Option<String>>("git_dir")?.map(PathBuf::from),
-        git_dir_id: row.get("git_dir_id")?,
-    })
+    let mut workspace = Workspace::record(
+        row.get("id")?,
+        row.get("repository_id")?,
+        row.get("name")?,
+        PathBuf::from(row.get::<_, String>("path")?),
+        row.get("branch")?,
+        row.get("state")?,
+    );
+    workspace.number = row.get("number")?;
+    workspace.mode = row.get("mode")?;
+    workspace.narrowing = json_column(row, "narrowing")?.unwrap_or_default();
+    workspace.at = starting_commit(row)?;
+    workspace.error = row.get("error")?;
+    workspace.base_commit = row.get("base_commit")?;
+    workspace.base_ref = row.get("base_ref")?;
+    workspace.git_dir = row.get::<_, Option<String>>("git_dir")?.map(PathBuf::from);
+    workspace.git_dir_id = row.get("git_dir_id")?;
+    workspace.setup_skipped = row.get("setup_skipped")?;
+    workspace.disposable = row.get("disposable")?;
+    Ok(workspace)
 }
 
 /// Where a workspace without a branch started, from its row.

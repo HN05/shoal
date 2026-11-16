@@ -2,48 +2,72 @@ use super::*;
 use crate::space_names::SpaceSelector;
 use shoal_ids::space_ids::SpaceId;
 
+/// A ready workspace `id` on the branch `id`.
+fn workspace(id: &str) -> Workspace {
+    serde_json::from_value(serde_json::json!({
+        "id": id,
+        "repository_id": "repo",
+        "name": id,
+        "path": format!("/{id}"),
+        "branch": id,
+        "state": "ready",
+        "workdir": {"kind": "worktree", "path": format!("/{id}"),
+                    "workspace": {"id": id, "name": id, "branch": id}},
+    }))
+    .unwrap()
+}
+
+/// A chat `id` in the repository's checkout.
+fn chat(id: &str) -> Chat {
+    serde_json::from_value(serde_json::json!({
+        "id": id, "repository_id": "repo", "name": id, "agent": "claude",
+        "mode": "chat", "started_at": 1,
+        "workdir": {"kind": "checkout", "path": "/repo"},
+    }))
+    .unwrap()
+}
+
+#[test]
+fn a_workspace_and_a_chat_read_back_as_spaces_of_their_kind() {
+    let workspace = serde_json::to_value(workspace("w1")).unwrap();
+    assert_eq!(workspace["kind"], "workspace");
+    assert_eq!(workspace["workdir"]["kind"], "worktree");
+    assert_eq!(workspace["workdir"]["path"], "/w1");
+    let chat = serde_json::to_value(chat("c1")).unwrap();
+    assert_eq!(chat["kind"], "chat");
+    assert_eq!(chat["workdir"]["kind"], "checkout");
+
+    let workspace: Space = serde_json::from_value(workspace).unwrap();
+    assert_eq!(workspace.kind(), SpaceKind::Workspace);
+    // A space's own JSON names its kind once and reads back the same.
+    let space = serde_json::to_string(&workspace).unwrap();
+    assert_eq!(
+        space.matches("\"kind\":\"workspace\"").count(),
+        1,
+        "{space}"
+    );
+    let workspace: Space = serde_json::from_str(&space).unwrap();
+    let workspace = workspace.into_workspace().unwrap();
+    assert_eq!(workspace.path, std::path::Path::new("/w1"));
+    let chat: Space = serde_json::from_value(chat).unwrap();
+    assert!(chat.worktree().is_none());
+    assert_eq!(chat.into_chat().unwrap().agent, Some("claude".into()));
+}
+
 #[test]
 fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_number_or_id() {
-    let workspace: Workspace = serde_json::from_value(serde_json::json!({
-        "id": "w1",
-        "number": 3,
-        "repository_id": "repo",
-        "name": "worker",
-        "path": "/worker",
-        "branch": "worker",
-        "state": "ready",
-    }))
-    .unwrap();
-    let chat = |id: &str, number, name: &str, running| Chat {
-        narrowing: Default::default(),
-        mode: "chat".into(),
-        number,
-        id: id.into(),
-        repository_id: Some("repo".into()),
+    let mut worker = workspace("w1");
+    worker.name = "worker".into();
+    worker.number = 3.into();
+    let chat = |id: &str, number: u32, name: &str, running| Chat {
+        number: number.into(),
         name: name.into(),
-        agent: Some("claude".into()),
-        workspace: None,
-        started_at: crate::time::UnixTime::EPOCH,
-        tmp_dir: None,
-        root_dir: None,
         running,
-        links: Default::default(),
-        review: Vec::new(),
-        holds: Vec::new(),
-        completion: None,
-        agent_state: None,
-        progress: None,
-        sleep: None,
-        asleep: None,
-        parent: None,
-        children: Vec::new(),
+        ..chat(id)
     };
     let spaces = Spaces {
-        workspaces: vec![workspace],
-        chats: vec![
-            chat("c1", 1.into(), "talk", true),
-            chat("c2", 2.into(), "saved", false),
-        ],
+        workspaces: vec![worker],
+        chats: vec![chat("c1", 1, "talk", true), chat("c2", 2, "saved", false)],
     };
     let found = |selector: &str| {
         let space = spaces.find(&SpaceSelector::from(selector));
@@ -67,26 +91,16 @@ fn the_spaces_below_a_space_include_those_below_them() {
         branch: (kind == SpaceKind::Workspace).then(|| id.into()),
     };
     let workspace = |id: &str, children: Vec<SpaceRef>| -> Workspace {
-        let mut workspace: Workspace = serde_json::from_value(serde_json::json!({
-            "id": id,
-            "repository_id": "repo",
-            "name": id,
-            "path": format!("/{id}"),
-            "branch": id,
-            "state": "ready",
-        }))
-        .unwrap();
-        workspace.children = children;
-        workspace
+        Workspace {
+            children,
+            ..workspace(id)
+        }
     };
     let chat = |id: &str, children: Vec<SpaceRef>| -> Chat {
-        let mut chat: Chat = serde_json::from_value(serde_json::json!({
-            "id": id, "repository_id": "repo", "name": id, "agent": "claude",
-            "started_at": 1,
-        }))
-        .unwrap();
-        chat.children = children;
-        chat
+        Chat {
+            children,
+            ..chat(id)
+        }
     };
     let spaces = Spaces {
         workspaces: vec![

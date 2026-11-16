@@ -103,7 +103,10 @@ async fn every_route_records_one_added_event_per_file() {
         (&added.space_id, added.space_kind),
         (&workspace.id, SpaceKind::Workspace)
     );
-    assert_eq!(added.repository_id.as_ref(), Some(&workspace.repository_id));
+    assert_eq!(
+        added.repository_id.as_ref(),
+        workspace.repository_id.as_ref()
+    );
     // The event's file is the record as `shoal files` lists it.
     assert_eq!(added.file, listed[2]);
     assert_eq!(added.file.title.as_deref(), Some("Crash log"));
@@ -231,7 +234,7 @@ async fn every_deletion_records_one_removed_event_per_file() {
     // The repository's removal deletes what is left.
     remove(&manager, &workspace.id).await;
     manager
-        .remove_repository(&workspace.repository_id)
+        .remove_repository(workspace.repository())
         .await
         .unwrap();
 
@@ -258,7 +261,10 @@ async fn every_deletion_records_one_removed_event_per_file() {
         (&expired.id, SpaceKind::Workspace)
     );
     assert_eq!(gone.file.workspace.as_deref(), Some("expired"));
-    assert_eq!(gone.repository_id.as_ref(), Some(&workspace.repository_id));
+    assert_eq!(
+        gone.repository_id.as_ref(),
+        workspace.repository_id.as_ref()
+    );
 }
 
 #[tokio::test]

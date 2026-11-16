@@ -179,7 +179,7 @@ fn repository_of<'a>(
     workspaces
         .iter()
         .find(|w| Some(&w.id) == space)
-        .map(|w| &w.repository_id)
+        .and_then(|w| w.repository_id.as_ref())
         .or_else(|| {
             let chat = chats.iter().find(|chat| Some(&chat.id) == space);
             chat.and_then(|chat| chat.repository_id.as_ref())
@@ -191,7 +191,7 @@ fn repository_of<'a>(
 fn note(chats: &[Chat], item: &Item) -> String {
     let space = item.space_id();
     let place = (chats.iter().find(|chat| Some(&chat.id) == space))
-        .and_then(|chat| chat.workspace.as_ref())
+        .and_then(|chat| chat.workdir.workspace())
         .map(|workspace| format!("in {}", workspace.name));
     let note = Some(item.note()).filter(|note| !note.is_empty());
     place.into_iter().chain(note).collect::<Vec<_>>().join("; ")

@@ -41,7 +41,7 @@ impl Manager {
         Ok(DiffBase {
             workspace_id: workspace.id,
             commit,
-            path: workspace.path,
+            path: workspace.part.path,
         })
     }
 }

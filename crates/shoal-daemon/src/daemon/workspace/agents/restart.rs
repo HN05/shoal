@@ -111,7 +111,7 @@ impl Manager {
         let agent = (agents.iter().find(|agent| agent.ran_as(execution)))
             .with_context(|| format!("no connected agent runs execution {execution}"))?;
         let workspace = self.workspace_by_id(&agent.space_id).await?;
-        let repository = workspace.repository_id.clone();
+        let repository = workspace.repository().clone();
         let space = crate::model::PresentSpace::Workspace(workspace);
         (self.ensure_change_held(giver, &space, change, Some(&repository))).await
     }

@@ -1734,7 +1734,7 @@ async fn a_launch_in_a_workspace_whose_setup_failed_waits_until_its_hook_ran() {
 async fn a_launch_waiting_for_setup_takes_a_permission_change() {
     let (_temp, manager, child, entry) = launch_waiting_for_setup().await;
     let ready = manager
-        .create_workspace(&child.repository_id, "ready".into(), None, None, None)
+        .create_workspace(child.repository(), "ready".into(), None, None, None)
         .await
         .unwrap();
     let change = PermissionChange::assigned("merge=direct").unwrap();

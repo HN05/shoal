@@ -174,7 +174,7 @@ async fn idle_removal_waits_and_requests_and_disk_space_do_not() {
         .unwrap();
     assert!(!workspace.path.exists());
 
-    let repo = workspace.repository_id.clone();
+    let repo = workspace.repository().clone();
     let other = manager
         .create_workspace(&repo, "disk".into(), None, None, None)
         .await

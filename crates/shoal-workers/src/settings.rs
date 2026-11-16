@@ -38,7 +38,7 @@ pub async fn configured_environment(
     let repo = crate::client::repositories::list(paths)
         .await?
         .into_iter()
-        .find(|repo| repo.id == workspace.repository_id)
+        .find(|repo| repo.id == *workspace.repository())
         .context("workspace repository is missing")?;
     Ok(crate::env::render_configured_environment(
         &settings.env,

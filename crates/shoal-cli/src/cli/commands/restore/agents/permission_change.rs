@@ -35,7 +35,7 @@ pub(super) async fn check(
         .iter()
         .filter(|setup| setup.launch.is_some())
     {
-        let repository = Some(setup.workspace.repository_id.as_str().into());
+        let repository = Some(setup.workspace.repository().as_str().into());
         crate::cli::commands::permissions::ensure_held(ctx, repository, &change.set).await?;
     }
     Ok(())

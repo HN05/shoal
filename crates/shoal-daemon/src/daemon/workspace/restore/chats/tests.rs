@@ -31,7 +31,7 @@ async fn restore_chat(manager: &Manager, id: &shoal_ids::space_ids::SpaceId) -> 
 #[tokio::test]
 async fn a_removed_chat_comes_back_under_its_id_below_its_parent() {
     let (_root, manager, parent) = with_workspace().await;
-    let repo = manager.repository(&parent.repository_id).await.unwrap();
+    let repo = manager.repository(parent.repository()).await.unwrap();
     let removed = chat(&manager, "notes", "plan", Some(&repo), Some(&parent.id)).await;
     let selector = SpaceSelector::id(&removed.id);
     manager.remove_chat(&selector, None).await.unwrap();
@@ -62,7 +62,7 @@ async fn a_removed_chat_comes_back_under_its_id_below_its_parent() {
 #[tokio::test]
 async fn a_removed_chat_keeps_its_running_agent_with_its_session() {
     let (_root, manager, parent) = with_workspace().await;
-    let repo = manager.repository(&parent.repository_id).await.unwrap();
+    let repo = manager.repository(parent.repository()).await.unwrap();
     let removed = chat(&manager, "notes", "plan", Some(&repo), None).await;
     crate::daemon::test_support::report_session(&manager, &removed.id, "s1").await;
     let selector = SpaceSelector::id(&removed.id);
@@ -107,7 +107,11 @@ async fn a_chat_in_a_removed_workspace_restores_once_that_workspace_does() {
 
     manager.restore_workspace(&selector).await.unwrap();
     let restored = restore_chat(&manager, &removed.id).await;
-    let place = restored.chat.workspace.map(|workspace| workspace.id);
+    let place = restored
+        .chat
+        .workdir
+        .workspace()
+        .map(|workspace| workspace.id.clone());
     assert_eq!(place, Some(workspace.id));
 }
 

@@ -68,7 +68,7 @@ impl Manager {
         selector: &SpaceSelector,
     ) -> Result<crate::model::OpenedWorkspace> {
         let workspace = self.workspace(selector).await?;
-        let (_repo, _guard) = self.lock_repository(&workspace.repository_id).await?;
+        let (_repo, _guard) = self.lock_repository(workspace.repository()).await?;
         // The workspace may have gone while waiting for the repository.
         let workspace = self.workspace_by_id(&workspace.id).await?;
         self.reopen_owned_workspace(
@@ -162,7 +162,7 @@ impl Manager {
     /// recorded no admin directory holds at its path otherwise is the user's
     /// to delete.
     pub(crate) async fn verify_removed_worktree(&self, workspace: &Workspace) -> Result<()> {
-        let repo = self.repository(&workspace.repository_id).await?;
+        let repo = self.repository(workspace.repository()).await?;
         if crate::removal::disowned(workspace, &repo.path).await?
             || self.left_by_unfinished_add(workspace).await?
         {
@@ -268,7 +268,7 @@ impl Manager {
     /// The admin directory of the linked worktree rooted at the recorded path
     /// that belongs to the recorded repository.
     async fn linked_git_dir(&self, workspace: &Workspace) -> Result<PathBuf> {
-        let repo = self.repository(&workspace.repository_id).await?;
+        let repo = self.repository(workspace.repository()).await?;
         // Verify this is still the checkout Shoal created before any deletion.
         let actual = git::checkout_dirs(&workspace.path).await?;
         ensure!(
@@ -314,7 +314,7 @@ impl Manager {
 
     /// Whether Git still lists the (possibly missing) worktree at its recorded path.
     pub(crate) async fn is_registered_worktree(&self, workspace: &Workspace) -> Result<bool> {
-        let repo = self.repository(&workspace.repository_id).await?;
+        let repo = self.repository(workspace.repository()).await?;
         let trees = git::worktrees(&repo.path, git::run).await?;
         let recorded = workspace.path.clone();
         off_runtime::run(move || {
@@ -332,7 +332,7 @@ impl Manager {
     /// their recorded admin directory before allowing ownership cleanup; only a
     /// link to another existing path needs proof that the directory is ours.
     pub(crate) async fn missing_worktree(&self, workspace: &Workspace) -> Result<Option<PathBuf>> {
-        let repo = self.repository(&workspace.repository_id).await?;
+        let repo = self.repository(workspace.repository()).await?;
         if let Some(directory) = workspace.git_dir.clone() {
             let workspace = workspace.clone();
             return off_runtime::run(move || moved_worktree(&workspace, &directory)).await;

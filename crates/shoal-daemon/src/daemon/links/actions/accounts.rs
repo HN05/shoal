@@ -36,7 +36,7 @@ impl Place {
     /// The repository it acts in.
     pub(in crate::daemon::links) fn repository_id(&self) -> &RepositoryId {
         match self {
-            Self::Workspace(workspace) => &workspace.repository_id,
+            Self::Workspace(workspace) => workspace.repository(),
             Self::Chat { checkout, .. } | Self::Checkout(checkout) => &checkout.id,
         }
     }

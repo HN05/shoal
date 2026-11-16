@@ -158,6 +158,10 @@ async fn a_chat_a_conversion_removed_restores_in_the_workspace_restored_beside()
     let crate::model::RestoredSpace::Chat(restored) = restored else {
         panic!("{restored:?}");
     };
-    let place = restored.chat.workspace.map(|workspace| workspace.id);
+    let place = restored
+        .chat
+        .workdir
+        .workspace()
+        .map(|workspace| workspace.id.clone());
     assert_eq!(place.as_ref(), Some(&record.space_id));
 }

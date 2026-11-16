@@ -296,7 +296,7 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
     let (_, worker) = chat_and_worker(&temp, &manager).await;
     let chat = manager
         .start_chat(
-            worker.repository_id.clone().into(),
+            worker.repository().clone().into(),
             "chat-2".into(),
             "codex".into(),
             None,
@@ -449,7 +449,7 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
     let (_, worker) = chat_and_worker(&temp, &manager).await;
     let chat = manager
         .start_chat(
-            worker.repository_id.clone().into(),
+            worker.repository().clone().into(),
             "chat-3".into(),
             "codex".into(),
             None,
@@ -486,7 +486,7 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
         .unwrap();
     let successor = manager
         .create_workspace(
-            &worker.repository_id,
+            worker.repository(),
             "worker".into(),
             None,
             None,
@@ -524,7 +524,7 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
     let (_, worker) = chat_and_worker(&temp, &manager).await;
     let chat = manager
         .start_chat(
-            worker.repository_id.clone().into(),
+            worker.repository().clone().into(),
             "chat-4".into(),
             "codex".into(),
             None,
@@ -566,12 +566,12 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
 
     // The worker's repository directory moves, as a chat of another
     // repository may coordinate it.
-    let repo = manager.repository(&worker.repository_id).await.unwrap();
+    let repo = manager.repository(worker.repository()).await.unwrap();
     let source = repo.workspaces_dir.unwrap();
     let destination = temp.path().join("moved");
     std::fs::rename(&source, &destination).unwrap();
     let (from, to) = (source.clone(), destination.clone());
-    let id = worker.repository_id.clone();
+    let id = worker.repository().clone();
     manager
         .store
         .write(move |tx| {
@@ -618,7 +618,7 @@ async fn same_named_spaces_reach_their_own_coordinators() {
     let (chat, worker) = chat_and_worker(&temp, &manager).await;
     let other_chat = manager
         .start_chat(
-            worker.repository_id.clone().into(),
+            worker.repository().clone().into(),
             "chat-2".into(),
             "codex".into(),
             None,
@@ -626,7 +626,7 @@ async fn same_named_spaces_reach_their_own_coordinators() {
         .await
         .unwrap();
     let other = manager
-        .create_workspace(&worker.repository_id, "other".into(), None, None, None)
+        .create_workspace(worker.repository(), "other".into(), None, None, None)
         .await
         .unwrap();
     manager
@@ -670,7 +670,7 @@ async fn same_named_siblings_send_the_same_message_apart() {
     let (temp, manager) = manager().await;
     let (chat, worker) = chat_and_worker(&temp, &manager).await;
     let sibling = manager
-        .create_workspace(&worker.repository_id, "sibling".into(), None, None, None)
+        .create_workspace(worker.repository(), "sibling".into(), None, None, None)
         .await
         .unwrap();
     manager

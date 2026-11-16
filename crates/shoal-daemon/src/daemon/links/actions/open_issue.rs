@@ -246,8 +246,7 @@ impl Manager {
         );
         let opening = match caller {
             Some(caller) => {
-                let permissions =
-                    (self.caller_permissions(caller, &workspace.repository_id)).await?;
+                let permissions = (self.caller_permissions(caller, workspace.repository())).await?;
                 destination.opening(&permissions)?
             }
             None => Opening::Direct,

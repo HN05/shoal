@@ -31,7 +31,7 @@ impl Manager {
         if base.is_some() {
             workspace.require_branch("stacking on a base workspace")?;
         }
-        let repository_id = workspace.repository_id.clone();
+        let repository_id = workspace.repository().clone();
         let base = match base {
             Some(base) => Some(
                 self.store
@@ -48,7 +48,7 @@ impl Manager {
             .lock_prs(base.iter().chain([&workspace.id]))
             .await;
         let workspace = self.workspace_by_id(&workspace.id).await?;
-        let (id, repository_id) = (workspace.id.clone(), workspace.repository_id.clone());
+        let (id, repository_id) = (workspace.id.clone(), workspace.repository().clone());
         self.store
             .write(move |tx| change_base(tx, &repository_id, &id, base.as_ref()))
             .await?;

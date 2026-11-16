@@ -200,7 +200,7 @@ async fn merged_cleanup_waits_for_grace_and_keeps_saved_agents_for_restore() {
     f.squash_merge();
     f.manager
         .write_local_config(
-            &f.workspace.repository_id,
+            f.workspace.repository(),
             Some("[cleanup]\ngrace_minutes = 600\n".into()),
         )
         .await
@@ -435,7 +435,7 @@ async fn holds_questions_running_work_and_unsaved_state_retain_a_merged_workspac
     assert!(f.kept_after(5).await, "a merge under way");
     fs::remove_file(git_dir.join("MERGE_HEAD")).unwrap();
 
-    let repo = f.workspace.repository_id.clone();
+    let repo = f.workspace.repository().clone();
     fs::write(f.workspace.path.join("two"), "edited\n").unwrap();
     manager
         .write_local_config(

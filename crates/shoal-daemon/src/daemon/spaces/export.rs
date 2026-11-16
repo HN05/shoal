@@ -404,7 +404,7 @@ fn packaged_record(
 ) -> RemovedSpace {
     RemovedSpace {
         space_id: workspace.id.clone(),
-        repository_id: Some(workspace.repository_id.clone()),
+        repository_id: workspace.repository_id.clone(),
         name: workspace.name.clone(),
         expires_at: checkpoint.expires_at,
         parent: workspace.parent.clone(),

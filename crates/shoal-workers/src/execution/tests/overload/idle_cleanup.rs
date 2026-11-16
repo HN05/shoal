@@ -69,7 +69,7 @@ async fn a_workspace_being_removed_refuses_messages_for_its_stopped_agent() {
     );
     manager
         .write_local_config(
-            &workspace.repository_id,
+            workspace.repository(),
             Some(format!("hooks.pre_remove = '{}'\n", hook.display())),
         )
         .await

@@ -286,7 +286,7 @@ impl Manager {
         }
         for workspace in self.list_workspaces().await? {
             ensure!(
-                workspace.repository_id == repo.id || !workspace.path.starts_with(directory),
+                workspace.repository() == &repo.id || !workspace.path.starts_with(directory),
                 "{} contains the workspace {} of another repository",
                 directory.display(),
                 workspace.name
@@ -322,7 +322,7 @@ impl Manager {
         Ok(MovedRepository {
             repository: self.repository(&repo.id).await?,
             from: source,
-            workspace_paths: workspaces.into_iter().map(|w| w.path).collect(),
+            workspace_paths: workspaces.into_iter().map(|w| w.part.path).collect(),
         })
     }
 
@@ -365,7 +365,7 @@ impl Manager {
             .list_workspaces()
             .await?
             .into_iter()
-            .map(|workspace| workspace.path)
+            .map(|workspace| workspace.part.path)
             .collect();
         registry::reserve_directory(root, name, &self.repositories().await?, &workspaces)
     }
@@ -382,7 +382,7 @@ impl Manager {
             .list_workspaces()
             .await?
             .into_iter()
-            .filter(|workspace| workspace.repository_id == *repository_id)
+            .filter(|workspace| workspace.repository() == repository_id)
             .collect())
     }
 

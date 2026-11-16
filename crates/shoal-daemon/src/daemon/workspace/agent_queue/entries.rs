@@ -165,7 +165,7 @@ impl Manager {
         let workspace = self.workspace(workspace).await?;
         Self::ensure_holds_agents(&workspace)?;
         ensure!(
-            workspace.repository_id == *repository_id,
+            workspace.repository() == repository_id,
             "workspace {} belongs to another repository",
             workspace.name
         );

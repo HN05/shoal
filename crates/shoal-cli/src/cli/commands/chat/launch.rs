@@ -416,7 +416,7 @@ async fn place_topic(
     repo: &ChatRepository,
     session: &crate::execution::recovery::LastSession,
 ) -> Result<Topic> {
-    if let Some(workspace) = chat.workspace.as_ref().filter(|_| !session.converted) {
+    if let Some(workspace) = chat.workdir.workspace().filter(|_| !session.converted) {
         let selector = SpaceSelector::id(&workspace.id);
         let workspace = crate::client::workspaces::inspect(&ctx.paths, selector).await?;
         return Ok(Topic::workspace(workspace.workspace, &session.mode));
@@ -431,8 +431,8 @@ async fn place_topic(
 /// chat without one started in.
 async fn repository_of(ctx: &Context, chat: &Chat) -> Result<ChatRepository> {
     let Some(id) = &chat.repository_id else {
-        let root_dir = match &chat.root_dir {
-            Some(root_dir) => root_dir.clone(),
+        let root_dir = match chat.workdir.root_dir() {
+            Some(root_dir) => root_dir.to_owned(),
             None => super::root_dir(ctx).await?,
         };
         return Ok(ChatRepository::Outside(root_dir));

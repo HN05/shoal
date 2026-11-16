@@ -125,7 +125,7 @@ async fn commit_owner(
                 .await?
                 .into_iter()
                 .find(|workspace| parent.selects(&workspace.id, workspace.number))
-                .map(|workspace| workspace.repository_id)
+                .and_then(|workspace| workspace.repository_id)
                 .ok_or_else(|| {
                     Refusal::new(Reason::NotFound, format!("unknown workspace: {parent}"))
                 })?;

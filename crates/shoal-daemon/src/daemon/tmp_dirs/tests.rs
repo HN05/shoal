@@ -162,5 +162,5 @@ async fn the_sweep_deletes_temporary_directories_without_a_record() {
     manager.sweep_tmp_dirs().await.unwrap();
     assert!(!orphan.exists());
     assert!(kept.is_dir());
-    assert!(chat.tmp_dir.unwrap().is_dir());
+    assert!(chat.part.tmp_dir.unwrap().is_dir());
 }

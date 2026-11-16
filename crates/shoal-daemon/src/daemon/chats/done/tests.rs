@@ -52,7 +52,7 @@ async fn a_chats_summary_ends_its_notice_and_each_done_replaces_it() {
         .await
         .unwrap();
     let recorded = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
-    assert_eq!(recorded.completion.unwrap().summary, None);
+    assert_eq!(recorded.part.completion.unwrap().summary, None);
 
     (manager.mark_chat_done(&chat.id, summarized("Fixed"), &Attacher::User))
         .await

@@ -24,7 +24,7 @@ async fn cleanup_skips_a_busy_repository_and_recorded_worktrees() {
             .create_workspace(&repo.id, name.into(), None, None, None)
             .await
             .unwrap();
-        worktrees.push(workspace.path);
+        worktrees.push(workspace.part.path);
     }
     // A worktree moved outside Shoal keeps its record and DerivedData.
     fs::rename(&worktrees[1], root.path().join("moved")).unwrap();

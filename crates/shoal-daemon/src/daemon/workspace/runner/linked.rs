@@ -134,7 +134,7 @@ impl Spaces {
         let mut own = self
             .workspaces
             .iter()
-            .filter(|workspace| workspace.repository_id == *repository_id);
+            .filter(|workspace| workspace.repository() == repository_id);
         match &run.trigger {
             Trigger::Pull { number } => {
                 own.find(|workspace| links_pull(forge, &workspace.links, *number))

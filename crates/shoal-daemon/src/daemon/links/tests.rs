@@ -243,7 +243,7 @@ async fn assigned_relation_uses_the_issue_link() {
 #[tokio::test]
 async fn a_moved_worktree_takes_no_recorded_relations() {
     let (_root, manager, id) = workspace_with_origin().await;
-    let path = manager.workspace_by_id(&id).await.unwrap().path;
+    let path = manager.workspace_by_id(&id).await.unwrap().part.path;
     std::fs::remove_dir_all(&path).unwrap();
     assert!(
         manager

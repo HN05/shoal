@@ -356,7 +356,7 @@ impl Manager {
             Ok(head) if head == completion.head => Ok(Progress::Done(Done {
                 name: workspace.name.into(),
                 branch,
-                path: workspace.path,
+                path: workspace.part.path,
                 head,
             })),
             _ => Ok(Progress::Waiting(workspace.name.into())),

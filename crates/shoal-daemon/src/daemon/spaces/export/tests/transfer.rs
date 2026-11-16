@@ -637,7 +637,8 @@ async fn concurrent_imports_of_a_copy_take_branches_of_their_own() {
         import_here(&manager, &repo, &bytes),
         import_here(&manager, &repo, &bytes)
     );
-    let mut branches = [first, second].map(|restored| restored.opened.workspace.branch.unwrap());
+    let mut branches =
+        [first, second].map(|restored| restored.opened.workspace.part.branch.unwrap());
     branches.sort();
     assert_eq!(branches, ["topic-2", "topic-3"]);
 }

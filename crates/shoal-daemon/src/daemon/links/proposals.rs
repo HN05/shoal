@@ -129,7 +129,7 @@ impl Manager {
         push: Option<PushSpecification>,
         proposer: Proposer,
     ) -> Result<Proposed> {
-        let repository = &workspace.repository_id;
+        let repository = workspace.repository();
         let files = self
             .lock_proposal_files_of(repository, &pull.attachments)
             .await?;

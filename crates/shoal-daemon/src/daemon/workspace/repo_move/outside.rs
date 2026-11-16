@@ -107,7 +107,7 @@ impl Manager {
         let mut homes: Vec<(SpaceId, SpaceName, Option<PathBuf>)> = Vec::new();
         let live = (self.chats().await?.into_iter())
             .filter(|chat| chat.repository_id.is_none())
-            .map(|chat| (chat.id, chat.name, chat.root_dir));
+            .map(|chat| (chat.id, chat.name, chat.workdir.root_dir().map(Into::into)));
         let removed = (self.removed_spaces().await?.into_iter())
             .filter(|removed| removed.repository_id.is_none())
             .filter_map(|removed| {

@@ -22,6 +22,7 @@ fn agent(origin: Option<Origin>) -> RunningAgent {
 fn workspace() -> PresentSpace {
     PresentSpace::Workspace(
         serde_json::from_value(json!({
+            "workdir": {"kind": "worktree", "path": "/work/fix", "workspace": {"id": "w1", "name": "fix", "branch": "fix"}},
             "id": "w1",
             "repository_id": "r1",
             "name": "fix",

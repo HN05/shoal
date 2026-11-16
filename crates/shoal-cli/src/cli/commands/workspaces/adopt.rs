@@ -83,7 +83,7 @@ async fn ensure_recorded_repository(
     let selected =
         repository::select(&repositories, ui::repository_selector(selector.to_owned())?).await?;
     ensure!(
-        selected.id == workspace.repository_id,
+        selected.id == *workspace.repository(),
         "{} is recorded in another repository than {selector}",
         workspace.name
     );

@@ -93,7 +93,7 @@ impl Manager {
         };
         let own = SpaceSelector::id(&caller.space_id);
         Ok(match self.space(&own).await? {
-            PresentSpace::Workspace(workspace) if workspace.repository_id == *repository => {
+            PresentSpace::Workspace(workspace) if workspace.repository() == repository => {
                 ItemContext::Workspace(own)
             }
             PresentSpace::Chat(chat) if chat.repository_id.as_ref() == Some(repository) => {

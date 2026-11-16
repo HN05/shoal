@@ -61,7 +61,7 @@ impl Manager {
                 );
                 self.verify_worktree(&workspace).await?;
                 let settings = self.workspace_settings(&workspace).await?;
-                let repository = self.repository(&workspace.repository_id).await?;
+                let repository = self.repository(workspace.repository()).await?;
                 Home::Workspace {
                     workspace,
                     repository,
@@ -96,8 +96,8 @@ impl Manager {
     pub(crate) async fn space_directory(&self, space: &PresentSpace) -> Result<PathBuf> {
         match space {
             PresentSpace::Workspace(workspace) => Ok(workspace.path.clone()),
-            PresentSpace::Chat(chat) => match &chat.workspace {
-                Some(workspace) => Ok(self.workspace_by_id(&workspace.id).await?.path),
+            PresentSpace::Chat(chat) => match chat.workdir.workspace() {
+                Some(workspace) => Ok(self.workspace_by_id(&workspace.id).await?.part.path),
                 None => self.chat_checkout_path(chat).await,
             },
         }
@@ -107,10 +107,10 @@ impl Manager {
     /// workspace it runs in, once a chat may run there, else its checkout
     /// or `root_dir`.
     pub(crate) async fn chat_path(&self, chat: &Chat) -> Result<PathBuf> {
-        match &chat.workspace {
+        match chat.workdir.workspace() {
             Some(workspace) => {
                 let selector = SpaceSelector::id(&workspace.id);
-                Ok(self.chat_workspace(&selector).await?.path)
+                Ok(self.chat_workspace(&selector).await?.part.path)
             }
             None => self.chat_checkout_path(chat).await,
         }

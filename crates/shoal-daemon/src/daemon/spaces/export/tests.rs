@@ -303,7 +303,12 @@ async fn a_workspace_moves_with_the_chats_in_it_and_below_it() {
         let chat = importing.chat_by_id(id).await.unwrap().unwrap();
         assert!(!chat.running);
         let parent = chat.parent.map(|parent| parent.id);
-        (parent, chat.workspace.map(|workspace| workspace.id))
+        (
+            parent,
+            chat.workdir
+                .workspace()
+                .map(|workspace| workspace.id.clone()),
+        )
     };
     assert_eq!(place(&reading.id).await, (None, Some(workspace.id.clone())));
     assert_eq!(place(&child.id).await, (Some(workspace.id.clone()), None));
@@ -556,7 +561,10 @@ async fn a_chat_without_a_repository_below_one_moves_with_it_into_root_dir() {
     let restored = importing.chat_by_id(&helper.id).await.unwrap().unwrap();
     let root_dir = importing.config().root_dir(&importing.paths).unwrap();
     assert_eq!(
-        (restored.repository_id, restored.root_dir),
+        (
+            restored.repository_id,
+            restored.workdir.root_dir().map(Into::into)
+        ),
         (None, Some(root_dir))
     );
 }
@@ -593,7 +601,7 @@ async fn a_carried_chat_whose_worktree_is_not_here_opens_in_the_checkout() {
     let crate::model::RestoredSpace::Chat(restored) = restored else {
         panic!("not a chat");
     };
-    assert_eq!(restored.chat.workspace, None);
+    assert_eq!(restored.chat.workdir.workspace(), None);
     assert_eq!(restored.warnings.len(), 1, "{:?}", restored.warnings);
 }
 

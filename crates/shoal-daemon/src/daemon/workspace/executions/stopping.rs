@@ -416,7 +416,7 @@ impl Manager {
         self.set_state(
             &workspace.id,
             reserved_state,
-            failure.map(|e| format!("{e:#}")).or(workspace.error),
+            failure.map(|e| format!("{e:#}")).or(workspace.part.error),
         )
         .await?;
         // The stopped agents' leases waited for the stop to end.

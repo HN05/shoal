@@ -29,7 +29,7 @@ impl Manager {
     ) -> Result<Checkpoint> {
         let workspace = self.workspace(selector).await?;
         // A repository move holds this gate; the workspace may have moved.
-        let (_repo, _git) = self.lock_repository(&workspace.repository_id).await?;
+        let (_repo, _git) = self.lock_repository(workspace.repository()).await?;
         let workspace = self.workspace_by_id(&workspace.id).await?;
         ensure!(
             matches!(
@@ -58,7 +58,7 @@ impl Manager {
             return;
         };
         // A repository move holds this gate; the workspace may have moved.
-        let Ok((_repo, _git)) = self.lock_repository(&workspace.repository_id).await else {
+        let Ok((_repo, _git)) = self.lock_repository(workspace.repository()).await else {
             return;
         };
         let Ok(workspace) = self.workspace_by_id(workspace_id).await else {
@@ -122,7 +122,7 @@ impl Manager {
         let created_at = UnixTime::now();
         Ok(Checkpoint {
             workspace_id: workspace.id.clone(),
-            repository_id: workspace.repository_id.clone(),
+            repository_id: workspace.repository().clone(),
             number: CheckpointNumber::default(),
             name,
             cause,
@@ -143,7 +143,7 @@ impl Manager {
         checkpoint: &Checkpoint,
     ) -> Result<bool> {
         // A repository move holds this gate; the workspace may have moved.
-        let (_repo, _git) = self.lock_repository(&workspace.repository_id).await?;
+        let (_repo, _git) = self.lock_repository(workspace.repository()).await?;
         let workspace = self.workspace_by_id(&workspace.id).await?;
         self.verify_worktree(&workspace).await?;
         let now = self
@@ -283,7 +283,7 @@ impl Manager {
             "checkpoint {} could not keep the workspace's unsaved files; commit or remove them first",
             replaced.number
         );
-        let _git = self.gates.lock_git(&workspace.repository_id).await;
+        let _git = self.gates.lock_git(workspace.repository()).await;
         git::checkpoint::rewind(
             &workspace.path,
             checkpoint.head.as_str(),

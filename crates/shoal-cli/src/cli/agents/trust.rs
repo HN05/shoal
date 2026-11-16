@@ -121,7 +121,7 @@ async fn workspace_trust_paths(ctx: &Context, workspace: &Workspace, tool: &str)
         .and_then(|repos| {
             repos
                 .into_iter()
-                .find(|repo| repo.id == workspace.repository_id)
+                .find(|repo| repo.id == *workspace.repository())
                 .context("workspace repository is missing")
         }) {
         Ok(repo) => repository_trust_paths(&repo, &workspace.path),

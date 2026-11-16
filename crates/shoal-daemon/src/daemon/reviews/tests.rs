@@ -413,7 +413,7 @@ async fn startup_removes_interrupted_checkouts_and_queues_their_reviews_again() 
 async fn a_review_checkout_holds_its_repository_until_it_is_removed() {
     let fixture = fixture(&[], "").await;
     let manager = &fixture.manager;
-    let repository = fixture.workspace.repository_id.clone();
+    let repository = fixture.workspace.repository().clone();
     let id = fixture.workspace.id.clone();
     let queued = manager
         .store
@@ -467,7 +467,7 @@ async fn a_replaced_checkout_is_not_reviewed() {
     let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
     let repository = fixture
         .manager
-        .repository(&fixture.workspace.repository_id)
+        .repository(fixture.workspace.repository())
         .await
         .unwrap();
     // Another worktree on the same branch at the workspace's path.
@@ -579,7 +579,7 @@ async fn later_reviews_receive_a_false_positive_until_it_is_reopened() {
 async fn a_finding_keeps_its_outcome_when_its_false_positive_cannot_be_kept() {
     let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
     let finding = fixture.review().await.findings[0].id;
-    let repository = &fixture.workspace.repository_id;
+    let repository = fixture.workspace.repository();
     let path = fixture
         .manager
         .false_positives_path(repository)
@@ -608,7 +608,7 @@ async fn the_false_positives_go_back_when_the_outcome_cannot_be_stored() {
         .resolve_finding(finding, Some(Outcome::FalsePositive { reason }))
         .await
         .unwrap();
-    let repository = &fixture.workspace.repository_id;
+    let repository = fixture.workspace.repository();
     let path = fixture
         .manager
         .false_positives_path(repository)
@@ -632,7 +632,7 @@ async fn the_false_positives_go_back_when_the_outcome_cannot_be_stored() {
 async fn a_false_positive_reserves_the_directory_of_an_older_registration() {
     let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
     let finding = fixture.review().await.findings[0].id;
-    let repository = fixture.workspace.repository_id.clone();
+    let repository = fixture.workspace.repository().clone();
     let id = repository.clone();
     fixture
         .manager
@@ -673,7 +673,7 @@ async fn a_false_positive_reserves_the_directory_of_an_older_registration() {
 #[tokio::test]
 async fn an_invalid_false_positives_file_fails_reviews_of_the_repository() {
     let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
-    let repository = &fixture.workspace.repository_id;
+    let repository = fixture.workspace.repository();
     let path = fixture
         .manager
         .false_positives_path(repository)
@@ -1074,7 +1074,7 @@ async fn removing_the_repository_stops_its_reviews_first() {
         changed.changed().await.unwrap();
     }
     manager
-        .remove_repository(&fixture.workspace.repository_id)
+        .remove_repository(fixture.workspace.repository())
         .await
         .unwrap();
     assert!(!fixture.runs.root().exists());
@@ -1168,7 +1168,7 @@ async fn a_review_runs_beside_a_run_that_could_not_be_removed_in_a_new_session()
     // restart.
     let kept = ReviewId(999);
     let run = fixture.left_run(kept);
-    let repository = fixture.workspace.repository_id.clone();
+    let repository = fixture.workspace.repository().clone();
     (manager.reviews)
         .hold_checkout(kept, &repository, &run)
         .keep();
@@ -1226,7 +1226,7 @@ async fn a_review_queued_while_a_cancelled_one_ends_waits_for_its_run() {
 async fn recovery_removes_the_runs_an_earlier_version_left_in_the_state_directory() {
     let fixture = fixture(&[], "").await;
     let manager = &fixture.manager;
-    let repository = fixture.workspace.repository_id.clone();
+    let repository = fixture.workspace.repository().clone();
     let old = manager.paths.state.join("reviews");
     let run = old.join("7");
     std::fs::create_dir_all(run.join("checkout")).unwrap();
@@ -1240,7 +1240,7 @@ async fn recovery_removes_the_runs_an_earlier_version_left_in_the_state_director
 async fn a_run_left_in_the_repository_directory_holds_back_its_move_and_removal() {
     let fixture = fixture(&[], "").await;
     let manager = &fixture.manager;
-    let repository = fixture.workspace.repository_id.clone();
+    let repository = fixture.workspace.repository().clone();
     fixture.runs.create().unwrap();
     manager.ensure_no_reviews_in(&repository).await.unwrap();
     let run = fixture.left_run(ReviewId(7));
@@ -1262,7 +1262,7 @@ async fn a_run_that_cannot_be_removed_fails_its_review_instead_of_starting_over(
     }
     let fixture = fixture(&[], "").await;
     let manager = &fixture.manager;
-    let repository = fixture.workspace.repository_id.clone();
+    let repository = fixture.workspace.repository().clone();
     let id = fixture.workspace.id.clone();
     let stuck = manager
         .store
@@ -1322,7 +1322,7 @@ async fn a_run_that_cannot_be_removed_fails_its_review_instead_of_starting_over(
 async fn a_run_recovery_cannot_stop_keeps_its_checkout_and_admission() {
     let fixture = fixture(&[], "").await;
     let manager = &fixture.manager;
-    let repository = fixture.workspace.repository_id.clone();
+    let repository = fixture.workspace.repository().clone();
     let id = fixture.workspace.id.clone();
     let stuck = manager
         .store

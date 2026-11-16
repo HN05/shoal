@@ -110,7 +110,7 @@ impl Manager {
             .list_workspaces()
             .await?
             .into_iter()
-            .filter(|w| w.repository_id == repo.id)
+            .filter(|w| w.repository() == &repo.id)
             .collect();
         self.check_repository_boundaries(&repo, &workspaces).await?;
         // A run its review left may still have its reviewer's processes in
@@ -178,7 +178,7 @@ impl Manager {
         environment: BTreeMap<String, String>,
     ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
-        self.keep_environment(&workspace.repository_id, environment)
+        self.keep_environment(workspace.repository(), environment)
             .await
     }
 

@@ -150,8 +150,8 @@ fn render_chat(chat: &Chat, palette: Palette) {
     if let Some(agent) = &chat.agent {
         outln!("Agent:         {agent}");
     }
-    outln!("Mode:          {}", chat.mode);
-    if let Some(workspace) = &chat.workspace {
+    outln!("Mode:          {}", chat.agent_mode());
+    if let Some(workspace) = chat.workdir.workspace() {
         outln!("Workspace:     {}", workspace.name);
     }
     if chat.running {

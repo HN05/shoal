@@ -495,6 +495,7 @@ async fn a_starting_checkpoint_outlives_its_expiry_while_its_workspace_exists() 
         .workspace(&manager.named("topic").await)
         .await
         .unwrap()
+        .part
         .copied_from
         .unwrap();
     assert_eq!(copied.workspace, None, "the source is gone");

@@ -1405,7 +1405,7 @@ async fn a_stalled_directory_below_a_done_chat_starts_no_grace_period() {
     let (chat, opened) = chat_with_workspace(&temp, &manager).await;
     manager
         .write_local_config(
-            &opened.repository_id,
+            opened.repository(),
             Some("[cleanup]\ngrace_minutes = 600\n".into()),
         )
         .await

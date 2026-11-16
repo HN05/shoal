@@ -31,7 +31,9 @@ pub async fn records(paths: &CommandPaths, selector: &SpaceSelector) -> Result<H
     {
         PresentSpace::Workspace(workspace) => Ok(HomeRecords::Workspace(workspace)),
         PresentSpace::Chat(chat) => {
-            let workspace = (chat.workspace.as_ref())
+            let workspace = chat
+                .workdir
+                .workspace()
                 .and_then(|workspace| spaces.find(&SpaceSelector::id(&workspace.id)))
                 .and_then(|space| space.worktree().cloned());
             let repository = match &chat.repository_id {
@@ -104,7 +106,7 @@ async fn workspaces_dir(paths: &CommandPaths, workspace: &Workspace) -> Option<P
         .and_then(|repositories| {
             repositories
                 .into_iter()
-                .find(|repository| repository.id == workspace.repository_id)
+                .find(|repository| repository.id == *workspace.repository())
                 .map(|repository| repository.workspaces_dir)
                 .context("workspace repository is missing")
         });

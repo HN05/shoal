@@ -86,13 +86,7 @@ async fn a_failure_retains_the_workspace_and_tells_the_user() {
 async fn a_failure_reaches_the_requesting_agent() {
     let (_root, manager, workspace) = fixture_with_removal_hook("exit 1").await;
     let requester = manager
-        .create_workspace(
-            &workspace.repository_id,
-            "requester".into(),
-            None,
-            None,
-            None,
-        )
+        .create_workspace(workspace.repository(), "requester".into(), None, None, None)
         .await
         .unwrap();
     manager
@@ -130,7 +124,7 @@ async fn a_failure_outlives_the_requesting_chat() {
     );
     let chat = manager
         .start_chat(
-            workspace.repository_id.clone().into(),
+            workspace.repository().clone().into(),
             "requester".into(),
             "claude".into(),
             None,

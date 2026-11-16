@@ -163,10 +163,10 @@ impl Manager {
     async fn present_home(&self, space: &PresentSpace) -> Result<HomeKey> {
         match space {
             PresentSpace::Workspace(workspace) => {
-                self.home_of(Some(&workspace.repository_id), None).await
+                self.home_of(workspace.repository_id.as_ref(), None).await
             }
             PresentSpace::Chat(chat) => {
-                (self.home_of(chat.repository_id.as_ref(), chat.root_dir.as_deref())).await
+                (self.home_of(chat.repository_id.as_ref(), chat.workdir.root_dir())).await
             }
         }
     }

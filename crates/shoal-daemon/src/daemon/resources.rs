@@ -359,7 +359,7 @@ impl Manager {
             } else {
                 result.insert(
                     name,
-                    (Scope::Repo(workspace.repository_id.clone()), definition),
+                    (Scope::Repo(workspace.repository().clone()), definition),
                 );
             }
         }
@@ -634,7 +634,7 @@ fn release_lease(
         }
     }
     let mut released = false;
-    for scope in [Scope::Global, Scope::Repo(workspace.repository_id.clone())] {
+    for scope in [Scope::Global, Scope::Repo(workspace.repository().clone())] {
         let target = Target::Resource {
             scope,
             pool: pool.to_owned(),

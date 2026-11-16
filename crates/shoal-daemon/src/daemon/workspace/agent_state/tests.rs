@@ -273,7 +273,7 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
     let (temp, manager) = manager().await;
     let own = workspace(&manager, &temp).await;
     let other = manager
-        .create_workspace(&own.repository_id, "other".into(), None, None, None)
+        .create_workspace(own.repository(), "other".into(), None, None, None)
         .await
         .unwrap();
     manager

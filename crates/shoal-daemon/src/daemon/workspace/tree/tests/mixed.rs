@@ -486,7 +486,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
         .unwrap();
     let auditing = manager.run_chat_agent(auditing, None).await.unwrap();
     assert_eq!(
-        auditing.workspace.map(|home| home.id),
+        auditing.workdir.workspace().map(|home| home.id.clone()),
         Some(worker.id.clone())
     );
     assert_eq!(auditing.parent.map(|parent| parent.id), Some(chat.id));

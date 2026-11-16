@@ -43,7 +43,7 @@ impl Manager {
         let root = self.reach_root(Some(caller)).await?;
         let workspaces = self.list_workspaces_within(root.as_ref()).await?;
         let reached = workspaces.iter().any(|workspace| {
-            workspace.repository_id == *repository
+            workspace.repository() == repository
                 && workspace
                     .branch
                     .as_ref()

@@ -150,7 +150,7 @@ async fn pick_add_branch(ctx: &Context, target: &AddTarget) -> Result<String> {
             };
             let label = match workspaces
                 .iter()
-                .find(|w| w.repository_id == repo.id && w.branch.as_ref() == Some(&b.name))
+                .find(|w| w.repository() == &repo.id && w.branch.as_ref() == Some(&b.name))
             {
                 Some(w) => format!("{label}  [workspace: {}]", w.name),
                 None => label,

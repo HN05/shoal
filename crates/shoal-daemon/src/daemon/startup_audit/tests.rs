@@ -74,7 +74,7 @@ async fn the_audit_fails_workspaces_whose_file_access_stalls_until_a_recheck_fin
     manager.audit_worktrees().await.unwrap();
     let audited = manager.workspace_by_id(&workspace.id).await.unwrap();
     assert_eq!(audited.state, WorkspaceState::Failed);
-    let error = audited.error.unwrap();
+    let error = audited.part.error.unwrap();
     assert!(error.starts_with(STARTUP_OWNERSHIP_FAILURE), "{error}");
 
     // The recheck skips the directory until it is due to check it again.

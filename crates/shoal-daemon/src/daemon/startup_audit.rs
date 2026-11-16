@@ -61,7 +61,7 @@ impl Manager {
     }
 
     async fn recheck_startup_failure(&self, workspace: &Workspace) -> Result<()> {
-        let Some(_git) = self.gates.try_lock_git(&workspace.repository_id) else {
+        let Some(_git) = self.gates.try_lock_git(workspace.repository()) else {
             return Ok(());
         };
         // Check without reserving first, so a workspace that still fails
@@ -75,22 +75,22 @@ impl Manager {
             .await?;
         // Another operation may have changed the workspace since it was listed.
         let current = self.workspace_by_id(&workspace.id).await?;
-        let verified = failed_at_startup(&Workspace {
-            state: previous,
-            ..current.clone()
-        }) && self
-            .check_access(
-                &current.path,
-                self.verify_and_record_worktree(&current, true),
-            )
-            .await
-            .is_ok();
+        let mut listed = current.clone();
+        listed.state = previous;
+        let verified = failed_at_startup(&listed)
+            && self
+                .check_access(
+                    &current.path,
+                    self.verify_and_record_worktree(&current, true),
+                )
+                .await
+                .is_ok();
         if verified {
             self.set_state(&workspace.id, WorkspaceState::Ready, None)
                 .await?;
             log!("ownership of {} verified again; ready", workspace.name);
         } else {
-            self.set_state(&workspace.id, previous, current.error)
+            self.set_state(&workspace.id, previous, current.part.error)
                 .await?;
         }
         Ok(())

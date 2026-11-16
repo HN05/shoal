@@ -46,7 +46,7 @@ impl Manager {
             "workspace {} is recorded on {recorded}, not {branch}",
             workspace.name,
         );
-        let _git = self.gates.lock_git(&workspace.repository_id).await;
+        let _git = self.gates.lock_git(workspace.repository()).await;
         let target = git::remote_ref("origin", branch.as_str());
         self.fast_forward_to(workspace, &target).await
     }

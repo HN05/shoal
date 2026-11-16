@@ -122,7 +122,7 @@ impl Manager {
             "chat {} is stopped; restore it before converting it",
             chat.name
         );
-        if let Some(workspace) = &chat.workspace {
+        if let Some(workspace) = chat.workdir.workspace() {
             bail!(
                 "chat {} runs in the worktree of {}, which stays that workspace's; start a chat in the checkout to convert",
                 chat.name,

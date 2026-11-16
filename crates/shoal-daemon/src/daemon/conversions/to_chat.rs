@@ -25,7 +25,7 @@ impl Manager {
     ) -> Result<Workspace> {
         let workspace = self.convertible_workspace(selector).await?;
         // The chat runs in the checkout, under its settings, not the worktree's.
-        let settings = (self.repository_settings_with_templates(&workspace.repository_id)).await?;
+        let settings = (self.repository_settings_with_templates(workspace.repository())).await?;
         super::ensure_mode(&settings, &mode)?;
         // No agent starts in the workspace from when the one that carries on
         // is chosen.

@@ -157,7 +157,7 @@ async fn revert_workspace(
             split::start_child(ctx, start).await?
         }
         Reverting::Workspace(workspace) => {
-            let repository = workspace.repository_id.clone();
+            let repository = workspace.repository().clone();
             start_workspace(ctx, repository, name, base, None).await?
         }
         Reverting::Chat(chat) => {

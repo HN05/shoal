@@ -10,7 +10,13 @@ fn chat(id: &str, parent: Option<&str>, workspace: Option<&str>) -> Chat {
         "id": id, "repository_id": "r1", "name": id, "agent": "claude", "started_at": 0,
         "session": format!("s-{id}"),
         "parent": parent.map(|parent| space(parent, "chat")),
-        "workspace": workspace.map(|workspace| serde_json::json!({"id": workspace, "name": workspace, "branch": null})),
+        "workdir": match workspace {
+            Some(workspace) => serde_json::json!({
+                "kind": "worktree", "path": format!("/{workspace}"),
+                "workspace": {"id": workspace, "name": workspace, "branch": null},
+            }),
+            None => serde_json::json!({"kind": "checkout", "path": "/repo"}),
+        },
     }))
     .unwrap()
 }

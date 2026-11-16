@@ -186,27 +186,30 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
         ) {
             Body::Chats(vec![Chat {
                 narrowing: Default::default(),
-                mode: "chat".into(),
+                mode: Some("chat".into()),
                 number: 7.into(),
                 id: "c1".into(),
                 repository_id: Some("repo".into()),
                 name: "chat".into(),
-                agent: Some("codex".into()),
-                workspace: None,
                 running: true,
-                started_at: UnixTime::from_seconds(0),
-                tmp_dir: None,
-                root_dir: None,
                 links: Default::default(),
                 review: Vec::new(),
                 holds: Vec::new(),
-                completion: None,
                 agent_state: None,
                 progress: None,
                 sleep: None,
                 asleep: None,
                 parent: None,
                 children: Vec::new(),
+                workdir: shoal_protocol::model::Workdir::Checkout {
+                    path: "/repo".into(),
+                },
+                part: shoal_protocol::model::ChatPart {
+                    agent: Some("codex".into()),
+                    started_at: UnixTime::from_seconds(0),
+                    tmp_dir: None,
+                    completion: None,
+                },
             }])
         } else {
             assert!(matches!(
@@ -270,27 +273,30 @@ fn restore_completes_restorable_spaces() {
     );
     let chat = |name: &str, running| Chat {
         narrowing: Default::default(),
-        mode: "chat".into(),
+        mode: Some("chat".into()),
         number: 1.into(),
         id: name.into(),
         repository_id: Some("repo".into()),
         name: name.into(),
-        agent: Some("claude".into()),
-        workspace: None,
-        started_at: UnixTime::from_seconds(0),
-        tmp_dir: None,
-        root_dir: None,
         running,
         links: Default::default(),
         review: Vec::new(),
         holds: Vec::new(),
-        completion: None,
         agent_state: None,
         progress: None,
         sleep: None,
         asleep: None,
         parent: None,
         children: Vec::new(),
+        workdir: shoal_protocol::model::Workdir::Checkout {
+            path: "/repo".into(),
+        },
+        part: shoal_protocol::model::ChatPart {
+            agent: Some("claude".into()),
+            started_at: UnixTime::from_seconds(0),
+            tmp_dir: None,
+            completion: None,
+        },
     };
     let candidates = stopped_chat_candidates(vec![chat("talk", false), chat("running", true)]);
     let offered: Vec<_> = candidates

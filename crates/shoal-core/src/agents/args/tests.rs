@@ -57,6 +57,7 @@ fn a_restored_agent_whose_mode_is_gone_gets_the_default_rules() {
         .resolve(&Default::default())
         .unwrap();
     let workspace: crate::model::Workspace = serde_json::from_value(serde_json::json!({
+        "workdir": {"kind": "worktree", "path": "/work/topic", "workspace": {"id": "id", "name": "topic", "branch": "topic"}},
         "id": "id", "repository_id": "repo", "name": "topic", "branch": "topic",
         "path": "/work/topic", "state": "ready", "created_at": 0, "updated_at": 0,
     }))
@@ -76,27 +77,30 @@ fn chat(
 ) -> Chat {
     Chat {
         narrowing: Default::default(),
-        mode: mode.into(),
+        mode: Some(mode.into()),
         number: 1.into(),
         id: "chat-id".into(),
         repository_id: repository_id.map(Into::into),
         name: "talk".into(),
-        agent: Some("codex".into()),
-        workspace: None,
         running: true,
-        started_at: crate::time::UnixTime::from_seconds(0),
-        tmp_dir,
-        root_dir: None,
         links: Default::default(),
         review: Vec::new(),
         holds: Vec::new(),
-        completion: None,
         agent_state: None,
         progress: None,
         sleep: None,
         asleep: None,
         parent: None,
         children: Vec::new(),
+        workdir: crate::model::Workdir::Checkout {
+            path: "/repo".into(),
+        },
+        part: crate::model::ChatPart {
+            agent: Some("codex".into()),
+            started_at: crate::time::UnixTime::from_seconds(0),
+            tmp_dir,
+            completion: None,
+        },
     }
 }
 

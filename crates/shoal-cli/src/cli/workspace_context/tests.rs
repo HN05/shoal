@@ -3,43 +3,18 @@ use crate::state::WorkspaceState;
 use shoal_ids::space_ids::SpaceId;
 
 fn workspace(name: &str, path: &Path) -> Workspace {
-    Workspace {
-        narrowing: Default::default(),
-        mode: None,
-        number: 1.into(),
-        holds: Vec::new(),
-        review: Vec::new(),
-        latest_review: None,
-        agent_state: None,
-        progress: None,
-        sleep: None,
-        asleep: None,
-        coordinator_state: None,
-        base_workspace: None,
-        stacked_workspaces: Vec::new(),
-        parent: None,
-        children: Vec::new(),
-        links: crate::model::SpaceLinks::default(),
-        running: false,
-        done: false,
-        setup_skipped: false,
-        disposable: false,
-        usage: None,
-        job: None,
-        id: SpaceId::from(format!("id-{name}")),
-        repository_id: "repo".into(),
-        name: name.into(),
-        path: path.into(),
-        branch: Some(name.into()),
-        at: None,
-        copied_from: None,
-        state: WorkspaceState::Ready,
-        error: None,
-        base_commit: None,
-        base_ref: None,
-        git_dir: None,
-        git_dir_id: None,
-    }
+    let id = SpaceId::from(format!("id-{name}"));
+    let state = WorkspaceState::Ready;
+    let mut workspace = Workspace::record(
+        id,
+        "repo".into(),
+        name.into(),
+        path.into(),
+        Some(name.into()),
+        state,
+    );
+    workspace.number = 1.into();
+    workspace
 }
 
 #[test]

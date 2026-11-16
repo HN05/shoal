@@ -37,7 +37,7 @@ impl Manager {
         let settings = if present {
             self.workspace_settings(workspace).await
         } else {
-            self.repository_settings(&workspace.repository_id).await
+            self.repository_settings(workspace.repository()).await
         };
         match settings {
             Ok(settings) => uses_xcode(&settings).then_some(settings),
@@ -62,7 +62,7 @@ impl Manager {
             })
             .await;
         }
-        match self.repository(&workspace.repository_id).await {
+        match self.repository(workspace.repository()).await {
             Ok(repo) => {
                 if let Some(cache) = xcode_cache(&repo, settings) {
                     self.prune_checkouts(&repo, cache).await;
@@ -145,8 +145,8 @@ impl Manager {
             .list_workspaces()
             .await?
             .into_iter()
-            .filter(|workspace| workspace.repository_id == repo.id)
-            .map(|workspace| workspace.path)
+            .filter(|workspace| workspace.repository() == &repo.id)
+            .map(|workspace| workspace.part.path)
             .collect())
     }
 
@@ -206,12 +206,12 @@ impl Manager {
     async fn repository_worktrees(&self, repo: &Repository) -> Result<Vec<PathBuf>> {
         let mut worktrees = vec![repo.path.clone()];
         for workspace in self.list_workspaces().await? {
-            if workspace.repository_id == repo.id
+            if workspace.repository() == &repo.id
                 && off_runtime::try_exists(&workspace.path)
                     .await
                     .with_context(|| format!("inspect {}", workspace.path.display()))?
             {
-                worktrees.push(workspace.path);
+                worktrees.push(workspace.part.path);
             }
         }
         Ok(worktrees)

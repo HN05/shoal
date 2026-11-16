@@ -218,7 +218,7 @@ async fn picking_repository(
 ) -> Result<Option<crate::repository::Selector>> {
     if let Some(Some(workspace)) = &args.in_workspace {
         let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace.clone()).await?;
-        return Ok(Some((&inspection.workspace.repository_id).into()));
+        return Ok(Some((inspection.workspace.repository()).into()));
     }
     let names_repository =
         args.repository.is_some() || args.repository_override.is_some() || args.issue.is_some();

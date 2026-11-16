@@ -109,7 +109,7 @@ fn waiting_launch(workspace: &crate::model::Workspace) -> QueueRequest {
         issue_labels: Vec::new(),
         priority: None,
         narrowing: Default::default(),
-        repository: (&workspace.repository_id).into(),
+        repository: (workspace.repository()).into(),
         name: "waiting".into(),
         agent: "claude".into(),
         mode: None,

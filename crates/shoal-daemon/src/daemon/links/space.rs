@@ -64,7 +64,7 @@ impl LinkSpace {
 
     pub(crate) fn repository_id(&self) -> &RepositoryId {
         match self {
-            Self::Workspace(workspace) => &workspace.repository_id,
+            Self::Workspace(workspace) => workspace.repository(),
             Self::Chat { checkout, .. } => &checkout.id,
         }
     }

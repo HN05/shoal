@@ -168,7 +168,7 @@ impl Manager {
         let commits = self.review_commits(&workspace, &review.target).await?;
         // The run's directory is the repository's, which a registration
         // older than it reserves first.
-        let repository = (self.reserve_repository_directory(&workspace.repository_id)).await?;
+        let repository = (self.reserve_repository_directory(workspace.repository())).await?;
         let place = run_files(&repository, &review)?;
         let held = self.hold_run(id, &repository.id, place).await?;
         if !self.start_review(id, &commits).await? {
@@ -214,7 +214,7 @@ impl Manager {
         };
         let stop = cancel.clone();
         let mut admission = self.agent_queue.request_oneshot(
-            &workspace.repository_id,
+            workspace.repository(),
             serving,
             after_stop,
             move || {
@@ -360,7 +360,7 @@ impl Manager {
         head: &CommitId,
         files: &Files,
     ) -> Result<()> {
-        let repository = self.repository(&workspace.repository_id).await?;
+        let repository = self.repository(workspace.repository()).await?;
         review_runs(&repository)?.create()?;
         std::fs::create_dir_all(&files.directory)
             .with_context(|| format!("create {}", files.directory.display()))?;
@@ -516,7 +516,7 @@ impl Manager {
             },
         );
         let (id, workspace_id) = (review.id, workspace.id.clone());
-        let false_positives = self.false_positives(&workspace.repository_id).await?;
+        let false_positives = self.false_positives(workspace.repository()).await?;
         let earlier = self
             .store
             .run(move |db| store::earlier(db, &workspace_id, id))
@@ -655,7 +655,7 @@ impl Manager {
         }
         let review = self.store.run(move |db| store::load(db, id)).await.ok()??;
         let workspace = self.workspace_by_id(&review.workspace_id).await.ok()?;
-        let repository = self.repository(&workspace.repository_id).await.ok()?;
+        let repository = self.repository(workspace.repository()).await.ok()?;
         let place = run_files(&repository, &review).ok()?;
         let beside = run_beside(&place, id);
         Some(LeftRun {

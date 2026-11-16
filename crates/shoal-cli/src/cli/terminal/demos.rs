@@ -24,7 +24,7 @@ pub(in crate::cli) async fn start_demo(
     worker: &DemoWorker<'_>,
 ) -> Result<Origin> {
     let origin = current_origin();
-    let repo = groups::Repo::Id(workspace.repository_id.as_str());
+    let repo = groups::Repo::Id(workspace.repository().as_str());
     let env = place_env(&ctx.paths)?;
     groups::first_queued(
         &ctx.paths,

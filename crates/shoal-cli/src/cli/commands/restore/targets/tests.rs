@@ -5,6 +5,7 @@ use shoal_protocol::space_names::SpaceSelector;
 
 fn spaces() -> Spaces {
     let workspace: Workspace = serde_json::from_value(serde_json::json!({
+        "workdir": {"kind": "worktree", "path": "/worker", "workspace": {"id": "w1", "name": "worker", "branch": "worker"}},
         "id": "w1",
         "number": 3,
         "repository_id": "repo",
@@ -16,27 +17,30 @@ fn spaces() -> Spaces {
     .unwrap();
     let chat = |id: &str, number: u32, name: &str, running| Chat {
         narrowing: Default::default(),
-        mode: "chat".into(),
+        mode: Some("chat".into()),
         number: number.into(),
         id: id.into(),
         repository_id: Some("repo".into()),
         name: name.into(),
-        agent: Some("claude".into()),
-        workspace: None,
-        started_at: UnixTime::from_seconds(0),
-        tmp_dir: None,
-        root_dir: None,
         running,
         links: Default::default(),
         review: Vec::new(),
         holds: Vec::new(),
-        completion: None,
         agent_state: None,
         progress: None,
         sleep: None,
         asleep: None,
         parent: None,
         children: Vec::new(),
+        workdir: shoal_protocol::model::Workdir::Checkout {
+            path: "/repo".into(),
+        },
+        part: shoal_protocol::model::ChatPart {
+            agent: Some("claude".into()),
+            started_at: UnixTime::from_seconds(0),
+            tmp_dir: None,
+            completion: None,
+        },
     };
     Spaces {
         workspaces: vec![workspace],

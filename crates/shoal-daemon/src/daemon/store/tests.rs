@@ -2231,7 +2231,10 @@ fn mappers_use_named_columns() -> Result<()> {
         WORKSPACE_COLUMNS,
         workspace,
         serde_json::json!({
-            "id": "workspace", "number": 1, "repository_id": "repo", "name": "worker", "path": "/work",
+            "id": "workspace", "kind": "workspace", "number": 1, "repository_id": "repo",
+            "name": "worker", "path": "/work",
+            "workdir": {"kind": "worktree", "path": "/work",
+                        "workspace": {"id": "workspace", "name": "worker", "branch": "feature"}},
             "branch": "feature", "state": "failed", "error": "setup error",
             "base_commit": "abc", "base_ref": "refs/heads/main",
             "git_dir": "/git/worktrees/worker", "git_dir_id": "1:2",

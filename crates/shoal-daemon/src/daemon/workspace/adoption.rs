@@ -53,7 +53,7 @@ impl Manager {
             .find(|w| w.path == path)
         {
             ensure!(
-                workspace.repository_id == repo.id
+                workspace.repository() == &repo.id
                     && workspace.branch.as_ref().map(BranchName::as_str) == Some(branch.as_str()),
                 "worktree no longer matches its recorded repository or branch"
             );
@@ -65,19 +65,17 @@ impl Manager {
         let identity = git_dir_identity(&git_dir).await?;
         let base = existing_base(repo, branch).await?;
         let (commit, reference) = recorded_base(repo, &base).await?;
-        let workspace = Workspace {
-            base_commit: Some(commit.into()),
-            base_ref: reference,
-            git_dir: Some(git_dir.clone()),
-            git_dir_id: Some(identity),
-            ..Workspace::new_record(
-                repo.id.clone(),
-                SpaceName::derive(branch.as_str(), "workspace"),
-                path,
-                Some(branch.clone()),
-                WorkspaceState::Ready,
-            )
-        };
+        let mut workspace = Workspace::new_record(
+            repo.id.clone(),
+            SpaceName::derive(branch.as_str(), "workspace"),
+            path,
+            Some(branch.clone()),
+            WorkspaceState::Ready,
+        );
+        workspace.base_commit = Some(commit.into());
+        workspace.base_ref = reference;
+        workspace.git_dir = Some(git_dir.clone());
+        workspace.git_dir_id = Some(identity);
         // A marker naming no recorded workspace outlived its record or a reset
         // state directory; one naming a recorded workspace refuses adoption.
         self.release_stale_owner(&git_dir, &workspace.id).await?;

@@ -373,7 +373,7 @@ impl Manager {
         check: Option<&Inspection>,
     ) -> Result<WorktreeRemoval> {
         let workspace = &worktree.workspace;
-        let repo = self.repository(&workspace.repository_id).await?;
+        let repo = self.repository(workspace.repository()).await?;
         let removed = match check {
             Some(check) => {
                 self.delete_checkpointed_worktree(&repo.path, workspace, removal, check)
@@ -450,7 +450,7 @@ impl Manager {
         match self.removal_hook(workspace, HookKind::PostRemove).await? {
             Some(command) => Ok(Some(PostRemoveHook {
                 command,
-                checkout: self.repository(&workspace.repository_id).await?.path,
+                checkout: self.repository(workspace.repository()).await?.path,
                 env: self.removed_workspace_environment(workspace).await?,
             })),
             None => Ok(None),

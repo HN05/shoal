@@ -80,7 +80,7 @@ async fn registration_rolls_back_setup_reservation_when_insertion_fails() {
 async fn registration_publishes_atomically_and_preserves_stop_during_pre_setup() {
     let (_root, manager, workspace) =
         fixture(": > hook-started\nwhile [ ! -f hook-release ]; do sleep 0.01; done").await;
-    let guard = manager.gates.lock_git(&workspace.repository_id).await;
+    let guard = manager.gates.lock_git(workspace.repository()).await;
     let git_gate = tokio::sync::OwnedMutexGuard::mutex(&guard).clone();
     drop(guard);
     // Pause publication after persistence, with registration still in flight.
@@ -394,6 +394,7 @@ async fn recorded_child_and_unverified_group_block_completion_without_markers() 
             .workspace_by_id(&workspace.id)
             .await
             .unwrap()
+            .part
             .error
             .unwrap();
         assert!(error.contains(&format!("PID {}", identity.pid)), "{error}");
@@ -441,6 +442,7 @@ async fn setup_preserves_inventory_failure_in_its_retained_diagnostic() {
     assert_eq!(workspace.state, WorkspaceState::Failed);
     assert!(
         workspace
+            .part
             .error
             .unwrap()
             .contains("inventory fixture refused")

@@ -124,7 +124,7 @@ impl Manager {
             CleanRequest {
                 workspace_id: workspace.id.clone(),
                 workspace_name: workspace.name.clone(),
-                repository_id: workspace.repository_id.clone(),
+                repository_id: workspace.repository().clone(),
                 execution_id,
                 requested_at: UnixTime::now(),
                 updated_at: UnixTime::now(),

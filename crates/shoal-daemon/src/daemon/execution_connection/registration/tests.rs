@@ -81,7 +81,7 @@ async fn a_setup_its_wrapper_never_received_fails_as_not_started() {
         inspection.executions
     );
     assert_eq!(inspection.workspace.state, WorkspaceState::Failed);
-    let error = inspection.workspace.error.unwrap_or_default();
+    let error = inspection.workspace.part.error.unwrap_or_default();
     assert!(error.contains("did not start"), "{error}");
     assert!(!manager.executions.has_connections().await);
 }

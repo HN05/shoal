@@ -94,7 +94,7 @@ impl Manager {
         let workspace = self.workspace_by_id(&workspace.id).await?;
         let agents = recovery::stopped_agents(&self.paths, &workspace.id)?;
         let mut record = packaged_record(&self.paths, &workspace, checkpoint, agents);
-        let repo = self.repository(&workspace.repository_id).await?;
+        let repo = self.repository(workspace.repository()).await?;
         let present = PresentSpace::Workspace(workspace.clone());
         record.session_files = self.unplaced_sessions(&present).await;
         let kept_sessions = self.kept_session_sources(&record).await;

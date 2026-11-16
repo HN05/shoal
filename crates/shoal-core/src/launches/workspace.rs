@@ -104,7 +104,7 @@ pub async fn pull_creation(
         return Ok(());
     }
     let owned = reads.workspaces().await?.iter().any(|workspace| {
-        workspace.repository_id == repo.id
+        workspace.repository() == &repo.id
             && workspace.branch.as_ref().map(BranchName::as_str) == Some(pull.head.as_str())
     });
     if owned {
@@ -196,7 +196,7 @@ pub async fn settle(
     taken.extend(
         workspaces
             .into_iter()
-            .filter_map(|workspace| workspace.branch),
+            .filter_map(|workspace| workspace.part.branch),
     );
     ensure!(
         git::repo::allocate_branch(&name, &taken) == name,
@@ -225,7 +225,7 @@ async fn repository_workspaces(
     repo: &Repository,
 ) -> Result<Vec<Workspace>> {
     Ok((reads.workspaces().await?.into_iter())
-        .filter(|workspace| workspace.repository_id == repo.id)
+        .filter(|workspace| workspace.repository() == &repo.id)
         .collect())
 }
 
@@ -253,7 +253,7 @@ pub async fn issue_creation(
     let mut associated = None;
     for workspace in workspaces
         .iter()
-        .filter(|workspace| workspace.repository_id == repo.id)
+        .filter(|workspace| workspace.repository() == &repo.id)
     {
         if (workspace.links.issues.iter()).any(|issue| issue.url == *issue_url) {
             ensure!(
@@ -274,7 +274,7 @@ pub async fn issue_creation(
     }
     let local = BranchName::from(name.as_str());
     if let Some(workspace) = workspaces.into_iter().find(|workspace| {
-        workspace.repository_id == repo.id && workspace.branch.as_ref() == Some(&local)
+        workspace.repository() == &repo.id && workspace.branch.as_ref() == Some(&local)
     }) {
         ensure_reopens(&workspace)?;
     } else if git::ref_exists(&repo.path, &git::local_ref(&local), git::isolated_command).await? {
@@ -352,7 +352,7 @@ pub async fn reopened_workspace(
     };
     Ok((reads.workspaces().await?.into_iter())
         .find(|workspace| {
-            workspace.repository_id == repo.id
+            workspace.repository() == &repo.id
                 && workspace.branch.as_ref().map(BranchName::as_str) == Some(&branch)
         })
         .map(|workspace| workspace.id))

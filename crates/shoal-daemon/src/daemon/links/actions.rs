@@ -832,7 +832,7 @@ impl Manager {
             return Ok(false);
         };
         let permissions = self
-            .caller_permissions(caller, &workspace.repository_id)
+            .caller_permissions(caller, workspace.repository())
             .await?;
         Ok(permissions.pr_open.value != Opening::Direct)
     }

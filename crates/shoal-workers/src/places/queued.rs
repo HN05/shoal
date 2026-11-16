@@ -62,7 +62,7 @@ pub async fn restore_in_background(
     args: &[OsString],
 ) -> Result<()> {
     let origin = queued_origin()?;
-    let repo = groups::Repo::Id(workspace.repository_id.as_str());
+    let repo = groups::Repo::Id(workspace.repository().as_str());
     groups::first_queued(
         paths,
         settings,

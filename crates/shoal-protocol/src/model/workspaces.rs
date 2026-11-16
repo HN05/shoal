@@ -1,5 +1,5 @@
 //! Workspace records and the commit, copy or branch they start from.
-use super::{AgentStatus, QueuedJob, ReviewMark, SpaceHold, SpaceLinks, SpaceRef};
+use super::{QueuedJob, Space, SpaceLinks, Workdir};
 use crate::space_names::SpaceName;
 use crate::state::{AgentState, WorkspaceState};
 use serde::{Deserialize, Serialize};
@@ -9,25 +9,14 @@ use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_refs::{BranchName, CommitId};
 use std::path::{Path, PathBuf};
 
+/// A workspace: a space with a worktree of its own.
+pub type Workspace = Space<Worktree>;
+
+/// What only a workspace has: the worktree it owns, with its branch, how it
+/// was made and set up, and its completion.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Workspace {
-    pub id: SpaceId,
-    /// Unique among the spaces that exist, workspaces and chats; freed when
-    /// it goes.
-    #[serde(default)]
-    pub number: SpaceNumber,
-    pub repository_id: RepositoryId,
-    pub name: SpaceName,
-    /// The mode its latest agent started in; none before it had one.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mode: Option<crate::config::modes::ModeName>,
-    /// The permissions `--permission` gave its latest agent, which apply as
-    /// given whatever its mode's.
-    #[serde(
-        default,
-        skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
-    )]
-    pub narrowing: crate::config::permissions::PermissionsConfig,
+#[serde(tag = "kind", rename = "workspace")]
+pub struct Worktree {
     pub path: PathBuf,
     /// Its branch; `None` for a workspace at a commit, which `at` describes.
     pub branch: Option<BranchName>,
@@ -45,35 +34,13 @@ pub struct Workspace {
     /// to verify the worktree was not moved or replaced.
     pub git_dir: Option<PathBuf>,
     pub git_dir_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub holds: Vec<SpaceHold>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub review: Vec<ReviewMark>,
     /// Its newest local review.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_review: Option<crate::reviews::ReviewStatus>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent_state: Option<AgentStatus>,
-    /// Where its agent is in its work, as it last reported.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub progress: Option<crate::progress::Progress>,
-    /// How long its agent sleeps, which keeps Shoal from waking it for
-    /// having stayed idle.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sleep: Option<crate::state::Sleep>,
-    /// Why Shoal put its stopped agent to sleep and what wakes it, while
-    /// Shoal brings that agent back on its own.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub asleep: Option<crate::model::Asleep>,
     /// In a list, the turn state its coordinator's agent reports while no
     /// agent of its own has started here, so that agent does its work.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coordinator_state: Option<AgentState>,
-    #[serde(default)]
-    pub links: SpaceLinks,
-    /// Whether an agent or command started through Shoal is running here.
-    #[serde(default)]
-    pub running: bool,
     /// Whether `shoal done` recorded a completion that is not withdrawn.
     #[serde(default)]
     pub done: bool,
@@ -90,13 +57,6 @@ pub struct Workspace {
     /// Workspaces that record this one as their base.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stacked_workspaces: Vec<WorkspaceRef>,
-    /// The space above this one: the workspace it was split from or the
-    /// chat that opened it.
-    #[serde(default)]
-    pub parent: Option<SpaceRef>,
-    /// The spaces below this one.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub children: Vec<SpaceRef>,
     /// What its processes use, while any run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage: Option<WorkspaceUsage>,
@@ -207,6 +167,7 @@ pub struct WorkspaceRef {
 }
 
 impl Workspace {
+    /// A new workspace's record, with an ID of its own.
     pub fn new_record(
         repository_id: RepositoryId,
         name: SpaceName,
@@ -214,42 +175,87 @@ impl Workspace {
         branch: Option<BranchName>,
         state: WorkspaceState,
     ) -> Self {
-        Self {
-            narrowing: Default::default(),
-            id: SpaceId::generate(),
-            number: SpaceNumber::default(),
+        Self::record(
+            SpaceId::generate(),
             repository_id,
             name,
-            mode: None,
             path,
             branch,
-            at: None,
-            copied_from: None,
             state,
-            error: None,
-            base_commit: None,
-            base_ref: None,
-            git_dir: None,
-            git_dir_id: None,
-            holds: Vec::new(),
+        )
+    }
+
+    /// The record of the workspace `id`, its worktree at `path`, with
+    /// nothing else known of it.
+    pub fn record(
+        id: SpaceId,
+        repository_id: RepositoryId,
+        name: SpaceName,
+        path: PathBuf,
+        branch: Option<BranchName>,
+        state: WorkspaceState,
+    ) -> Self {
+        let workdir = Workdir::Worktree {
+            workspace: WorkspaceRef {
+                id: id.clone(),
+                name: name.clone(),
+                branch: branch.clone(),
+            },
+            path: path.clone(),
+        };
+        Self {
+            id,
+            number: SpaceNumber::default(),
+            name,
+            repository_id: Some(repository_id),
+            mode: None,
+            narrowing: Default::default(),
+            running: false,
+            links: SpaceLinks::default(),
             review: Vec::new(),
-            latest_review: None,
+            holds: Vec::new(),
             agent_state: None,
             progress: None,
             sleep: None,
             asleep: None,
-            coordinator_state: None,
-            base_workspace: None,
-            stacked_workspaces: Vec::new(),
             parent: None,
             children: Vec::new(),
-            links: SpaceLinks::default(),
-            running: false,
-            done: false,
-            setup_skipped: false,
-            disposable: false,
-            usage: None,
-            job: None,
+            workdir,
+            part: Worktree {
+                path,
+                branch,
+                at: None,
+                copied_from: None,
+                state,
+                error: None,
+                base_commit: None,
+                base_ref: None,
+                git_dir: None,
+                git_dir_id: None,
+                latest_review: None,
+                coordinator_state: None,
+                done: false,
+                setup_skipped: false,
+                disposable: false,
+                base_workspace: None,
+                stacked_workspaces: Vec::new(),
+                usage: None,
+                job: None,
+            },
+        }
+    }
+
+    /// Its repository, which every workspace has.
+    pub fn repository(&self) -> &RepositoryId {
+        (self.repository_id.as_ref()).expect("a workspace belongs to a repository")
+    }
+
+    /// The reference other records give to it.
+    pub fn reference(&self) -> WorkspaceRef {
+        WorkspaceRef {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            branch: self.branch.clone(),
         }
     }
 
@@ -265,11 +271,6 @@ impl Workspace {
     /// of a workspace at a commit.
     pub fn branch_or_name(&self) -> &str {
         self.branch.as_ref().map_or(&self.name, BranchName::as_str)
-    }
-
-    /// Its number with its name, as text that names it does.
-    pub fn label(&self) -> String {
-        crate::space_names::label(self.number, &self.name)
     }
 
     /// Its worktree directory's name, the last part of its path, which

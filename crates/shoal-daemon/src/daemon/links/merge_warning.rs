@@ -91,7 +91,7 @@ impl Manager {
         let Some(recorded) = recorded.filter(|recorded| !recorded.files.is_empty()) else {
             return Ok(None);
         };
-        let repo = self.repository(&workspace.repository_id).await?;
+        let repo = self.repository(workspace.repository()).await?;
         let target = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await?;
         let head = git::resolve_commit(&workspace.path, "HEAD", git::run_isolated).await?;
         let merged = Merged {

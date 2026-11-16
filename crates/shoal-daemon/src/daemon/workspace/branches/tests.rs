@@ -1421,7 +1421,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
 async fn setup_releases_git_gate_after_registration_and_on_preparation_failure() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
-    let guard = f.manager.gates.lock_git(&workspace.repository_id).await;
+    let guard = f.manager.gates.lock_git(workspace.repository()).await;
     let gate = tokio::sync::OwnedMutexGuard::mutex(&guard).clone();
     drop(guard);
     assert!(
@@ -1487,7 +1487,7 @@ async fn incomplete_removal_allows_refresh_recovery_and_diagnosis() {
 async fn merge_execution_holds_git_gate_through_completion_and_releases_on_failure() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
-    let guard = f.manager.gates.lock_git(&workspace.repository_id).await;
+    let guard = f.manager.gates.lock_git(workspace.repository()).await;
     let gate = tokio::sync::OwnedMutexGuard::mutex(&guard).clone();
     drop(guard);
     for exit in [Some(0), None] {
@@ -2206,7 +2206,7 @@ impl Manager {
     ) -> anyhow::Result<crate::model::MergedBranch> {
         let selector = self.named(selector).await;
         let workspace = self.workspace(&selector).await?;
-        let _guard = self.gates.lock_git(&workspace.repository_id).await;
+        let _guard = self.gates.lock_git(workspace.repository()).await;
         let options = crate::model::MergeOptions {
             push,
             confirmed: None,

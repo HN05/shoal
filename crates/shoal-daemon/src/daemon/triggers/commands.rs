@@ -144,7 +144,7 @@ impl Manager {
                     .await
                     .context("find the space to act in")?;
                 match space {
-                    PresentSpace::Workspace(workspace) => Some(workspace.repository_id),
+                    PresentSpace::Workspace(workspace) => workspace.repository_id,
                     PresentSpace::Chat(chat) => chat.repository_id,
                 }
             }

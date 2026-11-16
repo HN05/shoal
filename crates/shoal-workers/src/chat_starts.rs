@@ -140,9 +140,9 @@ async fn home(paths: &CommandPaths, start: &ChatStart) -> Result<(Option<Reposit
                 .await?
                 .workspace;
             let repository = (repositories.into_iter())
-                .find(|repository| repository.id == workspace.repository_id)
+                .find(|repository| repository.id == *workspace.repository())
                 .context("the workspace's repository is no longer registered")?;
-            (Some(repository), workspace.path)
+            (Some(repository), workspace.part.path)
         }
         (None, Some(selector)) => {
             let repository = crate::repository::select(&repositories, selector.clone()).await?;

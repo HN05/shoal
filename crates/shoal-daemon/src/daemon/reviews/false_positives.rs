@@ -79,7 +79,8 @@ impl Manager {
         let repository_id = self
             .workspace_by_id(&review.workspace_id)
             .await?
-            .repository_id;
+            .repository()
+            .clone();
         let path = match entry {
             Some(_) => Some(self.false_positives_path_reserved(&repository_id).await?),
             None => self.false_positives_path(&repository_id).await?,

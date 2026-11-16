@@ -95,7 +95,7 @@ impl Manager {
     ) -> Result<Report> {
         // Serializes with branch creation and main updates; state reservation below
         // prevents new executions, removal, stop, and resource claims during repair.
-        let _guard = self.gates.lock_git(&queued.repository_id).await;
+        let _guard = self.gates.lock_git(queued.repository()).await;
         // Read again: a repair that held the gate meanwhile may have changed it.
         let workspace = self.workspace_by_id(&queued.id).await?;
         let mut report = Report::new(workspace.clone());

@@ -92,7 +92,7 @@ async fn chat_restore_child() {
     let (_root, manager, workspace, serving) = fixture().await;
     let paths = CommandPaths::from(manager.paths.clone());
     let checkout = manager
-        .repository(&workspace.repository_id)
+        .repository(workspace.repository())
         .await
         .unwrap()
         .path;
@@ -103,7 +103,7 @@ async fn chat_restore_child() {
     .unwrap();
     let chat = manager
         .start_chat(
-            workspace.repository_id.clone().into(),
+            workspace.repository().clone().into(),
             "talk".into(),
             "claude".into(),
             None,
@@ -144,7 +144,7 @@ async fn chat_restore_child() {
     let tool = &crate::ai::tools(&Default::default())["claude"];
     let hooks =
         crate::agents::hook_args(tool.integration, crate::agents::AgentSpace::Chat, false).unwrap();
-    let tmp_dir = fs::canonicalize(chat.tmp_dir.unwrap()).unwrap();
+    let tmp_dir = fs::canonicalize(chat.part.tmp_dir.unwrap()).unwrap();
     let directories = [fs::canonicalize("/tmp").unwrap(), tmp_dir];
     let expected: Vec<std::ffi::OsString> = ["claude-fixture", "--resume", "s1"]
         .into_iter()

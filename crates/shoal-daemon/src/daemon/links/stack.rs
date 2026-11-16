@@ -71,7 +71,11 @@ impl Manager {
         let merged_heads: Vec<BranchName> = pulls.into_iter().map(|pull| pull.head).collect();
         // Reload: they may have moved since. The caller holds the PR gates of
         // those stacked when it read `base`, so one stacked since waits.
-        let stacked = self.workspace_by_id(&base.id).await?.stacked_workspaces;
+        let stacked = self
+            .workspace_by_id(&base.id)
+            .await?
+            .part
+            .stacked_workspaces;
         let held = |id: &SpaceId| base.stacked_workspaces.iter().any(|held| held.id == *id);
         if !stacked.iter().all(|stacked| held(&stacked.id)) {
             return Ok(Some(anyhow::anyhow!(

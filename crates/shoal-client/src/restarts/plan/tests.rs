@@ -272,6 +272,7 @@ fn a_rerun_skips_what_any_run_of_a_pending_restart_restarted() {
 fn chat(name: &str) -> PresentSpace {
     PresentSpace::Chat(
         serde_json::from_value(serde_json::json!({
+            "workdir": {"kind": "checkout", "path": "/repo"},
             "id": name,
             "repository_id": "repository",
             "name": name,
