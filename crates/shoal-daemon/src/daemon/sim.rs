@@ -19,6 +19,7 @@ pub(crate) use shoal_protocol::sim::{
 };
 use simctl::Inventory;
 
+use crate::refusal::{Reason, Refusal};
 use crate::{
     daemon::{allocation::Allocation, approvals, queue, scope::Caller, workspace::Manager},
     model::Workspace,
@@ -553,7 +554,7 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         ensure!(
             workspace.state == WorkspaceState::Ready,
-            "workspace is not ready"
+            Refusal::new(Reason::NotReady, "workspace is not ready")
         );
         self.touch(&workspace.id).await;
         let sim = self

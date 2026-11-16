@@ -439,3 +439,23 @@ async fn a_release_a_busy_resource_operation_holds_off_waits_for_the_next_pass()
         "no release failed"
     );
 }
+
+/// A simulator release that finds its workspace taken by a lifecycle
+/// operation waits for the next pass, as a resource release does.
+#[tokio::test]
+async fn a_simulator_release_a_lifecycle_operation_holds_off_waits() {
+    let fixture = Fixture::new(POOL).await;
+    let (execution_id, _) = fixture.agent().await;
+    let agent = Acquirer::Agent { execution_id };
+    fixture.lease_simulator("agent", agent).await;
+    let manager = &fixture.manager;
+    let stopping = crate::state::WorkspaceState::Stopping;
+    (manager.reserve_lifecycle(&fixture.workspace.id, stopping))
+        .await
+        .unwrap();
+
+    let selector = fixture.selector();
+    let released = manager.release_simulator(&selector, "agent".into()).await;
+
+    assert!(waits(&released.unwrap_err()));
+}
