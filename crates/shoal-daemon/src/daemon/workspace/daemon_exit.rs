@@ -8,10 +8,9 @@
 use super::{
     Manager,
     executions::{Save, StopRequest},
-    shutdown_stop::Shutdown,
+    shutdown_stop::{Shutdown, StoppedSpaces},
 };
 use crate::daemon::workspace::runner::JobStop;
-use crate::model::PresentSpace;
 use crate::protocol::{Exit, QueuedLaunches};
 use shoal_protocol::space_names::SpaceSelector;
 use std::collections::HashSet;
@@ -45,9 +44,9 @@ impl Manager {
     /// whose work it stopped. What still runs afterwards, such as work that
     /// failed to stop, detaches or stops as [`Manager::stop_for_shutdown`]
     /// decides.
-    pub(crate) async fn end_work(&self, ending: Ending) -> Vec<PresentSpace> {
+    pub(crate) async fn end_work(&self, ending: Ending) -> StoppedSpaces {
         match ending {
-            Ending::Detach => Vec::new(),
+            Ending::Detach => StoppedSpaces::default(),
             Ending::Stop => {
                 self.executions.close().await;
                 self.stop_all_for_exit().await
@@ -62,7 +61,7 @@ impl Manager {
     /// Stop what `shoal stop --all` stops, as it does, keeping stopped
     /// agents down until `shoal restore`, after a stop before a shutdown that
     /// is under way. Returns the spaces stopped.
-    async fn stop_all_for_exit(&self) -> Vec<PresentSpace> {
+    async fn stop_all_for_exit(&self) -> StoppedSpaces {
         let _shutdown_stop = self.shutdown_stopped.lock().await;
         let moment = "before the Shoal daemon stopped";
         self.stop_every_target(moment, &HashSet::new(), |workspace| async move {

@@ -81,6 +81,7 @@ pub(crate) use holds::place_approved as place_approved_hold;
 pub(crate) use lifecycle::not_ready;
 pub(crate) use merge::RecordChange;
 pub(crate) use ownership::VerifiedWorktree;
+pub(crate) use shutdown_stop::StoppedSpaces;
 pub(crate) use stack::record_base_changed;
 pub(crate) use stopped_work::PermissionTargets;
 

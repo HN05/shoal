@@ -69,17 +69,17 @@ async fn an_exit_request_is_served_at_every_protocol_version_except_to_scopes() 
 }
 
 /// An exit answers again with the spaces whose work it stopped and left
-/// for `shoal restore`, leaving out stopped work it did not stop.
+/// for `shoal restore`, leaving out stopped work it did not stop, and
+/// names none where some work stopped outside the spaces it stopped.
 #[tokio::test]
 async fn an_exit_answers_again_with_the_spaces_of_the_work_it_stopped() {
-    use crate::daemon::test_support;
+    use crate::daemon::{test_support, workspace::StoppedSpaces};
     let (_root, manager) = test_support::manager().await;
     let (exit, mut requested) = tokio::sync::mpsc::channel(1);
     let server = Server {
         exit,
         ..server(manager.clone())
     };
-    let (_, mut client) = ask_exit(&server, None, "stop").await;
     let mut chats = Vec::new();
     for name in ["stopped", "earlier"] {
         let chat = test_support::chat(&manager, name, "chat", None, None).await;
@@ -95,21 +95,25 @@ async fn an_exit_answers_again_with_the_spaces_of_the_work_it_stopped() {
         chats.push(chat);
     }
     let number = chats[0].number;
-    let stopped = [crate::model::PresentSpace::Chat(chats.remove(0))];
-    requested
-        .try_recv()
-        .unwrap()
-        .answer(&manager, &stopped)
-        .await;
-    let exited = read_response(&mut client).await;
-    assert_eq!(exited["id"], 4);
-    assert_eq!(exited["type"], "exited", "{exited}");
-    assert_eq!(exited["data"]["stopped_work"], true, "{exited}");
-    assert_eq!(
-        exited["data"]["spaces"],
-        serde_json::json!([number]),
-        "{exited}"
-    );
+    let spaces = vec![crate::model::PresentSpace::Chat(chats.remove(0))];
+    for every in [true, false] {
+        let (_, mut client) = ask_exit(&server, None, "stop").await;
+        let stopped = StoppedSpaces {
+            spaces: spaces.clone(),
+            every,
+        };
+        let mut exit = requested.try_recv().unwrap();
+        exit.answer(&manager, &stopped).await;
+        let exited = read_response(&mut client).await;
+        assert_eq!(exited["type"], "exited", "{exited}");
+        assert_eq!(exited["data"]["stopped_work"], true, "{exited}");
+        let named = if every { vec![number] } else { Vec::new() };
+        assert_eq!(
+            exited["data"]["spaces"],
+            serde_json::json!(named),
+            "{exited}"
+        );
+    }
 }
 
 /// Ask `server` to exit with `exit` as a service command of another

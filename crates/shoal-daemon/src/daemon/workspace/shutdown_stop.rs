@@ -20,6 +20,16 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
+/// The spaces a stop of every running space stopped.
+#[derive(Default)]
+pub(crate) struct StoppedSpaces {
+    pub spaces: Vec<PresentSpace>,
+    /// Whether it stopped every running space's work there; otherwise work
+    /// may also stop elsewhere, as the daemon's last stop of what still
+    /// runs as it exits saves it.
+    pub every: bool,
+}
+
 /// What shuts down, which the stop and the user's notifications name.
 #[derive(Clone, Copy)]
 pub(crate) enum Shutdown {
@@ -82,10 +92,10 @@ impl Manager {
     /// user learns what to continue. An update waits for the stop. Once a
     /// stop before a shutdown finished, later ones wait for it and leave the
     /// work alone. Returns the spaces stopped.
-    pub(crate) async fn stop_for_shutdown_of(&self, shutdown: Shutdown) -> Vec<PresentSpace> {
+    pub(crate) async fn stop_for_shutdown_of(&self, shutdown: Shutdown) -> StoppedSpaces {
         let mut finished = self.shutdown_stopped.lock().await;
         if *finished {
-            return Vec::new();
+            return StoppedSpaces::default();
         }
         let left = match shutdown.ends_jobs() {
             true => HashSet::new(),
@@ -100,7 +110,7 @@ impl Manager {
                     .await
             })
             .await;
-        self.notify_shutdown_stop(shutdown, &stopped).await;
+        self.notify_shutdown_stop(shutdown, &stopped.spaces).await;
         *finished = true;
         stopped
     }
@@ -121,7 +131,7 @@ impl Manager {
         moment: &str,
         left: &HashSet<SpaceId>,
         stop: F,
-    ) -> Vec<PresentSpace>
+    ) -> StoppedSpaces
     where
         F: Fn(SpaceId) -> Fut,
         Fut: Future<Output = Result<()>>,
@@ -132,18 +142,24 @@ impl Manager {
             Ok(targets) => targets,
             Err(error) => {
                 log!("stop {moment}: running spaces unavailable: {error:#}");
-                return Vec::new();
+                return StoppedSpaces::default();
             }
         };
         let targets: Vec<PresentSpace> = (targets.into_iter())
             .filter(|space| !left.contains(space.id()))
             .collect();
         let results = join_all(targets.iter().map(|space| stop(space.id().clone()))).await;
-        let mut stopped = Vec::new();
+        let mut stopped = StoppedSpaces {
+            spaces: Vec::new(),
+            every: true,
+        };
         for (space, result) in targets.into_iter().zip(results) {
             match result {
-                Ok(()) => stopped.push(space),
-                Err(error) => self.notify_stop_failed(moment, &space, &error).await,
+                Ok(()) => stopped.spaces.push(space),
+                Err(error) => {
+                    stopped.every = false;
+                    self.notify_stop_failed(moment, &space, &error).await;
+                }
             }
         }
         stopped

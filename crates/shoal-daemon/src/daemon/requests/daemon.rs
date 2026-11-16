@@ -10,7 +10,7 @@ use super::super::{
     exit_wait::{self, Quiet},
     permissions::Action,
     scope::{self, Caller, Scoped},
-    workspace::{Ending, Manager},
+    workspace::{Ending, Manager, StoppedSpaces},
 };
 use crate::{
     config::permissions::PermissionKey,
@@ -126,6 +126,26 @@ pub(in crate::daemon) async fn exit(
     replied
 }
 
+/// What an exit that `stopped` spaces left for `shoal restore`: those of
+/// them whose work waits for it, when it stopped every running space's work
+/// there, else stopped work in spaces it cannot name.
+async fn exited(manager: &Manager, stopped: &StoppedSpaces) -> Exited {
+    if !stopped.every {
+        let spaces = Vec::new();
+        return Exited {
+            stopped_work: true,
+            spaces,
+        };
+    }
+    let spaces: Vec<_> = (manager.awaiting_restore(&stopped.spaces).await.into_iter())
+        .map(PresentSpace::number)
+        .collect();
+    Exited {
+        stopped_work: !spaces.is_empty(),
+        spaces,
+    }
+}
+
 /// An exit a client asked for, with the connection that hears what the
 /// daemon left once its work has ended, and for an exit that waited, the
 /// work it holds off until the daemon has exited.
@@ -148,17 +168,11 @@ impl RequestedExit {
         }
     }
 
-    /// Tell the client which of the `stopped` spaces, whose work ending it
-    /// stopped, left work for `shoal restore`, after the reply to its
-    /// request, which every release reads alone.
-    pub async fn answer(&mut self, manager: &Manager, stopped: &[PresentSpace]) {
-        let spaces: Vec<_> = (manager.awaiting_restore(stopped).await.into_iter())
-            .map(PresentSpace::number)
-            .collect();
-        let exited = Exited {
-            stopped_work: !spaces.is_empty(),
-            spaces,
-        };
+    /// Tell the client what ending work that `stopped` spaces left for
+    /// `shoal restore`, after the reply to its request, which every release
+    /// reads alone.
+    pub async fn answer(&mut self, manager: &Manager, stopped: &StoppedSpaces) {
+        let exited = exited(manager, stopped).await;
         let response = Response::new(self.request_id, Body::Exited(exited));
         // The client may have hung up.
         let _ = protocol::write(&mut self.stream, &response).await;

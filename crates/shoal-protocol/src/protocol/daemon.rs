@@ -101,10 +101,11 @@ pub enum Exit {
 /// answer to the request once its work has ended.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Exited {
-    /// The exit stopped work that waits for `shoal restore`.
+    /// The exit stopped work that waits for `shoal restore`, or may have
+    /// where `spaces` names none.
     pub stopped_work: bool,
-    /// The spaces of that work, by number; none from a daemon of an earlier
-    /// release, which only says whether any space has stopped work.
+    /// The spaces of that work, by number; none from a daemon that cannot
+    /// say whose, as one of an earlier release cannot.
     #[serde(default)]
     pub spaces: Vec<SpaceNumber>,
 }
