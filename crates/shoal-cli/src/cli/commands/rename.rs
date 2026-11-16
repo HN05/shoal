@@ -9,8 +9,9 @@ use crate::{
         terminal,
         ui::{self, Fallback},
     },
-    model::RenamedSpace,
+    model::{RenamedSpace, SpacePlaces},
     protocol::ConfigTarget,
+    sessions::Origin,
 };
 use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
@@ -60,9 +61,9 @@ async fn rename_space(ctx: &Context, space: SpaceSelector, name: SpaceName) -> R
     Ok(0)
 }
 
-/// Show the renamed space's label on the places it runs in and those Shoal
-/// created for it, where they still show the label its previous name gave
-/// them.
+/// Show the renamed space's label on the places its agents run in and those
+/// Shoal created for it, where they still show the label its previous name
+/// gave them.
 async fn relabel(ctx: &Context, renamed: &RenamedSpace) -> Result<()> {
     let RenamedSpace {
         space,
@@ -70,6 +71,16 @@ async fn relabel(ctx: &Context, renamed: &RenamedSpace) -> Result<()> {
     } = renamed;
     let places =
         crate::client::workspaces::places(&ctx.paths, SpaceSelector::id(space.id())).await?;
+    let shown = shown_places(places);
+    let settings = shoal_workers::settings::of(&ctx.paths, ConfigTarget::space(space)).await?;
+    let labels = terminal::Renamed::new(ctx, space, previous_name);
+    terminal::relabel_space(&settings, &shown, async |host| labels.labels(host).await).await;
+    Ok(())
+}
+
+/// The places that show a space's label: those its agents run in and
+/// those Shoal created for it, each once.
+fn shown_places(places: SpacePlaces) -> Vec<Origin> {
     let agents = (places.executions.into_iter()).filter(|execution| execution.agent.is_some());
     let running = agents.filter_map(|execution| execution.origin);
     let mut shown = Vec::new();
@@ -78,10 +89,7 @@ async fn relabel(ctx: &Context, renamed: &RenamedSpace) -> Result<()> {
             shown.push(place);
         }
     }
-    let settings = shoal_workers::settings::of(&ctx.paths, ConfigTarget::space(space)).await?;
-    let labels = terminal::Renamed::new(ctx, space, previous_name);
-    terminal::relabel_space(&settings, &shown, async |host| labels.labels(host).await).await;
-    Ok(())
+    shown
 }
 
 /// Ask for a space's new name until it is one a space can have.
