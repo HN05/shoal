@@ -7,6 +7,7 @@ mod compose;
 pub(crate) mod records;
 
 use anyhow::{Context, Result, bail, ensure};
+use futures_util::{StreamExt, stream};
 use shoal_ids::space_ids::SpaceId;
 
 use compose::Compose;
@@ -56,6 +57,9 @@ impl ContainerAcquisition {
     }
 }
 
+/// How many projects an overview lists with the runtime at once.
+const PROJECTS_LISTED_AT_ONCE: usize = 4;
+
 /// Who a start makes the project's acquirer.
 pub(crate) struct Starter {
     pub(crate) acquirer: Acquirer,
@@ -100,10 +104,11 @@ impl Manager {
             .store
             .read(move |db| records::list(db, owner.as_ref()))
             .await?;
-        let mut projects = Vec::with_capacity(recorded.len());
-        for recorded in recorded {
-            projects.push(self.describe_containers(recorded.project).await);
-        }
+        let projects = stream::iter(recorded)
+            .map(|recorded| self.describe_containers(recorded.project))
+            .buffered(PROJECTS_LISTED_AT_ONCE)
+            .collect()
+            .await;
         Ok(ContainerOverview { projects })
     }
 
