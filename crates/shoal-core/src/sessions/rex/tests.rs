@@ -8,7 +8,7 @@ fn fake(answers: &str) -> (tempfile::TempDir, Rex) {
     let program = root.path().join("rex");
     install_test_script(
         &program,
-        &format!(
+        format!(
             r#"#!/usr/bin/env python3
 import json, sys
 args = sys.argv[1:]

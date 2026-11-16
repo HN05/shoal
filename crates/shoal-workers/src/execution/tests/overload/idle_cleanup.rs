@@ -61,7 +61,7 @@ async fn a_workspace_being_removed_refuses_messages_for_its_stopped_agent() {
     let hook = home.join("wait-for-release");
     install_test_script(
         &hook,
-        &format!(
+        format!(
             "#!/bin/sh\ntouch '{}'\nwhile [ ! -e '{}' ]; do sleep 0.01; done\n",
             started.display(),
             release.display()

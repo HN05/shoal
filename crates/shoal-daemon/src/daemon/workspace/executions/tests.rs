@@ -24,7 +24,7 @@ pub(super) async fn fixture(hook: &str) -> (tempfile::TempDir, Arc<Manager>, Wor
     )
     .unwrap();
     let script = workspace.path.join("before.sh");
-    install_test_script(&script, &format!("#!/bin/sh\nset -eu\n{hook}\n"));
+    install_test_script(&script, format!("#!/bin/sh\nset -eu\n{hook}\n"));
     (root, manager, workspace)
 }
 

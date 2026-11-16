@@ -191,7 +191,7 @@ async fn a_removal_holds_only_its_own_workspaces_gate() {
     let hook = root.path().join("wait-for-release");
     install_test_script(
         &hook,
-        &format!(
+        format!(
             "#!/bin/sh\ntouch '{}'\nwhile [ ! -e '{}' ]; do sleep 0.01; done\n",
             started.display(),
             release.display()

@@ -240,7 +240,7 @@ async fn repeating_a_completion_reruns_a_configured_hook() {
     let hook = root.path().join("post-done");
     install_test_script(
         &hook,
-        &format!("#!/bin/sh\nprintf x >> '{}'\nexit 1\n", runs.display()),
+        format!("#!/bin/sh\nprintf x >> '{}'\nexit 1\n", runs.display()),
     );
     manager
         .write_local_config(

@@ -67,7 +67,7 @@ fn install_session_fixture(root: &std::path::Path) -> Result<()> {
     let script = bin.join("zmx");
     install_test_script(
         &script,
-        &format!(
+        format!(
             "#!/bin/sh\n[ \"$*\" = list ] || exit 1\necho list >> '{}'\nprintf '  name=retained\\tpid=3\\tclients=0\\n'\n",
             root.join("zmx-lists").display()
         ),
@@ -75,7 +75,7 @@ fn install_session_fixture(root: &std::path::Path) -> Result<()> {
     let herdr = bin.join("herdr");
     install_test_script(
         &herdr,
-        &format!(
+        format!(
             "#!/bin/sh\necho \"$*\" >> '{}'\necho unavailable\nexit 1\n",
             root.join("herdr-calls").display()
         ),

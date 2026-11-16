@@ -198,30 +198,48 @@ pub async fn in_new_terminal(root: &Path, name: &str) -> std::process::Output {
     output
 }
 
-/// Install `script` at `path` as a new executable file, renamed over any
-/// earlier one. A child process writes it: a test that forks while this
-/// binary holds the file open for writing leaves the descriptor in its child
-/// until the child execs, and running the script meanwhile fails with "Text
+/// Install an executable fixture, including any parent directories it needs.
+pub fn install_test_script(path: impl AsRef<Path>, script: impl AsRef<[u8]>) {
+    install_test_script_with_mode(path, script, 0o755);
+}
+
+/// Install an executable fixture with an explicit Unix permission mode,
+/// renamed over any earlier one, which may still be running.
+pub fn install_test_script_with_mode(path: impl AsRef<Path>, script: impl AsRef<[u8]>, mode: u32) {
+    use std::{io::Write as _, os::unix::fs::PermissionsExt as _};
+    let path = std::path::absolute(path).unwrap();
+    let parent = path.parent().unwrap();
+    fs::create_dir_all(parent).unwrap();
+    // This process writes the staged file but never runs it.
+    let mut staged = tempfile::NamedTempFile::new_in(parent).unwrap();
+    staged.write_all(script.as_ref()).unwrap();
+    fs::set_permissions(staged.path(), fs::Permissions::from_mode(mode)).unwrap();
+    copy_in_child(staged.path(), &path);
+}
+
+/// Copy `source` to a fresh file with its permissions, which a child process
+/// writes, and rename that over `destination`. A test that forks while this
+/// binary holds a file open for writing leaves the descriptor in its child
+/// until the child execs, and running the file meanwhile fails with "Text
 /// file busy".
-pub fn install_test_script(path: &Path, script: &str) {
-    use std::io::Write as _;
-    let staging = tempfile::tempdir_in(path.parent().unwrap()).unwrap();
-    let staged = staging.path().join("script");
-    let mut writer = Command::new("sh")
-        .args(["-c", "cat > \"$1\" && chmod 755 \"$1\"", "sh"])
-        .arg(&staged)
-        .stdin(std::process::Stdio::piped())
-        .spawn()
+pub fn copy_in_child(source: &Path, destination: &Path) {
+    let parent = destination.parent().unwrap();
+    let staging = tempfile::tempdir_in(parent).unwrap();
+    let fresh = staging.path().join("copy");
+    let output = isolate(&mut Command::new("cp"), parent)
+        .arg(source)
+        .arg(&fresh)
+        .output()
         .unwrap();
-    let mut input = writer.stdin.take().unwrap();
-    input.write_all(script.as_bytes()).unwrap();
-    drop(input);
     assert!(
-        writer.wait().unwrap().success(),
-        "install {}",
-        path.display()
+        output.status.success(),
+        "copy {} to {}: {}",
+        source.display(),
+        destination.display(),
+        String::from_utf8_lossy(&output.stderr)
     );
-    fs::rename(&staged, path).unwrap();
+    fs::set_permissions(&fresh, fs::metadata(source).unwrap().permissions()).unwrap();
+    fs::rename(&fresh, destination).unwrap();
 }
 
 /// Whether the filesystem holding `dir` clones files without copying them.
@@ -418,22 +436,9 @@ impl Drop for Adopted {
     }
 }
 
-/// Copy this test binary to `path`. A child copies it, so parallel spawns
-/// cannot inherit its writable descriptor and cause ETXTBSY when a test
-/// executes the copy.
-pub async fn copy_test_binary(path: &Path) {
-    let dir = path.parent().unwrap();
-    let output = isolated_command("cp", dir)
-        .arg(std::env::current_exe().unwrap())
-        .arg(path)
-        .output()
-        .await
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "copy the test binary: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+/// Copy this test binary to `path`, as [`copy_in_child`] does.
+pub fn copy_test_binary(path: &Path) {
+    copy_in_child(&std::env::current_exe().unwrap(), path);
 }
 
 /// A command running `program`, a copy of this test binary, until stopped.

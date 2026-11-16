@@ -18,14 +18,12 @@ pub mod zmx;
 
 // Each test binary uses its own subset of support, this included.
 #[allow(unused_imports)]
-pub use shoal_core::test_support::printed;
+pub use shoal_core::test_support::{install_test_script, install_test_script_with_mode, printed};
 
-use shoal_core::test_support::isolate;
+use shoal_core::test_support::{copy_in_child, isolate};
 use std::{
     ffi::{OsStr, OsString},
     fs,
-    io::Write,
-    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::{Command, Stdio},
     time::Duration,
@@ -34,48 +32,10 @@ use std::{
 /// A generous bound on a daemon socket read or write, never a timing assertion.
 pub const HANG_GUARD: Duration = Duration::from_secs(60);
 
-/// Install an executable fixture, including any parent directories it needs.
-pub fn install_test_script(path: impl AsRef<Path>, script: impl AsRef<[u8]>) {
-    install_test_script_with_mode(path, script, 0o755);
-}
-
-/// Install an executable fixture with an explicit Unix permission mode.
-pub fn install_test_script_with_mode(path: impl AsRef<Path>, script: impl AsRef<[u8]>, mode: u32) {
-    let path = std::path::absolute(path).unwrap();
-    let parent = path.parent().unwrap();
-    fs::create_dir_all(parent).unwrap();
-    // Copy to a fresh file so an earlier fixture can still be executing.
-    let destination = tempfile::NamedTempFile::new_in(parent)
-        .unwrap()
-        .into_temp_path();
-    let mut source = tempfile::NamedTempFile::new_in(parent).unwrap();
-    source.write_all(script.as_ref()).unwrap();
-    copy_in_child(source.path(), &destination);
-    fs::set_permissions(&destination, fs::Permissions::from_mode(mode)).unwrap();
-    fs::rename(&destination, path).unwrap();
-}
-
 /// Copy the `shoal` binary to `destination`, an executable a test runs in
 /// place of the one Cargo built.
 pub fn copy_shoal_binary(destination: &Path) {
     copy_in_child(Path::new(shoal_binary()), destination);
-}
-
-/// Copy `source` in a child, so parallel spawns cannot inherit a writable
-/// descriptor of `destination` and cause ETXTBSY when it is executed.
-fn copy_in_child(source: &Path, destination: &Path) {
-    let output = isolated(destination.parent().unwrap(), "cp")
-        .arg(source)
-        .arg(destination)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "copy {} to {}: {}",
-        source.display(),
-        destination.display(),
-        String::from_utf8_lossy(&output.stderr)
-    );
 }
 
 /// A fake agent's script: it touches `marker` in its directory, then runs

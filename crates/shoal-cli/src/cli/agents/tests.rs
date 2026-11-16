@@ -24,7 +24,7 @@ fn agents_are_installed_only_when_every_program_they_start_is_on_path() {
     assert!(!installed("codex"));
     // Happy needs both its own CLI and the agent it runs.
     assert!(!installed("happy-claude"));
-    install_test_script(&bin.path().join("happy"), "#!/bin/sh\n");
+    install_test_script(bin.path().join("happy"), "#!/bin/sh\n");
     assert!(installed("happy-claude"));
     assert!(!installed("happy-codex"));
 

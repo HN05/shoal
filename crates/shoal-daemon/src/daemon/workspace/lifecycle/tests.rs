@@ -75,7 +75,7 @@ pub(super) async fn fixture_with_hook(
     let path = repository(root.path(), "repo");
     let hook = root.path().join("remove-hook.sh");
     let script = script(root.path());
-    install_test_script(&hook, &format!("#!/bin/sh\nset -eu\n{script}\n"));
+    install_test_script(&hook, format!("#!/bin/sh\nset -eu\n{script}\n"));
     fs::write(
         path.join(".shoal.toml"),
         format!("{key} = '{}'\n", hook.display()),
@@ -1207,7 +1207,7 @@ async fn removal_stops_detached_processes_running_from_the_worktree() {
 async fn removal_stops_detached_programs_built_in_the_worktree() {
     let (root, manager, workspace) = fixture().await;
     let built = workspace.path.join("built");
-    crate::daemon::test_support::copy_test_binary(&built).await;
+    crate::daemon::test_support::copy_test_binary(&built);
     let elsewhere = root.path().join("elsewhere");
     fs::create_dir(&elsewhere).unwrap();
     let detached = crate::daemon::test_support::Adopted::start(
@@ -1241,7 +1241,7 @@ async fn automatic_removal_stops_detached_programs_built_in_the_worktree() {
     fs::create_dir_all(exclude.parent().unwrap()).unwrap();
     fs::write(&exclude, "built\n").unwrap();
     let built = workspace.path.join("built");
-    crate::daemon::test_support::copy_test_binary(&built).await;
+    crate::daemon::test_support::copy_test_binary(&built);
     let elsewhere = root.path().join("elsewhere");
     fs::create_dir(&elsewhere).unwrap();
     let detached = crate::daemon::test_support::Adopted::start(

@@ -25,7 +25,7 @@ fn dependencies_require_executable_files_on_the_supplied_path() {
     let checks = dependencies(Some(root.path().as_os_str()));
     assert_eq!(checks[0].status, CheckStatus::Error);
     assert_eq!(checks[1].status, CheckStatus::Warning);
-    install_test_script(&root.path().join("git"), "#!/bin/sh\n");
+    install_test_script(root.path().join("git"), "#!/bin/sh\n");
     let checks = dependencies(Some(root.path().as_os_str()));
     assert_eq!(checks[0].status, CheckStatus::Ok);
     assert!(

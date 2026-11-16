@@ -11,8 +11,8 @@ async fn git_fixtures_ignore_inherited_git_variables() -> Result<()> {
     let hooks = root.path().join("hooks");
     fs::create_dir(&hooks)?;
     install_test_script(
-        &hooks.join("post-commit"),
-        &format!("#!/bin/sh\ntouch '{}'\n", sentinel.join("hooked").display()),
+        hooks.join("post-commit"),
+        format!("#!/bin/sh\ntouch '{}'\n", sentinel.join("hooked").display()),
     );
     let before = snapshot(&sentinel)?;
     // Point Git at the sentinel as a hook or wrapper running the tests would.

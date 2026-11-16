@@ -431,7 +431,7 @@ async fn post_ready_hook_receives_marks_and_its_failure_keeps_them() {
     let hook = temp.path().join("post-ready");
     install_test_script(
         &hook,
-        &format!(
+        format!(
             "#!/bin/sh\nprintf '%s %s' \"$SHOAL_HOOK\" \"$SHOAL_REVIEW_MARKS\" > '{}'\nexit 3\n",
             record.display()
         ),
@@ -496,7 +496,7 @@ async fn a_chats_post_ready_hook_gets_the_configured_environment() {
     let hook = temp.path().join("post-ready");
     install_test_script(
         &hook,
-        &format!(
+        format!(
             "#!/bin/sh\nprintf '%s|%s' \"$GREETING\" \"$SHOAL_CHAT\" > '{}'\n",
             record.display()
         ),

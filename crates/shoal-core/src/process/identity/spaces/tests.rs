@@ -112,7 +112,7 @@ async fn the_temporary_directory_and_programs_built_in_the_worktree_tie_detached
     let elsewhere = root.path().join("elsewhere");
     std::fs::create_dir(&elsewhere).unwrap();
     let built = space.programs.as_ref().unwrap().join("built");
-    copy_test_binary(&built).await;
+    copy_test_binary(&built);
 
     let in_tmp = Adopted::start(&tmp_dir, "sleep 300", &[], &root.path().join("tmp-pid")).await;
     let running_built = Adopted::start(

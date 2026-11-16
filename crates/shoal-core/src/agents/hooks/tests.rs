@@ -11,7 +11,7 @@ fn state_hooks_report_each_state_and_never_fail() {
     let shoal = directory.path().join("shoal it's");
     install_test_script(
         &shoal,
-        &format!("#!/bin/sh\necho \"$@\" >> '{}'\nexit 2\n", log.display()),
+        format!("#!/bin/sh\necho \"$@\" >> '{}'\nexit 2\n", log.display()),
     );
     let quoted = crate::shell::quote(&[shoal.to_str().unwrap()]);
     let group = state(&quoted, Some("idle_prompt"), AgentState::Waiting);
@@ -47,7 +47,7 @@ fn plan_hooks_match_the_plan_tools_and_never_fail() {
     let shoal = directory.path().join("shoal");
     install_test_script(
         &shoal,
-        &format!("#!/bin/sh\necho \"$@\" >> '{}'\nexit 2\n", log.display()),
+        format!("#!/bin/sh\necho \"$@\" >> '{}'\nexit 2\n", log.display()),
     );
     let quoted = crate::shell::quote(&[shoal.to_str().unwrap()]);
     let (event, group) = plan(&quoted, crate::ai::IntegrationKind::Codex, "update_plan");

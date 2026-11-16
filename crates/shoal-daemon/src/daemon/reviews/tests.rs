@@ -39,7 +39,7 @@ async fn fixture_with(reviewers: &[(&str, &str)], review: &str, settings: &str) 
     for (name, script) in reviewers {
         let path = root.path().join(format!("{name}.sh"));
         let script = script.replace("{review}", &result.to_string_lossy());
-        install_test_script(&path, &format!("#!/bin/sh\n{script}\n"));
+        install_test_script(&path, format!("#!/bin/sh\n{script}\n"));
         config.push_str(&format!(
             "[agents.{name}]\ncommand = ['{}']\nreview = ['{{prompt}}', '{{schema}}']\n{settings}",
             path.display()
@@ -1410,7 +1410,7 @@ async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
     let result = root.path().join("review.json");
     std::fs::write(&result, REVIEW).unwrap();
     let script = root.path().join("reviewer.sh");
-    install_test_script(&script, &format!("#!/bin/sh\ncat '{}'\n", result.display()));
+    install_test_script(&script, format!("#!/bin/sh\ncat '{}'\n", result.display()));
     configure(
         &manager,
         &format!(

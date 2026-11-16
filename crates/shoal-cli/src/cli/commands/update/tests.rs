@@ -70,7 +70,7 @@ fn publish(
     let build = root.join("build");
     let script = build.join(program);
     fs::create_dir_all(script.parent().context("parent")?)?;
-    install_test_script(&script, &format!("#!/bin/sh\necho 'shoal {version}'\n"));
+    install_test_script(&script, format!("#!/bin/sh\necho 'shoal {version}'\n"));
     let archive = format!("shoal-v{version}-{platform}.tar.gz");
     let assets = root.join(format!("releases/download/v{version}"));
     fs::create_dir_all(&assets)?;
