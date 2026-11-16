@@ -61,7 +61,8 @@ fn add_owners(db: &Connection, start: i64, end: i64) -> Result<()> {
                 "INSERT INTO ports VALUES (?1,?2,?3,?2,'retained')",
                 rusqlite::params![owner, name, port],
             )?;
-            db.execute("INSERT INTO resource_leases VALUES (?1,?2,'global','pool',?3,?3,'retained',123,'read')",
+            db.execute("INSERT INTO resource_leases(id,workspace_id,scope,pool,name,resource,reason,created_at,mode)
+                VALUES (?1,?2,'global','pool',?3,?3,'retained',123,'read')",
                 [&id, &owner, name])?;
             db.execute(
                 &format!(
@@ -80,8 +81,16 @@ pub(in crate::daemon) fn check_owner_query(
     table: &str,
     owner_column: &str,
 ) -> Result<()> {
-    let db = populated_database()?;
+    let db = lease_database()?;
     check_query_growth(&db, sql, table, owner_column, "owner-0")
+}
+
+/// The populated database with the columns lease queries read that the
+/// v17 snapshot lacks.
+fn lease_database() -> Result<Connection> {
+    let db = populated_database()?;
+    db.execute_batch(include_str!("lease_acquirers.sql"))?;
+    Ok(db)
 }
 
 fn check_query_growth(
@@ -139,7 +148,7 @@ fn owner_port_reads_search_existing_index() -> Result<()> {
 
 #[test]
 fn resource_lists_preserve_global_order_and_owner_selection() -> Result<()> {
-    let db = populated_database()?;
+    let db = lease_database()?;
     let all_ports = ports(&db, None)?;
     let all_leases = resources::leases(&db, None)?;
     assert_eq!(all_ports.len(), 20);
@@ -184,7 +193,7 @@ fn resource_lists_preserve_global_order_and_owner_selection() -> Result<()> {
 
 #[test]
 fn resource_lists_propagate_decoding_and_prepare_errors() -> Result<()> {
-    let db = populated_database()?;
+    let db = lease_database()?;
     db.execute_batch(
         "PRAGMA ignore_check_constraints=ON;
         UPDATE ports SET port=-port WHERE workspace_id='owner-0';
@@ -256,6 +265,7 @@ fn ownership_snapshot(db: &mut Connection) -> Result<Vec<Vec<Vec<rusqlite::types
                 "id,repository_id,name,path,branch,state,error,base_commit,base_ref,git_dir,git_dir_id"
             }
             "executions" => &execution_columns,
+            "resource_leases" => "id,workspace_id,scope,pool,name,resource,reason,created_at,mode",
             _ => "*",
         };
         // A workspace's shared fields are its space's after the upgrade.

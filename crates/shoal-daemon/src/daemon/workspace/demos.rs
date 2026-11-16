@@ -151,6 +151,11 @@ impl Manager {
     }
 }
 
+/// Whether execution `execution` runs a demo.
+pub(crate) fn runs_demo(db: &Connection, execution: &ExecutionId) -> Result<bool> {
+    crate::daemon::store::exists(db, "SELECT 1 FROM demos WHERE execution_id=?1", [execution])
+}
+
 /// Resolve a demo's place before deleting the execution cascades its record.
 pub(super) fn execution_launch(db: &Connection, execution: &ExecutionId) -> Result<Option<Launch>> {
     let record: Option<String> = db

@@ -21,6 +21,7 @@ use crate::{
     },
     validate,
 };
+use shoal_protocol::acquirers::Acquirer;
 pub(crate) use shoal_protocol::resources::{
     Catalog, CatalogPool, Definition, LockMode, Overview, PoolStatus, RepositoryView,
     ResourceConfig, ResourceKind, ResourceLease, ResourceRequest, ResourceStatus, Scope,
@@ -45,6 +46,7 @@ impl ResourceLeaseExt for ResourceLease {
 }
 
 const LEASE_COLUMNS: &str = "id,workspace_id,scope,pool,name,resource,reason,created_at,mode,
+    acquirer,acquirer_execution,
     (SELECT repository_id FROM repository_resource_leases WHERE lease_id=resource_leases.id) AS repository_id,
     (SELECT path FROM repository_resource_leases WHERE lease_id=resource_leases.id) AS repository_path";
 
@@ -68,6 +70,15 @@ fn row_lease(row: &rusqlite::Row<'_>) -> rusqlite::Result<ResourceLease> {
         reason: row.get("reason")?,
         created_at: row.get("created_at")?,
         mode: row.get("mode")?,
+        acquirer: row_acquirer(row)?,
+    })
+}
+
+/// The acquirer a lease row records in its two columns.
+fn row_acquirer(row: &rusqlite::Row<'_>) -> rusqlite::Result<Acquirer> {
+    let index = row.as_ref().column_index("acquirer")?;
+    Acquirer::from_parts(row.get(index)?, row.get("acquirer_execution")?).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(index, rusqlite::types::Type::Text, error.into())
     })
 }
 
@@ -169,7 +180,8 @@ fn save_definition(
 
 fn insert_lease(tx: &Transaction<'_>, lease: &ResourceLease) -> Result<()> {
     tx.execute(
-        "INSERT INTO resource_leases(id,workspace_id,scope,pool,name,resource,reason,created_at,mode) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+        "INSERT INTO resource_leases(id,workspace_id,scope,pool,name,resource,reason,created_at,mode,acquirer,acquirer_execution)
+            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
         params![
             lease.id,
             lease.workspace_id,
@@ -179,7 +191,9 @@ fn insert_lease(tx: &Transaction<'_>, lease: &ResourceLease) -> Result<()> {
             lease.resource,
             lease.reason,
             lease.created_at,
-            lease.mode
+            lease.mode,
+            lease.acquirer.kind(),
+            lease.acquirer.execution()
         ],
     )?;
     Ok(())
@@ -402,6 +416,7 @@ impl Manager {
             self.verify_worktree(&workspace).await?;
         }
         let workspace_name = (workspace.name.clone(), workspace.id.clone());
+        let acquirer = self.acquirer(caller).await;
         let caller = caller.cloned();
         let ahead = place.ahead();
         let acquisition = self
@@ -410,6 +425,7 @@ impl Manager {
                 let claimant = Claimant {
                     workspace_id: workspace.id,
                     caller,
+                    acquirer,
                     ahead,
                 };
                 acquire_lease(db, claimant, scope, definition, request, related)
@@ -590,6 +606,8 @@ struct Claimant {
     workspace_id: SpaceId,
     /// Who asks for it, which a scoped caller does with configured approvals.
     caller: Option<Caller>,
+    /// Whose lease it becomes, which decides how long it lasts.
+    acquirer: Acquirer,
     /// Queued requests that arrived earlier.
     ahead: usize,
 }
@@ -609,12 +627,13 @@ fn acquire_lease(
     let Claimant {
         workspace_id,
         caller,
+        acquirer,
         ahead,
     } = claimant;
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
     store::require_ready(&tx, &workspace_id)?;
     if let Some(existing) = named_lease(&tx, &workspace_id, &request.pool, &request.name)? {
-        return renew_lease(tx, &existing, &scope, request);
+        return renew_lease(tx, &existing, &scope, request, &acquirer);
     }
     if let Some(resource) = &request.resource {
         ensure!(
@@ -721,6 +740,7 @@ fn acquire_lease(
             .or_else(|| settings.reason.clone())
             .or(definition.reason.clone()),
         created_at: crate::time::UnixTime::now(),
+        acquirer,
     };
     insert_lease(&tx, &lease)?;
     repositories::record(&tx, &lease)?;
@@ -729,12 +749,14 @@ fn acquire_lease(
 }
 
 /// An existing lease with the same name is returned again, refreshing its
-/// reason, as long as the request does not contradict it.
+/// reason and, for the user's request, becoming the user's, as long as the
+/// request does not contradict it.
 fn renew_lease(
     tx: Transaction<'_>,
     existing: &ResourceLease,
     scope: &Scope,
     request: ResourceRequest,
+    acquirer: &Acquirer,
 ) -> Result<Allocation<ResourceLease>> {
     ensure!(
         existing.scope == *scope
@@ -753,6 +775,14 @@ fn renew_lease(
             params![lease.id, reason],
         )?;
         lease.reason = Some(reason);
+    }
+    let renewed = lease.acquirer.renewed_by(acquirer);
+    if renewed != lease.acquirer {
+        tx.execute(
+            "UPDATE resource_leases SET acquirer=?2,acquirer_execution=?3 WHERE id=?1",
+            params![lease.id, renewed.kind(), renewed.execution()],
+        )?;
+        lease.acquirer = renewed;
     }
     tx.commit()?;
     Ok(Allocation::Granted(lease))

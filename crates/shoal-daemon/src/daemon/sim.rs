@@ -25,6 +25,7 @@ use crate::{
     time::UnixTime,
     validate,
 };
+use shoal_protocol::acquirers::Acquirer;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Operations on the client type [`Simulator`] that only the `shoal` command uses.
@@ -33,7 +34,7 @@ trait SimulatorExt {
     fn new(profile: Profile) -> Self;
 
     /// Take ownership for a lease; persist it before any simctl mutation.
-    fn claim(&mut self, workspace_id: &SpaceId, request: SimRequest);
+    fn claim(&mut self, workspace_id: &SpaceId, request: SimRequest, acquirer: Acquirer);
 
     /// Lease a booted device, or mark a failed boot while keeping the claim.
     fn finish_boot(&mut self, workspace_id: SpaceId, result: &Result<()>);
@@ -63,13 +64,15 @@ impl SimulatorExt for Simulator {
             last_used: UnixTime::now(),
             error: None,
             installed_apps: Some(0),
+            acquirer: Acquirer::User,
         }
     }
 
-    fn claim(&mut self, workspace_id: &SpaceId, request: SimRequest) {
+    fn claim(&mut self, workspace_id: &SpaceId, request: SimRequest, acquirer: Acquirer) {
         self.workspace_id = Some(workspace_id.to_owned());
         self.lease_name = Some(request.name);
         self.reason = request.reason;
+        self.acquirer = acquirer;
         self.state = SimulatorState::Booting;
         self.error = None;
     }
@@ -101,6 +104,16 @@ impl SimulatorExt for Simulator {
     fn app_cost(&self) -> usize {
         self.installed_apps.unwrap_or(usize::MAX)
     }
+}
+
+/// The request asking for a simulator, as allocation weighs it.
+struct Claimant {
+    /// Whose lease it becomes.
+    acquirer: Acquirer,
+    /// A scoped caller's request, which takes configured approvals.
+    approves: bool,
+    /// Queued requests that arrived earlier.
+    ahead: usize,
 }
 
 /// The runtimes simctl reports as usable.
@@ -253,8 +266,13 @@ impl Manager {
             None
         };
         let workspace_name = (workspace.name.clone(), workspace.id.clone());
+        let claimant = Claimant {
+            acquirer: self.acquirer(caller).await,
+            approves: caller.is_some(),
+            ahead: place.ahead(),
+        };
         let result = self
-            .allocate_simulator(workspace, request, &mut audit, caller, place.ahead())
+            .allocate_simulator(workspace, request, &mut audit, claimant)
             .await;
         place.settle(&result);
         if let Ok(outcome) = &result {
@@ -279,8 +297,7 @@ impl Manager {
         workspace: Workspace,
         request: SimRequest,
         audit: &mut Option<CleanRequest>,
-        caller: Option<&Caller>,
-        ahead: usize,
+        claimant: Claimant,
     ) -> Result<Allocation<Box<Simulator>>> {
         validate::name("simulator lease", &request.name)?;
         validate::reason("simulator", request.reason.as_deref())?;
@@ -321,11 +338,16 @@ impl Manager {
             planning::check_existing_request(sim, &request, profile.as_ref())?;
             self.reconcile_sim(sim, &inventory).await?;
             planning::check_existing_device(sim, &inventory)?;
+            let renewed = sim.acquirer.renewed_by(&claimant.acquirer);
+            if renewed != sim.acquirer {
+                sim.acquirer = renewed;
+                self.save_sim(sim).await?;
+            }
             return Ok(Allocation::Granted(Box::new(sim.clone())));
         }
         let profile = profile.unwrap();
         // An exported scope has no execution, but its requests still need approval.
-        if caller.is_some() && profile.requires_approval {
+        if claimant.approves && profile.requires_approval {
             let approval = approvals::ApprovalRequest::new(
                 &workspace.id,
                 approvals::Target::Simulator,
@@ -341,7 +363,7 @@ impl Manager {
                 return Ok(Allocation::Approval(Box::new(pending)));
             }
         }
-        if let Some(queued) = queue::behind(ahead, "simulators") {
+        if let Some(queued) = queue::behind(claimant.ahead, "simulators") {
             return Ok(queued);
         }
         // Cache live counts without booting stopped devices just to inspect them.
@@ -355,7 +377,8 @@ impl Manager {
             }
         }
         let plan = planning::plan(&records, &inventory, limits, &profile, request.clean);
-        self.execute_simulator_plan(&config, workspace, request, profile, plan, audit)
+        let claim = (request, claimant.acquirer);
+        self.execute_simulator_plan(&config, workspace, claim, profile, plan, audit)
             .await
     }
 
@@ -365,7 +388,7 @@ impl Manager {
         &self,
         config: &crate::config::Config,
         workspace: Workspace,
-        request: SimRequest,
+        (request, acquirer): (SimRequest, Acquirer),
         profile: Profile,
         plan: planning::Plan<'_>,
         audit: &mut Option<CleanRequest>,
@@ -396,7 +419,7 @@ impl Manager {
             audit.record_selection(&sim, needs_reset);
             self.save_clean_request(audit).await?;
         }
-        sim.claim(&workspace.id, request);
+        sim.claim(&workspace.id, request, acquirer);
         self.save_sim(&sim).await?; // ownership precedes every external mutation
         let result = self.boot(&mut sim, &workspace, needs_reset, audit).await;
         sim.finish_boot(workspace.id, &result);
@@ -552,6 +575,7 @@ impl Manager {
         };
         sim.last_workspace_id = sim.workspace_id.take();
         sim.lease_name = None;
+        sim.acquirer = Acquirer::User;
         sim.state = SimulatorState::Idle;
         sim.last_used = UnixTime::now();
         self.save_sim(&sim).await?;

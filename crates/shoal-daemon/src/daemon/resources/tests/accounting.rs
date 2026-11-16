@@ -13,6 +13,7 @@ fn lease(scope: Scope, pool: &str, resource: &str, mode: LockMode) -> ResourceLe
         resource: resource.into(),
         reason: None,
         created_at: UnixTime::from_seconds(0),
+        acquirer: Acquirer::User,
     }
 }
 

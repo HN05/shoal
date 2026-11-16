@@ -183,6 +183,7 @@ pub struct ResourceLease {
     pub resource: String,
     pub reason: Option<String>,
     pub created_at: crate::time::UnixTime,
+    pub acquirer: crate::acquirers::Acquirer,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

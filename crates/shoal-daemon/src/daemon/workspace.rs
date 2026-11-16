@@ -20,7 +20,7 @@ mod coordinated;
 mod copies;
 mod creation;
 mod daemon_exit;
-mod demos;
+pub(crate) mod demos;
 mod diff;
 pub(crate) mod done;
 mod environment;

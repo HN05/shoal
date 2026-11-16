@@ -49,6 +49,7 @@ fn record(id: &str, apps: Option<usize>, last_used: i64) -> Simulator {
         last_used: crate::time::UnixTime::from_seconds(last_used),
         error: None,
         installed_apps: apps,
+        acquirer: shoal_protocol::acquirers::Acquirer::User,
     }
 }
 

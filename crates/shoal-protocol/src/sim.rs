@@ -139,6 +139,9 @@ pub struct Simulator {
     /// User apps counted at release; `None` when unknown.
     #[serde(default)]
     pub installed_apps: Option<usize>,
+    /// Who holds the lease, the user for an idle device.
+    #[serde(default)]
+    pub acquirer: crate::acquirers::Acquirer,
 }
 
 /// What could be created for a workspace: installed inventory, the policy,

@@ -615,6 +615,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 194 {
         db.execute_batch(include_str!("space_creation_times.sql"))?;
     }
+    if version >= 195 {
+        db.execute_batch(include_str!("lease_acquirers.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -1997,6 +2000,32 @@ fn store_columns(db: &Connection, table: &str) -> Result<Vec<String>> {
         .prepare("SELECT name FROM pragma_table_info(?1)")?
         .query_map([table], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
+}
+
+#[test]
+fn resource_leases_recorded_before_acquirers_are_the_users() -> Result<()> {
+    let mut db = historical_database(194)?;
+    db.execute_batch(
+        "INSERT INTO resource_pools(scope,name,definition) VALUES ('global','devices','{}');
+         INSERT INTO resource_leases(id,workspace_id,scope,pool,name,resource,created_at)
+            VALUES ('lease','workspace','global','devices','default','phone',1);",
+    )?;
+
+    migrate(&mut db)?;
+
+    let acquirer = db.query_row(
+        "SELECT acquirer,acquirer_execution FROM resource_leases",
+        [],
+        |r| Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?)),
+    )?;
+    assert_eq!(acquirer, ("user".to_owned(), None));
+    // An agent's lease names its execution, and only the user's goes without.
+    let mismatched = db.execute(
+        "UPDATE resource_leases SET acquirer='agent' WHERE id='lease'",
+        [],
+    );
+    assert!(mismatched.is_err());
+    Ok(())
 }
 
 #[test]
