@@ -126,13 +126,16 @@ impl Manager {
     /// workspace was in another lifecycle operation then, such as a stop,
     /// and those the daemon stopped before releasing.
     pub(crate) async fn release_leases_of_ended_executions(&self) -> Result<()> {
+        // The leases first: an execution exists before it acquires one, so
+        // the executions read after hold every lease read here that is live.
+        let leases = self.acquired_leases().await?;
         let recorded = self.store.read(|db| recorded_executions(db)).await?;
-        let ended = |acquirer: &Acquirer| {
-            acquirer
-                .execution()
-                .is_some_and(|id| !recorded.contains(id))
-        };
-        self.release_acquired(ended).await;
+        let ended = leases
+            .into_iter()
+            .filter(|lease| (lease.acquirer.execution()).is_some_and(|id| !recorded.contains(id)));
+        for lease in ended {
+            self.release_acquired_lease(lease).await;
+        }
         Ok(())
     }
 
