@@ -540,70 +540,106 @@ async fn run_build(
     plan: &Plan,
     worktree: &Path,
     log: &Path,
-    mut cancel: watch::Receiver<bool>,
+    cancel: watch::Receiver<bool>,
 ) -> Result<()> {
-    let mut output = fs::File::create(log).with_context(|| format!("create {}", log.display()))?;
-    let deadline = tokio::time::Instant::now() + BUILD_TIMEOUT;
+    let mut steps = Steps::new(plan, worktree, log, cancel)?;
     for step in plan.build.steps() {
-        writeln!(output, "$ {}", step.label)?;
-        run_step(&step, plan, worktree, &output, log, deadline, &mut cancel).await?;
+        steps.run(&step).await?;
     }
     Ok(())
 }
 
-/// Run one command of the seed build until it exits, the build's deadline
-/// passes or `cancel` is set. Whatever it leaves in its process group is
-/// killed before this returns.
-async fn run_step(
-    step: &Step,
-    plan: &Plan,
-    worktree: &Path,
-    output: &fs::File,
-    log: &Path,
+/// Runs a seed build's commands one at a time in its worktree, each in the
+/// log, until the build's deadline.
+struct Steps<'a> {
+    plan: &'a Plan,
+    worktree: &'a Path,
+    log: &'a Path,
+    output: fs::File,
     deadline: tokio::time::Instant,
-    cancel: &mut watch::Receiver<bool>,
-) -> Result<()> {
-    let mut child = step_command(step, plan, worktree, output)?
-        .spawn()
-        .with_context(|| format!("launch {}", step.label))?;
-    let group = child.id().context("seed build process ID unavailable")? as i32;
-    // Dropping the build, as daemon shutdown does, kills its whole group.
-    let mut guard = GroupGuard(Some(group));
-    let stopped = tokio::select! {
-        exited = tokio::time::timeout_at(deadline, exited(group)) => match exited {
-            Ok(exited) => Ok(exited?),
-            Err(_) => Err(format!(
-                "the seed build timed out after {} minutes in {}; output is in {}",
-                BUILD_TIMEOUT.as_secs() / 60,
-                step.label,
-                log.display()
-            )),
-        },
-        _ = cancel.wait_for(|cancelled| *cancelled) => Err("seed build cancelled".to_owned()),
-    };
-    // The leader is not reaped yet, so its ID still names this group alone:
-    // nothing else can have taken it.
-    // SAFETY: killpg takes no pointers; a group without members is ESRCH.
-    unsafe { libc::killpg(group, libc::SIGKILL) };
-    let status = child.wait().await?;
-    group_gone(group).await;
-    guard.0 = None;
-    if let Err(reason) = stopped {
-        bail!(reason);
+    cancel: watch::Receiver<bool>,
+}
+
+impl<'a> Steps<'a> {
+    fn new(
+        plan: &'a Plan,
+        worktree: &'a Path,
+        log: &'a Path,
+        cancel: watch::Receiver<bool>,
+    ) -> Result<Self> {
+        Ok(Self {
+            plan,
+            worktree,
+            log,
+            output: fs::File::create(log).with_context(|| format!("create {}", log.display()))?,
+            deadline: tokio::time::Instant::now() + BUILD_TIMEOUT,
+            cancel,
+        })
     }
-    ensure!(
-        status.success(),
-        "{} exited with {}; output is in {}",
-        step.label,
-        crate::execution::exit_code(status),
-        log.display()
-    );
-    Ok(())
+
+    /// Run `step`, writing its output to the log.
+    async fn run(&mut self, step: &Step) -> Result<()> {
+        writeln!(self.output, "$ {}", step.label)?;
+        let stdout = self.output.try_clone()?;
+        self.wait(step, &stdout).await
+    }
+
+    /// Run `step`, its standard output to `stdout` and its errors to the
+    /// log, until it exits, the build's deadline passes or `cancel` is set.
+    /// Whatever it leaves in its process group is killed before this
+    /// returns.
+    async fn wait(&mut self, step: &Step, stdout: &fs::File) -> Result<()> {
+        let mut child = step_command(step, self.plan, self.worktree, stdout, &self.output)?
+            .spawn()
+            .with_context(|| format!("launch {}", step.label))?;
+        let group = child.id().context("seed build process ID unavailable")? as i32;
+        // Dropping the build, as daemon shutdown does, kills its whole group.
+        let mut guard = GroupGuard(Some(group));
+        let stopped = tokio::select! {
+            exited = tokio::time::timeout_at(self.deadline, exited(group)) => match exited {
+                Ok(exited) => Ok(exited?),
+                Err(_) => Err(format!(
+                    "the seed build timed out after {} minutes in {}; output is in {}",
+                    BUILD_TIMEOUT.as_secs() / 60,
+                    step.label,
+                    self.log.display()
+                )),
+            },
+            _ = self.cancel.wait_for(|cancelled| *cancelled) => {
+                Err("seed build cancelled".to_owned())
+            }
+        };
+        // The leader is not reaped yet, so its ID still names this group
+        // alone: nothing else can have taken it.
+        // SAFETY: killpg takes no pointers; a group without members is ESRCH.
+        unsafe { libc::killpg(group, libc::SIGKILL) };
+        let status = child.wait().await?;
+        group_gone(group).await;
+        guard.0 = None;
+        if let Err(reason) = stopped {
+            bail!(reason);
+        }
+        ensure!(
+            status.success(),
+            "{} exited with {}; output is in {}",
+            step.label,
+            crate::execution::exit_code(status),
+            self.log.display()
+        );
+        Ok(())
+    }
 }
 
 /// `step` as its own process group in the seed worktree, with the
-/// repository's `[env]` and none of the daemon's Shoal variables or secrets.
-fn step_command(step: &Step, plan: &Plan, worktree: &Path, output: &fs::File) -> Result<Command> {
+/// repository's `[env]` and none of the daemon's Shoal variables or secrets,
+/// printing to `stdout` and `stderr`.
+fn step_command(
+    step: &Step,
+    plan: &Plan,
+    worktree: &Path,
+    stdout: &fs::File,
+    stderr: &fs::File,
+) -> Result<Command> {
     let (program, args) = step.argv.split_first().context("empty seed command")?;
     let mut command = Command::new(program);
     command.args(args);
@@ -623,8 +659,8 @@ fn step_command(step: &Step, plan: &Plan, worktree: &Path, output: &fs::File) ->
     command
         .current_dir(worktree)
         .stdin(Stdio::null())
-        .stdout(output.try_clone()?)
-        .stderr(output.try_clone()?)
+        .stdout(stdout.try_clone()?)
+        .stderr(stderr.try_clone()?)
         .process_group(0)
         .kill_on_drop(true);
     Ok(command)
