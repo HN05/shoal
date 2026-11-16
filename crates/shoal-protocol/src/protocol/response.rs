@@ -186,6 +186,7 @@ response_bodies! {
     RunningAgents(Vec<crate::model::RunningAgent>),
     RestartedPlace(Option<crate::sessions::Origin>),
     OwnedPlaces(Vec<crate::model::OwnedPlace>),
+    SpacePlaces(crate::model::SpacePlaces),
     PlaceClose(crate::sessions::PlaceClose),
     PlaceOwnership(crate::sessions::PlaceOwnership),
     QueueEntry(crate::model::QueueEntry),

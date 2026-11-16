@@ -1,5 +1,4 @@
 //! The daemon's answers to [`WorkspaceMethod`] requests, and who may send them.
-use shoal_ids::space_ids::SpaceId;
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result, ensure};
@@ -277,10 +276,9 @@ pub(super) async fn handle(
         WorkspaceMethod::PlaceOwnership { workspace, place } => {
             Body::PlaceOwnership(manager.place_ownership(&workspace, &place).await?)
         }
-        WorkspaceMethod::OwnedPlaces => owned_places(manager, None).await?,
-        WorkspaceMethod::WorkspacePlaces { workspace } => {
-            let workspace = manager.workspace(&workspace).await?.id;
-            owned_places(manager, Some(workspace)).await?
+        WorkspaceMethod::OwnedPlaces => owned_places(manager).await?,
+        WorkspaceMethod::SpacePlaces { space } => {
+            Body::SpacePlaces(manager.space_places(&space).await?)
         }
         WorkspaceMethod::RecordOwnedPlace { workspace, origin } => {
             manager.record_owned_place(&workspace, origin).await?;
@@ -304,11 +302,11 @@ pub(super) async fn handle(
     }))
 }
 
-/// The places Shoal created for `workspace`, or for every space.
-async fn owned_places(manager: &Manager, workspace: Option<SpaceId>) -> Result<Body> {
+/// The places Shoal created for every space.
+async fn owned_places(manager: &Manager) -> Result<Body> {
     Ok(Body::OwnedPlaces(
         manager
-            .owned_places(workspace)
+            .owned_places(None)
             .await?
             .into_iter()
             .map(|(space_id, origin)| crate::model::OwnedPlace { space_id, origin })
@@ -385,7 +383,7 @@ impl Scoped for WorkspaceMethod {
             WorkspaceMethod::HeldPermissions { .. } => None,
             WorkspaceMethod::SetBaseWorkspace { workspace, .. }
             | WorkspaceMethod::SetWorkspaceName { workspace, .. }
-            | WorkspaceMethod::WorkspacePlaces { workspace }
+            | WorkspaceMethod::SpacePlaces { space: workspace }
             | WorkspaceMethod::RenameWorkspace { workspace, .. }
             | WorkspaceMethod::ConvertToChat { workspace, .. }
             | WorkspaceMethod::SplitWorkspace { workspace, .. }

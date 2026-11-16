@@ -112,9 +112,6 @@ pub struct KeptChat {
     /// The `root_dir` a chat without a repository ran in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub root_dir: Option<std::path::PathBuf>,
-    /// Where it ran in a terminal host, when it ran in one.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub origin: Option<crate::sessions::Origin>,
 }
 
 /// What a removal keeps of a workspace only.

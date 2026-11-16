@@ -1113,7 +1113,7 @@ async fn a_held_parents_completion_takes_the_chats_below_it_deepest_first() {
             .start_new_chat(Some(parent.repository_id.clone().into()), None, start)
             .await
             .unwrap();
-        let chat = manager.run_chat_agent(chat).await.unwrap();
+        let chat = manager.run_chat_agent(chat, None).await.unwrap();
         above = chat.id.clone();
         chats.push(chat);
     }

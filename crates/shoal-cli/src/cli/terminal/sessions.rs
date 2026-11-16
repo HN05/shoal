@@ -8,7 +8,7 @@ use anyhow::Result;
 
 use crate::{
     config::Effective,
-    model::{Chat, Execution},
+    model::Execution,
     protocol::Protection,
     sessions::{HostName, Origin},
     terminal::{Host, Session, Sessions, enabled_host, named},
@@ -26,9 +26,10 @@ pub(in crate::cli) struct Recorded<'a> {
 }
 
 impl<'a> Recorded<'a> {
-    /// Where a workspace's `executions` were recorded running, with their
-    /// agents, and the `places` Shoal created for it.
-    pub fn workspace(executions: &'a [Execution], places: &'a [Origin]) -> Vec<Self> {
+    /// Where a space's `executions` were recorded running, with their
+    /// agents, and the `places` Shoal created for it, a workspace's or a
+    /// chat's.
+    pub fn space(executions: &'a [Execution], places: &'a [Origin]) -> Vec<Self> {
         let executions = executions.iter().filter_map(|execution| {
             Some(Self {
                 place: execution.origin.as_ref()?,
@@ -45,25 +46,12 @@ impl<'a> Recorded<'a> {
         });
         executions.chain(created).collect()
     }
-
-    /// Where `chat` was recorded running, with its agent.
-    pub fn chat(chat: &'a Chat) -> Vec<Self> {
-        chat.origin
-            .iter()
-            .map(|place| Self {
-                place,
-                agent: Some(&chat.agent),
-                execution: None,
-                stopped: None,
-            })
-            .collect()
-    }
 }
 
 /// The agent sessions still open at `places` in the hosts `settings`
-/// enable, where the daemon recorded a workspace's executions or a chat
-/// running, or the places Shoal created for a workspace. A session where a
-/// stopped agent waits to be restored says so, whichever place found it.
+/// enable, where the daemon recorded a space's executions running, or the
+/// places Shoal created for it. A session where a stopped agent waits to be
+/// restored says so, whichever place found it.
 pub(in crate::cli) async fn sessions(
     settings: &Effective,
     places: &[Recorded<'_>],

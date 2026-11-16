@@ -85,7 +85,6 @@ fn chat(
         workspace: None,
         running: true,
         started_at: crate::time::UnixTime::from_seconds(0),
-        origin: None,
         tmp_dir,
         root_dir: None,
         links: Default::default(),

@@ -244,10 +244,10 @@ async fn a_queued_chat_takes_the_place_it_starts_in() -> Result<()> {
         })
         .await?;
     assert_eq!(owners, [("w1:p9".to_owned(), chat.id.clone())]);
-    let origin = manager.chat(&selector).await?.origin;
-    assert_eq!(
-        origin.and_then(|origin| origin.place).as_deref(),
-        Some("w1:p9")
-    );
+    let places = manager.space_places(&selector).await?.places;
+    let places: Vec<_> = (places.iter())
+        .filter_map(|place| place.place.as_deref())
+        .collect();
+    assert_eq!(places, ["w1:p9"]);
     Ok(())
 }

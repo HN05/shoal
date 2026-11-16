@@ -217,11 +217,13 @@ impl Manager {
         chat: ChatRow,
         execution: ExecutionId,
     ) -> Result<()> {
-        let origin = chat.agent()?.origin()?;
-        if let Err(error) = self.hand_over(id, mode, &chat, execution).await {
-            log!("agent of {id} not handed over yet: {error:#}");
-            return Ok(());
-        }
+        let origin = match self.hand_over(id, mode, &chat, execution).await {
+            Ok(origin) => origin,
+            Err(error) => {
+                log!("agent of {id} not handed over yet: {error:#}");
+                return Ok(());
+            }
+        };
         restore_workspace(&self.paths, id, origin.as_ref()).await
     }
 
@@ -286,15 +288,17 @@ impl Manager {
     /// `id`, whose row was `chat`, which runs as `execution`, as the
     /// workspace's last session under that execution, marked converted, in
     /// `mode`, then stop the agent where it ran, and forget the conversion
-    /// and the scope the agent carried there.
+    /// and the scope the agent carried there. Returns where the agent ran in
+    /// a terminal host, while it ran.
     async fn hand_over(
         &self,
         id: &SpaceId,
         mode: ModeName,
         chat: &ChatRow,
         execution: ExecutionId,
-    ) -> Result<()> {
+    ) -> Result<Option<Origin>> {
         let agent = chat.agent()?;
+        let origin = self.execution_origin(id, &execution).await?;
         let last = LastSession {
             session: self.latest_session(id, &execution),
             execution,
@@ -302,7 +306,7 @@ impl Manager {
             moved: false,
             copied: None,
             converted: true,
-            origin: agent.origin()?,
+            origin: origin.clone(),
             stop: None,
             model: Default::default(),
             mode,
@@ -317,7 +321,20 @@ impl Manager {
             .write(move |tx| super::record::relocated_chat(tx, &space, token.as_ref()))
             .await?;
         self.signals.agent_changed();
-        Ok(())
+        Ok(origin)
+    }
+
+    /// Where the execution `execution` of the space `id` runs in a terminal
+    /// host, while it runs in one.
+    async fn execution_origin(
+        &self,
+        id: &SpaceId,
+        execution: &ExecutionId,
+    ) -> Result<Option<Origin>> {
+        let executions = self.workspace_executions(id).await?;
+        Ok((executions.into_iter())
+            .find(|recorded| recorded.id == *execution)
+            .and_then(|recorded| recorded.origin))
     }
 
     /// Make the workspace `id` the stopped `chat` its agent carries on in:

@@ -14,6 +14,7 @@ use crate::{
         terminal::{self, Recorded},
         ui::{self, Fallback, NoCurrentWorkspace},
     },
+    client::connection::CommandPaths,
     model::{Chat, Inspection},
     protocol::{ConfigTarget, Protection},
     sessions::Origin,
@@ -148,7 +149,9 @@ impl Target {
     /// A workspace or one of `chats` with an agent session, or whose agent
     /// sleeps or is stopped, which the picker's status shows, from a picker.
     async fn picked(ctx: &Context, chats: Vec<Chat>) -> Result<Self> {
-        let attachable = terminal::session_owners(&chat_places(&chats));
+        let places = chat_places(&ctx.paths, &chats).await;
+        let places: Vec<_> = places.iter().map(|(id, place)| (id, place)).collect();
+        let attachable = terminal::session_owners(&places);
         let chats: Vec<_> = chats
             .into_iter()
             .filter(|chat| attachable.contains(&chat.id) || !chat.running || chat.asleep.is_some())
@@ -195,7 +198,10 @@ impl Target {
     /// marked with why.
     async fn sessions(&self, ctx: &Context) -> Result<Vec<Session>> {
         let settings = shoal_workers::settings::of(&ctx.paths, self.config()).await?;
-        terminal::sessions(&settings, &self.places()).await
+        let space = SpaceSelector::id(self.id());
+        let places = crate::client::workspaces::places(&ctx.paths, space).await?;
+        let recorded = Recorded::space(&places.executions, &places.places);
+        terminal::sessions(&settings, &recorded).await
     }
 
     /// The session `named` names, the target's only one or one picked,
@@ -317,16 +323,6 @@ impl Target {
         }
     }
 
-    /// Where the daemon recorded the target running, with its agents.
-    fn places(&self) -> Vec<Recorded<'_>> {
-        match self {
-            Self::Workspace(inspection) => {
-                Recorded::workspace(&inspection.executions, &inspection.places)
-            }
-            Self::Chat(chat) => Recorded::chat(chat),
-        }
-    }
-
     /// Why there is nothing to attach to, and for a chat where it runs instead.
     fn without_sessions(&self) -> String {
         match self {
@@ -357,11 +353,22 @@ fn stopped_agent(target: &Target, protection: &Protection) -> String {
     )
 }
 
-/// Where the daemon recorded `chats` running, by chat ID.
-pub(in crate::cli) fn chat_places(chats: &[Chat]) -> Vec<(&SpaceId, &Origin)> {
-    chats
-        .iter()
-        .filter_map(|chat| Some((&chat.id, chat.origin.as_ref()?)))
+/// Where the daemon recorded `chats` running, by chat ID: where their agents
+/// run and the places Shoal created for them, as a workspace's. A list the
+/// daemon cannot give counts as no place.
+pub(in crate::cli) async fn chat_places(
+    paths: &CommandPaths,
+    chats: &[Chat],
+) -> Vec<(SpaceId, Origin)> {
+    let agents = crate::client::agents::all(paths).await.unwrap_or_default();
+    let owned = crate::client::workspaces::owned_places(paths)
+        .await
+        .unwrap_or_default();
+    let running = (agents.into_iter()).filter_map(|agent| Some((agent.space_id, agent.origin?)));
+    let created = (owned.into_iter()).map(|place| (place.space_id, place.origin));
+    running
+        .chain(created)
+        .filter(|(id, _)| chats.iter().any(|chat| chat.id == *id))
         .collect()
 }
 

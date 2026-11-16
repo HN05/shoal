@@ -64,7 +64,7 @@ fn a_workspace_records_its_execution_agents_and_created_places() {
     ];
     let places = [shell.clone()];
     assert_eq!(
-        Recorded::workspace(&executions, &places),
+        Recorded::space(&executions, &places),
         [
             Recorded {
                 place: &agent,
@@ -116,7 +116,7 @@ fn a_workspace_records_where_a_stopped_agent_waits() {
     };
     let protection = stopped_by_load();
     assert_eq!(
-        Recorded::workspace(&[execution], &[]),
+        Recorded::space(&[execution], &[]),
         [Recorded {
             place: &place,
             agent: Some(&"claude".into()),

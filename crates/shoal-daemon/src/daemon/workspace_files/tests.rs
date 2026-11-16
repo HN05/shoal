@@ -1240,7 +1240,7 @@ async fn a_chat_without_a_repository_keeps_its_files_in_root_dir() {
         parent: None,
     };
     let chat = manager.start_new_chat(None, None, new).await.unwrap();
-    let chat = manager.run_chat_agent(chat).await.unwrap();
+    let chat = manager.run_chat_agent(chat, None).await.unwrap();
     let report = temp.path().join("report.md");
     std::fs::write(&report, "Plan").unwrap();
     let added = manager
@@ -1306,7 +1306,7 @@ async fn files_of_a_chat_without_a_repository_stay_with_the_root_dir_it_started_
         parent: None,
     };
     let chat = manager.start_new_chat(None, None, new).await.unwrap();
-    let chat = manager.run_chat_agent(chat).await.unwrap();
+    let chat = manager.run_chat_agent(chat, None).await.unwrap();
     let root_dir = manager.config().root_dir(&manager.paths).unwrap();
     let space = SpaceSelector::id(&chat.id);
     let attach = |name: &str| {

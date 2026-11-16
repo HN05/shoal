@@ -17,8 +17,8 @@ use shoal_protocol::{
     config::hooks::HookKind,
     model::{
         Blocker, ConflictCheck, DiffBase, Inspection, MergePreview, OwnedPlace, PresentSpace,
-        Refreshed, RenamedWorkspace, SpaceStatus, SpaceTarget, Spaces, UntrackedWorktree,
-        Workspace,
+        Refreshed, RenamedWorkspace, SpacePlaces, SpaceStatus, SpaceTarget, Spaces,
+        UntrackedWorktree, Workspace,
     },
     protocol::{CommitStart, ConfigTarget, CreationOptions, RepositoryLayers, WorkspaceMethod},
     repository::Selector,
@@ -246,9 +246,10 @@ pub async fn owned_places(daemon: &impl Daemon) -> Result<Vec<OwnedPlace>> {
     request(daemon, WorkspaceMethod::OwnedPlaces).await
 }
 
-/// The places Shoal created for `workspace`.
-pub async fn places(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Vec<OwnedPlace>> {
-    request(daemon, WorkspaceMethod::WorkspacePlaces { workspace }).await
+/// Where the executions of `space`, a workspace or a chat, run, and the
+/// places Shoal created for it.
+pub async fn places(daemon: &impl Daemon, space: SpaceSelector) -> Result<SpacePlaces> {
+    request(daemon, WorkspaceMethod::SpacePlaces { space }).await
 }
 
 /// Record `origin`, a place Shoal created for `workspace`, so the daemon

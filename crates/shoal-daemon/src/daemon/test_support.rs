@@ -53,7 +53,7 @@ pub async fn chat(
     };
     let repository = repository.map(|repository| repository.id.clone().into());
     let chat = manager.start_new_chat(repository, None, new).await.unwrap();
-    manager.run_chat_agent(chat).await.unwrap()
+    manager.run_chat_agent(chat, None).await.unwrap()
 }
 
 /// Keep `session` as the one the agent running in the space `id` reported,

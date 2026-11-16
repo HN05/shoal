@@ -103,6 +103,14 @@ pub struct CopyIgnored {
     pub exclude: Vec<String>,
 }
 
+/// Where a space's executions were recorded running, with their agents, and
+/// the places Shoal created for it, a workspace's or a chat's.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SpacePlaces {
+    pub executions: Vec<Execution>,
+    pub places: Vec<crate::sessions::Origin>,
+}
+
 /// A place Shoal created for a space, a workspace or a chat, which closes
 /// with it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

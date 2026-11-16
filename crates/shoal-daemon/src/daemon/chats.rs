@@ -45,11 +45,11 @@ impl Manager {
             name,
             agent,
             mode: crate::model::chat_mode(),
-            origin,
+            origin: origin.clone(),
             parent: None,
         };
         let chat = self.start_new_chat(Some(repository), None, new).await?;
-        self.run_chat_agent(chat).await
+        self.run_chat_agent(chat, origin).await
     }
 
     /// [`Self::start_chat`] in the worktree of the workspace `workspace`
@@ -69,21 +69,25 @@ impl Manager {
             name,
             agent,
             mode: crate::model::chat_mode(),
-            origin,
+            origin: origin.clone(),
             parent: None,
         };
         let repository = Some(workspace.repository_id.clone());
         let chat = (self.record_new_chat(repository, Some(workspace_ref(&workspace)), new)).await?;
-        self.run_chat_agent(chat).await
+        self.run_chat_agent(chat, origin).await
     }
 
-    /// Run the agent of `chat` as its execution, as its wrapper registers
-    /// and tracks it, and return the chat running it. Asked to stop, the
-    /// agent ends its processes and exits, as its wrapper stops it, first
-    /// saving itself for `shoal restore` when the stop asks that.
+    /// Run the agent of `chat` as its execution at `origin`, as its wrapper
+    /// registers and tracks it, and return the chat running it. Asked to
+    /// stop, the agent ends its processes and exits, as its wrapper stops
+    /// it, first saving itself for `shoal restore` when the stop asks that.
     #[cfg(test)]
-    pub(crate) async fn run_chat_agent(self: &std::sync::Arc<Self>, chat: Chat) -> Result<Chat> {
-        let place = (chat.origin.clone()).map(|origin| workspace::places::ExecutionPlace {
+    pub(crate) async fn run_chat_agent(
+        self: &std::sync::Arc<Self>,
+        chat: Chat,
+        origin: Option<crate::sessions::Origin>,
+    ) -> Result<Chat> {
+        let place = origin.map(|origin| workspace::places::ExecutionPlace {
             origin,
             agent: true,
         });
@@ -241,7 +245,6 @@ impl Manager {
             narrowing,
             workspace,
             started_at,
-            origin,
             tmp_dir: None,
             root_dir: home.root_dir.clone(),
             running: false,
@@ -257,7 +260,7 @@ impl Manager {
             children: Vec::new(),
             converted: false,
         };
-        self.record_chat(chat, home, parent, priority).await
+        self.record_chat(chat, home, parent, priority, origin).await
     }
 
     /// Record the removed chat `chat` again, as its restore reopens it: in
@@ -280,18 +283,19 @@ impl Manager {
                 _registry: Some(self.gates.lock_registry().await),
             },
         };
-        self.record_chat(chat, home, parent, None).await
+        self.record_chat(chat, home, parent, None, None).await
     }
 
     /// Record `chat` at `home`, below `parent` when given, with `priority`,
-    /// give it its temporary directory and take its place in a terminal
-    /// host.
+    /// give it its temporary directory and take `place`, where it runs in a
+    /// terminal host, when given.
     async fn record_chat(
         &self,
         chat: Chat,
         home: ChatHome<'_>,
         parent: Option<SpaceId>,
         priority: Option<shoal_schedule::priority::Priority>,
+        place: Option<crate::sessions::Origin>,
     ) -> Result<Chat> {
         ensure!(
             !self.agent_queue.suspended(),
@@ -309,7 +313,9 @@ impl Manager {
             })
             .await?;
         let chat = (self.give_tmp_dir(chat, home.repository.as_ref())).await?;
-        self.take_chat_place(&chat).await?;
+        if let Some(place) = place {
+            self.take_chat_place(&chat.id, place).await?;
+        }
         Ok(chat)
     }
 
@@ -561,16 +567,12 @@ fn insert(
         workspace::set_parent(tx, &chat.id, Some(parent))?;
     }
     tx.execute(
-        "INSERT INTO chats(id,agent,started_at,origin,workspace_id,root_dir)
-         VALUES (?1,?2,?3,?4,?5,?6)",
+        "INSERT INTO chats(id,agent,started_at,workspace_id,root_dir)
+         VALUES (?1,?2,?3,?4,?5)",
         params![
             chat.id,
             chat.agent,
             chat.started_at,
-            chat.origin
-                .as_ref()
-                .map(serde_json::to_string)
-                .transpose()?,
             workspace,
             (chat.root_dir.as_deref()).map(|root| root.to_string_lossy().into_owned()),
         ],
@@ -661,10 +663,11 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
     db.prepare(
         "SELECT chats.id,space.repository_id,space.name,chats.agent,
                     EXISTS (SELECT 1 FROM executions e WHERE e.space_id=chats.id) AS running,
-                    chats.started_at,chats.origin,repositories.workspaces_dir,
+                    chats.started_at,repositories.workspaces_dir,
                     space_completion.record AS completion,
-                    workspaces.id,home.name,workspaces.branch,space.number,space.mode,
-                    chats.root_dir,space.narrowing,chats.converted
+                    workspaces.id AS workspace_id,home.name AS workspace_name,
+                    workspaces.branch,space.number,space.mode,chats.root_dir,space.narrowing,
+                    chats.converted
              FROM chats JOIN spaces space ON space.id=chats.id
                 LEFT JOIN repositories ON repositories.id=space.repository_id
                 LEFT JOIN workspaces ON workspaces.id=chats.workspace_id
@@ -673,12 +676,13 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
              ORDER BY chats.started_at, chats.rowid",
     )?
     .query_map([], |row| {
-        let id: SpaceId = row.get(0)?;
-        let repository_id: Option<RepositoryId> = row.get(1)?;
+        let id: SpaceId = row.get("id")?;
+        let repository_id: Option<RepositoryId> = row.get("repository_id")?;
         let root_dir = row
-            .get::<_, Option<String>>(14)?
+            .get::<_, Option<String>>("root_dir")?
             .map(std::path::PathBuf::from);
-        let tmp_dir = match (&repository_id, row.get::<_, Option<String>>(7)?) {
+        let directory = row.get::<_, Option<String>>("workspaces_dir")?;
+        let tmp_dir = match (&repository_id, directory) {
             (Some(repository_id), Some(directory)) => {
                 Some(tmp_dirs::Layout::new(Path::new(&directory), repository_id).locate(&id))
             }
@@ -688,22 +692,21 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
         };
         Ok(Chat {
             id,
-            number: row.get(12)?,
+            number: row.get("number")?,
             repository_id,
-            name: row.get(2)?,
-            agent: row.get(3)?,
-            mode: row.get(13)?,
+            name: row.get("name")?,
+            agent: row.get("agent")?,
+            mode: row.get("mode")?,
             narrowing: store::json_column(row, "narrowing")?.unwrap_or_default(),
-            workspace: match row.get::<_, Option<SpaceId>>(9)? {
+            workspace: match row.get::<_, Option<SpaceId>>("workspace_id")? {
                 Some(id) => Some(WorkspaceRef {
                     id,
-                    name: row.get(10)?,
-                    branch: row.get(11)?,
+                    name: row.get("workspace_name")?,
+                    branch: row.get("branch")?,
                 }),
                 None => None,
             },
-            started_at: row.get(5)?,
-            origin: store::json_column(row, "origin")?,
+            started_at: row.get("started_at")?,
             tmp_dir,
             root_dir,
             running: row.get("running")?,
@@ -720,7 +723,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
             asleep: None,
             parent: None,
             children: Vec::new(),
-            converted: row.get(16)?,
+            converted: row.get("converted")?,
         })
     })?
     .collect::<rusqlite::Result<Vec<Chat>>>()?

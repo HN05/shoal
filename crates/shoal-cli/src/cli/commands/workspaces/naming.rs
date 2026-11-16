@@ -50,7 +50,7 @@ async fn relabel(ctx: &Context, renamed: &RenamedWorkspace) -> Result<()> {
     } = renamed;
     let places =
         crate::client::workspaces::places(&ctx.paths, SpaceSelector::id(&workspace.id)).await?;
-    let places: Vec<_> = places.into_iter().map(|owned| owned.origin).collect();
+    let places = places.places;
     let target = ConfigTarget::Space(SpaceSelector::id(&workspace.id));
     let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
     let labels = terminal::Renamed::new(ctx, workspace, previous_name);

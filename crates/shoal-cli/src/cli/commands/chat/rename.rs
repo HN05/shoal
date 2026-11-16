@@ -46,23 +46,23 @@ pub(in crate::cli::commands) async fn request_name(
     Ok(0)
 }
 
-/// Show the renamed chat's name on the place it runs in, where that still
-/// shows its previous name; the chat keeps its new name when that fails.
+/// Show the renamed chat's name on the places it runs in and those Shoal
+/// created for it, where they still show its previous name; the chat keeps
+/// its new name when that fails.
 async fn relabel(ctx: &Context, renamed: &RenamedChat) -> Result<()> {
     let RenamedChat {
         chat,
         previous_name,
     } = renamed;
-    let Some(place) = &chat.origin else {
-        return Ok(());
-    };
+    let places = crate::client::workspaces::places(&ctx.paths, SpaceSelector::id(&chat.id)).await?;
+    let running = (places.executions.into_iter()).filter_map(|execution| execution.origin);
+    let places: Vec<_> = running.chain(places.places).collect();
     let target = ConfigTarget::chat(chat);
     let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
     let labels = terminal::Labels {
         new: chat.name.to_string(),
         expected: previous_name.to_string(),
     };
-    let places = std::slice::from_ref(place);
-    terminal::relabel_space(&settings, places, async |_| labels.clone()).await;
+    terminal::relabel_space(&settings, &places, async |_| labels.clone()).await;
     Ok(())
 }

@@ -43,9 +43,6 @@ pub struct Chat {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace: Option<WorkspaceRef>,
     pub started_at: crate::time::UnixTime,
-    /// Where it runs in a terminal host, when it runs in one.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub origin: Option<crate::sessions::Origin>,
     /// Its own directory for temporary files, which goes with it; none in a
     /// repository without a directory.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -41,15 +41,15 @@ fn a_carried_chat_keeps_its_session_only_where_its_agent_continues_it() {
     let removed: RemovedSpace = serde_json::from_value(serde_json::json!({
         "workspace_id": "c1", "repository_id": "r1", "name": "reading",
         "links": {"issues": [], "prs": []},
-        "last_sessions": [{"execution": "c1", "agent": "claude", "session": "s1"}],
+        "last_sessions": [{"execution": "c1", "agent": "claude", "session": "s1",
+            "origin": {"host": "herdr", "place": "tab"}}],
         "cause": "manual", "removed_at": 1, "expires_at": 2,
-        "chat": {"agent": "claude", "mode": "chat",
-            "origin": {"host": "herdr", "place": "tab"}},
+        "chat": {"agent": "claude", "mode": "chat"},
     }))
     .unwrap();
     let carried = CarriedChat::of(None, Some("m1".into()), removed);
-    // The record carries no place it ran in.
-    assert_eq!(carried.chat.chat().unwrap().origin, None);
+    // The record carries no place its agent ran in.
+    assert_eq!(carried.chat.last_sessions[0].origin, None);
     let manifest = crate::transfer::Manifest {
         remote_url: None,
         space: crate::transfer::PackagedSpace {

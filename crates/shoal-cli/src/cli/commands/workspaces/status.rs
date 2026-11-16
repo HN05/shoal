@@ -101,15 +101,20 @@ fn listed<T>(found: Result<Vec<T>>) -> (Vec<T>, Option<String>) {
 /// The agent sessions of `space`, in the hosts its settings enable and at
 /// the places the daemon recorded it running in.
 async fn sessions(ctx: &Context, space: &SpaceDetail) -> Result<Vec<crate::terminal::Session>> {
-    let (target, places) = match space {
-        SpaceDetail::Workspace(status) => (
-            ConfigTarget::Space(SpaceSelector::id(&status.workspace.id)),
-            Recorded::workspace(&status.executions, &status.places),
-        ),
-        SpaceDetail::Chat { chat } => (ConfigTarget::chat(chat), Recorded::chat(chat)),
+    let target = match space {
+        SpaceDetail::Workspace(status) => {
+            ConfigTarget::Space(SpaceSelector::id(&status.workspace.id))
+        }
+        SpaceDetail::Chat { chat } => ConfigTarget::chat(chat),
     };
     let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
-    terminal::sessions(&settings, &places).await
+    let places = crate::client::workspaces::places(&ctx.paths, SpaceSelector::id(space.id()));
+    let places = places.await?;
+    terminal::sessions(
+        &settings,
+        &Recorded::space(&places.executions, &places.places),
+    )
+    .await
 }
 
 /// Linked items find the spaces that link them, and resources the

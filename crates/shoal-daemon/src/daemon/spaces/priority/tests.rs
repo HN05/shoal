@@ -56,7 +56,7 @@ async fn a_chat_started_with_a_priority_records_it() {
         parent: None,
     };
     let chat = manager.start_new_chat(None, None, new).await.unwrap();
-    let chat = manager.run_chat_agent(chat).await.unwrap();
+    let chat = manager.run_chat_agent(chat, None).await.unwrap();
     let stored = manager.store.read(move |tx| current(tx, &chat.id)).await;
     assert_eq!(stored.unwrap(), Priority::URGENT);
 }

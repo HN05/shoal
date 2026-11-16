@@ -24,7 +24,6 @@ fn spaces() -> Spaces {
         agent: "claude".into(),
         workspace: None,
         started_at: UnixTime::from_seconds(0),
-        origin: None,
         tmp_dir: None,
         root_dir: None,
         running,

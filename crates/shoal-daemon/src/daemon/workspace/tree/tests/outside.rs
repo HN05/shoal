@@ -53,7 +53,7 @@ async fn outside(
         parent: parent.cloned(),
     };
     let chat = manager.start_new_chat(None, None, new).await.unwrap();
-    let chat = manager.run_chat_agent(chat).await.unwrap();
+    let chat = manager.run_chat_agent(chat, None).await.unwrap();
     let process = agent_process(manager, &chat.id).await;
     (chat, process)
 }

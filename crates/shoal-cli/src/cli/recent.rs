@@ -189,9 +189,9 @@ pub async fn record_chat_attach(ctx: &Context, selector: &SpaceSelector) {
 /// when the chats cannot be listed.
 pub async fn session_chat(ctx: &Context, host: HostName, session: &str) -> Option<Chat> {
     let chats = crate::client::chats::list(&ctx.paths).await.ok()?;
-    chats.into_iter().find(|chat| {
-        (chat.origin.as_ref()).is_some_and(|place| place.host == host && place.id() == session)
-    })
+    let places = crate::cli::commands::sessions::chat_places(&ctx.paths, &chats).await;
+    let (id, _) = (places.iter()).find(|(_, place)| place.host == host && place.id() == session)?;
+    chats.into_iter().find(|chat| chat.id == *id)
 }
 
 /// Failing to keep the history never fails the command.

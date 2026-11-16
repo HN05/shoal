@@ -326,11 +326,12 @@ fn chat_rename_relabels_a_block_that_still_shows_the_old_name() {
             .to_string();
         rex.json(&["api", "call", "session.set_window_label", &input]);
     };
-    // The chat lasts while this test's process runs.
+    // The chat lasts while this test's process runs, in the block Shoal
+    // opened for it.
     let response = fixture.request(serde_json::json!({"start_chat":{
         "repository": repository["id"], "name": "talk", "agent": "claude",
         "pid": std::process::id(), "origin": {
-            "host": "rex", "group": session, "place": block,
+            "host": "rex", "group": session, "place": block, "owned": true,
             "data": {"server": rex.socket, "bin_dir": rex.program.parent().unwrap()}
         }
     }}));

@@ -997,8 +997,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
         .unwrap();
     assert_eq!(created["parent"]["id"], *chat, "{created}");
 
-    // While it runs, `list` shows the chat with its workspaces under it, and
-    // the zmx session it runs in.
+    // While it runs, `list` shows the chat with its workspaces under it.
     let chats: Value =
         serde_json::from_str(&fs::read_to_string(home.join("chat-chats")).unwrap()).unwrap();
     assert_eq!(chats.as_array().map(Vec::len), Some(1), "{chats}");
@@ -1006,10 +1005,6 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
     assert_eq!(
         [&listed["id"], &listed["name"], &listed["agent"]],
         [chat, &started["name"], &started["agent"]["name"]]
-    );
-    assert_eq!(
-        listed["origin"],
-        serde_json::json!({"host": "zmx", "place": "outer"})
     );
     // The agent ran with its own temporary directory, which the listing names.
     let tmp_dir = fs::read_to_string(home.join("chat-tmpdir")).unwrap();

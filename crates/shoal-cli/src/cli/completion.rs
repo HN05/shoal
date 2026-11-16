@@ -587,7 +587,8 @@ fn target_of(id: &str, parent: &str, name: &str, need: Need) -> Option<Target> {
 /// The running chats with an agent session.
 async fn session_chat_candidates(paths: &CommandPaths) -> Result<Vec<CompletionCandidate>> {
     let chats = crate::client::chats::list(paths).await?;
-    let places = super::commands::sessions::chat_places(&chats);
+    let places = super::commands::sessions::chat_places(paths, &chats).await;
+    let places: Vec<_> = places.iter().map(|(id, place)| (id, place)).collect();
     let attachable = terminal::session_owners(&places);
     Ok(chats
         .iter()

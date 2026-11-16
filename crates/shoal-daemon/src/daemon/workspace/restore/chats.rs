@@ -98,7 +98,6 @@ fn restored_record(removed: &RemovedSpace, kept: &KeptChat) -> Chat {
         narrowing: kept.narrowing,
         workspace: kept.workspace.clone(),
         started_at: crate::time::UnixTime::now(),
-        origin: kept.origin.clone(),
         tmp_dir: None,
         root_dir: kept.root_dir.clone(),
         running: false,

@@ -606,6 +606,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 191 {
         db.execute_batch(include_str!("chat_turn_marks.sql"))?;
     }
+    if version >= 192 {
+        db.execute_batch(include_str!("chat_places.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -1792,11 +1795,7 @@ fn migration_keeps_chat_sessions_where_every_space_keeps_them() -> Result<()> {
 
     migrate(&mut db)?;
 
-    let columns: Vec<String> = db
-        .prepare("SELECT name FROM pragma_table_info('chats')")?
-        .query_map([], |row| row.get(0))?
-        .collect::<rusqlite::Result<_>>()?;
-    assert!(!columns.iter().any(|column| column == "session"));
+    assert!(!store_columns(&db, "chats")?.contains(&"session".to_owned()));
     // The chat that became a workspace keeps its agent's session under the
     // execution that agent runs as; one whose agent is gone keeps its own.
     let records: Vec<String> = db
@@ -1850,6 +1849,54 @@ fn migration_moves_a_chats_turn_mark_to_its_agents_execution() -> Result<()> {
         r#"{"to":"workspace","execution":"converted-agent","chat":{}}"#
     );
     Ok(())
+}
+
+#[test]
+fn migration_drops_the_copies_of_a_chats_place() -> Result<()> {
+    let mut db = historical_database(191)?;
+    db.execute_batch(
+        r#"BEGIN;
+         INSERT INTO chats(id,agent,started_at,origin) VALUES ('chat','claude',1,'{"host":"zmx"}');
+         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('chat','chat','repo','chat');
+         COMMIT;
+         INSERT INTO space_conversions(space_id,record) VALUES
+             ('workspace','{"to":"workspace","chat":{"origin":"{}"}}'),
+             ('converting','{"to":"chat","chat":{"origin":{"host":"zmx"}}}');
+         INSERT INTO removed_spaces(space_id,repository_id,chat,name,expires_at,record) VALUES
+             ('removed','repo',1,'removed',1,'{"chat":{"agent":"claude","origin":{}}}');"#,
+    )?;
+
+    migrate(&mut db)?;
+
+    let records: Vec<String> = db
+        .prepare(
+            "SELECT record FROM (SELECT space_id,record FROM space_conversions
+                UNION ALL SELECT space_id,record FROM removed_spaces) ORDER BY space_id",
+        )?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    // A workspace becoming a chat keeps where its agent ran.
+    assert_eq!(
+        records,
+        [
+            r#"{"to":"chat","chat":{"origin":{"host":"zmx"}}}"#,
+            r#"{"chat":{"agent":"claude"}}"#,
+            r#"{"to":"workspace","chat":{}}"#,
+        ]
+    );
+    assert!(
+        !store_columns(&db, "chats")?.contains(&"origin".to_owned()),
+        "the row keeps no place"
+    );
+    Ok(())
+}
+
+/// The columns of `table`.
+fn store_columns(db: &Connection, table: &str) -> Result<Vec<String>> {
+    Ok(db
+        .prepare("SELECT name FROM pragma_table_info(?1)")?
+        .query_map([table], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
 }
 
 #[test]

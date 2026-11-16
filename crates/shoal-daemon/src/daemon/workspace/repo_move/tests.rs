@@ -808,7 +808,7 @@ async fn with_master() -> Result<(tempfile::TempDir, Arc<Manager>, crate::model:
         parent: None,
     };
     let chat = manager.start_new_chat(None, None, new).await?;
-    let chat = manager.run_chat_agent(chat).await?;
+    let chat = manager.run_chat_agent(chat, None).await?;
     Ok((temp, manager, chat, root))
 }
 

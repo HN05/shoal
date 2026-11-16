@@ -26,7 +26,7 @@ use crate::{
     config::Effective,
     execution::recovery::{Copied, LastSession, Record, StoppedAgent},
     git::{self, default_branch::DefaultBranchLookup},
-    model::{RemovedKind, RemovedSpace, Repository},
+    model::{RemovedSpace, Repository},
 };
 use shoal_protocol::transcripts;
 use shoal_protocol::transcripts::Environments;
@@ -582,11 +582,10 @@ fn kept_on(
     }
 }
 
-/// The record for another machine, where its agents' sessions do not exist
-/// and the package carries the session files it kept: a chat's keeps no
-/// place there either.
+/// The record for another machine, where its agents' sessions and places do
+/// not exist and the package carries the session files it kept.
 fn moved(removed: RemovedSpace) -> RemovedSpace {
-    let mut moved = RemovedSpace {
+    RemovedSpace {
         agents: removed.agents.into_iter().map(moved_agent).collect(),
         last_sessions: removed
             .last_sessions
@@ -595,11 +594,7 @@ fn moved(removed: RemovedSpace) -> RemovedSpace {
             .collect(),
         session_files: Vec::new(),
         ..removed
-    };
-    if let RemovedKind::Chat { chat } = &mut moved.kind {
-        chat.origin = None;
     }
-    moved
 }
 
 /// `sessions` of a copy, whose agents start from forks of their sessions

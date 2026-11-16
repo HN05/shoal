@@ -421,7 +421,7 @@ async fn a_chats_lost_report_counts_only_from_the_agent_it_runs() {
     // A restore runs another agent.
     manager.end_executions(&chat.id).await;
     let chat = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
-    manager.run_chat_agent(chat.clone()).await.unwrap();
+    manager.run_chat_agent(chat.clone(), None).await.unwrap();
     manager.recover_lost_reports().await;
 
     // The state ended with the agent, and the earlier agent's report does

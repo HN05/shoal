@@ -120,7 +120,6 @@ impl Manager {
                     narrowing: chat.narrowing,
                     workspace: chat.workspace,
                     root_dir: chat.root_dir,
-                    origin: chat.origin,
                 }),
             },
         };

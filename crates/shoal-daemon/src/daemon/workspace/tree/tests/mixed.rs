@@ -484,7 +484,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
         .start_new_chat(repository, workspace.as_ref(), new)
         .await
         .unwrap();
-    let auditing = manager.run_chat_agent(auditing).await.unwrap();
+    let auditing = manager.run_chat_agent(auditing, None).await.unwrap();
     assert_eq!(
         auditing.workspace.map(|home| home.id),
         Some(worker.id.clone())

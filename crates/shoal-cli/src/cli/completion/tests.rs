@@ -121,9 +121,9 @@ async fn attach_candidates_child() -> Result<()> {
 }
 
 async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) -> Result<()> {
-    // Four listings, then the settings of each of the five workspaces whose
-    // recorded places are asked about.
-    for _ in 0..9 {
+    // Six listings, the chats' places among them, then the settings of each
+    // of the five workspaces whose recorded places are asked about.
+    for _ in 0..11 {
         let (mut stream, _) = listener.accept().await?;
         let request: Request = protocol::read(&mut stream).await?;
         let body = if matches!(
@@ -137,6 +137,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                     ("w1", Some("claude"), "workspace-session"),
                     ("w3", None, "stale"),
                     ("w4", None, "retained"),
+                    ("c1", Some("codex"), "chat-session"),
                 ]
                 .map(|(workspace, agent, session)| RunningAgent {
                     execution: format!("{workspace}-execution").into(),
@@ -194,7 +195,6 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                 workspace: None,
                 running: true,
                 started_at: UnixTime::from_seconds(0),
-                origin: Some(Origin::created(HostName::Zmx, "chat-session".into())),
                 tmp_dir: None,
                 root_dir: None,
                 links: Default::default(),
@@ -279,7 +279,6 @@ fn restore_completes_restorable_spaces() {
         agent: "claude".into(),
         workspace: None,
         started_at: UnixTime::from_seconds(0),
-        origin: None,
         tmp_dir: None,
         root_dir: None,
         running,

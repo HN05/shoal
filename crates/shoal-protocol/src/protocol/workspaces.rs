@@ -129,9 +129,10 @@ pub enum WorkspaceMethod {
         workspace: SpaceSelector,
         name: crate::space_names::SpaceName,
     },
-    /// The places Shoal created for the workspace.
-    WorkspacePlaces {
-        workspace: SpaceSelector,
+    /// Where the space's executions run and the places Shoal created for
+    /// it, a workspace's or a chat's.
+    SpacePlaces {
+        space: SpaceSelector,
     },
     /// Record or clear the workspace whose branch this one builds on.
     SetBaseWorkspace {

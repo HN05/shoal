@@ -323,7 +323,7 @@ async fn the_file_events_of_a_chat_without_a_repository_name_none() {
         parent: None,
     };
     let chat = manager.start_new_chat(None, None, new).await.unwrap();
-    let chat = manager.run_chat_agent(chat).await.unwrap();
+    let chat = manager.run_chat_agent(chat, None).await.unwrap();
     let report = temp.path().join("report.md");
     std::fs::write(&report, "Plan").unwrap();
     manager
