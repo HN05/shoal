@@ -9,7 +9,10 @@ use shoal_refs::BranchName;
 use crate::{
     fsutil::off_runtime,
     removal::{BranchOutcome, RemovalResult},
+    tools::Tool,
 };
+
+pub mod interrupted;
 
 /// Create a linked worktree of `repo` at `path` on `branch`: a new branch at
 /// revision `base` when given, otherwise the existing branch, which Git
@@ -112,12 +115,13 @@ async fn remove_worktree(repo: &Path, path: &Path, files: FileRemoval) -> Result
     }
     command.arg("--").arg(path);
     let link = link_text(path).await?;
-    if let Err(error) = super::output(command).await {
+    let admin_dir = mark_removal(path, link.as_deref()).await?;
+    if let Err(Unfinished { error, stopped }) = run_removal(command).await {
         let failed = || format!("remove the worktree at {}: {error:#}", path.display());
         // Once Git starts deleting files it forgets the worktree, whatever
         // it could not delete, so the rest goes as a disowned worktree's.
         if listed(repo, path).await.with_context(failed)?.is_some() {
-            return Err(error.context(format!("remove the worktree at {}", path.display())));
+            return Err(unfinished_removal(path, admin_dir.as_deref(), stopped, error).await);
         }
         finish_deletion(path, link).await.with_context(failed)?;
     }
@@ -133,6 +137,70 @@ async fn remove_worktree(repo: &Path, path: &Path, files: FileRemoval) -> Result
 async fn link_text(path: &Path) -> Result<Option<String>> {
     let link = path.join(".git");
     off_runtime::run(move || Ok(crate::fsutil::read_optional(&link)?)).await
+}
+
+/// Record that a removal begins deleting the worktree at `path`, whose
+/// `.git` link reads `link`, in the admin directory it names, which this
+/// returns; nothing for a worktree without one, whose files are gone.
+async fn mark_removal(path: &Path, link: Option<&str>) -> Result<Option<PathBuf>> {
+    let Some((text, admin_dir)) =
+        link.and_then(|text| Some((text, interrupted::admin_dir(path, text)?)))
+    else {
+        return Ok(None);
+    };
+    interrupted::mark(&admin_dir, text.to_owned()).await?;
+    Ok(Some(admin_dir))
+}
+
+/// A `worktree remove` that did not succeed.
+struct Unfinished {
+    error: anyhow::Error,
+    /// It was stopped, by its timeout or a signal, rather than exiting.
+    stopped: bool,
+}
+
+/// Run the `worktree remove` `command`.
+async fn run_removal(command: tokio::process::Command) -> Result<(), Unfinished> {
+    let ran = super::bounded(command).capture().await;
+    let stopped = match &ran {
+        Err(error) => error.kind() == std::io::ErrorKind::TimedOut,
+        Ok(output) => output.status.code().is_none(),
+    };
+    crate::subprocess::checked_output(Tool::Git.program(), ran)
+        .map(drop)
+        .map_err(|error| Unfinished { error, stopped })
+}
+
+/// The error of a `worktree remove` that failed with `error` while Git
+/// still lists the worktree at `path`, whose admin directory is
+/// `admin_dir`. Git refuses before it deletes anything and forgets the
+/// worktree once it has, so only a run that was `stopped` can have deleted
+/// files: the worktree's own come back, as the next removal would put them
+/// back too.
+async fn unfinished_removal(
+    path: &Path,
+    admin_dir: Option<&Path>,
+    stopped: bool,
+    error: anyhow::Error,
+) -> anyhow::Error {
+    let failed = format!("remove the worktree at {}", path.display());
+    let Some(admin_dir) = admin_dir else {
+        return error.context(failed);
+    };
+    if !stopped {
+        return match interrupted::unmark(admin_dir).await {
+            Ok(()) => error.context(failed),
+            Err(unmark) => error.context(format!("{failed}; {unmark:#}")),
+        };
+    }
+    match interrupted::restore(path, admin_dir).await {
+        Ok(_) => error.context(format!(
+            "{failed}: it stopped partway, so its tracked files were checked out again; removing it again continues with what is left"
+        )),
+        Err(restore) => error.context(format!(
+            "{failed}: it stopped partway, and checking its tracked files out again failed: {restore:#}; removing it again puts them back first"
+        )),
+    }
 }
 
 /// Delete what Git left of the worktree at `path` once it stopped listing
@@ -211,9 +279,9 @@ fn linked_admin_dir(path: &Path) -> Result<Option<PathBuf>> {
     let Some(contents) = crate::fsutil::read_optional(&link)? else {
         return Ok(None);
     };
-    let named = (contents.strip_prefix("gitdir: "))
-        .with_context(|| format!("{} links no admin directory", link.display()))?;
-    Ok(Some(path.join(named.trim_end_matches('\n'))))
+    interrupted::admin_dir(path, &contents)
+        .with_context(|| format!("{} links no admin directory", link.display()))
+        .map(Some)
 }
 
 /// Delete the directory of the worktree at `path` that Git disowned,
