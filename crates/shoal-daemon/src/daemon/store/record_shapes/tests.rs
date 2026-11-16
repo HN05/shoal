@@ -210,3 +210,71 @@ fn a_snapshot_that_saw_no_state_leaves_it_out() -> Result<()> {
     assert_eq!(watch, json!({"comments": {}}));
     Ok(())
 }
+
+#[test]
+fn saved_agent_files_take_the_current_shape() -> Result<()> {
+    let state = tempfile::tempdir()?;
+    let mut db = Connection::open(state.path().join("state.db"))?;
+    migrate_to(&mut db, 210)?;
+    let space = state.path().join("workspaces/w");
+    fs::create_dir_all(&space)?;
+    let write = |name: &str, saved: Value| fs::write(space.join(name), saved.to_string());
+    write(
+        "e1.recovery.json",
+        json!({"agent": "claude", "place": "w1:p2"}),
+    )?;
+    write(
+        "e2.last-session.json",
+        json!({"agent": "codex", "mode": "plan"}),
+    )?;
+    write(
+        "last-session.json",
+        json!({"agent": "claude", "session": "s1"}),
+    )?;
+    // A truncated record stays as it is without stopping the migration.
+    fs::write(space.join("e3.recovery.json"), r#"{"agent":"#)?;
+    migrate(&mut db)?;
+    assert_eq!(
+        fs::read_to_string(space.join("e3.recovery.json"))?,
+        r#"{"agent":"#
+    );
+    let read = |path: &Path| -> Result<Value> { Ok(serde_json::from_slice(&fs::read(path)?)?) };
+    assert_eq!(
+        read(&space.join("e1.recovery.json"))?,
+        json!({"agent": "claude", "mode": "worker", "origin": {"host": "herdr", "place": "w1:p2"}})
+    );
+    assert_eq!(
+        read(&space.join("e2.last-session.json"))?,
+        json!({"agent": "codex", "mode": "plan", "execution": "e2"})
+    );
+    assert!(!space.join("last-session.json").exists());
+    let named: Vec<_> = (fs::read_dir(&space)?)
+        .map(|entry| entry.map(|entry| entry.path()))
+        .collect::<std::io::Result<_>>()?;
+    let [unnamed] = named
+        .iter()
+        .filter(|path| {
+            ![
+                "e1.recovery.json",
+                "e2.last-session.json",
+                "e3.recovery.json",
+            ]
+            .iter()
+            .any(|name| path.ends_with(name))
+        })
+        .collect::<Vec<_>>()[..]
+    else {
+        panic!("one renamed last session: {named:?}");
+    };
+    let last = read(unnamed)?;
+    let execution = last["execution"].as_str().unwrap_or_default();
+    assert!(
+        unnamed.ends_with(format!("{execution}.last-session.json")),
+        "{last}"
+    );
+    assert_eq!(
+        (last["session"].as_str(), last["mode"].as_str()),
+        (Some("s1"), Some("worker"))
+    );
+    Ok(())
+}

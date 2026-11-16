@@ -1,10 +1,12 @@
 //! Rewrite the JSON records the store holds into the shapes this release
 //! reads, a migration per change of shape, so code reads one shape of each.
-use std::collections::HashMap;
+use std::{collections::HashMap, fs, path::Path};
 
 use anyhow::Result;
 use rusqlite::{Connection, params};
 use serde_json::{Map, Value, json};
+
+use crate::fsutil::atomic::{Permissions, ReplaceOptions, replace_atomically};
 
 /// Watches name when the space last changed the item `own_change_at`,
 /// removal records keep every last session in `last_sessions`, and an
@@ -227,6 +229,100 @@ fn birth_identities_of(db: &Connection, select: &str, update: &str) -> Result<()
             db.execute(update, params![id, birth])?;
         }
     }
+    Ok(())
+}
+
+/// The files of stopped agents and last sessions in the state directory
+/// beside the database take the shapes their removal records' copies took:
+/// each names its mode and its terminal place as its `origin`, and a last
+/// session its execution, which a workspace's single unnamed one, from
+/// before workspaces kept one per agent, takes as a new name.
+pub(super) fn saved_agent_files(db: &Connection) -> Result<()> {
+    let Some(state) = super::state_directory(db) else {
+        return Ok(());
+    };
+    let spaces = state.join("workspaces");
+    let Ok(entries) = fs::read_dir(&spaces) else {
+        return Ok(());
+    };
+    for space in entries {
+        let space = space?.path();
+        if space.is_dir() {
+            name_unnamed_last_session(&space)?;
+            for file in fs::read_dir(&space)? {
+                current_saved_agent(&file?.path())?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// What a workspace kept its one last session in before agents kept one
+/// each.
+const UNNAMED_LAST_SESSION: &str = "last-session.json";
+const LAST_SESSION_SUFFIX: &str = ".last-session.json";
+const RECORD_SUFFIX: &str = ".recovery.json";
+
+/// Give the unnamed last session in `space` a file named after a new
+/// execution of its own.
+fn name_unnamed_last_session(space: &Path) -> Result<()> {
+    let unnamed = space.join(UNNAMED_LAST_SESSION);
+    if !unnamed.is_file() {
+        return Ok(());
+    }
+    let execution = shoal_ids::execution_ids::ExecutionId::generate();
+    let named = space.join(format!("{execution}{LAST_SESSION_SUFFIX}"));
+    let Some(mut last) = saved_object(&unnamed)? else {
+        return Ok(());
+    };
+    last.insert("execution".into(), json!(execution));
+    write_saved(&named, &last)?;
+    fs::remove_file(&unnamed)?;
+    Ok(())
+}
+
+/// Rewrite the stopped agent's record or the last session at `path` into
+/// the current shape; other files stay as they are.
+fn current_saved_agent(path: &Path) -> Result<()> {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return Ok(());
+    };
+    let execution = match name.strip_suffix(LAST_SESSION_SUFFIX) {
+        Some(execution) => Some(execution.to_owned()),
+        None if name.ends_with(RECORD_SUFFIX) => None,
+        None => return Ok(()),
+    };
+    let Some(mut saved) = saved_object(path)? else {
+        return Ok(());
+    };
+    let before = saved.clone();
+    origin_from_place(&mut saved);
+    filled(&mut saved, "mode", default_mode);
+    if let Some(execution) = execution {
+        filled(&mut saved, "execution", || json!(execution));
+    }
+    if saved != before {
+        write_saved(path, &saved)?;
+    }
+    Ok(())
+}
+
+/// The object the file at `path` holds; `None` for one that holds none,
+/// such as a truncated write, which its readers skip as this leaves it.
+fn saved_object(path: &Path) -> Result<Option<Map<String, Value>>> {
+    Ok(match serde_json::from_slice(&fs::read(path)?) {
+        Ok(Value::Object(saved)) => Some(saved),
+        _ => None,
+    })
+}
+
+/// Replace the file at `path` with `saved`, private as Shoal writes it.
+fn write_saved(path: &Path, saved: &Map<String, Value>) -> Result<()> {
+    let options = ReplaceOptions {
+        permissions: Permissions::Temporary,
+        sync: true,
+    };
+    replace_atomically(path, &serde_json::to_vec(saved)?, options)?;
     Ok(())
 }
 
