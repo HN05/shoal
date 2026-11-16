@@ -1,14 +1,15 @@
 use super::*;
 
+/// A simulator recorded before acquirers were is the user's.
 #[test]
-fn records_without_an_acquirer_are_the_users() -> Result<()> {
-    #[derive(Deserialize)]
-    struct Record {
-        #[serde(default)]
-        acquirer: Acquirer,
-    }
-    let record: Record = serde_json::from_str("{}")?;
-    assert_eq!(record.acquirer, Acquirer::User);
+fn simulators_recorded_without_an_acquirer_are_the_users() -> Result<()> {
+    let record = serde_json::json!({
+        "id": "sim", "udid": "device", "device": "Phone", "runtime": "iOS",
+        "workspace_id": "workspace", "last_workspace_id": null, "lease_name": "default",
+        "reason": null, "state": "leased", "last_used": 1, "error": null
+    });
+    let sim: crate::sim::Simulator = serde_json::from_value(record)?;
+    assert_eq!(sim.acquirer, Acquirer::User);
     Ok(())
 }
 
