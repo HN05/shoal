@@ -109,8 +109,11 @@ impl Manager {
 
     /// Record the background `activity` of `space`'s items; sync the
     /// default branch once one of them merged, since other workspaces'
-    /// conflict checks read it, and publish the space's progress again once
-    /// a PR moved into or out of draft, which its progress section follows.
+    /// conflict checks read it, publish the space's progress again once a
+    /// PR moved into or out of draft, which its progress section follows,
+    /// and settle the agent account on its issues again once one lost an
+    /// assignee, since another Shoal acting as the same account may have
+    /// taken it off one an agent here works.
     async fn act_on_background_activity(
         &self,
         space: &LinkSpace,
@@ -122,6 +125,9 @@ impl Manager {
         }
         if seen.changed_draft {
             self.publications.request(&space.id);
+        }
+        if seen.lost_assignee {
+            self.agent_settles.request(&space.id);
         }
         Ok(())
     }
@@ -186,6 +192,7 @@ impl Manager {
                     );
                     if let Some(previous) = previous {
                         seen.changed_draft |= previous.draft_changed(&snapshot);
+                        seen.lost_assignee |= previous.assignee_removed(&snapshot);
                         for update in previous.changes(&snapshot, &url) {
                             seen.merged |= update.kind == UpdateKind::Merged;
                             crate::daemon::events::record_item_activity(
@@ -208,6 +215,8 @@ pub(super) struct Seen {
     pub merged: bool,
     /// A PR moved into or out of draft.
     pub changed_draft: bool,
+    /// An item lost an assignee.
+    pub lost_assignee: bool,
 }
 
 /// Store `snapshot` as the background poll's observation of the item at

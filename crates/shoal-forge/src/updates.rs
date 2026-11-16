@@ -405,6 +405,12 @@ impl Snapshot {
         matches!((&self.details, &next.details), (Some(seen), Some(details)) if seen.draft_changed(details))
     }
 
+    /// Whether `next` lacks an assignee `self` showed; false while either
+    /// has not read its details.
+    pub fn assignee_removed(&self, next: &Self) -> bool {
+        matches!((&self.details, &next.details), (Some(seen), Some(details)) if seen.assignee_removed(details))
+    }
+
     /// The PR's head commit, `None` for an issue.
     pub fn head(&self) -> Option<&CommitId> {
         self.head.as_ref()

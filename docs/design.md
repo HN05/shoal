@@ -2553,8 +2553,10 @@ withdraws the completion. Every Shoal acting as the same account shares that
 assignee, so each records the issues it put or kept the account on and takes it
 off only those, leaving one another Shoal's agent may work; it reads the forge
 for whether the account is there, and settles it in the background, so a slow
-forge holds back no start or stop. The user's own login, under `[issue]
-assign = "user"` or `"both"`, joins on every assigned link, whoever makes it, and
+forge holds back no start or stop. Once the background poll sees an issue lose
+an assignee, the spaces linking it settle the account again, so one another
+Shoal took off an issue an agent here works goes back on. The user's own login,
+under `[issue] assign = "user"` or `"both"`, joins on every assigned link, whoever makes it, and
 leaves through the link and unlink paths, removal among them: Shoal records each
 login it added, per issue, so it takes back only its own and only once no space
 links the issue for it, never one the user assigned themselves. A closed issue

@@ -822,6 +822,21 @@ fn a_merge_ends_activity_and_closing_ends_it_once_the_assignment_is_done() {
 }
 
 #[test]
+fn an_assignee_counts_as_removed_only_once_a_read_lacks_it() {
+    let assigned = |logins: &[&str]| Snapshot {
+        details: Some(ItemDetails {
+            assignees: logins.iter().map(|login| (*login).into()).collect(),
+            ..ItemDetails::default()
+        }),
+        ..Snapshot::default()
+    };
+    let seen = assigned(&["ann", "Agent"]);
+    assert!(seen.assignee_removed(&assigned(&["ann"])));
+    assert!(!seen.assignee_removed(&assigned(&["agent", "ann", "bob"])));
+    assert!(!seen.assignee_removed(&Snapshot::default()));
+}
+
+#[test]
 fn a_saved_snapshot_and_watch_record_give_back_their_items_labels() {
     let snapshot = Snapshot {
         details: Some(ItemDetails {

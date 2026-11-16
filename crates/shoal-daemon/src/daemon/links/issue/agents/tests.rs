@@ -86,6 +86,21 @@ async fn the_agent_account_another_shoal_put_on_stays_once_no_agent_here_works_t
 }
 
 #[tokio::test]
+async fn the_agent_account_another_shoal_took_off_goes_back_on() {
+    let fixture = agents(&["fix"], &[], "").await;
+    let (manager, workspace) = (&fixture.manager, &fixture.workspaces[0]);
+    fixture.link_as(workspace, Assigner::Agent).await;
+    manager.poll_linked_item_activity().await.unwrap();
+    fixture.assign_elsewhere(&[]);
+    manager.poll_linked_item_activity().await.unwrap();
+    manager.settle_requested_agents().await;
+    assert_eq!(
+        fixture.changes(),
+        [json!(["shoal-agent"]), json!(["shoal-agent"])]
+    );
+}
+
+#[tokio::test]
 async fn both_assigns_the_user_and_the_agent_and_takes_both_back() {
     let fixture = agents(&["fix"], &[], "[issue]\nassign = \"both\"\n").await;
     let workspace = &fixture.workspaces[0];

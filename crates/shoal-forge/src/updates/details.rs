@@ -113,6 +113,12 @@ impl ItemDetails {
         matches!((self.draft, next.draft), (Some(was), Some(is)) if was != is)
     }
 
+    /// Whether `next` lacks an assignee `self` showed, whatever its case.
+    pub(crate) fn assignee_removed(&self, next: &Self) -> bool {
+        (self.assignees.iter())
+            .any(|was| !(next.assignees.iter()).any(|assignee| assignee.eq_ignore_ascii_case(was)))
+    }
+
     /// Take each part `edited` changed as it is after the action, and only
     /// the names it added to or removed from a list, so a name someone else
     /// changed since the cursor last saw the item is still reported.

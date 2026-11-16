@@ -30,6 +30,7 @@ pub(crate) struct Fixture {
     pub(crate) server: Server,
     pub(crate) repository: crate::model::Repository,
     pub(crate) workspaces: Vec<Workspace>,
+    assignees: Arc<Mutex<Vec<Value>>>,
     refuse: Arc<Mutex<Refuse>>,
 }
 
@@ -67,6 +68,7 @@ impl Fixture {
         let assignees = Arc::new(Mutex::new(logins(assignees)));
         let refuse = Arc::new(Mutex::new(Refuse::Nothing));
         let refusing = refuse.clone();
+        let assigned = assignees.clone();
         let server = Server::start(move |request| {
             let body = match request.line.as_str() {
                 "GET /api/v1/user" => match request.header("Authorization") {
@@ -74,13 +76,13 @@ impl Fixture {
                     _ => json!({"login": "shoal-user"}),
                 },
                 "GET /api/v1/repos/team/repo/issues/7" => json!({"number": 7,
-                    "title": "Bug", "state": "open", "assignees": *assignees.lock().unwrap()}),
+                    "title": "Bug", "state": "open", "assignees": *assigned.lock().unwrap()}),
                 "PATCH /api/v1/repos/team/repo/issues/7" => {
                     let edit: Value = serde_json::from_str(&request.body).unwrap();
                     let edited: Vec<&str> = (edit["assignees"].as_array().unwrap().iter())
                         .map(|login| login.as_str().unwrap())
                         .collect();
-                    let mut current = assignees.lock().unwrap();
+                    let mut current = assigned.lock().unwrap();
                     let change = match edited.len() > current.len() {
                         true => Refuse::Adding,
                         false => Refuse::Removing,
@@ -116,8 +118,15 @@ impl Fixture {
             server,
             repository,
             workspaces,
+            assignees,
             refuse,
         }
+    }
+
+    /// Change issue 7's assignees to `logins` behind Shoal's back, as
+    /// someone else editing it on the forge does.
+    pub(crate) fn assign_elsewhere(&self, logins: &[&str]) {
+        *self.assignees.lock().unwrap() = self::logins(logins);
     }
 
     /// Refuse the assignee edits of `change` from now on.
