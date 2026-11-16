@@ -137,6 +137,15 @@ pub fn ensure_copy_fits(launch: &Launch) -> Result<()> {
     Ok(())
 }
 
+/// The positional argument once the launch says whether a number names an
+/// issue: beside a branch or issue of its own, it names a repository.
+pub fn decided_target(launch: &Launch) -> Result<Option<StartTarget>> {
+    let names_branch = launch.branch.is_some() || launch.issue.is_some();
+    (launch.target.clone())
+        .map(|target| target.decided(names_branch))
+        .transpose()
+}
+
 /// The mode without one named: chat for a start that asks for a chat,
 /// whose agent the worker mode would not tell it is one, else the worker.
 pub fn default_mode(launch: &Launch) -> ModeName {

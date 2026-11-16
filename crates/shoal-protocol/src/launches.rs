@@ -13,6 +13,7 @@ use crate::{
     config::{modes::ModeName, permissions::PermissionsConfig},
     forge::items::reference::ItemInput,
     model::{QueueEntry, Workspace},
+    protocol::operations::StartedWorkspace,
     space_names::{SpaceName, SpaceSelector},
 };
 
@@ -108,6 +109,15 @@ pub struct Launch {
     /// without them, the default host opens it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub env: Option<BTreeMap<String, String>>,
+    /// The environment a new workspace's setup runs in: the caller's,
+    /// without its secrets; the daemon's own without one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub setup_env: Option<BTreeMap<String, String>>,
+    /// Why no terminal host the caller reaches could start its agent in the
+    /// background, which refuses a launch that starts one before it creates
+    /// anything.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unplaceable: Option<String>,
 }
 
 /// Where a launch started its agent.
@@ -118,6 +128,15 @@ pub enum Launched {
     Chat(StartedChat),
     /// As the worker of an existing workspace.
     Worker(Box<QueuedWorker>),
+    /// In a new or reopened workspace, which the operation it names
+    /// prepares, queuing the agent once it is set up.
+    Workspace(Box<StartedWorkspace>),
+    /// Nowhere yet: the whole launch waits in the agent queue for what
+    /// blocks it, behind `waiting` entries in all.
+    Waiting {
+        entry: Box<QueueEntry>,
+        waiting: usize,
+    },
 }
 
 /// The worker of an existing workspace a launch queued.

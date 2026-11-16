@@ -89,7 +89,7 @@ impl Manager {
     ) -> Result<RepositoryId> {
         let repos = self.repositories().await?;
         if let Some(named) = named {
-            let selector = crate::repository::named(named)?;
+            let selector = crate::repository::named_in(named, launch.directory.as_deref())?;
             return Ok(crate::repository::select(&repos, selector)
                 .await?
                 .id

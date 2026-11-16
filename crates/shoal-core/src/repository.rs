@@ -333,8 +333,16 @@ pub fn at_root<'a>(
 /// The selector `value` names: a path, canonical once it exists, else a
 /// repository's ID or name.
 pub fn named(value: String) -> Result<Selector> {
-    if Path::new(&value).exists() {
-        let path = std::fs::canonicalize(&value)?;
+    named_in(value, None)
+}
+
+/// [`named`] with a relative path resolved against `directory`, the one a
+/// start was made in, else this process's.
+pub fn named_in(value: String, directory: Option<&Path>) -> Result<Selector> {
+    let candidate =
+        directory.map_or_else(|| Path::new(&value).to_owned(), |base| base.join(&value));
+    if candidate.exists() {
+        let path = std::fs::canonicalize(&candidate)?;
         path.to_str().context("repository path is not UTF-8")?;
         Ok(Selector::Path { value, path })
     } else {

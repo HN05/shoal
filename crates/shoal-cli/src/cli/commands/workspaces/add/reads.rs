@@ -14,7 +14,21 @@ impl LaunchReads for DaemonReads<'_> {
         crate::client::workspaces::list(&self.0.paths).await
     }
 
-    async fn check_creation(&self, planned: PlannedWorkspace) -> Result<()> {
+    async fn check_opens(
+        &self,
+        repository: &crate::repository::Selector,
+        existing: &str,
+    ) -> Result<()> {
+        let planned = PlannedWorkspace {
+            repository: repository.clone(),
+            branch: None,
+            existing: Some(existing.to_owned()),
+            base: None,
+            git_profile: None,
+            path: None,
+            parent: None,
+            options: Default::default(),
+        };
         crate::client::workspaces::check_creation(&self.0.paths, planned).await
     }
 }

@@ -115,6 +115,28 @@ impl Manager {
         Ok(admission)
     }
 
+    /// [`Self::queue_add_as`] for a launch the daemon carries out itself
+    /// rather than its caller: one it admits at once starts as the queue
+    /// starts one it admits later.
+    pub(crate) async fn queue_own_launch(
+        &self,
+        request: QueueRequest,
+        caller: Option<&Caller>,
+    ) -> Result<QueueAdmission> {
+        let (name, env) = (request.name.clone(), request.env.clone());
+        let mut admission = self.queue_add_as(request, caller).await?;
+        if let (true, Some(entry)) = (admission.start, &admission.entry) {
+            let start = Start {
+                id: entry.id.clone(),
+                name,
+                env,
+            };
+            self.start_launches(vec![start], None).await?;
+            admission.start = false;
+        }
+        Ok(admission)
+    }
+
     /// The answer to the launch `id`, which the caller starts when `start`:
     /// its entry and the entries waiting.
     pub(super) async fn admission_of(

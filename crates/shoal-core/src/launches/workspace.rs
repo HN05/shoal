@@ -8,7 +8,6 @@ use shoal_protocol::space_names::SpaceName;
 use shoal_refs::BranchName;
 
 use crate::{
-    client::workspaces::PlannedWorkspace,
     forge::{ForgeRepo, PullRequest, items::reference::ItemRef},
     git,
     model::{Repository, Workspace},
@@ -25,8 +24,14 @@ pub trait LaunchReads {
     /// The workspaces the caller sees.
     async fn workspaces(&self) -> Result<Vec<Workspace>>;
 
-    /// Refuse what creating `planned` would refuse.
-    async fn check_creation(&self, planned: PlannedWorkspace) -> Result<()>;
+    /// Refuse what opening the existing branch `existing` in the repository
+    /// `repository` names would refuse, such as a local branch of its name
+    /// that does not track it.
+    async fn check_opens(
+        &self,
+        repository: &crate::repository::Selector,
+        existing: &str,
+    ) -> Result<()>;
 }
 
 /// The longest branch an issue names, and the most title words it takes.
@@ -193,7 +198,7 @@ pub async fn settle(
     if let Some(workspace) = super::on_branch(&workspaces, &name, remote.as_ref()) {
         // A remote branch opens a local one only where it tracks it.
         if remote.is_some() {
-            check_opens(reads, selector, &name).await?;
+            reads.check_opens(selector, &name).await?;
         }
         return Ok(Some(workspace.clone()));
     }
@@ -249,27 +254,6 @@ async fn branches(
 ) -> Result<(Option<(String, BranchName)>, Vec<BranchName>)> {
     let remote = git::remote_branch(&repo.path, name).await?;
     Ok((remote, git::branch::names_in_use(&repo.path).await?))
-}
-
-/// Refuse what opening the existing branch `existing` of the repository
-/// `selector` names would refuse, such as a local branch of its name that
-/// does not track it.
-async fn check_opens(
-    reads: &impl LaunchReads,
-    selector: &crate::repository::Selector,
-    existing: &str,
-) -> Result<()> {
-    let planned = PlannedWorkspace {
-        repository: selector.clone(),
-        branch: None,
-        existing: Some(existing.to_owned()),
-        base: None,
-        git_profile: None,
-        path: None,
-        parent: None,
-        options: Default::default(),
-    };
-    reads.check_creation(planned).await
 }
 
 /// `creation` on the branch `name` of an issue at `issue_url`: the local

@@ -10,7 +10,7 @@ use crate::protocol::{Body, LaunchMethod};
 use shoal_protocol::{launches::SpaceChoice, space_names::SpaceSelector};
 
 pub(super) async fn handle(
-    manager: &Manager,
+    manager: &std::sync::Arc<Manager>,
     method: LaunchMethod,
     caller: Option<&Caller>,
 ) -> Result<Answer> {

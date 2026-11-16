@@ -17,11 +17,12 @@ mod blockers;
 mod chat;
 mod shape;
 mod worker;
+mod workspace;
 
 impl Manager {
     /// Start an agent as `launch`, which `source` made, asks for `caller`.
     pub(crate) async fn launch(
-        &self,
+        self: &std::sync::Arc<Self>,
         mut launch: Launch,
         source: LaunchSource,
         caller: Option<&Caller>,
@@ -35,15 +36,11 @@ impl Manager {
             SpaceKind::Chat => (self.launch_in_chat(launch, shape, source, caller))
                 .await
                 .map(Launched::Chat),
-            SpaceKind::Workspace if launch.in_workspace.is_some() => (self
-                .launch_worker(launch, shape, source, caller))
-            .await
-            .map(|worker| Launched::Worker(Box::new(worker))),
-            SpaceKind::Workspace => {
-                anyhow::bail!(
-                    "the daemon launches agents only in chats and existing workspaces so far"
-                )
+            SpaceKind::Workspace if launch.in_workspace.is_some() => {
+                let worker = self.launch_worker(launch, shape, source, caller).await?;
+                Ok(Launched::Worker(Box::new(worker)))
             }
+            SpaceKind::Workspace => self.launch_workspace(launch, shape, source, caller).await,
         }
     }
 

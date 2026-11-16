@@ -292,6 +292,8 @@ impl StartArgs {
             task: Vec::new(),
             directory: None,
             env: None,
+            setup_env: None,
+            unplaceable: None,
         }
     }
 

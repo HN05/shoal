@@ -434,6 +434,93 @@ async fn a_launch_in_a_workspace_queues_its_worker_on_the_launchs_task() {
     assert_eq!(below.entry.unwrap().agent, "probe");
 }
 
+/// A launch of a new workspace in the test daemon's repository on `branch`.
+fn workspace_launch(daemon: &TestDaemon, branch: &str) -> Launch {
+    Launch {
+        target: Some(StartTarget::Repository(daemon.repository.id.to_string())),
+        branch: Some(branch.into()),
+        ..Launch::default()
+    }
+}
+
+#[tokio::test]
+async fn a_launch_opens_a_new_workspace_and_prepares_it() {
+    let daemon = TestDaemon::start().await;
+    crate::daemon::test_support::configure(
+        &daemon.manager,
+        "[agents.probe]\ncommand = [\"true\"]\n",
+    )
+    .await;
+    let app = daemon.connector();
+    let launch = Launch {
+        agent: Some("probe".into()),
+        ..workspace_launch(&daemon, "new")
+    };
+    let launched = crate::client::launches::launch(&app, launch, LaunchSource::Manual)
+        .await
+        .unwrap();
+    let Launched::Workspace(started) = launched else {
+        panic!("expected a workspace: {launched:?}");
+    };
+    assert_eq!(
+        started.workspace.branch.as_ref().map(|b| b.as_str()),
+        Some("new")
+    );
+    let worker = fake::take(&started.operation);
+    let OperationSpec::Prepare { steps, .. } = worker.order.spec.clone() else {
+        panic!("expected a preparation: {:?}", worker.order);
+    };
+    // Its agent queues once the workspace is set up, as the launch made it.
+    let agent = steps.agent.unwrap();
+    assert_eq!(agent.agent, "probe");
+    assert_eq!(agent.source, Some(LaunchSource::Manual));
+    worker.exit(1);
+}
+
+#[tokio::test]
+async fn a_launch_refuses_what_it_cannot_start_before_it_creates_anything() {
+    let daemon = TestDaemon::start().await;
+    let app = daemon.connector();
+    let refused = [
+        (
+            Launch {
+                agent: Some("missing".into()),
+                ..workspace_launch(&daemon, "unknown-agent")
+            },
+            "\"missing\"",
+        ),
+        (
+            Launch {
+                target: Some("https://other.example/team/repo/issues/7".parse().unwrap()),
+                ..Launch::default()
+            },
+            "shoal repo add https://other.example/team/repo",
+        ),
+        (
+            Launch {
+                agent: Some("codex".into()),
+                blockers: vec!["missing".into()],
+                ..workspace_launch(&daemon, "blocked")
+            },
+            "neither a space nor a queued agent",
+        ),
+    ];
+    for (launch, refusal) in refused {
+        let error = crate::client::launches::launch(&app, launch, LaunchSource::Manual)
+            .await
+            .unwrap_err();
+        assert!(format!("{error:#}").contains(refusal), "{error:#}");
+    }
+    assert!(
+        daemon
+            .manager
+            .visible_workspaces(None)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
 #[tokio::test]
 async fn a_worker_without_an_agent_or_task_takes_the_default_on_its_issue() {
     let daemon = TestDaemon::start().await;

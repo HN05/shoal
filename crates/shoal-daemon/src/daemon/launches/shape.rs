@@ -130,7 +130,9 @@ impl Manager {
     ) -> Result<Option<RepositoryId>> {
         let repos = self.repositories().await?;
         let named = (launch.repository.as_deref()).or(launches::positional_repository(launch));
-        if let Some(Ok(selector)) = named.map(|named| crate::repository::named(named.to_owned()))
+        let directory = launch.directory.as_deref();
+        if let Some(Ok(selector)) =
+            named.map(|named| crate::repository::named_in(named.to_owned(), directory))
             && let Ok(repo) = crate::repository::select(&repos, selector).await
         {
             return Ok(Some(repo.id.clone()));
