@@ -31,7 +31,7 @@ impl Path {
     }
 
     /// Its first key, a top-level key of the document.
-    pub fn top(&self) -> &str {
+    pub(crate) fn top(&self) -> &str {
         match self.steps.first() {
             Some(Step::Key(key)) => key,
             // A parsed path starts with a key.
@@ -40,7 +40,7 @@ impl Path {
     }
 
     /// Whether it names only a top-level key.
-    pub fn is_top(&self) -> bool {
+    pub(crate) fn is_top(&self) -> bool {
         self.steps.len() == 1
     }
 

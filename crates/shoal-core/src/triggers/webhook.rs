@@ -65,7 +65,7 @@ impl Webhook {
     /// A webhook whose requests sign with the `[secrets]` entry `secret`,
     /// carrying the signature as `signature` says, in `signature_header`
     /// for `hmac-sha256`; without a secret, it takes neither.
-    pub fn new(
+    pub(crate) fn new(
         secret: Option<String>,
         signature: Option<Scheme>,
         signature_header: Option<String>,
@@ -106,7 +106,7 @@ impl Webhook {
 
     /// Its `secret`, `signature` and `signature_header` as config writes
     /// them.
-    pub fn written(&self) -> (Option<String>, Option<Scheme>, Option<String>) {
+    pub(crate) fn written(&self) -> (Option<String>, Option<Scheme>, Option<String>) {
         let Some(signed) = &self.signed else {
             return (None, None, None);
         };

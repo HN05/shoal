@@ -55,12 +55,12 @@ impl Template {
 
     /// [`Self::render`] with each value an outside request sent between
     /// the delimiters of its request, so that text reads as data.
-    pub fn render_marked(&self, input: &Input) -> Result<String, Missing> {
+    pub(crate) fn render_marked(&self, input: &Input) -> Result<String, Missing> {
         self.render_with(input, true)
     }
 
     /// The request whose data a lookup of it reads in `input`, if any.
-    pub fn request_read<'a>(&self, input: &'a Input) -> Option<&'a Request> {
+    pub(crate) fn request_read<'a>(&self, input: &'a Input) -> Option<&'a Request> {
         (self.parts.iter()).find_map(|part| match part {
             Part::Lookup(path) => input.request_read_by(path),
             Part::Text(_) => None,

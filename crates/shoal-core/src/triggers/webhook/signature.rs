@@ -8,7 +8,7 @@ use super::Signature;
 
 impl Signature {
     /// The header, lowercased, that carries it.
-    pub fn header(&self) -> &str {
+    pub(crate) fn header(&self) -> &str {
         match self {
             Self::Forgejo => "x-forgejo-signature",
             Self::Github => "x-hub-signature-256",
