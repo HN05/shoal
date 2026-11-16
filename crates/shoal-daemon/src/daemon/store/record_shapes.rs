@@ -190,6 +190,47 @@ fn chat_names(db: &Connection) -> Result<std::collections::HashMap<String, Strin
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// Each workspace's Git directory, and each repository directory a
+/// removal deletes, takes the identity named by its birth time where an
+/// earlier version recorded its `device:inode`.
+pub(super) fn birth_identities(db: &Connection) -> Result<()> {
+    birth_identities_of(
+        db,
+        "SELECT id,git_dir,git_dir_id FROM workspaces
+         WHERE git_dir IS NOT NULL AND git_dir_id NOT LIKE 'birth:%'",
+        "UPDATE workspaces SET git_dir_id=?2 WHERE id=?1",
+    )?;
+    birth_identities_of(
+        db,
+        "SELECT repository_id,path,directory_id FROM repository_removals
+             JOIN repositories ON repositories.id=repository_id
+         WHERE directory_id NOT LIKE 'birth:%'",
+        "UPDATE repository_removals SET directory_id=?2 WHERE repository_id=?1",
+    )
+}
+
+/// Give each directory `select` names, as its key, path and recorded
+/// identity, its birth identity through `update`.
+fn birth_identities_of(db: &Connection, select: &str, update: &str) -> Result<()> {
+    let recorded = db
+        .prepare(select)?
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for (id, git_dir, identity) in recorded {
+        let path = std::path::Path::new(&git_dir);
+        if let Some(birth) = crate::daemon::workspace::identity::birth_identity(path, &identity) {
+            db.execute(update, params![id, birth])?;
+        }
+    }
+    Ok(())
+}
+
 /// Rewrite every record of `table` with `change`, writing back those it
 /// changed.
 fn rewrite(db: &Connection, table: &str, change: impl Fn(&mut Map<String, Value>)) -> Result<()> {

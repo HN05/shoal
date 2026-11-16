@@ -1,10 +1,7 @@
 //! Verify the recorded Git worktree before execution, recovery, or removal.
 use super::{
     Manager,
-    identity::{
-        clear_owner, directory_identity, has_directory_identity, mark_owner, marked_owner,
-        verify_owner,
-    },
+    identity::{clear_owner, directory_identity, mark_owner, marked_owner, verify_owner},
     paths::matches_recorded_worktree_path,
 };
 use crate::refusal::{Reason, Refusal};
@@ -43,13 +40,7 @@ pub(super) fn owns_git_dir(
     if marker == Some(workspace.id.as_str()) || same_path {
         return Ok(true);
     }
-    let same_identity = match (identity, workspace.git_dir_id.as_deref()) {
-        (Some(identity), Some(recorded)) => {
-            identity == recorded || has_directory_identity(git_dir, recorded)?
-        }
-        _ => false,
-    };
-    Ok(same_identity)
+    Ok(identity.is_some() && identity == workspace.git_dir_id.as_deref())
 }
 
 /// A worktree whose ownership verified.

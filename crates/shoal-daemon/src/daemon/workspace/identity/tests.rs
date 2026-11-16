@@ -57,25 +57,6 @@ fn identity_survives_device_changes_but_not_inode_reuse() {
 }
 
 #[test]
-fn legacy_identity_requires_both_device_and_inode_before_upgrade() {
-    let birth = Some(UNIX_EPOCH + Duration::new(100, 42));
-    assert!(matches_identity("55:123", 55, 123, birth));
-    assert!(matches_identity("55:123", 55, 123, None));
-    assert!(!matches_identity("55:123", 56, 123, birth));
-    assert!(!matches_identity("55:123", 55, 124, birth));
-    assert!(!matches_identity("invalid", 55, 123, birth));
-    let upgraded = format_identity(55, 123, birth);
-    assert!(matches_identity(&upgraded, 56, 123, birth));
-    assert!(!matches_identity(&upgraded, 55, 123, None));
-    assert!(!matches_identity(
-        &upgraded,
-        55,
-        123,
-        Some(UNIX_EPOCH + Duration::new(100, 43))
-    ));
-}
-
-#[test]
 fn identity_follows_symlinks_and_renames_but_rejects_replacement() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let original = temp.path().join("original");

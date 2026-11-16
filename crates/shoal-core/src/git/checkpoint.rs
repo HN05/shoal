@@ -10,8 +10,6 @@ use crate::fsutil::off_runtime;
 use super::{isolated_command_without_submodules, run_isolated, run_without_submodules};
 
 const REFS: &str = "refs/shoal/checkpoints/";
-/// Where removals kept their snapshots before checkpoints replaced them.
-const LEGACY_REFS: &str = "refs/shoal/removed/";
 
 /// The ref that keeps a checkpoint's commit reachable. It is named by the
 /// commit, so whichever checkpoints keep that commit own it.
@@ -22,11 +20,6 @@ pub fn reference(commit: &CommitId) -> String {
 /// Every checkpoint ref in the repository, with the commit it keeps.
 pub async fn saved_refs(repo: &Path) -> Result<Vec<(String, CommitId)>> {
     refs(repo, REFS).await
-}
-
-/// The refs removals kept before checkpoints, with the commit each keeps.
-pub async fn legacy_refs(repo: &Path) -> Result<Vec<(String, CommitId)>> {
-    refs(repo, LEGACY_REFS).await
 }
 
 async fn refs(repo: &Path, prefix: &str) -> Result<Vec<(String, CommitId)>> {

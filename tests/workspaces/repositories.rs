@@ -1090,7 +1090,21 @@ fn repository_removal_retries_partial_file_deletion_after_restart_but_rejects_re
     let repo = fixture.ok(&["repo", "ls"])[0].clone();
     let id = repo["id"].as_str().unwrap();
     let metadata = fs::metadata(&fixture.repo).unwrap();
-    let identity = format!("{}:{}", metadata.dev(), metadata.ino());
+    // The directory's identity as Shoal records it: by birth time where
+    // the filesystem keeps one.
+    let identity = match metadata
+        .created()
+        .ok()
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+    {
+        Some(born) => format!(
+            "birth:{}:{}:{}",
+            metadata.ino(),
+            born.as_secs(),
+            born.subsec_nanos()
+        ),
+        None => format!("{}:{}", metadata.dev(), metadata.ino()),
+    };
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute("INSERT INTO repository_removals(repository_id,directory_id,deleting_files) VALUES (?1,?2,1)", rusqlite::params![id, identity]).unwrap();
     let refused = fixture.run(&["start", id, "--branch", "too-late"]);

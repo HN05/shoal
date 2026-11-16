@@ -2,7 +2,6 @@ use super::*;
 use crate::daemon::test_support;
 use crate::daemon::workspace::creation::WorkspaceSource;
 use shoal_ids::space_ids::SpaceId;
-use std::os::unix::fs::MetadataExt;
 
 #[tokio::test]
 async fn removal_waits_for_queued_workspace_creation() {
@@ -76,25 +75,19 @@ async fn removal_refuses_a_checkout_whose_config_sets_bare() -> Result<()> {
 }
 
 #[test]
-fn recorded_identity_verifies_including_legacy_device_inode() -> Result<()> {
+fn recorded_identity_verifies_and_refuses_a_replaced_directory() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let root = fs::canonicalize(temp.path())?;
     let directory = root.join("checkout");
     fs::create_dir(&directory)?;
-    let metadata = fs::metadata(&directory)?;
-    let legacy = format!("{}:{}", metadata.dev(), metadata.ino());
     let current = real_directory_identity(&directory)?.context("missing identity")?;
-    for recorded in [current.as_str(), legacy.as_str()] {
-        verify_directory(&directory, Some(recorded), false)?;
-    }
+    verify_directory(&directory, Some(&current), false)?;
     assert!(verify_directory(&directory, None, true).is_err());
 
     let moved = root.join("moved");
     fs::rename(&directory, &moved)?;
     fs::create_dir(&directory)?;
-    for recorded in [current.as_str(), legacy.as_str()] {
-        assert!(verify_directory(&directory, Some(recorded), true).is_err());
-    }
+    assert!(verify_directory(&directory, Some(&current), true).is_err());
     fs::remove_dir(&directory)?;
     verify_directory(&directory, Some(&current), true)?;
     verify_directory(&directory, None, false)?;

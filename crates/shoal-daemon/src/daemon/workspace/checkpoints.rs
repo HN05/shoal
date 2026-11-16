@@ -454,10 +454,8 @@ impl Manager {
             .await?;
         // An unreadable session file keeps no ref.
         let sessions = (self.expire_imported_sessions(&HomeKey::Repository(repo.clone()))).await;
-        let legacy_deleted = self.adopt_legacy_refs(repo, &kept).await?;
-        let unowned_deleted = self.delete_unowned_refs(repo, &kept).await?;
         // A failure leaves the objects to the next pass that deletes a ref.
-        if legacy_deleted || unowned_deleted {
+        if self.delete_unowned_refs(repo, &kept).await? {
             git::checkpoint::prune_unreachable(&repo.path).await?;
         }
         sessions
@@ -472,22 +470,6 @@ impl Manager {
             if !kept.contains(commit.as_str()) {
                 deleted |= git::checkpoint::delete_at(&repo.path, &reference, &commit).await?;
             }
-        }
-        Ok(deleted)
-    }
-
-    /// Move the refs removals kept before checkpoints to the checkpoint ref
-    /// of the commit when the store migration recorded a checkpoint for it,
-    /// deleting the rest. `true` when it deleted one of the rest.
-    async fn adopt_legacy_refs(&self, repo: &Repository, kept: &HashSet<String>) -> Result<bool> {
-        let mut deleted = false;
-        for (legacy, commit) in git::checkpoint::legacy_refs(&repo.path).await? {
-            let adopted = kept.contains(commit.as_str());
-            if adopted {
-                let reference = git::checkpoint::reference(&commit);
-                git::checkpoint::save(&repo.path, &reference, &commit).await?;
-            }
-            deleted |= git::checkpoint::delete_at(&repo.path, &legacy, &commit).await? && !adopted;
         }
         Ok(deleted)
     }

@@ -170,3 +170,30 @@ fn events_earlier_versions_journaled_take_the_current_shape() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn a_git_directory_recorded_by_device_and_inode_takes_its_identity_now() -> Result<()> {
+    use std::os::unix::fs::MetadataExt as _;
+    let directory = tempfile::tempdir()?;
+    let metadata = std::fs::metadata(directory.path())?;
+    let earlier = format!("{}:{}", metadata.dev(), metadata.ino());
+    let mut db = before(208)?;
+    db.execute_batch(&format!(
+        "BEGIN;
+        INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+        INSERT INTO workspaces(id,path,branch,state,git_dir,git_dir_id)
+            VALUES ('w','/work','topic','ready','{}','{earlier}');
+        INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','w');
+        COMMIT;",
+        directory.path().display()
+    ))?;
+    migrate(&mut db)?;
+    let identity: String = db.query_row(
+        "SELECT git_dir_id FROM workspaces WHERE id='w'",
+        [],
+        |row| row.get(0),
+    )?;
+    let now = crate::daemon::workspace::identity::directory_identity(directory.path())?;
+    assert_eq!(identity, now);
+    Ok(())
+}

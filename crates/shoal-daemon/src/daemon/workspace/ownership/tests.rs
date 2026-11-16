@@ -50,29 +50,6 @@ fn ownership_uses_the_same_marker_path_and_identity_evidence() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn legacy_identity_matches_the_current_birth_identity() -> Result<()> {
-    use std::os::unix::fs::MetadataExt;
-
-    let temp = tempfile::tempdir()?;
-    let git_dir = temp.path().join("admin");
-    let other_dir = temp.path().join("other");
-    fs::create_dir(&git_dir)?;
-    fs::create_dir(&other_dir)?;
-    let metadata = fs::metadata(&git_dir)?;
-    let mut other = workspace();
-    other.git_dir = Some(other_dir);
-    other.git_dir_id = Some(format!("{}:{}", metadata.dev(), metadata.ino()));
-
-    assert!(owns_git_dir(
-        &other,
-        &git_dir,
-        Some(&directory_identity(&git_dir)?),
-        None
-    )?);
-    Ok(())
-}
-
 #[tokio::test]
 async fn a_marker_read_that_waits_in_open_leaves_the_runtime_thread_free() -> Result<()> {
     use std::{

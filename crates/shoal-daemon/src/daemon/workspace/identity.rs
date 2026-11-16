@@ -64,21 +64,24 @@ pub(super) fn verify_owner(
     Ok(())
 }
 
-pub(super) fn directory_identity(path: &Path) -> Result<String> {
+pub(in crate::daemon) fn directory_identity(path: &Path) -> Result<String> {
     let (metadata, birth) = directory_metadata(path)?;
     Ok(format_identity(metadata.dev(), metadata.ino(), birth))
 }
 
-/// Whether a directory still has a recorded identity, including the legacy
-/// `device:inode` form.
+/// Whether a directory still has a recorded identity.
 pub(super) fn has_directory_identity(path: &Path, recorded: &str) -> Result<bool> {
-    let (metadata, birth) = directory_metadata(path)?;
-    Ok(matches_identity(
-        recorded,
-        metadata.dev(),
-        metadata.ino(),
-        birth,
-    ))
+    Ok(directory_identity(path)? == recorded)
+}
+
+/// The identity of the directory at `path`, when `recorded` is the
+/// `device:inode` an earlier version recorded for it where its birth time
+/// now names it.
+pub(in crate::daemon) fn birth_identity(path: &Path, recorded: &str) -> Option<String> {
+    let (metadata, birth) = directory_metadata(path).ok()?;
+    let identity = format_identity(metadata.dev(), metadata.ino(), birth);
+    (recorded == format!("{}:{}", metadata.dev(), metadata.ino()) && identity != recorded)
+        .then_some(identity)
 }
 
 fn verify_directory_identity(path: &Path, recorded: &str) -> Result<()> {
@@ -128,10 +131,6 @@ fn linux_birth_time(directory: &fs::File) -> Result<Option<SystemTime>> {
     }
     let birth = Duration::new(stat.stx_btime.tv_sec as u64, stat.stx_btime.tv_nsec);
     Ok(UNIX_EPOCH.checked_add(birth))
-}
-
-fn matches_identity(recorded: &str, device: u64, inode: u64, birth: Option<SystemTime>) -> bool {
-    recorded == format_identity(device, inode, birth) || recorded == format!("{device}:{inode}")
 }
 
 fn format_identity(device: u64, inode: u64, birth: Option<SystemTime>) -> String {

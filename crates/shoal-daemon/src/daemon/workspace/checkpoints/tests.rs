@@ -467,17 +467,6 @@ async fn expiry_deletes_expired_and_unowned_checkpoints_and_adopts_removal_refs(
     let kept = [git::checkpoint::reference(&second.commit)];
     assert_eq!(checkpoint_refs(&f.checkout), kept);
 
-    // A removal snapshot from before checkpoints moves to the checkpoint the
-    // store migration recorded for it.
-    let legacy = format!("refs/shoal/removed/{}", f.workspace.id);
-    git(
-        &f.checkout,
-        &["update-ref", &legacy, second.commit.as_str()],
-    );
-    git(&f.checkout, &["update-ref", "-d", &kept[0]]);
-    manager.expire_checkpoints().await.unwrap();
-    assert_eq!(checkpoint_refs(&f.checkout), kept);
-
     // A workspace that is gone without a removal record owns nothing.
     let id = f.workspace.id.clone();
     manager

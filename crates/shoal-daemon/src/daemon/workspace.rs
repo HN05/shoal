@@ -28,7 +28,7 @@ pub(crate) mod executions;
 mod fast_forward;
 mod gates;
 pub(crate) mod holds;
-pub(super) mod identity;
+pub(in crate::daemon) mod identity;
 mod imported_sessions;
 mod kept_branches;
 mod lifecycle;

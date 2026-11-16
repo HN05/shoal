@@ -230,10 +230,6 @@ async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
     // nothing owns.
     git(
         &checkout,
-        &["update-ref", "refs/shoal/removed/unknown", "HEAD"],
-    );
-    git(
-        &checkout,
         &["update-ref", "refs/shoal/checkpoints/unknown/1", "HEAD"],
     );
     manager.expire_checkpoints().await.unwrap();
