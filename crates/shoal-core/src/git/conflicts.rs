@@ -3,27 +3,21 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use crate::{git, git::merge_tree::Merge, subprocess};
+use crate::{git, git::merge_tree::Merge};
 
 /// The paths a merge of `head` and `target` leaves conflicted; empty when it
 /// is clean.
 pub async fn merge_conflicts(repo: &Path, head: &str, target: &str) -> Result<Vec<String>> {
     let args = ["--name-only", "--no-messages", "-z", head, target];
-    let output = match git::merge_tree::write_tree(repo, &args)
+    let stdout = match git::merge_tree::write_tree(repo, &args)
         .await
         .context("check merge conflicts")?
     {
         Merge::Clean(_) => return Ok(Vec::new()),
-        Merge::Conflicted(output) => output,
+        Merge::Conflicted(stdout) => stdout,
     };
-    let stdout = String::from_utf8(output.stdout).context("Git paths are not UTF-8")?;
-    // Git also exits 1 for some failures, which print no tree or paths.
-    conflicted_paths(&stdout).with_context(|| {
-        format!(
-            "git merge-tree failed: {}",
-            subprocess::diagnostic(&output.stderr)
-        )
-    })
+    let stdout = String::from_utf8(stdout).context("Git paths are not UTF-8")?;
+    Ok(conflicted_paths(&stdout))
 }
 
 /// The paths matching `patterns`, globs relative to the repository root,
@@ -65,17 +59,14 @@ async fn changed_paths(
         .collect())
 }
 
-/// The paths after the tree ID in `-z` output, or `None` when it is not a
-/// conflict result.
-fn conflicted_paths(stdout: &str) -> Option<Vec<String>> {
-    let mut fields = stdout.split('\0');
-    let tree = fields.next()?;
-    let tree_id = matches!(tree.len(), 40 | 64) && tree.bytes().all(|b| b.is_ascii_hexdigit());
-    let paths: Vec<_> = fields
+/// The paths after the tree ID in `-z` output.
+fn conflicted_paths(stdout: &str) -> Vec<String> {
+    stdout
+        .split('\0')
+        .skip(1)
         .filter(|path| !path.is_empty())
         .map(str::to_owned)
-        .collect();
-    (tree_id && !paths.is_empty()).then_some(paths)
+        .collect()
 }
 
 #[cfg(test)]

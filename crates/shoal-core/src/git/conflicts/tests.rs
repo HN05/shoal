@@ -1,13 +1,21 @@
-use super::conflicted_paths;
+use std::fs;
 
-#[test]
-fn only_a_tree_id_with_paths_is_a_conflict_result() {
-    let tree = "26b77343eb53870bab71a317fc36bfeb93a4b67b";
-    assert_eq!(
-        conflicted_paths(&format!("{tree}\0f\0g\0")).unwrap(),
-        ["f", "g"]
-    );
-    for failure in ["", &format!("{tree}\0"), "not a tree\0f\0"] {
-        assert_eq!(conflicted_paths(failure), None);
-    }
+use crate::test_support::{commit, git, repository};
+
+#[tokio::test]
+async fn a_conflicted_merge_lists_its_conflicted_paths() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    fs::write(repo.join("untouched"), "untouched\n").unwrap();
+    commit(&repo, "untouched");
+    git(&repo, &["switch", "-q", "-c", "other"]);
+    fs::write(repo.join("tracked"), "other\n").unwrap();
+    commit(&repo, "tracked");
+    git(&repo, &["switch", "-q", "main"]);
+    fs::write(repo.join("tracked"), "main\n").unwrap();
+    commit(&repo, "tracked");
+    let paths = super::merge_conflicts(&repo, "main", "other")
+        .await
+        .unwrap();
+    assert_eq!(paths, ["tracked"]);
 }
