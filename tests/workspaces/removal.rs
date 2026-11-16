@@ -743,11 +743,13 @@ fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
 
 #[test]
 fn removal_confirmation_says_when_the_checkpoint_cannot_keep_the_files() {
-    let fixture = Fixture::with_config(Some("[cleanup.restore]\narchive_max_mb = 0\n"));
-    let workspace = fixture.add("large");
+    let fixture = Fixture::new();
+    let workspace = fixture.add("nested");
     let path = Path::new(workspace["path"].as_str().unwrap());
-    fs::write(path.join("uncommitted"), "too large to archive").unwrap();
-    let (no, prompt) = fixture.interactive(&["rm", "--wait", &fixture.id("large")], "n\n");
+    fs::write(path.join("uncommitted"), "kept only by the worktree").unwrap();
+    // A checkpoint cannot hold a nested repository's files.
+    git(path, &["init", "-q", "nested"]);
+    let (no, prompt) = fixture.interactive(&["rm", "--wait", &fixture.id("nested")], "n\n");
     assert!(!no.status.success());
     assert!(prompt.contains("cannot be restored"), "{prompt}");
     assert!(path.join("uncommitted").exists());
@@ -764,7 +766,7 @@ fn interactive_removal_confirms_and_defaults_to_no_without_affecting_scripts() {
     assert!(!piped.status.success());
     let (no, prompt) = fixture.interactive(&["rm", "--wait", &fixture.id("worker")], "n\n");
     assert!(!no.status.success());
-    // Changes small enough for the checkpoint can be restored.
+    // Changes a checkpoint keeps can be restored.
     assert!(!prompt.contains("cannot be restored"), "{prompt}");
     assert!(path.join("uncommitted").exists());
     // An answer that is neither is asked again.
