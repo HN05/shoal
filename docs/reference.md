@@ -6221,9 +6221,10 @@ project is stopped starts it first.
 The project is a [lease](#leases): an agent's stops when the agent does, the
 user's runs until released, and a project that is not stopped keeps the
 workspace from automatic removal, since a failed `up` can leave some services
-running. Removal runs `compose down --volumes --remove-orphans` by
-the project's name, after `hooks.pre_remove`, so a deleted worktree or a
-changed file still removes it; a failure keeps the workspace. Checkpoints keep
+running. Removal runs `compose down --volumes --remove-orphans` after
+`hooks.pre_remove`, with the file while the worktree has it, then by the
+project's name when it has none or the file no longer reads, so a deleted
+worktree or a broken file still removes it; a failure keeps the workspace. Checkpoints keep
 no volume data: a restored workspace starts fresh containers. The record
 survives daemon restarts, during which the containers keep running, and Shoal
 never stops or removes a project it has no record of. Container CPU and memory

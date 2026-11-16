@@ -17,7 +17,9 @@ with (root / 'compose-events').open('a') as log:
              'args': args, 'cwd': os.getcwd(), 'ports': ports}
     log.write(json.dumps(event) + '\n')
 failure = root / 'compose-fail'
-if failure.exists() and failure.read_text().strip() == command:
+failing = failure.read_text().split() if failure.exists() else []
+# `<command> with-file` fails only the calls that read the Compose file.
+if failing[:1] == [command] and (failing[1:] != ['with-file'] or args[:1] == ['-f']):
     print(f'injected {command} failure', file=sys.stderr)
     sys.exit(1)
 state_file = root / 'compose-projects.json'

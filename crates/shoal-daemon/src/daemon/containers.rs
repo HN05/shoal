@@ -6,6 +6,8 @@ mod automatic;
 mod compose;
 pub(crate) mod records;
 
+use std::path::Path;
+
 use anyhow::{Context, Result, bail, ensure};
 use futures_util::{StreamExt, stream};
 use shoal_ids::space_ids::SpaceId;
@@ -22,7 +24,7 @@ use super::{
 };
 use crate::{
     daemon::approvals::ApprovalRequest,
-    model::{PortReservation, PortSuggestion, Workspace},
+    model::{PortSuggestion, Workspace},
     protocol::Body,
     refusal::{Reason, Refusal},
     state::WorkspaceState,
@@ -152,13 +154,12 @@ impl Manager {
             .containers;
         let compose = configured_compose(workspace, settings.compose)?;
         ensure_ready(workspace)?;
-        let ports = match self
+        if let Err(pending) = self
             .reserve_ports(workspace, settings.ports, caller)
             .await?
         {
-            Ok(ports) => ports,
-            Err(pending) => return Ok(pending),
-        };
+            return Ok(pending);
+        }
         let recorded = self.container_project(&workspace.id).await?;
         let project = match recorded {
             Some(running) if running.project.state == ContainerState::Running => {
@@ -171,7 +172,7 @@ impl Manager {
                     None => compose::find_runtime(config.machine.containers.runtime)?,
                 };
                 let starting = starting_project(workspace, compose, runtime, starter);
-                self.run_project(workspace, starting, &ports).await?
+                self.run_project(workspace, starting).await?
             }
         };
         Ok(ContainerAcquisition::Started(Box::new(
@@ -179,21 +180,17 @@ impl Manager {
         )))
     }
 
-    /// Record `recorded` as starting, then run `compose up` on `ports` and
-    /// record how it went, returning the running project.
+    /// Record `recorded` as starting, then run `compose up` and record how
+    /// it went, returning the running project.
     async fn run_project(
         &self,
         workspace: &Workspace,
         mut recorded: Recorded,
-        ports: &[PortReservation],
     ) -> Result<ContainerProject> {
         // The record comes first, so whatever `up` leaves has one.
         self.save_containers(&recorded).await?;
-        let project = &recorded.project;
-        let up = Compose::at(project, Some(&workspace.path))
-            .await
-            .up(ports)
-            .await;
+        let worktree = Some(workspace.path.as_path());
+        let up = self.compose(&recorded.project, worktree).await?.up().await;
         recorded.project.state = match &up {
             Ok(()) => ContainerState::Running,
             Err(_) => ContainerState::Failed,
@@ -211,16 +208,12 @@ impl Manager {
         workspace: &Workspace,
         names: Vec<String>,
         caller: Option<&Caller>,
-    ) -> Result<Result<Vec<PortReservation>, ContainerAcquisition>> {
+    ) -> Result<Result<(), ContainerAcquisition>> {
         let selector = SpaceSelector::id(&workspace.id);
-        let mut reserved = Vec::with_capacity(names.len());
         for name in names {
             let request = PortRequest::default();
             let pending = match self.acquire_port(&selector, name, request, caller).await? {
-                ports::Acquisition::Allocation(Allocation::Granted(port)) => {
-                    reserved.push(port);
-                    continue;
-                }
+                ports::Acquisition::Allocation(Allocation::Granted(_)) => continue,
                 ports::Acquisition::Allocation(Allocation::Approval(request)) => {
                     ContainerAcquisition::Approval(request)
                 }
@@ -231,7 +224,7 @@ impl Manager {
             };
             return Ok(Err(pending));
         }
-        Ok(Ok(reserved))
+        Ok(Ok(()))
     }
 
     /// The running project `recorded` acquired again by `starter`: one set
@@ -297,7 +290,7 @@ impl Manager {
         if recorded.project.state == ContainerState::Stopped {
             return Ok(());
         }
-        let compose = Compose::at(&recorded.project, Some(&workspace.path)).await;
+        let compose = (self.compose(&recorded.project, Some(&workspace.path))).await?;
         compose.stop().await?;
         recorded.project.state = ContainerState::Stopped;
         recorded.project.acquirer = Acquirer::User;
@@ -313,7 +306,7 @@ impl Manager {
         let Some(recorded) = self.container_project(&workspace.id).await? else {
             return Ok(());
         };
-        let compose = Compose::at(&recorded.project, Some(&workspace.path)).await;
+        let compose = (self.compose(&recorded.project, Some(&workspace.path))).await?;
         (compose.down().await).with_context(|| {
             format!(
                 "the containers of {} were not removed; retaining it",
@@ -338,8 +331,8 @@ impl Manager {
                 return Ok(());
             }
             let worktree = self.workspace_by_id(workspace).await?.path;
-            Compose::at(&recorded.project, Some(&worktree))
-                .await
+            self.compose(&recorded.project, Some(&worktree))
+                .await?
                 .stop()
                 .await?;
             recorded.project.state = ContainerState::Stopped;
@@ -361,6 +354,17 @@ impl Manager {
         Ok(())
     }
 
+    /// `compose` on `project` in `worktree`, with its workspace's reserved
+    /// ports in their variables, as the file reads them.
+    async fn compose<'a>(
+        &self,
+        project: &'a ContainerProject,
+        worktree: Option<&'a Path>,
+    ) -> Result<Compose<'a>> {
+        let ports = (self.list_ports(Some(&SpaceSelector::id(&project.workspace_id)))).await?;
+        Ok(Compose::at(project, worktree, ports).await)
+    }
+
     async fn save_containers(&self, recorded: &Recorded) -> Result<()> {
         let recorded = recorded.clone();
         self.store
@@ -375,8 +379,8 @@ impl Manager {
             .as_ref()
             .ok()
             .map(|workspace| workspace.path.as_path());
-        let compose = Compose::at(&project, worktree).await;
-        let (services, services_error) = match compose.services().await {
+        let listed = async { self.compose(&project, worktree).await?.services().await };
+        let (services, services_error) = match listed.await {
             Ok(services) => (services, None),
             Err(error) => (Vec::new(), Some(format!("{error:#}"))),
         };

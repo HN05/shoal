@@ -60,13 +60,21 @@ pub(super) struct Compose<'a> {
     project: &'a str,
     /// The worktree and its Compose file, while both exist.
     file: Option<(&'a Path, &'a str)>,
+    /// The workspace's reserved ports, which the file reads from their
+    /// variables.
+    ports: Vec<PortReservation>,
 }
 
 impl<'a> Compose<'a> {
-    /// `compose` on `project` in its workspace's `worktree`: with its file
-    /// while the worktree has it, as podman-compose needs, and by its name
-    /// alone otherwise, as for a deleted worktree.
-    pub(super) async fn at(project: &'a ContainerProject, worktree: Option<&'a Path>) -> Self {
+    /// `compose` on `project` in its workspace's `worktree`, with `ports` in
+    /// their variables: with its file while the worktree has it, as
+    /// podman-compose needs, and by its name alone otherwise, as for a
+    /// deleted worktree.
+    pub(super) async fn at(
+        project: &'a ContainerProject,
+        worktree: Option<&'a Path>,
+        ports: Vec<PortReservation>,
+    ) -> Self {
         let file = match worktree {
             Some(worktree) => (off_runtime::try_exists(&worktree.join(&project.compose)).await)
                 .unwrap_or(false)
@@ -77,53 +85,72 @@ impl<'a> Compose<'a> {
             runtime: project.runtime,
             project: &project.project,
             file,
+            ports,
         }
     }
 
-    /// Start the services of the file, each of `ports` in its variable, and
-    /// wait until they run or report healthy.
-    pub(super) async fn up(&self, ports: &[PortReservation]) -> Result<()> {
+    /// Start the services of the file and wait until they run or report
+    /// healthy.
+    pub(super) async fn up(&self) -> Result<()> {
         ensure!(
             self.file.is_some(),
             "the worktree has no Compose file to start"
         );
-        let mut command = self.command();
+        let mut command = self.command(true);
         command.args(["up", "--detach", "--wait"]);
-        for port in ports {
-            command.env(&port.env_var, port.port.to_string());
-        }
         run(command, UP_TIMEOUT).await.map(drop)
     }
 
     /// Stop the services, keeping their containers and volumes.
     pub(super) async fn stop(&self) -> Result<()> {
-        let mut command = self.command();
-        command.arg("stop");
-        run(command, TIMEOUT).await.map(drop)
+        self.run_by_name_if_needed(&["stop"]).await
     }
 
     /// Remove the services with their volumes, and containers the file no
     /// longer names.
     pub(super) async fn down(&self) -> Result<()> {
-        let mut command = self.command();
-        command.args(["down", "--volumes", "--remove-orphans"]);
-        run(command, TIMEOUT).await.map(drop)
+        (self.run_by_name_if_needed(&["down", "--volumes", "--remove-orphans"])).await
     }
 
     /// The services with the ports the runtime published for them.
     pub(super) async fn services(&self) -> Result<Vec<ContainerService>> {
-        let mut command = self.command();
+        let mut command = self.command(true);
         command.args(["ps", "--all", "--format", "json"]);
         parse_services(&run(command, TIMEOUT).await?)
     }
 
-    /// `<runtime> compose --project-name <project>`, with `-f <file>` in
-    /// the worktree while it has the file.
-    fn command(&self) -> Command {
+    /// Run `args` with the file, then by the project's name alone when that
+    /// fails, as it does for a file that no longer reads, so the project
+    /// still stops and goes.
+    async fn run_by_name_if_needed(&self, args: &[&str]) -> Result<()> {
+        let mut command = self.command(true);
+        command.args(args);
+        let with_file = run(command, TIMEOUT).await;
+        let Err(error) = with_file.as_ref() else {
+            return Ok(());
+        };
+        if self.file.is_none() {
+            return with_file.map(drop);
+        }
+        let mut command = self.command(false);
+        command.args(args);
+        let by_name = run(command, TIMEOUT).await;
+        by_name
+            .map(drop)
+            .with_context(|| format!("and with its file: {error:#}"))
+    }
+
+    /// `<runtime> compose --project-name <project>`, with the ports in their
+    /// variables, and with `-f <file>` in the worktree when `with_file` and
+    /// it has the file.
+    fn command(&self, with_file: bool) -> Command {
         let mut command = Command::new(tool(self.runtime).program());
         command.args(["compose", "--project-name", self.project]);
-        if let Some((worktree, file)) = self.file {
+        if let Some((worktree, file)) = self.file.filter(|_| with_file) {
             command.current_dir(worktree).args(["-f", file]);
+        }
+        for port in &self.ports {
+            command.env(&port.env_var, port.port.to_string());
         }
         command
     }

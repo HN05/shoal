@@ -96,6 +96,13 @@ fn release_stops_the_project_and_keeps_its_ports() {
     let listed = fixture.ok(&["leases", "containers", "--space", &space]);
     assert_eq!(listed["projects"][0]["state"], "stopped");
     assert_eq!(commands(&fixture, &started["project"]), ["up", "stop"]);
+    // The file reads its ports from their variables in every call.
+    let events = compose_events(&fixture);
+    let ports = |command: &str| {
+        let event = events.iter().find(|event| event["command"] == command);
+        event.unwrap()["ports"].clone()
+    };
+    assert_eq!(ports("stop"), ports("up"));
     let ports = fixture.ok(&["leases", "port", "--space", &space]);
     assert_eq!(ports["reserved"][0]["port"], port);
 
@@ -241,7 +248,25 @@ fn a_failed_down_keeps_the_workspace_and_its_project() {
 
     fs::remove_file(fixture.root.path().join("compose-fail")).unwrap();
     fixture.ok(&["rm", "--wait", &space, "--yes"]);
-    assert_eq!(commands(&fixture, &project), ["up", "down", "down"]);
+    // With the file, then by name, then with the file again.
+    assert_eq!(commands(&fixture, &project), ["up", "down", "down", "down"]);
+}
+
+#[test]
+fn a_file_that_no_longer_reads_still_lets_removal_take_the_project_down() {
+    let fixture = with_containers(CONTAINERS);
+    fixture.add("worker");
+    let space = fixture.id("worker");
+    let project = fixture.ok(&["acquire", "containers", "--space", &space])["project"].clone();
+    fs::write(fixture.root.path().join("compose-fail"), "down with-file").unwrap();
+    fixture.ok(&["rm", "--wait", &space, "--yes"]);
+    let downs: Vec<Value> = (compose_events(&fixture).into_iter())
+        .filter(|event| event["project"] == project && event["command"] == "down")
+        .map(|event| event["args"].clone())
+        .collect();
+    let removal = ["down", "--volumes", "--remove-orphans"];
+    let with_file = [&["-f", "compose.yaml"][..], &removal].concat();
+    assert_eq!(downs, [json!(with_file), json!(removal)]);
 }
 
 const SETUP: &str = "[containers]\ncompose = 'compose.yaml'\nports = ['db']\nstart = 'setup'\n";

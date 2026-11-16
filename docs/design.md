@@ -3040,7 +3040,10 @@ over the lease an agent acquired for it, and what a demo's command acquires is
 the demo's; both end with the demo. A workspace's container project is such a
 lease: recorded with its runtime before any `compose` call, so Shoal only ever
 stops or removes a project it recorded, stopped on release with its volumes
-kept, and taken down by name in the shared removal path. One setup starts for
+kept, and taken down in the shared removal path. Each call reads the file,
+with the workspace's ports in their variables, while the worktree has it, as
+podman-compose needs; a stop or removal that fails with it runs again by the
+project's name, so a deleted worktree or a broken file never keeps a project. One setup starts for
 the workspace's own agent stays the user's until that agent starts and takes
 it over. Ports, holds and secret grants keep their own lifetimes. User scripts own integrations
 with the underlying resources.
