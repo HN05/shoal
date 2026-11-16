@@ -27,6 +27,26 @@ impl Manager {
             .await
     }
 
+    /// [`Self::set_state`] while the workspace is still in the state `from`.
+    pub(crate) async fn set_state_if(
+        &self,
+        id: &SpaceId,
+        from: WorkspaceState,
+        state: WorkspaceState,
+        error: Option<String>,
+    ) -> Result<()> {
+        let id = id.to_owned();
+        self.store
+            .write(move |tx| {
+                tx.execute(
+                    "UPDATE workspaces SET state=?2, error=?3 WHERE id=?1 AND state=?4",
+                    params![id, state, error, from],
+                )?;
+                Ok(())
+            })
+            .await
+    }
+
     /// Move a ready or failed workspace into a transient lifecycle state,
     /// excluding every other lifecycle operation until it is restored.
     pub(crate) async fn reserve_lifecycle(

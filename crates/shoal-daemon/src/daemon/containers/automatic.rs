@@ -3,8 +3,6 @@
 //! workspace, before its post-setup hook and agent, and before an agent
 //! starts there.
 use anyhow::{Result, anyhow};
-use rusqlite::params;
-use shoal_ids::space_ids::SpaceId;
 
 use super::{ContainerAcquisition, Starter};
 use crate::{
@@ -47,7 +45,10 @@ impl Manager {
         if let Err(error) = started.and_then(started_or_refused) {
             self.stop_failed_containers(&workspace.id).await;
             let message = format!("containers did not start: {error:#}; retry with shoal setup");
-            self.fail_ready_setup(&workspace.id, message).await?;
+            // A lifecycle operation that reserved it while `up` ran, such as
+            // a removal, keeps its own state.
+            let (ready, failed) = (WorkspaceState::Ready, WorkspaceState::Failed);
+            (self.set_state_if(&workspace.id, ready, failed, Some(message))).await?;
             return Err(error);
         }
         Ok(())
@@ -74,22 +75,6 @@ impl Manager {
         };
         let started = self.start_containers(&workspace, starter, caller).await;
         started.and_then(started_or_refused)
-    }
-
-    /// Fail the setup of the workspace `id` with `message` while it is still
-    /// ready: a lifecycle operation that reserved it while `up` ran, such as
-    /// a removal, keeps its own state.
-    async fn fail_ready_setup(&self, id: &SpaceId, message: String) -> Result<()> {
-        let id = id.to_owned();
-        self.store
-            .write(move |tx| {
-                tx.execute(
-                    "UPDATE workspaces SET state=?2, error=?3 WHERE id=?1 AND state=?4",
-                    params![id, WorkspaceState::Failed, message, WorkspaceState::Ready],
-                )?;
-                Ok(())
-            })
-            .await
     }
 
     /// Whether the project of `workspace` runs.
