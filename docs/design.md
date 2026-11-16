@@ -3006,13 +3006,13 @@ an execution's leases through each kind's release once its end is recorded or
 its stopped agent is proven ended while its execution waits for a restore. A
 lease whose workspace another lifecycle operation holds then, such as the stop
 that ended the agent, waits for it to end; the stop, the cleanup sweep and
-startup release the leases of ended executions. A failed release hands the lease
-to the user, so a failing hook does not rerun on every sweep. The user's lease
-stays until released; the user's acquire takes an agent's lease over, never the
-reverse. A demo outlives the agent that starts it, so a simulator demo takes
-over the lease an agent acquired for it, and what a demo's command acquires is
-the demo's; both end with the demo. Ports, holds and secret grants keep their
-own lifetimes. User scripts own integrations
+startup release the leases of ended executions and of agents stopped while their
+executions wait. A failed release hands the lease to the user, so a failing hook
+does not rerun on every sweep. The user's lease stays until released; the user's
+acquire takes an agent's lease over, never the reverse. A demo outlives the
+agent that starts it, so a simulator demo takes over the lease an agent acquired
+for it, and what a demo's command acquires is the demo's; both end with the
+demo. Ports, holds and secret grants keep their own lifetimes. User scripts own integrations
 with the underlying resources.
 
 Busy resource and simulator requests may queue. The daemon keeps queued lease names

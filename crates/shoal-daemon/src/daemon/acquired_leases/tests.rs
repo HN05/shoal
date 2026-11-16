@@ -4,7 +4,7 @@ use shoal_ids::execution_ids::ExecutionId;
 
 use super::*;
 use crate::{
-    daemon::test_support::{configure, manager, repository},
+    daemon::test_support::{agent_process, configure, manager, repository},
     model::Workspace,
 };
 use shoal_protocol::{resources::ResourceRequest, space_names::SpaceSelector};
@@ -252,22 +252,53 @@ async fn a_failing_release_hook_keeps_the_permit_as_the_users_and_tells_the_user
     );
 }
 
+/// The sweep releases the leases of an agent whose execution ended, or
+/// that a stop left without a process while its execution waits for a
+/// restore, and keeps those of a running agent and of a demo between runs.
 #[tokio::test]
-async fn leases_of_executions_that_ended_unreleased_are_released() {
+async fn leases_of_ended_and_stopped_agents_are_released_and_running_ones_kept() {
     let fixture = Fixture::new(POOL).await;
-    let ended = Acquirer::Agent {
-        execution_id: ExecutionId::generate(),
-    };
-    fixture.lease_simulator("ended", ended).await;
-    let (execution_id, _) = fixture.agent().await;
-    let running = Acquirer::Agent { execution_id };
-    fixture.lease_simulator("running", running).await;
+    let (running, _) = fixture.agent().await;
+    let process = agent_process(&fixture.manager, &fixture.workspace.id).await;
+    let (stopped, _) = fixture.agent().await;
+    let demo = fixture.manager.begin_execution(
+        fixture.workspace.id.as_str(),
+        None,
+        crate::daemon::workspace::ExecutionKind::Command,
+        None,
+    );
+    let demo = demo.await.unwrap().plan.id;
+    let leases = [
+        (
+            "ended",
+            Acquirer::Agent {
+                execution_id: ExecutionId::generate(),
+            },
+        ),
+        (
+            "running",
+            Acquirer::Agent {
+                execution_id: running,
+            },
+        ),
+        (
+            "stopped",
+            Acquirer::Agent {
+                execution_id: stopped,
+            },
+        ),
+        ("between-runs", Acquirer::Demo { execution_id: demo }),
+    ];
+    for (name, acquirer) in leases {
+        fixture.lease_simulator(name, acquirer).await;
+    }
 
     (fixture.manager.release_leases_of_ended_executions())
         .await
         .unwrap();
 
-    assert_eq!(fixture.simulators().await, ["running"]);
+    assert_eq!(fixture.simulators().await, ["between-runs", "running"]);
+    process.kill();
 }
 
 impl Fixture {

@@ -2,7 +2,7 @@
 //! end with it: who acquires a lease, the lease a demo takes over from the
 //! agent that started it, and releasing an execution's leases through each
 //! kind's release path once it ends.
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use anyhow::Result;
 use shoal_ids::execution_ids::ExecutionId;
@@ -122,17 +122,18 @@ impl Manager {
         self.release_acquired(|acquirer| *acquirer == agent).await;
     }
 
-    /// Release the leases of executions whose end is recorded: those whose
+    /// Release the leases of executions whose end is recorded, and of agents
+    /// proven stopped while their executions wait for a restore: those whose
     /// workspace was in another lifecycle operation then, such as a stop,
     /// and those the daemon stopped before releasing.
     pub(crate) async fn release_leases_of_ended_executions(&self) -> Result<()> {
         // The leases first: an execution exists before it acquires one, so
         // the executions read after hold every lease read here that is live.
         let leases = self.acquired_leases().await?;
-        let recorded = self.store.read(|db| recorded_executions(db)).await?;
+        let executions = self.store.read(|db| recorded_executions(db)).await?;
         let ended = leases
             .into_iter()
-            .filter(|lease| (lease.acquirer.execution()).is_some_and(|id| !recorded.contains(id)));
+            .filter(|lease| has_ended(&lease.acquirer, &executions));
         for lease in ended {
             self.release_acquired_lease(lease).await;
         }
@@ -240,11 +241,25 @@ impl Manager {
     }
 }
 
-/// Every execution with a record, which a recorded end deletes.
-fn recorded_executions(db: &rusqlite::Connection) -> Result<HashSet<ExecutionId>> {
-    let mut statement = db.prepare("SELECT id FROM executions")?;
-    let ids = statement.query_map([], |row| row.get(0))?;
+/// Every execution with a record, which a recorded end deletes, and
+/// whether it runs a process: a stopped agent waiting for its restore has
+/// none recorded.
+fn recorded_executions(db: &rusqlite::Connection) -> Result<HashMap<ExecutionId, bool>> {
+    let mut statement =
+        db.prepare("SELECT id, child IS NOT NULL OR group_id IS NOT NULL FROM executions")?;
+    let ids = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
     Ok(ids.collect::<rusqlite::Result<_>>()?)
+}
+
+/// Whether `acquirer` ended, as `executions` records them: an agent once
+/// its execution ended or runs no process, a demo, which runs none between
+/// its command's runs, only once its execution ended.
+fn has_ended(acquirer: &Acquirer, executions: &HashMap<ExecutionId, bool>) -> bool {
+    match acquirer {
+        Acquirer::User => false,
+        Acquirer::Agent { execution_id } => executions.get(execution_id) != Some(&true),
+        Acquirer::Demo { execution_id } => !executions.contains_key(execution_id),
+    }
 }
 
 #[cfg(test)]
