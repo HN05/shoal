@@ -3,7 +3,7 @@
 use std::{path::Path, time::Duration};
 
 use anyhow::{Context, Result, bail, ensure};
-use serde::Deserialize;
+use serde::{Deserialize, de::DeserializeOwned};
 use shoal_ids::space_ids::SpaceId;
 use tokio::process::Command;
 
@@ -47,7 +47,7 @@ pub(super) fn find_runtime(configured: Option<ContainerRuntime>) -> Result<Conta
     }
 }
 
-fn tool(runtime: ContainerRuntime) -> Tool {
+pub(super) fn tool(runtime: ContainerRuntime) -> Tool {
     match runtime {
         ContainerRuntime::Docker => Tool::Docker,
         ContainerRuntime::Podman => Tool::Podman,
@@ -194,19 +194,24 @@ struct Publisher {
     protocol: String,
 }
 
-/// The services `compose ps` lists, as a JSON array or one object per line
-/// as Compose releases differ, each published port once.
+/// The services `compose ps` lists, each published port once.
 fn parse_services(output: &str) -> Result<Vec<ContainerService>> {
+    let listed: Vec<Listed> = parse_listing(output)?;
+    Ok(listed.into_iter().map(service).collect())
+}
+
+/// What a runtime lists with `--format json`, as a JSON array or one
+/// object per line as its releases differ.
+pub(super) fn parse_listing<T: DeserializeOwned>(output: &str) -> Result<Vec<T>> {
     let trimmed = output.trim();
-    let listed: Vec<Listed> = if trimmed.starts_with('[') {
+    Ok(if trimmed.starts_with('[') {
         serde_json::from_str(trimmed)?
     } else {
         (trimmed.lines())
             .filter(|line| !line.trim().is_empty())
             .map(serde_json::from_str)
             .collect::<serde_json::Result<_>>()?
-    };
-    Ok(listed.into_iter().map(service).collect())
+    })
 }
 
 fn service(listed: Listed) -> ContainerService {
