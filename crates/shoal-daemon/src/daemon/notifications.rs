@@ -35,7 +35,8 @@ impl NotificationKindExt for NotificationKind {
             | Self::AgentStopped
             | Self::TurnFailed
             | Self::StartWarned
-            | Self::StartFailed => Some(Source::Daemon),
+            | Self::StartFailed
+            | Self::PreparationFailed => Some(Source::Daemon),
             Self::AgentMessage
             | Self::QuestionAsked
             | Self::QuestionWithdrawn

@@ -1,7 +1,10 @@
 //! Opening a workspace and starting its preparation in one request, as
 //! `shoal start` and `shoal split` do: the checks before anything is created,
 //! the workspace and its issue, then the operation that prepares it, which
-//! creates a new branch's worktree first.
+//! creates a new branch's worktree first, and whose failure the start's
+//! coordinator or the user hears of.
+mod failures;
+
 use crate::daemon::links::issue::{Assigner, AssignerOf};
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_ids::repository_ids::RepositoryId;
@@ -170,7 +173,9 @@ impl Manager {
         // A reopened workspace keeps its priority unless one was asked for.
         let priority = if opened.reused { asked } else { given };
         self.give_priority(&opened.workspace.id, priority).await?;
-        self.prepare_new(opened, issue, preparing, caller).await
+        let started = self.prepare_new(opened, issue, preparing, caller).await?;
+        self.report_failed_preparation(&started);
+        Ok(started)
     }
 
     /// Let the scoped `caller` start the agent `preparing` queues in

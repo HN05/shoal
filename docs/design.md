@@ -162,7 +162,10 @@ creates the worktree, sets it up, links its PR and runs a new workspace's
 post-setup hook. The request answers once the workspace is recorded, so a
 caller gets its number and its agent's entry without waiting for Git or
 setup; until its worktree exists, what reads it refuses the workspace, and
-removal takes only its record and leases. The request names an agent, mode or
+removal takes only its record and leases. The way the start's caller hears
+other news it does not wait for, a failed preparation reaches the agent of
+the nearest space above the workspace with one, or else the user, naming
+the restore that retries it and the removal. The request names an agent, mode or
 model only where the caller chose one; the daemon resolves the rest under the
 workspace's settings, `agent.default` for the agent, and the agent works on the
 start's issue unless the request gives it an issue or a task, so an app needs

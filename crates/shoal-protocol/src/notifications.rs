@@ -57,6 +57,9 @@ states!(NotificationKind {
     StartWarned => "start_warned",
     /// A new chat's agent did not start, and the daemon removed the chat.
     StartFailed => "start_failed",
+    /// The preparation of a workspace a start opened failed: creating its
+    /// worktree, its setup or its post-setup hook.
+    PreparationFailed => "preparation_failed",
     /// A seed build failed, or a new workspace could not start from it.
     SeedFailed => "seed_failed",
     /// Disk space cleanup emptied a repository's shared caches.

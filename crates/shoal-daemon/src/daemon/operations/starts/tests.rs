@@ -1,18 +1,24 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use super::{Opening, Preparing};
 use crate::{
+    daemon::notifications::NotificationKind,
     daemon::{
         operations::fake,
         test_support::{git, manager, repository},
         workspace::Manager,
     },
     model::{Repository, Workspace},
-    protocol::operations::{OperationSpec, StartedWorkspace, WorkspaceStart},
+    protocol::operations::{
+        Ended, Failure, OperationSpec, Report, StartedWorkspace, WorkspaceStart,
+    },
     removal::{InspectionPolicy, UnsavedWork},
     state::WorkspaceState,
 };
 use shoal_protocol::space_names::SpaceSelector;
+
+/// A generous guard against a hang; no test waits this long when it passes.
+const HANG: Duration = Duration::from_secs(60);
 
 async fn registered(root: &std::path::Path, manager: &Manager) -> Repository {
     let path = repository(root, "repo");
@@ -130,4 +136,45 @@ async fn a_workspace_whose_worktree_failed_goes_with_its_record() {
         .await
         .unwrap();
     assert!(manager.workspace(&selector).await.is_err());
+}
+
+#[tokio::test]
+async fn a_failed_preparation_reaches_the_user_with_what_retries_it() {
+    let (root, manager) = manager().await;
+    let repository = registered(root.path(), &manager).await;
+    let started = start(&manager, &repository, "child", "HEAD").await;
+    let worker = fake::take(&started.operation);
+    let message = "fatal: no space left".to_owned();
+    let failed = Ended::Failed(Failure::WorktreeFailed { message });
+    (manager.report_operation(&started.operation, Report::Ended(failed), None))
+        .await
+        .unwrap();
+    worker.exit(0);
+    let number = started.workspace.number;
+    let notification = tokio::time::timeout(HANG, async {
+        loop {
+            let notifications = manager.notifications(false, 10).await.unwrap();
+            let found = (notifications.into_iter())
+                .find(|notification| notification.kind == NotificationKind::PreparationFailed);
+            match found {
+                Some(found) => return found,
+                None => tokio::task::yield_now().await,
+            }
+        }
+    })
+    .await
+    .expect("the failure was reported");
+    assert_eq!(notification.space_id.as_ref(), Some(&started.workspace.id));
+    assert!(
+        notification.message.contains("fatal: no space left"),
+        "{}",
+        notification.message
+    );
+    assert!(
+        notification
+            .message
+            .contains(&format!("`shoal restore {number}`")),
+        "{}",
+        notification.message
+    );
 }

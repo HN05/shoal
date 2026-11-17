@@ -552,6 +552,20 @@ pub enum Failure {
 }
 
 impl Failure {
+    /// What the failure says, where it carries a message.
+    pub fn message(&self) -> Option<&str> {
+        match self {
+            Self::WorktreeFailed { message }
+            | Self::SetupFailed { message }
+            | Self::SetupNotStarted { message }
+            | Self::HookFailed { message }
+            | Self::PushFailed { message }
+            | Self::Refused { message, .. }
+            | Self::Failed { message } => Some(message),
+            Self::SetupUnverified { .. } | Self::Approval { .. } => None,
+        }
+    }
+
     /// The code a caller acts on.
     pub fn code(&self) -> ErrorCode {
         match self {

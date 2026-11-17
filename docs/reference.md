@@ -458,7 +458,7 @@ terminal, or with `--json`, it lists them in those groups instead, each removed
 space led by the ID that selects it, a workspace with the number of its removal's
 checkpoint.
 A named workspace whose setup failed, or never started, retries its setup as
-`shoal setup` does, after which the agent waiting for it in the queue starts
+`shoal setup` does, creating its worktree first when that failed too, after which the agent waiting for it in the queue starts
 as a restored agent would: as the queue admits it, at once with `--now`, or in
 this terminal with `--focus`, under the permissions `--permission` changes.
 Such workspaces restore together with the other spaces named, every one of
@@ -2117,9 +2117,15 @@ both (`--json` emits the workspace record, then the entry); the daemon then
 prepares the workspace in the background, creating its worktree and running
 setup and the post-setup hook, while the agent waits in the queue for that,
 holding no slot. Until its worktree exists, commands that read it refuse
-the workspace, and `shoal rm` removes only its record and leases. `--wait`
-returns once the preparation ends, reporting its failure as a start from a
-terminal does. The user's start without a terminal of an agent Happy runs
+the workspace, and `shoal rm` removes only its record and leases. A
+preparation that fails, creating the worktree or in setup or the post-setup
+hook, leaves the workspace failed and its agent waiting, and records a
+`preparation_failed` notification, which reaches the agent of the nearest
+space above with one as a message, or else the user, naming
+`shoal restore <space>`, which retries the preparation, creating the
+worktree first when it has none, and `shoal rm <space>`. `--wait` returns
+once the preparation ends, reporting its failure as a start from a terminal
+does. The user's start without a terminal of an agent Happy runs
 instead sets the workspace up first, then opens the agent in place when the
 limits admit it, otherwise waiting in the queue. `--now` starts that agent
 regardless of the limits, as does `--focus` for a scoped caller, as its

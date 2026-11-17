@@ -12,19 +12,16 @@ pub struct Failed(pub Failure);
 
 impl std::fmt::Display for Failed {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(message) = self.0.message() {
+            return f.write_str(message);
+        }
         match &self.0 {
-            Failure::WorktreeFailed { message }
-            | Failure::SetupFailed { message }
-            | Failure::SetupNotStarted { message }
-            | Failure::HookFailed { message }
-            | Failure::PushFailed { message }
-            | Failure::Refused { message, .. }
-            | Failure::Failed { message } => f.write_str(message),
             Failure::SetupUnverified { exit_code } => SetupVerificationFailure {
                 exit_code: *exit_code,
             }
             .fmt(f),
             Failure::Approval { request } => Undecided(request.clone()).fmt(f),
+            _ => Ok(()),
         }
     }
 }
