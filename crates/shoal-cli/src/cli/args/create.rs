@@ -223,7 +223,7 @@ pub struct StartArgs {
     /// agent.default, otherwise a picker.
     #[arg(short = 'a', long, value_parser = AgentParser)]
     pub agent: Option<Agent>,
-    /// Start the agent from a fork of the session of the parent workspace's
+    /// Start the agent from a fork of the session of the parent space's
     /// agent, or with --copy of the copied workspace's, so it begins with
     /// that conversation, which stays unchanged.
     #[arg(long, conflicts_with = "checkpoint")]

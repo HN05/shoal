@@ -450,7 +450,7 @@ fn ensure_nothing_dropped(args: &StartArgs) -> Result<()> {
 
 /// The parent, agent and session of a `--fork` start: one forked from the
 /// `copied` workspace's agent goes below `parent` as any start does, while
-/// one forked from the parent's agent goes below that workspace.
+/// one forked from the parent's agent goes below that space.
 async fn fork_from(
     ctx: &Context,
     copied: Option<SpaceSelector>,
@@ -465,16 +465,16 @@ async fn fork_from(
     Ok((Some(parent), Some(agent), Some(session)))
 }
 
-/// The workspace whose agent `--fork` forks, `workspace` or else the
-/// current one, the agent that starts from the fork, `agent` or else that
-/// one, and the session it forks. An agent that cannot start from a fork
-/// is refused before anything is created.
+/// The space, a workspace or a chat, whose agent `--fork` forks, `space`
+/// or else the current one, the agent that starts from the fork, `agent` or
+/// else that one, and the session it forks. An agent that cannot start from
+/// a fork is refused before anything is created.
 async fn forked(
     ctx: &Context,
-    workspace: Option<SpaceSelector>,
+    space: Option<SpaceSelector>,
     agent: Option<Agent>,
 ) -> Result<(SpaceSelector, Agent, AgentSessionId)> {
-    let parent = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let parent = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let AgentSession {
         agent: running,
         session,

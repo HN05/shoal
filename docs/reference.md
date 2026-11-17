@@ -2849,9 +2849,10 @@ Run inside a workspace or a chat, `shoal start` likewise creates a child of
 that space, or of a space below it that `--parent` names, in its repository,
 and a chat an agent starts opens in the background; that is the only creation
 and removal scope allows, and the rest stays with the user. `shoal start
---fork` starts the agent of the workspace `--parent` names, else the current
-one, in the new workspace below it from a fork of the agent's session, which
-stays unchanged, with the arguments after `--` as its task.
+--fork` starts the agent of the space, a workspace or a chat, that `--parent`
+names, else the current one, in the new workspace below it from a fork of the
+agent's session, which stays unchanged, with the arguments after `--` as its
+task.
 
 `--no-branch` creates a workspace at a commit instead: a worktree at a detached
 HEAD with no branch, nothing to push and no agent of its own, for comparing with

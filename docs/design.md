@@ -1076,8 +1076,8 @@ children, so its processes may remove and hold them, except that the user's
 holds anywhere below refuse the removal. `list` shows children below their
 parent, and `status` names the parent and children of either kind. `shoal start`
 is the only command that starts an agent, so `split` creates worktrees alone: a
-workspace process's `start` gives a child an agent of its own through the agent
-queue, and `start --fork` gives it the parent's agent
+`start` run in a space, a workspace or a chat, gives a child an agent of its own
+through the agent queue, and `start --fork` gives it the parent's agent
 from a fork of its session, the one the caller's agent or else the parent's only
 agent reported last, so the parent need not restate what it learned; the daemon starts every launch in an existing
 workspace itself, detached, unless `start --here` has the caller start it, and the agent

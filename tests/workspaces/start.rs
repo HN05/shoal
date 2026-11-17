@@ -139,7 +139,62 @@ fn start_runs_the_childs_agent_from_a_fork_of_the_parents_session() {
     assert!(refused.contains("cannot fork a session of pi"), "{refused}");
     let names = fixture.ok(&["list"]).to_string();
     assert!(!names.contains("\"refused\""), "{names}");
-    let forked = home.join("forked");
+    assert_forked(&fixture, "Take the child part");
+}
+
+/// A chat's agent starts a workspace below the chat whose agent starts from
+/// a fork of the chat agent's session.
+#[test]
+fn start_runs_the_childs_agent_from_a_fork_of_the_parent_chats_session() {
+    let fixture = Fixture::with_config(Some(
+        "[machine.overload.disk]\nenabled = false\n[agents.claude]\ncommand = ['sh', '-c', 'exec sh \"$HOME/agent.sh\" \"$@\"', 'claude']\n",
+    ));
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    fs::write(
+        fixture.root.path().join("agent.sh"),
+        format!(
+            "if [ \"$1\" = --resume ]; then printf '%s\\0' \"$@\" > \"$HOME/forked.tmp\"; mv \"$HOME/forked.tmp\" \"$HOME/forked\"; exit 0; fi\n\
+             printf '{{\"session_id\":\"parent-session\"}}' | '{shoal}' internal agent-state idle >/dev/null || exit 3\n\
+             '{shoal}' --json start \"$(cat \"$HOME/repo-path\")\" --branch child --fork -- 'Build the plan' > \"$HOME/split.json\" 2> \"$HOME/split.err\"\n",
+            shoal = support::shoal_binary(),
+        ),
+    )
+    .unwrap();
+    fs::write(
+        fixture.root.path().join("repo-path"),
+        fixture.repo.to_str().unwrap(),
+    )
+    .unwrap();
+    let (output, transcript) = fixture.interactive_command(
+        fixture.command().current_dir(&fixture.repo).args([
+            "start", "--mode", "chat", "--here", "--agent", "claude", "--name", "plan",
+        ]),
+        "",
+    );
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
+    let home = fixture.root.path();
+    let started = fs::read_to_string(home.join("split.json")).unwrap();
+    let queued: Value = serde_json::from_str(started.lines().last().unwrap_or_default())
+        .unwrap_or_else(|error| {
+            panic!(
+                "{error}: {started}{}",
+                fs::read_to_string(home.join("split.err")).unwrap()
+            )
+        });
+    assert_eq!(queued["agent"], "claude", "{queued}");
+    let child = fixture.ok(&["status", &fixture.id("child")]);
+    assert_eq!(child["workspace"]["parent"]["name"], "plan", "{child}");
+    assert_forked(&fixture, "Build the plan");
+}
+
+/// Wait for the forked agent of a fork test's child to start, and check it
+/// resumed a fork of the parent's session with `task`.
+fn assert_forked(fixture: &Fixture, task: &str) {
+    let forked = fixture.root.path().join("forked");
     wait_until("the forked agent start", || forked.exists());
     let args = fs::read_to_string(&forked).unwrap();
     let args: Vec<_> = args.trim_end_matches('\0').split('\0').collect();
@@ -148,7 +203,7 @@ fn start_runs_the_childs_agent_from_a_fork_of_the_parents_session() {
         ["--resume", "parent-session", "--fork-session"],
         "{args:?}"
     );
-    assert_eq!(args.last(), Some(&"Take the child part"), "{args:?}");
+    assert_eq!(args.last(), Some(&task), "{args:?}");
 }
 
 /// An agent starts a copy of its own workspace, whose agent starts from a
