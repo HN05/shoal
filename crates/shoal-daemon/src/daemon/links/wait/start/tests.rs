@@ -85,6 +85,8 @@ async fn linking_an_issue_takes_its_comments_as_seen() {
         workspace,
         issue,
     } = served(&forge).await;
+    // A workspace links its issue while it is set up.
+    set_state(&manager, &workspace, "preparing").await;
     let assigner = crate::daemon::links::issue::Assigner::Agent;
     let space = shoal_protocol::space_names::SpaceSelector::id(&workspace);
     let input = issue.to_string().parse().unwrap();
@@ -92,9 +94,12 @@ async fn linking_an_issue_takes_its_comments_as_seen() {
         .set_issue(&space, &input, None, assigner)
         .await
         .unwrap();
+    set_state(&manager, &workspace, "ready").await;
     let urls = [issue.to_string()];
     let pending = manager.pending_activity(&workspace, &urls).await;
     assert!(pending.unwrap().is_empty());
+    let unchanged = poll(&manager, &workspace, &issue, UnixTime::MAX).await;
+    assert!(unchanged.is_empty(), "{unchanged:?}");
 
     comments.store(3, Ordering::SeqCst);
     let later = poll(&manager, &workspace, &issue, UnixTime::MAX).await;
@@ -152,4 +157,24 @@ async fn poll(
     let report = BranchReport::Conflicts;
     let recorded = manager.record_observed(id, read.unwrap(), &all, report, observed_at);
     recorded.await.unwrap()
+}
+
+/// Put the workspace `id` in `state`.
+async fn set_state(
+    manager: &crate::daemon::workspace::Manager,
+    id: &shoal_ids::space_ids::SpaceId,
+    state: &'static str,
+) {
+    let id = id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE workspaces SET state=?1 WHERE id=?2",
+                params![state, id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
 }

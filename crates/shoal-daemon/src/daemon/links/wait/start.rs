@@ -11,7 +11,7 @@ use super::{
     items::followed_items,
 };
 use crate::{
-    daemon::{links::space::require_ready_space, log, workspace::Manager},
+    daemon::{log, workspace::Manager},
     forge::items::reference::ItemRef,
     time::UnixTime,
 };
@@ -79,7 +79,8 @@ fn start_followed(
     read_at: UnixTime,
     start: Start,
 ) -> Result<bool> {
-    require_ready_space(tx, id)?;
+    // A workspace links its issue while it is set up.
+    crate::daemon::links::ensure_accepts_links(tx, id)?;
     let mut queued = false;
     for (url, snapshot) in reads {
         if !follows(tx, id, &url)? {
