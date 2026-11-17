@@ -115,6 +115,52 @@ async fn removal_takes_a_child_being_prepared_below_a_parent_listed_first() {
 }
 
 #[tokio::test]
+async fn removal_takes_a_child_being_prepared_below_a_chat_in_a_workspace_listed_first() {
+    let (root, manager) = test_support::manager().await;
+    let checkout = test_support::repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let top = manager
+        .create_workspace_with(&repo.id, "a-top".into(), None, Default::default())
+        .await
+        .unwrap();
+    let below_top = crate::daemon::workspace::NewWorkspace {
+        parent: Some(top.id.clone()),
+        ..Default::default()
+    };
+    let host = manager
+        .create_workspace_with(&repo.id, "b-host".into(), None, below_top)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat_in_workspace(
+            &SpaceSelector::id(&host.id),
+            "watching".into(),
+            "claude".into(),
+            None,
+        )
+        .await
+        .unwrap();
+    let below_chat = crate::daemon::workspace::NewWorkspace {
+        pending: true,
+        parent: Some(chat.id.clone()),
+        ..Default::default()
+    };
+    let child = manager
+        .create_workspace_with(&repo.id, "c-child".into(), None, below_chat)
+        .await
+        .unwrap();
+    assert_eq!(child.state, WorkspaceState::Preparing);
+
+    let removal = manager.remove_repository(&repo.id).await.unwrap();
+    assert_eq!(removal.workspaces_removed, 3);
+    assert!(manager.list_workspaces().await.unwrap().is_empty());
+    assert!(!repo.path.exists());
+}
+
+#[tokio::test]
 async fn removal_refuses_a_checkout_whose_config_sets_bare() -> Result<()> {
     let (root, manager) = test_support::manager().await;
     let checkout = test_support::repository(root.path(), "repo");

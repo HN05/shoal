@@ -539,9 +539,16 @@ pub(crate) fn deciders(
     spaces_above(db, id, agents)
 }
 
-/// How many spaces lie above the space `id`, of either kind.
-pub(super) fn depth(db: &Connection, id: &SpaceId) -> Result<u32> {
-    let sql = format!("{} SELECT MAX(depth) FROM up", up("true"));
+/// The length of the longest chain of spaces whose removals take the
+/// space `id` first, each the next one's, as [`TAKEN_FIRST`] links them.
+pub(super) fn removal_depth(db: &Connection, id: &SpaceId) -> Result<u32> {
+    let sql = format!(
+        "WITH RECURSIVE taking(id, depth) AS (
+            SELECT ?1, 0
+            UNION ALL SELECT first.parent_id, taking.depth + 1
+                FROM taking JOIN {TAKEN_FIRST} AS first ON first.space_id=taking.id
+        ) SELECT MAX(depth) FROM taking"
+    );
     Ok(db.query_row(&sql, [id], |row| row.get(0))?)
 }
 

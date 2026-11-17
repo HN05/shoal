@@ -381,9 +381,9 @@ impl Manager {
             .await
     }
 
-    /// `workspaces` with each one before the spaces above it, so that each
-    /// goes through its own removal, which takes it while it is being
-    /// prepared, rather than through an ancestor's.
+    /// `workspaces` with each one before the spaces whose removals take it
+    /// first, so that each goes through its own removal, which takes it
+    /// while it is being prepared, rather than through theirs.
     async fn deepest_first<'a>(&self, workspaces: &'a [Workspace]) -> Result<Vec<&'a Workspace>> {
         let ids: Vec<_> = workspaces
             .iter()
@@ -392,7 +392,7 @@ impl Manager {
         let depths = (self.store)
             .read(move |tx| {
                 ids.iter()
-                    .map(|id| super::tree::depth(tx, id))
+                    .map(|id| super::tree::removal_depth(tx, id))
                     .collect::<Result<Vec<_>>>()
             })
             .await?;
