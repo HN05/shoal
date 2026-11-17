@@ -210,6 +210,10 @@ pub async fn find_by_identity<'a>(
     repositories: &'a [Repository],
     source: &str,
 ) -> Result<Option<&'a Repository>> {
+    // Reading the source's identity costs Git a process.
+    if repositories.is_empty() {
+        return Ok(None);
+    }
     let Some(source_identity) = identity(source).await? else {
         return Ok(None);
     };
