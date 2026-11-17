@@ -109,6 +109,7 @@ fn worker_request(launch: Launch, shape: Shape, source: LaunchSource) -> WorkerR
         fork,
         permissions,
         now,
+        here,
         task,
         prompt,
         env,
@@ -125,6 +126,7 @@ fn worker_request(launch: Launch, shape: Shape, source: LaunchSource) -> WorkerR
             fork,
             env,
             now,
+            here,
             source: Some(source),
             ..LaunchRequest::new(agent)
         },

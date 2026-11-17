@@ -137,6 +137,7 @@ fn agent_request(
         fork: launch.fork.clone(),
         env: launch.env.clone(),
         now: launch.now,
+        here: launch.here,
         source: Some(source),
         ..LaunchRequest::new(agent.agent)
     }

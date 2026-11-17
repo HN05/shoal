@@ -217,6 +217,7 @@ pub(super) fn queued_launch(
         issue: issue.map(issues::Issue::launch_issue),
         env: Some(crate::terminal::start_environment()),
         now,
+        here: false,
         source: Some(LaunchSource::Manual),
     })))
 }

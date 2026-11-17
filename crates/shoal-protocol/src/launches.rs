@@ -98,6 +98,11 @@ pub struct Launch {
     /// Start the agent at once regardless of the heavy slots.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub now: bool,
+    /// The caller runs the agent of the workspace it starts in its own
+    /// terminal or process, holding the agent's queue entry until the
+    /// workspace is prepared and the queue lets it start.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub here: bool,
     /// What the agent is told to do, passed on to it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub task: Vec<String>,

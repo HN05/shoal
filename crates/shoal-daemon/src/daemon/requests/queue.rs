@@ -55,6 +55,7 @@ pub(super) async fn handle(
             }
             Body::QueueEntry(entry)
         }
+        QueueMethod::QueueClaim { entry } => Body::QueueEntry(manager.queue_claim(&entry).await?),
         QueueMethod::StartedLaunch { entry } => {
             Body::StartedLaunch(manager.started_launch(&entry).await?)
         }
@@ -124,9 +125,11 @@ impl Scoped for QueueMethod {
                 (manager.authorize_beyond_limits(caller, start, repository)).await?;
                 None
             }
-            // A caller holds, fails and attaches the launches it starts
+            // A caller holds, claims, fails and attaches the launches it starts
             // itself, which its scope reaches.
-            QueueMethod::QueueHold { entry } | QueueMethod::QueueFail { entry, .. } => {
+            QueueMethod::QueueHold { entry }
+            | QueueMethod::QueueClaim { entry }
+            | QueueMethod::QueueFail { entry, .. } => {
                 manager.ensure_entry_reached(caller, entry).await?;
                 None
             }

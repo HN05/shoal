@@ -45,7 +45,8 @@ impl Manager {
     /// until the preparation gets past the post-setup hook, then starts as
     /// the queue admits it or, for one that starts now, at once regardless
     /// of the limits; in a `reused` one, which runs no post-setup hook, it
-    /// queues as in any ready one.
+    /// queues as in any ready one. One its caller runs `here` is left to
+    /// the caller once admitted, and kept for it while it waits.
     pub(crate) async fn queue_for_preparation(
         &self,
         (workspace, reused): (&Workspace, bool),
@@ -58,10 +59,15 @@ impl Manager {
                 at_once: std::mem::take(&mut launch.now),
             },
         };
+        let here = launch.here;
         let mut request = queued_agent_request(workspace, launch, pr)?;
         request.blockers = blockers;
-        (self.queue_add_awaiting(request, None, awaits).await?.entry)
-            .context("the daemon queued the agent without an entry")
+        let entry = (self.queue_add_awaiting(request, None, awaits).await?.entry)
+            .context("the daemon queued the agent without an entry")?;
+        if here {
+            self.keep_for_caller(&entry);
+        }
+        Ok(entry)
     }
 }
 

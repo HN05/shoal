@@ -73,6 +73,19 @@ pub(super) async fn add(manager: &Manager, repository: &Repository, name: &str) 
         .unwrap()
 }
 
+/// A new workspace of `repository` whose preparation has yet to set it up.
+pub(super) async fn preparing(manager: &Manager, repository: &Repository, name: &str) -> Workspace {
+    let workspace = manager
+        .create_workspace(&repository.id, name.into(), None, None, None)
+        .await
+        .unwrap();
+    let id = workspace.id.clone();
+    (manager.set_state(&id, WorkspaceState::Preparing, None))
+        .await
+        .unwrap();
+    manager.workspace_by_id(&id).await.unwrap()
+}
+
 /// Whether the daemon started `id`, passing the queuing terminal's Herdr variables.
 pub(super) fn started(id: &QueueEntryId) -> bool {
     STARTED.lock().unwrap().iter().any(|(started, env)| {

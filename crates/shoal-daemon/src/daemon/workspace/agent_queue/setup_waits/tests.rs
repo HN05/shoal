@@ -1,6 +1,6 @@
 use rusqlite::params;
 
-use super::super::tests::{add, limit_globally, register, request};
+use super::super::tests::{add, limit_globally, preparing, register, request};
 use crate::{
     daemon::{notifications::NotificationKind, test_support::manager, workspace::Manager},
     model::{QueueEntry, QueueRequest, Repository, Workspace},
@@ -145,19 +145,6 @@ async fn a_failed_start_that_cannot_open_its_workspace_ends_and_says_so() {
         .map(|notification| notification.space_id)
         .collect();
     assert_eq!(failed, [Some(child.id)]);
-}
-
-/// A new workspace of `repository` whose preparation has yet to set it up.
-async fn preparing(manager: &Manager, repository: &Repository, name: &str) -> Workspace {
-    let workspace = manager
-        .create_workspace(&repository.id, name.into(), None, None, None)
-        .await
-        .unwrap();
-    let id = workspace.id.clone();
-    (manager.set_state(&id, WorkspaceState::Preparing, None))
-        .await
-        .unwrap();
-    manager.workspace_by_id(&id).await.unwrap()
 }
 
 #[tokio::test]

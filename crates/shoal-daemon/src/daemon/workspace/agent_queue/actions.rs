@@ -35,7 +35,11 @@ impl Manager {
         Ok(entries.into_iter().find(|entry| entry.id == selector))
     }
 
-    async fn selected_entry(&self, selector: &str, caller: Option<&Caller>) -> Result<QueueEntry> {
+    pub(super) async fn selected_entry(
+        &self,
+        selector: &str,
+        caller: Option<&Caller>,
+    ) -> Result<QueueEntry> {
         self.find_entry(selector, caller)
             .await?
             .with_context(|| format!("{selector} is not in the agent queue"))

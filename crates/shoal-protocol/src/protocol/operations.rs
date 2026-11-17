@@ -289,6 +289,11 @@ pub struct QueuedLaunch<A = crate::agent::Agent> {
     /// its `limits` permission allows.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub now: bool,
+    /// The caller runs the agent in its own terminal or process: the queue
+    /// leaves the agent's entry to it, rather than start it in a place of
+    /// its own, while the caller holds it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub here: bool,
     /// What made the launch, which its agent's start records.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<crate::launches::LaunchSource>,
@@ -308,6 +313,7 @@ impl<A> QueuedLaunch<A> {
             issue: None,
             env: None,
             now: false,
+            here: false,
             source: None,
         }
     }
@@ -335,6 +341,7 @@ impl<A> QueuedLaunch<A> {
             issue,
             env,
             now,
+            here,
             source,
         } = self;
         QueuedLaunch {
@@ -348,6 +355,7 @@ impl<A> QueuedLaunch<A> {
             issue,
             env,
             now,
+            here,
             source,
         }
     }

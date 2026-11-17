@@ -184,7 +184,8 @@ pub struct ResolvedAddAgent {
 
 /// The queue request of `launch` in `workspace`, which the agent queue
 /// starts detached, beside the caller's terminal when the launch names it
-/// or else in the default host, linking `pr` as it starts.
+/// or else in the default host, or leaves to a caller that runs it `here`,
+/// linking `pr` as it starts.
 pub fn queued_agent_request(
     workspace: &Workspace,
     mut launch: QueuedLaunch,
@@ -194,7 +195,8 @@ pub fn queued_agent_request(
         (launch.env.take()).unwrap_or_else(|| crate::terminal::detached_start_environment(None));
     let issue_title = launch.issue.as_ref().map(|issue| issue.title.clone());
     let issue_labels = (launch.issue.as_ref()).map_or_else(Vec::new, |issue| issue.labels.clone());
-    let (agent, now, source) = (launch.agent.clone(), launch.now, launch.source.take());
+    let (agent, now, here) = (launch.agent.clone(), launch.now, launch.here);
+    let source = launch.source.take();
     let mut plan = AddPlan::agent_in(workspace, launch)?;
     plan.creation.pr = pr;
     Ok(QueueRequest {
@@ -210,7 +212,7 @@ pub fn queued_agent_request(
         env,
         now,
         workspace: Some(SpaceSelector::id(&workspace.id)),
-        starts_in_caller: false,
+        starts_in_caller: here,
         blockers: Vec::new(),
         source,
     })
@@ -276,6 +278,7 @@ impl AddPlan {
             issue,
             env: _,
             now: _,
+            here: _,
             source: _,
         } = launch;
         Ok(Self {

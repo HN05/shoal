@@ -149,14 +149,14 @@ impl Manager {
 
     /// Admit waiting entries that fit, record what holds back the others,
     /// start launches other than `caller`'s, and return whether `caller`'s
-    /// entry was admitted. An admitted restore
+    /// entry, which the caller may hold, was admitted. An admitted restore
     /// is left to its waiting agent; nothing is admitted while the system
     /// shuts down. Requires the queue gate.
     pub(super) async fn admit_waiting(&self, caller: Option<&QueueEntryId>) -> Result<bool> {
         if self.agent_queue.suspended() {
             return Ok(false);
         }
-        let mut work = self.waiting_work().await?;
+        let mut work = self.waiting_work(caller).await?;
         self.hold_back_for_exit(&mut work);
         let bases = self.hold_back_blocked(&mut work.entries).await?;
         let published = self.overload_recovery.published();
@@ -256,14 +256,14 @@ impl Manager {
     }
 
     /// The queued entries in rank order, each restore with whether its agent
-    /// waits and what for, without those a caller holds to start itself. A
-    /// restore the daemon starts is admitted like a launch once it waits for
-    /// nothing.
-    async fn waiting_work(&self) -> Result<WaitingWork> {
+    /// waits and what for, without those a caller holds to start itself but
+    /// `caller`'s own. A restore the daemon starts is admitted like a launch
+    /// once it waits for nothing.
+    async fn waiting_work(&self, caller: Option<&QueueEntryId>) -> Result<WaitingWork> {
         let now = std::time::Instant::now();
         let held = self.agent_queue.held();
         let mut queued = self.store.run(|db| queued_rows(db)).await?;
-        queued.retain(|row| !held.contains(&row.id));
+        queued.retain(|row| !held.contains(&row.id) || Some(&row.id) == caller);
         let oneshots = self.agent_queue.waiting_oneshots();
         let light = match queued.is_empty() && oneshots.is_empty() {
             true => Light::default(),

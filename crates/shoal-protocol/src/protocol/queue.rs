@@ -49,6 +49,14 @@ pub enum QueueMethod {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         here: bool,
     },
+    /// Start the launch `entry`, which the caller held while its workspace
+    /// was prepared, in the caller: at once when its start asked for that,
+    /// else when the limits admit it now. One they do not admit stays
+    /// waiting for the queue, which starts it once the caller lets go.
+    /// Answers with the entry, starting or waiting.
+    QueueClaim {
+        entry: QueueEntryId,
+    },
     /// The workspace a launch that left the queue started its agent in,
     /// while the daemon still knows it.
     StartedLaunch {

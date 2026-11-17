@@ -73,6 +73,14 @@ pub async fn start_here(daemon: &impl Daemon, entry: &QueueEntryId) -> Result<Qu
     request(daemon, QueueMethod::QueueStart { entry, here }).await
 }
 
+/// Start the launch `entry`, which this process holds, here once its
+/// workspace is prepared: at once when its start asked for that, else when
+/// the limits admit it now; one they do not stays waiting for the queue.
+pub async fn claim(daemon: &impl Daemon, entry: &QueueEntryId) -> Result<QueueEntry> {
+    let entry = entry.clone();
+    request(daemon, QueueMethod::QueueClaim { entry }).await
+}
+
 /// The workspace the launch `entry`, which left the queue, started its
 /// agent in, while the daemon still knows it.
 pub async fn started_workspace(

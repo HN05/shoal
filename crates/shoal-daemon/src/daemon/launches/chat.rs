@@ -20,7 +20,7 @@ use crate::{
 
 impl Manager {
     /// Start the agent of `launch`, which `source` made and `shape`
-    /// starts in a chat, for `caller`.
+    /// starts in a chat, for `caller`, which runs no chat's agent itself.
     pub(super) async fn launch_in_chat(
         &self,
         launch: Launch,
@@ -28,6 +28,10 @@ impl Manager {
         source: LaunchSource,
         caller: Option<&Caller>,
     ) -> Result<StartedChat> {
+        ensure!(
+            !launch.here,
+            "a launch runs no chat's agent in its caller; start the chat here with `shoal start --here`"
+        );
         let start = self.chat_start(launch, &shape, caller).await?;
         self.ensure_chat_start_allowed(&start, caller).await?;
         self.launch_chat(start, source, caller).await
