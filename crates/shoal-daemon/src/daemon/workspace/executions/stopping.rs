@@ -4,6 +4,7 @@ use super::super::Manager;
 use super::Connections;
 use crate::daemon::log;
 use crate::daemon::operations::starts::preparation_waits;
+use crate::daemon::workspace::ownership::CommonDir;
 use crate::{
     daemon::{
         space_processes::{Selection, WorktreeTies},
@@ -619,16 +620,20 @@ impl Manager {
     /// servers its hooks or apps started, scripts a recording left behind,
     /// or an agent Shoal did not start under a wrapper, since none outlives
     /// removal. Its worktree, where it has one, ties processes to it as
-    /// `ties` says once the directory is verified to be its worktree still.
+    /// `ties` says once the directory is verified to be its worktree still,
+    /// of the repository whose shared Git directory is `common_dir` when
+    /// the removal read it.
     pub(in crate::daemon::workspace) async fn stop_removed_processes(
         &self,
         space: &Space,
         ties: WorktreeTies,
+        common_dir: Option<&CommonDir>,
     ) -> Result<()> {
         if let Some(workspace) = space.to_workspace()
             && ties != WorktreeTies::None
         {
-            self.verify_removed_worktree(&workspace).await?;
+            self.verify_removed_worktree_with(&workspace, common_dir)
+                .await?;
         }
         let space = self.space_ties(space, ties).await?;
         self.stop_untracked(space, Selection::Processes, None)

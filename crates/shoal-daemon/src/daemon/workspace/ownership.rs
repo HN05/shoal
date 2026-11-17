@@ -37,6 +37,36 @@ fn records_git_dir(workspace: &Workspace, git_dir: &Path) -> bool {
     })
 }
 
+/// The Git directory every worktree of a repository shares, read from its
+/// checkout when a verification first needs it and kept for the rest of
+/// one operation, which verifies its worktree's own directories afresh each
+/// time.
+pub(crate) struct CommonDir {
+    checkout: PathBuf,
+    read: tokio::sync::OnceCell<PathBuf>,
+}
+
+impl CommonDir {
+    pub(crate) fn of(checkout: &Path) -> Self {
+        Self {
+            checkout: checkout.to_owned(),
+            read: tokio::sync::OnceCell::new(),
+        }
+    }
+
+    /// The repository checkout it is read from.
+    pub(crate) fn checkout(&self) -> &Path {
+        &self.checkout
+    }
+
+    async fn path(&self) -> Result<&Path> {
+        let read = self
+            .read
+            .get_or_try_init(|| git::common_dir(&self.checkout));
+        Ok(read.await?)
+    }
+}
+
 /// A worktree whose ownership verified.
 pub(crate) struct VerifiedWorktree {
     /// Whether recording its admin directory changed it. A failure leaves the
@@ -134,13 +164,26 @@ impl Manager {
     /// Verify that the worktree of `workspace` is the one it recorded,
     /// refusing a workspace whose worktree Git has yet to create.
     pub(crate) async fn verify_worktree(&self, workspace: &Workspace) -> Result<()> {
+        let common_dir = (self.common_dir(workspace).await)
+            .map_err(|error| Refusal::wrap(Reason::NotReady, error))?;
+        self.verify_worktree_against(workspace, &common_dir).await
+    }
+
+    /// Verify the worktree of `workspace` as [`Self::verify_worktree`]
+    /// does, as a worktree of the repository whose shared Git directory is
+    /// `common_dir`.
+    async fn verify_worktree_against(
+        &self,
+        workspace: &Workspace,
+        common_dir: &CommonDir,
+    ) -> Result<()> {
         if workspace.unborn() {
             let name = &workspace.name;
             let message =
                 format!("workspace {name} has no worktree yet; its preparation creates it");
             return Err(Refusal::new(Reason::NotReady, message).into());
         }
-        self.verify_worktree_identity(workspace)
+        self.verify_worktree_identity(workspace, common_dir)
             .await
             .map_err(|error| Refusal::wrap(Reason::NotReady, error))
     }
@@ -150,15 +193,18 @@ impl Manager {
     /// whose `.git` link still names the recorded one, or the one a checkout
     /// that failed or a restart cut short left. What a workspace that
     /// recorded no admin directory holds at its path otherwise is the user's
-    /// to delete.
-    pub(crate) async fn verify_removed_worktree(&self, workspace: &Workspace) -> Result<()> {
-        let repo = self.repository(workspace.repository()).await?;
-        if crate::removal::disowned(workspace, &repo.path).await?
-            || self.left_by_unfinished_add(workspace).await?
+    /// to delete. `common_dir` is the repository's shared Git directory.
+    pub(crate) async fn verify_removed_worktree(
+        &self,
+        workspace: &Workspace,
+        common_dir: &CommonDir,
+    ) -> Result<()> {
+        if crate::removal::disowned(workspace, common_dir.checkout()).await?
+            || self.left_by_unfinished_add(workspace, common_dir).await?
         {
             return Ok(());
         }
-        let verified = self.verify_worktree(workspace).await;
+        let verified = self.verify_worktree_against(workspace, common_dir).await;
         if workspace.git_dir.is_some() {
             return verified;
         }
@@ -171,24 +217,49 @@ impl Manager {
         })
     }
 
+    /// Verify the worktree a removal deletes as
+    /// [`Self::verify_removed_worktree`] does, against `common_dir` where
+    /// the removal read it, else reading it now.
+    pub(crate) async fn verify_removed_worktree_with(
+        &self,
+        workspace: &Workspace,
+        common_dir: Option<&CommonDir>,
+    ) -> Result<()> {
+        match common_dir {
+            Some(common_dir) => self.verify_removed_worktree(workspace, common_dir).await,
+            None => {
+                let common_dir = self.common_dir(workspace).await?;
+                self.verify_removed_worktree(workspace, &common_dir).await
+            }
+        }
+    }
+
     /// Whether the worktree at the path of the disposable `workspace`, which
     /// recorded no admin directory, is what a `worktree add` for it that a
     /// restart cut short left: a linked worktree of its repository whose
     /// admin directory no workspace marked. Nothing was at the path of a
     /// disposable workspace, which adopts nothing, when Shoal recorded it.
-    async fn left_by_unfinished_add(&self, workspace: &Workspace) -> Result<bool> {
+    async fn left_by_unfinished_add(
+        &self,
+        workspace: &Workspace,
+        common_dir: &CommonDir,
+    ) -> Result<bool> {
         if !workspace.disposable || workspace.git_dir.is_some() {
             return Ok(false);
         }
         // One Git cannot read proves nothing about whose directory it is.
-        let Ok(git_dir) = self.linked_git_dir(workspace).await else {
+        let Ok(git_dir) = self.linked_git_dir(workspace, common_dir).await else {
             return Ok(false);
         };
         off_runtime::run(move || Ok(marked_owner(&git_dir)?.is_none())).await
     }
 
-    async fn verify_worktree_identity(&self, workspace: &Workspace) -> Result<()> {
-        let actual_git_dir = self.linked_git_dir(workspace).await?;
+    async fn verify_worktree_identity(
+        &self,
+        workspace: &Workspace,
+        common_dir: &CommonDir,
+    ) -> Result<()> {
+        let actual_git_dir = self.linked_git_dir(workspace, common_dir).await?;
         let workspace = workspace.clone();
         off_runtime::run(move || verify_git_dir(&workspace, &actual_git_dir)).await
     }
@@ -215,7 +286,8 @@ impl Manager {
     /// still be a linked worktree of the recorded repository on the recorded
     /// branch, and no other workspace may own it.
     pub(crate) async fn reclaim_worktree(&self, workspace: &Workspace) -> Result<()> {
-        let git_dir = self.linked_git_dir(workspace).await?;
+        let common_dir = self.common_dir(workspace).await?;
+        let git_dir = self.linked_git_dir(workspace, &common_dir).await?;
         match workspace.branch() {
             Some(recorded) => {
                 let branch = git::head_branch(&workspace.path, true, git::run)
@@ -255,15 +327,24 @@ impl Manager {
         off_runtime::run(move || release_stale_marker(&git_dir, &workspace_id, &workspaces)).await
     }
 
-    /// The admin directory of the linked worktree rooted at the recorded path
-    /// that belongs to the recorded repository.
-    async fn linked_git_dir(&self, workspace: &Workspace) -> Result<PathBuf> {
+    /// The shared Git directory of the repository of `workspace`, read
+    /// when first needed.
+    pub(crate) async fn common_dir(&self, workspace: &Workspace) -> Result<CommonDir> {
         let repo = self.repository(workspace.repository()).await?;
+        Ok(CommonDir::of(&repo.path))
+    }
+
+    /// The admin directory of the linked worktree rooted at the recorded path
+    /// that belongs to the recorded repository, whose shared Git directory
+    /// is `common_dir`.
+    async fn linked_git_dir(
+        &self,
+        workspace: &Workspace,
+        common_dir: &CommonDir,
+    ) -> Result<PathBuf> {
         // Verify this is still the checkout Shoal created before any deletion.
-        let (actual, expected) = tokio::join!(
-            git::checkout_dirs(&workspace.path),
-            git::common_dir(&repo.path)
-        );
+        let (actual, expected) =
+            tokio::join!(git::checkout_dirs(&workspace.path), common_dir.path());
         let actual = actual?;
         ensure!(
             actual.root == off_runtime::canonicalize(&workspace.path).await?,

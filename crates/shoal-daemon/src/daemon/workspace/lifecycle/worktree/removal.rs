@@ -4,15 +4,15 @@
 //! deleted.
 use super::super::super::{Manager, StopRequest};
 use super::super::{Removal, STOPPED_REMOVAL, Stage};
+use super::candidacy::Baseline;
 use crate::daemon::space_processes::WorktreeTies;
-use crate::daemon::workspace::ownership::verify_admin_dir_owner;
+use crate::daemon::workspace::ownership::{CommonDir, verify_admin_dir_owner};
 use crate::daemon::workspace::runner::JobStop;
 use crate::{
     daemon::events::EventCause,
     fsutil::off_runtime,
     git::{
         self,
-        default_branch::DefaultBranch,
         worktree::{BranchRemoval, FileRemoval, interrupted},
     },
     hooks::{self, Hook, HookKind},
@@ -58,8 +58,8 @@ pub(in crate::daemon::workspace) struct WorktreeStage {
     present: bool,
     post_remove: Option<PostRemoveHook>,
     xcode: Option<crate::config::Effective>,
-    /// What each inspection compares the worktree with, read once.
-    default_branch: Option<DefaultBranch>,
+    /// What each inspection compares an existing worktree with.
+    baseline: Option<Baseline>,
 }
 
 /// What removing a worktree did.
@@ -120,6 +120,12 @@ impl WorktreeStage {
         }
     }
 
+    /// The shared Git directory of the repository of an existing worktree,
+    /// as the removal read it.
+    pub(in crate::daemon::workspace) fn common_dir(&self) -> Option<&CommonDir> {
+        self.baseline.as_ref().map(Baseline::common_dir)
+    }
+
     /// How the removal stops the workspace's commands: those of a deleted
     /// directory cannot be restored there.
     pub(in crate::daemon::workspace) fn stop_request(&self) -> StopRequest {
@@ -178,12 +184,12 @@ impl Manager {
         if matches!(removal, Removal::Deleted) && present {
             bail!("workspace directory exists");
         }
-        let (post_remove, default_branch) = if present {
+        let (post_remove, baseline) = if present {
             self.ensure_no_pending_rename(&workspace.id).await?;
             self.settle_interrupted_removal(workspace, replaced).await?;
             (
                 self.prepare_post_remove_hook(workspace).await?,
-                self.inspected_default_branch(workspace).await?,
+                Some(self.inspection_baseline(workspace).await?),
             )
         } else {
             (None, None)
@@ -193,7 +199,7 @@ impl Manager {
             workspace: workspace.clone(),
             present,
             post_remove,
-            default_branch,
+            baseline,
         })
     }
 
@@ -266,20 +272,19 @@ impl Manager {
         cancelled: &[IdleRestore],
     ) -> Result<Option<Inspection>> {
         let workspace = &worktree.workspace;
-        if !worktree.present {
+        let Some(baseline) = &worktree.baseline else {
             if matches!(stage, Stage::Initial) {
                 self.check_missing_worktree(workspace, removal).await?;
             }
             return Ok(None);
-        }
-        let default_branch = worktree.default_branch.as_ref();
-        (self.check_worktree(workspace, removal, stage, cancelled, default_branch))
+        };
+        (self.check_worktree(workspace, removal, stage, cancelled, baseline))
             .await
             .map(Some)
     }
 
-    /// Inspect the worktree of `workspace` against `default_branch` and
-    /// apply every check `removal` needs of it at `stage`, after stopping
+    /// Inspect the worktree of `workspace` against `baseline` and apply
+    /// every check `removal` needs of it at `stage`, after stopping
     /// the `cancelled` restores. A deleted directory inspects as clean,
     /// while its HEAD cannot be read.
     pub(in crate::daemon::workspace::lifecycle) async fn check_worktree(
@@ -288,7 +293,7 @@ impl Manager {
         removal: Removal<'_>,
         stage: Stage,
         cancelled: &[IdleRestore],
-        default_branch: Option<&DefaultBranch>,
+        baseline: &Baseline,
     ) -> Result<Inspection> {
         let executions = self.cleanup_executions(&workspace.id, cancelled).await?;
         let check = self
@@ -296,7 +301,7 @@ impl Manager {
                 self.workspace_by_id(&workspace.id).await?,
                 removal.inspection(),
                 executions,
-                default_branch,
+                baseline,
             )
             .await?;
         removal.verify(&check, stage)?;
@@ -427,7 +432,7 @@ impl Manager {
             outcome.hook_error = self.run_post_remove_hook(workspace, &hook).await;
             let space = Space::from(workspace.clone());
             if let Err(error) = self
-                .stop_removed_processes(&space, WorktreeTies::None)
+                .stop_removed_processes(&space, WorktreeTies::None, None)
                 .await
             {
                 crate::daemon::log!(

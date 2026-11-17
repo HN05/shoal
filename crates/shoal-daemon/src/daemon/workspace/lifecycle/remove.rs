@@ -276,14 +276,10 @@ impl Manager {
         self.check_space_removal(&space.id, removal, Stage::Initial, &[])
             .await?;
         if let Some(workspace) = space.to_workspace() {
-            let default_branch = self.inspected_default_branch(&workspace).await?;
-            let checked = self.check_worktree(
-                &workspace,
-                removal,
-                Stage::Initial,
-                &[],
-                default_branch.as_ref(),
-            );
+            let checked = async {
+                let baseline = self.inspection_baseline(&workspace).await?;
+                (self.check_worktree(&workspace, removal, Stage::Initial, &[], &baseline)).await
+            };
             self.check_access(&workspace.path, checked).await?;
         }
         let grace = self.space_settings(space).await?.cleanup.grace();
@@ -401,7 +397,8 @@ impl Manager {
         // After the hooks, so the final inspection and the checkpoint include
         // the files these processes write as they stop.
         let ties = (worktree.as_ref()).map_or(WorktreeTies::None, |stage| stage.ties(removal));
-        self.stop_removed_processes(space, ties).await?;
+        let common_dir = worktree.as_ref().and_then(WorktreeStage::common_dir);
+        self.stop_removed_processes(space, ties, common_dir).await?;
         let last = self
             .check_space_and_worktree(id, removal, Stage::Final, worktree.as_ref(), &cancelled)
             .await?;

@@ -2,7 +2,10 @@
 //! Git state and files, and the processes working in it.
 use super::super::super::Manager;
 use crate::{
-    daemon::cleanup::{Rule, Tree},
+    daemon::{
+        cleanup::{Rule, Tree},
+        workspace::ownership::CommonDir,
+    },
     fsutil::off_runtime,
     git::{
         self,
@@ -58,6 +61,21 @@ async fn directory_in_use(
     Ok(!users.activity_except(path, &wrappers).await?.is_empty())
 }
 
+/// What an inspection compares a worktree with: its repository's shared
+/// Git directory, and the default branch, `None` while that does not
+/// resolve. A removal, which inspects its worktree several times, reads
+/// them once.
+pub(in crate::daemon::workspace) struct Baseline {
+    common_dir: CommonDir,
+    default_branch: Option<DefaultBranch>,
+}
+
+impl Baseline {
+    pub(in crate::daemon::workspace) fn common_dir(&self) -> &CommonDir {
+        &self.common_dir
+    }
+}
+
 /// The workspace's executions as cleanup sees them.
 pub(in crate::daemon::workspace) struct CleanupExecutions {
     /// Those other than the idle restores, which keep the workspace.
@@ -78,43 +96,48 @@ impl Manager {
         policy: InspectionPolicy,
         executions: CleanupExecutions,
     ) -> Result<Inspection> {
-        let default_branch = self.inspected_default_branch(&workspace).await?;
-        (self.inspect_removal_against(workspace, policy, executions, default_branch.as_ref())).await
+        let baseline = self.inspection_baseline(&workspace).await?;
+        (self.inspect_removal_against(workspace, policy, executions, &baseline)).await
     }
 
-    /// The default branch an inspection of `workspace` compares it with:
-    /// its repository's, `None` while that does not resolve.
-    pub(in crate::daemon::workspace) async fn inspected_default_branch(
+    /// What inspections of `workspace` compare it with.
+    pub(in crate::daemon::workspace) async fn inspection_baseline(
         &self,
         workspace: &Workspace,
-    ) -> Result<Option<DefaultBranch>> {
-        let repo = self.repository(workspace.repository()).await?;
-        Ok(
-            git::default_branch::locate(&repo.path, DefaultBranchLookup::Cached)
+    ) -> Result<Baseline> {
+        let common_dir = self.common_dir(workspace).await?;
+        let default_branch =
+            git::default_branch::locate(common_dir.checkout(), DefaultBranchLookup::Cached)
                 .await
-                .ok(),
-        )
+                .ok();
+        Ok(Baseline {
+            common_dir,
+            default_branch,
+        })
     }
 
     /// Inspect `workspace` as [`Self::inspect_removal`] does, comparing it
-    /// with `default_branch`, which [`Self::inspected_default_branch`] read.
+    /// with `baseline`.
     pub(in crate::daemon::workspace) async fn inspect_removal_against(
         &self,
         workspace: Workspace,
         policy: InspectionPolicy,
         executions: CleanupExecutions,
-        default_branch: Option<&DefaultBranch>,
+        baseline: &Baseline,
     ) -> Result<Inspection> {
         if off_runtime::exists(&workspace.path).await? {
-            self.verify_removed_worktree(&workspace).await?;
+            self.verify_removed_worktree(&workspace, &baseline.common_dir)
+                .await?;
         }
-        let repo = self.repository(workspace.repository()).await?;
         removal::inspect(
             workspace,
             executions.running,
             executions.idle,
             policy,
-            (&repo.path, default_branch),
+            (
+                baseline.common_dir.checkout(),
+                baseline.default_branch.as_ref(),
+            ),
         )
         .await
     }
