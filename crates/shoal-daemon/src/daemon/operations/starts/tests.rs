@@ -2,7 +2,9 @@ use std::{sync::Arc, time::Duration};
 
 use super::{Opening, Preparing};
 use crate::{
+    config::permissions::PermissionsConfig,
     daemon::notifications::NotificationKind,
+    daemon::scope::Caller,
     daemon::{
         operations::fake,
         test_support::{git, global_config, manager, repository, repository_with},
@@ -10,7 +12,7 @@ use crate::{
     },
     model::{Repository, Workspace},
     protocol::operations::{
-        Ended, Failure, OperationSpec, Report, StartedWorkspace, WorkspaceStart,
+        Ended, Failure, LaunchRequest, OperationSpec, Report, StartedWorkspace, WorkspaceStart,
     },
     removal::{InspectionPolicy, UnsavedWork},
     state::WorkspaceState,
@@ -218,4 +220,61 @@ async fn a_retry_configures_the_worktree_an_earlier_creation_left() {
     assert!(!created.pending_worktree);
     let email = git(&created.path, &["config", "user.email"]);
     assert_eq!(email.trim(), "work@example.invalid");
+}
+
+#[tokio::test]
+async fn a_scoped_start_gives_its_agent_only_permissions_the_caller_holds() {
+    let (root, manager) = manager().await;
+    let repository = registered(root.path(), &manager).await;
+    let parent = manager
+        .create_workspace(
+            &repository.id,
+            "parent".into(),
+            Some("HEAD".into()),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    let held = PermissionsConfig::assigned(&["push=deny".to_owned()]).unwrap();
+    let held = serde_json::to_string(&held).unwrap();
+    let id = parent.id.clone();
+    (manager.store)
+        .run(move |db| {
+            let sql = "UPDATE spaces SET mode='worker',narrowing=?2 WHERE id=?1";
+            Ok(db.execute(sql, rusqlite::params![id, held])?)
+        })
+        .await
+        .unwrap();
+    let caller = Caller {
+        space_id: parent.id.clone(),
+        execution: None,
+        granted: None,
+        read_only: false,
+    };
+    let opening = Opening {
+        start: WorkspaceStart::Name("child".into()),
+        base: Some("HEAD".into()),
+        new: Default::default(),
+        parent: Some(parent.id.clone()),
+    };
+    let agent = LaunchRequest {
+        narrowing: PermissionsConfig::assigned(&["push=direct".to_owned()]).unwrap(),
+        ..LaunchRequest::new(Some("claude".parse().unwrap()))
+    };
+    let preparing = Preparing {
+        issue: None,
+        pr: None,
+        agent: Some(Box::new(agent)),
+        waiting: None,
+        queue_entry: None,
+        env: None,
+    };
+    let refused = manager
+        .start_workspace((&repository.id).into(), opening, preparing, Some(&caller))
+        .await;
+    assert!(refused.is_err(), "{refused:?}");
+    // Refused before anything was created.
+    let workspaces = manager.list_workspaces().await.unwrap();
+    assert_eq!(workspaces.len(), 1, "{workspaces:?}");
 }

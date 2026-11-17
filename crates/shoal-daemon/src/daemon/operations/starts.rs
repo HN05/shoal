@@ -165,7 +165,7 @@ impl Manager {
                 .await;
             opening.new.options.name = title.map(|title| SpaceName::derive(&title, "workspace"));
         }
-        self.authorize_start_now(caller, &preparing, &repo.id)
+        self.authorize_start_agent(caller, &preparing, &repo.id)
             .await?;
         let asked = opening.new.options.priority;
         let given = self.given_priority(caller, asked).await?;
@@ -178,10 +178,11 @@ impl Manager {
         Ok(started)
     }
 
-    /// Let the scoped `caller` start the agent `preparing` queues in
-    /// `repository` regardless of the limits, as its `limits` permission
-    /// allows, before the start creates anything.
-    async fn authorize_start_now(
+    /// Refuse the scoped `caller` the agent `preparing` queues in
+    /// `repository`, before the start creates anything, where it gives the
+    /// agent permissions the caller does not hold, or starts it regardless
+    /// of the limits beyond what the caller's `limits` permission allows.
+    async fn authorize_start_agent(
         &self,
         caller: Option<&Caller>,
         preparing: &Preparing,
@@ -190,6 +191,8 @@ impl Manager {
         let (Some(caller), Some(agent)) = (caller, &preparing.agent) else {
             return Ok(());
         };
+        let (giver, given) = (Some(&caller.space_id), &agent.narrowing);
+        (self.ensure_caller_holds(giver, given, Some(repository))).await?;
         if !agent.now {
             return Ok(());
         }
@@ -256,7 +259,7 @@ impl Manager {
         };
         preparing.work_on(issue.as_ref());
         name_after_issue(&mut split.options, issue.as_ref());
-        (self.authorize_start_now(caller, &preparing, parent.repository())).await?;
+        (self.authorize_start_agent(caller, &preparing, parent.repository())).await?;
         let priority = (self.given_priority(caller, split.options.priority)).await?;
         let child = self.create_child(&parent, split).await?;
         self.give_priority(&child.id, priority).await?;
@@ -429,10 +432,12 @@ impl Manager {
             workspace: SpaceSelector::id(&workspace.id),
             steps,
         };
+        // The record as the start left it, before its preparation changes it.
+        let recorded = self.workspace_by_id(&workspace.id).await?;
         let operation = self.start_operation(spec, preparing.env, caller).await?;
         Ok(StartedWorkspace {
             operation,
-            workspace: Box::new(self.workspace_by_id(&workspace.id).await?),
+            workspace: Box::new(recorded),
             reused,
             entry,
             warnings,
