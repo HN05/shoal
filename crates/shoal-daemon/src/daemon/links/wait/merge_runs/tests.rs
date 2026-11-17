@@ -293,18 +293,37 @@ async fn completion_cleanup_waits_for_the_runs_of_a_merge() {
     assert!(!workspace.path.exists());
 }
 
-#[tokio::test]
-async fn the_background_poll_follows_a_merge_while_older_updates_wait() {
-    let following = following(true, json!([])).await;
-    let (pr, id) = (following.pr.clone(), following.workspace.id.clone());
+/// Hold a comment on the PR's cursor for an agent that does not take it,
+/// so later reads of the PR replay it.
+async fn hold_a_comment(following: &Following) {
+    let pr = following.pr.clone();
     following.observe(&pr, pull("open", None)).await;
-    // A comment waits for an agent that does not take it.
     let mut commented = serde_json::to_value(pull("open", None)).unwrap();
     commented["comments"] = json!({"discussion:1": {"fingerprint": "first"}});
     let waiting = (following.observe(&pr, serde_json::from_value(commented).unwrap())).await;
     assert_eq!(waiting[0].kind, UpdateKind::Comment, "{waiting:?}");
     let replayed = following.observe(&pr, pull("merged", Some(MERGED))).await;
     assert_eq!(replayed, waiting);
+}
+
+#[tokio::test]
+async fn a_first_background_read_of_a_merged_pr_follows_its_merge() {
+    let following = following(true, json!([])).await;
+    hold_a_comment(&following).await;
+    assert!(!following.awaits().await);
+    let (pr, id) = (following.pr.clone(), following.workspace.id.clone());
+    (following.manager)
+        .record_background_activity(&id, vec![(pr, pull("merged", Some(MERGED)))])
+        .await
+        .unwrap();
+    assert!(following.awaits().await);
+}
+
+#[tokio::test]
+async fn the_background_poll_follows_a_merge_while_older_updates_wait() {
+    let following = following(true, json!([])).await;
+    let (pr, id) = (following.pr.clone(), following.workspace.id.clone());
+    hold_a_comment(&following).await;
     assert!(!following.awaits().await);
 
     for snapshot in [pull("open", None), pull("merged", Some(MERGED))] {

@@ -17,7 +17,7 @@ use crate::{
     },
     forge::{
         items::link::{LinkKind, Selection},
-        updates::UpdateKind,
+        updates::{SnapshotState, UpdateKind},
     },
     model::Chat,
     time::UnixTime,
@@ -242,15 +242,18 @@ fn record_baseline_item(
     }
     let now = UnixTime::now();
     snapshot.normalize(previous.as_ref().unwrap_or(&Snapshot::default()), now);
+    // A first read that shows the merge follows it, as a watch's first does.
+    let merged = |read: &Snapshot| read.state() == Some(SnapshotState::Merged);
+    if let Some(target) =
+        merges.filter(|_| merged(&snapshot) && !previous.as_ref().is_some_and(merged))
+    {
+        follow_merge(tx, id, url, &snapshot, target, now)?;
+    }
     if let Some(previous) = previous {
         seen.changed_draft |= previous.draft_changed(&snapshot);
         seen.lost_assignee |= previous.assignee_removed(&snapshot);
         for update in previous.changes(&snapshot, url) {
-            let merged = update.kind == UpdateKind::Merged;
-            seen.merged |= merged;
-            if let Some(target) = merges.filter(|_| merged) {
-                follow_merge(tx, id, url, &snapshot, target, now)?;
-            }
+            seen.merged |= update.kind == UpdateKind::Merged;
             crate::daemon::events::record_item_activity(tx, id, observed.kind, url, &update)?;
         }
     }
