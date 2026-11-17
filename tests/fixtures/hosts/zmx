@@ -2,5 +2,11 @@
 # The zmx every test finds unless it installs its own: the passthrough zmx of
 # zmx.py, keeping its sessions and calls apart from those of a test's own zmx.
 root=${ZMX_TEST_ROOT:-$HOME/default-zmx}
+# Listing no sessions, the call daemons make most, answers without starting
+# Python. No test reads this root's calls or writes its sessions.
+if [ -z "$ZMX_TEST_ROOT" ] && [ "$1" = list ] && [ ! -e "$root/zmx-sessions" ]; then
+  echo 'no sessions found'
+  exit
+fi
 mkdir -p "$root"
 ZMX_TEST_ROOT=$root exec python3 "$(dirname "$0")/../zmx.py" "$@"
