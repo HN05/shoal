@@ -10,6 +10,7 @@ mod agent_turns;
 pub(crate) mod agents;
 mod branch_rename;
 mod branches;
+pub(crate) mod busy_cpu;
 pub(crate) mod capacity;
 mod checkpoints;
 mod commits;
@@ -127,6 +128,8 @@ pub struct Manager {
     pub(crate) queues: super::queue::Queues,
     pub executions: executions::Executions,
     pub overload_recovery: overload_recovery::OverloadRecovery,
+    /// The busy CPU the overload monitor reads for job admission.
+    pub(crate) busy_cpu: busy_cpu::BusyCpu,
     pub agent_queue: agent_queue::AgentQueue,
     pub(crate) operations: Arc<crate::daemon::operations::Operations>,
     /// The scope tokens approved commands take their permission's actions
@@ -203,6 +206,7 @@ impl Manager {
             queues: Default::default(),
             executions: Default::default(),
             overload_recovery: Default::default(),
+            busy_cpu: Default::default(),
             agent_queue: Default::default(),
             operations: Default::default(),
             grants: Default::default(),

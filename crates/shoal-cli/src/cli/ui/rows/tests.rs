@@ -102,6 +102,11 @@ fn queue_status_names_the_work_a_launch_waits_for() {
         queue_status_cell(&entry).0,
         "queued, position 2, held by memory: needs 4.0 GiB, 1.5 GiB left"
     );
+    entry.held_by = Some(HeldBy::Cpu {
+        busy: 97,
+        level: 95,
+    });
+    assert!(queue_status_cell(&entry).0.ends_with("97% busy, 95% level"));
 }
 
 #[test]

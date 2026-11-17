@@ -34,7 +34,9 @@ struct Readings {
 }
 
 impl Readings {
-    fn take(settings: &crate::config::overload::Overload, manager: &Manager) -> Self {
+    /// Take one sample, reading CPU ticks when `cpu`: for CPU protection or
+    /// dynamic job admission.
+    fn take(settings: &crate::config::overload::Overload, cpu: bool, manager: &Manager) -> Self {
         use crate::process::load;
         let memory = settings.memory.enabled;
         Self {
@@ -43,7 +45,7 @@ impl Readings {
             } else {
                 Ok(false)
             },
-            cpu: if settings.cpu.enabled {
+            cpu: if cpu {
                 load::cpu_ticks()
             } else {
                 Ok(load::CpuTicks::default())
@@ -224,8 +226,10 @@ pub(super) async fn run(manager: Arc<Manager>) {
             continue;
         }
         let settings = &config.machine.overload;
-        let readings = Readings::take(settings, &manager);
+        let admission = config.machine.max_jobs == crate::config::RunLimit::Dynamic;
+        let readings = Readings::take(settings, settings.cpu.enabled || admission, &manager);
         let now = Instant::now();
+        publish_busy_cpu(&manager, now, settings, admission, &readings.cpu);
         let reason = monitor.reason(now, settings, readings.memory, readings.cpu);
         // Decide before awaiting warnings, so a reload meanwhile cannot pair
         // these readings with its new epoch.
@@ -251,6 +255,23 @@ pub(super) async fn run(manager: Arc<Manager>) {
             tokio::time::sleep(Duration::from_secs(settings.cooldown_seconds)).await;
         }
     }
+}
+
+/// Give job admission this sample's CPU ticks while `admission` reads
+/// them, over the CPU warning's window; a failed reading leaves it none.
+fn publish_busy_cpu(
+    manager: &Manager,
+    now: Instant,
+    settings: &crate::config::overload::Overload,
+    admission: bool,
+    cpu: &anyhow::Result<crate::process::load::CpuTicks>,
+) {
+    manager.busy_cpu.observe(
+        now,
+        cpu.as_ref().ok().copied().filter(|_| admission),
+        Duration::from_secs(settings.poll_seconds * 3),
+        Duration::from_secs(settings.warning.cpu_sustained_seconds),
+    );
 }
 
 #[cfg(test)]

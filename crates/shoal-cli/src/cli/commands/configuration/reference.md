@@ -140,8 +140,9 @@ sustained_seconds = 60
 ```
 
 The percentages above are those of `load = "balanced"` without swap. Each
-`load` sets these, and the memory warning level is also where dynamic admission
-stops starting agents and CI jobs:
+`load` sets these; the memory warning level is also where dynamic admission
+stops starting agents and CI jobs, and the CPU warning level, over its
+sustained seconds, where a CI job beside running ones waits:
 
 | `load` | CPU warning / stop / recovery | Memory warning / stop / recovery |
 |---|---|---|
@@ -152,7 +153,8 @@ stops starting agents and CI jobs:
 Memory percentages apply on Linux, where configured swap lets memory fill
 further before the kernel kills processes; macOS uses its native pressure
 levels. CPU usage is aggregate busy time across all cores, excluding I/O wait
-and niced time. Durations are seconds, bounded to one day; polling, cooldown
+and niced time, except that job admission counts niced time, in which jobs
+run, as busy. Durations are seconds, bounded to one day; polling, cooldown
 and sustained CPU and recovery durations must be positive. Recovery thresholds
 must be positive and below their stop thresholds; warning thresholds are not
 checked against stop thresholds. What each threshold does is in

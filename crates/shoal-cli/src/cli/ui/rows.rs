@@ -381,8 +381,8 @@ fn inherited_label(inherited: Option<&InheritedRank>) -> String {
 }
 
 /// What holds a waiting entry back: `memory: needs 4.0 GiB, 1.2 GiB left`,
-/// a limit's setting, low disk space, a failed reading or its tool's
-/// upstream limit.
+/// a limit's setting, low disk space, a failed reading, `CPU: 97% busy, 95%
+/// level` or its tool's upstream limit.
 pub fn held_by_label(held: HeldBy) -> String {
     match held {
         HeldBy::Memory { needed, left } => format!(
@@ -397,6 +397,7 @@ pub fn held_by_label(held: HeldBy) -> String {
         HeldBy::RepositoryLimit => "agent.max_heavy_running".into(),
         HeldBy::Permits => "runner.permit pool".into(),
         HeldBy::Reading => "critical or missing reading".into(),
+        HeldBy::Cpu { busy, level } => format!("CPU: {busy}% busy, {level}% level"),
         HeldBy::UpstreamLimit { limit, until } => {
             let limit = match limit {
                 ServiceLimit::RateLimited => "rate limited",

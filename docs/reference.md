@@ -2070,7 +2070,8 @@ which starts one agent at a time, at least 10 seconds apart, while measured
 memory and disk leave room below the
 [`[machine.overload.warning]`](#overload-protection) memory and disk
 thresholds, which [`load`](#overload-protection) sets. CPU holds back no
-start, since more work on a busy CPU only runs slower. A new agent mostly
+agent, since more work on a busy CPU only runs slower; only a
+[CI job](#runner) beside running ones waits for it. A new agent mostly
 reads files at first and compiles later, so for its first three minutes it
 counts at the memory a settled agent uses: the average resident memory of the
 workspaces of the agents that have run longer, at the latest usage sample, at
@@ -2213,15 +2214,17 @@ followed by `blocked by` and what blocks a waiting launch, or `after an update` 
 restore of an idle agent, then what held a waiting entry back at the last
 admission pass, as `held by` memory with what the entry needs and what is
 left, low disk space, `machine.max_heavy_agents`, `machine.max_jobs`,
-`agent.max_heavy_running`, a full `runner.permit` pool, or a critical or missing
-reading; the stagger between starts is too brief to show. A restore shows its
+`agent.max_heavy_running`, a full `runner.permit` pool, a critical or missing
+reading, or a busy CPU with its percentage and the level a job waits at; the
+stagger between starts is too brief to show. A restore shows its
 agent; `shoal list` shows the entries after the workspaces. `queue --json` gives the entries with their `kind`,
 `launch`, `restore` or `job`, a restore's stopped `execution`, a job's `job`
 with its run, `blockers` while any remain, the setup of the workspace it opens
 among them,
 `waits_for_update` for a restore of an idle agent, `held_by` with its `reason`
 (`memory` with `needed` and `left` bytes, `memory_kept`, `disk`, `max_heavy_agents`, `max_jobs`,
-`repository_limit`, `permits`, `reading`, or `upstream_limit` with the `limit`,
+`repository_limit`, `permits`, `reading`, `cpu` with the `busy` and `level`
+percentages, or `upstream_limit` with the `limit`,
 `rate_limited` or `exhausted`, and the Unix-seconds `until`), a waiting entry's `rank` with its
 `priority` and `tier` and, for each it took from other work, `priority_from`
 or `tier_from` with that work's space number or launch name `from` and the
@@ -3717,7 +3720,14 @@ resident memory its last five runs reached, by repository, workflow and job
 name, or what a starting agent counts at before it has run, and until it
 ends it reserves what it is expected to use beyond what its workspace used
 at the latest usage sample, all of it before one. A job's recent start
-counts against an agent's as an agent's counts against a job's. With
+counts against an agent's as an agent's counts against a job's. A job
+beside running ones also waits while the machine's CPU, niced time
+included, has been busy at or above `[machine.overload.warning]
+cpu_used_percent` on average over its `cpu_sustained_seconds`, or has not
+been read that long, while the first job starts whatever the CPU reads: a
+job's own CPU use is never reserved, since builds and tests use every core
+that is free, but jobs piled on a saturated CPU only make each other
+slower. With
 `runner.permit`, a job waits until its pool has a free permit and holds one
 while it runs. Until a job is admitted, any other runner may take it. `queue
 start` admits a job regardless of the limits, and `queue cancel` passes it

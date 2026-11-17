@@ -200,6 +200,25 @@ fn a_job_without_runs_reserves_an_agents_start_less_its_use() {
 }
 
 #[test]
+fn a_job_beside_running_ones_waits_for_a_busy_cpu_and_the_first_never_does() {
+    let cpu = |busy| Cpu { busy, level: 95 };
+    for busy in [None, Some(0.0), Some(100.0)] {
+        assert_eq!(cpu(busy).fits_job(0), Ok(()));
+    }
+    assert_eq!(cpu(Some(94.9)).fits_job(1), Ok(()));
+    for (busy, running) in [(97.5, 1), (95.0, 2)] {
+        assert_eq!(
+            cpu(Some(busy)).fits_job(running),
+            Err(HeldBy::Cpu {
+                busy: busy as u8,
+                level: 95,
+            })
+        );
+    }
+    assert_eq!(cpu(None).fits_job(1), Err(HeldBy::Reading));
+}
+
+#[test]
 fn memory_disk_and_the_stagger_stop_starts_and_critical_readings_block_even_the_first() {
     let settings = Overload::default();
     let one = Agents::count([running(WARM_UP, Some(GIB))]);

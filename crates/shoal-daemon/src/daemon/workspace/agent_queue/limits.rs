@@ -52,6 +52,9 @@ pub(crate) struct JobLimits {
     /// What measured memory and disk leave for a job's start, under dynamic
     /// admission.
     pub room: Option<capacity::Room>,
+    /// The machine's busy CPU against the level a further job waits at,
+    /// under dynamic admission.
+    pub cpu: Option<capacity::Cpu>,
 }
 
 impl Limits {
@@ -160,7 +163,7 @@ impl Admission {
 /// stopped, start only on sustained healthy readings (`recovered`), one per
 /// healthy interval. A CI job counts only against the jobs' limits, and under
 /// dynamic admission needs room for its own memory and takes the pass's one
-/// start, as an agent does. A light agent's entry needs no slot and no room,
+/// start, as an agent does, and beside running jobs a CPU below its level. A light agent's entry needs no slot and no room,
 /// so it takes none of the pass's starts and, restored, none of the healthy
 /// interval's: only critical or missing readings and low disk hold it. An
 /// entry that waits or does not fit keeps its place and is passed over.
@@ -199,6 +202,10 @@ pub(crate) fn admit(
             if let Err(held) = measured_fit(limits.jobs.room, started, |room| room.fits_job(cost)) {
                 starved |= overdue_for_memory(entry, held);
                 admission.hold(entry, held);
+                continue;
+            }
+            if let Some(Err(held)) = limits.jobs.cpu.map(|cpu| cpu.fits_job(jobs)) {
+                admission.hold(entry, Some(held));
                 continue;
             }
             started = true;
@@ -412,6 +419,7 @@ impl Manager {
                 fixed: fixed_limit(max_jobs),
                 disk: None,
                 room: measured.filter(|_| max_jobs == RunLimit::Dynamic),
+                cpu: (max_jobs == RunLimit::Dynamic).then(|| self.job_cpu(overload)),
             },
         };
         for id in repositories {
@@ -467,6 +475,16 @@ impl Manager {
             Agents::count(activities.iter().copied()),
             overload,
         ))
+    }
+
+    /// The machine's busy CPU over the CPU warning's window, against the
+    /// warning's level, at which a job beside running ones waits.
+    fn job_cpu(&self, overload: &Overload) -> capacity::Cpu {
+        let window = Duration::from_secs(overload.warning.cpu_sustained_seconds);
+        capacity::Cpu {
+            busy: self.busy_cpu.percent(window),
+            level: overload.warning.cpu_used_percent,
+        }
     }
 
     /// The limit free disk space sets for `used` slots beside a fixed limit.

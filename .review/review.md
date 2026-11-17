@@ -539,7 +539,7 @@ instead of the PR delivery guidance below.
   one agent at a time, staggered, while memory below its warning threshold, less
   what recently started agents are expected to use and running jobs have yet
   to use, and free disk leave
-  room; CPU never holds back a start. Critical or failed memory and disk
+  room; CPU never holds back an agent. Critical or failed memory and disk
   readings start none, and an idle machine starts one. Every caller sees the
   whole queue, each waiting entry with what held it back at the last pass.
   It accepts a positive fixed value or `none`; the global value limits the
@@ -563,11 +563,14 @@ instead of the PR delivery guidance below.
   `runner.enabled` is on: `machine.max_jobs` counts only jobs, and under
   `dynamic` a job is expected to use its recent runs' peak memory and, until it
   ends, reserves that less what its workspace uses at the latest sample; it
-  takes the one staggered start an agent would. A job is claimed only once admitted, runs
+  takes the one staggered start an agent would; beside running jobs it also
+  waits while the CPU, niced time included, is busy at the CPU warning level
+  over its window, or unread, while the first job never waits for the CPU.
+  A job is claimed only once admitted, runs
   the forge's runner (`forgejo-runner one-job --handle`, or a GitHub
   just-in-time runner whose workspace moves to the commit of the job it took
   before that job's first step) at nice 10, whose time CPU readings count as
-  idle, as a tracked execution in a disposable
+  idle except job admission's, as a tracked execution in a disposable
   workspace at its commit that starts from the seed, and ends only through the
   forge: stopping it cancels its run there, as its wrapper has the daemon do
   when a hangup or terminate signal reaches it, protection leaves it running,

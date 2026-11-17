@@ -1762,8 +1762,8 @@ limits the machine; the repository option `agent.max_heavy_running` limits each 
 with a global default like any other option, so one name never means both caps.
 The machine setting defaults to `dynamic`, which
 admits from measured memory and disk instead of a slot count, so the machine
-runs as many agents as it can without running out of either. CPU does not
-count: builds and tests use every core that is free, so a run's peak CPU is
+runs as many agents as it can without running out of either. CPU reserves
+nothing: builds and tests use every core that is free, so a run's peak CPU is
 not its cost, and more work on a busy CPU only runs slower, while memory and
 disk do not stretch and are what break a machine. Agents start one at a time
 and staggered; an agent reads files before it edits and compiles, so a recent
@@ -1793,6 +1793,12 @@ to use, its expected memory less what its workspace uses now: counting it
 only while it is young let each pass admit another job against memory the
 running ones would soon need. No count limits jobs by default, since the
 reservation already admits one only where its whole expected memory fits.
+A job beside running ones also waits while the CPU, niced time included,
+since jobs run niced, has stayed at or above the CPU warning level over its
+window, since further jobs on a saturated CPU only slow every job down; the
+first job never waits for it, so agents' load cannot starve jobs, and
+agents never do. The reading comes from the overload monitor's samples,
+taken while dynamic job admission applies, so no second sampler runs.
 Automatic restores are typed queue entries ordered with launches, queued when
 the stopped agent's processes are proven stopped. A restore of an agent stopped
 between turns waits for an update instead, holding no slot and holding back

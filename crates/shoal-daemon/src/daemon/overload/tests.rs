@@ -327,3 +327,36 @@ fn a_new_recovery_epoch_restarts_the_window_without_revoking() {
         Recovery::Publish(Some(1))
     );
 }
+
+#[tokio::test]
+async fn job_admission_reads_the_cpu_only_while_it_applies() {
+    let (_root, manager) = crate::daemon::test_support::manager().await;
+    let settings = crate::config::overload::Overload::default();
+    let window = Duration::from_secs(settings.warning.cpu_sustained_seconds);
+    let start = Instant::now();
+    let ticks = |n: u64| {
+        Ok(crate::process::load::CpuTicks {
+            used: 40 * n,
+            niced: 50 * n,
+            total: 100 * n,
+        })
+    };
+    let publish = |n: u32, admission| {
+        let at = start + Duration::from_secs(settings.poll_seconds) * n;
+        publish_busy_cpu(&manager, at, &settings, admission, &ticks(n.into()));
+    };
+    let polls = u32::try_from(window.as_secs() / settings.poll_seconds).unwrap();
+    for n in 0..=polls {
+        publish(n, true);
+    }
+    // Niced time counts as busy here, unlike to overload protection.
+    assert_eq!(manager.busy_cpu.percent(window), Some(90.0));
+    publish(polls + 1, false);
+    assert_eq!(manager.busy_cpu.percent(window), None);
+    let failed = Err(anyhow::anyhow!("unreadable"));
+    for n in 0..=polls {
+        publish(n, true);
+    }
+    publish_busy_cpu(&manager, start + window * 2, &settings, true, &failed);
+    assert_eq!(manager.busy_cpu.percent(window), None);
+}

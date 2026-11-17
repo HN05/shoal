@@ -1,8 +1,9 @@
-//! Dynamic admission from the daemon's memory and disk readings.
+//! Dynamic admission from the daemon's memory, disk and CPU readings.
 //!
 //! Agents and CI jobs start one at a time while memory and disk leave room
-//! for another. CPU does not limit them: builds and tests use every core that
-//! is free, and more work on a busy CPU only runs slower, while memory and
+//! for another. CPU holds back only a job beside running ones: builds and
+//! tests use every core that is free, so no start reserves CPU, but jobs
+//! piled on a saturated CPU only make each other slower, while memory and
 //! disk do not stretch. An agent first reads files and only later edits and
 //! compiles, so a recent start counts at the memory a settled agent's
 //! workspace uses until it settles itself. A job reaches its peak late, while
@@ -103,6 +104,34 @@ pub(crate) enum Room {
     /// warming agent uses what it is expected to and each job what it has
     /// yet to use, and what an agent's start is expected to use.
     Free { memory: u64, agent: u64 },
+}
+
+/// The machine's busy CPU, niced time included, averaged over the CPU
+/// warning's window, `None` until a reading spans it, and that warning's
+/// level, at which a job beside running ones waits.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Cpu {
+    pub busy: Option<f64>,
+    pub level: u8,
+}
+
+impl Cpu {
+    /// Whether a job fits beside `running` jobs: the first whatever the CPU
+    /// reads, so agents' load never starves jobs, and a further one only
+    /// below the level.
+    pub(crate) fn fits_job(self, running: u32) -> Result<(), HeldBy> {
+        if running == 0 {
+            return Ok(());
+        }
+        match self.busy {
+            None => Err(HeldBy::Reading),
+            Some(busy) if busy >= f64::from(self.level) => Err(HeldBy::Cpu {
+                busy: busy as u8,
+                level: self.level,
+            }),
+            Some(_) => Ok(()),
+        }
+    }
 }
 
 /// Why a start does not fit: what holds it, `None` for the stagger, which is

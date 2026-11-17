@@ -96,8 +96,12 @@ pub enum HeldBy {
     RepositoryLimit,
     /// The repository's `runner.permit` pool has no free permit.
     Permits,
-    /// A memory or disk reading is critical or missing.
+    /// A memory or disk reading is critical or missing, or, for a job beside
+    /// running ones, the CPU reading.
     Reading,
+    /// The machine's CPU, niced time included, was `busy` percent busy, at
+    /// or above the `level` percent a job beside running ones waits at.
+    Cpu { busy: u8, level: u8 },
     /// The proxy of a running agent of the same tool found its upstream
     /// under `limit`, which stands until `until`.
     UpstreamLimit {

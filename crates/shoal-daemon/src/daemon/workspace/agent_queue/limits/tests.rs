@@ -123,6 +123,7 @@ fn jobs_count_only_against_their_own_limits_and_share_the_dynamic_start() {
             fixed: Some(2),
             disk: None,
             room: None,
+            cpu: None,
         },
         ..limits(Some(1), &[])
     };
@@ -207,6 +208,7 @@ fn the_forge_is_read_while_any_room_is_left_for_a_job() {
             fixed: Some(2),
             disk: None,
             room: None,
+            cpu: None,
         },
         ..Limits::default()
     };
@@ -362,6 +364,7 @@ fn each_entry_passed_over_names_what_holds_it() {
             fixed: Some(1),
             disk: None,
             room: None,
+            cpu: None,
         },
         ..Limits::default()
     };
@@ -373,6 +376,7 @@ fn each_entry_passed_over_names_what_holds_it() {
             fixed: Some(2),
             disk: Some(1),
             room: None,
+            cpu: None,
         },
         ..Limits::default()
     };
@@ -403,6 +407,31 @@ fn each_entry_passed_over_names_what_holds_it() {
         held(&[], &queue, &dynamic(reading)),
         held_by(&[("a1", HeldBy::Reading), ("j1", HeldBy::Reading)])
     );
+    // Beside a running job, a busy CPU or none read holds a job, but no
+    // agent; with none running, a job starts whatever the CPU reads.
+    let cpu = |running, busy| Limits {
+        jobs: JobLimits {
+            running,
+            cpu: Some(capacity::Cpu { busy, level: 95 }),
+            ..dynamic(free(10 * GIB)).jobs
+        },
+        ..dynamic(free(10 * GIB))
+    };
+    let cpu_held = HeldBy::Cpu {
+        busy: 97,
+        level: 95,
+    };
+    assert_eq!(admit(&[], &queue, &cpu(1, Some(97.5)), false), ["a1"]);
+    assert_eq!(
+        held(&[], &queue, &cpu(1, Some(97.5))),
+        held_by(&[("j1", cpu_held)])
+    );
+    assert_eq!(
+        held(&[], &queue, &cpu(1, None)),
+        held_by(&[("j1", HeldBy::Reading)])
+    );
+    assert_eq!(admit(&[], &queue, &cpu(1, Some(90.0)), false), ["j1"]);
+    assert_eq!(admit(&[], &queue, &cpu(0, Some(100.0)), false), ["j1"]);
 }
 
 #[test]
