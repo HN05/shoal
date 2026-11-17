@@ -958,7 +958,8 @@ agent: the caller's terminal, a background place, the queue or an app only
 runs the recorded chat's agent, so a start that names nothing to link sends no
 link request. What linking warns of goes to the agent of the nearest space
 above the chat with one, else to the user's notifications, never only to a
-terminal the agent then takes over.
+terminal the agent then takes over, and a chat whose place never starts its
+agent is removed, since nothing ran in it, its failure told the same way.
 A chat an agent starts opens in a background place, since the agent cannot
 hand over its terminal, unless `start --here` runs it in the caller's own, and
 keeps the agent's scope until it runs the chat's agent in the chat's own

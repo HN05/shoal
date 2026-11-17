@@ -27,6 +27,7 @@ impl Manager {
     /// resolved, once the agent queue admits its agent: the chat is
     /// recorded below where it goes and linked first, and one whose agent
     /// waits starts from the queue. The worker acts with `caller`'s scope.
+    /// A chat whose place does not start its agent is removed.
     pub(crate) async fn launch_chat(
         &self,
         start: ChatStart,
@@ -45,7 +46,8 @@ impl Manager {
 
     /// Run the agent of the chat `launched` recorded for the resolved
     /// `start` in a background place, its agent taking the slot of the
-    /// admitted `entry`, with `caller`'s scope.
+    /// admitted `entry`, with `caller`'s scope, removing the chat when its
+    /// place does not start the agent.
     async fn start_in_place(
         &self,
         start: ChatStart,
@@ -63,8 +65,9 @@ impl Manager {
         if let Some(token) = &token {
             self.operations.revoke(token);
         }
-        if let (Err(error), Some(entry)) = (&started, &entry) {
-            self.free_failed_start(entry, error).await;
+        if let Err(error) = &started {
+            self.fail_chat_start(&chat.name, &chat.id, entry.as_ref(), error)
+                .await;
         }
         started.map(|started| warned(started, warnings))
     }
@@ -107,6 +110,22 @@ impl Manager {
         self.agent_queue.end_attach_keep(entry);
         if let Err(removal) = self.queue_remove(entry.as_str(), None).await {
             crate::daemon::log!("queued chat launch kept: {removal:#}");
+        }
+    }
+
+    /// End the start of the new chat `id`, named `name`, whose place did
+    /// not start its agent, with `error`: free the slot of its launch
+    /// `entry`, whose failure removes the chat, else remove it here.
+    async fn fail_chat_start(
+        &self,
+        name: &SpaceName,
+        id: &SpaceId,
+        entry: Option<&QueueEntryId>,
+        error: &anyhow::Error,
+    ) {
+        match entry {
+            Some(entry) => self.free_failed_start(entry, error).await,
+            None => self.fail_new_chat(name, id, &format!("{error:#}")).await,
         }
     }
 

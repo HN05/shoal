@@ -16,7 +16,7 @@ use super::{
 };
 use crate::{
     daemon::{notifications::NotificationKind, scope::Caller, workspace::Manager},
-    model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan, Workspace},
+    model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan, SpaceKind, Workspace},
     state::{QueueKind, QueueState},
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
@@ -498,48 +498,64 @@ impl Manager {
 
     /// End a starting entry that cannot start its agent and say why. An entry
     /// that already ended, such as with its removed workspace, has no slot
-    /// left to free.
+    /// left to free; a new chat its launch recorded, which nothing ran in,
+    /// goes with it.
     pub async fn fail_queue_entry(&self, id: &QueueEntryId, error: &str) -> Result<()> {
         let entry_id = id.to_owned();
         let entry = self
             .store
-            .run(move |db| {
-                let entry: Option<(SpaceName, bool, Option<SpaceId>)> = db
+            .write(move |tx| {
+                let entry: Option<(SpaceName, bool, Option<SpaceId>, bool)> = tx
                     .query_row(
-                        "SELECT name, state=?2, COALESCE(space_id,opens_workspace_id)
+                        "SELECT name, state=?2, COALESCE(space_id,opens_workspace_id),
+                            kind=?3 AND space_id IN (SELECT id FROM spaces WHERE kind=?4)
                             FROM agent_queue WHERE id=?1",
-                        params![entry_id, QueueState::Starting],
-                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                        params![
+                            entry_id,
+                            QueueState::Starting,
+                            QueueKind::Launch,
+                            SpaceKind::Chat
+                        ],
+                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
                     )
                     .optional()?;
-                db.execute(
+                tx.execute(
                     "DELETE FROM agent_queue WHERE id=?1 AND state=?2",
                     params![entry_id, QueueState::Starting],
                 )?;
                 Ok(entry)
             })
             .await?;
-        let (name, workspace) = match entry {
+        let (name, space, new_chat) = match entry {
             None => return Ok(()),
-            Some((_, false, _)) => bail!("queue entry is no longer starting"),
-            Some((name, true, workspace)) => (name, workspace),
+            Some((_, false, ..)) => bail!("queue entry is no longer starting"),
+            Some((name, true, space, new_chat)) => (name, space, new_chat),
         };
         self.fail_renewal_started_by(id, error).await;
-        if let Some(space) = &workspace {
+        if let Some(space) = &space {
             self.agent_settles.request(space);
         }
+        match (space, new_chat) {
+            (Some(chat), true) => self.fail_new_chat(&name, &chat, error).await,
+            (space, _) => self.tell_queue_failed(&name, space.as_ref(), error).await,
+        }
+        self.agent_queue.wake();
+        Ok(())
+    }
+
+    /// Tell that the launch named `name`, of `space` when it opened one,
+    /// did not start from the queue with `error`.
+    async fn tell_queue_failed(&self, name: &SpaceName, space: Option<&SpaceId>, error: &str) {
         // A launch that opened no workspace has its name alone, which no
         // workspace's identifies since names repeat.
         let (kind, message) = (
             NotificationKind::QueueFailed,
             format!("{name} did not start from the agent queue: {error}"),
         );
-        match workspace {
-            Some(workspace) => self.notify_space(&name, &workspace, kind, message).await,
-            None => self.notify(Some(&name), kind, message).await,
+        match space {
+            Some(space) => self.notify_space(name, space, kind, message).await,
+            None => self.notify(Some(name), kind, message).await,
         }
-        self.agent_queue.wake();
-        Ok(())
     }
 
     /// The agent a queued launch started takes over the slot its entry kept,

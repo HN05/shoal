@@ -1,6 +1,9 @@
 //! The chat a launch records before its agent runs anywhere: below where it
 //! goes, with the launch whose slot its agent takes attached, and linked to
-//! what it starts on, its starter told what that warned of.
+//! what it starts on, its starter told what that warned of; and the removal
+//! of one whose agent never started.
+use std::pin::Pin;
+
 use anyhow::{Context as _, Result};
 
 use crate::{
@@ -137,11 +140,32 @@ impl Manager {
         self.notify_space(&chat.name, &chat.id, kind, message).await;
     }
 
+    /// Remove the new chat `id`, named `name`, whose agent did not start
+    /// with `error`, telling its starter as its warnings are; one whose
+    /// agent runs after all stays.
+    pub(in crate::daemon) async fn fail_new_chat(
+        &self,
+        name: &SpaceName,
+        id: &SpaceId,
+        error: &str,
+    ) {
+        match self.chat_by_id(id).await {
+            Ok(Some(chat)) if !chat.running => {}
+            _ => return,
+        }
+        let message = format!("{name} did not start, so Shoal removed it: {error}");
+        (self.notify_space(name, id, NotificationKind::StartFailed, message)).await;
+        self.discard_new_chat(name, id).await;
+    }
+
     /// Remove the new chat `id`, named `name`, which nothing ran in.
     async fn discard_new_chat(&self, name: &SpaceName, id: &SpaceId) {
         let selector = SpaceSelector::id(id);
         let unsaved = UnsavedWork::taking(Vec::new());
-        let removed = self.remove_selected(&selector, unsaved, InspectionPolicy::GitOnly);
+        // Boxed, since a removal can end a queue entry whose failure removes
+        // its new chat.
+        let removed: Pin<Box<dyn Future<Output = Result<_>> + Send + '_>> =
+            Box::pin(self.remove_selected(&selector, unsaved, InspectionPolicy::GitOnly));
         if let Err(error) = removed.await {
             crate::daemon::log!("chat {name} kept without its agent: {error:#}");
         }

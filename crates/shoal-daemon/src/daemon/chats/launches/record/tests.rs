@@ -1,5 +1,6 @@
 use crate::{
     daemon::{
+        chats::launches::fake::FAILING,
         notifications::{Notification, NotificationKind},
         test_support::{git, global_config, manager, repository},
         workspace::Manager,
@@ -159,6 +160,52 @@ async fn a_link_that_fails_during_a_start_reaches_the_user() {
             .any(|notification| notification.message.contains(elsewhere)),
         "{warned:?}"
     );
+}
+
+/// Start a chat named `name` in `repo` whose place fails, and check that
+/// the daemon removed it and told the user why.
+async fn check_failed_place_removes_the_chat(manager: &Manager, repo: &Repository, name: &str) {
+    FAILING.lock().unwrap().push(name.into());
+
+    let started = manager.launch_chat(
+        start(Some(repo), name, &[ISSUE]),
+        LaunchSource::Manual,
+        None,
+    );
+    let error = started.await.unwrap_err();
+
+    assert!(
+        format!("{error:#}").contains("ended before the chat started"),
+        "{error:#}"
+    );
+    let chats = manager.chats().await.unwrap();
+    assert!(chats.iter().all(|chat| chat.name != name));
+    let failed = notified(manager, NotificationKind::StartFailed).await;
+    assert!(
+        failed
+            .iter()
+            .any(|notification| notification.message.contains(name)),
+        "{failed:?}"
+    );
+}
+
+/// A chat whose place fails is removed, its failure told, where no heavy
+/// slot tracks its agent.
+#[tokio::test]
+async fn an_untracked_chat_whose_place_fails_is_removed() {
+    let (temp, manager) = manager().await;
+    let repo = machine(&manager, &temp, false).await;
+    check_failed_place_removes_the_chat(&manager, &repo, "untracked").await;
+}
+
+/// A chat whose place fails is removed with the entry that held its
+/// agent's slot, which frees the slot.
+#[tokio::test]
+async fn a_chat_whose_place_fails_is_removed_with_its_slot() {
+    let (temp, manager) = manager().await;
+    let repo = machine(&manager, &temp, true).await;
+    check_failed_place_removes_the_chat(&manager, &repo, "tracked").await;
+    assert!(manager.queue_entries().await.unwrap().is_empty());
 }
 
 /// What starting a chat below a space whose agent runs warns of reaches

@@ -1854,8 +1854,9 @@ limits, a scoped caller's as its space's
 [`limits` permission](#permitted-actions) allows. The
 daemon records each chat under its name, linked to the issue it starts on,
 before its agent runs: what linking warns of reaches the agent of the nearest
-space above the chat with one, else your notifications. It records its
-agent's session as a
+space above the chat with one, else your notifications, and a chat whose
+place fails to start its agent is removed, its failure told the same way. It
+records its agent's session as a
 workspace agent's, the one the agent's session-start hook last reported, which
 [`shoal move`](#move-a-space-to-another-machine) continues on another machine.
 The chat runs while its agent runs, and stops when it exits or

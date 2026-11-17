@@ -31,9 +31,11 @@ trait NotificationKindExt {
 impl NotificationKindExt for NotificationKind {
     fn coordination(self) -> Option<Source> {
         match self {
-            Self::AgentExited | Self::AgentStopped | Self::TurnFailed | Self::StartWarned => {
-                Some(Source::Daemon)
-            }
+            Self::AgentExited
+            | Self::AgentStopped
+            | Self::TurnFailed
+            | Self::StartWarned
+            | Self::StartFailed => Some(Source::Daemon),
             Self::AgentMessage
             | Self::QuestionAsked
             | Self::QuestionWithdrawn
@@ -55,6 +57,7 @@ impl NotificationKindExt for NotificationKind {
                 | Self::HookFailed
                 | Self::QueueStarted
                 | Self::QueueFailed
+                | Self::StartFailed
                 | Self::RemovalFailed
         )
     }
