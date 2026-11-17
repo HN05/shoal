@@ -318,10 +318,7 @@ impl Manager {
         let placed = base.is_some() || new.path.is_some() || new.git_profile.is_some();
         // A new worktree waits for the preparation the start runs.
         let new = NewWorkspace {
-            pending: !matches!(
-                start,
-                WorkspaceStart::Workspace(_) | WorkspaceStart::Copy { .. }
-            ),
+            pending: !matches!(start, WorkspaceStart::Workspace(_)),
             ..new
         };
         match start {

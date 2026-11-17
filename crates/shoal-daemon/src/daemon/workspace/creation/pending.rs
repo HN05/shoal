@@ -3,12 +3,11 @@
 
 use super::{Configured, WorkspaceSource};
 use crate::{
-    daemon::workspace::Manager,
-    model::{Repository, Workspace},
-    state::WorkspaceState,
+    daemon::workspace::Manager, model::Workspace, protocol::CopySource, state::WorkspaceState,
 };
 use anyhow::{Result, bail, ensure};
 use rusqlite::{OptionalExtension, params};
+use shoal_ids::{checkpoint_numbers::CheckpointNumber, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::CommitId;
 
@@ -22,7 +21,8 @@ pub(in crate::daemon::workspace) struct PendingWorktree {
 }
 
 /// What a pending worktree checks out: a branch, as [`WorkspaceSource`]
-/// names it without what only a restore writes into it, or a commit.
+/// names it without what only a restore writes into it, a commit, or a
+/// copy's files.
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum PendingSource {
@@ -37,6 +37,43 @@ enum PendingSource {
     },
     /// Detached at `head`, as a workspace at a commit is.
     Commit { head: CommitId },
+    /// A copy of the files the live or removed workspace `workspace` has,
+    /// or its checkpoint `checkpoint` keeps, read when it is created.
+    Copy {
+        workspace: SpaceId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        checkpoint: Option<CheckpointNumber>,
+    },
+}
+
+/// How a pending worktree is created: checked out on a branch or at a
+/// commit, or as a copy of another workspace's files.
+enum Creation {
+    Branch(WorkspaceSource),
+    Commit(CommitId),
+    Copy(CopySource),
+}
+
+impl PendingSource {
+    /// How the worktree it checks out is created.
+    fn creation(self) -> Creation {
+        match self {
+            Self::New { base } => Creation::Branch(WorkspaceSource::New { base, parent: None }),
+            Self::Existing { branch, base } => Creation::Branch(WorkspaceSource::Existing {
+                branch,
+                base,
+                files: None,
+            }),
+            Self::Commit { head } => Creation::Commit(head),
+            Self::Copy {
+                workspace,
+                checkpoint,
+            } => Creation::Copy(CopySource {
+                workspace: SpaceSelector::Id(workspace),
+                checkpoint,
+            }),
+        }
+    }
 }
 
 impl PendingWorktree {
@@ -68,6 +105,24 @@ impl PendingWorktree {
             git_profile: None,
         }
     }
+
+    /// A copy of the files the workspace `workspace` has, or its
+    /// `checkpoint` keeps, with `git_profile`.
+    pub(in crate::daemon::workspace) fn copy(
+        workspace: SpaceId,
+        checkpoint: Option<CheckpointNumber>,
+        git_profile: Option<&str>,
+    ) -> Self {
+        let source = PendingSource::Copy {
+            workspace,
+            checkpoint,
+        };
+        let git_profile = git_profile.map(str::to_owned);
+        Self {
+            source,
+            git_profile,
+        }
+    }
 }
 
 impl Manager {
@@ -88,37 +143,23 @@ impl Manager {
             git_profile,
         } = self.claim_pending_worktree(&workspace).await?;
         let git_profile = git_profile.as_deref();
-        let result = match workspace.git_dir {
-            // An earlier try created it, then failed to configure it.
-            Some(_) => self.reconfigure_worktree(&workspace, git_profile).await,
-            None => (self.materialize_pending(&repo, &workspace, source, git_profile)).await,
-        };
-        self.settle_creation(&repo, &workspace, result, git).await
-    }
-
-    /// Create and configure the worktree `source` checks out for
-    /// `workspace`.
-    async fn materialize_pending(
-        &self,
-        repo: &Repository,
-        workspace: &Workspace,
-        source: PendingSource,
-        git_profile: Option<&str>,
-    ) -> Result<Configured> {
-        let source = match source {
-            PendingSource::New { base } => WorkspaceSource::New { base, parent: None },
-            PendingSource::Existing { branch, base } => WorkspaceSource::Existing {
-                branch,
-                base,
-                files: None,
-            },
-            PendingSource::Commit { head } => {
-                return self
-                    .materialize_commit_worktree(repo, workspace, &head, None)
+        let result = match source.creation() {
+            Creation::Copy(copied) => {
+                return (self.create_pending_copy(&repo, &workspace, &copied, git_profile, git))
                     .await;
             }
+            // An earlier try created it, then failed to configure it.
+            _ if workspace.git_dir.is_some() => {
+                self.reconfigure_worktree(&workspace, git_profile).await
+            }
+            Creation::Branch(source) => {
+                (self.materialize_worktree(&repo, &workspace, source, git_profile)).await
+            }
+            Creation::Commit(head) => {
+                (self.materialize_commit_worktree(&repo, &workspace, &head, None)).await
+            }
         };
-        (self.materialize_worktree(repo, workspace, source, git_profile)).await
+        self.settle_creation(&repo, &workspace, result, git).await
     }
 
     /// Configure the worktree an earlier creation of `workspace` left once

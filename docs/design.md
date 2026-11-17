@@ -152,8 +152,8 @@ it before, so the CLI and apps cannot drift. `shoal start`, `split` and apps ope
 workspace and start its preparation through one request, `StartWorkspace` or
 `StartSplit`: it refuses an agent that cannot run, an issue that is not open or
 a branch that is not a literal Git branch name before creating anything, records
-a new workspace on a branch or at a PR head, `preparing` without its worktree,
-or creates a copy or a split's with it, or reopens the one on the branch, PR head or record
+a new workspace, `preparing` without its worktree, or creates a split's with
+it, or reopens the one on the branch, PR head or record
 it names, assigns the issue, removing a new workspace it cannot assign, queues
 the detached agent the request asks for, with its mode, model, arguments,
 fork, issue and caller's place, as a scoped `start --agent` starts its agent,

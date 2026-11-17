@@ -13,7 +13,7 @@ use crate::{
     forge::numbers::PullNumber,
     model::{Repository, Workspace},
     protocol::{
-        CreationOptions, PullHead,
+        CopySource, CreationOptions, PullHead,
         operations::{
             Ended, Failure, LaunchRequest, OperationSpec, Report, StartedWorkspace, WorkspaceStart,
         },
@@ -104,6 +104,41 @@ async fn a_start_records_the_workspace_and_leaves_its_worktree_to_its_preparatio
     assert_eq!(
         git(&created.path, &["branch", "--show-current"]).trim(),
         "child"
+    );
+}
+
+#[tokio::test]
+async fn a_copy_start_leaves_its_worktree_to_its_preparation() {
+    let (root, manager) = manager().await;
+    let repository = registered(root.path(), &manager).await;
+    let source = (manager.create_workspace(&repository.id, "topic".into(), None, None, None))
+        .await
+        .unwrap();
+    std::fs::write(source.path.join("untracked"), "untracked\n").unwrap();
+    let opening = Opening {
+        start: WorkspaceStart::Copy {
+            source: CopySource {
+                workspace: SpaceSelector::id(&source.id),
+                checkpoint: None,
+            },
+            branch: None,
+            typed: false,
+        },
+        base: None,
+        new: Default::default(),
+        parent: None,
+    };
+    let started = start_opening(&manager, &repository, opening).await;
+    let workspace = *started.workspace;
+    assert!(workspace.pending_worktree);
+    assert!(!workspace.path.exists());
+    let _worker = fake::take(&started.operation);
+    let selector = SpaceSelector::id(&workspace.id);
+    let created = manager.create_pending_worktree(&selector).await.unwrap();
+    assert!(created.path.join("untracked").exists());
+    assert_eq!(
+        created.part.copied_from.unwrap().workspace.unwrap().id,
+        source.id
     );
 }
 

@@ -9,7 +9,11 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 use shoal_refs::{BranchName, CommitId};
 
-use super::{Manager, NewWorkspace, creation::Configured, restore::RestoredFiles};
+use super::{
+    Manager, NewWorkspace,
+    creation::{Configured, PendingWorktree},
+    restore::RestoredFiles,
+};
 use crate::{
     git,
     model::{
@@ -22,6 +26,7 @@ use crate::{
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
+use tokio::sync::OwnedMutexGuard;
 
 /// Where a copy goes.
 #[derive(Debug)]
@@ -152,7 +157,8 @@ impl Manager {
     }
 
     /// Create a copy of `source` in `repository` where `place` says, below
-    /// the space `new` names, and take its starting checkpoint. It runs
+    /// the space `new` names, and take its starting checkpoint; a pending
+    /// one's worktree waits in its record for its preparation. It runs
     /// setup like any workspace unless the caller skips it.
     pub(crate) async fn create_copy(
         &self,
@@ -171,13 +177,59 @@ impl Manager {
             source.name
         );
         let workspace = self.record_copy(&repo, &source, place, &new).await?;
+        if new.pending {
+            return self.workspace_by_id(&workspace.id).await;
+        }
         let result = self
             .materialize_copy_worktree(&repo, &workspace, &source, new.git_profile)
             .await;
-        let _creation = self.hold_creation(&workspace, git).await;
-        let seeded = self.seed_worktree(&repo, &workspace, result).await;
-        let started = self.record_copy_start(&workspace, &source, seeded).await;
-        self.record_creation(&workspace, started).await
+        self.settle_copy(&repo, &workspace, &source, result, git)
+            .await
+    }
+
+    /// Create the worktree of the recorded copy `workspace` with the files
+    /// of the workspace `copied` names as they are now, or give the one an
+    /// earlier try created them again, then settle its creation under the
+    /// repository's Git gate `git`.
+    pub(super) async fn create_pending_copy(
+        &self,
+        repo: &Repository,
+        workspace: &Workspace,
+        copied: &CopySource,
+        git_profile: Option<&str>,
+        git: OwnedMutexGuard<()>,
+    ) -> Result<Workspace> {
+        let source = match self.copy_source(copied).await {
+            Ok(source) => source,
+            Err(error) => return self.record_creation(workspace, Err(error)).await,
+        };
+        let result = match workspace.git_dir {
+            // An earlier try created it, then failed to fill or configure it.
+            Some(_) => {
+                self.refill_copy_worktree(workspace, &source, git_profile)
+                    .await
+            }
+            None => (self.materialize_copy_worktree(repo, workspace, &source, git_profile)).await,
+        };
+        self.settle_copy(repo, workspace, &source, result, git)
+            .await
+    }
+
+    /// Settle the creation of the copy `workspace` of `source`, whose
+    /// worktree was `materialized`, as [`Self::settle_creation`] does,
+    /// taking its starting checkpoint once the seed build is in.
+    async fn settle_copy(
+        &self,
+        repo: &Repository,
+        workspace: &Workspace,
+        source: &Source,
+        materialized: Result<Configured>,
+        git: OwnedMutexGuard<()>,
+    ) -> Result<Workspace> {
+        let _creation = self.hold_creation(workspace, git).await;
+        let seeded = self.seed_worktree(repo, workspace, materialized).await;
+        let started = self.record_copy_start(workspace, source, seeded).await;
+        self.record_creation(workspace, started).await
     }
 
     /// The workspace `request` names, live, or removed when it names a
@@ -299,7 +351,8 @@ impl Manager {
     }
 
     /// Record the copy of `source` where `place` says, with the source's
-    /// diff base. The caller holds the repository's Git gate.
+    /// diff base and, when `new` leaves it pending, how its worktree is
+    /// created. The caller holds the repository's Git gate.
     async fn record_copy(
         &self,
         repo: &Repository,
@@ -344,7 +397,12 @@ impl Manager {
         record.base_ref = source.base_ref.clone();
         record.setup_skipped = new.options.skip_setup;
         record.disposable = new.options.disposable;
-        self.insert_workspace(record, base_branch, new.parent.clone(), None, chosen)
+        let pending = new.pending.then(|| {
+            let id = source.workspace_id.clone();
+            PendingWorktree::copy(id, source.checkpoint(), new.git_profile)
+        });
+        let parent = new.parent.clone();
+        self.insert_workspace(record, base_branch, parent, pending, chosen)
             .await
     }
 
@@ -362,12 +420,31 @@ impl Manager {
                     .await
             }
             SourceFiles::Checkpoint { commit, .. } => {
-                let files = RestoredFiles {
-                    head: source.head.clone(),
-                    snapshot: commit.clone(),
-                };
+                let files = checkpoint_files(&source.head, commit);
                 self.check_out_copy(repo, workspace, &files, git_profile)
                     .await
+            }
+        }
+    }
+
+    /// Give the copy's worktree, which an earlier creation of `workspace`
+    /// left, its `source`'s files again, and configure it, once it verifies
+    /// as the one Git created for it.
+    async fn refill_copy_worktree(
+        &self,
+        workspace: &Workspace,
+        source: &Source,
+        git_profile: Option<&str>,
+    ) -> Result<Configured> {
+        self.verify_worktree(workspace).await?;
+        match &source.files {
+            SourceFiles::Worktree(path) => {
+                git::copy::refill(path, &workspace.path, &source.head).await?;
+                self.configure_clone(workspace, git_profile).await
+            }
+            SourceFiles::Checkpoint { commit, .. } => {
+                let files = checkpoint_files(&source.head, commit);
+                (self.configure_worktree(workspace, Some(&files), git_profile)).await
             }
         }
     }
@@ -415,9 +492,20 @@ impl Manager {
         // remove the worktree.
         self.record_worktree_identity(workspace).await?;
         git::copy::fill(source, path, head).await?;
+        self.configure_clone(workspace, git_profile).await
+    }
+
+    /// Apply `git_profile` to the copy `workspace`, which holds its live
+    /// source's files, ignored ones included, so it takes no seed build.
+    async fn configure_clone(
+        &self,
+        workspace: &Workspace,
+        git_profile: Option<&str>,
+    ) -> Result<Configured> {
         let config = self.config();
         if let Some(name) = git_profile {
-            crate::git_profile::apply(path, config.machine.git_profiles.profile(name)?).await?;
+            let profile = config.machine.git_profiles.profile(name)?;
+            crate::git_profile::apply(&workspace.path, profile).await?;
         }
         let settings = self.workspace_settings_from(&config, workspace).await?;
         Ok(Configured {
@@ -472,6 +560,15 @@ impl Manager {
                 Ok(())
             })
             .await
+    }
+}
+
+/// The files a copy of a checkpoint writes into its worktree at `head`,
+/// which the checkpoint's `commit` keeps.
+fn checkpoint_files(head: &CommitId, commit: &CommitId) -> RestoredFiles {
+    RestoredFiles {
+        head: head.clone(),
+        snapshot: commit.clone(),
     }
 }
 

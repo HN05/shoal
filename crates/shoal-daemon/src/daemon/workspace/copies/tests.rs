@@ -4,7 +4,7 @@ use super::*;
 use crate::{
     daemon::{
         scope::Caller,
-        test_support::{git, manager, repository},
+        test_support::{git, global_config, manager, repository},
     },
     removal::{InspectionPolicy, UnsavedWork},
 };
@@ -64,6 +64,39 @@ impl Fixture {
             .await
     }
 
+    /// Record a copy of the source's files, or of its `checkpoint`, on a new
+    /// branch with the Git profile `work`, which no config defines yet, and
+    /// fail to create its worktree, which Git creates before the profile is
+    /// looked up.
+    async fn failed_pending_copy(&self, checkpoint: Option<CheckpointNumber>) -> Workspace {
+        let source = CopySource {
+            workspace: SpaceSelector::id(&self.source.id),
+            checkpoint,
+        };
+        let new = NewWorkspace {
+            git_profile: Some("work"),
+            pending: true,
+            ..Default::default()
+        };
+        let repository = (self.source.repository()).into();
+        let place = CopyPlace::Branch(None);
+        let copy = (self.manager.create_copy(repository, &source, place, new))
+            .await
+            .unwrap();
+        assert!(copy.pending_worktree);
+        assert!(!copy.path.exists());
+        let selector = SpaceSelector::id(&copy.id);
+        let failed = self.manager.create_pending_worktree(&selector).await;
+        assert!(failed.is_err(), "{failed:?}");
+        let copy = self.manager.workspace_by_id(&copy.id).await.unwrap();
+        assert_eq!(copy.state, WorkspaceState::Failed);
+        assert!(copy.pending_worktree && copy.path.exists());
+        self.manager.publish_config(global_config(
+            "[machine.git_profiles.work]\nuser.email = 'work@example.invalid'\n",
+        ));
+        copy
+    }
+
     async fn unsaved_work(&self, workspace: &Workspace) -> Vec<String> {
         let check = (self.manager)
             .check_removal(&SpaceSelector::id(&workspace.id), InspectionPolicy::GitOnly)
@@ -108,6 +141,49 @@ async fn a_copy_takes_the_files_and_diff_base_of_its_source() {
         copied.head,
         git(&f.source.path, &["rev-parse", "HEAD"]).trim()
     );
+}
+
+#[tokio::test]
+async fn a_retried_copy_takes_its_sources_files_as_they_are_then() {
+    let f = Fixture::new().await;
+    let copy = f.failed_pending_copy(None).await;
+    let path = &f.source.path;
+    git(path, &["add", "--all"]);
+    git(path, &["commit", "-q", "-m", "later"]);
+    fs::write(path.join("untracked"), "changed later\n").unwrap();
+    let selector = SpaceSelector::id(&copy.id);
+    let copy = f.manager.create_pending_worktree(&selector).await.unwrap();
+    assert!(!copy.pending_worktree);
+    let head = git(path, &["rev-parse", "HEAD"]);
+    assert_eq!(git(&copy.path, &["rev-parse", "HEAD"]), head);
+    assert_eq!(git(&copy.path, STATUS), git(path, STATUS));
+    assert_eq!(
+        fs::read_to_string(copy.path.join("untracked")).unwrap(),
+        "changed later\n"
+    );
+    let email = git(&copy.path, &["config", "user.email"]);
+    assert_eq!(email.trim(), "work@example.invalid");
+    assert_eq!(copy.part.copied_from.unwrap().head, head.trim());
+}
+
+#[tokio::test]
+async fn a_retried_copy_of_a_checkpoint_writes_its_files_again() {
+    let f = Fixture::new().await;
+    let checkpoint = f
+        .manager
+        .take_checkpoint(&f.manager.named("topic").await, None)
+        .await
+        .unwrap();
+    let kept = git(&f.source.path, &["diff", "HEAD"]);
+    let copy = f.failed_pending_copy(Some(checkpoint.number)).await;
+    let selector = SpaceSelector::id(&copy.id);
+    let copy = f.manager.create_pending_worktree(&selector).await.unwrap();
+    assert!(!copy.pending_worktree);
+    assert_eq!(git(&copy.path, &["diff", "HEAD"]), kept);
+    let email = git(&copy.path, &["config", "user.email"]);
+    assert_eq!(email.trim(), "work@example.invalid");
+    let copied = copy.part.copied_from.unwrap();
+    assert_eq!(copied.checkpoint, Some(checkpoint.number));
 }
 
 #[tokio::test]
