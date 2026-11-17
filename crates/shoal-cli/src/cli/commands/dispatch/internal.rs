@@ -47,6 +47,9 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             resume,
         } => messages::wake(&ctx, agent, space.or(handed_over), resume).await,
         InternalCommand::SubagentStart => subagents::start(&ctx).await,
+        InternalCommand::Subagent { integration, space } => {
+            subagents::report(&ctx, space, integration).await
+        }
         InternalCommand::WorktreeCreate => worktree_hooks::create(&ctx).await,
         InternalCommand::WorktreeRemove => worktree_hooks::remove(&ctx).await,
         InternalCommand::PlaceWatch {

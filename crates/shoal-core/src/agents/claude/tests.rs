@@ -65,9 +65,13 @@ fn a_chat_agent_runs_a_workspace_agents_hooks_without_what_needs_a_worktree() {
     // It delivers messages, reports its turn's state and wakes as a
     // workspace's agent does.
     let mut shared = workspace["hooks"].as_object().unwrap().clone();
-    for event in ["WorktreeCreate", "WorktreeRemove", "SubagentStart"] {
+    for event in ["WorktreeCreate", "WorktreeRemove"] {
         assert!(shared.remove(event).is_some(), "{event}");
     }
+    // Every agent reports its subagents' starts; a workspace's also briefs
+    // them.
+    let brief = shared["SubagentStart"].as_array_mut().unwrap().pop();
+    assert!(brief.unwrap().to_string().contains("subagent-start"));
     assert_eq!(chat["hooks"], Value::Object(shared));
     // It may run the commands that finish its assignment, but has no branch.
     assert_eq!(chat["permissions"], workspace["permissions"]);

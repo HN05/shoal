@@ -2158,8 +2158,13 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
         "{}",
         args[1]
     );
+    // Its sandbox lets it reach the daemon, after its hooks.
+    let sandbox = (args.iter())
+        .position(|arg| arg == "sandbox_workspace_write.network_access=true")
+        .unwrap();
+    assert_eq!(args[sandbox - 1], "-c");
     // It runs a workspace agent's hooks without the subagent brief.
-    let hooks = args[2..10].chunks(2).map(|flag| {
+    let hooks = args[2..sandbox - 1].chunks(2).map(|flag| {
         assert_eq!(flag[0], "-c");
         flag[1].split_once('=').unwrap().0
     });
@@ -2169,16 +2174,17 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
             "hooks.PostToolUse",
             "hooks.SessionStart",
             "hooks.Stop",
+            "hooks.SubagentStart",
+            "hooks.SubagentStop",
             "hooks.UserPromptSubmit"
         ]
     );
-    // Its sandbox lets it reach the daemon.
-    assert_eq!(
-        args[10..12],
-        ["-c", "sandbox_workspace_write.network_access=true"]
-    );
+    let start = args
+        .iter()
+        .find(|arg| arg.starts_with("hooks.SubagentStart="));
+    assert!(!start.unwrap().contains("subagent-start"), "{start:?}");
     // Codex's default launcher appends its own options after forwarded ones.
-    assert_eq!(after_temp_dirs(&args[12..])[0], "--search");
+    assert_eq!(after_temp_dirs(&args[sandbox + 1..])[0], "--search");
     let codex = fs::read_to_string(fixture.root.path().join(".codex/config.toml")).unwrap();
     assert!(
         codex.contains(checkout.to_str().unwrap()) && codex.contains("trusted"),

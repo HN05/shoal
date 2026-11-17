@@ -5,13 +5,23 @@ use crate::agents::tests::WORKSPACE;
 
 #[test]
 fn a_chat_agent_runs_a_workspace_agents_hooks_without_the_subagent_brief() {
-    let chat = Codex.hook_args(AgentSpace::Chat, false).unwrap();
+    let mut chat = Codex.hook_args(AgentSpace::Chat, false).unwrap();
     let mut workspace = Codex.hook_args(WORKSPACE.into(), false).unwrap();
-    let brief = (workspace.iter())
-        .position(|arg| arg.to_str().unwrap().starts_with("hooks.SubagentStart="))
-        .unwrap();
-    // Its `-c` goes with it.
-    workspace.drain(brief - 1..=brief);
+    let starts = |args: &[OsString]| {
+        (args.iter())
+            .position(|arg| arg.to_str().unwrap().starts_with("hooks.SubagentStart="))
+            .unwrap()
+    };
+    let (in_chat, in_workspace) = (starts(&chat), starts(&workspace));
+    // Every agent reports its subagents' starts; a workspace's also briefs
+    // them.
+    let (chat_starts, workspace_starts) = (
+        chat.remove(in_chat).into_string().unwrap(),
+        workspace.remove(in_workspace).into_string().unwrap(),
+    );
+    assert!(chat_starts.contains("internal subagent --integration codex"));
+    assert!(!chat_starts.contains("subagent-start"));
+    assert!(workspace_starts.contains("subagent-start"));
     assert_eq!(chat, workspace);
 }
 

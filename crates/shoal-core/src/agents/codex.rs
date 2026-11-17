@@ -75,6 +75,10 @@ impl Integration for Codex {
         Wake::Prompt
     }
 
+    fn subagent_change(&self, event: &Value) -> Option<crate::protocol::SubagentChange> {
+        hooks::subagent_change(event)
+    }
+
     fn plan_change(&self, event: &Value) -> Option<shoal_protocol::progress::ProgressChange> {
         plan::change(event)
     }
@@ -99,14 +103,15 @@ fn shoal_overrides(space: AgentSpace) -> std::io::Result<Vec<OsString>> {
 }
 
 /// Codex takes each event's groups as a `-c hooks.<event>=` TOML value.
-/// Every agent reports its turn's state; a workspace's agent also gets the
-/// hook that briefs its subagents about the workspace.
+/// Every agent reports its turn's state and its subagents; a workspace's
+/// agent also gets the hook that briefs its subagents about the workspace.
 fn config_overrides(space: AgentSpace) -> std::io::Result<Vec<OsString>> {
     let shoal = hooks::shoal()?;
     let subagents = space.workspace().map(|_| hooks::subagent(&shoal));
     let groups = hooks::messages(&shoal)
         .chain(state_hooks(&shoal))
         .chain([hooks::plan(&shoal, IntegrationKind::Codex, plan::TOOLS)])
+        .chain(hooks::subagent_reports(&shoal, IntegrationKind::Codex))
         .chain(subagents);
     Ok(hooks::by_event(groups)
         .into_iter()

@@ -165,6 +165,17 @@ pub trait Integration: Sync {
         None
     }
 
+    /// The change to the agent's running subagents that `event`, from its
+    /// hook for a subagent's start or stop or its session's start, reports;
+    /// `None` for an agent without subagent hooks or an event that changes
+    /// none.
+    fn subagent_change(
+        &self,
+        _event: &serde_json::Value,
+    ) -> Option<crate::protocol::SubagentChange> {
+        None
+    }
+
     /// The change to the agent's plan that `event`, from its hook after a
     /// plan tool call, reports; `None` for an agent without plan hooks or
     /// an event that changes no plan.

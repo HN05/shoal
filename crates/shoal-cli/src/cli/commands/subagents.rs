@@ -1,19 +1,23 @@
-//! The `SubagentStart` hook. A subagent inherits its agent's scope, and under
+//! The subagent hooks. A subagent inherits its agent's scope, and under
 //! Codex its instructions and directory too, so without a brief it would act
 //! on its agent's workspace, finishing that assignment as the instructions
-//! say. The hook tells it which workspace it works in instead.
+//! say: the `SubagentStart` hook tells it which workspace it works in
+//! instead. Every agent's hooks also report its subagents' starts and
+//! stops, which keep it from sleep while it idles.
 use std::path::PathBuf;
 
 use anyhow::{Context as _, Result};
 use serde::Deserialize;
 
 use crate::{
+    ai::IntegrationKind,
     cli::{
         context::Context,
         ui::{self, Fallback},
     },
     model::Workspace,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// What `SubagentStart` passes besides the common fields.
 #[derive(Deserialize)]
@@ -31,6 +35,24 @@ pub(super) async fn start(ctx: &Context) -> Result<i32> {
         Ok(brief) => outln!("{}", super::messages::hook_output(&input, &brief)),
         Err(error) => eprintln!("shoal: subagent brief unavailable: {error:#}"),
     }
+    Ok(0)
+}
+
+/// Report the change to the running subagents that the hook event on stdin
+/// of an agent with `integration` names, for the space `space` names, else
+/// the agent's own. An event that changes none reports nothing.
+pub(super) async fn report(
+    ctx: &Context,
+    space: Option<SpaceSelector>,
+    integration: IntegrationKind,
+) -> Result<i32> {
+    let event = super::agent_state::hook_event();
+    let change = event.and_then(|event| crate::cli::agents::subagent_change(integration, &event));
+    let Some(change) = change else {
+        return Ok(0);
+    };
+    let space = ui::select_space(ctx, space, Fallback::OwnWorkspace).await?;
+    crate::client::agents::report_subagent(&ctx.paths, space, change).await?;
     Ok(0)
 }
 

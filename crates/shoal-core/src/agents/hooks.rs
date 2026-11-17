@@ -1,7 +1,9 @@
 //! Hook groups agents run Shoal through, in the event-and-group shape Claude
 //! Code and Codex share: `shoal messages --hook` delivers undelivered agent
 //! messages as context, `shoal internal agent-state` reports the turn
-//! state, and `shoal internal plan` the plan the agent's plan tools keep. Integrations choose the events and how the agent receives them.
+//! state, `shoal internal subagent` the subagents it runs, and
+//! `shoal internal plan` the plan the agent's plan tools keep. Integrations
+//! choose the events and how the agent receives them.
 use serde_json::{Map, Value, json};
 
 use crate::state::AgentState;
@@ -62,6 +64,53 @@ pub(crate) fn subagent(shoal: &str) -> (&'static str, Value) {
         "timeout": 10,
     }]});
     ("SubagentStart", group)
+}
+
+/// The groups that report the subagents an agent with `integration` starts
+/// and stops, and the session start that ends those of the session before,
+/// which the daemon counts as work while the agent idles. They never fail,
+/// as [`state`] does not.
+pub(crate) fn subagent_reports(
+    shoal: &str,
+    integration: crate::ai::IntegrationKind,
+) -> [(&'static str, Value); 3] {
+    let group = |matcher: Option<&str>| {
+        let mut group = json!({ "hooks": [{
+            "type": "command",
+            "command": format!(
+                "{shoal} internal subagent --integration {} >/dev/null 2>&1 || true",
+                crate::shell::quote(&[integration.as_str()])
+            ),
+            "timeout": 10,
+        }] });
+        if let Some(matcher) = matcher {
+            group["matcher"] = matcher.into();
+        }
+        group
+    };
+    [
+        ("SessionStart", group(Some(SESSION_START))),
+        ("SubagentStart", group(None)),
+        ("SubagentStop", group(None)),
+    ]
+}
+
+/// The change to the running subagents that `event` reports, in the shape
+/// Claude Code's and Codex's hook events share: a subagent's start or stop
+/// names its `agent_id`.
+pub(crate) fn subagent_change(event: &Value) -> Option<crate::protocol::SubagentChange> {
+    use crate::protocol::SubagentChange;
+    let agent_id = || event["agent_id"].as_str().map(str::to_owned);
+    match event["hook_event_name"].as_str()? {
+        "SessionStart" => Some(SubagentChange::SessionStarted),
+        "SubagentStart" => Some(SubagentChange::Started {
+            agent_id: agent_id()?,
+        }),
+        "SubagentStop" => Some(SubagentChange::Stopped {
+            agent_id: agent_id()?,
+        }),
+        _ => None,
+    }
 }
 
 /// The group that reports the session an agent starts, resumes or clears,

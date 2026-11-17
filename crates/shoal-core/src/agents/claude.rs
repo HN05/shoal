@@ -112,6 +112,10 @@ impl Integration for Claude {
         })
     }
 
+    fn subagent_change(&self, event: &Value) -> Option<crate::protocol::SubagentChange> {
+        hooks::subagent_change(event)
+    }
+
     fn plan_change(&self, event: &Value) -> Option<shoal_protocol::progress::ProgressChange> {
         plan::change(event)
     }
@@ -119,9 +123,9 @@ impl Integration for Claude {
 
 /// One `--settings` carries every hook; Claude Code merges it with the user's
 /// own settings, and a later `--settings` would replace it. Every agent
-/// reports its turn's state, is refused the timer tools whose timers its
-/// stops would end, and may run the commands that finish its
-/// assignment; a workspace's agent also gets the worktree and subagent hooks
+/// reports its turn's state and its subagents, is refused the timer tools
+/// whose timers its stops would end, and may run the commands that finish
+/// its assignment; a workspace's agent also gets the worktree and subagent hooks
 /// and tells auto mode that its branch is its own. For a proxied agent the
 /// wrapper merges these with any others into the one that names the
 /// proxy's URL, since these settings win over the user's own `env` and the
@@ -136,6 +140,7 @@ fn settings(space: AgentSpace) -> std::io::Result<Vec<OsString>> {
     let groups = hooks::messages(&shoal)
         .chain(state_hooks(&shoal))
         .chain([hooks::plan(&shoal, IntegrationKind::Claude, plan::TOOLS)])
+        .chain(hooks::subagent_reports(&shoal, IntegrationKind::Claude))
         .chain(subagents)
         .chain(wake_hooks(&shoal))
         .chain([timers::refused()]);

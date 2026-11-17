@@ -474,6 +474,15 @@ pub(in crate::cli) fn turn_failure(
     integration(kind).turn_failure(event)
 }
 
+/// The change to its running subagents that `event`, from a subagent hook
+/// of an agent with integration `kind`, reports.
+pub(in crate::cli) fn subagent_change(
+    kind: IntegrationKind,
+    event: &serde_json::Value,
+) -> Option<crate::protocol::SubagentChange> {
+    integration(kind).subagent_change(event)
+}
+
 /// The plan change that `event`, from the plan hook of an agent with
 /// integration `kind`, reports.
 pub(in crate::cli) fn plan_change(

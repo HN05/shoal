@@ -72,3 +72,62 @@ fn hooks_run_the_started_path_after_an_upgrade_replaces_its_binary() {
     fs::write(&path, "new").unwrap();
     assert_eq!(executable(&started).unwrap(), path);
 }
+
+#[test]
+fn subagent_hooks_report_starts_stops_and_session_starts_and_never_fail() {
+    let directory = tempfile::tempdir().unwrap();
+    let log = directory.path().join("calls");
+    let shoal = directory.path().join("shoal");
+    install_test_script(
+        &shoal,
+        format!("#!/bin/sh\necho \"$@\" >> '{}'\nexit 2\n", log.display()),
+    );
+    let quoted = crate::shell::quote(&[shoal.to_str().unwrap()]);
+    let groups = subagent_reports(&quoted, crate::ai::IntegrationKind::Claude);
+    let events: Vec<_> = groups.iter().map(|(event, _)| *event).collect();
+    assert_eq!(events, ["SessionStart", "SubagentStart", "SubagentStop"]);
+    // A compaction restarts the session mid-turn, leaving its subagents.
+    assert_eq!(groups[0].1["matcher"], SESSION_START);
+    for (_, group) in &groups {
+        let command = group["hooks"][0]["command"].as_str().unwrap();
+        let output = Command::new("sh").args(["-c", command]).output().unwrap();
+        assert!(output.status.success(), "{}", printed(&output));
+    }
+    let calls = fs::read_to_string(&log).unwrap();
+    assert!(
+        calls
+            .lines()
+            .all(|call| call == "internal subagent --integration claude"),
+        "{calls}"
+    );
+}
+
+#[test]
+fn subagent_events_name_the_change_to_the_running_subagents() {
+    use crate::protocol::SubagentChange;
+    let started = json!({"hook_event_name": "SubagentStart", "agent_id": "a1"});
+    let stopped = json!({"hook_event_name": "SubagentStop", "agent_id": "a1"});
+    let session = json!({"hook_event_name": "SessionStart", "source": "clear"});
+    assert_eq!(
+        subagent_change(&started),
+        Some(SubagentChange::Started {
+            agent_id: "a1".into()
+        })
+    );
+    assert_eq!(
+        subagent_change(&stopped),
+        Some(SubagentChange::Stopped {
+            agent_id: "a1".into()
+        })
+    );
+    assert_eq!(
+        subagent_change(&session),
+        Some(SubagentChange::SessionStarted)
+    );
+    for event in [
+        json!({"hook_event_name": "SubagentStop"}),
+        json!({"hook_event_name": "Stop", "agent_id": "a1"}),
+    ] {
+        assert_eq!(subagent_change(&event), None, "{event}");
+    }
+}

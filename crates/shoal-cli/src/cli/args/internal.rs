@@ -110,6 +110,18 @@ pub enum InternalCommand {
     /// Print which workspace a starting subagent works in as hook context;
     /// Shoal's Claude Code and Codex `SubagentStart` hooks run it.
     SubagentStart,
+    /// Report the start or stop of a subagent, or the session start, that
+    /// the hook event of an agent with this integration names; Shoal's agent
+    /// hooks call it.
+    Subagent {
+        /// The integration whose hook event stdin carries.
+        #[arg(long)]
+        integration: crate::ai::IntegrationKind,
+        /// Workspace or chat to report for; defaults to the chat this runs
+        /// in, else the caller's own or the current workspace.
+        #[arg(long)]
+        space: Option<SpaceSelector>,
+    },
     /// Split a child workspace for the worktree Claude Code creates and print
     /// its path; Shoal's Claude Code `WorktreeCreate` hook runs it.
     WorktreeCreate,
