@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result, bail, ensure};
 
 use crate::{
-    daemon::{links::actions::Place, scope::Caller, workspace::Manager},
+    daemon::{links::place::Place, scope::Caller, workspace::Manager},
     forge::{
         ForgeRepo,
         capability::Capability,

@@ -43,8 +43,6 @@ use shoal_protocol::space_names::SpaceSelector;
 mod accounts;
 mod open_issue;
 
-pub(in crate::daemon::links) use self::accounts::Place;
-
 impl Manager {
     /// Apply `action` to the item `input` names in the repository of
     /// `context`, or to the workspace's linked item of `kind`.

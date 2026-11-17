@@ -4,7 +4,7 @@
 //! `ci_approve` permission allows, as the agent account.
 use anyhow::{Context, Result};
 
-use super::actions::Place;
+use super::place::{Access, Place};
 use crate::{
     config::permissions::PermissionKey,
     daemon::{events, permissions::Action, scope::Caller, workspace::Manager},
@@ -33,7 +33,7 @@ impl Manager {
         pr: Option<ItemInput>,
         caller: Option<&Caller>,
     ) -> Result<RunsApproved> {
-        let place = self.place(context).await?;
+        let place = self.place(context, Access::Change).await?;
         let workspace = place.workspace();
         let workspace = workspace.as_ref();
         let forge = self.place_forge(&place).await?;

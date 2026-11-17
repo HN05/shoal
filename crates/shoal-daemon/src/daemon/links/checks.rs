@@ -3,7 +3,10 @@
 use anyhow::{Context as _, Result, bail};
 
 use crate::{
-    daemon::{links::space::LinkSpace, workspace::Manager},
+    daemon::{
+        links::{place::Access, space::LinkSpace},
+        workspace::Manager,
+    },
     forge::{
         ForgeRepo,
         capability::Capability,
@@ -83,7 +86,7 @@ impl Manager {
         name: &str,
     ) -> Result<CheckLog> {
         validate_check_name(name)?;
-        let place = self.place(context).await?;
+        let place = self.place(context, Access::Change).await?;
         let (forge, account) = self.place_forge_account(&place).await?;
         let space = self.context_space_if_any(context).await?;
         let pull = self.check_log_pr(space.as_ref(), &forge, selection).await?;

@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use shoal_ids::space_ids::SpaceId;
 
 use crate::{
-    daemon::{events, workspace::Manager},
+    daemon::{events, links::place::Access, workspace::Manager},
     forge::{
         ci::{CiActed, CiAction},
         items::{link::ItemKind, reference::ItemInput},
@@ -26,7 +26,7 @@ impl Manager {
         for check in &checks {
             validate_check_name(check)?;
         }
-        let place = self.place(context).await?;
+        let place = self.place(context, Access::Change).await?;
         let (forge, account) = self.place_change_account(&place).await?;
         let pull = (self.named_or_linked(item, place.space_id(), &forge, ItemKind::Pr)).await?;
         let (number, url) = (pull.pull()?, pull.to_string());

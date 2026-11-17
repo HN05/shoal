@@ -3,10 +3,13 @@
 //! reviewers and review threads.
 use anyhow::{Context, Result};
 
-use super::ReadPlace;
 use crate::{
     daemon::{
-        links::{actions::NOTHING_LINKED, space::LinkSpace},
+        links::{
+            actions::NOTHING_LINKED,
+            place::{Access, Place},
+            space::LinkSpace,
+        },
         scope::Caller,
         workspace::Manager,
     },
@@ -101,9 +104,9 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<LinkKind> {
         let account = self.read_account(caller);
-        match self.read_place(context).await? {
-            ReadPlace::Space(space) => self.space_number_kind(&space, number, &account).await,
-            ReadPlace::Checkout(checkout) => {
+        match self.place(context, Access::Read).await? {
+            Place::Space(space) => self.space_number_kind(&space, number, &account).await,
+            Place::Checkout(checkout) => {
                 let forge = self.checkout_forge(&checkout).await?;
                 Ok(forge.item_kind(&account, number).await?.into())
             }
@@ -181,8 +184,8 @@ impl Manager {
         item: Option<ItemInput>,
         caller: Option<&Caller>,
     ) -> Result<Vec<Reviewer>> {
-        let place = self.read_place(context).await?;
-        let forge = self.read_place_forge(&place).await?;
+        let place = self.place(context, Access::Read).await?;
+        let forge = self.place_forge(&place).await?;
         let pull = self.place_item(item, &place, &forge, ItemKind::Pr).await?;
         forge
             .reviewers(&self.read_account(caller), pull.pull()?)
@@ -199,8 +202,8 @@ impl Manager {
         comment: CommentId,
         caller: Option<&Caller>,
     ) -> Result<Thread> {
-        let place = self.read_place(context).await?;
-        let forge = self.read_place_forge(&place).await?;
+        let place = self.place(context, Access::Read).await?;
+        let forge = self.place_forge(&place).await?;
         let pull = self.place_item(item, &place, &forge, ItemKind::Pr).await?;
         forge.require(Capability::ResolveThreads)?;
         forge

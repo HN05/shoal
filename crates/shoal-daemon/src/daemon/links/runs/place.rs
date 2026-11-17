@@ -6,7 +6,11 @@ use anyhow::{Context, Result, ensure};
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 
 use crate::{
-    daemon::{links::actions::Place, scope::Caller, workspace::Manager},
+    daemon::{
+        links::place::{Access, Place},
+        scope::Caller,
+        workspace::Manager,
+    },
     forge::{
         ForgeRepo,
         items::{
@@ -93,7 +97,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<RunPlace> {
         let origin = match context {
-            Some(context) => Some(self.place(context).await?),
+            Some(context) => Some(self.place(context, Access::Change).await?),
             None => None,
         };
         if let Some(place) = &origin {

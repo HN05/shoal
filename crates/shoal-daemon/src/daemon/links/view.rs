@@ -2,7 +2,10 @@
 //! reports them now, with the logs of failed checks.
 use anyhow::Result;
 
-use super::{reads::ReadPlace, space::LinkSpace};
+use super::{
+    place::{Access, Place},
+    space::LinkSpace,
+};
 use crate::{
     daemon::{scope::Caller, workspace::Manager},
     forge::{
@@ -31,7 +34,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<Viewed> {
         let account = self.read_account(caller);
-        let place = self.read_place(context).await?;
+        let place = self.place(context, Access::Read).await?;
         let items = self.view_selection(&place, selection, &account).await?;
         // Nothing to read, so no forge is needed, as for a local repository.
         if !items.iter().any(|item| item.kind().item().is_some()) {
@@ -40,7 +43,7 @@ impl Manager {
                 views: Vec::new(),
             });
         }
-        let own = self.read_place_forge(&place).await?;
+        let own = self.place_forge(&place).await?;
         let mut views = self.read_views(&own, &account, &items, comments).await;
         // Logs are read as the agent account, whose token is the reading
         // one's for a scoped caller and the user's without one of its own.
@@ -56,16 +59,16 @@ impl Manager {
     /// or CI run URL of another repository selects that item.
     async fn view_selection(
         &self,
-        place: &ReadPlace,
+        place: &Place,
         selection: &Selection,
         account: &Account,
     ) -> Result<Vec<SelectedItem>> {
         match place {
-            ReadPlace::Space(space) => {
+            Place::Space(space) => {
                 let selection = self.classify_number(space, selection, account).await?;
                 Ok(self.select_items(space, &selection, true).await?.items)
             }
-            ReadPlace::Checkout(checkout) => {
+            Place::Checkout(checkout) => {
                 let item = (self.checkout_item(checkout, selection, true, account)).await?;
                 Ok(vec![item])
             }
