@@ -478,11 +478,13 @@ impl Manager {
     }
 
     /// The machine's busy CPU over the CPU warning's window, against the
-    /// warning's level, at which a job beside running ones waits.
+    /// warning's level, at which a job beside running ones waits; none read
+    /// once the overload monitor's sampling pauses.
     fn job_cpu(&self, overload: &Overload) -> capacity::Cpu {
         let window = Duration::from_secs(overload.warning.cpu_sustained_seconds);
+        let gap = crate::daemon::overload::sample_gap(overload);
         capacity::Cpu {
-            busy: self.busy_cpu.percent(window),
+            busy: (self.busy_cpu).percent(tokio::time::Instant::now(), window, gap),
             level: overload.warning.cpu_used_percent,
         }
     }

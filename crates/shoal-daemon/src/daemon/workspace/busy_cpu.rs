@@ -46,11 +46,15 @@ impl BusyCpu {
         }
     }
 
-    /// The busy percentage between the newest sample and the newest one at
-    /// least `window` older; `None` until the samples span the window.
-    pub(crate) fn percent(&self, window: Duration) -> Option<f64> {
+    /// The busy percentage at `now` between the newest sample and the newest
+    /// one at least `window` older; `None` until the samples span the window,
+    /// or once the newest is more than `gap` old, as while sampling pauses.
+    pub(crate) fn percent(&self, now: Instant, window: Duration, gap: Duration) -> Option<f64> {
         let samples = self.samples.lock().unwrap();
         let (newest, ticks) = samples.back()?;
+        if now.duration_since(*newest) > gap {
+            return None;
+        }
         let (_, earlier) = samples
             .iter()
             .rev()

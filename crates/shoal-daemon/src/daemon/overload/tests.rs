@@ -349,14 +349,22 @@ async fn job_admission_reads_the_cpu_only_while_it_applies() {
     for n in 0..=polls {
         publish(n, true);
     }
+    let gap = sample_gap(&settings);
+    let percent = |n: u32| {
+        let at = start + Duration::from_secs(settings.poll_seconds) * n;
+        manager.busy_cpu.percent(at, window, gap)
+    };
     // Niced time counts as busy here, unlike to overload protection.
-    assert_eq!(manager.busy_cpu.percent(window), Some(90.0));
+    assert_eq!(percent(polls), Some(90.0));
     publish(polls + 1, false);
-    assert_eq!(manager.busy_cpu.percent(window), None);
+    assert_eq!(percent(polls + 1), None);
     let failed = Err(anyhow::anyhow!("unreadable"));
     for n in 0..=polls {
         publish(n, true);
     }
     publish_busy_cpu(&manager, start + window * 2, &settings, true, &failed);
-    assert_eq!(manager.busy_cpu.percent(window), None);
+    assert_eq!(
+        manager.busy_cpu.percent(start + window * 2, window, gap),
+        None
+    );
 }

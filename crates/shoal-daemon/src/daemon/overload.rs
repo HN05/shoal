@@ -97,9 +97,11 @@ impl Monitor {
         memory: anyhow::Result<bool>,
         cpu: anyhow::Result<crate::process::load::CpuTicks>,
     ) -> Option<&'static str> {
-        if self.last_observation.replace(now).is_some_and(|previous| {
-            now.duration_since(previous) > Duration::from_secs(settings.poll_seconds * 3)
-        }) {
+        if self
+            .last_observation
+            .replace(now)
+            .is_some_and(|previous| now.duration_since(previous) > sample_gap(settings))
+        {
             self.memory = Sustained::default();
             self.cpu = Sustained::default();
             self.cpu_warning = Sustained::default();
@@ -269,9 +271,15 @@ fn publish_busy_cpu(
     manager.busy_cpu.observe(
         now,
         cpu.as_ref().ok().copied().filter(|_| admission),
-        Duration::from_secs(settings.poll_seconds * 3),
+        sample_gap(settings),
         Duration::from_secs(settings.warning.cpu_sustained_seconds),
     );
+}
+
+/// The longest one sample may follow another before the readings no longer
+/// count as continuous.
+pub(super) fn sample_gap(settings: &crate::config::overload::Overload) -> Duration {
+    Duration::from_secs(settings.poll_seconds * 3)
 }
 
 #[cfg(test)]
