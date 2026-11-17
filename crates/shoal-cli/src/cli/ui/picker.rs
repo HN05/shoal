@@ -185,7 +185,7 @@ pub fn pick_choice<T: Clone>(ctx: &Context, prompt: &str, choices: &[(T, &str)])
 /// and scrollbar columns.
 pub fn picker_width() -> Option<usize> {
     let terminal = std::fs::File::open("/dev/tty").ok()?;
-    Some(crate::cli::output::terminal_width(terminal)?.saturating_sub(3))
+    Some(shoal_core::execution::terminal_width(terminal)?.saturating_sub(3))
 }
 
 /// One picker input line: the id, a tab, and the label on one line.
