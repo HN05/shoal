@@ -162,14 +162,23 @@ pub(super) async fn handle(
                 .await?;
             Body::Ok
         }
-        AgentMethod::ReportAttached {
+        AgentMethod::ReportInput {
             workspace,
             execution,
-            attached,
+            at,
         } => {
-            manager
-                .report_attached(&workspace, &execution, attached)
-                .await?;
+            manager.report_input(&workspace, &execution, at).await?;
+            Body::Ok
+        }
+        AgentMethod::ReportTyping {
+            workspace,
+            execution,
+        } => {
+            manager.report_typing(&workspace, &execution).await?;
+            Body::Ok
+        }
+        AgentMethod::ReportAttach { space } => {
+            manager.record_user_interaction(caller, &space).await;
             Body::Ok
         }
         AgentMethod::AgentSession { workspace } => Body::AgentSession(
@@ -254,10 +263,12 @@ impl Scoped for AgentMethod {
             | AgentMethod::ReportUpstreamLimit { .. } => {
                 bail!("workspace processes cannot report what a proxy learns")
             }
-            // Only the agent's wrapper reads the place the agent runs in.
-            AgentMethod::ReportAttached { .. } => {
-                bail!("workspace processes cannot report whether a terminal shows an agent")
+            // Only the agent's wrapper reads the keys of its terminal.
+            AgentMethod::ReportInput { .. } => {
+                bail!("workspace processes cannot report the keys an agent reads")
             }
+            // Only the user attaches; a scoped report counts for nothing.
+            AgentMethod::ReportAttach { space } => Some(space),
             // A report claims the workspace for the reporting agent, which
             // would keep a child's events from reaching its coordinator.
             AgentMethod::SetAgentState { workspace, .. }
@@ -290,7 +301,11 @@ impl Scoped for AgentMethod {
             ),
             // The CLI types into the places of the agents it lists, which
             // it interrupts or continues.
-            AgentMethod::SpaceAgents { space } | AgentMethod::InterruptTurn { space, .. } => Some(
+            AgentMethod::SpaceAgents { space }
+            | AgentMethod::InterruptTurn { space, .. }
+            | AgentMethod::ReportTyping {
+                workspace: space, ..
+            } => Some(
                 manager
                     .workspace_below(
                         caller,

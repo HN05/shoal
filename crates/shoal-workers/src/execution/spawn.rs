@@ -41,9 +41,9 @@ pub(super) struct AgentLaunch {
     /// stop a launch until its agent starts.
     pub(super) fetched_key: Option<(Value, String)>,
     pub(super) proxy: Option<crate::proxy::Running>,
-    /// What tells whether a terminal shows the agent, which its wrapper
-    /// reports.
-    pub(super) shown: Option<super::attachment::Shown>,
+    /// Whether the agent reads keys from the wrapper's terminal, which the
+    /// wrapper reports.
+    pub(super) reads_terminal: bool,
 }
 
 /// How long a proxy's key command may run once the launch has registered.

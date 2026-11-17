@@ -582,8 +582,8 @@ instead of the PR delivery guidance below.
   file leaves out; explicit values win. Stop one connected tracked
   agent of a mode that is not `light`, a workspace's or a chat's, at a time
   through its wrapper, in the agent queue's rank reversed:
-  agents no terminal shows before shown ones, which still stop once no other is
-  left, idle before working ones, then the space the queue would start last;
+  the one the user interacted with longest ago, or never, first, then
+  idle before working ones, then the space the queue would start last;
   within a space the one idle longest, otherwise the newest; with configurable thresholds
   and timing; retain work and leases, notify with the pressure reason and recovery
   path, distinguish automatic recovery from manual or unavailable recovery, and never select disconnected

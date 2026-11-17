@@ -27,12 +27,10 @@ use shoal_core::{
     process, releases, repository, sessions, start_plan, terminal, tmp_dirs, tools, workers,
 };
 use shoal_forge_types as forge;
-use shoal_protocol::{agent, model, protocol, state};
+use shoal_protocol::{agent, model, protocol, state, time};
 
 #[cfg(test)]
 use shoal_core::test_support;
-#[cfg(test)]
-use shoal_protocol::time;
 
 #[cfg(test)]
 mod helper_tests {

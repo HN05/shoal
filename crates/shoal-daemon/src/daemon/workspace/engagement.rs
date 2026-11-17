@@ -4,7 +4,7 @@
 //! after a turn.
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceSelector;
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
@@ -111,12 +111,27 @@ fn interact(db: &Connection, id: &SpaceId, at: UnixTime) -> Result<()> {
     Ok(())
 }
 
+/// When the user last interacted with the agent of each space.
+fn interactions(db: &Connection) -> Result<HashMap<SpaceId, UnixTime>> {
+    Ok(db
+        .prepare(
+            "SELECT space_id,interacted_at FROM space_engagement WHERE interacted_at IS NOT NULL",
+        )?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 impl Manager {
     /// Record that the user interacted with the agent of the space `id` at
     /// `at`.
     pub(crate) async fn record_interaction(&self, id: &SpaceId, at: UnixTime) -> Result<()> {
         let id = id.to_owned();
         self.store.write(move |tx| interact(tx, &id, at)).await
+    }
+
+    /// When the user last interacted with the agent of each space.
+    pub(crate) async fn interactions(&self) -> Result<HashMap<SpaceId, UnixTime>> {
+        self.store.read(|db| interactions(db)).await
     }
 
     /// Record that the user interacted with the agent of the space

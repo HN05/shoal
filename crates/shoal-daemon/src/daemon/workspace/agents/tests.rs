@@ -472,8 +472,8 @@ async fn overload_stops_idle_agents_lowest_rank_first_before_working_ones() {
 }
 
 #[tokio::test]
-async fn overload_stops_attached_agents_only_after_the_others() {
-    use crate::state::AgentState;
+async fn overload_stops_the_agent_the_user_interacted_with_longest_ago_first() {
+    use crate::{state::AgentState, time::UnixTime};
     let (_root, manager) = manager().await;
     let repo = repository(_root.path(), "repo");
     let repo = manager
@@ -481,7 +481,12 @@ async fn overload_stops_attached_agents_only_after_the_others() {
         .await
         .unwrap();
     let mut executions = Vec::new();
-    for (name, attached) in [("attached", true), ("working", false), ("detached", false)] {
+    let interactions = [
+        ("recent", Some(2000)),
+        ("earlier", Some(1000)),
+        ("working", None),
+    ];
+    for (name, interacted) in interactions {
         let workspace = manager
             .create_workspace(&repo.id, name.into(), None, None, None)
             .await
@@ -514,14 +519,14 @@ async fn overload_stops_attached_agents_only_after_the_others() {
             )
             .await
             .unwrap();
-        manager
-            .report_attached(&SpaceSelector::id(&workspace.id), &id, attached)
-            .await
-            .unwrap();
+        if let Some(at) = interacted {
+            let at = UnixTime::from_seconds(at);
+            manager.record_interaction(&workspace.id, at).await.unwrap();
+        }
         executions.push(execution);
     }
-    // Idle, the attached agent would stop before the working one but for
-    // its attachment.
+    // Idle, the agents the user interacted with would stop before the
+    // working one but for their interactions.
     for index in [2, 1, 0] {
         assert!(
             manager

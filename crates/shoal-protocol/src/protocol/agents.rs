@@ -115,13 +115,22 @@ pub enum AgentMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         limit: Option<crate::executions::UpstreamLimit>,
     },
-    /// Whether a terminal shows the agent `execution` runs, which its
-    /// wrapper reads from the place it runs in and reports again
-    /// periodically, so a restarted daemon learns it too.
-    ReportAttached {
+    /// The agent `execution` runs read a key from its terminal at `at`, as
+    /// its wrapper finds by the terminal's access time.
+    ReportInput {
         workspace: SpaceSelector,
         execution: ExecutionId,
-        attached: bool,
+        at: crate::time::UnixTime,
+    },
+    /// Shoal types into the terminal of the agent `execution` runs now, so
+    /// the keys it reads next are not the user's.
+    ReportTyping {
+        workspace: SpaceSelector,
+        execution: ExecutionId,
+    },
+    /// The caller attached to the sessions of the space.
+    ReportAttach {
+        space: SpaceSelector,
     },
     /// Long-lived: answers once whether the workspace's agent is idle with
     /// undelivered messages or queued item updates matches `due`; with

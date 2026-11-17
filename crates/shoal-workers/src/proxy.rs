@@ -151,7 +151,7 @@ async fn relay(
 
 /// Send `report`, the JSON of a report a wrapper of an older release could
 /// not, as the `proxy-report` worker does. Only the wrapper's own reports,
-/// its proxy's and whether a terminal shows its agent, go through it.
+/// its proxy's and the keys its agent reads and Shoal types, go through it.
 pub async fn send_relayed(paths: &CommandPaths, report: &str) -> Result<i32> {
     use crate::protocol::AgentMethod;
     let report: AgentMethod = serde_json::from_str(report).map_err(anyhow::Error::from)?;
@@ -166,7 +166,8 @@ pub async fn send_relayed(paths: &CommandPaths, report: &str) -> Result<i32> {
                     execution: Some(_),
                     ..
                 }
-                | AgentMethod::ReportAttached { .. }
+                | AgentMethod::ReportInput { .. }
+                | AgentMethod::ReportTyping { .. }
         ),
         "the proxy-report worker sends only a wrapper's reports"
     );

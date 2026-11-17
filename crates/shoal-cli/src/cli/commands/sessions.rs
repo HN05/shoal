@@ -33,6 +33,8 @@ pub(super) async fn attach(
     );
     ensure!(ctx.on_terminal(), "attach requires a terminal");
     let target = Target::resolve(ctx, target).await?;
+    // Attaching is the user's interaction with the space's agent.
+    crate::client::agents::report_attach(&ctx.paths, SpaceSelector::id(target.id())).await?;
     let (target, session) = target.awake_session(ctx, session).await?;
     if terminal::attach(&target.number().to_string(), &session).await? {
         target.record_detach(ctx).await;

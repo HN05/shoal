@@ -29,10 +29,10 @@ use crate::{
     state::{AgentState, WorkspaceState},
 };
 
-mod attachment;
 mod chat_questions;
 mod forks;
 mod idle_stop;
+mod input;
 mod interrupts;
 mod make_room;
 mod restart;
@@ -220,9 +220,9 @@ pub(crate) struct Agent {
     update_hold: Option<OwnedRwLockReadGuard<()>>,
     /// The `shoal restart` of it in progress and those that ended.
     restarts: restart::Restarts,
-    /// Whether a terminal shows the agent, as its wrapper reported last;
-    /// `None` until it reports.
-    attached: Option<bool>,
+    /// When Shoal last started typing into its terminal, which makes the
+    /// keys it reads then Shoal's, not the user's.
+    typed_at: Option<crate::time::UnixTime>,
 }
 
 impl Agent {
@@ -528,7 +528,7 @@ impl Manager {
             stop: stop.clone(),
             update_hold: None,
             restarts: Default::default(),
-            attached: None,
+            typed_at: None,
         };
         connections
             .with_agents(|agents| agents.insert(id.clone(), agent))
@@ -1070,6 +1070,10 @@ impl Manager {
             Default::default()
         });
         let ranks = self.protection_ranks().await;
+        let interactions = self.interactions().await.unwrap_or_else(|error| {
+            log!("interactions unavailable to protection: {error:#}");
+            Default::default()
+        });
         self.executions
             .with_agents(|agents| {
                 let running =
@@ -1080,7 +1084,7 @@ impl Manager {
                             id,
                             space: &agent.workspace_id,
                             started: agent.started,
-                            attached: agent.attached == Some(true),
+                            interacted_at: interactions.get(&agent.workspace_id).copied(),
                         });
                 let selected: Vec<ExecutionId> = match select {
                     // Load stops heavy agents, a workspace's or a chat's.
@@ -1297,15 +1301,15 @@ struct Running<'a> {
     id: &'a ExecutionId,
     space: &'a SpaceId,
     started: Instant,
-    /// Whether a terminal shows it, so the user may be working with it.
-    attached: bool,
+    /// When the user last interacted with it.
+    interacted_at: Option<crate::time::UnixTime>,
 }
 
 /// Of the `running` agents, the one whose stop costs the least, by the
-/// queue's rank in reverse: one no terminal shows while there is one, then
-/// an idle one, then the space that `ranks` places last, the lowest
-/// priority and rank; within a space the one idle longest, otherwise the
-/// newest, which has the least progress to lose.
+/// queue's rank in reverse: the one the user interacted with longest ago,
+/// or never, then an idle one, then the space that `ranks` places last, the
+/// lowest priority and rank; within a space the one idle longest, otherwise
+/// the newest, which has the least progress to lose.
 fn first_to_stop<'a>(
     running: impl Iterator<Item = Running<'a>>,
     turns: &HashMap<ExecutionId, Turn>,
@@ -1316,7 +1320,7 @@ fn first_to_stop<'a>(
             let idle = turns.get(agent.id).filter(|turn| turn.idle());
             let place = ranks.get(agent.space).copied().unwrap_or(usize::MAX);
             (
-                agent.attached,
+                agent.interacted_at,
                 idle.is_none(),
                 std::cmp::Reverse(place),
                 idle.map(|turn| turn.since),

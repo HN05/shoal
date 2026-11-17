@@ -3,7 +3,8 @@
 //! after an interrupted turn, which the hook does not follow, or once the
 //! hook has stopped waiting. While it is idle so with undelivered updates,
 //! the wrapper types a fixed prompt into the terminal session it runs in,
-//! and the prompt's `UserPromptSubmit` hook delivers them.
+//! telling the daemon first so that it does not count the keys as the
+//! user's, and the prompt's `UserPromptSubmit` hook delivers them.
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use std::time::Duration;
@@ -56,7 +57,7 @@ pub(super) fn session(
 /// Wake the agent `plan` runs as `wake` says.
 pub(super) fn start(paths: &CommandPaths, plan: &ExecutionPlan, wake: Wake) -> Waker {
     let paths = paths.clone();
-    let workspace = plan.space.id.clone();
+    let (workspace, execution) = (plan.space.id.clone(), plan.id.clone());
     let hooked = (wake.when == PromptWake::WhenHookCannot).then(|| plan.id.clone());
     Waker(tokio::spawn(async move {
         // A host that needs the instance refuses prompts without it.
@@ -69,7 +70,10 @@ pub(super) fn start(paths: &CommandPaths, plan: &ExecutionPlan, wake: Wake) -> W
         };
         prompt_when_due(
             |due| await_wake(&paths, &workspace, due, hooked.clone()),
-            || session.submit(WAKE_PROMPT),
+            || async {
+                report_typing(&paths, &workspace, &execution).await;
+                session.submit(WAKE_PROMPT).await
+            },
         )
         .await
     }))
@@ -111,6 +115,17 @@ async fn await_wake(
             Err(_) => tokio::time::sleep(RETRY_INTERVAL).await,
         }
     }
+}
+
+/// Tell the daemon that the wrapper types into the terminal of `execution`
+/// in `workspace` now. A failed report stays quiet, as the wrapper's other
+/// reports do.
+async fn report_typing(paths: &CommandPaths, workspace: &SpaceId, execution: &ExecutionId) {
+    let report = AgentMethod::ReportTyping {
+        workspace: SpaceSelector::id(workspace),
+        execution: execution.clone(),
+    };
+    crate::proxy::send_report(paths, report).await;
 }
 
 /// A failed wait or prompt retries no sooner than this, so a persistent

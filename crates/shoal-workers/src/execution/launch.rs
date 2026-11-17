@@ -10,9 +10,9 @@ use std::{
 use anyhow::{Context, Result};
 
 use super::{
-    Mode, attachment,
+    Mode,
     completion::report_completion,
-    demo,
+    demo, input,
     link::Link,
     pause::{AfterPause, Halt, pause_agent, record_stopped_command, save_ending_agent},
     recovery,
@@ -113,10 +113,10 @@ impl TrackedLaunch {
         wake::session(integration, mode)
     }
 
-    /// Report whether a terminal shows the agent while it runs.
-    fn attachment(&self, paths: &CommandPaths) -> Option<attachment::Monitor> {
-        let shown = self.auth.as_ref()?.shown.clone()?;
-        Some(attachment::start(paths, &self.plan, shown))
+    /// Report the keys the agent reads from its terminal while it runs.
+    fn input(&self, paths: &CommandPaths) -> Option<input::Monitor> {
+        let reads = self.auth.as_ref()?.reads_terminal;
+        reads.then(|| input::start(paths, &self.plan))
     }
 
     /// Run the command once; a setup without a configured command has
@@ -135,7 +135,7 @@ impl TrackedLaunch {
         }
         // Prompts only while this child runs, which reports its state.
         let _waker = wake.map(|wake| wake::start(paths, &self.plan, wake));
-        let _attachment = self.attachment(paths);
+        let _input = self.input(paths);
         let (plan, recovery) = (&self.plan, self.recovery.as_ref());
         supervise(
             &mut self.link,
@@ -371,8 +371,7 @@ pub(super) async fn prepare_tracked_launch(
         crate::installed::remember_started();
     }
     let place = terminal_place(mode).await;
-    let mut auth =
-        prepare_agent_launch(paths, &workspace, mode, agent.as_ref(), place.as_ref()).await?;
+    let mut auth = prepare_agent_launch(paths, &workspace, mode, agent.as_ref()).await?;
     let recovery = if let Some(agent) = &agent {
         Some(super::restore::for_launch(paths, &workspace, agent).await)
     } else {
@@ -469,8 +468,7 @@ async fn prepare_restore(
     let workspace = &SpaceSelector::id(workspace);
     takeover::within_preparation_limit(async {
         let place = terminal_place(mode).await;
-        let auth =
-            prepare_agent_launch(paths, workspace, mode, Some(agent), place.as_ref()).await?;
+        let auth = prepare_agent_launch(paths, workspace, mode, Some(agent)).await?;
         let recovery = super::restore::for_launch(paths, workspace, agent).await;
         takeover::ensure_restorable(&recovery)?;
         Ok((place, auth, recovery))
@@ -606,7 +604,6 @@ async fn prepare_agent_launch(
     workspace: &SpaceSelector,
     mode: &Mode,
     agent: Option<&super::TrackedAgent>,
-    place: Option<&Origin>,
 ) -> Result<Option<AgentLaunch>> {
     let has_agent = agent.is_some();
     if !has_agent && !matches!(mode, Mode::Publish) {
@@ -651,9 +648,7 @@ async fn prepare_agent_launch(
         routed,
         fetched_key,
         proxy: None,
-        shown: has_agent
-            .then(|| attachment::Shown::of(&settings, place))
-            .flatten(),
+        reads_terminal: has_agent && input::has_terminal(),
     }))
 }
 

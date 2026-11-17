@@ -95,6 +95,25 @@ pub async fn interrupt_turn(
     request(daemon, AgentMethod::InterruptTurn { space, execution }).await
 }
 
+/// Tell the daemon that Shoal types into the terminal of `execution` of
+/// `space` now, so the keys its agent reads next are not the user's.
+pub async fn report_typing(
+    daemon: &impl Daemon,
+    space: SpaceSelector,
+    execution: ExecutionId,
+) -> Result<()> {
+    let method = AgentMethod::ReportTyping {
+        workspace: space,
+        execution,
+    };
+    request(daemon, method).await
+}
+
+/// Tell the daemon that the caller attached to the sessions of `space`.
+pub async fn report_attach(daemon: &impl Daemon, space: SpaceSelector) -> Result<()> {
+    request(daemon, AgentMethod::ReportAttach { space }).await
+}
+
 /// The agents connected in every workspace.
 pub async fn all(daemon: &impl Daemon) -> Result<Vec<RunningAgent>> {
     request(daemon, ExecutionMethod::ListAgents).await

@@ -82,6 +82,7 @@ async fn running_turns(ctx: &Context, spaces: &[Space]) -> Result<Vec<Interrupti
 /// Type the interrupt key, then record that it ended the turn.
 async fn interrupt_turn(ctx: &Context, interruption: &Interruption) -> Result<()> {
     let target = &interruption.target;
+    target.report_typing(ctx).await?;
     crate::terminal::send_keys(&target.place, interruption.key).await?;
     let (space, execution) = (target.space_id.clone(), target.execution.clone());
     crate::client::agents::interrupt_turn(&ctx.paths, SpaceSelector::id(&space), execution).await?;
@@ -148,7 +149,7 @@ impl Continuation {
     async fn submit_each(&self, ctx: &Context) -> ui::Report<Agent> {
         let mut report = ui::Report::new("continue");
         for target in &self.0 {
-            match crate::terminal::submit_prompt(&target.place, terminal::CONTINUE_PROMPT).await {
+            match target.continue_turn(ctx).await {
                 Ok(()) => report.done(
                     ctx,
                     &format!("Continued the turn of {}", target.described()),
@@ -223,6 +224,19 @@ impl Target {
     /// The agent and its space, as messages name them.
     fn described(&self) -> String {
         format!("{} in {}", name(self.agent.as_ref()), self.space)
+    }
+
+    /// Tell the daemon that Shoal types into the agent's terminal now, so it
+    /// does not count the keys as the user's.
+    async fn report_typing(&self, ctx: &Context) -> Result<()> {
+        let (space, execution) = (SpaceSelector::id(&self.space_id), self.execution.clone());
+        crate::client::agents::report_typing(&ctx.paths, space, execution).await
+    }
+
+    /// Submit the prompt that continues the agent's interrupted turn.
+    async fn continue_turn(&self, ctx: &Context) -> Result<()> {
+        self.report_typing(ctx).await?;
+        crate::terminal::submit_prompt(&self.place, terminal::CONTINUE_PROMPT).await
     }
 }
 

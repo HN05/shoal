@@ -226,12 +226,10 @@ then suggests `shoal restore --all`.
 
 At the configured memory threshold, the daemon asks one connected tracked agent
 of a mode that is not [light](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules) to stop, in the
-[agent queue's](#queue-order) order reversed: one you are not attached to while
-there is one, an idle one before a working one, then the one whose space ranks
-last, lowest priority first; within a space the one idle longest, otherwise the
-newest. Each agent's wrapper reports every 10
-seconds whether a terminal shows the agent, as `shoal status` marks its session
-`attached`; one running in a terminal no host serves always counts as attached.
+[agent queue's](#queue-order) order reversed: the one you
+[interacted](#sleep) with longest ago, or never, then an idle one before a
+working one, then the one whose space ranks last, lowest priority first; within
+a space the one idle longest, otherwise the newest.
 An agent is idle when its
 hooks last reported a finished turn, it runs no [subagent](#agent-state), and
 none of its processes run outside its process group, such as a background

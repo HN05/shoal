@@ -204,11 +204,12 @@ async fn the_proxy_report_worker_sends_only_a_wrappers_reports() {
         assert!(send_relayed(&paths, report).await.is_err(), "{report}");
     }
     assert!(send_relayed(&paths, "not json").await.is_err());
-    // After an upgrade, attachment reports reach the daemon this way too.
+    // After an upgrade, the keys an agent reads reach the daemon this way
+    // too.
     let (_daemon, methods) = daemon_speaking(&paths, crate::protocol::VERSION);
-    let attached = r#"{"report_attached":{"workspace":"w","execution":"e","attached":true}}"#;
-    assert_eq!(send_relayed(&paths, attached).await.unwrap(), 0);
-    assert_eq!(*methods.lock().unwrap(), ["report_attached"]);
+    let input = r#"{"report_input":{"workspace":"w","execution":"e","at":1700000000}}"#;
+    assert_eq!(send_relayed(&paths, input).await.unwrap(), 0);
+    assert_eq!(*methods.lock().unwrap(), ["report_input"]);
 }
 
 #[tokio::test]
