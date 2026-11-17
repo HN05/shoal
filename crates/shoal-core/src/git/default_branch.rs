@@ -12,22 +12,20 @@ pub enum DefaultBranchLookup {
     Discover,
 }
 
-/// The remote whose HEAD names the default branch: `origin`, or the only
-/// remote; `None` without remotes.
-pub async fn remote(repo: &Path) -> Result<Option<String>> {
-    let remotes = git::run(repo, &["remote"]).await?;
-    let remotes: Vec<_> = remotes.lines().collect();
+/// The remote among the repository's `remotes` whose HEAD names the
+/// default branch: `origin`, or the only remote; `None` without remotes.
+fn default_remote(remotes: &[String]) -> Result<Option<&str>> {
     if remotes.is_empty() {
         return Ok(None);
     }
-    if remotes.contains(&"origin") {
-        return Ok(Some("origin".to_owned()));
+    if remotes.iter().any(|remote| remote == "origin") {
+        return Ok(Some("origin"));
     }
     ensure!(
         remotes.len() == 1,
         "repository default remote is ambiguous (no origin); select a starting ref with --base"
     );
-    Ok(Some(remotes[0].to_owned()))
+    Ok(Some(&remotes[0]))
 }
 
 /// The default branch, with the remote whose HEAD names it.
@@ -46,16 +44,26 @@ pub async fn resolve(repo: &Path, lookup: DefaultBranchLookup) -> Result<BranchN
 /// Read cached remote HEAD. Branch refresh may discover and cache a missing one;
 /// cleanup only reads local metadata and never contacts a remote.
 pub async fn locate(repo: &Path, lookup: DefaultBranchLookup) -> Result<DefaultBranch> {
-    let Some(remote) = remote(repo).await? else {
+    locate_among(repo, &git::remote_names(repo).await?, lookup).await
+}
+
+/// The default branch as [`locate`] finds it, in the repository at `repo`
+/// whose remotes the caller listed as `remotes`.
+pub async fn locate_among(
+    repo: &Path,
+    remotes: &[String],
+    lookup: DefaultBranchLookup,
+) -> Result<DefaultBranch> {
+    let Some(remote) = default_remote(remotes)? else {
         let head = git::head_branch(repo, true, git::run)
             .await
             .context("local repository has no default branch; select a starting ref with --base")?;
         let name = head.context("repository HEAD does not name a local branch")?;
         return Ok(DefaultBranch { remote: None, name });
     };
-    let name = remote_head(repo, &remote, lookup).await?;
+    let name = remote_head(repo, remote, lookup).await?;
     Ok(DefaultBranch {
-        remote: Some(remote),
+        remote: Some(remote.to_owned()),
         name,
     })
 }

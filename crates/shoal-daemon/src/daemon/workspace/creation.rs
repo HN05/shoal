@@ -545,17 +545,20 @@ impl Manager {
                     .await?;
             return Ok(git::local_ref(&default));
         };
+        let remotes = git::remote_names(&repo.path).await?;
         // An explicit ref remains an escape hatch when remote default-branch
         // discovery is unavailable; only a remote branch it names is fetched.
+        let lookup = DefaultBranchLookup::Cached;
         if let Ok(default) =
-            crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await
+            crate::git::default_branch::locate_among(&repo.path, &remotes, lookup).await
         {
-            let default_ref = git::local_ref(&default);
-            if default == base || default_ref == base {
+            let default_ref = git::local_ref(&default.name);
+            if default.name == base || default_ref == base {
                 return Ok(default_ref);
             }
         }
-        if let Some((remote, branch)) = git::remote_branch(&repo.path, base).await? {
+        if let Some((remote, branch)) = git::remote_branch_among(&repo.path, base, &remotes).await?
+        {
             return git::fetch::configured_branch(&repo.path, &remote, &branch)
                 .await
                 .with_context(|| {

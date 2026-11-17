@@ -21,8 +21,8 @@ pub(crate) use queries::{
 };
 pub use queries::{
     checkout_dirs, configured_remote_url, current_branch, git_dir, head_and_branch, latest_subject,
-    log_stat, push_remote, remote_url, remotes, revision, symbolic_revision, verify_revision,
-    worktree_root,
+    log_stat, push_remote, remote_names, remote_url, remotes, revision, symbolic_revision,
+    verify_revision, worktree_root,
 };
 pub mod checkpoint;
 pub mod repo;
@@ -95,6 +95,28 @@ pub fn strip_remote(reference: &str) -> Option<&str> {
 /// branches or tags that Git would resolve first are not remote branches.
 /// The longest remote wins, since remote names may contain slashes.
 pub async fn remote_branch(repo: &Path, base: &str) -> Result<Option<(String, BranchName)>> {
+    let Some(qualified) = remote_branch_name(repo, base).await? else {
+        return Ok(None);
+    };
+    let remotes = remote_names(repo).await?;
+    Ok(split_remote_branch(qualified, &remotes))
+}
+
+/// The remote branch `base` names, as [`remote_branch`] finds it, among
+/// the `remotes` of the repository at `repo` the caller listed.
+pub async fn remote_branch_among(
+    repo: &Path,
+    base: &str,
+    remotes: &[String],
+) -> Result<Option<(String, BranchName)>> {
+    let name = remote_branch_name(repo, base).await?;
+    Ok(name.and_then(|qualified| split_remote_branch(qualified, remotes)))
+}
+
+/// `base` without its `refs/remotes/` or `remotes/` prefix, when it can
+/// name a remote branch: no local branch or tag shadows it and it is no
+/// revision expression.
+async fn remote_branch_name<'a>(repo: &Path, base: &'a str) -> Result<Option<&'a str>> {
     let short = base.strip_prefix("remotes/");
     let qualified = strip_remote(base).or(short);
     if qualified.is_none() {
@@ -109,13 +131,18 @@ pub async fn remote_branch(repo: &Path, base: &str) -> Result<Option<(String, Br
     if qualified.contains(['~', '^', ':', '?', '*', '[', '\\', ' ']) || qualified.contains("@{") {
         return Ok(None);
     }
-    let remotes = run_isolated(repo, &["remote"]).await?;
-    let mut remotes: Vec<&str> = remotes.lines().collect();
+    Ok(Some(qualified))
+}
+
+/// The remote among `remotes` and the branch on it that `qualified`, such
+/// as `origin/feature`, names; the longest remote wins.
+fn split_remote_branch(qualified: &str, remotes: &[String]) -> Option<(String, BranchName)> {
+    let mut remotes: Vec<&str> = remotes.iter().map(String::as_str).collect();
     remotes.sort_by_key(|remote| std::cmp::Reverse(remote.len()));
-    Ok(remotes.into_iter().find_map(|remote| {
+    remotes.into_iter().find_map(|remote| {
         let branch = qualified.strip_prefix(&format!("{remote}/"))?;
         (!branch.is_empty() && branch != "HEAD").then(|| (remote.to_owned(), branch.into()))
-    }))
+    })
 }
 
 /// A branch a remote advertises, with its commit.

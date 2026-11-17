@@ -172,6 +172,13 @@ pub async fn remotes(
     run(repo, &["remote"]).await
 }
 
+/// The names of the repository's remotes, for an operation that passes
+/// them to each lookup that picks among them.
+pub async fn remote_names(repo: &Path) -> Result<Vec<String>> {
+    let listing = remotes(repo, run).await?;
+    Ok(listing.lines().map(str::to_owned).collect())
+}
+
 /// The URLs the repository's remotes name, as configured, before any
 /// rewriting.
 #[derive(Debug, Default, PartialEq, Eq)]
