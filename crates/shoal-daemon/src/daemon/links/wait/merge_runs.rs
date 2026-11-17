@@ -28,7 +28,7 @@ use crate::{
 };
 use shoal_forge::{
     capability::CapabilityRequests,
-    ci::run_view::RunViewRequests,
+    ci::run_view::{MAX_RUNS, RunViewRequests},
     updates::{Snapshot, WatchRecord},
 };
 use shoal_protocol::events::MergeEvent;
@@ -36,9 +36,6 @@ use shoal_protocol::events::MergeEvent;
 /// How long after a watch saw a merge Shoal looks for the default branch's
 /// runs for its commit.
 pub(crate) const LOOKUP_WINDOW: Duration = Duration::from_secs(10 * 60);
-
-/// The most runs one listing of a merge commit's runs reads.
-const LISTED_RUNS: usize = 20;
 
 /// What the merge update of a PR whose merge commit the forge did not
 /// report adds.
@@ -145,7 +142,10 @@ impl Manager {
             branch: Some(lookup.branch.to_string()),
             workflow: None,
             commit: Some(lookup.commit.clone()),
-            limit: LISTED_RUNS,
+            // A lookup keeps the runs earlier listings linked, and the newest
+            // come first, so one listing misses a run only when more than
+            // it holds start between two polls.
+            limit: MAX_RUNS,
         };
         (forge.list_runs(&self.user_account(), &filter).await)
             .with_context(|| format!("could not list the CI runs of {}", lookup.commit))
