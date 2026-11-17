@@ -23,6 +23,7 @@ use crate::{
         },
         updates::{SnapshotState, UpdateKind},
     },
+    model::Space,
     time::UnixTime,
 };
 use shoal_forge::updates::Snapshot;
@@ -58,18 +59,14 @@ impl Manager {
         failure.map_or(Ok(()), Err)
     }
 
-    /// The spaces whose linked items the background poll reads: ready
-    /// workspaces and the chats of a repository, whether or not their agents
-    /// run. A chat without a repository records no links to read.
+    /// The spaces whose linked items the background poll reads: every
+    /// ready space of a repository, whether or not its agent runs. A space
+    /// without a repository records no links to read.
     pub(super) async fn polled_spaces(&self) -> Result<Vec<LinkSpace>> {
-        let workspaces = self.list_workspaces().await?.into_iter();
-        let ready = workspaces.filter(|w| w.state == crate::state::WorkspaceState::Ready);
-        let mut spaces: Vec<LinkSpace> = ready.map(LinkSpace::from).collect();
-        let chats = self.chats().await?.into_iter();
-        for chat in chats.filter(|chat| chat.repository_id.is_some()) {
-            spaces.push(LinkSpace::own(chat.into())?);
-        }
-        Ok(spaces)
+        let spaces = self.present_spaces().await?.into_iter();
+        (spaces.filter(|space| space.repository_id.is_some() && is_ready(space)))
+            .map(LinkSpace::own)
+            .collect()
     }
 
     /// Link the runs of the space's merges, then read the activity of its
@@ -290,6 +287,12 @@ fn saved_observation(
         )
         .optional()?;
     Ok(record.map(|text| serde_json::from_str(&text)).transpose()?)
+}
+
+/// Whether `space` is ready for work: a worktree once its setup readied it;
+/// a space without one has no setup to wait for.
+fn is_ready(space: &Space) -> bool {
+    (space.worktree()).is_none_or(|worktree| worktree.state == crate::state::WorkspaceState::Ready)
 }
 
 /// What a background poll saw change that Shoal acts on.
