@@ -410,6 +410,7 @@ impl Manager {
         preparing: Preparing,
         caller: Option<&Caller>,
     ) -> Result<StartedWorkspace> {
+        (self.ensure_start_agent_held(&workspace, &preparing, caller)).await?;
         let warnings = (self.assign_start_issue(&workspace, reused, issue, caller)).await?;
         // The entry is the workspace's before its setup can fail, so a
         // waiting launch frees its slot even once the caller is gone.
@@ -444,6 +445,25 @@ impl Manager {
             entry,
             warnings,
         })
+    }
+
+    /// Refuse the scoped `caller` the agent `preparing` queues in the
+    /// `workspace` a start opened where it would start with a permission
+    /// the caller does not hold: one it is given, or the value a key a
+    /// reopened workspace's agent was given and this one leaves out falls
+    /// back to.
+    async fn ensure_start_agent_held(
+        &self,
+        workspace: &Workspace,
+        preparing: &Preparing,
+        caller: Option<&Caller>,
+    ) -> Result<()> {
+        let (Some(caller), Some(agent)) = (caller, &preparing.agent) else {
+            return Ok(());
+        };
+        let mode = (agent.mode.clone()).unwrap_or(crate::config::modes::ModeName::DEFAULT);
+        let (giver, space) = (Some(&caller.space_id), SpaceSelector::id(&workspace.id));
+        (self.ensure_agent_held(giver, &space, &mode, &agent.narrowing)).await
     }
 
     /// Assign `issue` to the `workspace` a start opened, as `caller`'s

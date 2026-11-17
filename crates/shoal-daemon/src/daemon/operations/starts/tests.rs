@@ -274,6 +274,31 @@ async fn a_retry_configures_the_worktree_an_earlier_creation_left() {
     assert_eq!(email.trim(), "work@example.invalid");
 }
 
+/// Record `assignment` as the `--permission` given to the worker of
+/// `workspace`.
+async fn give(manager: &Manager, workspace: &Workspace, assignment: &str) {
+    let given = PermissionsConfig::assigned(&[assignment.to_owned()]).unwrap();
+    let given = serde_json::to_string(&given).unwrap();
+    let id = workspace.id.clone();
+    (manager.store)
+        .run(move |db| {
+            let sql = "UPDATE spaces SET mode='worker',narrowing=?2 WHERE id=?1";
+            Ok(db.execute(sql, rusqlite::params![id, given])?)
+        })
+        .await
+        .unwrap();
+}
+
+/// The scoped caller of `workspace`'s agent.
+fn scoped(workspace: &Workspace) -> Caller {
+    Caller {
+        space_id: workspace.id.clone(),
+        execution: None,
+        granted: None,
+        read_only: false,
+    }
+}
+
 #[tokio::test]
 async fn a_scoped_start_gives_its_agent_only_permissions_the_caller_holds() {
     let (root, manager) = manager().await;
@@ -288,22 +313,8 @@ async fn a_scoped_start_gives_its_agent_only_permissions_the_caller_holds() {
         )
         .await
         .unwrap();
-    let held = PermissionsConfig::assigned(&["push=deny".to_owned()]).unwrap();
-    let held = serde_json::to_string(&held).unwrap();
-    let id = parent.id.clone();
-    (manager.store)
-        .run(move |db| {
-            let sql = "UPDATE spaces SET mode='worker',narrowing=?2 WHERE id=?1";
-            Ok(db.execute(sql, rusqlite::params![id, held])?)
-        })
-        .await
-        .unwrap();
-    let caller = Caller {
-        space_id: parent.id.clone(),
-        execution: None,
-        granted: None,
-        read_only: false,
-    };
+    give(&manager, &parent, "push=deny").await;
+    let caller = scoped(&parent);
     let opening = Opening {
         start: WorkspaceStart::Name("child".into()),
         base: Some("HEAD".into()),
@@ -329,4 +340,56 @@ async fn a_scoped_start_gives_its_agent_only_permissions_the_caller_holds() {
     // Refused before anything was created.
     let workspaces = manager.list_workspaces().await.unwrap();
     assert_eq!(workspaces.len(), 1, "{workspaces:?}");
+}
+
+#[tokio::test]
+async fn a_scoped_start_reopening_a_workspace_keeps_what_its_agent_was_given() {
+    let (root, manager) = manager().await;
+    let repository = registered(root.path(), &manager).await;
+    let create = async |name: &str, parent: Option<&Workspace>| {
+        let workspace = manager
+            .create_workspace(&repository.id, name.into(), Some("HEAD".into()), None, None)
+            .await
+            .unwrap();
+        let parent = parent.map(|parent| parent.id.clone());
+        manager.assign_parent(&workspace.id, parent).await.unwrap();
+        workspace
+    };
+    // The caller holds `propose`; the user gave the space below it
+    // `direct`, and the workspace below that `propose`.
+    let top = create("top", None).await;
+    give(&manager, &top, "push=propose").await;
+    let middle = create("middle", Some(&top)).await;
+    give(&manager, &middle, "push=direct").await;
+    let reopened = create("reopened", Some(&middle)).await;
+    give(&manager, &reopened, "push=propose").await;
+    let opening = Opening {
+        start: WorkspaceStart::Branch("reopened".into()),
+        base: None,
+        new: Default::default(),
+        parent: None,
+    };
+    // Leaving `push` out would give it the space above's `direct`.
+    let agent = LaunchRequest {
+        mode: Some("worker".into()),
+        ..LaunchRequest::new(Some("claude".parse().unwrap()))
+    };
+    let preparing = Preparing {
+        issue: None,
+        pr: None,
+        agent: Some(Box::new(agent)),
+        waiting: None,
+        queue_entry: None,
+        env: None,
+    };
+    let refused = manager
+        .start_workspace(
+            (&repository.id).into(),
+            opening,
+            preparing,
+            Some(&scoped(&top)),
+        )
+        .await;
+    assert!(refused.is_err(), "{refused:?}");
+    assert!(manager.queue_entries().await.unwrap().is_empty());
 }
