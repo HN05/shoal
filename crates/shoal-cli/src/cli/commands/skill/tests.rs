@@ -303,6 +303,19 @@ fn refresh_updates_installed_skills_and_reports_user_changes_once() {
 }
 
 #[test]
+fn a_shoal_skill_in_any_directory_counts_as_installed() {
+    let root = tempfile::tempdir().unwrap();
+    let (empty, used) = (root.path().join("empty"), root.path().join("used"));
+    let directories = || [empty.clone(), used.clone(), root.path().join("missing")];
+    fs::create_dir_all(&empty).unwrap();
+    fs::create_dir_all(used.join("other-skill")).unwrap();
+    fs::write(skill_file(&used, "other-skill"), "other").unwrap();
+    assert!(!any_holds_shoal_skills(directories()).unwrap());
+    install(&skill_file(&used, SKILLS[0].0), "edited").unwrap();
+    assert!(any_holds_shoal_skills(directories()).unwrap());
+}
+
+#[test]
 fn diff_compares_the_installed_skill_with_this_version() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("SKILL.md");

@@ -137,7 +137,8 @@ nothing. Installation prints
 the shell initialization hint only when neither `.bashrc` nor `.zshrc` (under
 `ZDOTDIR` when set) contains an active initialization command, and names the
 default terminal host when it is not installed, suggesting one to install or an
-installed host to set as `terminal.default_host`. `shoal config
+installed host to set as `terminal.default_host`, and suggests `shoal skill
+install` when no AI tool has Shoal's skill. `shoal config
 install <name>` replaces the entire global file with a packaged template;
 `shoal config reset` installs `default`. Both move the current file to
 `config.toml.backup` (replacing an older backup) without asking. Templates are

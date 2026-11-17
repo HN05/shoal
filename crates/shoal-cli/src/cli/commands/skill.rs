@@ -164,6 +164,24 @@ pub(super) fn refresh_installed(state: &Path, json_output: bool) {
     }
 }
 
+/// Whether any configured skill directory holds a Shoal skill, which
+/// `refresh_installed` keeps current.
+pub(super) fn installed_anywhere() -> Result<bool> {
+    any_holds_shoal_skills(installed_directories()?)
+}
+
+/// Whether one of `directories` holds a Shoal skill, as `refresh` finds them.
+fn any_holds_shoal_skills(directories: impl IntoIterator<Item = PathBuf>) -> Result<bool> {
+    let bundled = skill_contents(None)?;
+    for directory in directories {
+        let record = Record::load(&directory)?.unwrap_or_default();
+        if holds_shoal_skills(&directory, &bundled, &record)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// Every configured skill directory, once; `refresh` skips those without Shoal skills.
 fn installed_directories() -> Result<BTreeSet<PathBuf>> {
     let home = crate::fsutil::home::home_dir()?;

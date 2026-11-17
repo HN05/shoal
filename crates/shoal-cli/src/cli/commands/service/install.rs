@@ -1,10 +1,11 @@
 //! `shoal daemon install`: setting up the OS service, and noting a missing
-//! terminal host or shell setup.
+//! terminal host, shell setup or agent skill.
 use crate::config_file::ConfigExt;
 use std::path::PathBuf;
 
 use anyhow::{Context as _, Result, ensure};
 
+use super::super::skill;
 use super::daemon::stop_daemon;
 use crate::client::output::daemon::Installed;
 use crate::{
@@ -100,6 +101,10 @@ pub(super) async fn install(
                 "\nAdd this line to ~/.zshrc or ~/.bashrc for directory navigation and tab completion:\n\n{}",
                 shell::INIT_COMMAND
             );
+        }
+        // Suggest the skill only when the lookup finds none.
+        if !skill::installed_anywhere().unwrap_or(true) {
+            outln!("\nInstall the agent skill with `shoal skill install`.");
         }
     }
     Ok(0)
