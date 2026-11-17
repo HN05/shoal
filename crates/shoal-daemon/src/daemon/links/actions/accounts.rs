@@ -1,6 +1,8 @@
 //! The forge and the accounts item actions go out with: the user's own
 //! logins for reads and the user's decisions, the review account for a
 //! scoped caller's verdicts, the agent account for the rest.
+use std::path::Path;
+
 use anyhow::{Context, Result};
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 
@@ -99,15 +101,20 @@ impl Manager {
             .naming_missing(Whose::Review.missing())
     }
 
+    /// The forge of the `origin` of the checkout or worktree at `path`.
+    pub(crate) async fn origin_forge(&self, path: &Path) -> Result<ForgeRepo> {
+        let remote = crate::repository::remote_url_from_path(path)
+            .await?
+            .context("forge actions need an origin remote")?;
+        self.forge(&remote).await
+    }
+
     /// The forge of the workspace's `origin`.
     pub(in crate::daemon::links) async fn workspace_forge(
         &self,
         workspace: &Workspace,
     ) -> Result<ForgeRepo> {
-        let remote = crate::repository::remote_url_from_path(&workspace.path)
-            .await?
-            .context("forge actions need an origin remote")?;
-        self.forge(&remote).await
+        self.origin_forge(&workspace.path).await
     }
 
     /// The repository `named` names, as OWNER/NAME on the forge of `own` or
@@ -132,10 +139,7 @@ impl Manager {
 
     /// The forge of the registered checkout's `origin`.
     pub(crate) async fn checkout_forge(&self, repository: &Repository) -> Result<ForgeRepo> {
-        let remote = crate::repository::remote_url_from_path(&repository.path)
-            .await?
-            .context("forge actions need an origin remote")?;
-        self.forge(&remote).await
+        self.origin_forge(&repository.path).await
     }
 
     /// The forge of the registered checkout's `origin`, with the agent

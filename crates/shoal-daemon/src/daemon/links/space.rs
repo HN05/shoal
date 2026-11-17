@@ -246,10 +246,7 @@ impl Manager {
 
     /// The forge of the space's `origin`.
     pub(crate) async fn space_forge(&self, space: &LinkSpace) -> Result<ForgeRepo> {
-        let remote = crate::repository::remote_url_from_path(space.origin_path())
-            .await?
-            .context("forge actions need an origin remote")?;
-        self.forge(&remote).await
+        self.origin_forge(space.origin_path()).await
     }
 }
 
