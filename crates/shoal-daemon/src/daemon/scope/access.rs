@@ -80,15 +80,6 @@ impl Manager {
         Ok(repositories)
     }
 
-    /// Whether the caller's own space is a chat.
-    pub(in crate::daemon) async fn caller_is_chat(&self, caller: &Caller) -> Result<bool> {
-        let id = caller.space_id.clone();
-        let kind = (self.store)
-            .run(move |db| crate::daemon::spaces::space_kind(db, &id))
-            .await?;
-        Ok(kind == Some(crate::model::SpaceKind::Chat))
-    }
-
     /// The repository of the caller's own space; none for a chat without
     /// one.
     pub(in crate::daemon) async fn caller_repository(
