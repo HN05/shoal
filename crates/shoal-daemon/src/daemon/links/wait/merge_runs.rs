@@ -20,7 +20,7 @@ use crate::{
         capability::Capability,
         ci::{run_action::Run, run_view::RunFilter},
         items::{
-            link::{ItemKind, LinkKind},
+            link::{ItemKind, LinkKind, Selection},
             reference::ItemRef,
         },
         updates::{SnapshotState, Update, UpdateKind},
@@ -152,13 +152,35 @@ impl Manager {
     /// Whether a PR the space `id` watches may have merged unseen: where
     /// `[pr] watch_merge_runs` is on, no read of Shoal's own has seen it
     /// merge or close, and the read that sees it merge starts the lookup of
-    /// its runs. Cleanup that finds the merge another way waits for it.
+    /// its runs. PR cleanup, which found every watched PR merged on the
+    /// forge, waits for that read.
     pub(crate) async fn merge_unseen(&self, id: &SpaceId) -> Result<bool> {
-        if self.configured_merge_target(id).await?.is_none() {
+        Ok(!self.unseen_prs(id).await?.is_empty())
+    }
+
+    /// Whether a PR the space `id` watches merged on the forge while no
+    /// read of Shoal's own has seen it, as [`Self::merge_unseen`] says,
+    /// reading those PRs from the forge: merged cleanup, which finds the
+    /// branch merged without them, waits only for one that did merge, so a
+    /// PR left open keeps nothing.
+    pub(crate) async fn merged_unseen(&self, id: &SpaceId) -> Result<bool> {
+        let unseen = self.unseen_prs(id).await?;
+        if unseen.is_empty() {
             return Ok(false);
         }
+        let reads = self.item_activity(unseen, &Selection::default()).await?;
+        let merged = |read: &Snapshot| read.state() == Some(SnapshotState::Merged);
+        Ok(reads.iter().any(|(_, read)| merged(read)))
+    }
+
+    /// The PRs the space `id` watches that no read of Shoal's own has seen
+    /// merge or close, where `[pr] watch_merge_runs` is on.
+    async fn unseen_prs(&self, id: &SpaceId) -> Result<Vec<ItemRef>> {
+        if self.configured_merge_target(id).await?.is_none() {
+            return Ok(Vec::new());
+        }
         let id = id.to_owned();
-        self.store.read(move |db| merge_unseen(db, &id)).await
+        self.store.read(move |db| unseen_prs(db, &id)).await
     }
 
     /// Whether the space `id` looks for the runs of a merge or follows one
@@ -258,19 +280,20 @@ pub(crate) fn awaits_merge_runs(db: &rusqlite::Connection, id: &SpaceId) -> Resu
     Ok(false)
 }
 
-/// Whether neither the background poll's baseline nor the watch cursor of
-/// the space `id` shows a PR it watches merged or closed.
-fn merge_unseen(db: &rusqlite::Connection, id: &SpaceId) -> Result<bool> {
+/// The PRs the space `id` watches that neither the background poll's
+/// baseline nor its watch cursor shows merged or closed.
+fn unseen_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
+    let mut unseen = Vec::new();
     for pull in linked_items(db, id, Some(ItemKind::Pr))? {
         let polled = observed_item(db, id, pull.url())?;
         let watched = cursor_record(db, id, pull.url())?;
         if !polled.is_some_and(|read| read.concluded())
             && !watched.is_some_and(|record| record.snapshot.concluded())
         {
-            return Ok(true);
+            unseen.push(pull);
         }
     }
-    Ok(false)
+    Ok(unseen)
 }
 
 /// The spaces with a lookup of a merge's runs.

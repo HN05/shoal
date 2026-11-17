@@ -90,7 +90,7 @@ impl Manager {
         }
         // Merged cleanup reads the merge from Git, which can show it before
         // the poll that starts the lookup of its runs.
-        if rule == Rule::Merged && self.merge_unseen(id).await? {
+        if rule == Rule::Merged && self.merged_unseen(id).await? {
             return Ok(Err(CleanupReason::MergeRuns));
         }
         if rule == Rule::Idle {

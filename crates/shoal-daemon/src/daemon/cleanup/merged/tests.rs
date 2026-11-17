@@ -616,16 +616,33 @@ async fn merged_cleanup_removes_a_chat_stopped_for_its_idle_period() {
     assert!(manager.chats().await.unwrap().is_empty());
 }
 
-#[tokio::test]
-async fn merged_cleanup_waits_for_a_poll_to_see_a_watched_prs_merge() {
-    let f = Fixture::new().await;
+/// The fixture's workspace, with its issue unlinked, watching a PR on a
+/// forge that reports it `merged` or open, in a repository with
+/// `[pr] watch_merge_runs` on, and its branch squashed onto the default
+/// branch. Returns the PR's URL and the forge.
+async fn watching_a_pr(f: &Fixture, merged: bool) -> (String, shoal_forge::test_support::Server) {
     f.unlink_issue().await;
+    let server = shoal_forge::test_support::Server::start(move |request| {
+        if request.line != "GET /api/v1/repos/team/repo/pulls/1" {
+            return (404, Vec::new(), Vec::new());
+        }
+        let state = if merged { "closed" } else { "open" };
+        let pull = serde_json::json!({"number": 1, "title": "Fix", "state": state,
+            "merged": merged, "merge_commit_sha": merged.then_some("squash"),
+            "head": {"ref": "topic", "sha": "head"}, "base": {"ref": "main"}});
+        (200, Vec::new(), pull.to_string().into())
+    });
+    let host = &server.host;
+    crate::forge::hosts::learn(host, crate::forge::backends::ForgeKind::Forgejo);
     crate::daemon::test_support::configure(
         &f.manager,
-        "[cleanup]\ngrace_minutes = 0\n\n[pr]\nwatch_merge_runs = true\n",
+        &format!(
+            "[machine.forges.\"{host}\"]\ntype = \"forgejo\"\nuser_token = \"user\"\n\n\
+             [cleanup]\ngrace_minutes = 0\n\n[pr]\nwatch_merge_runs = true\n"
+        ),
     )
     .await;
-    let pr = "http://127.0.0.1:1/team/repo/pulls/1";
+    let pr = format!("http://{host}/team/repo/pulls/1");
     let registration = crate::daemon::links::pr::Registration {
         kind: crate::daemon::links::pr::RegistrationKind::Watch {
             urls: vec![pr.parse().unwrap()],
@@ -645,7 +662,14 @@ async fn merged_cleanup_waits_for_a_poll_to_see_a_watched_prs_merge() {
         .await
         .unwrap();
     f.squash_merge();
-    assert!(f.kept_after(5).await, "the merge is unseen");
+    (pr, server)
+}
+
+#[tokio::test]
+async fn merged_cleanup_waits_for_a_poll_to_see_a_watched_prs_merge() {
+    let f = Fixture::new().await;
+    let (pr, _forge) = watching_a_pr(&f, true).await;
+    assert!(f.kept_after(5).await, "the PR's merge is unseen");
 
     // The poll sees the merge, without a merge commit to look up runs of.
     let id = f.workspace.id.clone();
@@ -663,5 +687,12 @@ async fn merged_cleanup_waits_for_a_poll_to_see_a_watched_prs_merge() {
         })
         .await
         .unwrap();
+    assert!(!f.kept_after(5).await);
+}
+
+#[tokio::test]
+async fn a_watched_pr_left_open_does_not_keep_a_merged_workspace() {
+    let f = Fixture::new().await;
+    let _forge = watching_a_pr(&f, false).await;
     assert!(!f.kept_after(5).await);
 }
