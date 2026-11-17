@@ -82,6 +82,8 @@ impl Items for Bitbucket {
             node_id: None,
             head_repository: text(&value["source"]["repository"]["full_name"]),
             body: text(body).unwrap_or_default(),
+            // Bitbucket counts a pull request's comments, not an issue's.
+            comments: value["comment_count"].as_u64(),
             author: text(&value["author"]["account_id"]),
             head_sha: text(&value["source"]["commit"]["hash"]).map(Into::into),
             base_sha: text(&value["destination"]["commit"]["hash"]).map(Into::into),

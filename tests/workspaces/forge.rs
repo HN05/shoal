@@ -40,12 +40,14 @@ pub(crate) fn github_open_items(
 }
 
 /// The REST answers for open issue `number` of GitHub's team/project,
-/// titled `title` and described by `body`, which no issue blocks.
+/// titled `title` and described by `body`, which no issue blocks and
+/// nobody commented on.
 pub(crate) fn github_issue(number: u64, title: &str, body: &str) -> serde_json::Map<String, Value> {
     let issue = format!("repos/team/project/issues/{number}");
     let responses = serde_json::json!({
         format!("GET {issue}"): {"body": {"number": number, "title": title, "state": "open",
-            "body": body, "labels": []}},
+            "body": body, "labels": [], "comments": 0}},
+        format!("GET {issue}/comments?per_page=100&page=1"): {"body": []},
         format!("GET {issue}/dependencies/blocked_by?per_page=100&page=1"): {"body": []},
     });
     responses.as_object().unwrap().clone()

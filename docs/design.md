@@ -3813,7 +3813,8 @@ command runs the daemon starts each followed item's cursor again from a new read
 what the item's discussion and details held by then is history, which `shoal view`
 shows, while its condition, such as failed checks, a conflict or its closing, is still
 reported. Polls that started in an earlier second than the read are dropped, since
-they may show the item before it. A watch of an item the space does not follow, or whose first read failed,
+they may show the item before it, and the agent's first message counts the issue's
+comments. A watch of an item the space does not follow, or whose first read failed,
 reports existing activity on its first read. Cancelling the watch discards that cursor.
 An omitted timeout keeps the watch unbounded; an explicit timeout remains a bounded
 polling interval.

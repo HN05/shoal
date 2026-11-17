@@ -22,6 +22,7 @@ fn the_diff_runs_from_the_merge_base_to_the_head() -> Result<()> {
         node_id: None,
         head_repository: None,
         body: String::new(),
+        comments: None,
         author: None,
         head_sha: Some("abc".into()),
         base_sha: Some("def".into()),

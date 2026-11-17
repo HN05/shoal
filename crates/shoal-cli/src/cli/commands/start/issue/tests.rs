@@ -19,6 +19,7 @@ fn a_chat_on_an_issue_is_named_after_its_title_without_asking() {
             .unwrap(),
         details: String::new(),
         labels: Vec::new(),
+        comments: None,
     };
     let plain = Topic::repository(&repo, &"plan".into());
     let home = crate::model::ChatHome::Checkout(&repo);

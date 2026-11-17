@@ -93,6 +93,7 @@ impl Items for GitLab {
             node_id: None,
             head_repository: (kind == ItemKind::Pr && same_project).then(|| repo.path.clone()),
             body: text(&value["description"]).unwrap_or_default(),
+            comments: value["user_notes_count"].as_u64(),
             author: text(&value["author"]["username"]),
             head_sha: text(&value["sha"]).map(Into::into),
             base_sha: None,

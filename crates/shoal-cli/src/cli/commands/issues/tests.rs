@@ -116,6 +116,7 @@ fn an_issues_subject_names_it_by_number_title_and_url() {
         url: "https://forge.example/team/repo/issues/34".parse().unwrap(),
         details: "body".into(),
         labels: Vec::new(),
+        comments: Some(2),
     };
     let subject = issue.subject();
     assert!(
@@ -128,7 +129,11 @@ fn an_issues_subject_names_it_by_number_title_and_url() {
         "{}",
         subject.text
     );
+    assert!(subject.text.contains("has 2 comments"), "{}", subject.text);
     assert_eq!(subject.issue.unwrap().number, 34);
     issue.details = " \n".into();
-    assert!(!issue.subject().text.contains("Issue description"));
+    issue.comments = None;
+    let unknown = issue.subject().text;
+    assert!(!unknown.contains("Issue description"));
+    assert!(!unknown.contains("The issue has"), "{unknown}");
 }

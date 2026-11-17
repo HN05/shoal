@@ -32,6 +32,7 @@ impl ForgeRepo {
             title: details.item.title,
             details: details.body,
             labels: details.item.labels,
+            comments: details.comments,
         })
     }
 

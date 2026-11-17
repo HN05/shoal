@@ -62,6 +62,9 @@ pub struct Current {
     /// `owner/repository` of a PR's head branch.
     pub head_repository: Option<String>,
     pub body: String,
+    /// How many comments its discussion holds, where the forge says, not
+    /// counting comments on a PR's code.
+    pub comments: Option<u64>,
     /// Who opened the item, named as reviewer changes name users.
     pub author: Option<String>,
     /// The commit a PR's head branch points to.

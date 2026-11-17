@@ -18,6 +18,7 @@ fn reverts_go_through_graphql_and_report_the_new_branch() {
         node_id: Some("PR_7".into()),
         head_repository: None,
         body: String::new(),
+        comments: None,
         author: None,
         head_sha: None,
         base_sha: None,

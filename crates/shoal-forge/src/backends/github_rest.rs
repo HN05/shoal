@@ -206,6 +206,7 @@ pub(crate) fn current(
         node_id: text(&value["node_id"]),
         head_repository: text(&value["head"]["repo"]["full_name"]),
         body: text(&value["body"]).unwrap_or_default(),
+        comments: value["comments"].as_u64(),
         author: text(&value["user"]["login"]),
         head_sha: text(&value["head"]["sha"]).map(Into::into),
         base_sha: text(&value["base"]["sha"]).map(Into::into),

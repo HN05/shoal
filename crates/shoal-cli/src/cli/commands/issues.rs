@@ -159,6 +159,8 @@ pub(in crate::cli) struct Issue {
     pub(super) url: ItemRef,
     pub(super) details: String,
     pub(in crate::cli) labels: Vec<String>,
+    /// How many comments it has, where the forge says.
+    pub(super) comments: Option<u64>,
 }
 
 impl Issue {
@@ -181,7 +183,10 @@ impl Issue {
         if !details.is_empty() {
             text.push_str(&format!("\nIssue description:\n{details}\n"));
         }
-        text.push_str("\n`shoal view` shows the issue with its comments and later edits.");
+        text.push_str(&format!(
+            "\n{}`shoal view` shows the issue with its comments and later edits.",
+            comment_count(self.comments)
+        ));
         crate::config::templates::Subject {
             text,
             issue: Some(crate::config::templates::IssueFields {
@@ -249,7 +254,19 @@ impl From<crate::forge::items::issue::IssueDetails> for Issue {
             url: issue.url,
             details: issue.details,
             labels: issue.labels,
+            comments: issue.comments,
         }
+    }
+}
+
+/// What an agent's first message says of how many `comments` the issue
+/// has, where the forge says: Shoal reports only those posted later.
+fn comment_count(comments: Option<u64>) -> String {
+    match comments {
+        Some(0) => "The issue has no comments. ".to_owned(),
+        Some(1) => "The issue has 1 comment. ".to_owned(),
+        Some(count) => format!("The issue has {count} comments. "),
+        None => String::new(),
     }
 }
 

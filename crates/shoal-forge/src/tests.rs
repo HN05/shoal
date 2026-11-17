@@ -27,6 +27,7 @@ fn pull(head_repository: Option<&str>) -> Current {
         node_id: None,
         head_repository: head_repository.map(str::to_owned),
         body: String::new(),
+        comments: None,
         author: None,
         head_sha: Some("a".repeat(40).into()),
         base_sha: None,

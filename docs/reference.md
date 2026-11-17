@@ -5208,7 +5208,8 @@ array, and a `messages` array when agent messages arrived. Linking an item, and
 an agent starting a new session, take its comments and edits so far as seen, which
 `shoal view` shows, while failed checks, conflicts and its state are still reported;
 a watch of an item the space does not follow reports its existing activity first.
-Watches share a cursor per workspace and item across restarts. Pending updates replay until the
+Watches share a cursor per workspace and item across restarts. The first message of
+an agent started on an issue counts the comments the issue already has. Pending updates replay until the
 CLI acknowledges successful output. Unlinking discards that item's cursor.
 `--timeout <seconds>` bounds the wait to 1–3600 seconds; without it, the wait is
 unbounded. A watch survives daemon restarts, waiting up to two minutes for a

@@ -2459,7 +2459,11 @@ fn start_runs_a_repositorys_own_mode_and_records_it() {
     ));
     let bin = fixture.root.path().join("bin");
     fs::create_dir_all(&bin).unwrap();
-    fixture.script_github(&github_issue(37, "Sort the queue", "Body."));
+    let mut issue = github_issue(37, "Sort the queue", "Body.");
+    let read = serde_json::json!({"body": {"number": 37, "title": "Sort the queue",
+        "state": "open", "body": "Body.", "labels": [], "comments": 2}});
+    issue.insert("GET repos/team/project/issues/37".into(), read);
+    fixture.script_github(&issue);
     install_test_script_with_mode(
         bin.join("fake-agent"),
         "#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$HOME/agent-args\"\nexit 7\n",
@@ -2493,6 +2497,7 @@ fn start_runs_a_repositorys_own_mode_and_records_it() {
         format!(
             "--prompt=Triage {branch}\n\nIssue #37: Sort the queue\n\
              https://github.com/team/project/issues/37\n\nIssue description:\nBody.\n\n\
+             The issue has 2 comments. \
              `shoal view` shows the issue with its comments and later edits.\n\nLabel #37.\0"
         )
     );
