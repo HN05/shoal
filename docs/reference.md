@@ -6431,8 +6431,8 @@ returns a `skill` field).
 
 Shoal records what it installed in `.shoal-skills.json` in each skill directory.
 After an upgrade, the next unscoped command updates each directory that still
-holds a Shoal skill: it adds new skills, replaces outdated copies and removes
-retired skills. A
+holds a Shoal skill without printing anything: it adds new skills, replaces
+outdated copies and removes retired skills. A
 skill changed or removed since Shoal installed it is kept and reported once;
 `shoal skill install` restores a removed skill and, in a terminal, asks whether
 to keep, replace or show the diff of each changed one; `--force` replaces them

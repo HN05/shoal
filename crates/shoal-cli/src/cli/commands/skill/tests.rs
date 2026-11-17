@@ -247,7 +247,7 @@ fn refresh_updates_installed_skills_and_reports_user_changes_once() {
     let read = |name| fs::read_to_string(skill_file(directory, name)).unwrap();
     // Refreshing never starts an installation.
     let outcome = refresh(directory, &bundled(), Mode::Refresh).unwrap();
-    assert!(!outcome.changed && outcome.installed.is_empty());
+    assert!(outcome.installed.is_empty());
     assert_eq!(fs::read_dir(directory).unwrap().count(), 0);
 
     // An upgrade replaces what an earlier version wrote.
@@ -259,14 +259,13 @@ fn refresh_updates_installed_skills_and_reports_user_changes_once() {
     fs::write(skill_file(directory, other), "edited").unwrap();
     record(directory, &[(other, Entry::copy(b"old"))]);
     let outcome = refresh(directory, &bundled(), Mode::Refresh).unwrap();
-    assert!(outcome.changed);
     assert_eq!(outcome.installed, [shoal]);
     assert_eq!(outcome.kept, [other]);
     assert_eq!(read(shoal), SKILLS[0].1);
     assert_eq!(read(other), "edited");
     // A kept skill is reported once by refresh and on every install.
     let outcome = refresh(directory, &bundled(), Mode::Refresh).unwrap();
-    assert!(!outcome.changed && outcome.kept.is_empty());
+    assert!(outcome.kept.is_empty());
     let outcome = refresh(directory, &bundled(), Mode::Install(Changed::Keep)).unwrap();
     assert_eq!(outcome.kept, [other]);
     assert_eq!(read(other), "edited");

@@ -131,7 +131,9 @@ pub(super) fn run(
 }
 
 /// Bring skills Shoal installed earlier up to date with this version, so an
-/// upgrade needs no `shoal skill install`. Never fails the calling command.
+/// upgrade needs no `shoal skill install`. Never fails the calling command,
+/// and says nothing unless the user has something to do, since it runs before
+/// every command, including those a shell runs as it starts.
 pub(super) fn refresh_installed(state: &Path, json_output: bool) {
     if crate::env::inherits_scope(state) || !crate::build::changes_user_files() {
         return;
@@ -149,9 +151,6 @@ pub(super) fn refresh_installed(state: &Path, json_output: bool) {
     for directory in directories {
         match refresh(&directory, &skills, Mode::Refresh) {
             Ok(outcome) if !json_output => {
-                if outcome.changed {
-                    eprintln!("Updated Shoal skills in {}", directory.display());
-                }
                 for name in outcome.kept {
                     eprintln!(
                         "Kept modified skill {name} at {}; run `shoal skill install --force` to replace it",
@@ -222,8 +221,6 @@ struct Outcome {
     /// Skills left as the user changed them: on install every one, on refresh
     /// those found changed by this call.
     kept: Vec<String>,
-    /// Whether this call changed a skill.
-    changed: bool,
 }
 
 /// Install `skills`, the bundled ones, in `directory` and remove recorded
@@ -276,7 +273,6 @@ impl Installation<'_> {
         }
         if found != Found::Current {
             install(&path, contents)?;
-            self.outcome.changed = true;
         }
         self.record.skills.insert(name.to_owned(), expected);
         self.outcome.installed.push(name);
@@ -321,7 +317,6 @@ impl Installation<'_> {
             let path = skill_file(self.directory, &name);
             if real_directory(&self.directory.join(&name))? && entry.matches(&path)? {
                 remove_skill(&self.directory.join(&name))?;
-                self.outcome.changed = true;
             } else if entry != Entry::Kept && exists(&path)? {
                 self.outcome.kept.push(name);
             }
