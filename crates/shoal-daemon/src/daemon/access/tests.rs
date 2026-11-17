@@ -21,7 +21,7 @@ async fn a_failed_file_names_the_directory() {
     assert!(format!("{error:#}").contains(&named), "{error:#}");
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn a_file_that_cannot_be_created_in_time_fails_at_the_limit() {
     let (release, blocked) = std::sync::mpsc::channel::<()>();
     within_limit(Path::new("/volume"), Duration::from_secs(2), move |_| {
