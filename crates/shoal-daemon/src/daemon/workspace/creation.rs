@@ -657,12 +657,11 @@ pub(super) async fn recorded_base(
     repo: &crate::model::Repository,
     base: &str,
 ) -> Result<(String, Option<String>)> {
-    let commit = git::resolve_commit(&repo.path, base, git::run_isolated).await?;
-    let reference = git::symbolic_revision(&repo.path, base, git::run_isolated).await?;
-    let reference = reference.trim_end_matches('\n');
+    let (commit, reference) =
+        git::resolve_named_commit(&repo.path, base, git::run_isolated).await?;
     Ok((
         commit.into(),
-        reference.starts_with("refs/").then(|| reference.to_owned()),
+        reference.starts_with("refs/").then_some(reference),
     ))
 }
 

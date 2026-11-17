@@ -39,7 +39,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use shoal_refs::{BranchName, CommitId};
 use tokio::process::Command;
 
@@ -499,6 +499,35 @@ pub async fn resolve_commit(
     .await?
     .trim()
     .into())
+}
+
+/// The commit `rev` peels to, as [`resolve_commit`] reads it, with the full
+/// ref name `rev` names, empty for a revision that names no ref, such as a
+/// commit or `main~1`: what [`symbolic_revision`] reads, from the same Git
+/// process.
+pub async fn resolve_named_commit(
+    repo: &Path,
+    rev: &str,
+    run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
+) -> Result<(CommitId, String)> {
+    // Without `--verify`, which takes one revision, Git would print an
+    // option-like argument back instead of resolving it.
+    ensure!(!rev.starts_with('-'), "{rev} is not a revision");
+    let peeled = format!("{rev}^{{commit}}");
+    let output = run(repo, &["rev-parse", &peeled, "--symbolic-full-name", rev]).await?;
+    // One revision prints its commit and at most its name; a range prints
+    // its other end as well, and negates a revision with `^`.
+    let lines: Vec<&str> = output.lines().collect();
+    let (commit, name) = match lines[..] {
+        [commit] => (commit, ""),
+        [commit, name] if !name.starts_with('^') => (commit, name),
+        _ => bail!("{rev} is not one revision"),
+    };
+    ensure!(
+        !commit.is_empty() && commit.bytes().all(|byte| byte.is_ascii_hexdigit()),
+        "{rev} is not a commit"
+    );
+    Ok((commit.into(), name.to_owned()))
 }
 
 /// Ask Git whether `name` is acceptable branch syntax, independently of the

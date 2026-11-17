@@ -489,19 +489,18 @@ impl Manager {
         base: Option<&str>,
     ) -> Result<Start> {
         let revision = self.new_branch_base(repo, base).await?;
-        let commit = match git::resolve_commit(&repo.path, &revision, git::run_isolated).await {
-            Ok(commit) => commit,
+        let resolve = || git::resolve_named_commit(&repo.path, &revision, git::run_isolated);
+        let (commit, reference) = match resolve().await {
+            Ok(resolved) => resolved,
             Err(error) => {
                 if git::fetch::with_tags(&repo.path, "origin").await.is_err() {
                     return Err(error.context(format!("{revision} is not a commit here")));
                 }
-                git::resolve_commit(&repo.path, &revision, git::run_isolated)
-                    .await
+                (resolve().await)
                     .with_context(|| format!("{revision} is not a commit here or on origin"))?
             }
         };
-        let reference = git::symbolic_revision(&repo.path, &revision, git::run_isolated).await?;
-        Ok(named_start(commit, base, reference.trim_end_matches('\n')))
+        Ok(named_start(commit, base, &reference))
     }
 }
 

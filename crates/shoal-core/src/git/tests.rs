@@ -151,6 +151,40 @@ async fn value_queries_distinguish_branches_tags_and_detached_head() {
 }
 
 #[tokio::test]
+async fn a_named_commit_reads_the_ref_a_revision_names_with_its_commit() {
+    use crate::test_support::{commit, git, repository};
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    let first = git(&repo, &["rev-parse", "HEAD"]).trim().to_owned();
+    std::fs::write(repo.join("second"), "").unwrap();
+    commit(&repo, "second");
+    git(&repo, &["tag", "-a", "v1", "-m", "annotated"]);
+    let head = git(&repo, &["rev-parse", "HEAD"]).trim().to_owned();
+    let named = async |rev: &str| resolve_named_commit(&repo, rev, run_isolated).await;
+    let resolved = |commit: &str, name: &str| (CommitId::from(commit), name.to_owned());
+    assert_eq!(
+        named("main").await.unwrap(),
+        resolved(&head, "refs/heads/main")
+    );
+    assert_eq!(named("v1").await.unwrap(), resolved(&head, "refs/tags/v1"));
+    assert_eq!(named("main~1").await.unwrap(), resolved(&first, ""));
+    assert_eq!(named(&first).await.unwrap(), resolved(&first, ""));
+    // A file of that name is no revision.
+    std::fs::write(repo.join("file"), "").unwrap();
+    for rev in [
+        "missing",
+        "file",
+        "HEAD^{tree}",
+        "--all",
+        "main~1..main",
+        "main...main~1",
+        "^main",
+    ] {
+        assert!(named(rev).await.is_err(), "{rev} resolved");
+    }
+}
+
+#[tokio::test]
 async fn background_ssh_disables_prompts_and_preserves_transport_selection() {
     let root = tempfile::tempdir().unwrap();
     let ssh = root.path().join("fake-ssh");
