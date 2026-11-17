@@ -6,6 +6,8 @@ use rusqlite::{Connection, params};
 use shoal_ids::repository_ids::RepositoryId;
 
 use super::{Manager, paths::real_directory_identity};
+
+pub(crate) mod holds;
 use crate::{
     daemon::{log, notifications::NotificationKind, store},
     git,
@@ -101,14 +103,21 @@ impl Manager {
     }
 
     async fn contribution_in_use(&self, id: &RepositoryId) -> Result<bool> {
+        if self.contribution_holds.held(id) {
+            return Ok(true);
+        }
         let id = id.to_owned();
         self.store.run(move |db| in_use(db, &id)).await
     }
 
     /// Record the removal of a contribution nothing is left of, in the
     /// transaction that checks it, so new work is either seen here or refused
-    /// afterwards; `false` when something is left.
+    /// afterwards; `false` when something is left. The caller holds the
+    /// registry gate, under which a running `shoal contribute` holds it.
     pub(super) async fn begin_contribution_removal(&self, repo: &Repository) -> Result<bool> {
+        if self.contribution_holds.held(&repo.id) {
+            return Ok(false);
+        }
         let id = repo.id.clone();
         let directory = real_directory_identity(&repo.path)?;
         self.store

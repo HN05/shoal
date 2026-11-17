@@ -5,6 +5,7 @@ use anyhow::Result;
 
 use super::super::{
     answer::Answer,
+    contribution_holds,
     permissions::Action,
     scope::{Caller, Scoped},
     workspace::Manager,
@@ -34,7 +35,16 @@ pub(super) async fn handle(
             Body::Repository(manager.register_repository(source, name, path).await?)
         }
         RepositoryMethod::RegisterContribution { source, name } => {
-            Body::Repository(manager.register_contribution(source, name).await?)
+            let manager = manager.clone();
+            return Ok(Answer::connection(move |stream, request_id, guard| {
+                contribution_holds::register(stream, request_id, manager, (source, name), guard)
+            }));
+        }
+        RepositoryMethod::HoldContribution { repository } => {
+            let manager = manager.clone();
+            return Ok(Answer::connection(move |stream, request_id, guard| {
+                contribution_holds::hold(stream, request_id, manager, repository, guard)
+            }));
         }
         RepositoryMethod::RenameRepository { repository, name } => {
             Body::Repository(manager.rename_repository(&repository, name).await?)
@@ -154,6 +164,9 @@ impl Scoped for RepositoryMethod {
     ) -> Result<Option<&mut SpaceSelector>> {
         let repository = match self {
             RepositoryMethod::ListRepositories => return Ok(None),
+            // It only keeps a registered repository from cleanup while its
+            // connection lives, resuming the hold of a registration.
+            RepositoryMethod::HoldContribution { .. } => return Ok(None),
             // The inbox lists them with the user's notifications.
             RepositoryMethod::FailingSyncs => {
                 let action = Action::new(PermissionKey::Notifications, "the failing syncs");

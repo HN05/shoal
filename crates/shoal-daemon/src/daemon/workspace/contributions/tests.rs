@@ -261,6 +261,31 @@ async fn an_ended_chats_files_keep_a_contribution_until_they_expire() {
 }
 
 #[tokio::test]
+async fn a_held_contribution_stays_until_its_connection_closes() {
+    use crate::protocol::{Body, Response};
+    let (root, manager) = manager().await;
+    let repo = contribution(&manager, root.path()).await;
+    let (mut client, server) = tokio::net::UnixStream::pair().unwrap();
+    let guard = Arc::new(tokio::sync::RwLock::new(())).read_owned().await;
+    let held = tokio::spawn(crate::daemon::contribution_holds::hold(
+        server,
+        1,
+        manager.clone(),
+        repo.id.clone(),
+        guard,
+    ));
+    let response: Response = crate::protocol::read(&mut client).await.unwrap();
+    assert!(matches!(response.body, Body::Ok), "{:?}", response.body);
+    // The fixture's grace period is over at once.
+    manager.sweep_contributions().await.unwrap();
+    assert!(registered(&manager, &repo).await);
+    drop(client);
+    held.await.unwrap().unwrap();
+    manager.sweep_contributions().await.unwrap();
+    assert!(!registered(&manager, &repo).await);
+}
+
+#[tokio::test]
 async fn a_removed_contribution_names_the_fork_it_leaves() {
     let (root, manager) = manager().await;
     let repo = contribution(&manager, root.path()).await;

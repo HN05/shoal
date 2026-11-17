@@ -15,7 +15,7 @@ async fn a_contribution_clones_a_url_and_keeps_an_existing_registration() {
         .register_repository(source.as_str().into(), None, None)
         .await
         .unwrap();
-    let again = manager.register_contribution(source, None).await.unwrap();
+    let (again, _hold) = manager.register_contribution(source, None).await.unwrap();
     assert_eq!(again.id, registered.id);
     assert!(!again.contribution);
 }

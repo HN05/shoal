@@ -72,6 +72,7 @@ pub(crate) use agent_queue::Grant;
 pub use agents::RestartWaits;
 pub(crate) use agents::{Pause, Protection};
 pub(crate) use branches::NewWorktreeOptions;
+pub(crate) use contributions::holds::ContributionHold;
 pub(crate) use copies::CopyPlace;
 pub(crate) use creation::{NewWorkspace, build_pending_in};
 pub(crate) use daemon_exit::Ending;
@@ -137,6 +138,8 @@ pub struct Manager {
     /// The busy CPU the overload monitor reads for job admission.
     pub(crate) busy_cpu: busy_cpu::BusyCpu,
     pub agent_queue: agent_queue::AgentQueue,
+    /// The contributions a running `shoal contribute` keeps from cleanup.
+    pub(crate) contribution_holds: contributions::holds::ContributionHolds,
     pub(crate) operations: Arc<crate::daemon::operations::Operations>,
     /// The scope tokens approved commands take their permission's actions
     /// with.
@@ -216,6 +219,7 @@ impl Manager {
             overload_recovery: Default::default(),
             busy_cpu: Default::default(),
             agent_queue: Default::default(),
+            contribution_holds: Default::default(),
             operations: Default::default(),
             grants: Default::default(),
             shutdown_stopped: Default::default(),

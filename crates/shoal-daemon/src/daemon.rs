@@ -14,6 +14,7 @@ pub(crate) mod checkout_sync;
 pub mod cleanup;
 mod connections;
 pub(crate) mod containers;
+mod contribution_holds;
 pub(crate) mod conversions;
 pub(crate) mod disk;
 pub mod environment;

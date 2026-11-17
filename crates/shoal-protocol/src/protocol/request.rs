@@ -136,6 +136,7 @@ impl Operation {
 
     pub fn lifetime(&self) -> Lifetime {
         match self {
+            Self::Repository(method) => method.lifetime(),
             Self::Workspace(method) => method.lifetime(),
             Self::Execution(method) => method.lifetime(),
             Self::Agent(method) => method.lifetime(),
@@ -148,7 +149,6 @@ impl Operation {
             Self::Review(method) => method.lifetime(),
             Self::Subscription(method) => method.lifetime(),
             Self::Daemon(_)
-            | Self::Repository(_)
             | Self::Chat(_)
             | Self::Removal(_)
             | Self::Recovery(_)

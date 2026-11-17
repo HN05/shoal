@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use shoal_ids::repository_ids::RepositoryId;
 
+use super::Lifetime;
+
 /// Requests about registered repositories, their configuration and their branches.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -11,10 +13,16 @@ pub enum RepositoryMethod {
         name: Option<String>,
         path: Option<std::path::PathBuf>,
     },
-    /// Clone a repository URL for `shoal contribute`.
+    /// Clone a repository URL for `shoal contribute`, then keep the
+    /// contribution from cleanup while the connection stays open.
     RegisterContribution {
         source: String,
         name: Option<String>,
+    },
+    /// Keep a contribution from cleanup while the connection stays open, as
+    /// its registration did before the daemon restarted.
+    HoldContribution {
+        repository: RepositoryId,
     },
     RenameRepository {
         repository: crate::repository::Selector,
@@ -79,4 +87,16 @@ pub enum RepositoryMethod {
         repository: RepositoryId,
         environment: std::collections::BTreeMap<String, String>,
     },
+}
+
+impl RepositoryMethod {
+    pub fn lifetime(&self) -> Lifetime {
+        match self {
+            // Never sent again: once answered, its hold resumes as
+            // `HoldContribution`.
+            Self::RegisterContribution { .. } => Lifetime::Open,
+            Self::HoldContribution { .. } => Lifetime::Resumed,
+            _ => Lifetime::Reply,
+        }
+    }
 }

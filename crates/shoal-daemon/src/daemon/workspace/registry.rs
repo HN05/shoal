@@ -56,14 +56,18 @@ impl Manager {
 
     /// `shoal contribute`: clone a repository URL as a contribution, which
     /// pushes to the user's fork when the user cannot push to the repository.
-    /// An existing registration is returned as it is.
-    pub async fn register_contribution(
+    /// An existing registration is returned as it is. The hold keeps it
+    /// from cleanup from the moment it is registered.
+    pub(crate) async fn register_contribution(
         &self,
         source: String,
         name: Option<String>,
-    ) -> Result<Repository> {
-        self.register(source.into(), name, None, Registration::Contribution)
-            .await
+    ) -> Result<(Repository, super::ContributionHold)> {
+        let _guard = self.gates.lock_registry().await;
+        let registration = Registration::Contribution;
+        let repo = (self.register_locked(source.into(), name, None, registration)).await?;
+        let hold = self.contribution_holds.hold(&repo.id);
+        Ok((repo, hold))
     }
 
     async fn register(
@@ -73,10 +77,21 @@ impl Manager {
         clone_path: Option<PathBuf>,
         registration: Registration,
     ) -> Result<Repository> {
+        let _guard = self.gates.lock_registry().await;
+        (self.register_locked(source, name, clone_path, registration)).await
+    }
+
+    /// [`Self::register`] under the registry gate the caller holds.
+    async fn register_locked(
+        &self,
+        source: repository::Selector,
+        name: Option<String>,
+        clone_path: Option<PathBuf>,
+        registration: Registration,
+    ) -> Result<Repository> {
         if let Some(name) = &name {
             validate::name("repository", name)?;
         }
-        let _guard = self.gates.lock_registry().await;
         let repositories = self.repositories().await?;
         let source = match repository::select(&repositories, &source).await {
             Ok(existing)
