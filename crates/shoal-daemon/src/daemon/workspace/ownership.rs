@@ -1,7 +1,7 @@
 //! Verify the recorded Git worktree before execution, recovery, or removal.
 use super::{
     Manager,
-    identity::{clear_owner, directory_identity, mark_owner, marked_owner, verify_owner},
+    identity::{clear_owner, mark_owner, marked_owner, verify_owner},
     paths::matches_recorded_worktree_path,
 };
 use crate::refusal::{Reason, Refusal};
@@ -16,37 +16,31 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// Whether a recorded workspace owns a Git administrative directory.
-///
-/// A marker is authoritative for workspaces created with marker support. The
-/// recorded path and filesystem identity cover records from before markers,
-/// and are both compared so path aliases and identity upgrades use the same
-/// collision rule everywhere a worktree is claimed.
-pub(super) fn owns_git_dir(
-    workspace: &Workspace,
-    git_dir: &Path,
-    identity: Option<&str>,
-    marker: Option<&str>,
-) -> Result<bool> {
-    let canonical_git_dir = fs::canonicalize(git_dir).ok();
-    let same_path = workspace.git_dir.as_ref().is_some_and(|recorded| {
-        match (canonical_git_dir.as_ref(), fs::canonicalize(recorded).ok()) {
-            (Some(canonical_git_dir), Some(canonical_recorded)) => {
-                canonical_recorded == *canonical_git_dir
-            }
+/// Whether a recorded workspace has a claim on the Git administrative
+/// directory `git_dir`, whose owner marker is `marker`, that refuses
+/// another's: its marker names it, or its record names the directory by any
+/// path. Only the marker proves ownership; a recorded path alone keeps a
+/// directory from passing to another workspace without a reclaim at it.
+pub(super) fn claims_git_dir(workspace: &Workspace, git_dir: &Path, marker: Option<&str>) -> bool {
+    marker == Some(workspace.id.as_str()) || records_git_dir(workspace, git_dir)
+}
+
+/// Whether the workspace's record names the admin directory `git_dir`,
+/// comparing real paths where both exist.
+fn records_git_dir(workspace: &Workspace, git_dir: &Path) -> bool {
+    let real = fs::canonicalize(git_dir).ok();
+    workspace.git_dir.as_ref().is_some_and(|recorded| {
+        match (real.as_ref(), fs::canonicalize(recorded).ok()) {
+            (Some(real), Some(recorded)) => recorded == *real,
             _ => recorded == git_dir,
         }
-    });
-    if marker == Some(workspace.id.as_str()) || same_path {
-        return Ok(true);
-    }
-    Ok(identity.is_some() && identity == workspace.git_dir_id.as_deref())
+    })
 }
 
 /// A worktree whose ownership verified.
 pub(crate) struct VerifiedWorktree {
-    /// Whether recording the identity changed it. A failure leaves the existing
-    /// record, which verification just accepted, protecting the worktree.
+    /// Whether recording its admin directory changed it. A failure leaves the
+    /// existing record and marker, which verification just accepted.
     pub identity: Result<bool>,
 }
 
@@ -199,8 +193,8 @@ impl Manager {
         off_runtime::run(move || verify_git_dir(&workspace, &actual_git_dir)).await
     }
 
-    /// Verify ownership, then record the worktree's identity when `record` is
-    /// set. Recording runs only after verification passes; an error from
+    /// Verify ownership, then record the worktree's admin directory when
+    /// `record` is set. Recording runs only after verification passes; an error from
     /// verification means the worktree is not proven to be this workspace's.
     pub(crate) async fn verify_and_record_worktree(
         &self,
@@ -247,8 +241,8 @@ impl Manager {
             .await
     }
 
-    /// Refuse an admin directory another recorded workspace owns, by marker or
-    /// recorded location, and clear a marker naming no recorded workspace: one
+    /// Refuse an admin directory another recorded workspace claims, and
+    /// clear a marker naming no recorded workspace: one
     /// left behind when a record was forgotten or the state directory reset.
     pub(super) async fn release_stale_owner(
         &self,
@@ -288,24 +282,22 @@ impl Manager {
     }
 
     /// Mark the worktree's admin directory as this workspace's and record its
-    /// location and filesystem identity, returning whether anything changed.
+    /// location, returning whether anything changed.
     pub(crate) async fn record_worktree_identity(&self, workspace: &Workspace) -> Result<bool> {
         let git_dir = git::git_dir(&workspace.path).await?;
-        let (marked, identity) = {
+        let marked = {
             let (git_dir, id) = (git_dir.clone(), workspace.id.clone());
             off_runtime::run(move || mark_git_dir(&git_dir, &id)).await?
         };
-        if workspace.git_dir.as_ref() == Some(&git_dir)
-            && workspace.git_dir_id.as_ref() == Some(&identity)
-        {
+        if workspace.git_dir.as_ref() == Some(&git_dir) {
             return Ok(!marked);
         }
         let id = workspace.id.clone();
         self.store
             .run(move |db| {
                 db.execute(
-                    "UPDATE workspaces SET git_dir=?2,git_dir_id=?3 WHERE id=?1",
-                    params![id, git_dir.to_str(), identity],
+                    "UPDATE workspaces SET git_dir=?2 WHERE id=?1",
+                    params![id, git_dir.to_str()],
                 )?;
                 Ok(true)
             })
@@ -355,21 +347,17 @@ impl Manager {
 }
 
 /// Refuse the admin directory `git_dir`, which `workspace` recorded, unless
-/// its owner marker, or for a record from before markers its identity,
-/// makes it the workspace's own, whatever its worktree holds.
+/// its owner marker makes it the workspace's own, whatever its worktree
+/// holds.
 pub(super) async fn verify_admin_dir_owner(workspace: &Workspace, git_dir: &Path) -> Result<()> {
-    let (git_dir, id, recorded) = (
-        git_dir.to_owned(),
-        workspace.id.clone(),
-        workspace.git_dir_id.clone(),
-    );
-    off_runtime::run(move || verify_owner(&git_dir, &id, recorded.as_deref())).await
+    let (git_dir, id) = (git_dir.to_owned(), workspace.id.clone());
+    off_runtime::run(move || verify_owner(&git_dir, &id)).await
 }
 
 /// Refuse an admin directory that is not the workspace's own, or not the one
 /// it recorded.
 fn verify_git_dir(workspace: &Workspace, git_dir: &Path) -> Result<()> {
-    verify_owner(git_dir, &workspace.id, workspace.git_dir_id.as_deref())?;
+    verify_owner(git_dir, &workspace.id)?;
     if let Some(expected) = &workspace.git_dir {
         ensure!(
             fs::canonicalize(expected)? == git_dir,
@@ -387,11 +375,9 @@ fn release_stale_marker(
     workspaces: &[Workspace],
 ) -> Result<()> {
     let marked = marked_owner(git_dir)?;
-    let identity = directory_identity(git_dir)?;
     for other in workspaces {
-        let owns = owns_git_dir(other, git_dir, Some(&identity), marked.as_deref())?;
         ensure!(
-            other.id == *workspace_id || !owns,
+            other.id == *workspace_id || !claims_git_dir(other, git_dir, marked.as_deref()),
             "Git worktree is already owned by {}; restore its recorded path",
             other.name
         );
@@ -403,14 +389,13 @@ fn release_stale_marker(
 }
 
 /// Mark the admin directory as `workspace_id`'s unless it already is,
-/// returning whether it already was, and its filesystem identity.
-fn mark_git_dir(git_dir: &Path, workspace_id: &SpaceId) -> Result<(bool, String)> {
+/// returning whether it already was.
+fn mark_git_dir(git_dir: &Path, workspace_id: &SpaceId) -> Result<bool> {
     let marked = marked_owner(git_dir)?.as_deref() == Some(workspace_id.as_str());
     if !marked {
         mark_owner(git_dir, workspace_id.as_str())?;
     }
-    // The identity only proves ownership of records made before markers.
-    Ok((marked, directory_identity(git_dir)?))
+    Ok(marked)
 }
 
 /// Where the worktree of the workspace's recorded admin `directory` moved,
@@ -429,7 +414,7 @@ fn moved_worktree(workspace: &Workspace, directory: &Path) -> Result<Option<Path
     // one marked for another workspace means this worktree was deleted.
     match marked_owner(directory)? {
         Some(owner) if owner != workspace.id => return Ok(None),
-        _ => verify_owner(directory, &workspace.id, workspace.git_dir_id.as_deref())?,
+        _ => verify_owner(directory, &workspace.id)?,
     }
     Ok(Some(path.to_owned()))
 }

@@ -397,7 +397,7 @@ pub fn repository(row: &Row<'_>) -> rusqlite::Result<Repository> {
     })
 }
 
-pub const WORKSPACE_COLUMNS: &str = "id,number,repository_id,name,mode,narrowing,path,branch,start_commit,made_for,state,error,base_commit,base_ref,git_dir,git_dir_id,setup_skipped,disposable";
+pub const WORKSPACE_COLUMNS: &str = "id,number,repository_id,name,mode,narrowing,path,branch,start_commit,made_for,state,error,base_commit,base_ref,git_dir,setup_skipped,disposable";
 
 pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
     let mut workspace = Workspace::record(
@@ -415,7 +415,6 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
     workspace.base_commit = row.get("base_commit")?;
     workspace.base_ref = row.get("base_ref")?;
     workspace.git_dir = row.get::<_, Option<String>>("git_dir")?.map(PathBuf::from);
-    workspace.git_dir_id = row.get("git_dir_id")?;
     workspace.setup_skipped = row.get("setup_skipped")?;
     workspace.disposable = row.get("disposable")?;
     Ok(workspace)

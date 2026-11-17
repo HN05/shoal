@@ -1753,7 +1753,7 @@ async fn failed_checkout() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
         .store
         .run(move |db| {
             db.execute(
-                "UPDATE workspaces SET state=?2,git_dir=NULL,git_dir_id=NULL WHERE id=?1",
+                "UPDATE workspaces SET state=?2,git_dir=NULL WHERE id=?1",
                 rusqlite::params![id, WorkspaceState::Failed],
             )?;
             Ok(())

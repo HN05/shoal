@@ -1,5 +1,6 @@
-//! Persistent identity for directories Shoal owns: Git administrative
-//! directories and repository checkouts.
+//! Proof of the directories Shoal owns: the owner marker of a Git
+//! administrative directory, and the filesystem identity of a repository's
+//! checkout and directory.
 use anyhow::{Context, Result, ensure};
 use shoal_ids::space_ids::SpaceId;
 use std::{
@@ -42,25 +43,15 @@ pub(super) fn clear_owner(git_dir: &Path) -> Result<()> {
     }
 }
 
-/// Prove an admin directory belongs to a workspace: by its marker, or for records
-/// made before markers existed, by the recorded filesystem identity.
-pub(super) fn verify_owner(
-    git_dir: &Path,
-    workspace_id: &SpaceId,
-    recorded: Option<&str>,
-) -> Result<()> {
-    match marked_owner(git_dir)? {
-        Some(owner) => ensure!(
-            owner == *workspace_id,
-            "Git worktree metadata is marked as another Shoal workspace's; ownership cannot be verified"
-        ),
-        None => {
-            let identity = recorded.context(
-                "Git worktree ownership is unverified; check the worktree, then reclaim it with shoal adopt <its path>",
-            )?;
-            verify_directory_identity(git_dir, identity)?;
-        }
-    }
+/// Prove an admin directory belongs to a workspace by its marker.
+pub(super) fn verify_owner(git_dir: &Path, workspace_id: &SpaceId) -> Result<()> {
+    let owner = marked_owner(git_dir)?.context(
+        "Git worktree ownership is unverified; check the worktree, then reclaim it with shoal adopt <its path>",
+    )?;
+    ensure!(
+        owner == *workspace_id,
+        "Git worktree metadata is marked as another Shoal workspace's; ownership cannot be verified"
+    );
     Ok(())
 }
 
@@ -82,14 +73,6 @@ pub(in crate::daemon) fn birth_identity(path: &Path, recorded: &str) -> Option<S
     let identity = format_identity(metadata.dev(), metadata.ino(), birth);
     (recorded == format!("{}:{}", metadata.dev(), metadata.ino()) && identity != recorded)
         .then_some(identity)
-}
-
-fn verify_directory_identity(path: &Path, recorded: &str) -> Result<()> {
-    ensure!(
-        has_directory_identity(path, recorded)?,
-        "Git worktree metadata was replaced or its recorded filesystem identity changed; ownership cannot be verified. Check the worktree, then reclaim it with shoal adopt <its path>"
-    );
-    Ok(())
 }
 
 #[cfg(not(target_os = "linux"))]

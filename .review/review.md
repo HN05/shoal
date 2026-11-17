@@ -119,9 +119,8 @@ instead of the PR delivery guidance below.
   service termination and its command deadlines cover the drain. Managed stops
   signal the daemon and await its ownership lock before removing its service job,
   including jobs loaded with an older termination limit.
-  Worktree ownership is proven by the owner marker in the Git admin directory; the recorded
-  inode/birth-time identity proves only unmarked records, which gain a marker only
-  after it still matches; missing proofs never establish ownership.
+  Worktree ownership is proven by the owner marker in the Git admin directory alone;
+  a missing marker never establishes ownership.
   Only an explicit reclaim (`adopt` of the recorded path) may
   re-establish ownership that failed verification, and only at the recorded path,
   repository and branch. Automatic recovery only readies a workspace the startup

@@ -162,14 +162,7 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
     assert!(String::from_utf8_lossy(&diff.stdout).contains("changed after rename"));
     fixture.ok(&["done", "--undo", &fixture.id("original")]);
     fixture.ok(&["done", &fixture.id("original")]);
-    for field in [
-        "id",
-        "path",
-        "git_dir",
-        "git_dir_id",
-        "base_ref",
-        "base_commit",
-    ] {
+    for field in ["id", "path", "git_dir", "base_ref", "base_commit"] {
         assert_eq!(renamed[field], workspace[field]);
     }
     assert_eq!(
@@ -320,8 +313,6 @@ fn interrupted_workspace_rename_requires_explicit_repair() {
         }
         if branch == "new/topic" {
             fs::remove_file(Path::new(workspace["git_dir"].as_str().unwrap()).join(OWNER_MARKER))
-                .unwrap();
-            db.execute("UPDATE workspaces SET git_dir_id='birth:1:2:3'", [])
                 .unwrap();
         }
         fixture.restart();

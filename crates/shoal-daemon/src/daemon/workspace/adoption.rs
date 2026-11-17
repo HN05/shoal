@@ -1,6 +1,6 @@
 //! Explicitly transfer a linked worktree into Shoal's normal lifecycle.
+use super::Manager;
 use super::creation::{existing_base, recorded_base};
-use super::{Manager, identity::directory_identity};
 use crate::daemon::log;
 use crate::{
     fsutil::off_runtime,
@@ -67,7 +67,6 @@ impl Manager {
             return Ok(workspace);
         }
         let git_dir = git::git_dir(&path).await?;
-        let identity = git_dir_identity(&git_dir).await?;
         let base = existing_base(repo, branch).await?;
         let (commit, reference) = recorded_base(repo, &base).await?;
         let mut workspace = Workspace::new_record(
@@ -80,23 +79,17 @@ impl Manager {
         workspace.base_commit = Some(commit.into());
         workspace.base_ref = reference;
         workspace.git_dir = Some(git_dir.clone());
-        workspace.git_dir_id = Some(identity);
         // A marker naming no recorded workspace outlived its record or a reset
         // state directory; one naming a recorded workspace refuses adoption.
         self.release_stale_owner(&git_dir, &workspace.id).await?;
+        // Marked before the record exists, so no record is ever without its
+        // proof; a refused insertion leaves a marker naming no workspace,
+        // which the next claim of the directory clears.
+        self.record_worktree_identity(&workspace).await?;
         self.verify_worktree(&workspace).await?;
-        // Record identity, base and readiness together: a crash must never leave
-        // an adopted directory with weaker ownership checks or pending setup.
-        let workspace = self.insert_workspace(workspace, None, None, false).await?;
-        // Mark only once the record exists, so a refused insertion leaves the
-        // metadata untouched; the committed identity protects it if marking fails.
-        if let Err(error) = self.record_worktree_identity(&workspace).await {
-            log!(
-                "worktree identity not recorded for {}: {error:#}",
-                workspace.name
-            );
-        }
-        Ok(workspace)
+        // Record the admin directory, base and readiness together: a crash
+        // must never leave an adopted directory with pending setup.
+        self.insert_workspace(workspace, None, None, false).await
     }
 
     async fn copy_and_adopt(
@@ -203,17 +196,15 @@ impl Manager {
         let base = existing_base(repo, workspace.require_branch("adoption")?).await?;
         let (commit, reference) = recorded_base(repo, &base).await?;
         let git_dir = git::git_dir(&workspace.path).await?;
-        let identity = git_dir_identity(&git_dir).await?;
-        self.record_copy_ready(workspace, git_dir, identity, commit.into(), reference)
+        self.record_copy_ready(workspace, git_dir, commit.into(), reference)
             .await
     }
 
-    /// Persist the copied worktree's verified identity, base, and readiness.
+    /// Persist the copied worktree's admin directory, base, and readiness.
     async fn record_copy_ready(
         &self,
         workspace: &Workspace,
         git_dir: PathBuf,
-        identity: String,
         commit: CommitId,
         reference: Option<String>,
     ) -> Result<()> {
@@ -221,12 +212,11 @@ impl Manager {
         self.store
             .run(move |db| {
                 db.execute(
-                    "UPDATE workspaces SET state=?2,error=NULL,git_dir=?3,git_dir_id=?4,base_commit=?5,base_ref=?6,setup_finished=1 WHERE id=?1",
+                    "UPDATE workspaces SET state=?2,error=NULL,git_dir=?3,base_commit=?4,base_ref=?5,setup_finished=1 WHERE id=?1",
                     rusqlite::params![
                         id,
                         WorkspaceState::Ready,
                         git_dir.to_str(),
-                        identity,
                         commit,
                         reference,
                     ],
@@ -235,10 +225,4 @@ impl Manager {
             })
             .await
     }
-}
-
-/// The filesystem identity of the admin directory `git_dir`.
-async fn git_dir_identity(git_dir: &Path) -> Result<String> {
-    let git_dir = git_dir.to_owned();
-    off_runtime::run(move || directory_identity(&git_dir)).await
 }

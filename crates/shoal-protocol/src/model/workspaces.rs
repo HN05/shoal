@@ -27,10 +27,9 @@ pub struct Worktree {
     pub error: Option<String>,
     pub base_commit: Option<CommitId>,
     pub base_ref: Option<String>,
-    /// Git's per-worktree admin directory and its filesystem identity, used
-    /// to verify the worktree was not moved or replaced.
+    /// Git's per-worktree admin directory, whose owner marker verifies the
+    /// worktree was not moved or replaced.
     pub git_dir: Option<PathBuf>,
-    pub git_dir_id: Option<String>,
     /// Its newest local review.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_review: Option<crate::reviews::ReviewStatus>,
@@ -275,7 +274,6 @@ impl Workspace {
                 base_commit: None,
                 base_ref: None,
                 git_dir: None,
-                git_dir_id: None,
                 latest_review: None,
                 coordinator_state: None,
                 done: false,

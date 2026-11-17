@@ -334,7 +334,6 @@ fn daemon_startup_quarantines_operations_and_retains_claims_across_restarts() {
                 if *state == "ready" { "ready" } else { "failed" }
             );
             assert_eq!(saved["git_dir"], workspace["git_dir"]);
-            assert_eq!(saved["git_dir_id"], workspace["git_dir_id"]);
             let error = saved["error"].as_str().unwrap();
             match *state {
                 "ready" | "failed" => assert_eq!(error, "original error"),
@@ -474,7 +473,7 @@ fn unmark_owner(workspace: &Value) {
 }
 
 #[test]
-fn owner_marker_keeps_workspaces_verified_when_filesystem_identity_changes() {
+fn the_owner_marker_keeps_a_workspace_verified_across_restarts() {
     let mut fixture = Fixture::with_config(Some("[resources.lock]\n"));
     let workspace = fixture.add("marked");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -491,15 +490,9 @@ fn owner_marker_keeps_workspaces_verified_when_filesystem_identity_changes() {
         "--space",
         &fixture.id("marked"),
     ]);
-    // A reboot renumbering the device, or a restore from backup, changes the
-    // stat identity without changing ownership.
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
-    db.execute("UPDATE workspaces SET git_dir_id='birth:1:2:3'", [])
-        .unwrap();
     fixture.restart();
     let saved = fixture.ok(&["status", &fixture.id("marked")])["workspace"].clone();
     assert_eq!(saved["state"], "ready", "{saved}");
-    assert_eq!(saved["git_dir_id"], workspace["git_dir_id"]);
     assert!(
         fixture
             .run(&["run", "--workspace", &fixture.id("marked"), "--", "true"])
@@ -542,14 +535,8 @@ fn adopting_a_workspace_path_again_reclaims_its_unverifiable_worktree() {
         "--space",
         &fixture.id("reclaimed"),
     ]);
-    // An unmarked record whose filesystem identity changed cannot be verified.
+    // An unmarked admin directory cannot be verified.
     unmark_owner(&workspace);
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
-    db.execute(
-        "UPDATE workspaces SET git_dir_id='0:0' WHERE id IN (SELECT id FROM spaces WHERE name='reclaimed')",
-        [],
-    )
-    .unwrap();
     fixture.restart();
     assert_eq!(
         fixture.ok(&["status", &fixture.id("reclaimed")])["workspace"]["state"],
@@ -616,14 +603,8 @@ fn reconcile_reclaims_unverifiable_worktrees_only_on_explicit_request() {
         "--space",
         &fixture.id("reclaimed"),
     ]);
-    // An unmarked record whose filesystem identity changed cannot be verified.
+    // An unmarked admin directory cannot be verified.
     unmark_owner(&workspace);
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
-    db.execute(
-        "UPDATE workspaces SET git_dir_id='0:0' WHERE id IN (SELECT id FROM spaces WHERE name='reclaimed')",
-        [],
-    )
-    .unwrap();
     fixture.restart();
     assert_eq!(
         fixture.ok(&["status", &fixture.id("reclaimed")])["workspace"]["state"],
@@ -645,10 +626,6 @@ fn reconcile_reclaims_unverifiable_worktrees_only_on_explicit_request() {
     assert_eq!(
         fs::read_to_string(&marker).unwrap().trim_end(),
         workspace["id"].as_str().unwrap()
-    );
-    assert_eq!(
-        reclaimed[0]["workspace"]["git_dir_id"],
-        workspace["git_dir_id"]
     );
     assert!(
         fixture
@@ -674,16 +651,10 @@ fn reconcile_reclaims_unverifiable_worktrees_only_on_explicit_request() {
 #[test]
 fn deleted_worktrees_are_forgotten_even_when_their_metadata_is_unverifiable() {
     let fixture = Fixture::new();
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     let mut paths = Vec::new();
     for name in ["deleted", "moved"] {
         let workspace = fixture.add(name);
         unmark_owner(&workspace);
-        db.execute(
-            "UPDATE workspaces SET git_dir_id='0:0' WHERE id IN (SELECT id FROM spaces WHERE name=?1)",
-            [name],
-        )
-        .unwrap();
         paths.push(PathBuf::from(workspace["path"].as_str().unwrap()));
     }
     // Git still lists the deleted worktree, but nothing exists to protect.

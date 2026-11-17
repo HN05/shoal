@@ -187,7 +187,8 @@ fn a_git_directory_recorded_by_device_and_inode_takes_its_identity_now() -> Resu
         COMMIT;",
         directory.path().display()
     ))?;
-    migrate(&mut db)?;
+    // Read before a later migration drops the column.
+    migrate_to(&mut db, 208)?;
     let identity: String = db.query_row(
         "SELECT git_dir_id FROM workspaces WHERE id='w'",
         [],

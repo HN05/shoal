@@ -2207,7 +2207,7 @@ async fn copy_adoption_records_ownership_and_finishes_ready() {
         fs::read_to_string(copied.path.join("copied")).unwrap(),
         "copied files\n"
     );
-    assert!(copied.git_dir.is_some() && copied.git_dir_id.is_some());
+    assert!(copied.git_dir.is_some());
     assert_eq!(
         git(&f.repo, &["worktree", "list", "--porcelain"])
             .matches("worktree ")
@@ -2283,7 +2283,7 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
     assert_eq!(w.name, "adopt/topic");
     assert_eq!(w.state, crate::state::WorkspaceState::Ready);
     assert_eq!(w.base_ref.as_deref(), Some("refs/heads/main"));
-    assert!(w.git_dir.is_some() && w.git_dir_id.is_some());
+    assert!(w.git_dir.is_some());
     assert_eq!(
         fs::read_to_string(w.git_dir.as_ref().unwrap().join("shoal-workspace")).unwrap(),
         format!("{}\n", w.id)
@@ -2300,8 +2300,8 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
     assert_eq!(f.manager.usage.activity(&w.id), 1);
     let restored = Manager::open(Paths::for_test(f.root.path())).await.unwrap();
     assert_eq!(
-        restored.workspace_by_id(&w.id).await.unwrap().git_dir_id,
-        w.git_dir_id
+        restored.workspace_by_id(&w.id).await.unwrap().git_dir,
+        w.git_dir
     );
     assert!(restored.verify_worktree(&w).await.is_ok());
     assert!(f.manager.verify_worktree(&w).await.is_ok());

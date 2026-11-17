@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, consumed_upgrades, place_owners, place_servers, record_shapes};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 218;
+pub(super) const SCHEMA_VERSION: i64 = 219;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -500,6 +500,7 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (216, include_str!("queue_starts_at_once.sql"), None),
     (217, include_str!("space_wake_timers.sql"), None),
     (218, include_str!("execution_subagents.sql"), None),
+    (219, UNMARKED_ADMIN_DIRECTORIES, None),
 ];
 
 /// The migrations that rebuild a table others reference, which run on their
@@ -1103,6 +1104,11 @@ pub(super) const STATELESS_SNAPSHOTS: &str =
         WHERE json_valid(record) AND json_extract(record,'$.state')='';
     UPDATE space_item_activity SET record=json_remove(record,'$.state')
         WHERE json_valid(record) AND json_extract(record,'$.state')='';";
+
+/// An admin directory's owner marker alone proves it a workspace's, so the
+/// filesystem identity that proved those made before markers goes.
+pub(super) const UNMARKED_ADMIN_DIRECTORIES: &str =
+    "ALTER TABLE workspaces DROP COLUMN git_dir_id;";
 
 /// Checkpoints outlive their workspace, not their repository.
 pub(super) const CHECKPOINTS: &str = "CREATE TABLE checkpoints (

@@ -622,7 +622,6 @@ CREATE TABLE "workspaces" (
     base_commit TEXT,
     base_ref TEXT,
     git_dir TEXT,
-    git_dir_id TEXT,
     setup_finished INTEGER NOT NULL DEFAULT 0 CHECK(setup_finished IN (0,1)),
     observed_branch TEXT,
     base_workspace_id TEXT,

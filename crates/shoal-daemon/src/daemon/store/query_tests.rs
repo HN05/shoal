@@ -262,7 +262,7 @@ fn ownership_snapshot(db: &mut Connection) -> Result<Vec<Vec<Vec<rusqlite::types
         let columns = match table {
             "repositories" => "id,path,source,last_used,name,workspaces_dir",
             "workspaces" => {
-                "id,repository_id,name,path,branch,state,error,base_commit,base_ref,git_dir,git_dir_id"
+                "id,repository_id,name,path,branch,state,error,base_commit,base_ref,git_dir"
             }
             "executions" => &execution_columns,
             "resource_leases" => "id,workspace_id,scope,pool,name,resource,reason,created_at,mode",
@@ -289,7 +289,7 @@ async fn v17_upgrade_and_reopen_preserve_ownership_leases_and_executions() -> Re
     let mut old = populated_database()?;
     old.execute_batch(
         r#"UPDATE workspaces SET state='preparing', git_dir='/git/worktrees/owner',
-            git_dir_id='1:2', base_commit='abc', base_ref='refs/heads/main';
+            base_commit='abc', base_ref='refs/heads/main';
         UPDATE executions SET wrapper='{"pid":123,"birth":"wrapper"}',
             child='{"pid":456,"birth":"child"}', group_id=456;"#,
     )?;

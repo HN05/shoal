@@ -18,7 +18,7 @@ fn workspace() -> Workspace {
 }
 
 #[test]
-fn ownership_uses_the_same_marker_path_and_identity_evidence() -> Result<()> {
+fn a_marker_or_a_recorded_path_claims_an_admin_directory() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let git_dir = temp.path().join("admin");
     fs::create_dir(&git_dir)?;
@@ -26,27 +26,10 @@ fn ownership_uses_the_same_marker_path_and_identity_evidence() -> Result<()> {
     fs::create_dir(&different)?;
     let mut other = workspace();
     other.git_dir = Some(temp.path().join("admin/../admin"));
-    other.git_dir_id = Some("old-identity".into());
-
-    assert!(owns_git_dir(&other, &git_dir, Some("new-identity"), None)?);
-    assert!(owns_git_dir(
-        &other,
-        &different,
-        Some("old-identity"),
-        None
-    )?);
-    assert!(owns_git_dir(
-        &other,
-        Path::new("/missing"),
-        None,
-        Some(other.id.as_str())
-    )?);
-    assert!(!owns_git_dir(
-        &other,
-        &different,
-        Some("new-identity"),
-        None
-    )?);
+    assert!(claims_git_dir(&other, &git_dir, None));
+    assert!(!claims_git_dir(&other, &different, None));
+    assert!(claims_git_dir(&other, &different, Some(other.id.as_str())));
+    assert!(!claims_git_dir(&other, &different, Some("another")));
     Ok(())
 }
 

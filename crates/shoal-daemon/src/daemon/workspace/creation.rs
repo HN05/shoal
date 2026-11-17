@@ -2,7 +2,8 @@
 //! and settling its worktree.
 
 use super::{
-    Manager, NewWorktreeOptions, branches, identity, ownership::owns_git_dir, restore, stack, tree,
+    Manager, NewWorktreeOptions, branches, identity, ownership::claims_git_dir, restore, stack,
+    tree,
 };
 use crate::{
     config::Config,
@@ -502,16 +503,10 @@ impl Manager {
                     .query_map([], store::workspace)?
                     .collect::<rusqlite::Result<Vec<_>>>()?;
                 for workspace in workspaces {
-                    let owns = match record.git_dir.as_ref() {
-                        Some(git_dir) => owns_git_dir(
-                            &workspace,
-                            git_dir,
-                            record.git_dir_id.as_deref(),
-                            marker.as_deref(),
-                        )?,
-                        None => false,
-                    };
-                    ensure!(!owns,
+                    let claimed = record.git_dir.as_ref().is_some_and(|git_dir| {
+                        claims_git_dir(&workspace, git_dir, marker.as_deref())
+                    });
+                    ensure!(!claimed,
                         "Git worktree is already owned by {}; restore its recorded path", workspace.name);
                 }
                 let base_workspace = match &base_branch {
@@ -529,14 +524,13 @@ impl Manager {
                 }
                 let (branch, start_commit, made_for) = store::head_columns(&record.head)?;
                 tx.execute(
-                    "INSERT INTO workspaces (id,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,start_commit,made_for,setup_skipped,disposable) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?3,?10,?11,?12,?13,?14)",
+                    "INSERT INTO workspaces (id,path,branch,state,git_dir,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,start_commit,made_for,setup_skipped,disposable) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?3,?9,?10,?11,?12,?13)",
                     params![
                         record.id,
                         record.path.to_str(),
                         branch,
                         record.state,
                         record.git_dir.as_ref().and_then(|p| p.to_str().map(str::to_owned)),
-                        record.git_dir_id,
                         record.base_commit,
                         record.base_ref,
                         record.state == WorkspaceState::Ready,

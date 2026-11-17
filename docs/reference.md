@@ -6164,10 +6164,9 @@ executions proven stopped, preserving work and leases. Moved worktrees must retu
 to their recorded path, and a deleted directory is forgotten by the next
 cleanup sweep or `shoal rm`, retaining the branch. Ownership is proven by a
 `shoal-workspace` marker in the worktree's Git admin directory, so it survives
-reboots, device renumbering and restores. Workspaces recorded before markers
-gain one once their recorded filesystem identity verifies at startup or on
-repair. When neither proof verifies ownership, check the worktree at the
-recorded path yourself and [adopt it](#adopting-a-worktree) again.
+reboots, device renumbering and restores. When the marker does not verify
+ownership, check the worktree at the recorded path yourself and
+[adopt it](#adopting-a-worktree) again.
 
 Executions record wrapper and child identities plus a process group. Descendants
 inherit `SHOAL_EXECUTION_ID`, which recovery uses with live ancestry to find

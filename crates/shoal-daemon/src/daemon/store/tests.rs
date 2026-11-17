@@ -662,6 +662,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 218 {
         db.execute_batch(include_str!("execution_subagents.sql"))?;
     }
+    if version >= 219 {
+        db.execute_batch(UNMARKED_ADMIN_DIRECTORIES)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -2450,9 +2453,9 @@ fn mappers_use_named_columns() -> Result<()> {
             INSERT INTO spaces(id,kind,repository_id,name)
                 VALUES ('workspace','workspace','repo','worker');
             INSERT INTO workspaces(id,path,branch,state,error,
-                base_commit,base_ref,git_dir,git_dir_id,setup_finished)
+                base_commit,base_ref,git_dir,setup_finished)
                 VALUES ('workspace','/work','feature','failed','setup error',
-                    'abc','refs/heads/main','/git/worktrees/worker','1:2',1);
+                    'abc','refs/heads/main','/git/worktrees/worker',1);
             INSERT INTO ports(workspace_id,name,port,env_var,reason)
                 VALUES ('workspace','web',12345,'WEB_PORT',NULL);
             INSERT INTO executions(id,space_id,state,wrapper,child,group_id,agent)
@@ -2481,7 +2484,7 @@ fn mappers_use_named_columns() -> Result<()> {
                         "workspace": {"id": "workspace", "name": "worker", "branch": "feature"}},
             "branch": "feature", "state": "failed", "error": "setup error",
             "base_commit": "abc", "base_ref": "refs/heads/main",
-            "git_dir": "/git/worktrees/worker", "git_dir_id": "1:2",
+            "git_dir": "/git/worktrees/worker",
             "base_workspace": null, "parent": null, "links": {"issues": [], "prs": [], "opened": [], "related": []}, "running": false, "done": false,
             "setup_skipped": false, "disposable": false
         }),
