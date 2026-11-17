@@ -311,10 +311,10 @@ impl Manager {
     ) -> Result<()> {
         self.ensure_no_other_execution(workspace, own_execution)
             .await?;
-        self.verify_worktree(workspace).await?;
+        let git_dir = self.verified_git_dir(workspace).await?;
         let path = &workspace.path;
         ensure!(
-            !git::status::operation_in_progress(path).await?,
+            !git::status::operation_in_progress_at(path, &git_dir).await?,
             "a Git operation is under way in the workspace; finish or abort it first"
         );
         let branch = current_branch(path).await?;

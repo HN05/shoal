@@ -119,6 +119,12 @@ pub(crate) async fn head_tree(repo: &Path) -> Result<String> {
 /// Whether a merge, rebase, cherry-pick, revert or bisect is under way, or the
 /// index has conflicts: state a snapshot of the files would not capture.
 pub async fn operation_in_progress(repo: &Path) -> Result<bool> {
+    operation_in_progress_at(repo, &super::git_dir(repo).await?).await
+}
+
+/// [`operation_in_progress`] in the checkout at `repo`, whose own Git
+/// directory the caller read as `git_dir`.
+pub async fn operation_in_progress_at(repo: &Path, git_dir: &Path) -> Result<bool> {
     pub(crate) const MARKERS: &[&str] = &[
         "MERGE_HEAD",
         "CHERRY_PICK_HEAD",
@@ -127,7 +133,6 @@ pub async fn operation_in_progress(repo: &Path) -> Result<bool> {
         "rebase-merge",
         "rebase-apply",
     ];
-    let git_dir = super::git_dir(repo).await?;
     for marker in MARKERS {
         if off_runtime::try_exists(&git_dir.join(marker)).await? {
             return Ok(true);

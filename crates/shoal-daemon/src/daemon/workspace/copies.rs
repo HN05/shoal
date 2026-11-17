@@ -256,10 +256,10 @@ impl Manager {
             "workspace {name} is {}; copy it once it is ready",
             workspace.state
         );
-        self.verify_worktree(&workspace).await?;
+        let git_dir = self.verified_git_dir(&workspace).await?;
         let path = &workspace.path;
         ensure!(
-            !git::status::operation_in_progress(path).await?,
+            !git::status::operation_in_progress_at(path, &git_dir).await?,
             "a Git operation is under way in {name}; copy it once it is finished or aborted"
         );
         ensure!(

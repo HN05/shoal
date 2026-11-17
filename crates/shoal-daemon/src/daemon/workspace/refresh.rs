@@ -161,9 +161,9 @@ impl Manager {
             workspace.name
         );
         self.ensure_no_other_execution(workspace, own).await?;
-        self.verify_worktree(workspace).await?;
+        let git_dir = self.verified_git_dir(workspace).await?;
         ensure!(
-            !git::status::operation_in_progress(&workspace.path).await?,
+            !git::status::operation_in_progress_at(&workspace.path, &git_dir).await?,
             "a Git operation is under way in workspace {}; finish or abort it first",
             workspace.name
         );
