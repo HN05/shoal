@@ -2,11 +2,12 @@
 //! them, their checkouts' sync, branches and local configuration, and the
 //! agent configs Shoal keeps for them.
 use shoal_ids::repository_ids::RepositoryId;
-use std::{collections::BTreeMap, path::PathBuf};
+use std::{collections::BTreeMap, path::PathBuf, time::Duration};
 
 use anyhow::Result;
+use tokio::{io::AsyncReadExt as _, net::UnixStream};
 
-use crate::connection::{Daemon, call, pages, request};
+use crate::connection::{Daemon, call, open, pages, request};
 use shoal_protocol::{
     config::edit::Change,
     model::{
@@ -16,6 +17,9 @@ use shoal_protocol::{
     protocol::RepositoryMethod,
     repository::Selector,
 };
+
+/// Hold a contribution again this soon after the daemon closes its hold.
+const HOLD_RETRY: Duration = Duration::from_secs(1);
 
 /// The registered repositories.
 pub async fn list(daemon: &impl Daemon) -> Result<Vec<Repository>> {
@@ -37,10 +41,46 @@ pub async fn register(
 }
 
 /// Register a fork of `source` to contribute to, or the repository already
-/// registered for it.
-pub async fn register_contribution(daemon: &impl Daemon, source: String) -> Result<Repository> {
+/// registered for it, which cleanup keeps while the hold lives.
+pub async fn register_contribution(
+    daemon: &(impl Daemon + Clone + Send + 'static),
+    source: String,
+) -> Result<(Repository, ContributionHold)> {
     let method = RepositoryMethod::RegisterContribution { source, name: None };
-    request(daemon, method).await
+    let (stream, body) = open(daemon, method).await?;
+    let repo = Repository::try_from(body.into_result()?)?;
+    let hold = tokio::spawn(keep_contribution(daemon.clone(), repo.id.clone(), stream));
+    Ok((repo, ContributionHold(hold)))
+}
+
+/// Keeps a registered contribution from cleanup while it lives, from its
+/// registration on. It holds it again after a daemon restart.
+pub struct ContributionHold(tokio::task::JoinHandle<()>);
+
+impl Drop for ContributionHold {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+/// Hold `repository` on the registration's `stream`, and once the daemon
+/// closes it, on a new connection, until the repository is gone.
+async fn keep_contribution(daemon: impl Daemon, repository: RepositoryId, mut stream: UnixStream) {
+    let mut closed = [0u8; 1];
+    let _ = stream.read(&mut closed).await;
+    loop {
+        tokio::time::sleep(HOLD_RETRY).await;
+        let repository = repository.clone();
+        if let Ok((mut stream, body)) =
+            open(&daemon, RepositoryMethod::HoldContribution { repository }).await
+        {
+            // A refusal means the repository is no longer registered.
+            if body.into_result().is_err() {
+                return;
+            }
+            let _ = stream.read(&mut closed).await;
+        }
+    }
 }
 
 pub async fn rename(
@@ -175,3 +215,6 @@ pub async fn keep_agent_environment(
     .await?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

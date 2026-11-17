@@ -12,6 +12,7 @@ use crate::{
         output::Palette,
         ui::{self, ModeChoice},
     },
+    client::repositories::{self, ContributionHold},
     config::{Config, modes::ModeName, repo::ConfigLayers},
     git,
     model::Repository,
@@ -37,7 +38,9 @@ pub(super) async fn contribute(ctx: &Context, args: ContributeArgs) -> Result<i3
         Some(linked) => linked.repository_url(),
         None => target.to_string(),
     };
-    let repo = register(ctx, source).await?;
+    // Held until the command ends, so cleanup cannot remove the clone while
+    // a picker is open.
+    let (repo, _hold) = register(ctx, source).await?;
     let start = StartArgs {
         here,
         focus,
@@ -67,18 +70,19 @@ fn ensure_agent_available(ctx: &Context, agent: Option<&Agent>) -> Result<()> {
     agents::ensure_available(agent, &settings)
 }
 
-/// Register `source` as a contribution and say where its pushes go.
-async fn register(ctx: &Context, source: String) -> Result<Repository> {
-    let repo = ctx
+/// Register `source` as a contribution, held against cleanup, and say where
+/// its pushes go. A repository registered otherwise needs no hold.
+async fn register(ctx: &Context, source: String) -> Result<(Repository, Option<ContributionHold>)> {
+    let (repo, hold) = ctx
         .progress(
             "Registering contribution",
-            crate::client::repositories::register_contribution(&ctx.paths, source),
+            repositories::register_contribution(&ctx.paths, source),
         )
         .await?;
     let label = ui::repository_label(&repo, Palette::stderr(ctx.json));
     if !repo.contribution {
         eprintln!("Using registered repository {label}; it stays registered");
-        return Ok(repo);
+        return Ok((repo, None));
     }
     match git::remote_url(&repo.path, git::FORK_REMOTE).await {
         Ok(fork) => eprintln!(
@@ -87,5 +91,5 @@ async fn register(ctx: &Context, source: String) -> Result<Repository> {
         ),
         Err(_) => eprintln!("Registered contribution {label}; branches push to it directly"),
     }
-    Ok(repo)
+    Ok((repo, Some(hold)))
 }

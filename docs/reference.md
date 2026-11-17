@@ -3141,8 +3141,8 @@ an existing fork, and the clone gets the fork as its `fork` remote with
 there and opens the PR from the fork. Forking needs GitHub, Forgejo or Gitea.
 
 The cleanup sweep removes a contribution repository as `repo rm` does once it has
-had no workspace, queued agent, chat, pending issue proposal, kept branch or
-resource another repository's workspace borrows, no unexpired
+had no running `shoal contribute`, workspace, queued agent, chat, pending issue
+proposal, kept branch or resource another repository's workspace borrows, no unexpired
 [checkpoint](#checkpoints-and-restore), removal record or removed space's
 [files](#attached-files), and no changed files,
 stash, Git operation under way or commits in its checkout that no branch or tag
