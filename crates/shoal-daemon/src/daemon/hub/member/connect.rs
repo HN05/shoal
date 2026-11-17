@@ -147,10 +147,12 @@ impl Transport {
     }
 }
 
-/// Log each line of `stderr`, keeping the last [`KEPT_LINES`] in `kept`.
+/// Log each line of `stderr` and keep the last [`KEPT_LINES`] in `kept`,
+/// each as short as the daemon keeps what another side sent.
 async fn keep_stderr(stderr: ChildStderr, kept: Arc<Mutex<VecDeque<String>>>) {
     let mut lines = BufReader::new(stderr).lines();
     while let Ok(Some(line)) = lines.next_line().await {
+        let line = crate::daemon::hub::shown(&line);
         log!("hub connect: {line}");
         let mut kept = kept.lock().unwrap();
         if kept.len() == KEPT_LINES {

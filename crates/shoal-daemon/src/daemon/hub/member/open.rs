@@ -18,6 +18,7 @@ use crate::daemon::{
         identity::{Identity, nonce, verify},
         pairing::code_proof,
         sealing::Exchange,
+        shown,
         transport::Channel,
     },
     workspace::Manager,
@@ -140,7 +141,10 @@ impl Manager {
                 check_hub(&key, &transcript, &signature, &expected)?;
                 (key, transcript)
             }
-            frame => bail!("expected the hub's challenge, not {frame:?}"),
+            frame => bail!(
+                "expected the hub's challenge, not {}",
+                shown(&format!("{frame:?}"))
+            ),
         };
         let signed = transcript.signed(Signer::Member);
         let code = code.map(|code| code_proof(&code, &signed));
@@ -159,7 +163,10 @@ impl Manager {
                 refusal,
                 sealed: channel.sealed_last(),
             },
-            frame => bail!("expected the hub's welcome, not {frame:?}"),
+            frame => bail!(
+                "expected the hub's welcome, not {}",
+                shown(&format!("{frame:?}"))
+            ),
         })
     }
 

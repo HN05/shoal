@@ -176,7 +176,10 @@ where
                             drop(held);
                         });
                     }
-                    frame => return End::Lost(anyhow!("unexpected hub link frame {frame:?}")),
+                    frame => {
+                        let frame = super::shown(&format!("{frame:?}"));
+                        return End::Lost(anyhow!("unexpected hub link frame {frame}"));
+                    }
                 }
             }
         }

@@ -23,6 +23,7 @@ use super::{
     members, pairing,
     sealing::Exchange,
     session::{self, Calls, End},
+    shown,
     transport::Channel,
 };
 use crate::daemon::{log, notifications::NotificationKind, workspace::Manager};
@@ -64,7 +65,10 @@ impl Manager {
                 log!("hub: refused a link: {}", refusal.message);
                 channel.close_with(&Frame::Refused(refusal)).await;
             }
-            Err(error) => log!("hub: a link failed to open: {error:#}"),
+            Err(error) => log!(
+                "hub: a link failed to open: {}",
+                shown(&format!("{error:#}"))
+            ),
         }
     }
 
@@ -169,7 +173,10 @@ impl Manager {
                 };
                 Ok(Some((proof, transcript)))
             }
-            Ok(Ok(frame)) => bail!("expected the member's proof, not {frame:?}"),
+            Ok(Ok(frame)) => bail!(
+                "expected the member's proof, not {}",
+                shown(&format!("{frame:?}"))
+            ),
             Ok(Err(error)) => Err(error),
             Err(_) => Ok(None),
         }
@@ -252,9 +259,9 @@ impl Manager {
     /// Record the new member `joining` asks for.
     async fn join_member(&self, joining: &Joining) -> Result<Member> {
         let own = self.hub_identity().await?.public.clone();
-        let Joining {
-            kind, name, key, ..
-        } = joining.clone();
+        let Joining { kind, name, key } = joining.clone();
+        // The joiner chose it, and logs and listings show it.
+        let name = shown(&name);
         self.store
             .write(move |tx| {
                 let id = members::join(tx, kind, &name, &key)?;
@@ -332,7 +339,10 @@ impl Manager {
         self.member_seen(&member.id, &version).await;
         match end {
             End::Closed | End::Stopped => log!("hub: {} {} disconnected", member.kind, member.name),
-            End::Lost(error) => log!("hub: lost {} {}: {error:#}", member.kind, member.name),
+            End::Lost(error) => {
+                let error = shown(&format!("{error:#}"));
+                log!("hub: lost {} {}: {error}", member.kind, member.name)
+            }
         }
     }
 

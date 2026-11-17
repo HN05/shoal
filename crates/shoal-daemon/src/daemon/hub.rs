@@ -50,6 +50,20 @@ pub(crate) async fn run(manager: Arc<Manager>) {
     tokio::join!(listener::run(manager.clone()), member::run(manager));
 }
 
+/// The most of what the other side of a link sent that the daemon keeps or
+/// shows.
+const SHOWN_TEXT: usize = 300;
+
+/// `text`, which may quote what the other side of a link sent before it was
+/// authenticated, as the daemon keeps and shows it: one line of printable
+/// text, at most [`SHOWN_TEXT`] bytes.
+fn shown(text: &str) -> String {
+    let printable: String = (text.chars())
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
+    shoal_protocol::validate::shorten(printable, SHOWN_TEXT)
+}
+
 /// Serve the link a member opened on the daemon's socket with `hello`, in a
 /// request of `protocol`, until it ends.
 pub(crate) async fn accept_socket_link(
@@ -112,3 +126,6 @@ impl Manager {
             .await
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -20,6 +20,7 @@ use super::{
     identity::Identity,
     membership::{self, Joined},
     session::{self, Calls, End},
+    shown,
 };
 use crate::{
     daemon::{log, notifications::NotificationKind, workspace::Manager},
@@ -47,6 +48,30 @@ pub(super) struct Link {
     /// Held while the membership is joined or left, so neither overwrites
     /// what the other recorded.
     changes: tokio::sync::Mutex<()>,
+    /// When the user last heard of a refusal that came unsealed.
+    unsealed_alert: UnsealedAlert,
+}
+
+/// How often the user hears of a refusal that came unsealed, which anyone
+/// between this machine and the hub could have sent.
+const UNSEALED_ALERT_EVERY: Duration = Duration::from_secs(60 * 60);
+
+/// When the user last heard of a refusal that came unsealed.
+#[derive(Default)]
+struct UnsealedAlert(Mutex<Option<tokio::time::Instant>>);
+
+impl UnsealedAlert {
+    /// Whether an alert is due, which it then is not for
+    /// [`UNSEALED_ALERT_EVERY`].
+    fn due(&self) -> bool {
+        let now = tokio::time::Instant::now();
+        let mut last = self.0.lock().unwrap();
+        let due = last.is_none_or(|alerted| now.duration_since(alerted) >= UNSEALED_ALERT_EVERY);
+        if due {
+            *last = Some(now);
+        }
+        due
+    }
 }
 
 #[derive(Default)]
@@ -62,7 +87,10 @@ impl Link {
         self.state.lock().unwrap().calls.clone()
     }
 
+    /// Keep the link's `calls` and its `problem`, which may quote what the
+    /// other side sent, as [`shown`] bounds it.
     fn set(&self, calls: Option<Arc<Calls>>, problem: Option<String>) {
+        let problem = problem.as_deref().map(shown);
         *self.state.lock().unwrap() = State { calls, problem };
     }
 }
@@ -246,6 +274,8 @@ impl Manager {
             End::Closed => format!("the hub at {route} closed the link"),
             End::Lost(error) => format!("lost the link to the hub at {route}: {error:#}"),
         };
+        // The error may quote a frame no one authenticated.
+        let problem = shown(&problem);
         log!("hub: {problem}");
         self.hub.member.set(None, Some(problem));
         Kept::Served
@@ -280,8 +310,9 @@ impl Manager {
     }
 
     fn link_failed(&self, error: &anyhow::Error) -> Kept {
-        log!("hub: {error:#}");
-        self.hub.member.set(None, Some(format!("{error:#}")));
+        let problem = shown(&format!("{error:#}"));
+        log!("hub: {problem}");
+        self.hub.member.set(None, Some(problem));
         Kept::Failed
     }
 
@@ -294,10 +325,8 @@ impl Manager {
             sealed,
             member,
         } = refused;
-        let message = format!(
-            "The hub at {route} refused this machine: {}",
-            refusal.message
-        );
+        let text = shown(&refusal.message);
+        let message = format!("The hub at {route} refused this machine: {text}");
         log!("hub: {message}");
         // Recorded before the problem shows, so a join that follows it finds
         // the membership revoked.
@@ -308,9 +337,11 @@ impl Manager {
         {
             log!("hub: could not record the revoked membership: {error:#}");
         }
-        self.hub.member.set(None, Some(refusal.message));
-        self.notify(None, NotificationKind::HubRefused, &message)
-            .await;
+        self.hub.member.set(None, Some(text));
+        if sealed || self.hub.member.unsealed_alert.due() {
+            self.notify(None, NotificationKind::HubRefused, &message)
+                .await;
+        }
         Kept::Failed
     }
 
@@ -366,3 +397,6 @@ fn route(connect: Vec<String>, membership: &Membership) -> Route {
         false => Route::Command(connect),
     }
 }
+
+#[cfg(test)]
+mod tests;

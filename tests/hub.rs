@@ -334,3 +334,22 @@ fn a_machine_that_revokes_itself_hears_that_it_did() {
         (role["problem"].as_str()).is_some_and(|problem| problem.contains("revoked"))
     });
 }
+
+#[test]
+fn the_hub_keeps_a_joiner_s_name_short() {
+    let hub = Machine::hub();
+    let laptop = Machine::start("");
+    let long = "laptop".repeat(5_000);
+    laptop.join_through_command(&hub, &long);
+    let members = hub.members_once(|members| members.len() == 2);
+    let joined = members
+        .iter()
+        .find(|member| member["hub"] == false)
+        .unwrap();
+    let name = joined["name"].as_str().unwrap();
+    assert!(
+        name.starts_with("laptop") && name.len() <= 300,
+        "{}",
+        name.len()
+    );
+}

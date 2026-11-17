@@ -137,7 +137,10 @@ impl Manager {
                 self.accept_member(channel, protocol, hello, Over::Listener)
                     .await
             }
-            Err(error) => log!("hub: a listener connection opened no link: {error:#}"),
+            Err(error) => {
+                let error = super::shown(&format!("{error:#}"));
+                log!("hub: a listener connection opened no link: {error}")
+            }
         }
     }
 }
