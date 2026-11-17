@@ -14,6 +14,7 @@ pub(crate) struct Signals {
     cleanup: Notify,
     environment: Notify,
     turn_retry: Notify,
+    wake_timers: Notify,
     execution_unknown: Notify,
     lost_reports: Notify,
     simulator_idle: Notify,
@@ -92,6 +93,15 @@ impl Signals {
 
     pub(crate) fn turn_retry_woken(&self) -> Notified<'_> {
         self.turn_retry.notified()
+    }
+
+    /// Wake the wake timers' loop, since a timer was set.
+    pub(crate) fn set_wake_timer(&self) {
+        self.wake_timers.notify_one();
+    }
+
+    pub(crate) fn wake_timer_set(&self) -> Notified<'_> {
+        self.wake_timers.notified()
     }
 
     /// Wake stopped-agent reconciliation, since an execution became unknown.

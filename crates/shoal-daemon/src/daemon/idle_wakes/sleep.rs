@@ -1,16 +1,21 @@
 //! The sleep an agent that waits for something takes: Shoal does not wake
 //! it for having stayed idle, and puts it to sleep once that costs nothing,
 //! until its next turn starts, or after every turn until `shoal sleep
-//! --undo`, which also wakes an agent asleep for any reason.
-use anyhow::Result;
-use rusqlite::{Connection, OptionalExtension, params};
+//! --undo`, which also wakes an agent asleep for any reason and cancels
+//! its timer.
+use anyhow::{Result, ensure};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use crate::{
-    daemon::workspace::Manager,
+    daemon::{wake_timers, workspace::Manager},
     state::{AgentState, Sleep},
+    time::UnixTime,
 };
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::{sleep::Slept, space_names::SpaceSelector};
+use shoal_protocol::{
+    sleep::{Slept, WakeTimer},
+    space_names::SpaceSelector,
+};
 
 /// How long the agent of the space `id` sleeps.
 pub(crate) fn current(db: &Connection, id: &SpaceId) -> Result<Option<Sleep>> {
@@ -57,27 +62,66 @@ pub(crate) fn follow_state(
     Ok(())
 }
 
+/// Refuse a timer without a sleep, since waking the agent cancels its
+/// timer, and a timer's message an agent message could not carry.
+fn check(sleep: Option<Sleep>, timer: Option<&WakeTimer>) -> Result<()> {
+    ensure!(
+        sleep.is_some() || timer.is_none(),
+        "a timer comes with a sleep; waking the agent cancels its timer"
+    );
+    if let Some(message) = timer.and_then(|timer| timer.message.as_deref()) {
+        crate::validate::agent_message(message)?;
+    }
+    Ok(())
+}
+
+/// Record that the agent of the space `id` sleeps as `sleep` says, with
+/// `timer` replacing its timer when one is given, or with no sleep wake it
+/// and cancel its timer; how long it then sleeps, and when its timer fires.
+fn record(
+    tx: &Transaction<'_>,
+    id: &SpaceId,
+    sleep: Option<Sleep>,
+    timer: Option<WakeTimer>,
+) -> Result<(Option<Sleep>, Option<UnixTime>)> {
+    set(tx, id, sleep)?;
+    match (sleep, timer) {
+        (None, _) => {
+            wake_timers::cancel(tx, id)?;
+            crate::daemon::workspace::agent_queue::asleep::wake(tx, id)?;
+        }
+        (Some(_), Some(timer)) => wake_timers::set(tx, id, &timer)?,
+        (Some(_), None) => {}
+    }
+    Ok((current(tx, id)?, wake_timers::due_at(tx, id)?))
+}
+
 impl Manager {
     /// Let the agent of the space `selector` names sleep as `sleep` says,
-    /// or with none end its sleep and wake it: a restore Shoal queued on its
-    /// own for it then waits only for its turn in the agent queue.
-    pub async fn sleep(&self, selector: &SpaceSelector, sleep: Option<Sleep>) -> Result<Slept> {
+    /// replacing its timer with `timer` when one is given, or with no sleep
+    /// end its sleep, cancel its timer and wake it: a restore Shoal queued
+    /// on its own for it then waits only for its turn in the agent queue.
+    pub async fn sleep(
+        &self,
+        selector: &SpaceSelector,
+        sleep: Option<Sleep>,
+        timer: Option<WakeTimer>,
+    ) -> Result<Slept> {
+        check(sleep, timer.as_ref())?;
         let space = self.space(selector).await?;
         let idle_wake_minutes = self.idle_wake_minutes(&space).await?;
-        let id = space.id.to_owned();
-        let sleep = (self.store)
-            .write(move |tx| {
-                set(tx, &id, sleep)?;
-                if sleep.is_none() {
-                    crate::daemon::workspace::agent_queue::asleep::wake(tx, &id)?;
-                }
-                current(tx, &id)
-            })
+        let (id, timer_set) = (space.id.to_owned(), timer.is_some());
+        let (sleep, wake_at) = (self.store)
+            .write(move |tx| record(tx, &id, sleep, timer))
             .await?;
+        if timer_set {
+            self.signals.set_wake_timer();
+        }
         self.agent_queue.wake();
         Ok(Slept {
             space: space.name.to_owned(),
             sleep,
+            wake_at,
             idle_wake_minutes,
         })
     }

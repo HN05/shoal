@@ -352,7 +352,12 @@ restore keeps why the agent sleeps and what wakes it, so lists, status and the
 inbox read it without the recovery records, and `shoal attach`, the user
 asking for the agent, starts that restore at once. `shoal sleep` is the
 agent saying it has nothing to do until something arrives, so Shoal stops it
-once that costs no prompt cache whether or not work waits; queued work that
+once that costs no prompt cache whether or not work waits, and it takes the
+agent's timer, since a timer says the same until a time: one per space, which a
+new one replaces, kept as daemon state through stops, restores and restarts
+until it fires as an agent message, `--undo` cancels it or the space is done or
+removed. A loop sets its next timer each turn, so Shoal parses no recurring
+schedule. Queued work that
 needs a slot or memory may also put an idle agent to sleep, lowest rank and
 priority first and never above the entry's priority, but only one something
 will wake (a watched open PR, a blocker, an open question or a pending
@@ -534,7 +539,8 @@ ends the daemon starts the same stop, which the service definition's stop
 timeout bounds; after a logind stop the signal leaves work alone.
 As after a protection stop, an agent stopped between turns returns only for an
 update, counting processes still running outside its process group as a turn
-in flight, and its restore keeps its workspace from no cleanup meanwhile; `shoal restore` asks for the agent itself, so its restore waits for
+in flight, and its restore keeps its workspace from no cleanup meanwhile unless a
+`shoal sleep` timer will wake it, which gives it work at that time; `shoal restore` asks for the agent itself, so its restore waits for
 nothing but admission.
 The request is its own file so that forgetting it, as a stop does, never
 replaces a record a restore holds. An

@@ -98,9 +98,10 @@ fn queued_restores(db: &Connection, workspace_id: &SpaceId) -> Result<Vec<Queued
 impl Manager {
     /// The executions of the workspace whose agent, stopped between turns
     /// with every process, waits in the queue for an update, in its wrapper
-    /// or for the daemon to start it, while none is recorded for it. Disk
-    /// space may still hold back one that is, which has work all the same.
-    /// An agent stopped because its space is blocked is not idle.
+    /// or for the daemon to start it, while none is recorded for it and no
+    /// timer will wake it. Disk space may still hold back one that is,
+    /// which has work all the same. An agent stopped because its space is
+    /// blocked is not idle.
     pub(crate) async fn idle_restores(
         &self,
         workspace_id: &SpaceId,
@@ -137,7 +138,10 @@ impl Manager {
                 idle.insert(restore.execution);
             }
         }
-        if !idle.is_empty() && self.agent_updates_recorded(workspace_id).await? {
+        if !idle.is_empty()
+            && (self.agent_updates_recorded(workspace_id).await?
+                || self.wake_timer_set(workspace_id).await?)
+        {
             idle.clear();
         }
         Ok(idle)

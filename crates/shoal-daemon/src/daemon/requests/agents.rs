@@ -86,7 +86,11 @@ pub(super) async fn handle(
             Body::Progress(manager.set_progress(&space, change).await?)
         }
         AgentMethod::Progress { space } => Body::Progress(manager.space_progress(&space).await?),
-        AgentMethod::Sleep { space, sleep } => Body::Slept(manager.sleep(&space, sleep).await?),
+        AgentMethod::Sleep {
+            space,
+            sleep,
+            timer,
+        } => Body::Slept(manager.sleep(&space, sleep, timer).await?),
         AgentMethod::StartWokenTurn { workspace } => Body::WokenTurn(WokenTurn {
             starts: manager
                 .start_woken_turn(&workspace, execution(caller))

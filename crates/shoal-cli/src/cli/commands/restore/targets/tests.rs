@@ -29,6 +29,7 @@ fn spaces() -> Spaces {
         agent_state: None,
         progress: None,
         sleep: None,
+        wake_at: None,
         asleep: None,
         parent: None,
         children: Vec::new(),

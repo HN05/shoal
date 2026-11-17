@@ -621,7 +621,9 @@ async fn a_sleeping_agent_sleeps_once_its_cache_expires() {
         .unwrap();
     let (workspace, execution) = agent(&manager, &repo.id, "sleeps", UNFINISHED).await;
     let selector = SpaceSelector::id(&workspace.id);
-    (manager.sleep(&selector, Some(Sleep::Turn))).await.unwrap();
+    (manager.sleep(&selector, Some(Sleep::Turn), None))
+        .await
+        .unwrap();
     cache_expires_in(&manager, &workspace, 600).await;
     manager.stop_idle_agents().await.unwrap();
     assert!(!*execution.stop.borrow(), "a warm cache keeps the agent");
@@ -633,6 +635,46 @@ async fn a_sleeping_agent_sleeps_once_its_cache_expires() {
         stop_reason(&manager, &execution).await,
         Some(Protection::slept().reason)
     );
+}
+
+/// An asleep agent's timer keeps its waiting restore from counting as an
+/// idle agent's, which keeps the workspace from cleanup, and makes the
+/// restore due once it fires.
+#[tokio::test]
+async fn an_asleep_agents_timer_keeps_its_workspace_and_restores_it() {
+    let (root, manager) = manager().await;
+    manager.publish_config(crate::daemon::test_support::global_config(
+        "[machine.overload.disk]\nenabled = false",
+    ));
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (workspace, execution) = agent(&manager, &repo.id, "sleeps", UNFINISHED).await;
+    let selector = SpaceSelector::id(&workspace.id);
+    let at = UnixTime::now() + std::time::Duration::from_secs(20 * 60);
+    let timer = shoal_protocol::sleep::WakeTimer { at, message: None };
+    (manager.sleep(&selector, Some(Sleep::Turn), Some(timer)))
+        .await
+        .unwrap();
+    cache_expires_in(&manager, &workspace, 0).await;
+    manager.stop_idle_agents().await.unwrap();
+    assert!(*execution.stop.borrow());
+    let agent = crate::agent::Agent::from("claude");
+    manager
+        .queue_restore(&execution.plan.id, &agent, &workspace.id)
+        .await
+        .unwrap();
+    let _waiter = manager.agent_queue.wait_for_restore(&execution.plan.id);
+    let idle = manager.idle_restores(&workspace.id).await.unwrap();
+    assert!(idle.is_empty(), "{idle:?}");
+    let due = manager.restore_due(&workspace.id, &execution.plan.id);
+    assert!(!due.await.unwrap());
+
+    manager.fire_wake_timers(at).await.unwrap();
+    let due = manager.restore_due(&workspace.id, &execution.plan.id);
+    assert!(due.await.unwrap());
 }
 
 /// A light workspace agent that sleeps only stops its idle wakes: neither
@@ -655,7 +697,9 @@ async fn a_light_agent_that_sleeps_keeps_running() {
     };
     let (workspace, execution) = agent(&manager, &repo.id, "sleeps", light).await;
     let selector = SpaceSelector::id(&workspace.id);
-    (manager.sleep(&selector, Some(Sleep::Turn))).await.unwrap();
+    (manager.sleep(&selector, Some(Sleep::Turn), None))
+        .await
+        .unwrap();
     cache_expires_in(&manager, &workspace, 0).await;
 
     manager.stop_idle_agents().await.unwrap();
@@ -676,7 +720,7 @@ async fn under_the_speed_schedule_a_sleeping_agent_sleeps_at_once() {
         .unwrap();
     let (workspace, execution) = agent(&manager, &repo.id, "sleeps", UNFINISHED).await;
     let selector = SpaceSelector::id(&workspace.id);
-    (manager.sleep(&selector, Some(Sleep::Permanent)))
+    (manager.sleep(&selector, Some(Sleep::Permanent), None))
         .await
         .unwrap();
     cache_expires_in(&manager, &workspace, 600).await;

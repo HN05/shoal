@@ -99,14 +99,14 @@ async fn a_worker_idle_for_its_period_is_woken_unless_done_or_sleeping() {
         .await
         .unwrap();
     let slept = manager
-        .sleep(&selector(&sleeping), Some(Sleep::Turn))
+        .sleep(&selector(&sleeping), Some(Sleep::Turn), None)
         .await
         .unwrap();
     assert_eq!(
         (slept.sleep, slept.idle_wake_minutes),
         (Some(Sleep::Turn), Some(60))
     );
-    (manager.sleep(&selector(&permanent), Some(Sleep::Permanent)))
+    (manager.sleep(&selector(&permanent), Some(Sleep::Permanent), None))
         .await
         .unwrap();
     let mut woken = Woken::default();
@@ -133,7 +133,9 @@ async fn a_worker_idle_for_its_period_is_woken_unless_done_or_sleeping() {
     assert_eq!(messages(&manager, &sleeping.id).await.len(), 1);
     assert!(messages(&manager, &permanent.id).await.is_empty());
     // Undo ends a permanent sleep.
-    let undone = (manager.sleep(&selector(&permanent), None)).await.unwrap();
+    let undone = (manager.sleep(&selector(&permanent), None, None))
+        .await
+        .unwrap();
     assert_eq!(undone.sleep, None);
     sweep_later(&manager, &mut Woken::default()).await;
     assert_eq!(messages(&manager, &permanent.id).await.len(), 1);
@@ -145,7 +147,10 @@ async fn a_sleep_lasts_through_its_turn_and_a_wait_for_the_user() {
     let (_, [workspace]) = idle_workers(&manager, &temp, ["waits"]).await;
     let selector = SpaceSelector::id(&workspace.id);
     report(&manager, &workspace.id, AgentState::Working).await;
-    manager.sleep(&selector, Some(Sleep::Turn)).await.unwrap();
+    manager
+        .sleep(&selector, Some(Sleep::Turn), None)
+        .await
+        .unwrap();
     // A permission prompt in the turn that slept starts no turn.
     report(&manager, &workspace.id, AgentState::Waiting).await;
     report(&manager, &workspace.id, AgentState::Working).await;
@@ -165,7 +170,7 @@ async fn a_chat_sleeps_whatever_its_mode() {
     configure(&manager, "[modes.plan]\nidle_wake_minutes = 30\n").await;
     let talks = chat(&manager, "talks", ModeName::CHAT, Some(&repo), None).await;
     let plans = chat(&manager, "plans", ModeName::PLAN, Some(&repo), None).await;
-    let slept = (manager.sleep(&SpaceSelector::id(&talks.id), Some(Sleep::Permanent)))
+    let slept = (manager.sleep(&SpaceSelector::id(&talks.id), Some(Sleep::Permanent), None))
         .await
         .unwrap();
     assert_eq!(

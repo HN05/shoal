@@ -35,12 +35,15 @@ pub enum AgentMethod {
         space: SpaceSelector,
     },
     /// Let the space's agent sleep as `sleep` says, so Shoal does not wake
-    /// it for having stayed idle, or end its sleep with none; a space whose
-    /// mode never wakes it records none.
+    /// it for having stayed idle, replacing its timer with `timer` when one
+    /// is given, or end its sleep and cancel its timer with none; a space
+    /// whose mode never wakes it records none.
     Sleep {
         space: SpaceSelector,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         sleep: Option<crate::state::Sleep>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        timer: Option<crate::sleep::WakeTimer>,
     },
     /// [`Self::SetAgentState`] working for the turn a wake hook starts with
     /// an update, unless a stop of the caller's agent came first, which

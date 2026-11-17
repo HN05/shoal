@@ -21,7 +21,7 @@ pub(super) async fn run(
     sleep: Option<Sleep>,
 ) -> Result<i32> {
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    let slept = sleep::set(&ctx.paths, space, sleep).await?;
+    let slept = sleep::set(&ctx.paths, space, sleep, None).await?;
     ctx.show(&slept, |slept| outln!("{}", summary(slept)))?;
     Ok(0)
 }

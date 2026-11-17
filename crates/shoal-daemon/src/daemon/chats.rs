@@ -251,6 +251,7 @@ impl Manager {
             agent_state: None,
             progress: None,
             sleep: None,
+            wake_at: None,
             asleep: None,
             parent: None,
             children: Vec::new(),
@@ -700,6 +701,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
             agent_state: None,
             progress: None,
             sleep: None,
+            wake_at: None,
             asleep: None,
             parent: None,
             children: Vec::new(),
@@ -726,6 +728,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
         chat.agent_state = workspace::agent_state::current(db, &chat.id)?;
         chat.progress = crate::daemon::progress::current(db, &chat.id)?;
         chat.sleep = crate::daemon::idle_wakes::sleep::current(db, &chat.id)?;
+        chat.wake_at = crate::daemon::wake_timers::due_at(db, &chat.id)?;
         chat.asleep = workspace::agent_queue::asleep::current(db, &chat.id)?;
         Ok(chat)
     })

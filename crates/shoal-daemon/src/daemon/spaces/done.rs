@@ -12,7 +12,7 @@ use crate::{
         item_numbers::ItemNumber,
         links::{pr::current_head, space::require_ready_space},
         notifications::NotificationKind,
-        progress, questions,
+        progress, questions, wake_timers,
         workspace::{GuardMode, Manager, ResourceGuard, turn_retry},
         workspace_files::Attacher,
     },
@@ -190,8 +190,10 @@ impl Manager {
                     progress::record_status(tx, &id, completion.summary.as_deref(), now)?
                         | progress::remove_blockers(tx, &id, now)?;
                 let closed = questions::close_open(tx, &id)?;
-                // Finished work leaves its failed turn alone.
+                // Finished work leaves its failed turn alone, and has
+                // nothing left for a timer to wake it for.
                 turn_retry::cancel(tx, &id)?;
+                wake_timers::cancel(tx, &id)?;
                 Ok(Persisted {
                     changed: replaced || !closed.is_empty() || progressed,
                     closed,

@@ -74,6 +74,7 @@ pub(crate) mod test_support;
 mod tmp_dirs;
 pub(crate) mod triggers;
 mod untracked;
+pub(crate) mod wake_timers;
 mod warnings;
 pub mod workspace;
 pub mod workspace_files;
@@ -188,6 +189,7 @@ pub async fn run(
     );
     spawn_supervised(&mut background, &manager, "keep awake", keep_awake::run);
     spawn_supervised(&mut background, &manager, "idle wakes", idle_wakes::run);
+    spawn_supervised(&mut background, &manager, "wake timers", wake_timers::run);
     spawn_supervised(
         &mut background,
         &manager,

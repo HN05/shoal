@@ -57,6 +57,9 @@ pub struct Space<P = SpacePart> {
     /// having stayed idle.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sleep: Option<crate::state::Sleep>,
+    /// When the timer `shoal sleep --for` or `--until` set wakes its agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wake_at: Option<crate::time::UnixTime>,
     /// Why Shoal put its stopped agent to sleep and what wakes it, while
     /// Shoal brings that agent back on its own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -172,6 +175,7 @@ impl<P> Space<P> {
             agent_state,
             progress,
             sleep,
+            wake_at,
             asleep,
             parent,
             children,
@@ -192,6 +196,7 @@ impl<P> Space<P> {
             agent_state,
             progress,
             sleep,
+            wake_at,
             asleep,
             parent,
             children,

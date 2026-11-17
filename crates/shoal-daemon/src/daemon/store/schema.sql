@@ -655,6 +655,12 @@ CREATE TABLE pending_worktrees (
     plan TEXT NOT NULL
 );
 
+CREATE TABLE space_wake_timers (
+    space_id TEXT PRIMARY KEY,
+    due_at INTEGER NOT NULL,
+    message TEXT
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
@@ -1122,4 +1128,8 @@ WHEN NEW.state='failed' AND OLD.state='preparing' BEGIN
     INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
         '$.kind','setup_failed','$.error',NEW.error
     ) FROM space_event_records WHERE id=NEW.id AND space_kind='workspace';
+END;
+
+CREATE TRIGGER space_wake_timer_removed AFTER DELETE ON spaces BEGIN
+    DELETE FROM space_wake_timers WHERE space_id=OLD.id;
 END;
