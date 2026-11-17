@@ -1141,50 +1141,26 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
             },
         )
         .await;
-    // A launch that names no workspace opens a new one in the caller's scope.
-    for (workspace, allowed) in [
-        (Some(&child.id), true),
-        (Some(&parent.id), false),
-        (Some(&sibling.id), false),
-        (None, true),
-    ] {
-        let mut method = crate::protocol::QueueMethod::QueueAdd {
-            request: Box::new(QueueRequest {
-                workspace: workspace.map(SpaceSelector::from),
-                ..request(&repo, "launch", false)
+    // It queues the worker of a workspace below its own, and only there.
+    let worker = |workspace: &shoal_ids::space_ids::SpaceId, now: bool| {
+        crate::protocol::QueueMethod::QueueAgent {
+            workspace: SpaceSelector::id(workspace),
+            launch: Box::new(crate::protocol::operations::LaunchRequest {
+                now,
+                ..crate::protocol::operations::LaunchRequest::new(Some("claude".into()))
             }),
-        };
+            blockers: Vec::new(),
+            pr: None,
+        }
+    };
+    for (workspace, allowed) in [(&child.id, true), (&parent.id, false), (&sibling.id, false)] {
+        let mut method = worker(workspace, false);
         let authorized =
             crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
         assert_eq!(authorized.is_ok(), allowed, "{workspace:?}");
     }
-    // It starts one in its own process, but only the user starts one
-    // regardless of the limits.
-    for (request, allowed) in [
-        (request(&repo, "launch", true), false),
-        (
-            QueueRequest {
-                starts_in_caller: true,
-                ..request(&repo, "launch", false)
-            },
-            true,
-        ),
-    ] {
-        let mut method = crate::protocol::QueueMethod::QueueAdd {
-            request: Box::new(QueueRequest {
-                workspace: Some(SpaceSelector::id(&child.id)),
-                ..request
-            }),
-        };
-        let authorized =
-            crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
-        assert_eq!(authorized.is_ok(), allowed);
-    }
-    // Nor does it open one in another repository.
-    let other = register(&manager, &temp, "other").await;
-    let mut method = crate::protocol::QueueMethod::QueueAdd {
-        request: Box::new(request(&other, "launch", false)),
-    };
+    // Only the user starts one regardless of the limits.
+    let mut method = worker(&child.id, true);
     let authorized =
         crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
     assert!(authorized.is_err());

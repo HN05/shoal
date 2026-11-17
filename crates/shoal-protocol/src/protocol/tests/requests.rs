@@ -138,7 +138,6 @@ const REQUESTS: &[&str] = &[
     r#"{"check_chat_parent":{"repository":"app","workspace":"fix","parent":"7"}}"#,
     r#""chat_root""#,
     // The agent queue.
-    r#"{"queue_add":{"request":{"repository":"app","name":"fix","agent":"claude","issue_title":null,"plan":"{}","env":{},"now":false,"workspace":"fix","starts_in_caller":true,"blockers":[]}}}"#,
     r#"{"queue_chat":{"request":{"repository":"app","name":"talk","agent":"claude","mode":"chat","plan":"{}","env":{}}}}"#,
     r#"{"queue_agent":{"workspace":"fix","launch":{"agent":null,"prompt":"Fix the build"}}}"#,
     r#""list_queue""#,

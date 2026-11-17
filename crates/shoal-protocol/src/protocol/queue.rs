@@ -9,9 +9,6 @@ use super::Lifetime;
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum QueueMethod {
-    QueueAdd {
-        request: Box<crate::model::QueueRequest>,
-    },
     /// Admit the launch of a new chat's agent now or queue it.
     QueueChat {
         request: Box<crate::model::ChatQueueRequest>,

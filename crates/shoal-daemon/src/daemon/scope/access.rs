@@ -13,9 +13,7 @@ use crate::{
         approvals::ApprovalRequest, item_numbers::ItemNumber, permissions::Action,
         questions::Question, workspace::Manager,
     },
-    model::{
-        ChatQueueRequest, QueueEntry, QueueRequest, Repository, RunningAgent, Space, SpaceTarget,
-    },
+    model::{ChatQueueRequest, QueueEntry, Repository, RunningAgent, Space, SpaceTarget},
     protocol::{ChatStart, operations::WorkspaceStart},
     repository::Selector,
 };
@@ -414,40 +412,6 @@ impl Manager {
         Ok(())
     }
 
-    /// The workspace `request` starts an agent in, which must be one below
-    /// the caller's, or none for the launch of a new workspace in the
-    /// caller's repository, which opens it in the caller's scope; a start
-    /// regardless of the limits is the `limits` permission's.
-    pub(in crate::daemon) async fn queue_target<'a>(
-        &self,
-        caller: &Caller,
-        request: &'a mut QueueRequest,
-    ) -> Result<Option<&'a mut SpaceSelector>> {
-        if request.workspace.is_none() {
-            self.confine_new_launch(caller, request).await?;
-            if request.now {
-                let start = format!("start the agent of new space {} now", request.name);
-                let repository = Some(self.repository(&request.repository).await?.id);
-                (self.authorize_beyond_limits(caller, start, repository)).await?;
-            }
-            return Ok(None);
-        }
-        let QueueRequest {
-            workspace,
-            mode,
-            narrowing,
-            now,
-            ..
-        } = request;
-        let target = workspace.as_mut().context(WORKER_REFUSAL)?;
-        let target = self.worker_target(caller, target, mode.as_ref(), narrowing);
-        let target = target.await?;
-        if *now {
-            (self.authorize_start_beyond_limits(caller, "start", target)).await?;
-        }
-        Ok(Some(target))
-    }
-
     /// The workspace below `caller`'s own space, which its scope reaches,
     /// whose worker it queues in `mode`, the default mode without one,
     /// refused with `given` permissions the caller does not hold.
@@ -469,17 +433,6 @@ impl Manager {
         let giver = Some(&caller.space_id);
         (self.ensure_agent_held(giver, target, &mode, given)).await?;
         Ok(target)
-    }
-
-    /// Confine `caller`'s launch of a new workspace to its own repository,
-    /// with only the permissions its own space holds.
-    async fn confine_new_launch(&self, caller: &Caller, request: &mut QueueRequest) -> Result<()> {
-        const REFUSAL: &str = "workspace processes start agents only in their own repository";
-        let repository = &request.repository;
-        request.repository = self.own_repository(caller, repository, REFUSAL).await?;
-        let repository = self.repository(&request.repository).await?.id;
-        let giver = Some(&caller.space_id);
-        (self.ensure_caller_holds(giver, &request.narrowing, Some(&repository))).await
     }
 
     /// Confine the launch of a new chat's agent that `caller` queues: it
