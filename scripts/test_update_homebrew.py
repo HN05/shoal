@@ -20,11 +20,11 @@ end
 
     @staticmethod
     def manifest(version, checksum="c" * 64):
-        return "\n".join(f"{checksum}  {name}" for name in sorted(updater.release_archives(version)))
+        return "\n".join(f"{checksum}  {name}" for name in sorted(updater.release_layouts(version)[0]))
 
     @staticmethod
     def formula_archives(version):
-        return [updater.formula_archive(version, platform, platform_os)
+        return [f"shoal-v{version}-{platform}{'-app' if platform_os == 'macos' else ''}.tar.gz"
                 for _, platform, platform_os, _ in updater.release_targets()]
 
     @staticmethod
@@ -59,11 +59,19 @@ end
 
     def test_macos_installs_the_app_archive_only(self):
         result = self.update(self.formula, "0.2.0", "a" * 40)
-        expected = []
-        for _, platform, platform_os, _ in updater.release_targets():
-            suffix = "-app" if platform_os == "macos" else ""
-            expected.append(f"shoal-v0.2.0-{platform}{suffix}.tar.gz")
-        self.assertEqual(self.asset_names(result), expected)
+        self.assertEqual(self.asset_names(result), self.formula_archives("0.2.0"))
+
+    def test_a_release_without_app_archives_installs_the_binary_archives(self):
+        # A resumed release published before Shoal.app had an archive of its own.
+        manifest = "\n".join(f"{'c' * 64}  shoal-v0.2.0-{platform}.tar.gz"
+                             for _, platform, _, _ in updater.release_targets())
+        result = updater.update_formula(self.formula, "0.2.0", "a" * 40, manifest)
+        self.assertEqual(self.asset_names(result),
+                         [f"shoal-v0.2.0-{platform}.tar.gz" for _, platform, _, _ in updater.release_targets()])
+        self.assertEqual(updater.update_formula(result, "0.2.0", "a" * 40, manifest), result)
+        partial = manifest + f"\n{'c' * 64}  " + self.formula_archives("0.2.0")[0]
+        with self.assertRaisesRegex(ValueError, "every release archive"):
+            updater.update_formula(self.formula, "0.2.0", "a" * 40, partial)
 
     def test_upgrades_a_formula_that_installs_the_macos_binary_archive(self):
         current = self.update(self.formula, "0.1.0", "a" * 40)
@@ -122,7 +130,7 @@ end
 
     def test_checksums_follow_asset_names_not_manifest_order(self):
         assets = {name: f"{index:064x}"
-                  for index, name in enumerate(sorted(updater.release_archives("0.2.0")))}
+                  for index, name in enumerate(sorted(updater.release_layouts("0.2.0")[0]))}
         manifest = "\n".join(f"{checksum}  {name}"
                              for name, checksum in reversed(list(assets.items())))
         result = updater.update_formula(self.formula, "0.2.0", "a" * 40, manifest)
@@ -148,7 +156,7 @@ end
                     self.update(previous, "0.1.0", "b" * 40)
                 with self.assertRaisesRegex(ValueError, "every release archive"):
                     updater.release_checksums(manifest.replace("custom-platform", "old-platform"),
-                                              updater.release_archives("0.2.0"))
+                                              updater.release_layouts("0.2.0"))
 
 
 if __name__ == "__main__":
