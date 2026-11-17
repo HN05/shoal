@@ -1600,6 +1600,14 @@ fn changes_in_another_repository_are_the_users_alone() {
     outside.current_dir(fixture.root.path());
     let pinned = fixture.output(outside.args(comment).args(["--repo", "repo"]));
     assert!(!pinned.status.success(), "{}", printed(&pinned));
+    // So does one without an origin, which has no forge to act on.
+    let local = repository_with(fixture.root.path(), "local", &[("tracked", "local\n")]);
+    fixture.ok(&["repo", "add", local.to_str().unwrap()]);
+    let mut outside = fixture.command();
+    outside.current_dir(fixture.root.path());
+    let pinned = fixture.output(outside.args(comment).args(["--repo", "local"]));
+    let refused = String::from_utf8_lossy(&pinned.stderr);
+    assert!(refused.contains("no origin"), "{}", printed(&pinned));
     assert!(fixture.requests().is_empty());
     // The user comments from outside any space, with nothing registered
     // there, as the user's own login.

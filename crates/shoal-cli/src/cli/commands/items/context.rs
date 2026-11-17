@@ -1,7 +1,7 @@
 //! Where an item command that needs only a repository runs: a workspace, or
 //! a registered checkout, where a chat runs its agent and where the
 //! user names a registered repository to act in without a workspace.
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{context::Context, ui},
@@ -184,7 +184,8 @@ async fn in_chat_outside_repositories(ctx: &Context) -> Result<bool> {
 /// command, or a chat's without a repository, acts without a workspace; a
 /// workspace process acts only through its own. It also names the
 /// repository by its `origin`, so an item's, run's or workflow's URL of
-/// another one is refused rather than followed.
+/// another one is refused rather than followed; without an `origin` it has
+/// no forge to act on.
 async fn registered_target(ctx: &Context, repo: Option<&str>) -> Result<Option<RepoTarget>> {
     let Some(named) = repo else {
         return Ok(None);
@@ -195,8 +196,11 @@ async fn registered_target(ctx: &Context, repo: Option<&str>) -> Result<Option<R
     let Some(checkout) = registered(ctx, named).await? else {
         return Ok(None);
     };
+    let origin = repository::remote_url_from_path(&checkout.path).await?;
+    let origin = origin
+        .with_context(|| format!("{named} has no origin remote, so it has no forge to act on"))?;
     Ok(Some(RepoTarget {
-        repository: repository::remote_url_from_path(&checkout.path).await?,
+        repository: Some(origin),
         context: Some(ItemContext::Checkout(checkout.id)),
     }))
 }
