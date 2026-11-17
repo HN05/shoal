@@ -420,3 +420,34 @@ async fn a_blocked_copy_takes_its_source_as_it_is_once_its_blockers_clear() {
     assert!(!created.pending_worktree);
     assert!(created.copied_from.is_some());
 }
+
+#[tokio::test]
+async fn a_start_waiting_for_no_such_space_records_nothing() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let blocker = Blocker::Space(shoal_ids::space_ids::SpaceId::generate().to_string());
+    let opening = Opening {
+        start: WorkspaceStart::Name("ui".into()),
+        base: None,
+        new: Default::default(),
+        parent: None,
+    };
+    let preparing = Preparing {
+        issue: None,
+        pr: None,
+        agent: Some(Box::new(LaunchRequest::new(Some(
+            "claude".parse().unwrap(),
+        )))),
+        waiting: None,
+        queue_entry: None,
+        blockers: vec![blocker],
+        unfollowed: true,
+        env: None,
+    };
+    let refused = manager
+        .start_workspace((&repo.id).into(), opening, preparing, None)
+        .await;
+    assert!(refused.is_err(), "{refused:?}");
+    assert!(manager.list_workspaces().await.unwrap().is_empty());
+    assert!(manager.queue_entries().await.unwrap().is_empty());
+}

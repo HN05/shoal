@@ -196,6 +196,8 @@ impl Manager {
         }
         self.authorize_start_agent(caller, &preparing, &repo.id)
             .await?;
+        // The work its agent waits for is checked before anything is recorded.
+        (self.check_blockers(&(&repo.id).into(), preparing.blockers.clone())).await?;
         let asked = opening.new.options.priority;
         let given = self.given_priority(caller, asked).await?;
         let opened = (self.open_for_start(repository, opening, caller)).await?;
