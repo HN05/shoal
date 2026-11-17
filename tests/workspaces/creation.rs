@@ -41,6 +41,11 @@ fn named_workspace_uses_committed_history_and_deletes_redundant_branch() {
 #[test]
 fn failed_creation_cannot_adopt_an_unrelated_worktree_at_its_reserved_path() {
     let fixture = Fixture::new();
+    install_test_script(
+        fixture.repo.join("pre-remove.sh"),
+        "#!/bin/sh\ntouch \"$HOME/pre-remove-ran\"\n",
+    );
+    commit_resource_config(&fixture.repo, "hooks.pre_remove = 'pre-remove.sh'\n");
     let failed = fixture.run(&[
         "start",
         "--wait",
@@ -72,6 +77,8 @@ fn failed_creation_cannot_adopt_an_unrelated_worktree_at_its_reserved_path() {
     let removal = fixture.run(&["rm", "--wait", &fixture.id("reserved"), "--yes"]);
     assert!(!removal.status.success());
     assert!(reserved.exists());
+    // Nothing ran in the worktree the workspace does not own.
+    assert!(!fixture.root.path().join("pre-remove-ran").exists());
 }
 
 #[test]
