@@ -70,13 +70,12 @@ impl WatchRecord {
             return self.pending.clone();
         }
         // A poll that started before the read the watch started from may
-        // have read the item before it. One that started in the same second
-        // is taken as after it, so a watch that follows at once is not
-        // held back a whole poll.
+        // have read the item before it, however late it finishes. One that
+        // started in the same second is taken as after it, so a watch that
+        // follows at once is not held back a whole poll.
         if self.started_at.is_some_and(|at| observed_at < at) {
             return Vec::new();
         }
-        self.started_at = None;
         snapshot.normalize(&self.snapshot, UnixTime::now());
         self.discount_own_changes(&mut snapshot, observed_at);
         let changes = self.snapshot.changes(&snapshot, url);

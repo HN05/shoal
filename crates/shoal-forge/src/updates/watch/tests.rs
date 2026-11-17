@@ -142,3 +142,21 @@ fn a_restart_reports_a_condition_its_read_first_shows() {
         [UpdateKind::Closed]
     );
 }
+
+#[test]
+fn a_poll_that_started_before_the_start_stays_stale_after_a_newer_one() {
+    let mut record = WatchRecord::default();
+    let read = json!({"discussion:1": "one", "discussion:2": "two"});
+    let read_at = UnixTime::from_seconds(10);
+    record.start_from(snapshot(read.clone(), "open"), "pr", read_at);
+    let newer = UnixTime::from_seconds(11);
+    assert!(
+        record
+            .observe(snapshot(read, "open"), "pr", newer)
+            .is_empty()
+    );
+    let stale = snapshot(json!({"discussion:1": "one"}), "open");
+    let older = UnixTime::from_seconds(9);
+    assert!(record.observe(stale, "pr", older).is_empty());
+    assert_eq!(record.snapshot.comments.len(), 2);
+}
