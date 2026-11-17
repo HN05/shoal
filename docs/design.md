@@ -2265,7 +2265,9 @@ Item selectors make the `pr`/`issue` word optional for numbers: a linked
 item with that number decides the kind, otherwise the forge's issue read where
 issues and PRs share one sequence. Where they do not, an unlinked number stays
 ambiguous and needs its kind rather than a guess between two reads.
-Ready workspaces with linked issues or PRs are polled every 30 seconds; the
+Ready workspaces with linked issues or PRs, and the chats that run or, stopped,
+still watch an open PR or a merge's CI runs, so an asleep chat hears what wakes
+it, are polled every 30 seconds; the
 daemon keeps a separate activity snapshot for each item and appends an
 `item_activity` event for each newly observed comment, edit, completed check,
 conflict, closure, merge, reopen, or lookup failure. The first observation

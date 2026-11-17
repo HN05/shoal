@@ -3283,3 +3283,50 @@ async fn the_background_poll_reads_spaces_together() {
     }
     manager.poll_linked_item_activity().await.unwrap();
 }
+
+#[tokio::test]
+async fn a_stopped_chat_is_polled_while_it_watches_an_open_pr() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "asleep".into(),
+            "claude".into(),
+            None,
+        )
+        .await
+        .unwrap();
+    let polled = || async {
+        let spaces = manager.polled_spaces().await.unwrap();
+        spaces.iter().any(|space| space.id == chat.id)
+    };
+    assert!(polled().await);
+    // Its agent stops, as Shoal stops one that sleeps.
+    let id = chat.id.clone();
+    (manager.store)
+        .run(move |db| {
+            db.execute("DELETE FROM executions WHERE space_id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert!(!polled().await);
+    register_watch(&manager, &chat.id, PR.as_str()).await;
+    assert!(polled().await);
+    // Once the poll saw the PR merge, its activity is over.
+    let merged = serde_json::from_value::<Snapshot>(json!({"comments": {}, "checks": {},
+        "conflict": null, "state": "merged", "errors": {}}))
+    .unwrap();
+    for snapshot in [snapshot("open"), merged] {
+        manager
+            .record_background_activity(&chat.id, vec![(PR.as_str().into(), snapshot)])
+            .await
+            .unwrap();
+    }
+    assert!(!polled().await);
+}

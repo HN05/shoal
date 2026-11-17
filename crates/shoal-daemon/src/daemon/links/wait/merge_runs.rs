@@ -224,7 +224,7 @@ pub(crate) fn awaits_merge_runs(db: &rusqlite::Connection, id: &SpaceId) -> Resu
 }
 
 /// The spaces with a lookup of a merge's runs.
-pub(super) fn merge_run_spaces(db: &rusqlite::Transaction<'_>) -> Result<Vec<SpaceId>> {
+pub(super) fn merge_run_spaces(db: &rusqlite::Connection) -> Result<Vec<SpaceId>> {
     Ok(db
         .prepare("SELECT DISTINCT space_id FROM merge_runs")?
         .query_map([], |row| row.get(0))?

@@ -7,7 +7,7 @@ use rusqlite::{OptionalExtension, params};
 
 use super::{
     branch_report::{BranchReport, branch_report},
-    items::polled_items,
+    items::{polled_items, watches_open_pr},
     merge_runs::merge_run_spaces,
 };
 use crate::{
@@ -54,16 +54,26 @@ impl Manager {
     }
 
     /// The spaces whose linked items the background poll reads: ready
-    /// workspaces and the running chats of a repository.
-    async fn polled_spaces(&self) -> Result<Vec<LinkSpace>> {
+    /// workspaces, and the chats of a repository that run or await what
+    /// the poll finds, such as a chat asleep until its PR's activity.
+    pub(super) async fn polled_spaces(&self) -> Result<Vec<LinkSpace>> {
         let workspaces = self.list_workspaces().await?.into_iter();
         let ready = workspaces.filter(|w| w.state == crate::state::WorkspaceState::Ready);
         let mut spaces: Vec<LinkSpace> = ready.map(LinkSpace::from).collect();
-        let following = self.store.read(merge_run_spaces).await?;
-        let polled = |chat: &Chat| chat.running || following.contains(&chat.id);
         let chats = self.chats().await?.into_iter();
-        for chat in chats.filter(|chat| chat.repository_id.is_some() && polled(chat)) {
-            spaces.push(LinkSpace::own(chat.into())?);
+        let chats: Vec<Chat> = chats.filter(|chat| chat.repository_id.is_some()).collect();
+        let stopped: Vec<SpaceId> = (chats.iter())
+            .filter(|chat| !chat.running)
+            .map(|chat| chat.id.clone())
+            .collect();
+        let awaiting = self
+            .store
+            .read(move |db| awaiting_activity(db, stopped))
+            .await?;
+        for chat in chats {
+            if chat.running || awaiting.contains(&chat.id) {
+                spaces.push(LinkSpace::own(chat.into())?);
+            }
         }
         Ok(spaces)
     }
@@ -219,6 +229,19 @@ impl Manager {
             })
             .await
     }
+}
+
+/// The spaces among `ids` whose activity is still to come: they watch an
+/// open PR or look for, or follow, the CI runs of a merge.
+fn awaiting_activity(db: &rusqlite::Connection, ids: Vec<SpaceId>) -> Result<Vec<SpaceId>> {
+    let following = merge_run_spaces(db)?;
+    let mut awaiting = Vec::new();
+    for id in ids {
+        if following.contains(&id) || watches_open_pr(db, &id)? {
+            awaiting.push(id);
+        }
+    }
+    Ok(awaiting)
 }
 
 /// What a background poll saw change that Shoal acts on.
