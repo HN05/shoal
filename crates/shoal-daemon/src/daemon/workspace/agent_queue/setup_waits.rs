@@ -49,33 +49,24 @@ impl Manager {
     pub(super) async fn start_released_at_once(&self, workspace: &SpaceId) -> Result<()> {
         let _gate = self.agent_queue.lock_admission().await;
         let workspace = workspace.to_owned();
-        let released: Vec<QueueEntryId> = self
-            .store
-            .run(move |db| {
-                Ok(db
-                    .prepare(&format!(
-                        "SELECT id {AWAITING_SETUP} AND starts_at_once
-                            AND NOT EXISTS (SELECT 1 FROM agent_queue_blockers b WHERE b.entry_id=agent_queue.id)"
-                    ))?
-                    .query_map(
-                        params![workspace, QueueKind::Launch, QueueState::Queued],
-                        |row| row.get(0),
-                    )?
-                    .collect::<rusqlite::Result<_>>()?)
-            })
+        let released = (self.store)
+            .run(move |db| released_at_once(db, &workspace))
             .await?;
         // A restore that runs the agent itself holds its entry meanwhile.
         let held = self.agent_queue.held();
         for id in released.into_iter().filter(|id| !held.contains(id)) {
-            let started = match self.waiting_entry(id.as_str(), None, "").await {
-                Ok(entry) => self.start_waiting(entry, false).await.map(drop),
-                Err(error) => Err(error),
-            };
-            if let Err(error) = started {
+            if let Err(error) = self.start_waiting_now(&id).await {
                 log!("{id} did not start at once after its setup: {error:#}");
             }
         }
         Ok(())
+    }
+
+    /// Start the waiting entry `id` now, regardless of the limits. Requires
+    /// the queue gate.
+    async fn start_waiting_now(&self, id: &QueueEntryId) -> Result<()> {
+        let entry = self.waiting_entry(id.as_str(), None, "").await?;
+        self.start_waiting(entry, false).await.map(drop)
     }
 
     /// Return to the queue each starting launch of a workspace whose setup
@@ -154,6 +145,20 @@ impl Manager {
             })
             .await
     }
+}
+
+/// The launches waiting to open `workspace` that their start asked to
+/// start at once and that nothing blocks any longer.
+fn released_at_once(db: &rusqlite::Connection, workspace: &SpaceId) -> Result<Vec<QueueEntryId>> {
+    let query = format!(
+        "SELECT id {AWAITING_SETUP} AND starts_at_once
+            AND NOT EXISTS (SELECT 1 FROM agent_queue_blockers b WHERE b.entry_id=agent_queue.id)"
+    );
+    let selection = params![workspace, QueueKind::Launch, QueueState::Queued];
+    Ok(db
+        .prepare(&query)?
+        .query_map(selection, |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
 }
 
 /// Return each starting launch of a workspace outside `preparing` whose
