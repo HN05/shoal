@@ -308,10 +308,29 @@ impl Manager {
         let workspace = self.workspace_by_id(&workspace.id).await?;
         let pending = self.claim_pending_worktree(&workspace).await?;
         let git_profile = pending.git_profile.clone();
-        let result = self
-            .materialize_worktree(&repo, &workspace, pending.source(), git_profile.as_deref())
-            .await;
+        let result = match workspace.git_dir {
+            // An earlier try created it, then failed to configure it.
+            Some(_) => {
+                self.reconfigure_worktree(&workspace, git_profile.as_deref())
+                    .await
+            }
+            None => {
+                let source = pending.source();
+                (self.materialize_worktree(&repo, &workspace, source, git_profile.as_deref())).await
+            }
+        };
         self.settle_creation(&repo, &workspace, result, git).await
+    }
+
+    /// Configure the worktree an earlier creation of `workspace` left once
+    /// it verifies as the one Git created for it.
+    async fn reconfigure_worktree(
+        &self,
+        workspace: &Workspace,
+        git_profile: Option<&str>,
+    ) -> Result<Configured> {
+        self.verify_worktree(workspace).await?;
+        self.configure_worktree(workspace, None, git_profile).await
     }
 
     /// The pending worktree of `workspace`, which goes back to preparing

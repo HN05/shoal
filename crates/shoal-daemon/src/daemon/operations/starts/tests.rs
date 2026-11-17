@@ -5,7 +5,7 @@ use crate::{
     daemon::notifications::NotificationKind,
     daemon::{
         operations::fake,
-        test_support::{git, manager, repository},
+        test_support::{git, global_config, manager, repository, repository_with},
         workspace::Manager,
     },
     model::{Repository, Workspace},
@@ -177,4 +177,33 @@ async fn a_failed_preparation_reaches_the_user_with_what_retries_it() {
         "{}",
         notification.message
     );
+}
+
+#[tokio::test]
+async fn a_retry_configures_the_worktree_an_earlier_creation_left() {
+    let (root, manager) = manager().await;
+    let path = repository_with(
+        root.path(),
+        "repo",
+        &[(".shoal.toml", "git_profile = 'work'\n")],
+    );
+    let repository = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let started = start(&manager, &repository, "child", "HEAD").await;
+    let _worker = fake::take(&started.operation);
+    let selector = SpaceSelector::id(&started.workspace.id);
+    // Git creates the worktree, but the profile it names is not defined.
+    let failed = manager.create_pending_worktree(&selector).await;
+    assert!(failed.is_err(), "{failed:?}");
+    let workspace = read(&manager, &started.workspace).await;
+    assert!(workspace.pending_worktree && workspace.path.exists());
+    manager.publish_config(global_config(
+        "[machine.git_profiles.work]\nuser.email = 'work@example.invalid'\n",
+    ));
+    let created = manager.create_pending_worktree(&selector).await.unwrap();
+    assert!(!created.pending_worktree);
+    let email = git(&created.path, &["config", "user.email"]);
+    assert_eq!(email.trim(), "work@example.invalid");
 }
