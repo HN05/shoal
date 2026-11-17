@@ -258,12 +258,16 @@ impl Manager {
     async fn linked_git_dir(&self, workspace: &Workspace) -> Result<PathBuf> {
         let repo = self.repository(workspace.repository()).await?;
         // Verify this is still the checkout Shoal created before any deletion.
-        let actual = git::checkout_dirs(&workspace.path).await?;
+        let (actual, expected) = tokio::join!(
+            git::checkout_dirs(&workspace.path),
+            git::common_dir(&repo.path)
+        );
+        let actual = actual?;
         ensure!(
             actual.root == off_runtime::canonicalize(&workspace.path).await?,
             "workspace path no longer points to its worktree root"
         );
-        let expected = git::common_dir(&repo.path).await?;
+        let expected = expected?;
         ensure!(
             expected == actual.common_dir,
             "workspace now belongs to a different repository"
