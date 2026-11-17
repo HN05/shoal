@@ -11,6 +11,8 @@ use crate::{
     client::views,
     forge::{
         ci::{
+            JobState,
+            check_state::CheckState,
             run_action::Run,
             run_view::{JobRef, RunFilter, RunView},
         },
@@ -76,6 +78,9 @@ pub(in crate::cli::commands) fn render_run(view: &RunView, relations: &[Relation
     outln!("Run:      {}", view.run.url);
     items_view::render_relations(relations);
     outln!("State:    {}", view.run.state);
+    if let Some(result) = view.run.result {
+        outln!("Result:   {result}");
+    }
     if let Some(branch) = &view.run.branch {
         outln!("Branch:   {branch}");
     }
@@ -84,14 +89,10 @@ pub(in crate::cli::commands) fn render_run(view: &RunView, relations: &[Relation
     }
     outln!("Jobs:");
     for job in &view.jobs {
+        let state = shown_state(job.state, job.result);
         match &job.url {
-            Some(url) => outln!(
-                "  {:<9}  {}  (ID {})  {url}",
-                job.state.as_str(),
-                job.name,
-                job.id
-            ),
-            None => outln!("  {:<9}  {}  (ID {})", job.state.as_str(), job.name, job.id),
+            Some(url) => outln!("  {state:<9}  {}  (ID {})  {url}", job.name, job.id),
+            None => outln!("  {state:<9}  {}  (ID {})", job.name, job.id),
         }
     }
     for log in &view.logs {
@@ -103,7 +104,7 @@ pub(in crate::cli::commands) fn render_run(view: &RunView, relations: &[Relation
     }
 }
 
-/// One line per run: its state, workflow, branch and URL.
+/// One line per run: its state or result, workflow, branch and URL.
 fn render_runs(runs: &Vec<Run>) {
     if runs.is_empty() {
         outln!("No runs");
@@ -111,10 +112,13 @@ fn render_runs(runs: &Vec<Run>) {
     for run in runs {
         let workflow = run.workflow.as_deref().unwrap_or("-");
         let branch = run.branch.as_deref().unwrap_or("-");
-        outln!(
-            "{:<8}  {workflow}  {branch}  {}",
-            run.state.as_str(),
-            run.url
-        );
+        let state = shown_state(run.state, run.result);
+        outln!("{state:<9}  {workflow}  {branch}  {}", run.url);
     }
+}
+
+/// What a run or job shows in a line: its result once it finished, else its
+/// state.
+fn shown_state(state: JobState, result: Option<CheckState>) -> &'static str {
+    result.map_or(state.as_str(), CheckState::as_str)
 }
