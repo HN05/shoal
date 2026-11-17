@@ -74,14 +74,16 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
     let worker = &calls[1][4..];
     let session = worker.iter().position(|arg| arg == "session").unwrap();
     assert_eq!(worker[session - 1], "internal");
-    // The session names the host that opened it and closes with its workspace.
+    // The session names the host that opened it and closes with its
+    // workspace, and its agent begins a new session.
     assert_eq!(
-        worker[session + 1..session + 11],
+        worker[session + 1..session + 12],
         [
             id,
             "claude",
             "--mode",
             "worker",
+            "--new-session",
             "--host",
             "zmx",
             "--close-in",

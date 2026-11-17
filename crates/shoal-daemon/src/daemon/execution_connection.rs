@@ -160,6 +160,7 @@ pub(super) async fn reattach(
             model: request.model,
             mode: (request.mode).unwrap_or(crate::config::modes::ModeName::DEFAULT),
             narrowing: request.narrowing,
+            new_session: false,
         }),
         recover: request.recover,
         reattach: true,

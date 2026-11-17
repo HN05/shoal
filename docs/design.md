@@ -3807,11 +3807,13 @@ lists sensitive files. Each check against the default target is kept per
 workspace with its head and target commits. Forgejo reads
 come from its REST API and work anonymously for public repositories. The watch shares a
 persistent cursor per workspace and item and reports changes between its reads.
-Linking an item starts its cursor from a read made then: what the item's discussion
-and details held by then is history, which `shoal view` shows, while its condition,
-such as failed checks, a conflict or its closing, is still reported. Polls that
-started in an earlier second than the read are dropped, since they may show the item
-before it. A watch of an item the space does not follow, or whose first read failed,
+Linking an item starts its cursor from a read made then, and an agent that begins a
+new session, rather than continuing or forking one, registers as such, so before its
+command runs the daemon starts each followed item's cursor again from a new read:
+what the item's discussion and details held by then is history, which `shoal view`
+shows, while its condition, such as failed checks, a conflict or its closing, is still
+reported. Polls that started in an earlier second than the read are dropped, since
+they may show the item before it. A watch of an item the space does not follow, or whose first read failed,
 reports existing activity on its first read. Cancelling the watch discards that cursor.
 An omitted timeout keeps the watch unbounded; an explicit timeout remains a bounded
 polling interval.

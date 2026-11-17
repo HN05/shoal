@@ -1367,6 +1367,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
         ] {
             for target in [&workspace, &other] {
                 let mut method = ExecutionMethod::Execute {
+                    new_session: false,
                     narrowing: Default::default(),
                     mode: None,
                     model: Default::default(),

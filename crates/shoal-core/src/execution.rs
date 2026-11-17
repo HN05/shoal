@@ -23,6 +23,9 @@ pub struct TrackedAgent {
     pub mode: crate::config::modes::ModeName,
     /// The permissions `--permission` gives its agent, whatever its mode's.
     pub narrowing: crate::config::permissions::PermissionsConfig,
+    /// Whether it begins a new session, rather than continuing or forking
+    /// one, so its watches start from what its space follows now.
+    pub new_session: bool,
 }
 
 #[cfg(any(test, feature = "test-support"))]
@@ -34,6 +37,7 @@ impl TrackedAgent {
             name: name.into(),
             model: Default::default(),
             mode: crate::config::modes::ModeName::DEFAULT,
+            new_session: false,
         }
     }
 }

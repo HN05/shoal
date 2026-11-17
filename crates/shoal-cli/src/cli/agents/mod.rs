@@ -65,6 +65,8 @@ pub(in crate::cli) struct Launch {
     /// Recovery records of stopped agents this one replaces, consumed once
     /// it has started.
     pub replaces: Vec<PathBuf>,
+    /// Whether it begins a new session, rather than continuing or forking one.
+    pub new_session: bool,
 }
 
 /// The repository a chat belongs to, or none, with `root_dir`, where a chat
@@ -130,6 +132,9 @@ pub(in crate::cli) struct ChatLaunch {
     pub args: Vec<OsString>,
     /// What the chat is linked to once recorded, such as the issue it plans.
     pub links: SpaceLinks,
+    /// Whether its agent begins a new session, rather than continuing or
+    /// forking one.
+    pub new_session: bool,
 }
 
 impl ChatLaunch {
@@ -160,6 +165,12 @@ impl Opening {
         match self {
             Self::New { mode, .. } | Self::Told { mode, .. } => mode,
         }
+    }
+
+    /// Whether a launch with `options` begins a new session: one that
+    /// neither replaces a stopped session nor starts from a fork.
+    fn begins_session(&self, options: &LaunchOptions) -> bool {
+        matches!(self, Self::New { .. }) && options.fork.is_none() && options.replaces.is_empty()
     }
 
     /// The system text and first message of the launch at `place`.
@@ -255,6 +266,7 @@ pub(super) async fn launch_agent(
         system: instructions,
         first_message: prompt,
     } = opening.brief(&settings, place)?;
+    let new_session = opening.begins_session(&options);
     let model = match options.model {
         ModelRequest::Override(requested) => resolve_model(&settings, &agent, requested),
         ModelRequest::Kept(model) => model,
@@ -271,6 +283,7 @@ pub(super) async fn launch_agent(
         mode: opening.mode().clone(),
         narrowing: options.narrowing,
         replaces: options.replaces,
+        new_session,
     };
     let replaces = launch.replaces.clone();
     let Some(detached) = integration.detached() else {

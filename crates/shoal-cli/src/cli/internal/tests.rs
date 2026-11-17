@@ -255,6 +255,7 @@ fn detached_round_trips_literal_arguments_and_globals() {
             model: Some("gpt; $model".into()),
             effort: Some("high".into()),
         },
+        new_session: true,
     };
     for json in [false, true] {
         for agent in [None, Some(&happy)] {
@@ -265,6 +266,7 @@ fn detached_round_trips_literal_arguments_and_globals() {
                 model,
                 mode,
                 narrowing,
+                new_session,
                 command: parsed_command,
             } = parse(
                 Worker::Detached {
@@ -294,6 +296,7 @@ fn detached_round_trips_literal_arguments_and_globals() {
             });
             assert_eq!(mode, expected);
             assert!(narrowing.is_empty());
+            assert_eq!(new_session, agent.is_some());
             assert_eq!(parsed_command, command);
         }
     }
@@ -333,12 +336,13 @@ fn session_round_trips_records_and_literal_arguments() {
         model: None,
         effort: Some("low".into()),
     };
-    for (records, close_in, model) in [
-        (vec![], None, Default::default()),
+    for (records, close_in, model, new) in [
+        (vec![], None, Default::default(), true),
         (
             vec![PathBuf::from("/state/a record.json"), "/b".into()],
             Some(HostName::Zmx),
             effort,
+            false,
         ),
     ] {
         let InternalCommand::Session {
@@ -347,6 +351,7 @@ fn session_round_trips_records_and_literal_arguments() {
             model: parsed_model,
             mode,
             narrowing,
+            new_session,
             records: parsed_records,
             command: parsed_command,
             host,
@@ -359,6 +364,7 @@ fn session_round_trips_records_and_literal_arguments() {
                     mode: "chat".into(),
                     name: "claude".into(),
                     model: model.clone(),
+                    new_session: new,
                 },
                 records: &records,
                 command: &command,
@@ -374,6 +380,7 @@ fn session_round_trips_records_and_literal_arguments() {
         assert_eq!(agent, "claude");
         assert_eq!(mode, "chat");
         assert!(narrowing.is_empty());
+        assert_eq!(new_session, new);
         assert_eq!(crate::agent::ModelChoice::from(parsed_model), model);
         assert_eq!(parsed_records, records);
         assert_eq!(parsed_command, command);
@@ -435,6 +442,7 @@ fn take_over_round_trips_the_agent_and_its_connection() {
             model: Some("m1".into()),
             effort: Some("high".into()),
         },
+        new_session: false,
     };
     for (record, log) in [(None, None), (Some(record), Some(log))] {
         let InternalCommand::TakeOver {

@@ -87,6 +87,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             model,
             mode,
             narrowing,
+            new_session,
             command,
         } => {
             let agent = agent.map(|name| TrackedAgent {
@@ -94,6 +95,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
                 model: model.into(),
                 mode,
                 narrowing,
+                new_session,
             });
             shoal_workers::execution::run_detached_wrapper(
                 &ctx.paths,
@@ -132,11 +134,13 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
         } => {
             let taken = shoal_workers::execution::TakenOver {
                 workspace,
+                // The wrapper it continues registered the agent's start.
                 agent: TrackedAgent {
                     name: agent,
                     model: model.into(),
                     mode,
                     narrowing,
+                    new_session: false,
                 },
                 connection,
                 record,
@@ -166,6 +170,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             model,
             mode,
             narrowing,
+            new_session,
             records,
             command,
             host,
@@ -181,6 +186,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
                 model: model.into(),
                 mode,
                 narrowing,
+                new_session,
             };
             run_session(&ctx, workspace, agent, records, command).await
         }

@@ -165,6 +165,9 @@ pub enum InternalCommand {
         /// The `--permission` narrowing it started with, as JSON.
         #[arg(long, value_parser = narrowing, default_value = "{}")]
         narrowing: crate::config::permissions::PermissionsConfig,
+        /// The agent begins a new session.
+        #[arg(long)]
+        new_session: bool,
         #[arg(last = true, required = true)]
         command: Vec<OsString>,
     },
@@ -218,6 +221,9 @@ pub enum InternalCommand {
         /// The `--permission` narrowing it started with, as JSON.
         #[arg(long, value_parser = narrowing, default_value = "{}")]
         narrowing: crate::config::permissions::PermissionsConfig,
+        /// The agent begins a new session.
+        #[arg(long)]
+        new_session: bool,
         #[arg(long = "record")]
         records: Vec<PathBuf>,
         /// The host that opened the place.

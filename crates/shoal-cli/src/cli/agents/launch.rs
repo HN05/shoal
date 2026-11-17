@@ -36,6 +36,7 @@ pub(super) async fn tracked(
         model,
         mode,
         narrowing,
+        new_session,
         ..
     } = launch;
     let agent = execution::TrackedAgent {
@@ -43,6 +44,7 @@ pub(super) async fn tracked(
         model,
         mode,
         narrowing,
+        new_session,
     };
     if let Some(code) =
         terminal::run_agent(ctx, &settings, &workspace, &agent, &replaces, &command).await?

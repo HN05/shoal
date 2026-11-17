@@ -190,6 +190,12 @@ fn narrowing_args(agent: &crate::execution::TrackedAgent) -> Vec<OsString> {
     }
 }
 
+/// The worker option that says `agent` begins a new session; none when it
+/// continues or forks one.
+fn new_session_arg(agent: &crate::execution::TrackedAgent) -> Option<OsString> {
+    agent.new_session.then(|| "--new-session".into())
+}
+
 /// This executable for a command a terminal or session runs as typed,
 /// naming the state directory even when it is the default, so a
 /// `SHOAL_STATE_DIR` in the place's environment cannot redirect it. It shows
@@ -296,6 +302,7 @@ pub(crate) fn internal_command_for(
                 args.extend(model_args(&agent.model));
                 args.extend(["--mode".into(), agent.mode.as_str().into()]);
                 args.extend(narrowing_args(agent));
+                args.extend(new_session_arg(agent));
             }
             args.push("--".into());
             args.extend_from_slice(command);
@@ -326,6 +333,7 @@ pub(crate) fn internal_command_for(
             args.extend(model_args(&agent.model));
             args.extend(["--mode".into(), agent.mode.as_str().into()]);
             args.extend(narrowing_args(agent));
+            args.extend(new_session_arg(agent));
             args.extend(["--host".into(), host.as_str().into()]);
             for record in records {
                 args.extend(["--record".into(), record.as_os_str().to_owned()]);

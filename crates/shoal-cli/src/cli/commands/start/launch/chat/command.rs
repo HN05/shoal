@@ -51,6 +51,7 @@ pub(super) fn chat_launch(
         repository: repo,
         workspace: topic.workspace.clone(),
         settings,
+        new_session: resumed.is_empty(),
         args: [resumed, options.args.clone()].concat(),
         links: topic.links.clone(),
     })

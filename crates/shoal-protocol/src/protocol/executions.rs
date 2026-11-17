@@ -30,6 +30,10 @@ pub enum ExecutionMethod {
             skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
         )]
         narrowing: crate::config::permissions::PermissionsConfig,
+        /// The agent begins a new session, so its space's watches restart
+        /// from what its items hold now.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        new_session: bool,
         #[serde(default)]
         recover: bool,
         /// The wrapper keeps its command running when the daemon goes away

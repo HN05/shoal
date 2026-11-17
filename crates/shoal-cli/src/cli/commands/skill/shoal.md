@@ -438,7 +438,8 @@ Code, and for a workspace's Codex in a place its host types into,
 launched through Shoal, hooks deliver activity as context after tool calls and start the next
 turn with it after a turn ends; a delivery replaces a running watch. Other
 agents run `shoal watch pr`, which returns `updates`. Comments and edits
-made before an item is linked are not reported; `shoal view` shows them. A wait for an item the space does not follow
+made before an item is linked, or before a new agent session starts, are not
+reported; `shoal view` shows them. A wait for an item the space does not follow
 includes its existing activity, and waits share a cursor per workspace. A newer wait
 supersedes a running one, which returns `superseded: true`. Without
 `--timeout` (1–3600 seconds) the wait is unbounded; `timed_out` with empty

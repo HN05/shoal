@@ -46,6 +46,7 @@ pub(super) async fn start(
         model,
         mode,
         narrowing,
+        new_session,
         ..
     } = launch;
     crate::agents::ensure_available(&name, &settings)?;
@@ -70,6 +71,7 @@ pub(super) async fn start(
         model,
         mode,
         narrowing,
+        new_session,
     };
     let (execution, prepared) = launch_session(
         ctx,
@@ -310,6 +312,7 @@ pub(super) async fn start_chat(
         narrowing,
         settings,
         model,
+        new_session,
         ..
     } = chat;
     crate::agents::ensure_available(name, settings)?;
@@ -345,6 +348,7 @@ pub(super) async fn start_chat(
         model: model.clone(),
         mode: mode.clone(),
         narrowing: *narrowing,
+        new_session: *new_session,
     };
     let space = crate::model::ExecutionSpace {
         id: record.id.clone(),

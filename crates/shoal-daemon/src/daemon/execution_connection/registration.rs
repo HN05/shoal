@@ -158,6 +158,13 @@ pub(super) async fn register(
             manager.continue_restart(entry, &plan.id).await;
             source = manager.consume_queue_entry(entry, &space.id).await;
         }
+        // Before the agent runs: what its space's items held by then is
+        // history, which its first message points it to.
+        if agent.new_session
+            && let Err(error) = manager.restart_watches(&space.id).await
+        {
+            log!("{}'s watches not restarted: {error:#}", space.name);
+        }
     }
     drop(reserved);
     drop(admitted);

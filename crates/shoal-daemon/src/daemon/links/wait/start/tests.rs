@@ -3,6 +3,7 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
+use rusqlite::params;
 use serde_json::json;
 
 use crate::{
@@ -10,7 +11,10 @@ use crate::{
         links::wait::branch_report::BranchReport,
         test_support::{configure, git, manager, repository},
     },
-    forge::items::{link::Selection, reference::ItemRef},
+    forge::{
+        items::{link::Selection, reference::ItemRef},
+        updates::UpdateKind,
+    },
     time::UnixTime,
 };
 use shoal_forge::test_support::Server;
@@ -95,6 +99,43 @@ async fn linking_an_issue_takes_its_comments_as_seen() {
     comments.store(3, Ordering::SeqCst);
     let later = poll(&manager, &workspace, &issue, UnixTime::MAX).await;
     assert_eq!(later.len(), 1, "{later:?}");
+    assert!(later[0].message.starts_with("1 new comment from dev;"));
+}
+
+#[tokio::test]
+async fn a_restart_drops_the_comments_queued_before_it() {
+    let comments = Arc::new(AtomicUsize::new(2));
+    let forge = issue_forge(comments.clone());
+    // The root lives as long as the test.
+    let Served {
+        _root,
+        manager,
+        workspace,
+        issue,
+    } = served(&forge).await;
+    let (id, url) = (workspace.clone(), issue.to_string());
+    manager
+        .store
+        .run(move |db| {
+            let sql = "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)";
+            db.execute(sql, params![id, url])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    // A poll before the agent starts queues the issue's comments for it.
+    let queued = poll(&manager, &workspace, &issue, UnixTime::now()).await;
+    assert_eq!(queued.len(), 1, "{queued:?}");
+
+    manager.restart_watches(&workspace).await.unwrap();
+    let urls = [issue.to_string()];
+    let pending = manager.pending_activity(&workspace, &urls).await;
+    assert!(pending.unwrap().is_empty());
+
+    comments.store(3, Ordering::SeqCst);
+    let later = poll(&manager, &workspace, &issue, UnixTime::MAX).await;
+    assert_eq!(later.len(), 1, "{later:?}");
+    assert_eq!(later[0].kind, UpdateKind::Comment);
     assert!(later[0].message.starts_with("1 new comment from dev;"));
 }
 

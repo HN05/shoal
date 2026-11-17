@@ -52,6 +52,7 @@ impl Manager {
             model: execution.model.clone(),
             mode: (execution.mode.clone()).unwrap_or(crate::config::modes::ModeName::DEFAULT),
             narrowing: execution.narrowing,
+            new_session: false,
         };
         self.keep_agent_session(&execution.space_id, &agent, &execution.id)
             .await

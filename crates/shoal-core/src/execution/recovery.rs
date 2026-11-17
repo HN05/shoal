@@ -174,6 +174,7 @@ impl Recovery {
             model: self.model.clone(),
             mode: self.mode.clone(),
             narrowing: self.narrowing,
+            new_session: false,
         }
     }
 

@@ -351,6 +351,7 @@ async fn run_agent(
         mode,
         narrowing,
         args,
+        new_session,
         ..
     } = launch;
     let home = repository.home(workspace.as_ref());
@@ -375,6 +376,8 @@ async fn run_agent(
         model,
         mode,
         narrowing,
+        // An agent that replaces a stopped one continues its session.
+        new_session: new_session && records.is_empty(),
     };
     let space = SpaceSelector::id(&chat.id);
     match records.is_empty() {

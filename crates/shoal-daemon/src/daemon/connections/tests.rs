@@ -106,6 +106,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         .unwrap()
         .unwrap();
     let execute = ExecutionMethod::Execute {
+        new_session: false,
         narrowing: Default::default(),
         mode: None,
         model: Default::default(),

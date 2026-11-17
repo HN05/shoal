@@ -107,6 +107,7 @@ impl Manager {
             model: Default::default(),
             mode: chat.agent_mode(),
             narrowing: chat.narrowing,
+            new_session: false,
         };
         let id = started.plan.id.clone();
         let running = std::time::Duration::ZERO;

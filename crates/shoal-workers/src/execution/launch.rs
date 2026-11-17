@@ -539,6 +539,7 @@ async fn open_execution(
         model: agent.map(|agent| agent.model.clone()).unwrap_or_default(),
         mode: agent.map(|agent| agent.mode.clone()),
         narrowing: agent.map(|agent| agent.narrowing).unwrap_or_default(),
+        new_session: agent.is_some_and(|agent| agent.new_session),
         recover,
         reattach: mode.reattaches(),
         demo: match mode {

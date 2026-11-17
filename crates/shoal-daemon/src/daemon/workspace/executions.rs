@@ -807,6 +807,7 @@ impl Manager {
                 // What its launch recorded, which a reattaching wrapper
                 // cannot change.
                 narrowing,
+                new_session: false,
             };
             self.track_agent(
                 &request.execution,
