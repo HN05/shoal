@@ -12,7 +12,7 @@ use rusqlite::{OptionalExtension, params};
 use super::{
     blockers,
     dispatch::Start,
-    store::{self, ENTRY_COLUMNS, Launch, entry, insert_launch, opens_existing_branch},
+    store::{self, Awaits, ENTRY_COLUMNS, Launch, entry, insert_launch, opens_existing_branch},
 };
 use crate::{
     daemon::{notifications::NotificationKind, scope::Caller, workspace::Manager},
@@ -44,8 +44,19 @@ impl Manager {
     /// starts it.
     pub async fn queue_add_as(
         &self,
+        request: QueueRequest,
+        caller: Option<&Caller>,
+    ) -> Result<QueueAdmission> {
+        (self.queue_add_awaiting(request, caller, Awaits::FailedSetup)).await
+    }
+
+    /// [`Self::queue_add_as`] for a launch that `awaits` what it says in
+    /// the workspace it opens.
+    pub(super) async fn queue_add_awaiting(
+        &self,
         mut request: QueueRequest,
         caller: Option<&Caller>,
+        awaits: Awaits,
     ) -> Result<QueueAdmission> {
         ensure!(
             !request.now || request.blockers.is_empty(),
@@ -101,6 +112,7 @@ impl Manager {
             state,
             opens: target,
             scope,
+            awaits,
         };
         let now = launch.request.now;
         let removing = self.space_removals.clone();

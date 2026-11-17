@@ -73,6 +73,20 @@ pub(super) struct Launch {
     /// The space whose scoped process queued the launch of a new
     /// workspace, in whose scope the launch opens it.
     pub scope: Option<SpaceId>,
+    /// What a launch in an existing workspace waits for there.
+    pub awaits: Awaits,
+}
+
+/// What a launch in an existing workspace waits for before it may start.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) enum Awaits {
+    /// A retried setup, when the workspace's setup failed or never started.
+    #[default]
+    FailedSetup,
+    /// The preparation of the new workspace a start opened, past its
+    /// post-setup hook, whatever state the workspace is in, then starting
+    /// at once regardless of the limits when `at_once`.
+    Preparation { at_once: bool },
 }
 
 /// What a launch asks for, a workspace's or a chat's, as its row records it.
@@ -249,11 +263,14 @@ pub(super) fn insert_launch(
             "the repository is being removed"
         );
     }
-    let waits_for_setup = match &launch.opens {
-        Some(workspace) => !launch.request.now && setup_failed(tx, workspace)?,
-        None => false,
+    let waits_for_setup = match (&launch.opens, launch.awaits) {
+        (Some(_), Awaits::Preparation { .. }) => true,
+        (Some(workspace), Awaits::FailedSetup) => {
+            !launch.request.now && setup_failed(tx, workspace)?
+        }
+        (None, _) => false,
     };
-    if let Some(workspace) = &launch.opens {
+    if let (Some(workspace), Awaits::FailedSetup) = (&launch.opens, launch.awaits) {
         if waits_for_setup {
             end_failed_starts(tx, workspace)?;
         } else {
@@ -261,6 +278,7 @@ pub(super) fn insert_launch(
                 .context("start agents in a ready workspace")?;
         }
     }
+    let at_once = matches!(launch.awaits, Awaits::Preparation { at_once: true });
     if let Some(space) = &launch.scope {
         require_queuing_space(tx, space, removing)
             .context("the space that queued the launch is being removed")?;
@@ -287,8 +305,8 @@ pub(super) fn insert_launch(
     );
     let now = UnixTime::now();
     tx.execute(
-        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,opens_workspace_id,mode,narrowing,scope_space_id,priority,issue_labels,source)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,opens_workspace_id,mode,narrowing,scope_space_id,priority,issue_labels,source,starts_at_once)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)",
         params![
             launch.id,
             QueueKind::Launch,
@@ -308,6 +326,7 @@ pub(super) fn insert_launch(
             request.priority,
             serde_json::to_string(&request.issue_labels)?,
             (request.source.as_ref()).map(serde_json::to_string).transpose()?,
+            at_once,
         ],
     )?;
     if let Some(repository) = &launch.repository {

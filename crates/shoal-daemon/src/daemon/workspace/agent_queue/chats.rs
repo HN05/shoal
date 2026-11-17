@@ -53,6 +53,7 @@ impl Manager {
             },
             opens: None,
             scope: caller.map(|caller| caller.space_id.clone()),
+            awaits: Default::default(),
         };
         let removing = self.space_removals.clone();
         self.store

@@ -3,6 +3,7 @@
 //! its record, to start once its preparation lets it.
 use anyhow::{Context as _, Result};
 
+use super::store::Awaits;
 use crate::{
     agents::resolve_launch,
     daemon::workspace::Manager,
@@ -10,7 +11,6 @@ use crate::{
     model::{Blocker, QueueEntry, Workspace},
     protocol::operations::{LaunchIssue, LaunchRequest, QueuedLaunch},
     start_plan::queued_agent_request,
-    state::WorkspaceState,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -40,24 +40,26 @@ impl Manager {
             .context("the daemon queued the agent without an entry")
     }
 
-    /// Queue `launch` in the `workspace` a start opened, which waits until
-    /// the workspace's preparation gets past its post-setup hook unless it
-    /// is ready already, then starts as the queue admits it or, for one
-    /// that starts now, at once regardless of the limits.
+    /// Queue `launch` in the `workspace` a start opened, linking `pr` as
+    /// it starts. In a new workspace it waits until the preparation gets
+    /// past the post-setup hook, then starts as the queue admits it or, for
+    /// one that starts now, at once regardless of the limits; in a `reused`
+    /// one, which runs no post-setup hook, it queues as in any ready one.
     pub(crate) async fn queue_for_preparation(
         &self,
-        workspace: &Workspace,
+        (workspace, reused): (&Workspace, bool),
         mut launch: QueuedLaunch,
+        pr: Option<ItemInput>,
     ) -> Result<QueueEntry> {
-        let waits = workspace.state != WorkspaceState::Ready;
-        let at_once = waits && std::mem::take(&mut launch.now);
-        let request = queued_agent_request(workspace, launch, None)?;
-        let entry = (self.queue_add(request).await?.entry)
-            .context("the daemon queued the agent without an entry")?;
-        if at_once {
-            self.start_at_once_after_setup(&entry.id).await?;
-        }
-        Ok(entry)
+        let awaits = match reused {
+            true => Awaits::FailedSetup,
+            false => Awaits::Preparation {
+                at_once: std::mem::take(&mut launch.now),
+            },
+        };
+        let request = queued_agent_request(workspace, launch, pr)?;
+        (self.queue_add_awaiting(request, None, awaits).await?.entry)
+            .context("the daemon queued the agent without an entry")
     }
 }
 

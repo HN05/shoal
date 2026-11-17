@@ -413,7 +413,8 @@ impl Manager {
         }
         let entry = match preparing.agent {
             Some(agent) => Some(Box::new(
-                self.queue_for_preparation(&workspace, *agent).await?,
+                (self.queue_for_preparation((&workspace, reused), *agent, preparing.pr.clone()))
+                    .await?,
             )),
             None => None,
         };

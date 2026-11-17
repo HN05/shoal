@@ -172,7 +172,7 @@ async fn a_start_now_waits_for_its_preparation_then_starts_past_the_limits() {
         ..crate::protocol::operations::QueuedLaunch::new("claude".parse().unwrap())
     };
     let entry = manager
-        .queue_for_preparation(&workspace, launch)
+        .queue_for_preparation((&workspace, false), launch, None)
         .await
         .unwrap();
     assert_eq!(entry.state, QueueState::Queued);
@@ -192,7 +192,7 @@ async fn a_queued_start_waits_for_its_preparation_then_for_the_limits() {
     let workspace = preparing(&manager, &repo, "child").await;
     let launch = crate::protocol::operations::QueuedLaunch::new("claude".parse().unwrap());
     let entry = manager
-        .queue_for_preparation(&workspace, launch)
+        .queue_for_preparation((&workspace, false), launch, None)
         .await
         .unwrap();
     manager.release_setup_waits(&workspace.id).await.unwrap();
@@ -200,4 +200,45 @@ async fn a_queued_start_waits_for_its_preparation_then_for_the_limits() {
     let waiting = entries.iter().find(|queued| queued.id == entry.id).unwrap();
     assert_eq!(waiting.state, QueueState::Queued);
     assert!(waiting.blockers.is_empty(), "{waiting:?}");
+}
+
+#[tokio::test]
+async fn a_new_workspace_ready_at_once_holds_its_agent_until_its_preparation_lets_it() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    // Created ready, as a copy with nothing to set up is.
+    let workspace = manager
+        .create_workspace(&repo.id, "child".into(), None, None, None)
+        .await
+        .unwrap();
+    assert_eq!(workspace.state, WorkspaceState::Ready);
+    let launch = crate::protocol::operations::QueuedLaunch::new("claude".parse().unwrap());
+    let entry = manager
+        .queue_for_preparation((&workspace, false), launch, None)
+        .await
+        .unwrap();
+    assert_eq!(entry.state, QueueState::Queued);
+    assert_eq!(entry.blockers, vec!["setup of child".to_owned()]);
+}
+
+#[tokio::test]
+async fn a_held_start_now_is_left_to_its_holder_when_its_setup_releases_it() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    add(&manager, &repo, "first").await;
+    let workspace = preparing(&manager, &repo, "child").await;
+    let launch = crate::protocol::operations::QueuedLaunch {
+        now: true,
+        ..crate::protocol::operations::QueuedLaunch::new("claude".parse().unwrap())
+    };
+    let entry = manager
+        .queue_for_preparation((&workspace, false), launch, None)
+        .await
+        .unwrap();
+    manager.agent_queue.hold(&entry.id);
+    manager.release_setup_waits(&workspace.id).await.unwrap();
+    let entries = manager.queue_entries().await.unwrap();
+    let held = entries.iter().find(|queued| queued.id == entry.id).unwrap();
+    assert_eq!(held.state, QueueState::Queued);
 }

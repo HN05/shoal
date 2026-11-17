@@ -43,24 +43,9 @@ enum Returned {
 }
 
 impl Manager {
-    /// Have the waiting launch `entry` start at once, regardless of the
-    /// limits, when the setup it waits for releases it.
-    pub(super) async fn start_at_once_after_setup(&self, entry: &QueueEntryId) -> Result<()> {
-        let entry = entry.to_owned();
-        self.store
-            .run(move |db| {
-                db.execute(
-                    "UPDATE agent_queue SET starts_at_once=1 WHERE id=?1",
-                    [&entry],
-                )?;
-                Ok(())
-            })
-            .await
-    }
-
     /// Start at once each launch waiting to open `workspace` that its start
-    /// asked to, now that nothing holds it back; one that cannot start stays
-    /// for the queue to admit.
+    /// asked to, now that nothing blocks it, unless its caller holds it;
+    /// one that cannot start stays for the queue to admit.
     pub(super) async fn start_released_at_once(&self, workspace: &SpaceId) -> Result<()> {
         let _gate = self.agent_queue.lock_admission().await;
         let workspace = workspace.to_owned();
@@ -79,7 +64,9 @@ impl Manager {
                     .collect::<rusqlite::Result<_>>()?)
             })
             .await?;
-        for id in released {
+        // A restore that runs the agent itself holds its entry meanwhile.
+        let held = self.agent_queue.held();
+        for id in released.into_iter().filter(|id| !held.contains(id)) {
             let started = match self.waiting_entry(id.as_str(), None, "").await {
                 Ok(entry) => self.start_waiting(entry, false).await.map(drop),
                 Err(error) => Err(error),
