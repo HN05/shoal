@@ -15,26 +15,25 @@ fn launch(preset: Preset, variable: &str, value: &str) -> Launch {
     }
 }
 
+/// Where the announcement says the demo listens, after checking it names
+/// the demo.
+fn announced_location(launch: &Launch) -> String {
+    let line = announcement(launch).expect("a serving demo is announced");
+    assert!(line.contains(&launch.name), "{line}");
+    line.rsplit(' ').next().unwrap().to_owned()
+}
+
 #[test]
 fn serving_demos_announce_where_they_listen() {
     let server = launch(Preset::Server, PORT, "49200");
-    assert_eq!(
-        announcement(&server).as_deref(),
-        Some("shoal: demo app serves at localhost:49200")
-    );
+    assert_eq!(announced_location(&server), "localhost:49200");
     let web = launch(Preset::Web, PORT, "49200");
-    assert_eq!(
-        announcement(&web).as_deref(),
-        Some("shoal: demo app serves at http://localhost:49200")
-    );
+    assert_eq!(announced_location(&web), "http://localhost:49200");
     let https = Launch {
         scheme: Some(Scheme::Https),
         ..web
     };
-    assert_eq!(
-        announcement(&https).as_deref(),
-        Some("shoal: demo app serves at https://localhost:49200")
-    );
+    assert_eq!(announced_location(&https), "https://localhost:49200");
 }
 
 #[test]
