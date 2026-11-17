@@ -276,7 +276,14 @@ impl Manager {
         self.check_space_removal(&space.id, removal, Stage::Initial, &[])
             .await?;
         if let Some(workspace) = space.to_workspace() {
-            let checked = self.check_worktree(&workspace, removal, Stage::Initial, &[]);
+            let default_branch = self.inspected_default_branch(&workspace).await?;
+            let checked = self.check_worktree(
+                &workspace,
+                removal,
+                Stage::Initial,
+                &[],
+                default_branch.as_ref(),
+            );
             self.check_access(&workspace.path, checked).await?;
         }
         let grace = self.space_settings(space).await?.cleanup.grace();

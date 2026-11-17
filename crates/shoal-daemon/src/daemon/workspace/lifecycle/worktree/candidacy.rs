@@ -4,7 +4,10 @@ use super::super::super::Manager;
 use crate::{
     daemon::cleanup::{Rule, Tree},
     fsutil::off_runtime,
-    git::{self, default_branch::DefaultBranchLookup},
+    git::{
+        self,
+        default_branch::{DefaultBranch, DefaultBranchLookup},
+    },
     model::{CleanupReason, Workspace, Worktree},
     process,
     removal::{self, IdleRestore, Inspection, InspectionPolicy, RemovalCheck},
@@ -75,20 +78,43 @@ impl Manager {
         policy: InspectionPolicy,
         executions: CleanupExecutions,
     ) -> Result<Inspection> {
+        let default_branch = self.inspected_default_branch(&workspace).await?;
+        (self.inspect_removal_against(workspace, policy, executions, default_branch.as_ref())).await
+    }
+
+    /// The default branch an inspection of `workspace` compares it with:
+    /// its repository's, `None` while that does not resolve.
+    pub(in crate::daemon::workspace) async fn inspected_default_branch(
+        &self,
+        workspace: &Workspace,
+    ) -> Result<Option<DefaultBranch>> {
+        let repo = self.repository(workspace.repository()).await?;
+        Ok(
+            git::default_branch::locate(&repo.path, DefaultBranchLookup::Cached)
+                .await
+                .ok(),
+        )
+    }
+
+    /// Inspect `workspace` as [`Self::inspect_removal`] does, comparing it
+    /// with `default_branch`, which [`Self::inspected_default_branch`] read.
+    pub(in crate::daemon::workspace) async fn inspect_removal_against(
+        &self,
+        workspace: Workspace,
+        policy: InspectionPolicy,
+        executions: CleanupExecutions,
+        default_branch: Option<&DefaultBranch>,
+    ) -> Result<Inspection> {
         if off_runtime::exists(&workspace.path).await? {
             self.verify_removed_worktree(&workspace).await?;
         }
         let repo = self.repository(workspace.repository()).await?;
-        let default_branch =
-            crate::git::default_branch::locate(&repo.path, DefaultBranchLookup::Cached)
-                .await
-                .ok();
         removal::inspect(
             workspace,
             executions.running,
             executions.idle,
             policy,
-            (&repo.path, default_branch.as_ref()),
+            (&repo.path, default_branch),
         )
         .await
     }

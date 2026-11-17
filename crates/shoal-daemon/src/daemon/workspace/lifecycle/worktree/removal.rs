@@ -12,6 +12,7 @@ use crate::{
     fsutil::off_runtime,
     git::{
         self,
+        default_branch::DefaultBranch,
         worktree::{BranchRemoval, FileRemoval, interrupted},
     },
     hooks::{self, Hook, HookKind},
@@ -57,6 +58,8 @@ pub(in crate::daemon::workspace) struct WorktreeStage {
     present: bool,
     post_remove: Option<PostRemoveHook>,
     xcode: Option<crate::config::Effective>,
+    /// What each inspection compares the worktree with, read once.
+    default_branch: Option<DefaultBranch>,
 }
 
 /// What removing a worktree did.
@@ -175,18 +178,22 @@ impl Manager {
         if matches!(removal, Removal::Deleted) && present {
             bail!("workspace directory exists");
         }
-        let post_remove = if present {
+        let (post_remove, default_branch) = if present {
             self.ensure_no_pending_rename(&workspace.id).await?;
             self.settle_interrupted_removal(workspace, replaced).await?;
-            self.prepare_post_remove_hook(workspace).await?
+            (
+                self.prepare_post_remove_hook(workspace).await?,
+                self.inspected_default_branch(workspace).await?,
+            )
         } else {
-            None
+            (None, None)
         };
         Ok(WorktreeStage {
             xcode: self.xcode_settings(workspace, present).await,
             workspace: workspace.clone(),
             present,
             post_remove,
+            default_branch,
         })
     }
 
@@ -265,27 +272,31 @@ impl Manager {
             }
             return Ok(None);
         }
-        (self.check_worktree(workspace, removal, stage, cancelled))
+        let default_branch = worktree.default_branch.as_ref();
+        (self.check_worktree(workspace, removal, stage, cancelled, default_branch))
             .await
             .map(Some)
     }
 
-    /// Inspect the worktree of `workspace` and apply every check `removal`
-    /// needs of it at `stage`, after stopping the `cancelled` restores. A
-    /// deleted directory inspects as clean, while its HEAD cannot be read.
+    /// Inspect the worktree of `workspace` against `default_branch` and
+    /// apply every check `removal` needs of it at `stage`, after stopping
+    /// the `cancelled` restores. A deleted directory inspects as clean,
+    /// while its HEAD cannot be read.
     pub(in crate::daemon::workspace::lifecycle) async fn check_worktree(
         &self,
         workspace: &Workspace,
         removal: Removal<'_>,
         stage: Stage,
         cancelled: &[IdleRestore],
+        default_branch: Option<&DefaultBranch>,
     ) -> Result<Inspection> {
         let executions = self.cleanup_executions(&workspace.id, cancelled).await?;
         let check = self
-            .inspect_removal(
+            .inspect_removal_against(
                 self.workspace_by_id(&workspace.id).await?,
                 removal.inspection(),
                 executions,
+                default_branch,
             )
             .await?;
         removal.verify(&check, stage)?;
