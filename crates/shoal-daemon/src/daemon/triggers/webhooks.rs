@@ -76,7 +76,7 @@ impl Manager {
     /// a daemon that leaves the user's config to the installed Shoal.
     pub(super) fn webhook_address(&self) -> Option<SocketAddr> {
         let address = self.config().machine.webhooks.listen;
-        address.filter(|_| self.fires_global_triggers())
+        address.filter(|_| self.acts_on_global_config())
     }
 
     /// A listener on `address`, none without one or when it cannot bind,

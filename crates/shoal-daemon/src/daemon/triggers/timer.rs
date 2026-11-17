@@ -36,7 +36,7 @@ impl Manager {
     pub(super) async fn trigger_pass(self: &Arc<Self>, now: UnixTime) -> Option<UnixTime> {
         let _firing = self.triggers.firing.lock().await;
         let mut next: Option<UnixTime> = None;
-        let fires_global = self.fires_global_triggers();
+        let fires_global = self.acts_on_global_config();
         let triggers = self.configured_triggers().await.into_iter();
         for trigger in triggers.filter(|trigger| trigger.repository.is_some() || fires_global) {
             // A queued run whose wait ended launches before a new firing,
@@ -142,14 +142,6 @@ impl Manager {
         self.store
             .write(move |tx| state::settle(tx, queued.id, &run))
             .await
-    }
-
-    /// Whether this daemon fires the global config's triggers: a
-    /// development build leaves those of the user's own config to the
-    /// installed Shoal, whose daemon fires them.
-    pub(super) fn fires_global_triggers(&self) -> bool {
-        let config = crate::config::Config::path(&self.paths);
-        crate::config_file::refuse_user_config(&config).is_ok()
     }
 
     /// The runtime state of `trigger`, recorded as new at `now` the first

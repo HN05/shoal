@@ -255,6 +255,15 @@ impl Manager {
         self.config_state.current()
     }
 
+    /// Whether this daemon acts on what the global config sets up for the
+    /// machine, such as its triggers, listeners and hub role: a development
+    /// build leaves those of the user's own config to the installed Shoal,
+    /// whose daemon acts on them.
+    pub(crate) fn acts_on_global_config(&self) -> bool {
+        let config = crate::config::Config::path(&self.paths);
+        crate::config_file::refuse_user_config(&config).is_ok()
+    }
+
     /// Make `config` the one later operations read. Changed overload
     /// settings withdraw recovery readiness before anything can read them, so
     /// a waiting agent needs a fresh healthy interval under the new thresholds.
