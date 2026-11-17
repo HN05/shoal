@@ -382,6 +382,12 @@ impl Snapshot {
         self.state
     }
 
+    /// Whether the snapshot holds no read of the item yet, as a watch's
+    /// does before its first observation.
+    pub(crate) fn before_first_read(&self) -> bool {
+        self.kind.is_none()
+    }
+
     /// The issue's or PR's title, once a read of it has been recorded.
     pub fn title(&self) -> Option<&str> {
         (self.details.as_ref()).map(|details| details.title.as_str())

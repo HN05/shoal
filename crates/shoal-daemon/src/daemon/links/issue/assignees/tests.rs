@@ -235,5 +235,12 @@ async fn assigning_off_leaves_assignees_alone() {
     let workspace = &fixture.workspaces[0];
     assert!(fixture.link(workspace).await.is_empty());
     fixture.unlink(workspace).await;
-    assert!(fixture.server.received().is_empty());
+    // Only the watch's first read of the issue.
+    let lines: Vec<_> = (fixture.server.received().into_iter())
+        .map(|request| request.line)
+        .collect();
+    assert!(
+        lines.iter().all(|line| line.starts_with("GET ")),
+        "{lines:?}"
+    );
 }

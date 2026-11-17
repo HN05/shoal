@@ -8,7 +8,7 @@ use shoal_time::UnixTime;
 
 use super::{Edited, Snapshot, held::HeldPasses};
 use shoal_forge_types::items::item::ItemState;
-use shoal_forge_types::updates::Update;
+use shoal_forge_types::updates::{Update, UpdateKind};
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct WatchRecord {
@@ -27,9 +27,37 @@ pub struct WatchRecord {
     own_change_at: Option<UnixTime>,
     #[serde(default, skip_serializing_if = "HeldPasses::is_empty")]
     held: HeldPasses,
+    /// When the read the watch started from began; observations that
+    /// started before then may show the item before it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    started_at: Option<UnixTime>,
 }
 
 impl WatchRecord {
+    /// Start the watch from `snapshot` of the item at `url`, read by a
+    /// lookup that began at `read_at`, as when its space links the item or
+    /// an agent begins a new session there. What the item's discussion and
+    /// details show then is history, which `shoal view` shows: of the
+    /// updates not yet acknowledged only those of the item's condition
+    /// stay, and a watch that never read the item reports its condition,
+    /// such as failed checks, a conflict or its closing.
+    pub fn start_from(&mut self, mut snapshot: Snapshot, url: &str, read_at: UnixTime) {
+        snapshot.normalize(&self.snapshot, UnixTime::now());
+        self.pending.retain(|update| of_condition(update.kind));
+        if self.snapshot.before_first_read() {
+            let mut condition = self.snapshot.changes(&snapshot, url);
+            condition.retain(|update| of_condition(update.kind));
+            (self.pending).extend(one_delivery(self.held.deliver(&snapshot, condition)));
+        }
+        self.snapshot = snapshot;
+        self.started_at = Some(read_at);
+    }
+
+    /// Whether the watch has read its item.
+    pub fn has_read(&self) -> bool {
+        !self.snapshot.before_first_read()
+    }
+
     /// The updates a watch reports for `snapshot` of the item at `url`, seen
     /// by a poll that started at `observed_at`. Updates still pending are
     /// reported again instead, and the cursor stays until they are
@@ -43,6 +71,14 @@ impl WatchRecord {
         if !self.pending.is_empty() {
             return self.pending.clone();
         }
+        // A poll that started before the read the watch started from may
+        // have read the item before it. One that started in the same second
+        // is taken as after it, so a watch that follows at once is not
+        // held back a whole poll.
+        if self.started_at.is_some_and(|at| observed_at < at) {
+            return Vec::new();
+        }
+        self.started_at = None;
         snapshot.normalize(&self.snapshot, UnixTime::now());
         self.discount_own_changes(&mut snapshot, observed_at);
         let changes = self.snapshot.changes(&snapshot, url);
@@ -92,6 +128,12 @@ impl WatchRecord {
             self.own_change_at = Some(UnixTime::now());
         }
     }
+}
+
+/// Whether an update of `kind` reports the item's condition rather than
+/// what was said on it or changed in its details.
+fn of_condition(kind: UpdateKind) -> bool {
+    !matches!(kind, UpdateKind::Comment | UpdateKind::Edited)
 }
 
 /// `updates` as one delivery, which an agent acknowledges together.

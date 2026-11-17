@@ -3233,8 +3233,11 @@ async fn the_background_poll_reads_spaces_together() {
         .register_repository(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    // Each workspace's issue is answered only once both are being read.
+    // Once linked, each workspace's issue is answered only once both are
+    // being read.
     let arrived = shoal_forge::test_support::together(2);
+    let polling = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let polled = polling.clone();
     let server = shoal_forge::test_support::Server::start(move |request| {
         let Some(number) = request
             .line
@@ -3246,7 +3249,7 @@ async fn the_background_poll_reads_spaces_together() {
             return (200, Vec::new(), "[]".into());
         }
         // A refusal that is not sent again, so a read alone fails the poll.
-        if !arrived() {
+        if polled.load(std::sync::atomic::Ordering::SeqCst) && !arrived() {
             return (400, Vec::new(), Vec::new());
         }
         let issue = json!({"number": number.parse::<u64>().unwrap(), "title": "Fix",
@@ -3281,6 +3284,7 @@ async fn the_background_poll_reads_spaces_together() {
             .await
             .unwrap();
     }
+    polling.store(true, std::sync::atomic::Ordering::SeqCst);
     manager.poll_linked_item_activity().await.unwrap();
 }
 

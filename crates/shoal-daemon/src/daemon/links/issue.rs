@@ -88,6 +88,7 @@ impl Manager {
         let fresh = self
             .persist_issue_assignment(&space.id, &url, title, assigner)
             .await?;
+        (self.start_linked_watches_gated(&space.id, vec![url.clone()])).await;
         Ok(self.assign_linked(&space, &forge, &url, fresh).await)
     }
 

@@ -204,6 +204,22 @@ impl Manager {
             .await
     }
 
+    /// The activity of each of `items` the forge reads in full, leaving out
+    /// the others.
+    pub(super) async fn complete_reads(&self, items: Vec<ItemRef>) -> Vec<(String, Snapshot)> {
+        let account = &self.user_account();
+        stream::iter(items)
+            .map(|item| async move {
+                let read = self.read_item_activity(account, &item, false).await.ok()?;
+                let complete = read.errors().next().is_none();
+                complete.then(|| (item.to_string(), read))
+            })
+            .buffered(ITEMS_READ_AT_ONCE)
+            .filter_map(std::future::ready)
+            .collect()
+            .await
+    }
+
     /// The activity of `item`. The forge failing to read a `linked` item
     /// leaves an unread snapshot, so a watch reports the failure as it
     /// reports one of the item's sources; an item named on the command line

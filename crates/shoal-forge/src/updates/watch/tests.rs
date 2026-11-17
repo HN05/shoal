@@ -78,3 +78,51 @@ fn own_changes_are_not_reported_back() {
         [UpdateKind::Comment]
     );
 }
+
+#[test]
+fn a_start_reports_the_condition_of_an_item_never_read_but_not_its_comments() {
+    let mut record = WatchRecord::default();
+    let earlier = json!({"discussion:1": "one", "discussion:2": "two"});
+    let read_at = UnixTime::from_seconds(10);
+    record.start_from(snapshot(earlier, "closed"), "pr", read_at);
+    assert_eq!(
+        record
+            .pending
+            .iter()
+            .map(|update| update.kind)
+            .collect::<Vec<_>>(),
+        [UpdateKind::Closed]
+    );
+    record.pending.clear();
+    // A poll that started before the read may show the item before it.
+    let stale = snapshot(json!({"discussion:1": "one"}), "closed");
+    let before = UnixTime::from_seconds(9);
+    assert!(record.observe(stale, "pr", before).is_empty());
+    let later = json!({"discussion:1": "one", "discussion:2": "two", "discussion:3": "three"});
+    let updates = record.observe(snapshot(later, "closed"), "pr", UnixTime::MAX);
+    assert_eq!(
+        updates[0].message,
+        "1 new comment; read them with shoal view pr"
+    );
+}
+
+#[test]
+fn a_restart_keeps_only_the_queued_updates_of_the_items_condition() {
+    let mut record = WatchRecord::default();
+    record.observe(snapshot(json!({}), "open"), "pr", UnixTime::EPOCH);
+    record.pending.clear();
+    let queued = json!({"discussion:1": "one"});
+    let updates = record.observe(snapshot(queued, "closed"), "pr", UnixTime::EPOCH);
+    assert_eq!(updates.len(), 2);
+    let read = json!({"discussion:1": "one", "discussion:2": "two"});
+    record.start_from(snapshot(read, "closed"), "pr", UnixTime::EPOCH);
+    // The queued comment goes; the item's closing stays, reported once.
+    assert_eq!(
+        record
+            .pending
+            .iter()
+            .map(|update| update.kind)
+            .collect::<Vec<_>>(),
+        [UpdateKind::Closed]
+    );
+}

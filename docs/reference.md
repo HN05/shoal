@@ -5204,9 +5204,11 @@ A new [agent message](#agent-messages) ends a watch at once, ahead of item
 activity, even when the watch would otherwise fail for lack of linked items.
 Each update includes its item URL, kind and message; a comment update counts the
 new, edited and deleted comments and reviews by kind and author. `--json` returns an `updates`
-array, and a `messages` array when agent messages arrived. The first watch
-reports existing activity; subsequent watches share a
-cursor per workspace and item across restarts. Pending updates replay until the
+array, and a `messages` array when agent messages arrived. Linking an item takes
+its comments and edits so far as seen, which `shoal view` shows, while failed checks,
+conflicts and its state are still reported; a watch of an item the space does not
+follow reports its existing activity first. Watches share a cursor per workspace and
+item across restarts. Pending updates replay until the
 CLI acknowledges successful output. Unlinking discards that item's cursor.
 `--timeout <seconds>` bounds the wait to 1–3600 seconds; without it, the wait is
 unbounded. A watch survives daemon restarts, waiting up to two minutes for a

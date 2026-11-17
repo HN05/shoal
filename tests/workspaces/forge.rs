@@ -1000,10 +1000,7 @@ fn pr_wait_wakes_for_failed_ci_reviews_and_conflicts_with_own_scope() {
     ]);
     let (runs, answer) = github_check_runs(checks.clone());
     responses.insert(runs, answer);
-    responses.insert(
-        "GET repos/team/project/pulls/7/comments?per_page=100&page=1".into(),
-        serde_json::json!({"body": [{"id":1,"body":"review finding","user":{"login":"bot"}}]}),
-    );
+    // Linked before its finding, which its watch then reports.
     fixture.script_github(&responses);
     fixture.ok(&[
         "link",
@@ -1013,6 +1010,11 @@ fn pr_wait_wakes_for_failed_ci_reviews_and_conflicts_with_own_scope() {
         "--space",
         &fixture.id("watch"),
     ]);
+    responses.insert(
+        "GET repos/team/project/pulls/7/comments?per_page=100&page=1".into(),
+        serde_json::json!({"body": [{"id":1,"body":"review finding","user":{"login":"bot"}}]}),
+    );
+    fixture.script_github(&responses);
     let binary = support::shoal_binary();
     let first = fixture.ok(&[
         "run",
@@ -1095,10 +1097,7 @@ fn a_newer_pr_wait_supersedes_the_older_one_without_taking_its_updates() {
     fixture.add("waits");
     fixture.add_github_origin();
     let mut responses = github_pr(7, "waits");
-    responses.insert(
-        "GET repos/team/project/issues/7/comments?per_page=100&page=1".into(),
-        serde_json::json!({"body": [{"id":1,"node_id":"IC_1","body":"review"}]}),
-    );
+    // Linked before its comment, which its watch then reports.
     fixture.script_github(&responses);
     // Lookups after linking block until released, so the first wait is still polling when
     // the second starts.
@@ -1120,6 +1119,11 @@ exec "$HOME/forge.py" "$@"
         "--space",
         &fixture.id("waits"),
     ]);
+    responses.insert(
+        "GET repos/team/project/issues/7/comments?per_page=100&page=1".into(),
+        serde_json::json!({"body": [{"id":1,"node_id":"IC_1","body":"review"}]}),
+    );
+    fixture.script_github(&responses);
     fs::write(fixture.root.path().join("block"), "").unwrap();
     let wait = || {
         fixture
@@ -1164,8 +1168,9 @@ fn unified_items_link_filter_and_watch_explicit_targets_without_completion() {
     fixture.add("items");
     fixture.add("other");
     fixture.add_github_origin();
-    // Issue `number` with one comment, and PR 7 with another.
-    let write_issue = |fixture: &Fixture, number: u64, body: &str| {
+    // Issue `number` with one comment, and PR 7 with another; neither has
+    // one without `body`.
+    let write_issue = |fixture: &Fixture, number: u64, body: Option<&str>| {
         let mut responses = github_pr(7, "items");
         let comments = |number: u64| {
             format!("GET repos/team/project/issues/{number}/comments?per_page=100&page=1")
@@ -1174,13 +1179,18 @@ fn unified_items_link_filter_and_watch_explicit_targets_without_completion() {
             format!("GET repos/team/project/issues/{number}"): {"body": {"number": number,
                 "title": "Issue", "state": "open", "body": "", "labels": [],
                 "pull_request": null}},
-            comments(number): {"body": [{"id": 1, "node_id": "IC_1", "body": body}]},
-            comments(7): {"body": [{"id": 2, "node_id": "IC_2", "body": "PR comment"}]},
+            comments(number): {"body": body.map_or(serde_json::json!([]), |body| {
+                serde_json::json!([{"id": 1, "node_id": "IC_1", "body": body}])
+            })},
+            comments(7): {"body": body.map_or(serde_json::json!([]), |_| {
+                serde_json::json!([{"id": 2, "node_id": "IC_2", "body": "PR comment"}])
+            })},
         });
         responses.extend(issue.as_object().unwrap().clone());
         fixture.script_github(&responses);
     };
-    write_issue(&fixture, 1, "first");
+    // Linked before their comments, which their watches then report.
+    write_issue(&fixture, 1, None);
     fixture.ok(&[
         "link",
         "pr",
@@ -1196,6 +1206,7 @@ fn unified_items_link_filter_and_watch_explicit_targets_without_completion() {
         "--space",
         &fixture.id("items"),
     ]);
+    write_issue(&fixture, 1, Some("first"));
     let binary = support::shoal_binary();
     let filtered = fixture.ok(&[
         "run",
@@ -1217,11 +1228,11 @@ fn unified_items_link_filter_and_watch_explicit_targets_without_completion() {
         issue["updates"][0]["url"],
         "https://github.com/team/project/issues/1"
     );
-    write_issue(&fixture, 1, "changed");
+    write_issue(&fixture, 1, Some("changed"));
     let all = fixture.ok(&["watch", "--space", &fixture.id("items")]);
     assert_eq!(all["updates"].as_array().unwrap().len(), 1);
     fixture.restart();
-    write_issue(&fixture, 1, "changed after restart");
+    write_issue(&fixture, 1, Some("changed after restart"));
     let direct = fixture.ok(&[
         "watch",
         "https://github.com/team/project/issues/1",
@@ -1275,7 +1286,7 @@ fn unified_items_link_filter_and_watch_explicit_targets_without_completion() {
         inspection["pr_cleanup"]["urls"][0],
         "https://github.com/team/project/pull/7"
     );
-    write_issue(&fixture, 2, "unlinked issue");
+    write_issue(&fixture, 2, Some("unlinked issue"));
     let explicit = fixture.ok(&["watch", "issue", "2", "--space", &fixture.id("items")]);
     assert_eq!(
         explicit["updates"][0]["url"],
@@ -1284,7 +1295,7 @@ fn unified_items_link_filter_and_watch_explicit_targets_without_completion() {
     let inspection = fixture.ok(&["status", &fixture.id("items")]);
     assert_eq!(inspection["issues"], serde_json::json!([]));
     assert!(inspection["completion"].is_null());
-    write_issue(&fixture, 1, "relink");
+    write_issue(&fixture, 1, Some("relink"));
     fixture.ok(&[
         "link",
         "issue",
@@ -1417,11 +1428,15 @@ fn watch_forgejo_issue_reports_comments_closure_and_reopening() {
         )
     };
     state("open");
-    script_api(
-        home,
-        "repos/team/repo/issues/8/comments?limit=50&page=1",
-        &serde_json::json!([{"id": 1, "body": "first comment"}]),
-    );
+    let comments = |comments: serde_json::Value| {
+        script_api(
+            home,
+            "repos/team/repo/issues/8/comments?limit=50&page=1",
+            &comments,
+        )
+    };
+    // Linked before its comment, which its watch then reports.
+    comments(serde_json::json!([]));
     fixture.ok(&[
         "link",
         "issue",
@@ -1430,6 +1445,7 @@ fn watch_forgejo_issue_reports_comments_closure_and_reopening() {
         "--space",
         &fixture.id("issue-watch"),
     ]);
+    comments(serde_json::json!([{"id": 1, "body": "first comment"}]));
     let first = fixture.ok(&["watch", "issue", "--space", &fixture.id("issue-watch")]);
     assert_eq!(first["updates"][0]["kind"], "comment");
     state("closed");
@@ -1546,7 +1562,8 @@ fn pr_wait_reports_forgejo_reviews_when_the_ci_lookup_fails() {
         &serde_json::json!([]),
     );
     script_api(home, &status, &checks("pending"));
-    script_api(home, reviews, &review("A finding"));
+    // Linked before its review, which its watch then reports.
+    script_api(home, reviews, &serde_json::json!([]));
     fixture.ok(&[
         "link",
         "pr",
@@ -1555,6 +1572,7 @@ fn pr_wait_reports_forgejo_reviews_when_the_ci_lookup_fails() {
         "--space",
         &fixture.id("watch"),
     ]);
+    script_api(home, reviews, &review("A finding"));
     let first = fixture.ok(&["watch", "pr", "--space", &fixture.id("watch")]);
     // The passing check waits for rust.
     assert_eq!(first["updates"].as_array().unwrap().len(), 1, "{first}");

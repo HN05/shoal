@@ -102,6 +102,25 @@ impl Fixture {
         support::forge::respond(self.root.path(), &responses);
     }
 
+    /// Run the link command `args` while the forge shows every discussion
+    /// and review empty, then answer as before, so the link's watch starts
+    /// before what the answers hold and reports it.
+    fn link_before_discussion(&self, args: &[&str]) -> Value {
+        let file = self.root.path().join("forge/responses.json");
+        let responses: Value = serde_json::from_str(&fs::read_to_string(&file).unwrap()).unwrap();
+        let mut quiet = responses.clone();
+        for (key, answer) in quiet.as_object_mut().unwrap() {
+            if key.starts_with("GET ") && (key.contains("/comments?") || key.contains("/reviews?"))
+            {
+                *answer = json!({"body": []});
+            }
+        }
+        self.respond(quiet);
+        let linked = self.ok(args);
+        self.respond(responses);
+        linked
+    }
+
     /// Requests since the last call, as `[key, body, auth]`.
     fn requests(&self) -> Vec<Value> {
         let log = self.root.path().join("forge/requests.jsonl");
@@ -1137,7 +1156,7 @@ fn pr_review_takes_line_comments_from_arguments_and_a_file_and_watches_skip_it()
         })
     };
     fixture.respond(responses("open", &[]));
-    fixture.ok(&[
+    fixture.link_before_discussion(&[
         "link",
         "pr",
         "8",
@@ -1219,7 +1238,7 @@ fn watches_do_not_report_a_forgejo_reviewer_request_as_a_review() {
         })
     };
     fixture.respond(responses("open", json!([])));
-    fixture.ok(&[
+    fixture.link_before_discussion(&[
         "link",
         "pr",
         "8",
@@ -1768,7 +1787,7 @@ fn comment_edits_change_only_the_logins_own_comments_and_are_not_reported_back()
         "PATCH repos/team/project/issues/comments/2":
             {"body": {"id": 2, "body": "Fixed", "user": {"login": "me"}}},
     }));
-    fixture.ok(&[
+    fixture.link_before_discussion(&[
         "link",
         "issue",
         "8",
@@ -2264,7 +2283,7 @@ fn watches_read_every_page_of_a_discussion() {
         }))
     };
     respond("first");
-    fixture.ok(&[
+    fixture.link_before_discussion(&[
         "link",
         "issue",
         "8",
@@ -2296,7 +2315,7 @@ fn watches_deliver_item_activity_while_git_fails_in_the_worktree() {
         "GET repos/team/project/issues/8/comments?limit=50&page=1":
             {"body": [{"id": 1, "body": "Hello?"}]},
     }));
-    fixture.ok(&[
+    fixture.link_before_discussion(&[
         "link",
         "issue",
         "8",
@@ -2332,7 +2351,7 @@ fn watches_report_a_failed_item_lookup_without_failing() {
         "GET repos/team/project/issues/8": issue,
         comments: {"body": [{"id": 1, "body": "Hello?"}]},
     }));
-    fixture.ok(&[
+    fixture.link_before_discussion(&[
         "link",
         "issue",
         "8",
@@ -2410,7 +2429,7 @@ fn watches_do_not_report_the_agents_own_comments_back() {
         "GET repos/team/project/issues/8": issue("open"),
         "GET repos/team/project/issues/8/comments?limit=50&page=1": comments(&[1]),
     }));
-    fixture.ok(&[
+    fixture.link_before_discussion(&[
         "link",
         "issue",
         "8",
@@ -2493,7 +2512,7 @@ fn watches_read_unchanged_items_as_not_modified() {
             }))
         };
         respond("open");
-        fixture.ok(&[
+        fixture.link_before_discussion(&[
             "link",
             "issue",
             "8",
@@ -2673,7 +2692,7 @@ fn a_pr_from_another_branch_of_the_worktree_is_assigned_and_watched() {
         "GET repos/team/project/commits/head/status?limit=50":
             {"body": {"total_count": 0, "statuses": []}},
     }));
-    fixture.ok(&[
+    fixture.link_before_discussion(&[
         "link",
         "pr",
         "8",

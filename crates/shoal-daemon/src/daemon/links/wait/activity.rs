@@ -280,7 +280,7 @@ pub(in crate::daemon::links) fn record_received_change(
 }
 
 /// Whether the space `id` follows the item at `url`.
-fn follows(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Result<bool> {
+pub(super) fn follows(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Result<bool> {
     Ok(followed_items(db, id, None)?
         .iter()
         .any(|followed| followed.url() == url))

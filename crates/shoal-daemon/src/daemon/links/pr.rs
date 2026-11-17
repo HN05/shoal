@@ -105,10 +105,11 @@ impl Manager {
             kind.map(|kind| Registration { kind, error: None }),
             titled,
         );
-        let id = space.id.to_owned();
+        let (id, added) = (space.id.to_owned(), change.added.clone());
         (self.store)
             .write(move |tx| record_change(tx, &id, change))
             .await?;
+        self.start_linked_watches_gated(&space.id, added).await;
         self.signals.wake_cleanup();
         Ok(())
     }
