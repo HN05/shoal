@@ -270,6 +270,8 @@ async fn a_released_preparation_never_stacks_its_blocker_on_itself() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     let api = create(&manager, &repo, "api").await;
+    std::fs::write(api.path.join("api"), "api\n").unwrap();
+    commit(&api.path, "api");
     let blocker = Blocker::Space(api.id.to_string());
     let ui = *start(&manager, &repo, "ui", vec![blocker]).await.workspace;
     // Meanwhile the blocker came to build on the waiting workspace.
@@ -278,9 +280,14 @@ async fn a_released_preparation_never_stacks_its_blocker_on_itself() {
     (manager.set_base_workspace(&api_selector, Some(ui_selector)))
         .await
         .unwrap();
-    let refused = manager.build_pending_on(&ui.id, "api".into()).await;
-    assert!(refused.is_err(), "{refused:?}");
+    done(&manager, &api).await;
+    manager.start_waiting_preparations().await.unwrap();
+    assert!(manager.operation_runs_in(&ui.id));
+    // It holds the blocker's work without stacking on it.
     assert_eq!(read(&manager, &ui).await.part.base_workspace, None);
+    let selector = SpaceSelector::id(&ui.id);
+    let created = manager.create_pending_worktree(&selector).await.unwrap();
+    assert!(created.path.join("api").exists());
 }
 
 #[tokio::test]

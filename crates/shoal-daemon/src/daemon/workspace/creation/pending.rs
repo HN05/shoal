@@ -224,6 +224,9 @@ impl Manager {
 
 /// [`Manager::build_pending_on`] in `tx`, with `owner` the workspace that
 /// owns `base`, if any, whose PR gate and that of `id` the caller holds.
+/// An owner that came to build on the workspace `id` meanwhile is no base
+/// of it, which would make a cycle, though the worktree still holds its
+/// work.
 pub(crate) fn build_pending_in(
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
@@ -245,6 +248,7 @@ pub(crate) fn build_pending_in(
         params![id, serde_json::to_string(&pending)?],
     )?;
     match owner {
+        Some(owner) if stack::builds_on(tx, owner, id)? => Ok(()),
         Some(owner) => stack::stack_on(tx, id, owner, EventCause::Blocker),
         None => Ok(()),
     }

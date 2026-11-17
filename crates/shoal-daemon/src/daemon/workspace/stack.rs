@@ -98,17 +98,23 @@ fn change_base(
 /// would make `id` build on itself.
 fn ensure_acyclic(db: &Connection, id: &SpaceId, base: &SpaceId) -> Result<()> {
     ensure!(
-        !store::exists(
-            db,
-            "WITH RECURSIVE chain(id) AS (
-                SELECT ?1 UNION SELECT base_workspace_id FROM workspaces
-                JOIN chain USING(id) WHERE base_workspace_id IS NOT NULL
-            ) SELECT 1 FROM chain WHERE id=?2",
-            [base, id],
-        )?,
+        !builds_on(db, base, id)?,
         "a workspace cannot build on itself or a workspace stacked on it"
     );
     Ok(())
+}
+
+/// Whether the workspace `id` is `base` or builds on it, directly or
+/// through the workspaces stacked between.
+pub(crate) fn builds_on(db: &Connection, id: &SpaceId, base: &SpaceId) -> Result<bool> {
+    store::exists(
+        db,
+        "WITH RECURSIVE chain(id) AS (
+            SELECT ?1 UNION SELECT base_workspace_id FROM workspaces
+            JOIN chain USING(id) WHERE base_workspace_id IS NOT NULL
+        ) SELECT 1 FROM chain WHERE id=?2",
+        [id, base],
+    )
 }
 
 /// Record `base` as the base of workspace `id` for `cause`, refusing one
