@@ -968,7 +968,7 @@ last check of HEAD against the default target found
 [changed on both sides](#conflicts), from a watch or `shoal conflicts`, in
 `changed_on_both_sides` (`target`, `target_commit`, `head` and `files`). Status also
 names the first condition that keeps the space from automatic cleanup, holds,
-open questions, a pending PR proposal or push request, a running chat in it, queued agent launches and assignment state before commands, leases and Git state, or the idle delay
+open questions, a pending PR proposal or push request, a running chat in it, queued agent launches, the CI runs of a merge it follows and assignment state before commands, leases and Git state, or the idle delay
 when nothing does, in `cleanup_reason`. It lists the chats in the worktree, in
 `chats`. A chat's status leaves out what needs a worktree: its
 branch, changes, setup, executions, leases and sync; it names the
@@ -5051,7 +5051,17 @@ links the run it starts as opened where the forge reports its URL. Linked runs
 have no completion or cleanup effect; `shoal watch` follows each until it
 finishes, and it stays linked until it is unlinked or the workspace is removed.
 A PR's runs are not linked; the PR's checks cover them, so link one only to
-follow it past the PR's merge. Commands that select items this way give a number without a
+follow it past the PR's merge. Where
+[`[pr] watch_merge_runs`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#prs)
+is on, the watch that sees an assigned PR merge into the default branch does
+that itself: for ten minutes the background poll lists the default branch's
+runs for the merge commit the forge reports and links each new one as related,
+so the space hears how it ends as of any linked run. Where the forge reports no
+merge commit, the merge's update says its runs cannot be followed, and a lookup
+that finds no run records that in the space's log. Until the lookup ends and the
+runs it linked finish, the space stays from every unattended removal, with
+`cleanup_reason` `merge_runs`, and its asleep agent counts as one an update
+wakes. Commands that select items this way give a number without a
 kind the kind of the linked item with that number, otherwise the kind the forge
 reports; GitLab and Bitbucket number issues and PRs separately, so there such a
 number must be linked. Use `--space` to select another space, a workspace or chat,
@@ -5483,7 +5493,7 @@ it when it expires, and Git state such as unpushed commits is checked when it
 starts and when it expires.
 Running/unknown commands, saved stopped work, a chat running in the worktree or
 saved there, directory users (including shells), dirty/unpushed work,
-simulator leases, permits, holds, open [questions](#questions), pending PR proposals and push requests, and failed checks block cleanup.
+simulator leases, permits, holds, open [questions](#questions), pending PR proposals and push requests, the CI runs of a merge the space follows, and failed checks block cleanup.
 So does the running agent of the nearest space above with one, in any turn
 state, while no agent of the space's own works there: none has ever started in
 the workspace, as in a child it split for its subagents, or the chat's agent

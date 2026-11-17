@@ -2294,6 +2294,17 @@ failed read of a linked item itself is such a source: it keeps the item's last
 snapshot and reports `lookup_failed`, so an outage never also fails the watch
 or the Stop hook's wait that reports it. A watch of an item named on the
 command line still fails, so a mistyped item does not wait silently.
+Decision: with `[pr] watch_merge_runs` on, a repository has Shoal follow the
+default branch's CI runs for each assigned PR's merge, since an agent that
+slept or finished never heard that its merge broke the default branch, and two
+agents then found and filed the break twice. The watch that records the merge
+starts a persisted lookup of the merge commit the forge reports, never one
+Shoal guesses; the background poll lists its runs for a fixed ten minutes,
+since a run that has not started by then is not coming, and links each as
+related, so the linked-run watch reports its end through the paths every update
+takes. The lookup and its unfinished runs keep the space from unattended
+removal, so a done space stays to hear them, however long a run waits for a
+runner.
 
 Notifications stay in the terminal: the daemon records what a user would
 otherwise miss (busy resources and who holds them, port conflicts, exits of
