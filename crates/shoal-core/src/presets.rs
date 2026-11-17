@@ -7,7 +7,7 @@ use anyhow::{Context as _, Result};
 use crate::fsutil::atomic::{Permissions, ReplaceOptions, replace_atomically};
 
 pub(crate) use crate::config::presets::{CARGO_CACHE, KEPT_CACHES, XCODE_FILES_CACHE};
-pub use crate::config::presets::{Preset, XCODE_CACHE};
+pub use crate::config::presets::{Preset, SeedCommand, XCODE_CACHE};
 
 pub(crate) mod cargo;
 pub mod derived_data;

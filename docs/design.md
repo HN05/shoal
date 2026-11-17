@@ -1353,7 +1353,10 @@ scratch for clippy. Clippy's lint arguments are rustc options, and rustc
 discards incremental state built under other options, so the seed passes none
 and serves clippy runs that fail on warnings through Cargo's `build.warnings`
 instead; a step without them also denies nothing, so a default branch with
-warnings still seeds.
+warnings still seeds. A failure of the clippy step alone still freezes the
+snapshot and notifies, since its outputs serve only clippy runs and clippy is an
+optional component a toolchain can lack; a timeout or cancellation there fails
+the build as in any step.
 Cargo never deletes the outputs of a unit whose hash changed, which
 releases, lockfile and toolchain updates and crate moves do, so the seed
 `target` would keep every earlier build and each freeze, spare and clone would

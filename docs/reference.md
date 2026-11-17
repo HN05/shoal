@@ -3616,7 +3616,11 @@ one's mapping to clippy's builds of the workspace's crates and passes every
 other rustc run through unchanged. The preset's `RUSTC_WRAPPER` replaces a
 wrapper set in the inherited environment or as Cargo's `build.rustc-wrapper`,
 such as sccache; one set in `[env]` replaces the preset's, and clippy then
-builds without the mapping. The seed build fails without clippy installed.
+builds without the mapping. When the clippy step fails, such as without
+clippy installed or on a lint that denies by default, the seed keeps the
+outputs of the other steps and notifies; new workspaces start without
+clippy's, and the seed is rebuilt only once the default branch or its
+settings change.
 The seed's clippy results serve only clippy runs with the same lint arguments,
 and the seed passes none after `--`. To fail on warnings, use Cargo's
 `build.warnings` instead, as in `CARGO_BUILD_WARNINGS=deny cargo clippy

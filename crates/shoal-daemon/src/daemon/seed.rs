@@ -5,10 +5,10 @@ use shoal_ids::repository_ids::RepositoryId;
 use std::{
     collections::BTreeMap,
     ffi::OsString,
-    fs,
+    fmt, fs,
     io::{Read as _, Seek as _, Write as _},
-    path::Path,
-    process::Stdio,
+    path::{Path, PathBuf},
+    process::{ExitStatus, Stdio},
     sync::Arc,
     time::Duration,
 };
@@ -115,7 +115,8 @@ pub async fn run_spares(manager: Arc<Manager>) {
 impl Manager {
     /// Rebuild, one at a time, each seed whose default branch moved since its
     /// snapshot. A commit whose build failed is not retried until the branch
-    /// moves again or the daemon restarts.
+    /// moves again or the daemon restarts; one whose soft steps alone failed
+    /// built a current snapshot.
     pub async fn refresh_seeds(&self) {
         let repositories = match self.repositories().await {
             Ok(repositories) => repositories,
@@ -152,7 +153,25 @@ impl Manager {
         let result = self.build_seed(repo, &layout, &plan, &build).await;
         self.seeds
             .record_result(&repo.id, result.is_err().then_some(build));
-        result
+        self.report_soft_failures(repo, &result?).await;
+        Ok(())
+    }
+
+    /// Tell the user which soft steps of the repository's installed seed
+    /// failed, so new workspaces start without their outputs.
+    async fn report_soft_failures(&self, repo: &Repository, failures: &[StepFailure]) {
+        let name = crate::repository::name(repo);
+        for failure in failures {
+            self.notify(
+                None,
+                NotificationKind::SeedFailed,
+                format!(
+                    "Seed build for {name} kept the outputs of its other steps: {failure}; \
+                     new workspaces start without its outputs"
+                ),
+            )
+            .await;
+        }
     }
 
     /// The repository's seed settings, or `None` when it configures no seed.
@@ -175,19 +194,20 @@ impl Manager {
     }
 
     /// Check the seed worktree out at `tip`, build it and freeze the outputs.
-    /// Repository removal cancels the build and waits for it to return.
+    /// Returns how its soft steps failed. Repository removal cancels the
+    /// build and waits for it to return.
     async fn build_seed(
         &self,
         repo: &Repository,
         layout: &Layout,
         plan: &Plan,
         build: &(CommitId, String),
-    ) -> Result<()> {
+    ) -> Result<Vec<StepFailure>> {
         let tip = &build.0;
         let slot = self.seeds.slot(&repo.id);
         let _build = slot.gate.lock().await;
         if self.repository(&repo.id).await.is_err() {
-            return Ok(());
+            return Ok(Vec::new());
         }
         {
             let _git = self.gates.lock_git(&repo.id).await;
@@ -198,7 +218,7 @@ impl Manager {
         crate::caches::directories(repo, &plan.caches)?;
         let previous = previous_build(layout, tip).await?;
         log!("seed build for {} at {tip}", repo.path.display());
-        let toolchains = run_build(
+        let built = run_build(
             plan,
             previous.as_ref(),
             &layout.worktree(),
@@ -206,11 +226,11 @@ impl Manager {
             slot.cancel.subscribe(),
         )
         .await?;
-        self.freeze_seed(repo, layout, plan, build, toolchains)
+        self.freeze_seed(repo, layout, plan, build, built.toolchains)
             .await?;
         // The new snapshot needs its own spare.
         self.seeds.want_spare();
-        Ok(())
+        Ok(built.soft_failures)
     }
 
     /// Replace the snapshot with the outputs the seed worktree built with
@@ -565,24 +585,53 @@ impl Drop for SeedStop {
     }
 }
 
+/// What a seed build that went to its end built with, and how its soft
+/// steps failed.
+struct Built {
+    toolchains: Toolchains,
+    soft_failures: Vec<StepFailure>,
+}
+
+/// A step that ran to its end and exited non-zero.
+struct StepFailure {
+    label: String,
+    code: i32,
+    log: PathBuf,
+}
+
+impl fmt::Display for StepFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self { label, code, log } = self;
+        write!(
+            f,
+            "{label} exited with {code}; output is in {}",
+            log.display()
+        )
+    }
+}
+
 /// Run the seed build in its worktree, writing its output to `log`: name
 /// each preset's toolchain, reset the outputs `previous` left that this build
-/// would not reuse, then run the build's commands in order, until one fails,
-/// the build times out or `cancel` is set. Returns the toolchains.
+/// would not reuse, then run the build's commands in order, until one that
+/// is not soft fails, the build times out or `cancel` is set.
 async fn run_build(
     plan: &Plan,
     previous: Option<&Previous>,
     worktree: &Path,
     log: &Path,
     cancel: watch::Receiver<bool>,
-) -> Result<Toolchains> {
+) -> Result<Built> {
     let mut steps = Steps::new(plan, worktree, log, cancel)?;
     let toolchains = identify_toolchains(&mut steps, &plan.build).await?;
     let resets = plan.build.resets(previous, &plan.settings()?, &toolchains);
+    let mut soft_failures = Vec::new();
     for step in plan.build.steps(&resets) {
-        steps.run(&step).await?;
+        soft_failures.extend(steps.run(&step).await?);
     }
-    Ok(toolchains)
+    Ok(Built {
+        toolchains,
+        soft_failures,
+    })
 }
 
 /// Run each preset's toolchain command and keep what it printed.
@@ -622,11 +671,16 @@ impl<'a> Steps<'a> {
         })
     }
 
-    /// Run `step`, writing its output to the log.
-    async fn run(&mut self, step: &Step) -> Result<()> {
+    /// Run `step`, writing its output to the log. Returns how a soft step
+    /// failed; any other failure is an error.
+    async fn run(&mut self, step: &Step) -> Result<Option<StepFailure>> {
         writeln!(self.output, "$ {}", step.label)?;
         let stdout = self.output.try_clone()?;
-        self.wait(step, &stdout).await
+        let status = self.wait(step, &stdout).await?;
+        match self.failure(step, status) {
+            Some(failure) if !step.soft => bail!("{failure}"),
+            soft => Ok(soft),
+        }
     }
 
     /// Run `step` and return what it printed to standard output, which the
@@ -639,14 +693,27 @@ impl<'a> Steps<'a> {
         stdout.seek(std::io::SeekFrom::Start(0))?;
         stdout.read_to_end(&mut printed)?;
         self.output.write_all(&printed)?;
-        waited.map(|()| String::from_utf8_lossy(&printed).into_owned())
+        if let Some(failure) = self.failure(step, waited?) {
+            bail!("{failure}");
+        }
+        Ok(String::from_utf8_lossy(&printed).into_owned())
+    }
+
+    /// How `step` failed when it exited with `status`, or `None` when it
+    /// succeeded.
+    fn failure(&self, step: &Step, status: ExitStatus) -> Option<StepFailure> {
+        (!status.success()).then(|| StepFailure {
+            label: step.label.clone(),
+            code: crate::execution::exit_code(status),
+            log: self.log.to_owned(),
+        })
     }
 
     /// Run `step`, its standard output to `stdout` and its errors to the
-    /// log, until it exits, the build's deadline passes or `cancel` is set.
-    /// Whatever it leaves in its process group is killed before this
-    /// returns.
-    async fn wait(&mut self, step: &Step, stdout: &fs::File) -> Result<()> {
+    /// log, until it exits, the build's deadline passes or `cancel` is set,
+    /// and return how it exited. Whatever it leaves in its process group is
+    /// killed before this returns.
+    async fn wait(&mut self, step: &Step, stdout: &fs::File) -> Result<ExitStatus> {
         let mut child = step_command(step, self.plan, self.worktree, stdout, &self.output)?
             .spawn()
             .with_context(|| format!("launch {}", step.label))?;
@@ -677,14 +744,7 @@ impl<'a> Steps<'a> {
         if let Err(reason) = stopped {
             bail!(reason);
         }
-        ensure!(
-            status.success(),
-            "{} exited with {}; output is in {}",
-            step.label,
-            crate::execution::exit_code(status),
-            self.log.display()
-        );
-        Ok(())
+        Ok(status)
     }
 }
 

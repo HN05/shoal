@@ -225,6 +225,114 @@ async fn a_preset_builds_and_keeps_its_tool_outputs() {
     assert!(log.contains("$ cargo clippy --all-targets\n"), "{log}");
 }
 
+/// A repository whose seed runs `presets` with the fake tools of its `bin`:
+/// `cargo` records each command in `target` and fails at `clippy` as a
+/// toolchain without clippy does, and `npm ci` exits with `npm_exit`.
+async fn fake_tools(
+    manager: &Manager,
+    root: &Path,
+    presets: &str,
+    npm_exit: i32,
+) -> (PathBuf, Repository) {
+    let checkout = repository(root, "repo");
+    let tools = [
+        ("bin/rustc", "#!/bin/sh\necho 'rustc 1.100.0'\n".to_owned()),
+        (
+            "bin/cargo",
+            "#!/bin/sh\ncase \"$1\" in\nclean) ;;\n\
+             clippy) echo 'error: no such command: `clippy`' >&2; exit 101 ;;\n\
+             *) mkdir -p target && touch \"target/$1\" ;;\nesac\n"
+                .to_owned(),
+        ),
+        ("bin/npm", format!("#!/bin/sh\nexit {npm_exit}\n")),
+    ];
+    for (path, script) in &tools {
+        install_test_script(checkout.join(path), script);
+        commit(&checkout, path);
+    }
+    fs::write(
+        checkout.join(".shoal.toml"),
+        format!(
+            "setup.presets = {presets}\n[env]\nPATH = '{{workspace_path}}/bin:/usr/bin:/bin'\n"
+        ),
+    )
+    .unwrap();
+    commit(&checkout, ".shoal.toml");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    (checkout, repo)
+}
+
+/// The messages of the unread seed failures.
+async fn seed_failures(manager: &Manager) -> Vec<String> {
+    let notifications = manager.notifications(true, 10).await.unwrap();
+    (notifications.into_iter())
+        .filter(|notification| notification.kind == NotificationKind::SeedFailed)
+        .map(|notification| notification.message)
+        .collect()
+}
+
+#[tokio::test]
+async fn a_failed_soft_step_keeps_the_other_steps_outputs() {
+    let (temp, manager) = manager().await;
+    configure(&manager, NO_PRESSURE).await;
+    let (checkout, repo) = fake_tools(&manager, temp.path(), "['cargo']", 0).await;
+    manager.refresh_seeds().await;
+    let layout = Layout::of(&repo);
+    if !native_cloning(layout.root()) {
+        return assert_clone_refused(&manager, &layout).await;
+    }
+    let snapshot = Snapshot::open(&layout).unwrap().unwrap();
+    assert_eq!(
+        snapshot.commit,
+        git(&checkout, &["rev-parse", "main"]).trim()
+    );
+    let failures = seed_failures(&manager).await;
+    assert!(
+        (failures.iter())
+            .any(|message| message.contains("cargo clippy --all-targets exited with 101")),
+        "{failures:?}"
+    );
+    let workspace = manager
+        .create_workspace(&repo.id, "feature".into(), None, None, None)
+        .await
+        .unwrap();
+    for built in ["build", "test", "check"] {
+        assert!(
+            workspace.path.join("target").join(built).is_file(),
+            "{built}"
+        );
+    }
+    // The snapshot is current, so the same tip and settings do not rebuild.
+    fs::remove_file(layout.log()).unwrap();
+    manager.refresh_seeds().await;
+    assert!(!layout.log().exists(), "the seed is not rebuilt");
+}
+
+#[tokio::test]
+async fn a_failure_after_a_soft_one_fails_the_build() {
+    let (temp, manager) = manager().await;
+    configure(&manager, NO_PRESSURE).await;
+    let (_, repo) = fake_tools(&manager, temp.path(), "['cargo', 'npm']", 1).await;
+    manager.refresh_seeds().await;
+    let layout = Layout::of(&repo);
+    let log = fs::read_to_string(layout.log()).unwrap();
+    assert!(log.contains("$ npm ci\n"), "{log}");
+    assert!(Snapshot::open(&layout).unwrap().is_none());
+    // The build's failure is the report; the soft one shows only in the log.
+    let failures = seed_failures(&manager).await;
+    assert!(
+        (failures.iter()).any(|message| message.contains("npm ci exited with 1")),
+        "{failures:?}"
+    );
+    assert!(
+        !(failures.iter()).any(|message| message.contains("clippy")),
+        "{failures:?}"
+    );
+}
+
 /// A repository whose checkout configures `script` as its seed.
 async fn seeded(manager: &Manager, root: &Path, script: &str) -> (PathBuf, Repository) {
     let checkout = repository(root, "repo");

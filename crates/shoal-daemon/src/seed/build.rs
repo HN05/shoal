@@ -10,7 +10,10 @@ use std::{
 
 use serde::Serialize;
 
-use crate::{config::repo::Seed, presets::Preset};
+use crate::{
+    config::repo::Seed,
+    presets::{Preset, SeedCommand},
+};
 
 /// The output of each preset's toolchain command, as a build ran it.
 pub type Toolchains = HashMap<Preset, String>;
@@ -29,6 +32,9 @@ pub enum Build {
 pub struct Step {
     pub label: String,
     pub argv: Vec<OsString>,
+    /// Whether the build goes on, keeping its outputs, when the command
+    /// exits non-zero.
+    pub soft: bool,
 }
 
 /// What the current snapshot was built from, as the next build compares it.
@@ -60,7 +66,7 @@ impl Build {
     pub fn toolchain_steps(&self) -> Vec<(Preset, Step)> {
         self.presets()
             .iter()
-            .filter_map(|preset| Some((*preset, step(preset.toolchain_command()?))))
+            .filter_map(|preset| Some((*preset, required(preset.toolchain_command()?))))
             .collect()
     }
 
@@ -91,15 +97,16 @@ impl Build {
             Self::Script(command) => vec![Step {
                 label: "setup.seed.command".into(),
                 argv: vec![command.into()],
+                soft: false,
             }],
             Self::Presets(presets) => (resets.iter())
                 .filter_map(|preset| preset.reset_command())
+                .map(required)
                 .chain(
-                    presets
-                        .iter()
-                        .flat_map(|preset| preset.seed_commands().iter().copied()),
+                    (presets.iter())
+                        .flat_map(|preset| preset.seed_commands())
+                        .map(step),
                 )
-                .map(step)
                 .collect(),
         }
     }
@@ -150,10 +157,19 @@ fn names(pattern: &str, file: &str) -> bool {
     }
 }
 
-fn step(argv: &[&str]) -> Step {
+fn step(command: &SeedCommand) -> Step {
+    Step {
+        soft: command.is_soft(),
+        ..required(command.argv())
+    }
+}
+
+/// `argv` as a step whose failure fails the build.
+fn required(argv: &[&str]) -> Step {
     Step {
         label: argv.join(" "),
         argv: argv.iter().map(OsString::from).collect(),
+        soft: false,
     }
 }
 

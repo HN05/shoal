@@ -48,25 +48,50 @@ states!(
     }
 );
 
+/// One command of a preset's seed build.
+#[derive(Debug, Clone, Copy)]
+pub enum SeedCommand {
+    /// A command whose non-zero exit fails the build.
+    Required(&'static [&'static str]),
+    /// A command after whose non-zero exit the build goes on, and keeps the
+    /// outputs of its other commands.
+    Soft(&'static [&'static str]),
+}
+
+impl SeedCommand {
+    pub fn argv(self) -> &'static [&'static str] {
+        match self {
+            Self::Required(argv) | Self::Soft(argv) => argv,
+        }
+    }
+
+    pub fn is_soft(self) -> bool {
+        matches!(self, Self::Soft(_))
+    }
+}
+
 impl Preset {
     /// The seed build's commands, in order, or none when the preset has no
     /// usual build. The package managers' commands reproduce the committed
     /// lockfile exactly and fail without one; Yarn 2 and later read
     /// `--frozen-lockfile` as `--immutable`.
-    pub fn seed_commands(self) -> &'static [&'static [&'static str]] {
+    pub fn seed_commands(self) -> &'static [SeedCommand] {
+        use SeedCommand::{Required, Soft};
         match self {
             Self::Cargo => &[
-                &["cargo", "build", "--all-targets"],
-                &["cargo", "test", "--no-run"],
-                &["cargo", "check", "--all-targets"],
-                &["cargo", "clippy", "--all-targets"],
+                Required(&["cargo", "build", "--all-targets"]),
+                Required(&["cargo", "test", "--no-run"]),
+                Required(&["cargo", "check", "--all-targets"]),
+                // Its outputs serve only clippy runs, and clippy is an
+                // optional component, which a toolchain can lack.
+                Soft(&["cargo", "clippy", "--all-targets"]),
             ],
-            Self::Npm => &[&["npm", "ci"]],
-            Self::Pnpm => &[&["pnpm", "install", "--frozen-lockfile"]],
-            Self::Yarn => &[&["yarn", "install", "--frozen-lockfile"]],
-            Self::Bun => &[&["bun", "install", "--frozen-lockfile"]],
-            Self::Go => &[&["go", "build", "./..."]],
-            Self::Zig => &[&["zig", "build"]],
+            Self::Npm => &[Required(&["npm", "ci"])],
+            Self::Pnpm => &[Required(&["pnpm", "install", "--frozen-lockfile"])],
+            Self::Yarn => &[Required(&["yarn", "install", "--frozen-lockfile"])],
+            Self::Bun => &[Required(&["bun", "install", "--frozen-lockfile"])],
+            Self::Go => &[Required(&["go", "build", "./..."])],
+            Self::Zig => &[Required(&["zig", "build"])],
             // Building needs a scheme, and Xcode's outputs record their path;
             // C builds have no usual command.
             Self::Xcode | Self::Ccache => &[],
