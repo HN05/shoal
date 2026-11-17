@@ -90,6 +90,12 @@ impl WatchStarts {
     }
 }
 
+/// A read of a space's items, made for their watches to start from.
+pub(crate) struct StartRead {
+    start: PollStart,
+    reads: Vec<(String, Snapshot)>,
+}
+
 /// Which of a space's watches a read starts.
 #[derive(Clone, Copy)]
 enum Start {
@@ -118,43 +124,60 @@ impl Manager {
     /// holding the space's PR gate. An item the forge does not read in full
     /// is left to the next poll.
     pub(crate) async fn start_linked_watches_gated(&self, id: &SpaceId, items: Vec<ItemRef>) {
-        if let Err(error) = self.start_watches(id, items, Start::Unread).await {
+        let read = self.read_for_start(items).await;
+        if let Err(error) = self.record_watch_start(id, read, Start::Unread).await {
             log!("watches of {id}'s linked items not started: {error:#}");
         }
     }
 
-    /// Start the watch of each item the space `id` follows again from a
-    /// read of it made now. An item the forge does not read in full keeps
-    /// its watch as it was.
-    pub(crate) async fn restart_watches(&self, id: &SpaceId) -> Result<()> {
+    /// Read each item the space `id` follows, for its watch to start again
+    /// from.
+    pub(crate) async fn read_followed(&self, id: &SpaceId) -> Result<StartRead> {
         let owned = id.to_owned();
         let items = (self.store)
             .run(move |db| followed_items(db, &owned, None))
             .await?;
-        let _guard = self.gates.lock_prs([id]).await;
-        self.start_watches(id, items, Start::Every).await
+        Ok(self.read_for_start(items).await)
     }
 
-    /// Start the watches of `items` on the cursor of the space `id` that
-    /// `start` selects from a read of each made now.
-    async fn start_watches(&self, id: &SpaceId, items: Vec<ItemRef>, start: Start) -> Result<()> {
-        if items.is_empty() {
+    /// Start each watch of the space `id` again from `read`, for a caller
+    /// holding the space's PR gate. A watch of an item the forge did not
+    /// read in full stays as it was.
+    pub(crate) async fn restart_watches_gated(&self, id: &SpaceId, read: StartRead) -> Result<()> {
+        self.record_watch_start(id, read, Start::Every).await
+    }
+
+    /// A read of `items` made now, leaving out those the forge does not read
+    /// in full.
+    async fn read_for_start(&self, items: Vec<ItemRef>) -> StartRead {
+        let start = self.poll_start();
+        let reads = self.complete_reads(items).await;
+        StartRead { start, reads }
+    }
+
+    /// Start the watches `start` selects of the space `id` from `read`, and
+    /// note the read they started from, for a caller holding the space's PR
+    /// gate.
+    async fn record_watch_start(&self, id: &SpaceId, read: StartRead, start: Start) -> Result<()> {
+        let StartRead {
+            start: began,
+            reads,
+        } = read;
+        if reads.is_empty() {
             return Ok(());
         }
-        let read = self.poll_start();
-        let reads = self.complete_reads(items).await;
         // Checked before recording, as a poll's are.
         let changing = self.assignees_changing(&reads);
         let owned = id.to_owned();
         let started = self
             .store
-            .write(move |tx| start_followed(tx, &owned, reads, read.at, start, &changing))
+            .write(move |tx| start_followed(tx, &owned, reads, began.at, start, &changing))
             .await?;
         if started.iter().any(|(_, queued)| *queued) {
             self.signals.item_updates_queued();
         }
         let urls = started.into_iter().map(|(url, _)| url).collect();
-        self.watch_starts.started(id, urls, read.read());
+        self.watch_starts.started(id, urls, began.read());
         Ok(())
     }
 }

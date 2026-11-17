@@ -132,7 +132,7 @@ async fn a_restart_drops_the_comments_queued_before_it() {
     let queued = poll(&manager, &workspace, &issue, UnixTime::now()).await;
     assert_eq!(queued.len(), 1, "{queued:?}");
 
-    manager.restart_watches(&workspace).await.unwrap();
+    restart(&manager, &workspace).await;
     let urls = [issue.to_string()];
     let pending = manager.pending_activity(&workspace, &urls).await;
     assert!(pending.unwrap().is_empty());
@@ -183,7 +183,7 @@ async fn a_poll_that_began_before_a_restart_is_dropped_when_it_finishes() {
         .await
         .unwrap();
     comments.store(2, Ordering::SeqCst);
-    manager.restart_watches(&workspace).await.unwrap();
+    restart(&manager, &workspace).await;
     let report = BranchReport::Conflicts;
     let late = manager.record_observed(&workspace, stale, &all, report, early);
     assert!(late.await.unwrap().is_empty());
@@ -228,4 +228,11 @@ async fn set_state(
         })
         .await
         .unwrap();
+}
+
+/// Restart the watches of the space `id` as an agent's new session does.
+async fn restart(manager: &crate::daemon::workspace::Manager, id: &shoal_ids::space_ids::SpaceId) {
+    let read = manager.read_followed(id).await.unwrap();
+    let _gate = manager.gates.lock_prs([id]).await;
+    manager.restart_watches_gated(id, read).await.unwrap();
 }

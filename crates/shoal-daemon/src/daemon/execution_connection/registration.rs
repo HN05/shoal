@@ -198,21 +198,34 @@ pub(super) async fn register(
 
 /// Restart the watches of `space`, whose agent begins a new session, before
 /// the agent runs: what its items held by then is history, which its first
-/// message points it to. A stop asked for meanwhile, as by a removal that
-/// holds the space's PR gate the restart waits for, ends the wait, so the
-/// connection relays it; the agent it stops needs no watches.
+/// message points it to. A stop asked for while it reads the items or
+/// waits for the space's PR gate, as a removal holding that gate does,
+/// ends the restart, so the connection relays the stop; the agent it stops
+/// needs no watches. Once it holds the gate, the restart records its read
+/// and the read's place among the polls in full, which later polls depend
+/// on.
 async fn restart_watches(
     manager: &Manager,
     space: &crate::model::Space,
     mut stop: watch::Receiver<bool>,
 ) {
-    tokio::select! {
-        restarted = manager.restart_watches(&space.id) => {
-            if let Err(error) = restarted {
+    let gated = async {
+        let read = manager.read_followed(&space.id).await?;
+        let gate = manager.gates.lock_prs([&space.id]).await;
+        anyhow::Ok((read, gate))
+    };
+    let (read, _gate) = tokio::select! {
+        gated = gated => match gated {
+            Ok(gated) => gated,
+            Err(error) => {
                 log!("{}'s watches not restarted: {error:#}", space.name);
+                return;
             }
-        }
-        _ = stop.wait_for(|stop| *stop) => {}
+        },
+        _ = stop.wait_for(|stop| *stop) => return,
+    };
+    if let Err(error) = manager.restart_watches_gated(&space.id, read).await {
+        log!("{}'s watches not restarted: {error:#}", space.name);
     }
 }
 
