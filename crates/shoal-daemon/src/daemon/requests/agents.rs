@@ -314,17 +314,17 @@ impl Scoped for AgentMethod {
                     )
                     .await?,
             ),
-            AgentMethod::SendAgentMessage { space: workspace, .. } => Some(
+            AgentMethod::SendAgentMessage { space, .. } => Some(
                 manager
                     .workspace_below(
                         caller,
-                        workspace,
-                        "workspace processes send agent messages only to the workspaces below theirs",
+                        space,
+                        "scoped processes send agent messages only to the spaces below theirs",
                     )
                     .await?,
             ),
-            // The handler narrows the recipients to the workspaces below
-            // the caller's.
+            // The handler narrows the recipients to the spaces below the
+            // caller's.
             AgentMethod::SendAllAgentMessage {
                 repository: Some(repository),
                 ..
@@ -333,7 +333,7 @@ impl Scoped for AgentMethod {
                     .own_repository(
                         caller,
                         repository,
-                        "workspace processes send agent messages only to the workspaces below theirs",
+                        "scoped processes send agent messages only to the spaces below theirs",
                     )
                     .await?;
                 None

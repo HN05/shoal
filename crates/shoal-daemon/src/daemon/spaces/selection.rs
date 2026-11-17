@@ -28,8 +28,18 @@ impl Manager {
     /// Every space: the workspaces in listing order, then the chats in
     /// start order.
     pub(crate) async fn present_spaces(&self) -> Result<Vec<Space>> {
-        let workspaces = self.list_workspaces().await?;
-        let chats = self.chats().await?;
+        self.spaces_within(None).await
+    }
+
+    /// `root` and every space below it, or every space without `root`: the
+    /// workspaces in listing order, then the chats in start order.
+    pub(crate) async fn spaces_within(&self, root: Option<&SpaceId>) -> Result<Vec<Space>> {
+        let workspaces = self.list_workspaces_within(root).await?;
+        let mut chats = self.chats().await?;
+        if let Some(root) = root {
+            let subtree = self.subtree(root).await?;
+            chats.retain(|chat| subtree.contains(&chat.id));
+        }
         Ok((workspaces.into_iter().map(Space::from))
             .chain(chats.into_iter().map(Space::from))
             .collect())

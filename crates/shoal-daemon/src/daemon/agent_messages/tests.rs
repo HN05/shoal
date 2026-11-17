@@ -334,9 +334,12 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
             .unwrap();
         chats.push(chat);
     }
-    let sender = chats[1].id.clone();
+    // The sending chat reaches every space; a workspace's process only
+    // those below its own.
+    let chat = chats[1].id.clone();
     let send = |repository: Option<&RepositoryId>, below: Option<SpaceId>| {
-        let (manager, sender) = (&manager, &sender);
+        let sender = below.clone().unwrap_or_else(|| chat.clone());
+        let manager = &manager;
         let repository = repository.cloned().map(Into::into);
         async move {
             manager
@@ -346,7 +349,7 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
                     Vec::new(),
                     &Attacher::User,
                     below.as_ref(),
-                    Some(sender),
+                    Some(&sender),
                 )
                 .await
                 .unwrap()
@@ -415,6 +418,42 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
             allowed
         );
     }
+}
+
+#[tokio::test]
+async fn a_message_to_all_from_a_coordinator_reaches_the_chats_below_it_not_being_removed() {
+    let (temp, manager) = manager().await;
+    let parent = workspace(&temp, &manager, "parent").await;
+    let mut chats = Vec::new();
+    for (name, below) in [("below", true), ("removing", true), ("beside", false)] {
+        let new = crate::daemon::chats::NewChat {
+            priority: None,
+            narrowing: Default::default(),
+            name: name.into(),
+            agent: "claude".into(),
+            mode: crate::model::chat_mode(),
+            origin: None,
+            parent: below.then(|| parent.id.clone()),
+        };
+        let repository = Some(parent.repository().clone().into());
+        let chat = manager.start_new_chat(repository, None, new).await.unwrap();
+        chats.push(manager.run_chat_agent(chat, None).await.unwrap());
+    }
+    let _removal = manager.space_removals.reserve(&chats[1].id).unwrap();
+    let reached = manager
+        .send_all_message(
+            None,
+            "Rebase onto main".into(),
+            Vec::new(),
+            &Attacher::User,
+            Some(&parent.id),
+            Some(&parent.id),
+        )
+        .await
+        .unwrap();
+    assert_eq!(names(&reached.now.chats), ["below"]);
+    assert!(reached.now.workspaces.is_empty());
+    assert!(reached.on_start.is_empty() && reached.refused.is_empty());
 }
 
 #[tokio::test]

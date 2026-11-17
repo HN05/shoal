@@ -11,6 +11,19 @@ use std::{
 
 use anyhow::{Result, ensure};
 
+use crate::{daemon::workspace::Manager, model::Space, state::WorkspaceState};
+
+impl Manager {
+    /// Whether `space` is being removed: a removal holds it, or its
+    /// worktree's lifecycle records one.
+    pub(crate) fn being_removed(&self, space: &Space) -> bool {
+        self.space_removals.reserved(&space.id)
+            || space
+                .worktree()
+                .is_some_and(|worktree| worktree.state == WorkspaceState::Removing)
+    }
+}
+
 /// The IDs of the spaces being removed, shared with the store's thread, which
 /// reads them in the transactions that record what a reserved space refuses.
 #[derive(Clone, Default)]

@@ -9,9 +9,8 @@ use crate::{
         workspace::Manager,
         workspace_files::{Attacher, NewFile},
     },
-    model::{Chat, Space, SpaceKind, Workspace},
+    model::{Space, SpaceKind},
     repository::Selector,
-    state::WorkspaceState,
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
@@ -42,8 +41,8 @@ impl Manager {
     /// [`Self::send_to`] to every workspace and chat with an
     /// agent, running, reattaching, stopped, queued or waiting for its
     /// restore, but the sender's own space `sender`, of `repository` when
-    /// it names one, or only to the workspaces below `below`, the sender's
-    /// own workspace; the spaces it reached, by whether their agent runs. An
+    /// it names one, or only to the spaces below `below`, the sender's own
+    /// space; the spaces it reached, by whether their agent runs. An
     /// agent that does not run reads the message once it next runs, which
     /// the message does not cause, except for a restore waiting for an
     /// update. A space that refuses the message, such as one whose unread
@@ -75,10 +74,9 @@ impl Manager {
         Ok(reached)
     }
 
-    /// The spaces with an agent, each with its [`Reader`]: the
-    /// [`Self::workspace_recipients`] and, unless `below` names the sender's
-    /// workspace, the [`Self::chat_recipients`] of `repository` when it
-    /// names one.
+    /// The spaces with an agent, each with its [`Reader`], by name: those
+    /// [`Self::spaces_within`] `below` lists, but `sender` and the spaces
+    /// being removed, of `repository` when it names one.
     async fn recipients(
         &self,
         repository: Option<&Selector>,
@@ -89,16 +87,11 @@ impl Manager {
             Some(repository) => Some(self.repository(repository.clone()).await?.id),
             None => None,
         };
-        let workspaces = self
-            .workspace_recipients(repository.as_ref(), below)
-            .await?;
-        let chats = match below {
-            Some(_) => Vec::new(),
-            None => self.chat_recipients(repository.as_ref(), sender).await?,
-        };
+        let mut spaces = self.spaces_within(below).await?;
+        spaces.retain(|space| self.addressed(space, repository.as_ref(), sender));
+        spaces.sort_by(|a, b| a.name.cmp(&b.name));
         let agents = self.agents().await?;
-        Ok((workspaces.into_iter().map(Space::from))
-            .chain(chats.into_iter().map(Space::from))
+        Ok((spaces.into_iter())
             .map(|space| {
                 let reader = self.reader(&agents, &space);
                 (space, reader)
@@ -107,36 +100,18 @@ impl Manager {
             .collect())
     }
 
-    /// The workspaces, except those being removed, of `repository` when it
-    /// names one; only the workspaces below `below` when it names one.
-    async fn workspace_recipients(
+    /// Whether a message to every agent from `sender`, of `repository` when
+    /// it names one, goes to `space`: one of that repository, but the
+    /// sender's own, that no removal is taking.
+    fn addressed(
         &self,
-        repository: Option<&RepositoryId>,
-        below: Option<&SpaceId>,
-    ) -> Result<Vec<Workspace>> {
-        let mut workspaces = self.list_workspaces_within(below).await?;
-        workspaces.retain(|workspace| {
-            Some(&workspace.id) != below
-                && repository.is_none_or(|repository| repository == workspace.repository())
-                && workspace.state != WorkspaceState::Removing
-        });
-        Ok(workspaces)
-    }
-
-    /// The chats, running or stopped, but the sender's own space `sender`,
-    /// by name, of `repository` when it names one.
-    async fn chat_recipients(
-        &self,
+        space: &Space,
         repository: Option<&RepositoryId>,
         sender: Option<&SpaceId>,
-    ) -> Result<Vec<Chat>> {
-        let mut chats = self.chats().await?;
-        chats.retain(|chat| {
-            repository.is_none_or(|repository| Some(repository) == chat.repository_id.as_ref())
-                && sender.is_none_or(|sender| *sender != chat.id)
-        });
-        chats.sort_by(|a, b| a.name.cmp(&b.name));
-        Ok(chats)
+    ) -> bool {
+        Some(&space.id) != sender
+            && repository.is_none_or(|repository| Some(repository) == space.repository_id.as_ref())
+            && !self.being_removed(space)
     }
 
     /// The workspaces whose agents run, and those with an agent's execution

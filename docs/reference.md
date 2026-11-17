@@ -5878,15 +5878,15 @@ waits for one to start there, each with `workspaces` and `chats` with
 
 `--all` queues the message for every agent, and `--repo` for every agent of
 the repository it names, or without a value the current checkout's or
-workspace's, else a picked one: each chat but the one sending, running or
-stopped, and each workspace, except one being removed, whose agent runs,
+workspace's, else a picked one: each space but the sender's own and those
+being removed, a chat running or stopped, and a workspace whose agent runs,
 working or idle, or is stopped, waits for its restore, is queued to start or
 restore, or has a wrapper waiting to reattach, as after a daemon restart. An
 agent that runs connected receives it now, and any other once it next runs;
 the message starts none of them, except an idle agent Shoal stopped whose
 restore waits for an update, as a message to its space alone starts it. It
-lists the spaces it reached as a message to one space does; a workspace
-process reaches only the workspaces below its own. Workspaces without any
+lists the spaces it reached as a message to one space does; a scoped
+process reaches only the spaces its scope reaches. Workspaces without any
 agent get nothing, since a message waits there until an agent reads it. A space that refuses the message, such as
 one whose unread messages are full or that is being removed, is listed with
 why under `refused` while the others still receive it, and the command then
