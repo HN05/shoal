@@ -1,5 +1,6 @@
 //! `shoal start`: plan a workspace, then open it here or hand it to a terminal host.
 mod agent;
+mod blocked;
 mod branch;
 mod detached;
 mod existing;
@@ -33,13 +34,14 @@ use self::{
         AddSettings, check_chosen_model, choose_add_agent, choose_for_picked_issue,
         resolve_add_agent,
     },
+    blocked::start_blocked,
     detached::ensure_detachable,
     finish::execute_add_with_target,
     handoff::start_beside,
     mode::choose_add_mode,
     place::{add_placed, places_after_setup},
     plan::{absolute, check_add_creation, plan_addition, start_as},
-    queue::{admit, failing_entry, named_blockers},
+    queue::{Timing, admit, failing_entry, named_blockers, timing},
     source::{load_add_issue, pick_add_source, select_add_creation},
     target::resolve_add_target,
 };
@@ -181,17 +183,18 @@ async fn start_planned(
         // builds on Linux.
         return Box::pin(add_placed(ctx, plan, target, issue, options, blockers)).await;
     }
-    if let Some(queued) = admit(
+    let timing = timing(
         ctx,
-        &target,
-        settings,
-        &mut plan,
+        (&target, settings),
+        &plan,
         issue.as_ref(),
-        &options,
-        blockers,
-    )
-    .await?
-    {
+        (&options, blockers),
+    );
+    let Timing { now, blockers } = timing.await?;
+    if !blockers.is_empty() {
+        return start_blocked(ctx, plan, &target, issue.as_ref(), blockers).await;
+    }
+    if let Some(queued) = admit(ctx, &target, &mut plan, issue.as_ref(), now).await? {
         return Ok(queued);
     }
     let handoff = start_beside(ctx, &target, settings, &mut plan, issue.as_ref(), options).await;

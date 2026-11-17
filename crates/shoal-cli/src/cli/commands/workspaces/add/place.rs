@@ -2,15 +2,17 @@
 //! workspace is set up, from that workspace's own settings: queued for the
 //! daemon, or, for an agent that runs its own way and so leaves this
 //! process at once, started here when the agent limits admit it. The
-//! daemon carries out every other start without a terminal.
+//! daemon carries out every other start without a terminal, and one whose
+//! agent waits for other work.
 use std::ffi::OsString;
 
 use anyhow::Result;
 
 use super::{
     AddOptions,
-    finish::{AgentStart, add_planned, execute_add_with_target, holding, report_queued_in},
-    queue::{admit_launch, launch_blockers},
+    blocked::start_blocked,
+    finish::{AgentStart, add_planned, holding, report_queued_in},
+    queue::launch_blockers,
     target::AddTarget,
 };
 use crate::{
@@ -37,13 +39,13 @@ pub(super) fn places_after_setup(ctx: &Context, plan: &AddPlan, options: &AddOpt
         && super::detached::leaves_caller(ctx, options.here)
 }
 
-/// Open the planned workspace and place its agent once setup ends. A
-/// launch that waits for `blockers`, or the issues the forge records as
-/// blocking its issue, queues whole, as from a terminal, and starts here
-/// once admitted.
+/// Open the planned workspace and place its agent once setup ends. One
+/// that waits for `blockers`, or the issues the forge records as blocking
+/// its issue, the daemon records at once, with its agent queued there, as
+/// from a terminal.
 pub(super) async fn add_placed(
     ctx: &Context,
-    mut plan: AddPlan,
+    plan: AddPlan,
     target: AddTarget,
     issue: Option<issues::Issue>,
     options: AddOptions,
@@ -54,11 +56,7 @@ pub(super) async fn add_placed(
     if blockers.is_empty() {
         return add_planned(ctx, plan, target, issue, AgentStart::Placed { now }).await;
     }
-    let admitted = admit_launch(ctx, &target, &mut plan, issue.as_ref(), (false, blockers));
-    if let Some(queued) = admitted.await? {
-        return Ok(queued);
-    }
-    execute_add_with_target(ctx, plan, target, issue).await
+    start_blocked(ctx, plan, &target, issue.as_ref(), blockers).await
 }
 
 /// The launch of the agent that starts in this process.
@@ -158,7 +156,6 @@ async fn admit_here(
         issue_title: launch.issue.as_ref().map(|issue| issue.title.clone()),
         issue_labels: (launch.issue.as_ref()).map_or_else(Vec::new, |issue| issue.labels.clone()),
         now: launch.now,
-        blockers: Vec::new(),
         opens: Some(workspace.id.clone()),
     };
     let plan = AddPlan::agent_in(workspace, launch)?;

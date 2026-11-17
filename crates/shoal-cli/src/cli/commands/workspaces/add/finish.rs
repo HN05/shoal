@@ -24,10 +24,10 @@ use crate::{
         shell, terminal,
     },
     client::connection::CommandPaths,
-    model::{QueueEntry, Workspace},
+    model::{Blocker, QueueEntry, Workspace},
     protocol::{
         ConfigTarget,
-        operations::{Preparation, Prepared, QueuedLaunch},
+        operations::{LaunchRequest, Preparation, Prepared, QueuedLaunch},
     },
     start_plan::{AddPlan, Creation, ResolvedAddAgent},
     state::QueueState,
@@ -127,6 +127,8 @@ pub(super) async fn add_planned(
         workspace,
         queue_entry: queue_entry.clone(),
         waiting: own,
+        agent: None,
+        blockers: Vec::new(),
     };
     // The daemon gave the starting entry the workspace before its setup.
     let preparing = start_add_workspace(ctx, &target, start, issue.as_ref()).await?;
@@ -278,54 +280,73 @@ async fn enters_added(
 /// What the planned workspace opens: the recorded `workspace` a launch
 /// goes to, or else what `creation` makes below `parent`, or for the user
 /// without one.
-struct AddStart {
-    creation: Creation,
-    parent: Option<SpaceSelector>,
-    workspace: Option<SpaceId>,
+pub(super) struct AddStart {
+    pub creation: Creation,
+    pub parent: Option<SpaceSelector>,
+    pub workspace: Option<SpaceId>,
     /// The starting queue entry whose launch opens it.
-    queue_entry: Option<QueueEntryId>,
+    pub queue_entry: Option<QueueEntryId>,
     /// The agent the caller starts itself, which waits should setup fail.
-    waiting: Option<Box<QueuedLaunch>>,
+    pub waiting: Option<Box<QueuedLaunch>>,
+    /// The agent its preparation queues, waiting for `blockers`, which the
+    /// preparation of a new worktree waits for too.
+    pub agent: Option<Box<LaunchRequest>>,
+    pub blockers: Vec<Blocker>,
 }
 
-/// Open the planned workspace, assigned `issue` unless the start names the
-/// workspace, which keeps the issue it has, and follow its preparation.
+impl AddStart {
+    /// The request that opens it in `target`'s repository, assigned
+    /// `issue` unless it names the workspace, which keeps the issue it has.
+    pub(super) fn request(
+        self,
+        target: &AddTarget,
+        issue: Option<&issues::Issue>,
+    ) -> Result<NewWorkspace> {
+        let Self {
+            creation,
+            parent,
+            workspace,
+            queue_entry,
+            waiting,
+            agent,
+            blockers,
+        } = self;
+        let issue = issue.filter(|_| workspace.is_none());
+        let crate::start_plan::Opening {
+            start,
+            base,
+            path,
+            git_profile,
+            options,
+            pr,
+        } = creation.opening(workspace)?;
+        Ok(NewWorkspace {
+            repository: target.selector.clone(),
+            start,
+            base,
+            path,
+            git_profile,
+            parent,
+            options,
+            issue: issue.map(|issue| issue.url.clone().into()),
+            pr,
+            agent,
+            queue_entry,
+            waiting,
+            blockers,
+        })
+    }
+}
+
+/// Open the planned workspace that `start` describes, assigned `issue`
+/// unless the start names the workspace, and follow its preparation.
 async fn start_add_workspace<'c>(
     ctx: &'c Context,
     target: &AddTarget,
-    AddStart {
-        creation,
-        parent,
-        workspace,
-        queue_entry,
-        waiting,
-    }: AddStart,
+    start: AddStart,
     issue: Option<&issues::Issue>,
 ) -> Result<Preparing<'c, CommandPaths>> {
-    let issue = issue.filter(|_| workspace.is_none());
-    let crate::start_plan::Opening {
-        start,
-        base,
-        path,
-        git_profile,
-        options,
-        pr,
-    } = creation.opening(workspace)?;
-    let new = NewWorkspace {
-        repository: target.selector.clone(),
-        start,
-        base,
-        path,
-        git_profile,
-        parent,
-        options,
-        issue: issue.map(|issue| issue.url.clone().into()),
-        pr,
-        agent: None,
-        queue_entry,
-        waiting,
-        blockers: Vec::new(),
-    };
+    let new = start.request(target, issue)?;
     let env = crate::env::without_secrets();
     let preparing = preparation::create(&ctx.paths, new, env);
     ctx.progress("Opening workspace", preparing).await

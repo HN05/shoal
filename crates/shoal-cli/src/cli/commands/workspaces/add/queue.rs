@@ -1,4 +1,5 @@
-//! Admitting an addition's agent to the agent queue, with what blocks it.
+//! Admitting an addition's agent to the agent queue, and what blocks it,
+//! which the daemon waits for instead.
 use anyhow::Result;
 
 use shoal_ids::queue_entry_ids::QueueEntryId;
@@ -46,21 +47,28 @@ pub(super) async fn named_blockers(
     Ok(blockers)
 }
 
-/// Admit the plan's agent, if any, to the agent queue for this process to
-/// start: a start takes its slot and builds on the branch a done blocker
-/// left, while a queued launch is reported and returns its exit status.
-/// Only the user's start skips the limits unasked.
-pub(super) async fn admit(
+/// When the plan's agent starts: `now`, beside the limits, or once what
+/// blocks it is done.
+pub(super) struct Timing {
+    pub now: bool,
+    pub blockers: Vec<Blocker>,
+}
+
+/// When the plan's agent, if any, starts: what `blockers` and the issues
+/// the forge records as blocking its issue leave waiting, or else `now`
+/// as `options` ask. Only the user's start skips the limits unasked.
+pub(super) async fn timing(
     ctx: &Context,
-    target: &AddTarget,
-    settings: &AddSettings<'_>,
-    plan: &mut AddPlan,
+    (target, settings): (&AddTarget, &AddSettings<'_>),
+    plan: &AddPlan,
     issue: Option<&issues::Issue>,
-    options: &AddOptions,
-    blockers: Vec<Blocker>,
-) -> Result<Option<i32>> {
+    (options, blockers): (&AddOptions, Vec<Blocker>),
+) -> Result<Timing> {
     if plan.agent_name().is_none() {
-        return Ok(None);
+        return Ok(Timing {
+            now: false,
+            blockers,
+        });
     }
     let now = match crate::env::is_scoped() {
         true => options.now,
@@ -70,16 +78,18 @@ pub(super) async fn admit(
         }
     };
     let blockers = launch_blockers(ctx, target, issue, now, blockers).await?;
-    admit_launch(ctx, target, plan, issue, (now, blockers)).await
+    Ok(Timing { now, blockers })
 }
 
-/// [`admit`] the plan's agent, which starts `now` or waits for `blockers`.
-pub(super) async fn admit_launch(
+/// Admit the plan's agent, if any, to the agent queue for this process to
+/// start `now` or once a slot is free: a start takes its slot, while a
+/// queued launch is reported and returns its exit status.
+pub(super) async fn admit(
     ctx: &Context,
     target: &AddTarget,
     plan: &mut AddPlan,
     issue: Option<&issues::Issue>,
-    (now, blockers): (bool, Vec<Blocker>),
+    now: bool,
 ) -> Result<Option<i32>> {
     let Some(agent) = plan.agent_name() else {
         return Ok(None);
@@ -93,13 +103,11 @@ pub(super) async fn admit_launch(
         issue_title: issue.map(|issue| issue.title.clone()),
         issue_labels: issue.map_or_else(Vec::new, |issue| issue.labels.clone()),
         now,
-        blockers,
         opens: reopened_workspace(ctx, target, plan).await?,
     };
     match queued_agents::admit(ctx, plan, launch).await? {
-        queued_agents::Admission::Start { entry, base } => {
+        queued_agents::Admission::Start { entry } => {
             plan.queue_entry = entry;
-            plan.creation.build_on(base);
             Ok(None)
         }
         queued_agents::Admission::Queued(entry, waiting) => {

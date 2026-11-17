@@ -7,7 +7,7 @@ use super::listing::ListFilter;
 use crate::client::queue;
 use crate::{
     cli::{context::Context, output::Palette, ui},
-    model::{Blocker, QueueEntry, QueueRequest, Workspace},
+    model::{QueueEntry, QueueRequest, Workspace},
     start_plan::AddPlan,
     state::{QueueKind, QueueState},
     terminal,
@@ -19,12 +19,8 @@ use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) enum Admission {
-    /// Start now; the entry, when one tracks the slot, and the branch of a
-    /// done blocker to build on.
-    Start {
-        entry: Option<QueueEntryId>,
-        base: Option<String>,
-    },
+    /// Start now; the entry, when one tracks the slot.
+    Start { entry: Option<QueueEntryId> },
     /// Wait in the queue behind this many entries in total.
     Queued(Box<QueueEntry>, usize),
 }
@@ -38,7 +34,6 @@ pub(super) struct Launch {
     /// The labels of its issue, which may give it a priority.
     pub issue_labels: Vec<String>,
     pub now: bool,
-    pub blockers: Vec<Blocker>,
     /// The existing workspace the launch reopens, whose agent it becomes.
     pub opens: Option<SpaceId>,
 }
@@ -59,14 +54,13 @@ pub(super) async fn admit(ctx: &Context, plan: &AddPlan, launch: Launch) -> Resu
         now: launch.now,
         workspace: launch.opens.map(SpaceSelector::Id),
         starts_in_caller: true,
-        blockers: launch.blockers,
+        blockers: Vec::new(),
         priority: plan.creation.options.priority,
         source: Some(LaunchSource::Manual),
     };
     let admission = queue::add(&ctx.paths, request).await?;
     Ok(match (admission.start, admission.entry) {
         (true, entry) => Admission::Start {
-            base: entry.as_ref().and_then(|entry| entry.base.clone()),
             entry: entry.map(|entry| entry.id),
         },
         (false, Some(entry)) => Admission::Queued(Box::new(entry), admission.waiting),

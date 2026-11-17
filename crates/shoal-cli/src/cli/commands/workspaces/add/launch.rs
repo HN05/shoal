@@ -237,7 +237,7 @@ async fn follow_workspace(
 
 /// Report the workspace the daemon `started`, whose preparation goes on
 /// without this process, and the entry of its agent, which waits for it.
-fn report_workspace(ctx: &Context, started: StartedWorkspace) -> Result<i32> {
+pub(super) fn report_workspace(ctx: &Context, started: StartedWorkspace) -> Result<i32> {
     links::print_warnings(&started.warnings);
     let StartedWorkspace {
         workspace,

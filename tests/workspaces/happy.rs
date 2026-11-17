@@ -911,7 +911,7 @@ fn happy_launch(output: &Output) -> Value {
 
 /// Without a terminal, an agent Happy runs leaves the call at once anyway,
 /// so its start hands it over here, needing no host to start it in the
-/// background, also once the work it waits for is complete.
+/// background; one that waits for other work starts from the queue.
 #[test]
 fn a_start_without_a_terminal_hands_a_happy_agent_over_here() {
     let fixture = Fixture::with_config(Some(&format!("{UNLIMITED_AGENTS}{HAPPY_ENABLED}")));
@@ -946,14 +946,20 @@ fn a_start_without_a_terminal_hands_a_happy_agent_over_here() {
         .unwrap();
     happy_launch(&existing);
     fixture.ok(&["stop", &fixture.id("existing")]);
-    fixture.add("finished");
-    fixture.ok(&["done", &fixture.id("finished")]);
-    happy_launch(&start(&[
+    fixture.add("unfinished");
+    let blocked = start(&[
         "--branch",
         "next",
         "--add-blocker",
-        &fixture.id("finished"),
-    ]));
+        &fixture.id("unfinished"),
+    ]);
+    assert!(blocked.status.success(), "{}", printed(&blocked));
+    let stdout = String::from_utf8_lossy(&blocked.stdout);
+    let entry: Value = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
+    assert!(
+        (entry["blockers"].as_array().unwrap().iter()).any(|blocker| blocker == "unfinished"),
+        "{stdout}"
+    );
     fixture.ok(&["stop", &fixture.id("placed")]);
     fixture.ok(&["stop", &fixture.id("next")]);
 }
