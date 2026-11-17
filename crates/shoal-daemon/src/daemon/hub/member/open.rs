@@ -2,12 +2,12 @@
 //! machine's key and checking the hub's against the one it expects.
 use std::time::Duration;
 
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result, anyhow, bail};
 use shoal_ids::member_ids::MemberId;
 use shoal_protocol::{
     hub::{
-        Fingerprint, MemberKind, PublicKey, Route,
-        link::{Frame, Hello, Intent, Joining, Opening, Refusal, Signer, signed},
+        Fingerprint, PublicKey, Route, Signature,
+        link::{Frame, Hello, Intent, Opening, Refusal, Signer, Transcript},
     },
     protocol::{Method, Request, VERSION},
 };
@@ -15,7 +15,9 @@ use shoal_protocol::{
 use super::connect::Transport;
 use crate::daemon::{
     hub::{
-        identity::{nonce, verify},
+        identity::{Identity, nonce, verify},
+        pairing::code_proof,
+        sealing::Exchange,
         transport::Channel,
     },
     workspace::Manager,
@@ -24,17 +26,25 @@ use crate::daemon::{
 /// How long the hub has to answer each step of opening a link.
 const OPEN_TIMEOUT: Duration = Duration::from_secs(60);
 
-/// A link to open: where, what for, and the key the hub must prove.
+/// A link to open: where, what for, the key pair this machine proves, the
+/// pairing code a join proves, and the key the hub must prove.
 pub(super) struct Plan {
     pub route: Route,
     pub intent: Intent,
+    pub key: Identity,
+    pub code: Option<String>,
     pub expected: Expected,
 }
 
 /// What opening a link came to.
 pub(super) enum Opened {
     Welcomed(Welcomed),
-    Refused(Refusal),
+    /// The hub refused the link: for sure when the refusal came `sealed`,
+    /// and otherwise as anyone between the sides could have.
+    Refused {
+        refusal: Refusal,
+        sealed: bool,
+    },
 }
 
 /// The hub took this machine as `member`, named `name`; it holds `hub_key`.
@@ -70,81 +80,87 @@ impl Manager {
         let Plan {
             route,
             intent,
+            key,
+            code,
             expected,
         } = plan;
-        let mut transport = Transport::connect(&route).await?;
-        let opened = self.open_on(transport.channel(), intent, expected);
+        let late = || {
+            anyhow!(
+                "the hub at {route} did not answer within {}s",
+                OPEN_TIMEOUT.as_secs()
+            )
+        };
+        let connected = tokio::time::timeout(OPEN_TIMEOUT, Transport::connect(&route)).await;
+        let mut transport = connected.map_err(|_| late())??;
+        let opened = self.open_on(transport.channel(), intent, &key, code, expected);
         match tokio::time::timeout(OPEN_TIMEOUT, opened).await {
             Ok(Ok(opened)) => Ok((transport, opened)),
             Ok(Err(error)) => Err(transport.failure(error).await),
-            Err(_) => bail!(
-                "the hub at {route} did not answer within {}s",
-                OPEN_TIMEOUT.as_secs()
-            ),
+            Err(_) => Err(late()),
         }
     }
 
-    /// Open the link on `channel` for `intent`.
+    /// Open the link on `channel` for `intent`, proving `identity` and
+    /// `code`, and seal it once this side sent its proof.
     async fn open_on(
         &self,
         channel: &mut Channel,
         intent: Intent,
+        identity: &Identity,
+        code: Option<String>,
         expected: Expected,
     ) -> Result<Opened> {
-        let identity = self.hub_identity().await?;
-        let ours = nonce();
+        let exchange = Exchange::new()?;
         let hello = Hello {
             version: env!("CARGO_PKG_VERSION").into(),
-            nonce: ours.clone(),
+            nonce: nonce(),
+            exchange: exchange.public.clone(),
             instance: self.hub_instance(),
             intent,
         };
         channel.send(&opening(&hello)?).await?;
-        let (key, theirs) = match channel.expect::<Frame>().await? {
-            Frame::Refused(refusal) => return Ok(Opened::Refused(refusal)),
+        let (key, transcript) = match channel.expect::<Frame>().await? {
+            Frame::Refused(refusal) => {
+                return Ok(Opened::Refused {
+                    refusal,
+                    sealed: false,
+                });
+            }
             Frame::Challenge {
                 key,
                 nonce,
+                exchange: theirs,
                 signature,
             } => {
-                if !verify(&key, &signed(Signer::Hub, &ours, &nonce), &signature) {
-                    bail!("the hub's signature does not check");
-                }
-                if !expected.admits(&key) {
-                    bail!(
-                        "the hub's key is not the one this machine paired with, so something between them poses as the hub"
-                    );
-                }
-                (key, nonce)
+                let transcript = Transcript {
+                    hello,
+                    hub_nonce: nonce,
+                    hub_exchange: theirs,
+                };
+                check_hub(&key, &transcript, &signature, &expected)?;
+                (key, transcript)
             }
             frame => bail!("expected the hub's challenge, not {frame:?}"),
         };
-        let signature = identity.sign(&signed(Signer::Member, &theirs, &ours));
-        channel.send(&Frame::Proof { signature }).await?;
+        let signed = transcript.signed(Signer::Member);
+        let code = code.map(|code| code_proof(&code, &signed));
+        let signature = identity.sign(&signed);
+        channel.send(&Frame::Proof { signature, code }).await?;
+        channel
+            .seal(exchange.keys(&transcript, Signer::Member)?)
+            .await?;
         Ok(match channel.expect::<Frame>().await? {
             Frame::Welcome { member, name, .. } => Opened::Welcomed(Welcomed {
                 member,
                 name,
                 hub_key: key,
             }),
-            Frame::Refused(refusal) => Opened::Refused(refusal),
+            Frame::Refused(refusal) => Opened::Refused {
+                refusal,
+                sealed: channel.sealed_last(),
+            },
             frame => bail!("expected the hub's welcome, not {frame:?}"),
         })
-    }
-
-    /// The intent of joining as a machine named `name`, or after its host,
-    /// with `code`.
-    pub(super) async fn join_intent(
-        &self,
-        name: Option<String>,
-        code: Option<String>,
-    ) -> Result<Intent> {
-        Ok(Intent::Join(Joining {
-            kind: MemberKind::Machine,
-            name: name.unwrap_or_else(crate::process::machine::hostname),
-            key: self.hub_identity().await?.public.clone(),
-            code,
-        }))
     }
 
     /// What tells this installation from a copy of its state directory
@@ -160,6 +176,25 @@ impl Manager {
             .finalize();
         digest.iter().map(|byte| format!("{byte:02x}")).collect()
     }
+}
+
+/// Refuse a hub whose `signature` of `transcript` does not check with
+/// `key`, or whose key is not the `expected` one.
+fn check_hub(
+    key: &PublicKey,
+    transcript: &Transcript,
+    signature: &Signature,
+    expected: &Expected,
+) -> Result<()> {
+    if !verify(key, &transcript.signed(Signer::Hub), signature) {
+        bail!("the hub's signature does not check");
+    }
+    if !expected.admits(key) {
+        bail!(
+            "the hub's key is not the one this machine paired with, so something between them poses as the hub"
+        );
+    }
+    Ok(())
 }
 
 /// The request that opens a link with `hello`.

@@ -21,6 +21,7 @@ mod member;
 mod members;
 mod membership;
 mod pairing;
+mod sealing;
 mod session;
 mod transport;
 
@@ -32,6 +33,9 @@ pub(crate) struct Hub {
     codes: pairing::Codes,
     /// As the hub: its members' open links.
     links: links::Links,
+    /// As the hub: held while a member is admitted and its link registered,
+    /// and while a member is revoked and its link ended.
+    admissions: tokio::sync::Mutex<()>,
     /// As the hub: where its listener is bound, or why it is not.
     listener: listener::Bound,
     /// As a member: its link to the hub.

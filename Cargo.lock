@@ -1518,6 +1518,7 @@ name = "shoal-daemon"
 version = "0.18.2"
 dependencies = [
  "anyhow",
+ "base64",
  "form_urlencoded",
  "fs2",
  "futures-util",

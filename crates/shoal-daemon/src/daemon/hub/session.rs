@@ -12,7 +12,7 @@ use std::{
 
 use anyhow::{Result, anyhow, bail};
 use shoal_protocol::hub::link::{Call, Frame, Reply, SILENCE};
-use tokio::{sync::oneshot, task::JoinSet, time::Instant};
+use tokio::{sync::oneshot, time::Instant};
 
 use super::transport::{Channel, Sender};
 
@@ -77,8 +77,11 @@ pub(super) enum End {
 }
 
 /// Serve `channel` until it ends or `stop` resolves, answering the other
-/// side's calls with `answer` and passing replies to `calls`.
-pub(super) async fn serve<A, F>(
+/// side's calls with `answer` and passing replies to `calls`. An answer
+/// comes with what it holds until its reply is written, such as the daemon
+/// operation that keeps an update from exiting between a change and the
+/// reply that reports it.
+pub(super) async fn serve<A, F, H>(
     mut channel: Channel,
     calls: &Calls,
     answer: A,
@@ -86,10 +89,10 @@ pub(super) async fn serve<A, F>(
 ) -> End
 where
     A: Fn(Call) -> F,
-    F: Future<Output = Reply> + Send + 'static,
+    F: Future<Output = (Reply, H)> + Send + 'static,
+    H: Send + 'static,
 {
     let sender = channel.sender();
-    let mut answering = JoinSet::new();
     let mut pings = tokio::time::interval(SILENCE / 3);
     let mut heard = Instant::now();
     tokio::pin!(stop);
@@ -104,7 +107,6 @@ where
             () = tokio::time::sleep_until(heard + SILENCE) => {
                 return End::Lost(anyhow!("heard nothing for {}s", SILENCE.as_secs()));
             }
-            Some(_) = answering.join_next(), if !answering.is_empty() => {}
             frame = channel.receive::<Frame>() => {
                 heard = Instant::now();
                 let frame = match frame {
@@ -121,9 +123,13 @@ where
                     Frame::Pong => {}
                     Frame::Reply { id, reply } => calls.replied(id, reply),
                     Frame::Call { id, call } => {
-                        let (reply, sender) = (answer(call), sender.clone());
-                        answering.spawn(async move {
-                            let _ = sender.send(&Frame::Reply { id, reply: reply.await }).await;
+                        let (answer, sender) = (answer(call), sender.clone());
+                        // Detached: an answer that changes something finishes,
+                        // and drops what it holds, even once the link ends.
+                        tokio::spawn(async move {
+                            let (reply, held) = answer.await;
+                            let _ = sender.send_written(&Frame::Reply { id, reply }).await;
+                            drop(held);
                         });
                     }
                     frame => return End::Lost(anyhow!("unexpected hub link frame {frame:?}")),

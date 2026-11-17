@@ -189,6 +189,17 @@ encoded!(
     32
 );
 encoded!(
+    /// An ephemeral X25519 public key, which one side of a link sends for
+    /// the key exchange that seals it.
+    ExchangeKey,
+    32
+);
+encoded!(
+    /// An HMAC-SHA256 tag, which proves a joiner holds a pairing code.
+    Mac,
+    32
+);
+encoded!(
     /// The SHA-256 digest of a public key, which a pairing code carries for
     /// the joiner to check the hub's key against.
     Fingerprint,
@@ -264,9 +275,8 @@ pub struct Membership {
     /// The ID the hub gave this machine.
     pub member: MemberId,
     pub name: String,
-    /// The URL this machine paired at, none when it joined through a
-    /// command.
-    pub url: Option<HubUrl>,
+    /// The URL this machine paired at, or the command it joined through.
+    pub through: Route,
     pub joined_at: UnixTime,
 }
 
@@ -276,12 +286,11 @@ pub struct Membership {
 pub enum HubRole {
     /// It is the hub.
     Hub { listener: Listener },
-    /// It joined a hub, which it reaches by `route`.
+    /// It joined a hub, which it reaches by `route`: `[machine.hub]
+    /// connect` when set, else what it joined through.
     Member {
         membership: Membership,
-        /// None until `[machine.hub] connect` is set for a membership made
-        /// through a command.
-        route: Option<Route>,
+        route: Route,
         connected: bool,
         /// Why its link is down, or why it no longer tries to open one.
         #[serde(default, skip_serializing_if = "Option::is_none")]

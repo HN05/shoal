@@ -23,7 +23,7 @@ use serde_json::Value;
 use shoal_protocol::hub::{Listener, link::PATH};
 use tokio::{
     net::{TcpListener, TcpStream},
-    sync::Semaphore,
+    sync::{OwnedSemaphorePermit, Semaphore},
 };
 use tokio_tungstenite::{
     WebSocketStream,
@@ -170,11 +170,7 @@ async fn accept(
             .expect("never closed");
         match listener.accept().await {
             Ok((stream, _)) => {
-                let manager = manager.clone();
-                tokio::spawn(async move {
-                    serve(manager, stream).await;
-                    drop(permit);
-                });
+                tokio::spawn(serve(manager.clone(), stream, Arc::new(permit)));
             }
             Err(error) => {
                 log!("hub: accept failed: {error}");
@@ -184,11 +180,12 @@ async fn accept(
     }
 }
 
-/// Answer the requests on `stream` until it closes or upgrades.
-async fn serve(manager: Arc<Manager>, stream: TcpStream) {
+/// Answer the requests on `stream` until it closes or upgrades, holding
+/// `permit` until then and through the link an upgrade carries.
+async fn serve(manager: Arc<Manager>, stream: TcpStream, permit: Arc<OwnedSemaphorePermit>) {
     let service = service_fn(move |request| {
-        let manager = manager.clone();
-        async move { Ok::<_, Infallible>(respond(manager, request)) }
+        let (manager, permit) = (manager.clone(), permit.clone());
+        async move { Ok::<_, Infallible>(respond(manager, request, permit)) }
     });
     let _ = http1::Builder::new()
         .timer(TokioTimer::new())
@@ -200,7 +197,11 @@ async fn serve(manager: Arc<Manager>, stream: TcpStream) {
 
 /// The response to `request`: a WebSocket upgrade at the link's path, whose
 /// link a task then serves, and `404` for anything else.
-fn respond(manager: Arc<Manager>, request: Request<Incoming>) -> Response<Empty<Bytes>> {
+fn respond(
+    manager: Arc<Manager>,
+    request: Request<Incoming>,
+    permit: Arc<OwnedSemaphorePermit>,
+) -> Response<Empty<Bytes>> {
     let key = request.headers().get(header::SEC_WEBSOCKET_KEY).cloned();
     let upgrades = request
         .headers()
@@ -215,6 +216,7 @@ fn respond(manager: Arc<Manager>, request: Request<Incoming>) -> Response<Empty<
                 let socket = TokioIo::new(upgraded);
                 let socket = WebSocketStream::from_raw_socket(socket, Role::Server, None).await;
                 manager.open_listener_link(Channel::websocket(socket)).await;
+                drop(permit);
             }
             Err(error) => log!("hub: a WebSocket upgrade failed: {error}"),
         }

@@ -10,6 +10,7 @@ use crate::refusal::{Reason, Refusal};
 use crate::time::UnixTime;
 
 /// A member as the store holds it.
+#[derive(Debug)]
 pub(super) struct Recorded {
     pub member: Member,
     pub key: PublicKey,

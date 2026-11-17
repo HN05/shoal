@@ -716,10 +716,13 @@ CREATE TABLE hub_membership (
     id INTEGER PRIMARY KEY CHECK(id = 1),
     member_id TEXT NOT NULL,
     name TEXT NOT NULL,
+    private_key BLOB NOT NULL,
     hub_key TEXT NOT NULL,
     url TEXT,
+    connect TEXT,
     joined_at INTEGER NOT NULL,
-    revoked INTEGER NOT NULL DEFAULT 0 CHECK(revoked IN (0,1))
+    revoked INTEGER NOT NULL DEFAULT 0 CHECK(revoked IN (0,1)),
+    CHECK((url IS NULL) <> (connect IS NULL))
 );
 
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;

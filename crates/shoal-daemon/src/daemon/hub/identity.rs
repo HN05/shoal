@@ -1,6 +1,7 @@
-//! This daemon's key pair, which proves it to the hub it joins or, as the
-//! hub, to its members: made the first time a link needs it and kept in the
-//! store, never leaving it.
+//! The key pairs links prove: the hub's own, made the first time a link
+//! needs it, and one per membership of a machine that joins a hub, made for
+//! that join, so a machine that left or was revoked joins again with a new
+//! credential. Both stay in the store, never leaving it.
 use anyhow::{Context as _, Result, anyhow};
 use ring::{
     rand::{SecureRandom as _, SystemRandom},
@@ -10,6 +11,36 @@ use rusqlite::OptionalExtension as _;
 use shoal_protocol::hub::{Nonce, PublicKey, Signature};
 
 use crate::daemon::workspace::Manager;
+
+/// A key pair as PKCS#8, which the store keeps; its `Debug` leaves the key
+/// out.
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct KeyPair(Vec<u8>);
+
+impl KeyPair {
+    /// A new key pair.
+    pub(crate) fn generate() -> Result<Self> {
+        let pkcs8 = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new())
+            .map_err(|error| anyhow!("could not make a key pair: {error}"))?;
+        Ok(Self(pkcs8.as_ref().to_vec()))
+    }
+
+    pub(crate) fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl From<Vec<u8>> for KeyPair {
+    fn from(pkcs8: Vec<u8>) -> Self {
+        Self(pkcs8)
+    }
+}
+
+impl std::fmt::Debug for KeyPair {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("KeyPair(..)")
+    }
+}
 
 /// A key pair and its public half as members and the hub exchange it.
 pub(crate) struct Identity {
@@ -22,8 +53,8 @@ impl Identity {
         Signature::try_from(self.pair.sign(bytes).as_ref()).expect("Ed25519 signs 64 bytes")
     }
 
-    fn from_pkcs8(pkcs8: &[u8]) -> Result<Self> {
-        let pair = Ed25519KeyPair::from_pkcs8(pkcs8)
+    pub(crate) fn new(key: &KeyPair) -> Result<Self> {
+        let pair = Ed25519KeyPair::from_pkcs8(key.as_bytes())
             .map_err(|error| anyhow!("unreadable hub key pair: {error}"))?;
         let public = PublicKey::try_from(pair.public_key().as_ref())?;
         Ok(Self { pair, public })
@@ -52,20 +83,21 @@ pub(crate) fn random<const N: usize>() -> [u8; N] {
 }
 
 impl Manager {
-    /// This daemon's key pair, made and kept the first time it is asked for.
+    /// The hub's own key pair, made and kept the first time it is asked
+    /// for.
     pub(crate) async fn hub_identity(&self) -> Result<std::sync::Arc<Identity>> {
         let identity = &self.hub.identity;
         let identity = identity.get_or_try_init(|| async {
-            let pkcs8 = self.store.write(stored_or_new_key).await?;
-            Identity::from_pkcs8(&pkcs8).map(std::sync::Arc::new)
+            let key = self.store.write(stored_or_new_key).await?;
+            Identity::new(&key).map(std::sync::Arc::new)
         });
         identity.await.cloned()
     }
 }
 
-/// The key pair the store keeps, as PKCS#8, after keeping a new one when it
-/// has none.
-fn stored_or_new_key(tx: &rusqlite::Transaction<'_>) -> Result<Vec<u8>> {
+/// The hub's key pair the store keeps, after keeping a new one when it has
+/// none.
+fn stored_or_new_key(tx: &rusqlite::Transaction<'_>) -> Result<KeyPair> {
     let stored = tx
         .query_row(
             "SELECT private_key FROM hub_identity WHERE id=1",
@@ -74,14 +106,13 @@ fn stored_or_new_key(tx: &rusqlite::Transaction<'_>) -> Result<Vec<u8>> {
         )
         .optional()?;
     if let Some(stored) = stored {
-        return Ok(stored);
+        return Ok(KeyPair(stored));
     }
-    let pkcs8 = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new())
-        .map_err(|error| anyhow!("could not make a hub key pair: {error}"))?;
+    let key = KeyPair::generate()?;
     tx.execute(
         "INSERT INTO hub_identity(id, private_key) VALUES (1, ?1)",
-        [pkcs8.as_ref()],
+        [key.as_bytes()],
     )
     .context("keep the hub key pair")?;
-    Ok(pkcs8.as_ref().to_vec())
+    Ok(key)
 }

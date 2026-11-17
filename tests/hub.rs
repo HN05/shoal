@@ -105,10 +105,12 @@ fn a_machine_joins_through_a_command_and_keeps_its_link() {
     );
     assert_eq!(named(&members, "laptop").unwrap()["kind"], "machine");
     assert!(members.iter().any(|member| member["hub"] == true));
-    let config = fs::read_to_string(laptop.root.path().join(".config/shoal/config.toml")).unwrap();
-    assert!(config.contains("daemon"), "{config}");
     let role = laptop.connected();
     assert_eq!(role["membership"]["member"], membership["member"]);
+    assert_eq!(
+        role["route"]["command"].as_array().unwrap().last().unwrap(),
+        "connect"
+    );
     // A joined machine asks the hub for codes, which name the hub's URL.
     let listener = hub.json(&["hub", "ls"])["listener"]["url"].clone();
     let pairing = laptop.json(&["hub", "pair"]);
@@ -124,7 +126,7 @@ fn a_machine_joins_over_the_listener_with_a_code_it_uses_once() {
     let code = pairing["code"].as_str().unwrap();
     let membership = laptop.json(&["hub", "join", code, "--name", "laptop"]);
     assert!(
-        membership["url"]
+        membership["through"]["url"]
             .as_str()
             .unwrap()
             .starts_with("http://127.0.0.1:")
@@ -217,8 +219,7 @@ fn a_join_through_a_command_that_finds_no_shoal_names_the_fix() {
     assert!(!output.status.success(), "{}", printed(&output));
     let error = String::from_utf8_lossy(&output.stderr);
     assert!(error.contains("absolute path"), "{error}");
-    let config = laptop.root.path().join(".config/shoal/config.toml");
-    assert!(!fs::read_to_string(config).unwrap().contains("connect"));
+    assert_eq!(laptop.json(&["status"])["daemon"]["hub"], Value::Null);
 }
 
 #[test]
@@ -246,6 +247,46 @@ fn a_machine_that_leaves_loses_its_credential_and_route() {
         .clone();
     assert!(named(&members, "laptop").is_none());
     assert_eq!(laptop.json(&["status"])["daemon"]["hub"], Value::Null);
-    let config = fs::read_to_string(laptop.root.path().join(".config/shoal/config.toml")).unwrap();
-    assert!(!config.contains("connect"), "{config}");
+}
+
+#[test]
+fn a_machine_joins_again_after_it_left_or_was_revoked() {
+    let hub = Machine::hub();
+    let laptop = Machine::start("");
+    let first = laptop.join_through_command(&hub, "laptop");
+    laptop.connected();
+    laptop.json(&["hub", "leave"]);
+    let second = laptop.join_through_command(&hub, "laptop");
+    assert_ne!(second["member"], first["member"]);
+    laptop.connected();
+    hub.json(&["hub", "revoke", second["member"].as_str().unwrap()]);
+    laptop.role_once(|role| {
+        (role["problem"].as_str()).is_some_and(|problem| problem.contains("revoked"))
+    });
+    let third = laptop.join_through_command(&hub, "laptop");
+    let role = laptop.connected();
+    assert_eq!(role["membership"]["member"], third["member"]);
+    let members = hub.members_once(|members| named(members, "laptop").is_some());
+    assert_eq!(
+        members
+            .iter()
+            .filter(|member| member["name"] == "laptop")
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn the_hub_takes_no_link_from_a_space_s_scope() {
+    let hub = Machine::hub();
+    let protocol = daemon_client::protocol(hub.root.path());
+    let opening =
+        json!({"protocol": protocol, "id": 1, "scope": "token", "method": {"hub_link": {}}});
+    let answer = daemon_client::exchange(hub.root.path(), &opening);
+    assert_eq!(answer["type"], "error", "{answer}");
+    let members = hub.json(&["hub", "ls"])["members"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert_eq!(members.len(), 1);
 }

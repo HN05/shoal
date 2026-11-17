@@ -1,14 +1,22 @@
 //! Joining the hub, by a pairing code or through a command, and leaving it.
+//! Each join makes a key pair of its own, so a machine that left or was
+//! revoked joins again under a new credential.
 use anyhow::{Result, bail};
 use shoal_protocol::{
-    hub::{HubUrl, Left, Membership, Route, link::Call},
+    hub::{
+        Left, MemberKind, Membership, Route,
+        link::{Call, Intent, Joining},
+    },
     protocol::JoinVia,
 };
 
 use super::open::{Expected, Opened, Plan, Welcomed};
 use crate::{
     daemon::{
-        hub::membership::{self, Joined},
+        hub::{
+            identity::{Identity, KeyPair},
+            membership::{self, Joined},
+        },
         workspace::Manager,
     },
     refusal::{Reason, Refusal},
@@ -20,26 +28,35 @@ impl Manager {
     /// host.
     pub(crate) async fn join_hub(&self, via: JoinVia, name: Option<String>) -> Result<Membership> {
         self.ensure_joinable().await?;
-        let (route, expected, code, url) = match via {
+        let key = KeyPair::generate()?;
+        let identity = Identity::new(&key)?;
+        let (route, expected, code) = match via {
             JoinVia::Code(code) => (
-                Route::Url(code.url.clone()),
+                Route::Url(code.url),
                 Expected::Fingerprint(code.key),
                 Some(code.code),
-                Some(code.url),
             ),
-            JoinVia::Command(command) => (Route::Command(command), Expected::Any, None, None),
+            JoinVia::Command(command) => (Route::Command(command), Expected::Any, None),
         };
-        let intent = self.join_intent(name, code).await?;
+        let intent = Intent::Join(Joining {
+            kind: MemberKind::Machine,
+            name: name.unwrap_or_else(crate::process::machine::hostname),
+            key: identity.public.clone(),
+        });
         let plan = Plan {
-            route,
+            route: route.clone(),
             intent,
+            key: identity,
+            code,
             expected,
         };
         let welcomed = match self.open_link(plan).await?.1 {
             Opened::Welcomed(welcomed) => welcomed,
-            Opened::Refused(refusal) => bail!("the hub refused this machine: {}", refusal.message),
+            Opened::Refused { refusal, .. } => {
+                bail!("the hub refused this machine: {}", refusal.message)
+            }
         };
-        let membership = self.save_membership(welcomed, url).await?;
+        let membership = self.save_membership(welcomed, key, route).await?;
         self.hub.member.wake.notify_one();
         Ok(membership)
     }
@@ -70,11 +87,12 @@ impl Manager {
     }
 
     /// Keep this machine's membership of the hub that `welcomed` it, which
-    /// it paired with at `url`.
-    pub(super) async fn save_membership(
+    /// it proves with `key` and joined `through`.
+    async fn save_membership(
         &self,
         welcomed: Welcomed,
-        url: Option<HubUrl>,
+        key: KeyPair,
+        through: Route,
     ) -> Result<Membership> {
         let Welcomed {
             member,
@@ -85,9 +103,10 @@ impl Manager {
             membership: Membership {
                 member,
                 name,
-                url,
+                through,
                 joined_at: UnixTime::now(),
             },
+            key,
             hub_key,
             revoked: false,
         };

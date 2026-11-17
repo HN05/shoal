@@ -536,6 +536,13 @@ async fn serve_request(
         // A hub member's link, which checks the protocol itself.
         Method::HubLink(Opening::HubLink(hello)) => {
             drop(operation_guard);
+            if request.scope.is_some() {
+                let body = Body::error(
+                    ErrorCode::OperationFailed,
+                    "a space's processes open no hub link; only the user's own terminal or a command it runs, such as over ssh, does",
+                );
+                return protocol::write(&mut stream, &Response::new(request.id, body)).await;
+            }
             let manager = server.manager.clone();
             hub::accept_socket_link(manager, stream, request.protocol, hello).await;
             return Ok(());

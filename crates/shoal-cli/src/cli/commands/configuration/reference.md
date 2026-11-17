@@ -280,7 +280,7 @@ cloudflared or Caddy, in front of it. See
 enabled = true                           # This daemon takes the hub role
 listen = "127.0.0.1:7474"                # The default
 url = "https://shoal.example.ts.net"     # Default: http:// and the listen address
-connect = ["ssh", "desk", "shoal", "daemon", "connect"]   # A joined machine's route to the hub
+connect = ["ssh", "desk", "shoal", "daemon", "connect"]   # Overrides a joined machine's route
 ```
 
 With `enabled`, the daemon is the [hub](../../../../../../docs/reference.md#hub)
@@ -291,12 +291,12 @@ tunnel or reverse proxy, such as Tailscale Serve, cloudflared or Caddy, is in
 front of it, and `url` is the address members reach it at there. `shoal hub
 pair` warns when `url` is `http://` to another machine.
 
-`connect` is for a machine that joins the hub: its daemon runs the command and
+`connect` is for a machine that joined the hub: its daemon runs the command and
 uses its standard input and output as its link to the hub, restarting it when
-it exits, in place of the URL it paired at. The command ends in
-`shoal daemon connect` on the hub, with an absolute path to `shoal` when it is
-not on the `PATH` there, such as over `ssh` or `docker exec`. With it set, the
-machine joins without a pairing code.
+it exits, in place of the URL it paired at or the command it joined through.
+The command ends in `shoal daemon connect` on the hub, with an absolute path to
+`shoal` when it is not on the `PATH` there, such as over `ssh` or
+`docker exec`.
 
 ### Container runtime
 

@@ -4,7 +4,11 @@
 use std::{collections::HashMap, sync::Mutex, time::Duration};
 
 use anyhow::Result;
-use shoal_protocol::hub::pairing::{Pairing, PairingCode};
+use ring::hmac;
+use shoal_protocol::hub::{
+    Mac,
+    pairing::{Pairing, PairingCode},
+};
 use tokio::time::Instant;
 
 use super::identity::random;
@@ -38,12 +42,28 @@ impl Codes {
         code
     }
 
-    /// Whether `code` was issued and has not expired, which it then no
-    /// longer is.
-    pub(super) fn take(&self, code: &str) -> bool {
-        let expires = self.0.lock().unwrap().remove(code);
-        expires.is_some_and(|expires| expires > Instant::now())
+    /// Whether a code that was issued and has not expired `proves` itself,
+    /// which it then no longer is.
+    pub(super) fn take_proven(&self, proves: impl Fn(&str) -> bool) -> bool {
+        let mut codes = self.0.lock().unwrap();
+        let now = Instant::now();
+        codes.retain(|_, expires| *expires > now);
+        let proven = codes.keys().find(|code| proves(code)).cloned();
+        proven.is_some_and(|code| codes.remove(&code).is_some())
     }
+}
+
+/// What proves a joiner holds `code` without sending it: the HMAC-SHA256,
+/// keyed with the code's text, of what the joiner signs, `signed`.
+pub(super) fn code_proof(code: &str, signed: &[u8]) -> Mac {
+    let tag = hmac::sign(&hmac::Key::new(hmac::HMAC_SHA256, code.as_bytes()), signed);
+    Mac::try_from(tag.as_ref()).expect("HMAC-SHA256 tags are 32 bytes")
+}
+
+/// Whether `proof` proves `code` for what the joiner signed, `signed`.
+pub(super) fn proves_code(code: &str, signed: &[u8], proof: &Mac) -> bool {
+    let key = hmac::Key::new(hmac::HMAC_SHA256, code.as_bytes());
+    hmac::verify(&key, signed, proof.as_bytes()).is_ok()
 }
 
 impl Manager {

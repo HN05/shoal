@@ -25,7 +25,7 @@ fn status_names_why_the_link_to_the_hub_is_down() {
     let membership = shoal_protocol::hub::Membership {
         member: "m1".to_owned().into(),
         name: "laptop".into(),
-        url: None,
+        through: shoal_protocol::hub::Route::Command(vec!["ssh".into(), "desk".into()]),
         joined_at: crate::time::UnixTime::from_seconds(0),
     };
     let status = crate::protocol::DaemonStatus {
@@ -38,7 +38,7 @@ fn status_names_why_the_link_to_the_hub_is_down() {
         cleanup_error: None,
         hub: Some(shoal_protocol::hub::HubRole::Member {
             membership,
-            route: None,
+            route: shoal_protocol::hub::Route::Command(vec!["ssh".into(), "desk".into()]),
             connected: false,
             problem: Some("the hub revoked this machine's credential".into()),
         }),

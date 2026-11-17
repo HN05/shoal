@@ -747,8 +747,11 @@ The hub's listener serves HTTP, and the link over a WebSocket at `/hub`, on
 tunnel or reverse proxy in front of it, such as Tailscale Serve, cloudflared or
 Caddy, and set `[machine.hub] url` to the address machines reach it at there.
 The hub and every machine hold a key pair of their own, which pairing
-exchanges, and each link opens with both sides signing what the other sent, so
-nothing between them, a proxy included, can pose as either.
+exchanges. Each link opens with both sides signing what the other sent,
+including a key exchange whose keys then encrypt and authenticate every frame,
+and a joiner proves its pairing code without sending it, so nothing between
+them, a proxy included, can pose as either, use a code it saw, or read,
+change, add or replay a frame.
 
 `shoal hub pair` runs on the hub, or on a machine that joined it, and prints a
 code with its QR code: the hub's URL, its key's fingerprint and a secret that
@@ -761,15 +764,17 @@ one. `hub leave` revokes this machine's own credential, or names what to revoke
 on the hub when it cannot reach it. Only your own terminal pairs, joins, leaves
 and revokes; anyone lists.
 
-`[machine.hub] connect` makes the daemon run a command and use its standard
-input and output as the link, restarting it with backoff and logging its
+A machine can also reach the hub through a command, whose standard input and
+output its daemon uses as the link, restarting it with backoff and logging its
 standard error: `shoal daemon connect` on the hub relays them to its daemon's
 socket, byte for byte, and fails when no daemon runs there, never starting
 one. Running commands on the hub as you proves more than a code, so `shoal hub
 join --connect` joins without one: it checks that the command answers, names
-an absolute path to `shoal` when the other side does not find it, and then
-saves it as `connect`. With `connect` set, a machine that has not joined joins
-at once.
+an absolute path to `shoal` when the other side does not find it, and keeps
+the command as the machine's route to the hub. `[machine.hub] connect`
+overrides the route a machine joined by. Each join makes the machine a key
+pair of its own, so one that left or was revoked joins again as a new
+member.
 
 The hub refuses a link that presents a revoked credential, which stops the
 machine from trying again until it joins again; one that presents a

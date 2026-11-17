@@ -1,5 +1,5 @@
--- This daemon's Ed25519 key pair, as PKCS#8, which proves it to the hub it
--- joins or, as the hub, to its members.
+-- This daemon's Ed25519 key pair, as PKCS#8, which proves it as the hub
+-- to its members.
 CREATE TABLE hub_identity (
     id INTEGER PRIMARY KEY CHECK(id = 1),
     private_key BLOB NOT NULL
@@ -19,16 +19,20 @@ CREATE TABLE hub_members (
     revoked_at INTEGER
 );
 
--- The hub this daemon joined: the ID it gave this machine, the hub's key
--- each link checks, and the URL it paired at, none through a command. A
--- revoked membership stays until the machine leaves or joins again, so
--- that the daemon tells why it no longer connects.
+-- The hub this daemon joined: the ID it gave this machine, the key pair,
+-- as PKCS#8, this membership alone proves, the hub's key each link checks,
+-- and the URL it paired at or the command, as a JSON array, it joined
+-- through. A revoked membership stays until the machine leaves or joins
+-- again, so that the daemon tells why it no longer connects.
 CREATE TABLE hub_membership (
     id INTEGER PRIMARY KEY CHECK(id = 1),
     member_id TEXT NOT NULL,
     name TEXT NOT NULL,
+    private_key BLOB NOT NULL,
     hub_key TEXT NOT NULL,
     url TEXT,
+    connect TEXT,
     joined_at INTEGER NOT NULL,
-    revoked INTEGER NOT NULL DEFAULT 0 CHECK(revoked IN (0,1))
+    revoked INTEGER NOT NULL DEFAULT 0 CHECK(revoked IN (0,1)),
+    CHECK((url IS NULL) <> (connect IS NULL))
 );

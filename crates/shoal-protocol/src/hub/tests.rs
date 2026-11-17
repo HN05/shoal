@@ -1,6 +1,6 @@
 use super::{
-    HubUrl, Nonce, PublicKey,
-    link::{Signer, signed},
+    ExchangeKey, HubUrl, MemberKind, Nonce, PublicKey,
+    link::{Hello, Intent, Joining, Signer, Transcript},
     pairing::PairingCode,
 };
 
@@ -77,16 +77,42 @@ fn a_pairing_code_needs_its_code_and_key() {
     }
 }
 
+/// A transcript of a join by `key`.
+fn joining(key: u8) -> Transcript {
+    let bytes = |byte: u8| [byte; 32];
+    Transcript {
+        hello: Hello {
+            version: "1.0.0".into(),
+            nonce: Nonce::try_from(bytes(1).as_slice()).unwrap(),
+            exchange: ExchangeKey::try_from(bytes(3).as_slice()).unwrap(),
+            instance: "desk".into(),
+            intent: Intent::Join(Joining {
+                kind: MemberKind::Machine,
+                name: "laptop".into(),
+                key: PublicKey::try_from(bytes(key).as_slice()).unwrap(),
+            }),
+        },
+        hub_nonce: Nonce::try_from(bytes(2).as_slice()).unwrap(),
+        hub_exchange: ExchangeKey::try_from(bytes(4).as_slice()).unwrap(),
+    }
+}
+
 #[test]
-fn each_side_signs_its_own_role() {
-    let first = Nonce::try_from([1u8; 32].as_slice()).unwrap();
-    let second = Nonce::try_from([2u8; 32].as_slice()).unwrap();
+fn each_side_signs_its_own_role_over_the_whole_transcript() {
+    let transcript = joining(7);
     assert_ne!(
-        signed(Signer::Hub, &first, &second),
-        signed(Signer::Member, &first, &second)
+        transcript.signed(Signer::Hub),
+        transcript.signed(Signer::Member)
     );
+    let mut other = transcript.clone();
+    other.hub_exchange = ExchangeKey::try_from([5u8; 32].as_slice()).unwrap();
+    assert_ne!(transcript.signed(Signer::Hub), other.signed(Signer::Hub));
+}
+
+#[test]
+fn what_a_joiner_signs_names_its_key() {
     assert_ne!(
-        signed(Signer::Hub, &first, &second),
-        signed(Signer::Hub, &second, &first)
+        joining(7).signed(Signer::Member),
+        joining(8).signed(Signer::Member)
     );
 }

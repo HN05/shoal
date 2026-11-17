@@ -1,10 +1,8 @@
 //! A member's side of its link to the hub. The daemon of a machine that
 //! joined a hub keeps one link to it, over `[machine.hub] connect` when set
 //! and otherwise to the URL it paired at, and opens it again with backoff
-//! once it is lost, as after sleep or a network change. With `connect` set
-//! and no membership, it joins over that command, which proves as much as a
-//! pairing code would. A refusal it cannot outwait, such as of a revoked
-//! credential, stops it until the user acts.
+//! once it is lost, as after sleep or a network change. A refusal it cannot
+//! outwait, such as of a revoked credential, stops it until the user acts.
 use std::{
     sync::{Arc, Mutex},
     time::Duration,
@@ -12,12 +10,13 @@ use std::{
 
 use anyhow::{Result, anyhow};
 use shoal_protocol::hub::{
-    HubRole, Route,
+    HubRole, Membership, Route,
     link::{Call, Intent, Refusal, RefusalReason, Reply},
 };
 use tokio::sync::Notify;
 
 use super::{
+    identity::Identity,
     membership::{self, Joined},
     session::{self, Calls, End},
 };
@@ -71,8 +70,6 @@ enum Attempt {
     Idle(Option<String>),
     /// Connect as the member `joined` records, by `route`.
     Connect { joined: Box<Joined>, route: Route },
-    /// Join the hub through the command `connect` names.
-    Join { connect: Vec<String> },
 }
 
 /// Keep this machine's link to the hub it joined, until the daemon stops.
@@ -135,31 +132,19 @@ impl Manager {
         let Some(settings) = self.hub_settings().filter(|hub| !hub.enabled) else {
             return Ok(Attempt::Idle(None));
         };
-        let joined = self.store.read(membership::load).await?;
-        let connect = settings.connect;
-        Ok(match joined {
-            Some(joined) if joined.revoked => Attempt::Idle(Some(
+        let Some(joined) = self.store.read(membership::load).await? else {
+            return Ok(Attempt::Idle(None));
+        };
+        if joined.revoked {
+            return Ok(Attempt::Idle(Some(
                 "the hub revoked this machine's credential; run shoal hub join to join it again"
                     .into(),
-            )),
-            Some(joined) => {
-                let route = match (connect.is_empty(), &joined.membership.url) {
-                    (false, _) => Route::Command(connect),
-                    (true, Some(url)) => Route::Url(url.clone()),
-                    (true, None) => {
-                        return Ok(Attempt::Idle(Some(
-                            "this machine joined through a command; set [machine.hub] connect to it"
-                                .into(),
-                        )));
-                    }
-                };
-                Attempt::Connect {
-                    joined: Box::new(joined),
-                    route,
-                }
-            }
-            None if !connect.is_empty() => Attempt::Join { connect },
-            None => Attempt::Idle(None),
+            )));
+        }
+        let route = route(settings.connect, &joined.membership);
+        Ok(Attempt::Connect {
+            joined: Box::new(joined),
+            route,
         })
     }
 
@@ -167,57 +152,46 @@ impl Manager {
     /// refuses it, or what the link reads changes.
     async fn keep_link(&self, attempt: Attempt) -> Kept {
         let stop = self.link_changed(&attempt);
-        let plan = match self.link_plan(&attempt).await {
+        let plan = match self.link_plan(&attempt) {
             Ok(Some(plan)) => plan,
             Ok(None) => return Kept::Stopped,
             Err(error) => return self.link_failed(&error),
         };
         let route = plan.route.clone();
-        let transport = match self.open_attempt(&attempt, plan).await {
+        let transport = match self.open_attempt(plan).await {
             Ok(Ok(transport)) => transport,
-            Ok(Err(refusal)) => return self.refused(&route, refusal).await,
+            Ok(Err((refusal, sealed))) => return self.refused(&route, refusal, sealed).await,
             Err(error) => return self.link_failed(&error),
         };
         self.serve_hub(transport, &route, stop).await
     }
 
     /// How to open the link `attempt` names, none for an idle one.
-    async fn link_plan(&self, attempt: &Attempt) -> Result<Option<Plan>> {
-        Ok(Some(match attempt {
-            Attempt::Connect { joined, route } => Plan {
-                route: route.clone(),
-                intent: Intent::Connect {
-                    member: joined.membership.member.clone(),
-                },
-                expected: Expected::Key(joined.hub_key.clone()),
+    fn link_plan(&self, attempt: &Attempt) -> Result<Option<Plan>> {
+        let Attempt::Connect { joined, route } = attempt else {
+            return Ok(None);
+        };
+        Ok(Some(Plan {
+            route: route.clone(),
+            intent: Intent::Connect {
+                member: joined.membership.member.clone(),
             },
-            Attempt::Join { connect } => Plan {
-                route: Route::Command(connect.clone()),
-                intent: self.join_intent(None, None).await?,
-                expected: Expected::Any,
-            },
-            Attempt::Idle(_) => return Ok(None),
+            key: Identity::new(&joined.key)?,
+            code: None,
+            expected: Expected::Key(joined.hub_key.clone()),
         }))
     }
 
-    /// Open the link `plan` names for `attempt`, keeping the membership a
-    /// join makes, or the hub's refusal.
-    async fn open_attempt(
-        &self,
-        attempt: &Attempt,
-        plan: Plan,
-    ) -> Result<Result<Transport, Refusal>> {
+    /// Open the link `plan` names, or the hub's refusal and whether it
+    /// came sealed.
+    async fn open_attempt(&self, plan: Plan) -> Result<Result<Transport, (Refusal, bool)>> {
         let route = plan.route.clone();
         let (transport, opened) = self.open_link(plan).await?;
         let welcomed = match opened {
             Opened::Welcomed(welcomed) => welcomed,
-            Opened::Refused(refusal) => return Ok(Err(refusal)),
+            Opened::Refused { refusal, sealed } => return Ok(Err((refusal, sealed))),
         };
-        let member = welcomed.member.clone();
-        if matches!(attempt, Attempt::Join { .. }) {
-            self.save_membership(welcomed, None).await?;
-        }
-        log!("hub: connected to {route} as {member}");
+        log!("hub: connected to {route} as {}", welcomed.member);
         Ok(Ok(transport))
     }
 
@@ -233,9 +207,8 @@ impl Manager {
         let calls = Calls::new(channel.sender());
         self.hub.member.set(Some(calls.clone()), None);
         let answer = |_| async {
-            Reply::Failed {
-                message: "this machine answers no calls of the hub".into(),
-            }
+            let message = "this machine answers no calls of the hub".into();
+            (Reply::Failed { message }, ())
         };
         let problem = match session::serve(channel, &calls, answer, stop).await {
             End::Stopped => return Kept::Stopped,
@@ -276,22 +249,26 @@ impl Manager {
         Kept::Failed
     }
 
-    /// Stop after the hub's `refusal`, telling the user; a revoked
-    /// credential is recorded, so the link waits for a new join.
-    async fn refused(&self, route: &Route, refusal: Refusal) -> Kept {
+    /// Back off after the hub's `refusal`, telling the user. A revocation
+    /// that came `sealed`, which only the hub can send, is recorded, so the
+    /// link waits for a new join; any other refusal is tried again.
+    async fn refused(&self, route: &Route, refusal: Refusal, sealed: bool) -> Kept {
         let message = format!(
             "The hub at {route} refused this machine: {}",
             refusal.message
         );
         log!("hub: {message}");
-        self.notify(None, NotificationKind::HubRefused, &message)
-            .await;
-        self.hub.member.set(None, Some(refusal.message));
-        if refusal.reason == RefusalReason::Revoked
+        // Recorded before the problem shows, so a join that follows it finds
+        // the membership revoked.
+        if sealed
+            && refusal.reason == RefusalReason::Revoked
             && let Err(error) = self.store.write(membership::revoked).await
         {
             log!("hub: could not record the revoked membership: {error:#}");
         }
+        self.hub.member.set(None, Some(refusal.message));
+        self.notify(None, NotificationKind::HubRefused, &message)
+            .await;
         Kept::Failed
     }
 
@@ -318,10 +295,8 @@ impl Manager {
         let Some(joined) = self.store.read(membership::load).await? else {
             return Ok(None);
         };
-        let route = match self.link_attempt().await? {
-            Attempt::Connect { route, .. } => Some(route),
-            _ => None,
-        };
+        let connect = self.config().machine.hub.connect.clone();
+        let route = route(connect, &joined.membership);
         let state = self.hub.member.state.lock().unwrap();
         Ok(Some(HubRole::Member {
             membership: joined.membership,
@@ -329,5 +304,14 @@ impl Manager {
             connected: state.calls.is_some(),
             problem: state.problem.clone(),
         }))
+    }
+}
+
+/// The route to the hub: `connect` when it names a command, else what
+/// `membership` joined through.
+fn route(connect: Vec<String>, membership: &Membership) -> Route {
+    match connect.is_empty() {
+        true => membership.through.clone(),
+        false => Route::Command(connect),
     }
 }

@@ -3,13 +3,10 @@
 //! daemon connect`, the relay a joined machine reaches the hub's daemon by.
 use anyhow::{Context as _, Result};
 use shoal_protocol::{
-    config::edit::Change,
     hub::{HubRole, Listener, Member, Overview},
     protocol::JoinVia,
 };
 
-use super::configuration::reload_daemon;
-use crate::config_file::ConfigExt as _;
 use crate::{
     cli::{
         args::hub::{HubCommand, JoinArgs},
@@ -20,9 +17,6 @@ use crate::{
     client::output::hub::Paired,
     time::UnixTime,
 };
-
-/// The global config key a join through a command sets.
-const CONNECT: &str = "machine.hub.connect";
 
 pub(in crate::cli::commands) async fn run(ctx: &Context, command: HubCommand) -> Result<i32> {
     match command {
@@ -73,8 +67,7 @@ async fn pair(ctx: &Context) -> Result<i32> {
     Ok(0)
 }
 
-/// Join the hub, keeping the command a join through one used as this
-/// machine's route to the hub.
+/// Join the hub, by a pairing code or through a command.
 async fn join(ctx: &Context, args: JoinArgs) -> Result<i32> {
     let JoinArgs {
         code,
@@ -86,16 +79,7 @@ async fn join(ctx: &Context, args: JoinArgs) -> Result<i32> {
         (None, Some(command)) => JoinVia::Command(command_words(&command)?),
         (None, None) => unreachable!("clap requires a code or --connect"),
     };
-    let membership = crate::client::hub::join(&ctx.paths, via.clone(), name).await?;
-    if let JoinVia::Command(command) = via {
-        let value = toml::Value::Array(command.into_iter().map(toml::Value::String).collect());
-        let change = Change {
-            key: CONNECT.into(),
-            value: Some(value.to_string()),
-        };
-        crate::config::Config::edit(&ctx.paths, &[change])?;
-        reload_daemon(ctx).await;
-    }
+    let membership = crate::client::hub::join(&ctx.paths, via, name).await?;
     let message = format!(
         "Joined the hub as {} ({})",
         membership.name, membership.member
@@ -111,18 +95,9 @@ fn command_words(command: &str) -> Result<Vec<String>> {
     Ok(words)
 }
 
-/// Leave the hub, and stop reaching it through `[machine.hub] connect`.
+/// Leave the hub.
 async fn leave(ctx: &Context) -> Result<i32> {
     let left = crate::client::hub::leave(&ctx.paths).await?;
-    let config = crate::config::Config::load(&ctx.paths)?;
-    if !config.machine.hub.connect.is_empty() {
-        let change = Change {
-            key: CONNECT.into(),
-            value: None,
-        };
-        crate::config::Config::edit(&ctx.paths, &[change])?;
-        reload_daemon(ctx).await;
-    }
     let message = match left.revoked {
         true => "Left the hub, which revoked this machine's credential".to_owned(),
         false => format!(
@@ -211,16 +186,13 @@ pub(in crate::cli::commands) fn role_line(role: &HubRole) -> String {
             connected,
             problem,
         } => {
-            let to = route
-                .as_ref()
-                .map_or_else(String::new, |route| format!(" through {route}"));
             let state = match (connected, problem) {
                 (true, _) => "connected".to_owned(),
                 (false, Some(problem)) => format!("not connected: {problem}"),
                 (false, None) => "not connected".to_owned(),
             };
             format!(
-                "Member of the hub as {} ({}){to}, {state}",
+                "Member of the hub as {} ({}) through {route}, {state}",
                 membership.name, membership.member
             )
         }

@@ -10,16 +10,18 @@ use serde_json::Value;
 use shoal_ids::member_ids::MemberId;
 use shoal_protocol::{
     hub::{
-        Member, MemberKind, PublicKey, Signature,
-        link::{Frame, Hello, Intent, Joining, Refusal, RefusalReason, Signer, signed},
+        ExchangeKey, Mac, Member, PublicKey, Signature,
+        link::{Frame, Hello, Intent, Joining, Refusal, RefusalReason, Signer, Transcript},
     },
     protocol,
 };
+use tokio::sync::OwnedRwLockReadGuard;
 
 use super::{
     identity::{nonce, verify},
     links::Registration,
-    members,
+    members, pairing,
+    sealing::Exchange,
     session::{self, Calls, End},
     transport::Channel,
 };
@@ -66,7 +68,9 @@ impl Manager {
         }
     }
 
-    /// The member that opened `channel`, or why the hub refuses it.
+    /// The member that opened `channel`, or why the hub refuses it. The
+    /// link is sealed once the member proved its key, so every later
+    /// refusal and the welcome go sealed.
     async fn admit(
         &self,
         channel: &mut Channel,
@@ -84,18 +88,27 @@ impl Manager {
             return Ok(Err(self.refuse_version(&opening, protocol).await));
         }
         let hello: Hello = serde_json::from_value(opening).context("unreadable hub link hello")?;
-        let Some(proof) = self.challenge(channel, &hello).await? else {
+        let exchange = Exchange::new()?;
+        let Some((proof, transcript)) = self.challenge(channel, &hello, &exchange.public).await?
+        else {
             return Ok(Err(refusal(
                 RefusalReason::Proof,
                 "no proof of the member's key",
             )));
         };
-        let member = match &hello.intent {
-            Intent::Join(joining) => self.joining(joining, &proof, over).await?,
-            Intent::Connect { member } => self.paired(member, &proof).await?,
+        // A revocation commits and ends the member's link under the same
+        // lock, so none slips between reading the member and registering
+        // its link.
+        let _admission = self.hub.admissions.lock().await;
+        let claimant = match self.claimant(&hello.intent, &proof).await? {
+            Ok(claimant) => claimant,
+            Err(refusal) => return Ok(Err(refusal)),
         };
-        let member = match member {
-            Ok(member) => member,
+        channel
+            .seal(exchange.keys(&transcript, Signer::Hub)?)
+            .await?;
+        let (member, _operation) = match self.take(claimant, &proof, over).await? {
+            Ok(taken) => taken,
             Err(refusal) => return Ok(Err(refusal)),
         };
         let Some(registration) = self.hub.links.register(&member.id, &hello.instance) else {
@@ -112,7 +125,7 @@ impl Manager {
             name: member.name.clone(),
             hub: self.own_member().await?,
         };
-        channel.send(&welcome).await?;
+        channel.sender().send_written(&welcome).await?;
         Ok(Ok(Admitted {
             member,
             version: hello.version,
@@ -120,65 +133,125 @@ impl Manager {
         }))
     }
 
-    /// Prove the hub's key to the member that sent `hello`, and read its
-    /// proof of its own, none when it sends none in time.
-    async fn challenge(&self, channel: &mut Channel, hello: &Hello) -> Result<Option<Proof>> {
+    /// Prove the hub's key, with its half of the key exchange, `exchange`,
+    /// to the member that sent `hello`, and read its proof of its own with
+    /// the transcript both signed; none when it sends no proof in time.
+    async fn challenge(
+        &self,
+        channel: &mut Channel,
+        hello: &Hello,
+        exchange: &ExchangeKey,
+    ) -> Result<Option<(Proof, Transcript)>> {
         let identity = self.hub_identity().await?;
-        let ours = nonce();
+        let transcript = Transcript {
+            hello: hello.clone(),
+            hub_nonce: nonce(),
+            hub_exchange: exchange.clone(),
+        };
         let challenge = Frame::Challenge {
             key: identity.public.clone(),
-            signature: identity.sign(&signed(Signer::Hub, &hello.nonce, &ours)),
-            nonce: ours.clone(),
+            nonce: transcript.hub_nonce.clone(),
+            exchange: exchange.clone(),
+            signature: identity.sign(&transcript.signed(Signer::Hub)),
         };
         channel.send(&challenge).await?;
         let frame = tokio::time::timeout(PROOF_TIMEOUT, channel.expect::<Frame>()).await;
         match frame {
-            Ok(Ok(Frame::Proof { signature })) => Ok(Some(Proof {
-                signed: signed(Signer::Member, &ours, &hello.nonce),
-                signature,
-            })),
+            Ok(Ok(Frame::Proof { signature, code })) => {
+                let signed = transcript.signed(Signer::Member);
+                let proof = Proof {
+                    signed,
+                    signature,
+                    code,
+                };
+                Ok(Some((proof, transcript)))
+            }
             Ok(Ok(frame)) => bail!("expected the member's proof, not {frame:?}"),
             Ok(Err(error)) => Err(error),
             Err(_) => Ok(None),
         }
     }
 
-    /// The new member `joining` asks for, which `proof` must prove, recorded
-    /// once a pairing code admits it, or a link over the daemon's socket,
-    /// or why the hub refuses it.
-    async fn joining(
+    /// Who `intent` claims the member is, once `proof` proves it holds the
+    /// key that claim names, or why the hub refuses it.
+    async fn claimant<'i>(
         &self,
-        joining: &Joining,
+        intent: &'i Intent,
         proof: &Proof,
-        over: Over,
-    ) -> Result<Result<Member, Refusal>> {
-        let Joining {
-            kind,
-            name,
-            key,
-            code,
-        } = joining;
-        if !proof.proves(key) {
+    ) -> Result<Result<Claimant<'i>, Refusal>> {
+        let claimant = match intent {
+            Intent::Join(joining) => Claimant::New(joining),
+            Intent::Connect { member } => {
+                let own = self.hub_identity().await?.public.clone();
+                let id = member.clone();
+                let recorded = self.store.read(move |tx| members::find(tx, &id, &own));
+                match recorded.await? {
+                    Some(recorded) => Claimant::Paired(Box::new(recorded)),
+                    None => {
+                        return Ok(Err(refusal(
+                            RefusalReason::Proof,
+                            "the hub has no such member; run shoal hub join to join it again",
+                        )));
+                    }
+                }
+            }
+        };
+        if !proof.proves(claimant.key()) {
             return Ok(Err(refusal(
                 RefusalReason::Proof,
-                "the joiner's signature does not check",
+                "the member's signature does not check",
             )));
         }
+        Ok(Ok(claimant))
+    }
+
+    /// The member `claimant` becomes: a new one recorded once a pairing
+    /// code admits it, or a link over the daemon's socket, with the daemon
+    /// operation the record holds until the member is welcomed; a paired
+    /// one unless the hub revoked it. Otherwise why the hub refuses it.
+    async fn take(
+        &self,
+        claimant: Claimant<'_>,
+        proof: &Proof,
+        over: Over,
+    ) -> Result<Result<(Member, Option<OwnedRwLockReadGuard<()>>), Refusal>> {
+        let joining = match claimant {
+            Claimant::Paired(recorded) if recorded.revoked => {
+                return Ok(Err(refusal(
+                    RefusalReason::Revoked,
+                    format!(
+                        "the hub revoked the credential of {} {}; run shoal hub join to join it again",
+                        recorded.member.kind, recorded.member.name
+                    ),
+                )));
+            }
+            Claimant::Paired(recorded) => return Ok(Ok((recorded.member, None))),
+            Claimant::New(joining) => joining,
+        };
         let admitted =
-            over == Over::Socket || (code.as_deref()).is_some_and(|code| self.hub.codes.take(code));
+            over == Over::Socket || self.hub.codes.take_proven(|code| proof.proves_code(code));
         if !admitted {
             return Ok(Err(refusal(
                 RefusalReason::Code,
                 "the pairing code is unknown, used or expired; run shoal hub pair for a new one",
             )));
         }
-        self.join_member(*kind, name, key).await.map(Ok)
+        let Some(operation) = self.gates.operation_unless_exiting().await else {
+            return Ok(Err(refusal(
+                RefusalReason::Restarting,
+                "the hub's daemon is restarting; join again once it is back",
+            )));
+        };
+        let member = self.join_member(joining).await?;
+        Ok(Ok((member, Some(operation))))
     }
 
-    /// Record a new member of `kind` named `name`, which proved `key`.
-    async fn join_member(&self, kind: MemberKind, name: &str, key: &PublicKey) -> Result<Member> {
+    /// Record the new member `joining` asks for.
+    async fn join_member(&self, joining: &Joining) -> Result<Member> {
         let own = self.hub_identity().await?.public.clone();
-        let (name, key) = (name.to_owned(), key.clone());
+        let Joining {
+            kind, name, key, ..
+        } = joining.clone();
         self.store
             .write(move |tx| {
                 let id = members::join(tx, kind, &name, &key)?;
@@ -186,35 +259,6 @@ impl Manager {
                 Ok(recorded.context("a member just recorded")?.member)
             })
             .await
-    }
-
-    /// The paired member `id`, which `proof` must prove, or why the hub
-    /// refuses it.
-    async fn paired(&self, id: &MemberId, proof: &Proof) -> Result<Result<Member, Refusal>> {
-        let own = self.hub_identity().await?.public.clone();
-        let id = id.clone();
-        let recorded = self
-            .store
-            .read(move |tx| members::find(tx, &id, &own))
-            .await?;
-        Ok(match recorded {
-            None => Err(refusal(
-                RefusalReason::Proof,
-                "the hub has no such member; run shoal hub join to join it again",
-            )),
-            Some(recorded) if !proof.proves(&recorded.key) => Err(refusal(
-                RefusalReason::Proof,
-                "the member's signature does not check",
-            )),
-            Some(recorded) if recorded.revoked => Err(refusal(
-                RefusalReason::Revoked,
-                format!(
-                    "the hub revoked the credential of {} {}; run shoal hub join to join it again",
-                    recorded.member.kind, recorded.member.name
-                ),
-            )),
-            Some(recorded) => Ok(recorded.member),
-        })
     }
 
     /// The refusal of a member that speaks `protocol`, after recording an
@@ -276,7 +320,7 @@ impl Manager {
         let calls = Calls::new(channel.sender());
         let answer = |call| {
             let (manager, member) = (self.clone(), member.clone());
-            async move { session::reply(manager.answer_member(&member, call).await) }
+            async move { manager.answer_member(&member, call).await }
         };
         let end = session::serve(channel, &calls, answer, registration.stopped()).await;
         drop(registration);
@@ -299,15 +343,37 @@ impl Manager {
     }
 }
 
+/// Who a member claims to be.
+enum Claimant<'i> {
+    New(&'i Joining),
+    Paired(Box<members::Recorded>),
+}
+
+impl Claimant<'_> {
+    /// The key the member must prove.
+    fn key(&self) -> &PublicKey {
+        match self {
+            Self::New(joining) => &joining.key,
+            Self::Paired(recorded) => &recorded.key,
+        }
+    }
+}
+
 /// A member's signature and what it must sign.
 struct Proof {
     signed: Vec<u8>,
     signature: Signature,
+    /// A joiner's proof of its pairing code.
+    code: Option<Mac>,
 }
 
 impl Proof {
     fn proves(&self, key: &PublicKey) -> bool {
         verify(key, &self.signed, &self.signature)
+    }
+
+    fn proves_code(&self, code: &str) -> bool {
+        (self.code.as_ref()).is_some_and(|proof| pairing::proves_code(code, &self.signed, proof))
     }
 }
 
