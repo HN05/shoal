@@ -130,6 +130,9 @@ impl TrackedLaunch {
         if mode.is_setup() && self.command.is_empty() {
             return Ok(Outcome::Exited(0));
         }
+        if let Mode::Demo { launch } = mode {
+            demo::announce(launch);
+        }
         // Prompts only while this child runs, which reports its state.
         let _waker = wake.map(|wake| wake::start(paths, &self.plan, wake));
         let _attachment = self.attachment(paths);

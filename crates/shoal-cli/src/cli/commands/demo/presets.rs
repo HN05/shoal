@@ -198,11 +198,11 @@ fn instructions(preset: Preset, launch: &Launch, ssh: Option<&str>) -> Result<Ve
     let host = ssh.and_then(|connection| connection.split_whitespace().nth(2));
     Ok(match preset {
         Preset::Server | Preset::Web => {
-            let (Some(port), Some(address)) = (launch.environment.get(PORT), launch.address())
+            let (Some(port), Some(location)) = (launch.environment.get(PORT), launch.location())
             else {
                 anyhow::bail!("demo {} has no port", launch.name);
             };
-            let mut lines = vec![launch.url().unwrap_or(address)];
+            let mut lines = vec![location];
             if let Some(host) = host {
                 let user = std::env::var("USER").unwrap_or_default();
                 lines.push(format!(

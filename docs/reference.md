@@ -1414,7 +1414,9 @@ and one Shoal opened belongs to another workspace or chat once its agent
 starts in it, and closes with that one instead. Rex reports
 no agent turn state, so an agent without turn hooks closes its block once its
 execution ends. Rex sends no push notifications to the phone, and a demo's
-screen of a full-screen program shows only its current screen.
+screen of a full-screen program shows only its current screen. A Rex app on
+another device opens the `localhost` link a serving demo prints in its block
+through a forward to the Rex server's machine.
 
 #### tmux
 
@@ -1766,7 +1768,8 @@ demo of the workspace.
 Each demo runs as a tracked command where queued agents start: in a background
 place of the host it was started from, such as a Herdr tab, otherwise of
 `terminal.default_host`, such as a detached zmx session
-named `<workspace>-<name>`. A demo needs a terminal host: without one, such as
+named `<workspace>-<name>`. Before each run, a `server` or `web` demo without
+`open` prints there where it listens, as opening prints it. A demo needs a terminal host: without one, such as
 when zmx is missing from `PATH`, `shoal demo start` fails, saying why, and
 starts nothing. A command that exits runs again; an exit
 within 10 seconds of a start doubles the wait before the next run, from 1 to 30

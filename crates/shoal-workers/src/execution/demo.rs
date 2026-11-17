@@ -1,7 +1,9 @@
-//! A demo's restarts: its wrapper runs the command again whenever it exits,
-//! waiting longer after each exit that follows soon after a start, so a
-//! command that fails at once keeps its error on screen without spinning.
+//! A demo's runs: its wrapper shows where a serving demo listens before each
+//! run, and runs the command again whenever it exits, waiting longer after
+//! each exit that follows soon after a start, so a command that fails at once
+//! keeps its error on screen without spinning.
 use anyhow::{Context, Result, bail};
+use shoal_protocol::demos::{Launch, Preset};
 use tokio::{
     signal::unix::{SignalKind, signal},
     time::{Duration, sleep, timeout},
@@ -17,6 +19,25 @@ const MAX_DELAY: Duration = Duration::from_secs(30);
 /// A hang guard for the daemon's answer, which waits for proof that the
 /// exited run's processes stopped.
 const RELEASE_LIMIT: Duration = Duration::from_secs(60);
+
+/// Show where a serving demo listens in its place, so the terminal showing
+/// it offers the link, which a Rex app on another device opens through a
+/// forward.
+pub(super) fn announce(launch: &Launch) {
+    if let Some(line) = announcement(launch) {
+        eprintln!("{line}");
+    }
+}
+
+/// The line `announce` shows: none for a demo that serves nothing or that its
+/// `open` command opens instead.
+fn announcement(launch: &Launch) -> Option<String> {
+    if launch.open.is_some() || !launch.preset.is_some_and(Preset::serves) {
+        return None;
+    }
+    let location = launch.location()?;
+    Some(format!("shoal: demo {} serves at {location}", launch.name))
+}
 
 /// The delay before the next restart.
 #[derive(Debug, Default)]

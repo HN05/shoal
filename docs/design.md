@@ -1721,7 +1721,10 @@ and the agent reads and types into; a start no host takes fails rather than
 run a demo without a terminal. Shoal knows how a demo reaches
 the user only through presets, which reserve ports or lease a simulator and say
 how to open it; the repository's `open` command replaces that, so tools such
-as browsers and screen sharing stay outside Shoal. Starting, reading and stopping
+as browsers and screen sharing stay outside Shoal. A serving demo prints
+where it listens in its own place before each run, so a terminal host that
+forwards a `localhost` link from another device, such as a Rex app, opens it
+there; Shoal opens no tunnel and calls no host to forward. Starting, reading and stopping
 a demo are own-workspace actions without approval: the agent can already run
 the command, and a demo only keeps it running and tells the user.
 The journal records a demo's start at its command's first run, when a start

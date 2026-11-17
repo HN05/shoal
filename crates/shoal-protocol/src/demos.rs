@@ -116,6 +116,12 @@ impl Launch {
         let scheme = self.scheme.unwrap_or(Scheme::Http);
         Some(format!("{scheme}://{}", self.address()?))
     }
+
+    /// Where the user reaches a serving demo: a web demo's URL, otherwise
+    /// its address.
+    pub fn location(&self) -> Option<String> {
+        self.url().or_else(|| self.address())
+    }
 }
 
 /// How far a launch the starting CLI waits on got.
