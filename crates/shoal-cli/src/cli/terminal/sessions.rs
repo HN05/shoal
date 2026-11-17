@@ -248,7 +248,7 @@ pub(in crate::cli) async fn attach(space: &str, session: &Session) -> Result<boo
 pub(super) async fn report_detach(host: &dyn Sessions, space: &str, session: &str) -> Result<bool> {
     let running = host.left_running(session).await?;
     if running {
-        eprintln!("shoal: detached from {session}; run `shoal attach {space}` to return");
+        eprintln!("shoal: detached; run `shoal attach {space}` to return");
     }
     Ok(running)
 }
