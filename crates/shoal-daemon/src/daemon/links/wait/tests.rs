@@ -186,7 +186,7 @@ fn snapshot(message: &str) -> Snapshot {
     serde_json::from_value(json!({"comments": {"one": {"fingerprint": message}}, "checks": {}, "conflict": null, "state": "open", "errors": {}})).unwrap()
 }
 
-async fn register_watch(manager: &Manager, id: &SpaceId, url: &str) {
+pub(super) async fn register_watch(manager: &Manager, id: &SpaceId, url: &str) {
     let id = id.clone();
     let registration = super::super::pr::Registration {
         kind: RegistrationKind::Watch {

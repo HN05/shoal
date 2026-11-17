@@ -638,6 +638,17 @@ CREATE TABLE "workspaces" (
     starting_index TEXT
 );
 
+CREATE TABLE merge_runs (
+    space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+    pr_url TEXT NOT NULL,
+    merge_commit TEXT NOT NULL,
+    branch TEXT NOT NULL,
+    merged_at INTEGER NOT NULL,
+    looking INTEGER NOT NULL DEFAULT 1 CHECK(looking IN (0,1)),
+    runs TEXT NOT NULL DEFAULT '[]',
+    PRIMARY KEY(space_id,pr_url)
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);

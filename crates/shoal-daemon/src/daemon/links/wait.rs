@@ -19,6 +19,7 @@ mod cursor;
 mod delivery;
 mod framing;
 mod items;
+mod merge_runs;
 mod poll;
 mod waits;
 mod wake;

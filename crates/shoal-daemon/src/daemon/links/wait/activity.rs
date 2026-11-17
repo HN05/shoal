@@ -10,6 +10,7 @@ use super::{
         save_pending,
     },
     items::{NO_LINKED_ITEMS, followed_items, links_kind},
+    merge_runs::{MergeTarget, follow_merge},
 };
 use crate::{
     daemon::{links::space::require_ready_space, workspace::Manager},
@@ -38,11 +39,13 @@ impl Manager {
         // Checked before recording, so a change that starts later comes
         // after the poll's read, and one that ended was recorded first.
         let changing = self.assignees_changing(&observations);
+        let merges = self.merge_target(id, &observations).await;
         let poll = Poll {
             selection: selection.clone(),
             report,
             observed_at,
             changing,
+            merges,
         };
         let id = id.to_owned();
         let agents = self.tracked_agents().await;
@@ -120,6 +123,8 @@ struct Poll {
     /// The observed items Shoal was changing on its own as the poll
     /// recorded them, which it records as the spaces' own once changed.
     changing: Vec<String>,
+    /// Where the merges the poll saw are followed, when they are.
+    merges: Option<MergeTarget>,
 }
 
 /// Record `observations` from `poll` on the cursor of the space `id` in one
@@ -147,7 +152,13 @@ fn record_observations(
         if poll.changing.contains(&url) {
             record.own_change_running(observed_at);
         }
-        updates.extend(record.observe(snapshot, &url, observed_at));
+        // Updates still pending are observed again, not anew.
+        let replayed = !record.pending.is_empty();
+        record.observe(snapshot, &url, observed_at);
+        if let Some(target) = poll.merges.as_ref().filter(|_| !replayed) {
+            follow_merge(tx, id, &url, &mut record, target, UnixTime::now())?;
+        }
+        updates.extend(record.pending.iter().cloned());
         save_cursor_record(tx, id, &url, &record)?;
     }
     Ok(updates)

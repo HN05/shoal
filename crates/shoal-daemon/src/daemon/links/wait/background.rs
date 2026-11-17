@@ -8,6 +8,7 @@ use rusqlite::{OptionalExtension, params};
 use super::{
     branch_report::{BranchReport, branch_report},
     items::polled_items,
+    merge_runs::merge_run_spaces,
 };
 use crate::{
     daemon::{
@@ -15,6 +16,7 @@ use crate::{
         workspace::Manager,
     },
     forge::{items::link::Selection, updates::UpdateKind},
+    model::Chat,
     time::UnixTime,
 };
 use shoal_forge::updates::Snapshot;
@@ -57,16 +59,27 @@ impl Manager {
         let workspaces = self.list_workspaces().await?.into_iter();
         let ready = workspaces.filter(|w| w.state == crate::state::WorkspaceState::Ready);
         let mut spaces: Vec<LinkSpace> = ready.map(LinkSpace::from).collect();
+        let following = self.store.read(merge_run_spaces).await?;
+        let polled = |chat: &Chat| chat.running || following.contains(&chat.id);
         let chats = self.chats().await?.into_iter();
-        for chat in chats.filter(|chat| chat.running && chat.repository_id.is_some()) {
+        for chat in chats.filter(|chat| chat.repository_id.is_some() && polled(chat)) {
             spaces.push(LinkSpace::own(chat.into())?);
         }
         Ok(spaces)
     }
 
+    /// Link the runs of the space's merges, then read the activity of its
+    /// polled items, and record and queue what changed. A failed lookup of
+    /// either holds back neither.
+    pub(super) async fn poll_space_item_activity(&self, space: &LinkSpace) -> Result<()> {
+        let followed = self.follow_merge_runs(space).await;
+        let polled = self.poll_space_items(space).await;
+        polled.and(followed)
+    }
+
     /// Read the activity of the space's polled items, and record and queue
     /// what changed.
-    pub(super) async fn poll_space_item_activity(&self, space: &LinkSpace) -> Result<()> {
+    async fn poll_space_items(&self, space: &LinkSpace) -> Result<()> {
         let id = space.id.to_owned();
         let items = self.store.run(move |db| polled_items(db, &id)).await?;
         if items.is_empty() {

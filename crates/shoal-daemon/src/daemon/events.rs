@@ -264,6 +264,16 @@ fn record_with(
     Ok(())
 }
 
+/// Record that no CI run of the default branch started for `merge`, which
+/// the space `id` watched, while Shoal looked for one.
+pub(crate) fn record_no_merge_runs(
+    db: &Connection,
+    id: &SpaceId,
+    merge: &shoal_protocol::events::MergeEvent,
+) -> Result<()> {
+    record_with(db, id, EventKind::NoMergeRuns, "merge", merge)
+}
+
 /// Record the new `progress` of the space `id`.
 pub(crate) fn record_progress(
     db: &Connection,
