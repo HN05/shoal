@@ -7,6 +7,7 @@ pub(in crate::cli) mod command_line;
 pub mod coordination;
 pub mod create;
 pub mod diagnostics;
+pub mod hub;
 pub mod integration;
 pub mod internal;
 pub mod items;

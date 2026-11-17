@@ -68,6 +68,9 @@ pub enum Style {
     Idle,
     /// Work is complete and needs nothing more.
     Done,
+    /// A code a camera reads, such as a QR code: dark on light whatever
+    /// the terminal's own colors.
+    Scannable,
 }
 
 /// A failure as JSON output reports it: under the daemon's code when it has a
@@ -175,6 +178,7 @@ impl Palette {
             Style::Active => "36",
             Style::Idle => "34",
             Style::Done => "2;32",
+            Style::Scannable => "30;107",
         };
         format!("\x1b[{code}m{value}\x1b[0m")
     }

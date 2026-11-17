@@ -529,6 +529,27 @@ found and the command that fixes it, and `shoal status <name>` shows one
 workspace or chat; see [cleanup](docs/reference.md#automatic-cleanup) and
 [recovery](docs/reference.md#recovery) for details.
 
+## Join your machines to a hub
+
+One machine's daemon can be the hub your other machines join. On it:
+
+```toml
+# ~/.config/shoal/config.toml, then shoal config reload
+[machine.hub]
+enabled = true
+url = "https://desk.example.ts.net"   # What a tunnel or proxy with TLS serves the listener at
+```
+
+```sh
+shoal hub pair                       # On the hub: a code, with its QR code
+shoal hub join '<code>'              # On the machine that joins
+shoal hub join --connect "ssh desk shoal daemon connect"   # Or over SSH, without a code or proxy
+shoal hub ls                         # Every machine and device, and whether it is connected
+```
+
+The listener stays on loopback until something with TLS is in front of it; see
+[hub](docs/reference.md#hub).
+
 ## Update
 
 ```sh

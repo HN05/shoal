@@ -69,7 +69,9 @@ const GROUPS: &[(&str, &[&str])] = &[
     ("Activity", &["alerts"]),
     (
         "Configuration and installation",
-        &["repo", "config", "update", "daemon", "shell", "skill"],
+        &[
+            "repo", "config", "update", "daemon", "hub", "shell", "skill",
+        ],
     ),
 ];
 

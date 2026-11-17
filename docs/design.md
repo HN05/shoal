@@ -106,6 +106,28 @@ topics, then each record that changed or was removed, comparing again after
 each stored change, until its scope token is revoked; a daemon restart closes
 it and `shoal_client` subscribes again and reports the new snapshot as a
 resync.
+The hub is a role of the ordinary daemon, `[machine.hub] enabled`, which
+the user's other machines join; the hub stays the machine of its own
+spaces. One hub per user, without failover and never chained, though
+machines are addressed by the ID the hub gives each at pairing, so nothing
+assumes one hop. Every machine connects out and keeps one link, opening it
+again with backoff; the hub never dials one. The listener serves HTTP and
+the link over a WebSocket on loopback by default and handles no TLS, which
+a tunnel or proxy in front of it provides; the hub and each member hold
+their own Ed25519 keys, exchanged at pairing and proven by both sides
+signing the other's nonce on every link, so whoever ends TLS can pose as
+neither. The same link runs over any command's standard input and output
+through `shoal daemon connect`, which relays them to the daemon's socket;
+running commands there as the user proves more than a pairing code, so a
+join that way needs none. Link frames are lines or WebSocket messages of at
+most 16 MiB. A credential records its kind, a machine or a device, the hub
+refuses a revoked one or one another installation's link holds, and
+versions match exactly: the hub refuses a member of another protocol,
+reading only the protocol of its first request, and records an alert naming
+the upgrade, while the member keeps working on its own. Pairing codes live
+in the hub's memory and admit one join within ten minutes. Browser
+sessions, the directory of every machine's spaces and routing requests
+between machines are later steps.
 The minimum Rust version follows current stable so the code can use its newest
 features; the manifest and CI toolchain advance together, with locked dependencies.
 The daemon raises its open file limit at startup and accepts every connection,

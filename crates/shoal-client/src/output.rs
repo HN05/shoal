@@ -16,6 +16,7 @@ pub mod demo;
 pub mod download;
 pub mod error;
 pub mod forge;
+pub mod hub;
 pub mod inbox;
 pub mod items;
 pub mod leases;

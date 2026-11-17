@@ -25,6 +25,11 @@ pub enum ServiceCommand {
         #[command(subcommand)]
         command: DaemonCommand,
     },
+    /// Pair your machines and devices with the hub, join it and leave it.
+    Hub {
+        #[command(subcommand)]
+        command: super::hub::HubCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -148,6 +153,11 @@ pub enum DaemonCommand {
         #[arg(long, hide = true)]
         managed: bool,
     },
+    /// Relay standard input and output to the running daemon's socket, as
+    /// a machine's link to the hub does through [machine.hub] connect.
+    ///
+    /// It never starts the daemon: without one it exits with an error.
+    Connect,
 }
 
 // Whether stopping the daemon waits for work it runs itself, such as

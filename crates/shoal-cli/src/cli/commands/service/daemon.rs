@@ -63,6 +63,9 @@ fn status_message(status: &crate::protocol::DaemonStatus) -> String {
     if let Some(error) = &status.cleanup_error {
         message.push_str(&format!("\n{error}"));
     }
+    if let Some(role) = &status.hub {
+        message.push_str(&format!("\n{}", crate::cli::commands::hub::role_line(role)));
+    }
     message
 }
 

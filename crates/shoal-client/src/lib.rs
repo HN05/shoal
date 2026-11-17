@@ -16,6 +16,7 @@ pub mod events;
 pub mod executions;
 pub mod files;
 pub mod forge_reads;
+pub mod hub;
 pub mod items;
 pub mod launches;
 pub mod leases;

@@ -26,6 +26,7 @@ mod environment;
 mod events;
 mod files;
 mod holds;
+mod hub;
 mod inbox;
 pub(super) mod issues;
 mod items;

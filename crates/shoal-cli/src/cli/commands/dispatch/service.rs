@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::cli::{
     args::service::{ConfigCommand, ServiceCommand},
-    commands::{config_setup, configuration, service, update},
+    commands::{config_setup, configuration, hub, service, update},
     context::Context,
     entry::Daemon,
 };
@@ -36,5 +36,6 @@ pub(in crate::cli::commands) async fn run(
         },
         ServiceCommand::Update => update::run(&ctx).await,
         ServiceCommand::Daemon { command } => service::run(ctx, command, daemon).await,
+        ServiceCommand::Hub { command } => hub::run(&ctx, command).await,
     }
 }

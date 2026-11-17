@@ -15,9 +15,11 @@ clap_complete = { version = "=4.6.11", features = ["unstable-dynamic"] }
 fs2 = "0.4"
 futures-util.workspace = true
 libc.workspace = true
+qrcode = { version = "0.14", default-features = false }
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"
+shlex = "1"
 shoal-client.workspace = true
 shoal-core.workspace = true
 shoal-forge.workspace = true
@@ -29,7 +31,7 @@ shoal-schedule.workspace = true
 shoal-subprocess.workspace = true
 shoal-workers.workspace = true
 tempfile.workspace = true
-tokio = { workspace = true, features = ["macros", "net", "io-util", "process", "rt", "rt-multi-thread", "signal", "sync", "time"] }
+tokio = { workspace = true, features = ["macros", "net", "io-std", "io-util", "process", "rt", "rt-multi-thread", "signal", "sync", "time"] }
 toml.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }
 

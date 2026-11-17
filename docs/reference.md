@@ -721,6 +721,63 @@ speaks only its own release's protocol: a daemon of another release refuses
 it with `protocol_mismatch` naming both versions, and the app updates with
 Shoal.
 
+### Hub
+
+```sh
+shoal hub pair                     # On the hub or a joined machine: a code and its QR code
+shoal hub join <code> [--name N]   # Join this machine with that code
+shoal hub join --connect "ssh desk shoal daemon connect"   # Or through a command, without a code
+shoal hub ls                       # The listener, and every machine and device
+shoal hub revoke <machine or device>
+shoal hub leave
+```
+
+One daemon of yours takes the hub role, with
+[`[machine.hub] enabled`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub),
+and your other machines join it; the hub stays the machine of its own spaces,
+and one without repositories is a hub alone. Each machine that joined keeps one
+link to the hub and opens it again with backoff after sleep or a network
+change; the hub never connects to a machine. `shoal status` shows the role the
+daemon takes: the hub's listener, or the machine's membership with whether its
+link is open and why not.
+
+The hub's listener serves HTTP, and the link over a WebSocket at `/hub`, on
+`[machine.hub] listen`, loopback by default. Shoal handles no TLS, so
+`shoal status` and `shoal hub ls` show the listener as unencrypted: put a
+tunnel or reverse proxy in front of it, such as Tailscale Serve, cloudflared or
+Caddy, and set `[machine.hub] url` to the address machines reach it at there.
+The hub and every machine hold a key pair of their own, which pairing
+exchanges, and each link opens with both sides signing what the other sent, so
+nothing between them, a proxy included, can pose as either.
+
+`shoal hub pair` runs on the hub, or on a machine that joined it, and prints a
+code with its QR code: the hub's URL, its key's fingerprint and a secret that
+admits one join within ten minutes. It warns when the URL is `http://` to
+another machine. `shoal hub join <code>` joins this machine under the host's
+name, or `--name`; an app joins as a device with the same code. The hub gives
+each machine or device an ID at pairing, and `hub ls` lists them with kind,
+name, Shoal version and when each was last seen, by which `hub revoke` names
+one. `hub leave` revokes this machine's own credential, or names what to revoke
+on the hub when it cannot reach it. Only your own terminal pairs, joins, leaves
+and revokes; anyone lists.
+
+`[machine.hub] connect` makes the daemon run a command and use its standard
+input and output as the link, restarting it with backoff and logging its
+standard error: `shoal daemon connect` on the hub relays them to its daemon's
+socket, byte for byte, and fails when no daemon runs there, never starting
+one. Running commands on the hub as you proves more than a code, so `shoal hub
+join --connect` joins without one: it checks that the command answers, names
+an absolute path to `shoal` when the other side does not find it, and then
+saves it as `connect`. With `connect` set, a machine that has not joined joins
+at once.
+
+The hub refuses a link that presents a revoked credential, which stops the
+machine from trying again until it joins again; one that presents a
+credential another machine's link holds, as a copy of a state directory does,
+which is told to join as a machine of its own; and one of another protocol
+version, recording an alert that names the machine, its version and the
+upgrade to run. A refused machine keeps working on its own.
+
 ## Workspaces
 
 `shoal branch rename [WORKSPACE] BRANCH` renames a ready workspace's checked-out Git

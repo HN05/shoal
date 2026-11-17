@@ -23,5 +23,6 @@ pub(super) async fn run(ctx: Context, command: DaemonCommand, daemon: Daemon) ->
         DaemonCommand::Start => daemon::start(&ctx).await,
         DaemonCommand::Stop(wait) => daemon::stop(&ctx, wait.when()).await,
         DaemonCommand::Restart(wait) => daemon::restart(&ctx, wait.when()).await,
+        DaemonCommand::Connect => super::hub::relay(&ctx).await,
     }
 }
