@@ -7,6 +7,7 @@ pub mod gate;
 pub mod git_profiles;
 pub mod hooks;
 pub mod machine;
+pub mod mcp;
 pub mod modes;
 pub mod named_commands;
 pub mod overload;

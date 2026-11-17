@@ -1,7 +1,8 @@
 //! Build tools a repository names in `presets`, and what each sets up so its
 //! workspaces stop repeating the same work: a seed build of the default
 //! branch whose outputs new workspaces clone, environment that lets a
-//! tool's own cache serve every workspace, and shared caches.
+//! tool's own cache serve every workspace, shared caches, and the MCP
+//! servers its agents use.
 use std::collections::BTreeMap;
 
 use anyhow::{Result, ensure};
@@ -37,7 +38,8 @@ states!(
         /// Go: builds without workspace paths so its shared build cache
         /// serves every workspace, and seeds that cache.
         Go => "go",
-        /// Xcode: one compilation cache for every workspace's `xcodebuild`.
+        /// Xcode: one compilation cache for every workspace's `xcodebuild`,
+        /// and Xcode's MCP server for agents.
         Xcode => "xcode",
         /// Zig: one local cache for every workspace, and seeds it.
         Zig => "zig",
@@ -144,6 +146,15 @@ impl Preset {
                 ("CMAKE_C_COMPILER_LAUNCHER", "ccache"),
                 ("CMAKE_CXX_COMPILER_LAUNCHER", "ccache"),
             ],
+            _ => &[],
+        }
+    }
+
+    /// The MCP servers the preset brings, each by its name and command
+    /// line, which `[mcp]` changes.
+    pub(crate) fn mcp_servers(self) -> &'static [(&'static str, &'static [&'static str])] {
+        match self {
+            Self::Xcode => &[("xcode", &["xcrun", "mcpbridge"])],
             _ => &[],
         }
     }

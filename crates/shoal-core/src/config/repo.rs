@@ -73,6 +73,9 @@ pub struct RepoConfig {
     pub env: BTreeMap<String, String>,
     #[option(named, resolve = preset_caches)]
     pub caches: BTreeMap<String, Cache>,
+    /// MCP servers agents start, with the presets'.
+    #[option(named_sections, resolve = crate::config::mcp::resolve -> crate::config::mcp::Servers)]
+    pub mcp: BTreeMap<String, crate::config::mcp::ServerConfig>,
     /// Commands kept running for the user to try, by name.
     #[option(named)]
     pub demos: BTreeMap<String, shoal_protocol::demos::Demo>,
@@ -480,6 +483,7 @@ impl RepoConfig {
         }
         .validate("agent")?;
         validate_caches(&self.caches)?;
+        crate::config::mcp::validate(&self.mcp)?;
         shoal_protocol::demos::validate(&self.demos)?;
         crate::config::presets::validate(self.setup.presets.as_deref().unwrap_or_default())?;
         crate::secrets::validate(&self.secrets)?;
