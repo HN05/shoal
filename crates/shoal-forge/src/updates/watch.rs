@@ -43,6 +43,9 @@ impl WatchRecord {
     /// acknowledged only those of its condition stay.
     pub fn start_from(&mut self, mut snapshot: Snapshot, url: &str, read_at: UnixTime) {
         snapshot.normalize(&self.snapshot, UnixTime::now());
+        // The read shows the space's own comments it has, which no later
+        // change may be taken for.
+        self.snapshot.adopt_authored(&snapshot, &mut self.authored);
         self.pending.retain(|update| of_condition(update.kind));
         let mut condition = self.snapshot.changes(&snapshot, url);
         condition.retain(|update| of_condition(update.kind));

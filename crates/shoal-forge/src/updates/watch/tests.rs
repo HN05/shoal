@@ -160,3 +160,20 @@ fn a_poll_that_started_before_the_start_stays_stale_after_a_newer_one() {
     assert!(record.observe(stale, "pr", older).is_empty());
     assert_eq!(record.snapshot.comments.len(), 2);
 }
+
+#[test]
+fn a_start_takes_the_spaces_own_comment_it_reads_as_seen() {
+    let mut record = WatchRecord::default();
+    record.observe(snapshot(json!({}), "open"), "pr", UnixTime::EPOCH);
+    record.pending.clear();
+    record.adopt_own_change(vec!["discussion:1".into()], None, &Edited::default());
+    let read = json!({"discussion:1": "mine"});
+    record.start_from(snapshot(read, "open"), "pr", UnixTime::EPOCH);
+    // Someone else's edit of it is no longer taken for the space's own.
+    let edited = json!({"discussion:1": "theirs"});
+    let updates = record.observe(snapshot(edited, "open"), "pr", UnixTime::MAX);
+    assert_eq!(
+        updates.iter().map(|update| update.kind).collect::<Vec<_>>(),
+        [UpdateKind::Comment]
+    );
+}
