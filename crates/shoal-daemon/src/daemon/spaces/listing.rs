@@ -30,7 +30,7 @@ impl Manager {
                 Ok((workspaces, chats))
             })
             .await?;
-        let chats = self.with_agents(chats)?;
+        let chats = self.with_agents(chats);
         Ok((workspaces.into_iter().map(Space::from))
             .chain(chats.into_iter().map(Space::from))
             .collect())

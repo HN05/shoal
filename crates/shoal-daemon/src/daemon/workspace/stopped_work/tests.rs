@@ -204,3 +204,36 @@ async fn a_chats_stopped_agent_is_its_saved_work() {
         .collect();
     assert_eq!(summarized, [(&talk.id, true)]);
 }
+
+#[tokio::test]
+async fn a_chat_whose_stopped_agent_cannot_be_read_costs_only_its_own_summary() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let mut chats = Vec::new();
+    for name in ["broken", "healthy"] {
+        let stopped = chat(&manager, name, "chat", Some(&repo), None).await;
+        manager.end_executions(&stopped.id).await;
+        let record = crate::execution::recovery::save_record(
+            &manager.paths,
+            &stopped.id,
+            &ExecutionId::from("agent"),
+            &TrackedAgent::named("claude"),
+            None,
+            None,
+        )
+        .unwrap();
+        chats.push((stopped, record));
+    }
+    std::fs::write(&chats[0].1, "{").unwrap();
+
+    let summaries = manager.saved_summaries(None).await.unwrap();
+    let healthy = &chats[1].0.id;
+    assert!(
+        summaries.iter().any(|summary| summary.space == *healthy),
+        "{summaries:?}"
+    );
+}

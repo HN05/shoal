@@ -364,7 +364,7 @@ impl Manager {
     /// Running and stopped chats in start order, each with its agent.
     pub async fn chats(&self) -> Result<Vec<Chat>> {
         let recorded = self.recorded_chats(None).await?;
-        self.with_agents(recorded)
+        Ok(self.with_agents(recorded))
     }
 
     /// The running or stopped chat with the ID `id`, with its agent.
@@ -390,14 +390,25 @@ impl Manager {
     }
 
     /// The `recorded` chats, each with its agent, of which the store
-    /// records what each comes with.
+    /// records what each comes with. One whose saved agent cannot be read
+    /// is listed without it, so it costs only its own chat.
     pub(crate) fn with_agents(
         &self,
         recorded: Vec<(Chat, spaces::sessions::StoredAgents)>,
-    ) -> Result<Vec<Chat>> {
+    ) -> Vec<Chat> {
         (recorded.into_iter())
-            .map(|(chat, stored)| self.with_agent(chat, stored))
+            .map(|(chat, stored)| self.listed_with_agent(chat, stored))
             .collect()
+    }
+
+    /// `chat` with its agent, of which the store records `stored`, or
+    /// without one when what its stop saved cannot be read.
+    fn listed_with_agent(&self, mut chat: Chat, stored: spaces::sessions::StoredAgents) -> Chat {
+        chat.agent = self.agent_from(&chat.id, stored).unwrap_or_else(|error| {
+            crate::daemon::log!("saved agent of chat {} unreadable: {error:#}", chat.id);
+            None
+        });
+        chat
     }
 
     /// `chat` with its agent, of which the store records `stored`.
