@@ -219,6 +219,25 @@ async fn a_retry_of_a_failed_copy_switched_to_another_branch_is_refused() {
 }
 
 #[tokio::test]
+async fn a_retry_of_a_failed_copy_in_a_git_operation_is_refused() {
+    let f = Fixture::new().await;
+    let checkpoint = f
+        .manager
+        .take_checkpoint(&f.manager.named("topic").await, None)
+        .await
+        .unwrap();
+    let copy = f.failed_pending_copy(Some(checkpoint.number)).await;
+    let git_dir = git(&copy.path, &["rev-parse", "--absolute-git-dir"]);
+    let merge_head = std::path::Path::new(git_dir.trim()).join("MERGE_HEAD");
+    fs::write(&merge_head, git(&copy.path, &["rev-parse", "HEAD"])).unwrap();
+    let selector = SpaceSelector::id(&copy.id);
+    let refused = f.manager.create_pending_worktree(&selector).await;
+    assert!(refused.is_err(), "{refused:?}");
+    assert!(merge_head.exists());
+    assert!(copy.path.join("mine").exists());
+}
+
+#[tokio::test]
 async fn a_retried_copy_of_a_checkpoint_writes_its_files_again() {
     let f = Fixture::new().await;
     let checkpoint = f

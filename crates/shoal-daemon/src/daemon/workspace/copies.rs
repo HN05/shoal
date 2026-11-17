@@ -430,8 +430,8 @@ impl Manager {
     /// Give the copy's worktree, which an earlier creation of `workspace`
     /// left, its `source`'s files again, and configure it, once it verifies
     /// as the one Git created for it, still on its recorded branch or
-    /// detached, and a checkpoint keeps what it holds, refusing what a
-    /// checkpoint cannot keep.
+    /// detached, and a checkpoint keeps what it holds, refusing a Git
+    /// operation under way there and what a checkpoint cannot keep.
     async fn refill_copy_worktree(
         &self,
         workspace: &Workspace,
@@ -440,6 +440,11 @@ impl Manager {
     ) -> Result<Configured> {
         let branch = workspace.branch().map(BranchName::as_str);
         self.verify_checkout(workspace, branch).await?;
+        ensure!(
+            !git::status::operation_in_progress(&workspace.path).await?,
+            "a Git operation is under way in workspace {}; finish or abort it first",
+            workspace.name
+        );
         let kept = self
             .checkpoint(workspace, CheckpointCause::Refresh, None)
             .await?;
