@@ -16,6 +16,7 @@ use crate::{
 };
 use anyhow::{Context, Result, bail, ensure};
 pub(super) use pending::PendingWorktree;
+pub(crate) use pending::build_pending_in;
 use rusqlite::params;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceName;

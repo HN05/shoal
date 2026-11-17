@@ -7,7 +7,7 @@ use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context as _, Result, bail, ensure};
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 
 use super::{
     Grant,
@@ -19,7 +19,7 @@ use crate::{
         scope::Caller,
         workspace::{Manager, StopRequest},
     },
-    model::{PreparationWait, QueueEntry, QueuedJob},
+    model::{QueueEntry, QueuedJob},
     state::{QueueKind, QueueState},
 };
 
@@ -230,10 +230,7 @@ impl Manager {
                     return Ok(None);
                 }
                 let cancelled = delete_waiting_launches(tx, &id)?;
-                tx.execute(
-                    "UPDATE waiting_preparations SET waits=?2 WHERE workspace_id=?1 AND for_agent",
-                    params![id, serde_json::to_string(&PreparationWait::Stopped)?],
-                )?;
+                crate::daemon::operations::starts::note_agent_stopped(tx, &id)?;
                 Ok(Some(cancelled))
             })
             .await?;
@@ -296,7 +293,7 @@ impl Manager {
 
     /// Delete the entry `id` if it still waits, returning whether it did.
     async fn delete_waiting_entry(&self, id: QueueEntryId) -> Result<bool> {
-        self.store.run(move |db| delete_waiting(db, &id)).await
+        self.store.write(move |tx| delete_waiting(tx, &id)).await
     }
 
     /// Delete `repository`'s job entry `id` if it still waits, leaving its
@@ -324,12 +321,25 @@ impl Manager {
     }
 }
 
-/// Delete the entry `id` if it still waits, returning whether it did.
+/// Delete the entry `id` if it still waits, returning whether it did. The
+/// preparation of the workspace a launch waited to open then waits for its
+/// stopped agent.
 fn delete_waiting(db: &rusqlite::Connection, id: &QueueEntryId) -> Result<bool> {
+    let opens: Option<SpaceId> = db
+        .query_row(
+            "SELECT opens_workspace_id FROM agent_queue WHERE id=?1 AND state=?2",
+            params![id, QueueState::Queued],
+            |row| row.get(0),
+        )
+        .optional()?
+        .flatten();
     let deleted = db.execute(
         "DELETE FROM agent_queue WHERE id=?1 AND state=?2",
         params![id, QueueState::Queued],
     )?;
+    if let (1, Some(workspace)) = (deleted, &opens) {
+        crate::daemon::operations::starts::note_agent_stopped(db, workspace)?;
+    }
     Ok(deleted == 1)
 }
 

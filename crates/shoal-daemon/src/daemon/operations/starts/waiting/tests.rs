@@ -282,3 +282,19 @@ async fn a_released_preparation_never_stacks_its_blocker_on_itself() {
     assert!(refused.is_err(), "{refused:?}");
     assert_eq!(read(&manager, &ui).await.part.base_workspace, None);
 }
+
+#[tokio::test]
+async fn a_cancelled_queue_entry_leaves_its_preparation_to_a_restore() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let api = create(&manager, &repo, "api").await;
+    let blocker = Blocker::Space(api.id.to_string());
+    let started = start(&manager, &repo, "ui", vec![blocker]).await;
+    let entry = started.entry.as_ref().unwrap().id.clone();
+    manager.queue_remove(entry.as_str(), None).await.unwrap();
+    let waits = read(&manager, &started.workspace)
+        .await
+        .part
+        .preparation_waits;
+    assert_eq!(waits, Some(PreparationWait::Stopped));
+}

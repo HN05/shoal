@@ -10,12 +10,13 @@ use anyhow::{Result, bail};
 use rusqlite::{OptionalExtension, params};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_refs::BranchName;
 
 use crate::{
     daemon::{
         log,
         scope::Caller,
-        workspace::{Manager, agent_queue::Readiness},
+        workspace::{Manager, agent_queue::Readiness, build_pending_in},
     },
     model::{PreparationWait, Workspace},
     protocol::operations::{Failure, OperationSpec, Preparation},
@@ -168,16 +169,9 @@ impl Manager {
     /// hears of.
     async fn release_preparation(self: &Arc<Self>, id: &SpaceId, base: Option<String>) {
         let released = async {
-            let claimed = self.store.run({
-                let id = id.clone();
-                move |db| claim_waiting(db, &id)
-            });
-            let Some(Claimed { steps, env, scope }) = claimed.await? else {
+            let Some(Claimed { steps, env, scope }) = self.claim_release(id, base).await? else {
                 return Ok(None);
             };
-            if let Some(base) = base {
-                self.build_pending_on(id, base.into()).await?;
-            }
             let caller = scope.map(Caller::of_space);
             let workspace = SpaceSelector::id(id);
             let spec = OperationSpec::Prepare { workspace, steps };
@@ -193,6 +187,35 @@ impl Manager {
                 (self.tell_preparation_failure(id, &Failure::Failed { message })).await;
             }
         }
+    }
+
+    /// Take the waiting preparation of the workspace `id` out of its record
+    /// to start it, creating its worktree on `base` when given, with the
+    /// workspace that owns it as its base, in one transaction under the
+    /// gates of a base change. A base it cannot take, such as one that
+    /// builds on it, ends the wait all the same, so the release fails once.
+    async fn claim_release(&self, id: &SpaceId, base: Option<String>) -> Result<Option<Claimed>> {
+        let base = base.map(BranchName::from);
+        let owner = match &base {
+            Some(base) => self.branch_owner(id, base).await?,
+            None => None,
+        };
+        let _gate = self.gates.lock_prs(owner.iter().chain([id])).await;
+        let claiming = id.clone();
+        let claimed = (self.store)
+            .write(move |tx| {
+                let claimed = claim_waiting(tx, &claiming)?;
+                if let (Some(_), Some(base)) = (&claimed, &base) {
+                    build_pending_in(tx, &claiming, base, owner.as_ref())?;
+                }
+                Ok(claimed)
+            })
+            .await;
+        if claimed.is_err() {
+            let ending = id.clone();
+            self.store.run(move |db| end_wait(db, &ending)).await?;
+        }
+        claimed
     }
 
     /// Record the preparation `start` of the workspace `id`, in the scope
@@ -262,6 +285,17 @@ pub(crate) fn preparation_waits(
         .transpose()?)
 }
 
+/// Record that the waiting preparation of the workspace `id`, if one waits
+/// for an agent, now waits for its stopped agent, as cancelling its launch
+/// leaves it.
+pub(crate) fn note_agent_stopped(db: &rusqlite::Connection, id: &SpaceId) -> Result<()> {
+    db.execute(
+        "UPDATE waiting_preparations SET waits=?2 WHERE workspace_id=?1 AND for_agent",
+        params![id, serde_json::to_string(&PreparationWait::Stopped)?],
+    )?;
+    Ok(())
+}
+
 /// Every waiting preparation.
 fn waiting_preparations(db: &mut rusqlite::Connection) -> Result<Vec<Waiting>> {
     let rows = db
@@ -299,7 +333,7 @@ fn end_wait(db: &mut rusqlite::Connection, id: &SpaceId) -> Result<()> {
 /// start it, if it still waits and, where it waits for an agent, the launch
 /// of that agent still waits to open the workspace: a stop that cancelled
 /// the launch since its gate was read keeps it waiting.
-fn claim_waiting(db: &mut rusqlite::Connection, id: &SpaceId) -> Result<Option<Claimed>> {
+fn claim_waiting(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<Claimed>> {
     let claimed: Option<(String, Option<String>, Option<SpaceId>)> = db
         .query_row(
             "DELETE FROM waiting_preparations WHERE workspace_id=?1

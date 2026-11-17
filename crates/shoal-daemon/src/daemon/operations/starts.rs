@@ -7,7 +7,7 @@
 mod failures;
 mod waiting;
 
-pub(crate) use waiting::preparation_waits;
+pub(crate) use waiting::{note_agent_stopped, preparation_waits};
 
 use crate::daemon::links::issue::{Assigner, AssignerOf};
 use shoal_ids::queue_entry_ids::QueueEntryId;
@@ -447,10 +447,9 @@ impl Manager {
             self.give_start_entry(entry, &workspace).await?;
         }
         // The agent an admitted launch starts in an existing workspace starts
-        // on a branch brought up to date.
-        if reused && preparing.queue_entry.is_some() {
-            self.refresh_admitted(&workspace).await;
-        }
+        // on what it was made from now.
+        let set_up_again =
+            reused && preparing.queue_entry.is_some() && self.refresh_admitted(&workspace).await;
         let may_wait = preparing.may_wait(&workspace);
         let Preparing {
             pr,
@@ -464,7 +463,7 @@ impl Manager {
         let entry = (self.queue_start_agent(opened, agent, (pr.clone(), blockers))).await?;
         let start = PreparationStart {
             steps: Preparation {
-                setup: workspace.state == WorkspaceState::Preparing,
+                setup: workspace.state == WorkspaceState::Preparing || set_up_again,
                 post_setup: !reused,
                 pr,
                 agent: None,

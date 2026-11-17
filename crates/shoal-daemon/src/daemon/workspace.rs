@@ -73,7 +73,7 @@ pub use agents::RestartWaits;
 pub(crate) use agents::{Pause, Protection};
 pub(crate) use branches::NewWorktreeOptions;
 pub(crate) use copies::CopyPlace;
-pub(crate) use creation::NewWorkspace;
+pub(crate) use creation::{NewWorkspace, build_pending_in};
 pub(crate) use daemon_exit::Ending;
 pub(crate) use executions::{Completing, ExecutionRequest, ReattachedExecution, StartedExecution};
 pub use executions::{ExecutionKind, StopRequest, UnprovenStop};

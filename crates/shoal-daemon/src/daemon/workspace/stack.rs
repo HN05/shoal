@@ -20,32 +20,17 @@ use crate::{
 };
 
 impl Manager {
-    /// Record the workspace that owns `branch` in `workspace`'s repository
-    /// as the base of `workspace`, for `cause`, under the gates and the
-    /// check of any base change; nothing when no workspace owns it.
-    pub(crate) async fn stack_on_branch(
+    /// The workspace that owns `branch` in the repository of the workspace
+    /// `id`, which a workspace may build on.
+    pub(crate) async fn branch_owner(
         &self,
-        workspace: &Workspace,
-        branch: BranchName,
-        cause: EventCause,
-    ) -> Result<()> {
-        let (id, repository_id) = (workspace.id.clone(), workspace.repository().clone());
-        let owner = (self.store)
+        id: &SpaceId,
+        branch: &BranchName,
+    ) -> Result<Option<SpaceId>> {
+        let repository_id = self.workspace_by_id(id).await?.repository().clone();
+        let branch = branch.clone();
+        (self.store)
             .run(move |db| owner(db, &repository_id, &branch))
-            .await?;
-        let Some(owner) = owner else {
-            return Ok(());
-        };
-        let _gate = self.gates.lock_prs([&owner, &id]).await;
-        self.store
-            .write(move |tx| {
-                ensure_acyclic(tx, &id, &owner)?;
-                tx.execute(
-                    "UPDATE workspaces SET base_workspace_id=?2 WHERE id=?1",
-                    params![id, owner],
-                )?;
-                record_base_changed(tx, &id, cause)
-            })
             .await
     }
 
@@ -124,6 +109,23 @@ fn ensure_acyclic(db: &Connection, id: &SpaceId, base: &SpaceId) -> Result<()> {
         "a workspace cannot build on itself or a workspace stacked on it"
     );
     Ok(())
+}
+
+/// Record `base` as the base of workspace `id` for `cause`, refusing one
+/// that would make it build on itself. The caller holds the PR gates of
+/// both, as every base change takes them.
+pub(crate) fn stack_on(
+    tx: &rusqlite::Transaction<'_>,
+    id: &SpaceId,
+    base: &SpaceId,
+    cause: EventCause,
+) -> Result<()> {
+    ensure_acyclic(tx, id, base)?;
+    tx.execute(
+        "UPDATE workspaces SET base_workspace_id=?2 WHERE id=?1",
+        params![id, base],
+    )?;
+    record_base_changed(tx, id, cause)
 }
 
 /// Journal the workspace's current base workspace.

@@ -496,12 +496,12 @@ async fn a_scoped_start_reopening_a_workspace_keeps_what_its_agent_was_given() {
 }
 
 /// Carry out an admitted launch in the existing `workspace`, as the queue's
-/// start does.
+/// start does, returning what its preparation runs.
 async fn reopen_for_admitted(
     manager: &Arc<Manager>,
     repository: &Repository,
     workspace: &Workspace,
-) {
+) -> crate::protocol::operations::Preparation {
     let opening = Opening {
         start: WorkspaceStart::Workspace(SpaceSelector::id(&workspace.id)),
         base: None,
@@ -522,7 +522,11 @@ async fn reopen_for_admitted(
         .start_workspace((&repository.id).into(), opening, preparing, None)
         .await
         .unwrap();
-    let _worker = fake::take(started.operation.as_deref().unwrap());
+    let worker = fake::take(started.operation.as_deref().unwrap());
+    let OperationSpec::Prepare { steps, .. } = worker.order.spec else {
+        panic!("expected a preparation: {:?}", worker.order);
+    };
+    steps
 }
 
 #[tokio::test]
@@ -546,4 +550,26 @@ async fn an_admitted_agent_starts_on_its_untouched_branch_brought_up_to_date() {
     reopen_for_admitted(&manager, &repository, &touched).await;
     assert!(!touched.path.join("later").exists());
     assert!(touched.path.join("own").exists());
+}
+
+#[tokio::test]
+async fn an_admitted_agent_starts_in_a_copy_of_its_source_as_it_is_now() {
+    let (root, manager) = manager().await;
+    let repository = registered(root.path(), &manager).await;
+    let source = (manager.create_workspace(&repository.id, "source".into(), None, None, None))
+        .await
+        .unwrap();
+    let copied = crate::protocol::CopySource {
+        workspace: SpaceSelector::id(&source.id),
+        checkpoint: None,
+    };
+    let place = crate::daemon::workspace::CopyPlace::Branch(Some("copy".into()));
+    let copy = (manager.create_copy((&repository.id).into(), &copied, place, Default::default()))
+        .await
+        .unwrap();
+    // The source's work went on while the copy's agent waited.
+    std::fs::write(source.path.join("later"), "later\n").unwrap();
+    let steps = reopen_for_admitted(&manager, &repository, &copy).await;
+    assert!(copy.path.join("later").exists());
+    assert!(steps.setup);
 }

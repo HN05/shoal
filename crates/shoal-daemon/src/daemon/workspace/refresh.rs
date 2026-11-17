@@ -43,27 +43,32 @@ impl Manager {
         self.refresh_to(&workspace, target, caller).await
     }
 
-    /// Bring the branch of `workspace`, whose admitted agent is about to
-    /// start there, up to date with what it builds on while it holds
-    /// nothing of its own, as `shoal refresh` does, with what the checkout
-    /// has of the default branch. A workspace at a commit, a copy, or one
-    /// that holds work of its own stays as it is, and one that cannot be
-    /// refreshed starts its agent as it is.
-    pub(crate) async fn refresh_admitted(&self, workspace: &Workspace) {
-        if workspace.copied_from.is_some() || workspace.branch().is_none() {
-            return;
+    /// Bring `workspace`, whose admitted agent is about to start there, up
+    /// to date with what it was made from while it holds nothing of its
+    /// own, as `shoal refresh` does, with what the checkout has of the
+    /// default branch: a branch fast-forwards to what it builds on, and a
+    /// copy takes its live source's files again. Returns whether its setup
+    /// is to run again, as for a copy whose source's files replaced what
+    /// setup wrote. A workspace at a commit, or one that holds work of its
+    /// own, stays as it is, and one that cannot be refreshed starts its
+    /// agent as it is.
+    pub(crate) async fn refresh_admitted(&self, workspace: &Workspace) -> bool {
+        if workspace.copied_from.is_none() && workspace.branch().is_none() {
+            return false;
         }
         let refreshed = async {
             let target = self.refresh_target(workspace, None).await?;
             self.refresh_to(workspace, target, None).await
         };
-        if let Err(error) = refreshed.await
-            && !error.is::<HoldsOwnWork>()
-        {
-            log!(
-                "{} starts its agent without a refresh: {error:#}",
-                workspace.name
-            );
+        match refreshed.await {
+            Ok(refreshed) => refreshed.setup,
+            Err(error) => {
+                if !error.is::<HoldsOwnWork>() {
+                    let name = &workspace.name;
+                    log!("{name} starts its agent without a refresh: {error:#}");
+                }
+                false
+            }
         }
     }
 
