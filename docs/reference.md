@@ -4313,7 +4313,8 @@ anyone else with your own logins.
 A command that needs only a repository, such as this one, reads the repository
 of the workspace or registered checkout it runs in, such as a chat's, else a
 registered repository the user picks, and with `--repo`, named as for
-`issue open --repo`, another repository. A
+`issue open --repo`, another repository, which needs none of them when its
+URL names it. A
 command that needs a capability the forge lacks fails before changing anything,
 naming the forge and the capability.
 
@@ -4398,11 +4399,13 @@ when several are assigned. A chat acts in its
 repository's registered checkout, and an issue it opens is recorded as opened
 there, or with `--link` assigned to it. Outside a space they act on the
 repository of the registered checkout they run in, as its agent account, and take
-only a number or URL. `-r`/`--repo`, instead of `--space`, names a registered
-repository by name, ID, path or remote URL to act on the same way from anywhere,
-so a client acting as the user needs no workspace; outside a space and a
-checkout, an issue or PR URL of a registered repository selects that repository
-too. Workspace processes act only from their own workspace, `pr open` needs one,
+only a number or URL. `-r`/`--repo`, instead of `--space`, names any repository
+as for `issue open --repo`, and an issue or PR URL names its own, registered or
+not, to act on the same way from anywhere, so a client acting as the user needs
+no workspace; a registered one is acted on through its checkout. Anyone reads
+another repository's items, while changing them is yours, with your own logins:
+a scoped process's change there is refused. Workspace processes act only from
+their own workspace, `pr open` needs one,
 and `pr revert` needs a space; a chat's revert that the forge cannot open itself
 comes from a new workspace the chat opens.
 Outside all of them, a non-interactive call fails saying so. `edit`
@@ -4571,7 +4574,7 @@ with merged PRs counted as closed. `--limit` caps the list at 1 to 1000 items,
 30 by default. `--repo` searches another repository, named as for
 `issue open --repo`; for anyone but a workspace process, one that names a
 registered repository is searched through its checkout, needing no workspace,
-as `issue open`, `repo labels`, `forge capabilities`, `forge reactions` and
+and one named by its URL needs neither, as `issue open`, `repo labels`, `forge capabilities`, `forge reactions` and
 `forge api` use it. Workspace processes search as the agent account, anyone else
 with your own logins. Each line shows an item's number, state (`draft` for an
 open draft PR), title, labels and each assignee after an `@`; JSON lists the

@@ -85,32 +85,33 @@ pub async fn list_items(
     pages(daemon, method).await
 }
 
-/// The items `selection` names in `context`: in a space, where it may name
-/// linked ones, or in a registered checkout, where only a number or URL
-/// selects one. With `elsewhere`, an issue, PR or CI run URL of another
+/// The items `selection` names in the `target` repository: in a space's
+/// own, where it may name linked ones, or elsewhere, where only a number or
+/// URL selects one. With `elsewhere`, an issue, PR or CI run URL of another
 /// repository selects that item.
 pub async fn select_items(
     daemon: &impl Daemon,
-    context: ItemContext,
+    target: RepoTarget,
     selection: Selection,
     elsewhere: bool,
 ) -> Result<Selected> {
     let method = ItemMethod::SelectItems {
-        context,
+        target,
         selection,
         elsewhere,
     };
     request(daemon, method).await
 }
 
-/// The kind of the item numbered `number` in `context`: in a space, that of
-/// the linked item with that number, otherwise the kind the forge reports.
+/// The kind of the item numbered `number` in the `target` repository: in a
+/// space's own, that of the linked item with that number, otherwise the
+/// kind the forge reports.
 pub async fn number_kind(
     daemon: &impl Daemon,
-    context: ItemContext,
+    target: RepoTarget,
     number: u64,
 ) -> Result<LinkKind> {
-    request(daemon, ItemMethod::NumberKind { context, number }).await
+    request(daemon, ItemMethod::NumberKind { target, number }).await
 }
 
 /// The open issue `item` names in `context`'s repository, by number or
@@ -162,26 +163,26 @@ pub async fn pull_request(
     request(daemon, ItemMethod::PullRequest { context, item }).await
 }
 
-/// Who the PR `item` names in `context`'s repository, or the space's linked
-/// PR, can ask for a review.
+/// Who the PR `item` names in the `target` repository, or the space's
+/// linked PR, can ask for a review.
 pub async fn reviewers(
     daemon: &impl Daemon,
-    context: ItemContext,
+    target: RepoTarget,
     item: Option<ItemInput>,
 ) -> Result<Vec<Reviewer>> {
-    pages(daemon, ItemMethod::Reviewers { context, item }).await
+    pages(daemon, ItemMethod::Reviewers { target, item }).await
 }
 
-/// The review thread of `comment` on the PR `item` names in `context`'s
+/// The review thread of `comment` on the PR `item` names in the `target`
 /// repository, or on the space's linked PR.
 pub async fn review_thread(
     daemon: &impl Daemon,
-    context: ItemContext,
+    target: RepoTarget,
     item: Option<ItemInput>,
     comment: CommentId,
 ) -> Result<Thread> {
     let method = ItemMethod::ReviewThread {
-        context,
+        target,
         item,
         comment,
     };
@@ -193,10 +194,10 @@ pub async fn review_thread(
 /// `None` when it brings none.
 pub async fn merge_warning(
     daemon: &impl Daemon,
-    context: ItemContext,
+    target: RepoTarget,
     item: Option<ItemInput>,
 ) -> Result<Option<MergeWarning>> {
-    request(daemon, ItemMethod::MergeWarning { context, item }).await
+    request(daemon, ItemMethod::MergeWarning { target, item }).await
 }
 
 /// The merged PR `item`, by default `space`'s linked one, with what

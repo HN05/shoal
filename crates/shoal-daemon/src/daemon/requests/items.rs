@@ -1,7 +1,7 @@
 //! The daemon's answers to [`ItemMethod`] requests, and who may send them.
 use std::sync::Arc;
 
-use anyhow::{Result, bail};
+use anyhow::{Context as _, Result, bail};
 
 use super::super::{
     answer::Answer,
@@ -62,8 +62,8 @@ pub(super) async fn handle(
             let labels = manager.labels(&target, caller).await;
             return Ok(Answer::pages(labels, Body::Labels));
         }
-        ItemMethod::Reviewers { context, item } => {
-            let reviewers = manager.reviewers(&context, item, caller).await;
+        ItemMethod::Reviewers { target, item } => {
+            let reviewers = manager.reviewers(&target, item, caller).await;
             return Ok(Answer::pages(reviewers, Body::Reviewers));
         }
         ItemMethod::Capabilities { target } => {
@@ -73,16 +73,16 @@ pub(super) async fn handle(
             Body::Reactions(manager.reactions(&target, caller).await?)
         }
         ItemMethod::ReviewThread {
-            context,
+            target,
             item,
             comment,
         } => Body::Thread(
             manager
-                .review_thread(&context, item, comment, caller)
+                .review_thread(&target, item, comment, caller)
                 .await?,
         ),
-        ItemMethod::NumberKind { context, number } => {
-            Body::LinkKind(manager.number_kind(&context, number, caller).await?)
+        ItemMethod::NumberKind { target, number } => {
+            Body::LinkKind(manager.number_kind(&target, number, caller).await?)
         }
         ItemMethod::IssueDetails {
             context,
@@ -103,12 +103,12 @@ pub(super) async fn handle(
             Body::PullRequest(manager.pull_request(&context, &item, caller).await?)
         }
         ItemMethod::ViewItems {
-            context,
+            target,
             selection,
             comments,
         } => {
             let viewed = manager
-                .view_items(&context, &selection, comments, caller)
+                .view_items(&target, &selection, comments, caller)
                 .await
                 .and_then(|viewed| json_pieces(&viewed));
             return Ok(Answer::pages(viewed, Body::ViewPieces));
@@ -131,23 +131,19 @@ pub(super) async fn handle(
             return Ok(Answer::pages(download, Body::Downloaded));
         }
         ItemMethod::ItemAction {
-            context,
+            target,
             kind,
             item,
             action,
             confirmed,
         } => Body::Item(match confirmed {
             Some(confirmed) => {
-                (manager.confirmed_merge(&context, item, action, &confirmed, caller)).await?
+                (manager.confirmed_merge(&target, item, action, &confirmed, caller)).await?
             }
-            None => {
-                manager
-                    .item_action(&context, kind, item, action, caller)
-                    .await?
-            }
+            None => (manager.item_action(&target, kind, item, action, caller)).await?,
         }),
-        ItemMethod::MergeWarning { context, item } => {
-            Body::MergeWarning(manager.merge_warning(&context, item).await?)
+        ItemMethod::MergeWarning { target, item } => {
+            Body::MergeWarning(manager.merge_warning(&target, item).await?)
         }
         ItemMethod::OpenPull {
             workspace,
@@ -177,12 +173,12 @@ pub(super) async fn handle(
             link,
         } => Body::Opened(manager.open_issue(&target, issue, link, caller).await?),
         ItemMethod::SelectItems {
-            context,
+            target,
             selection,
             elsewhere,
         } => Body::SelectedItems(
             manager
-                .select_context_items(&context, &selection, elsewhere, caller)
+                .select_context_items(&target, &selection, elsewhere, caller)
                 .await?,
         ),
         ItemMethod::LinkItem {
@@ -245,7 +241,7 @@ impl Scoped for ItemMethod {
             // permission's, and the merge then names the head its request
             // binds.
             ItemMethod::ItemAction {
-                context,
+                target,
                 item,
                 action:
                     action @ (Action::Merge { .. }
@@ -254,62 +250,61 @@ impl Scoped for ItemMethod {
                     | Action::DeleteBranch),
                 ..
             } => {
+                let context = own_context(caller, target);
                 let repository = reached_change_context(manager, caller, context).await?;
-                let subject = manager.bind_merge(context, item.clone(), action);
+                let subject = manager.bind_merge(target, item.clone(), action, caller);
                 let merge = permissions::Action::new(PermissionKey::Merge, subject.await?)
                     .in_repository(repository);
                 manager.authorize_action(Some(caller), merge).await?;
-                Some(context_selector(context)?)
-            }
-            ItemMethod::MergeWarning { context, .. } => {
-                read_context_space(manager, caller, context).await?
+                Some(target_selector(target)?)
             }
             // Approving and requesting changes are the `pr_review`
             // permission's.
             ItemMethod::ItemAction {
-                context,
+                target,
                 item,
                 action: Action::Review(review),
                 ..
             } => {
                 if review.has_verdict() {
+                    let context = own_context(caller, target);
                     let repository = reached_change_context(manager, caller, context).await?;
                     let key = PermissionKey::PrReview;
                     manager
                         .refuse_denied(caller, key, Some(&repository))
                         .await?;
-                    let verdict = manager.verdict_action(context, item.clone(), review, repository);
+                    let verdict =
+                        manager.verdict_action(target, item.clone(), review, repository, caller);
                     manager
                         .authorize_action(Some(caller), verdict.await?)
                         .await?;
                 }
+                let context = own_context(caller, target);
                 Some(change_context_space(manager, caller, context).await?)
             }
             // Reads go out as the agent account wherever they run.
             ItemMethod::ListItems { target, .. }
             | ItemMethod::Labels { target }
             | ItemMethod::Capabilities { target }
-            | ItemMethod::Reactions { target } => {
+            | ItemMethod::Reactions { target }
+            | ItemMethod::MergeWarning { target, .. }
+            | ItemMethod::Reviewers { target, .. }
+            | ItemMethod::ReviewThread { target, .. }
+            | ItemMethod::NumberKind { target, .. }
+            | ItemMethod::SelectItems { target, .. }
+            | ItemMethod::ViewItems { target, .. } => {
                 read_context_space(manager, caller, own_context(caller, target)).await?
             }
-            ItemMethod::Reviewers { context, .. }
-            | ItemMethod::ReviewThread { context, .. }
-            | ItemMethod::NumberKind { context, .. }
-            | ItemMethod::IssueDetails { context, .. }
+            ItemMethod::IssueDetails { context, .. }
             | ItemMethod::IssueBlockers { context, .. }
-            | ItemMethod::PullRequest { context, .. }
-            | ItemMethod::SelectItems { context, .. }
-            | ItemMethod::ViewItems { context, .. } => {
+            | ItemMethod::PullRequest { context, .. } => {
                 read_context_space(manager, caller, context).await?
             }
             ItemMethod::OpenIssue { target, .. }
             | ItemMethod::ForgeApi { target, .. }
-            | ItemMethod::ForgeDownload { target, .. } => {
-                let context = own_context(caller, target);
-                Some(change_context_space(manager, caller, context).await?)
-            }
-            ItemMethod::ItemAction {
-                context,
+            | ItemMethod::ForgeDownload { target, .. }
+            | ItemMethod::ItemAction {
+                target,
                 action:
                     Action::Edit(_)
                     | Action::Comment { .. }
@@ -320,7 +315,10 @@ impl Scoped for ItemMethod {
                     | Action::Reopen
                     | Action::Update { .. },
                 ..
-            } => Some(change_context_space(manager, caller, context).await?),
+            } => {
+                let context = own_context(caller, target);
+                Some(change_context_space(manager, caller, context).await?)
+            }
             ItemMethod::LinkItem {
                 space: workspace, ..
             }
@@ -349,6 +347,12 @@ impl Scoped for ItemMethod {
 /// `target` names another.
 pub(super) fn own_context<'a>(caller: &Caller, target: &'a mut RepoTarget) -> &'a mut ItemContext {
     (target.context).get_or_insert_with(|| ItemContext::space(SpaceSelector::id(&caller.space_id)))
+}
+
+/// The space `target` comes from, which [`context_selector`] names.
+pub(super) fn target_selector(target: &mut RepoTarget) -> Result<&mut SpaceSelector> {
+    let context = target.context.as_mut();
+    context_selector(context.context("scoped processes act on items from their space")?)
 }
 
 /// The space `context` names: a scoped process acts on items from its

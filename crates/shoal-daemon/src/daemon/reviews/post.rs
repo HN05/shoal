@@ -82,12 +82,12 @@ impl Manager {
             diff.as_ref()
                 .is_some_and(|diff| diff.shows(&finding.path, u64::from(finding.line)))
         };
-        let context = ItemContext::space(SpaceSelector::id(&workspace.id));
+        let target = ItemContext::space(SpaceSelector::id(&workspace.id)).into();
         let action = Action::Review(new_review(review, shows, moved.then_some(head)));
         let url = pull.to_string();
         match self
             .item_action(
-                &context,
+                &target,
                 ItemKind::Pr,
                 Some(pull.clone().into()),
                 action,
@@ -100,7 +100,7 @@ impl Manager {
             Err(error) if error.downcast_ref::<HeadMoved>().is_some() => {
                 let action = Action::Review(new_review(review, |_| false, Some(head)));
                 self.item_action(
-                    &context,
+                    &target,
                     ItemKind::Pr,
                     Some(pull.clone().into()),
                     action,

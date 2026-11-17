@@ -328,7 +328,7 @@ async fn deleting_a_pr_s_branch_follows_the_merge_permission() {
         .unwrap();
     let chat = chat(&manager, "chat", "chat", Some(&repo), None).await;
     let mut delete = ItemMethod::ItemAction {
-        context: ItemContext::space(SpaceSelector::id(&chat.id)),
+        target: ItemContext::space(SpaceSelector::id(&chat.id)).into(),
         kind: ItemKind::Pr,
         item: Some("12".parse().unwrap()),
         action: ItemAction::DeleteBranch,

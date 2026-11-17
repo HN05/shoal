@@ -40,7 +40,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<ForgeRepo> {
         let target = self.forge_target(target, None, Access::Read, caller);
-        Ok(target.await?.forge)
+        target.await?.into_forge()
     }
 }
 

@@ -53,7 +53,8 @@ impl Manager {
             kind: Some(LinkKind::Issue),
             input: Some(input),
         };
-        let selected = (self.select_context_items(context, &selection, true, caller)).await?;
+        let selected =
+            (self.select_context_items(&context.clone().into(), &selection, true, caller)).await?;
         let issue = selected.items.into_iter().next();
         Ok(ItemInput::Url(
             anyhow::Context::context(issue, "no issue selected")?.url,

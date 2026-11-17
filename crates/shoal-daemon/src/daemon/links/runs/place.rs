@@ -129,7 +129,7 @@ impl Manager {
         input: &ItemInput,
         caller: Option<&Caller>,
     ) -> Result<RunPlace> {
-        let named = self.named_run_forge(input).await?;
+        let named = self.input_forge(input).await?;
         self.run_place(context, named, caller).await
     }
 
@@ -163,17 +163,6 @@ impl Manager {
         Ok((place, Some(link.workflow), link.branch))
     }
 
-    /// The repository the run URL `input` names, or none for a run number.
-    pub(in crate::daemon::links) async fn named_run_forge(
-        &self,
-        input: &ItemInput,
-    ) -> Result<Option<ForgeRepo>> {
-        Ok(match input {
-            ItemInput::Url(run) => Some(self.item_forge(run).await?),
-            ItemInput::Number(_) => None,
-        })
-    }
-
     /// Refuse a workspace process the explicitly selected run of another
     /// repository than its space's, which a watch would read with the user's
     /// own logins. A chat without a repository counts every registered
@@ -186,7 +175,7 @@ impl Manager {
         let (Some(LinkKind::Ci), Some(input)) = (selection.kind, selection.input.as_ref()) else {
             return Ok(());
         };
-        let Some(named) = self.named_run_forge(input).await? else {
+        let Some(named) = self.input_forge(input).await? else {
             return Ok(());
         };
         if self.space(selector).await?.repository_id.as_ref().is_none() {

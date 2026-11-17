@@ -21,7 +21,7 @@ mod run_approval;
 mod runs;
 pub(crate) mod space;
 mod stack;
-mod target;
+pub(in crate::daemon) mod target;
 mod verdict;
 mod view;
 pub mod wait;
@@ -326,7 +326,7 @@ impl Manager {
     ) -> Result<ItemRef> {
         let forge = match kind {
             // A run's URL may name another repository.
-            LinkKind::Ci => match self.named_run_forge(input).await? {
+            LinkKind::Ci => match self.input_forge(input).await? {
                 Some(forge) => forge,
                 None => self.space_forge(space).await?,
             },

@@ -303,7 +303,10 @@ unlink or the space's removal, and linking it warns of anyone else assigned;
 `[issue] assign` also or instead adds the user's own login. `--repo OWNER/NAME`, or a repository URL on another forge, opens it
 in another repository, as the space's `issue_other_repositories` permission
 allows;
-`issue ls` and `pr ls` take `--repo` too, and match their words by
+`issue ls`, `pr ls`, `view` and the other issue and PR commands take `--repo`
+too, or an item's URL, for any repository, registered or not: an agent reads
+another repository's items, and changing them is the user's. `issue ls` and
+`pr ls` match their words by
 `--match keyword`, `meaning` where the forge searches by meaning, or `both`
 ways by default, which on another forge is its keyword search. `shoal pr revert [<number>]`
 opens a PR that undoes a merged one; where the forge cannot, it opens it from a

@@ -82,23 +82,6 @@ async fn a_chat_without_a_repository_acts_in_each_repository_under_its_permissio
     }
     assert_eq!(openings, [Opening::Propose, Opening::Direct]);
 
-    // A request resolving its space from the context keeps the checkout it
-    // acts in, as a check log's does.
-    let context = acting_in(&master, &repos[1]);
-    let space = manager.context_space_if_any(&context).await.unwrap();
-    assert_eq!(
-        space.map(|space| space.repository_id().to_owned()),
-        Some(repos[1].id.clone())
-    );
-    let checkout = ItemContext::Checkout(repos[1].id.clone());
-    assert!(
-        manager
-            .context_space_if_any(&checkout)
-            .await
-            .unwrap()
-            .is_none()
-    );
-
     // Its proposal names the repository it acts in, where the decision
     // finds it again.
     let space = manager

@@ -8,7 +8,7 @@ fn selected_numbers_name_one_kind() {
         relations: Vec::new(),
     };
     let mut selected = Selected {
-        path: PathBuf::new(),
+        path: None,
         items: vec![
             item("https://gitlab.com/team/repo/-/issues/5"),
             item("https://gitlab.com/team/repo/-/merge_requests/6"),

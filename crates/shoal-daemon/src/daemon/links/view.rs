@@ -2,10 +2,7 @@
 //! reports them now, with the logs of failed checks.
 use anyhow::Result;
 
-use super::{
-    place::{Access, Place},
-    space::LinkSpace,
-};
+use super::{place::Place, space::LinkSpace, target::ForgeTarget};
 use crate::{
     daemon::{scope::Caller, workspace::Manager},
     forge::{
@@ -17,25 +14,27 @@ use crate::{
         review::view::ItemView,
     },
     model::SelectedItem,
-    protocol::ItemContext,
+    protocol::RepoTarget,
 };
 use shoal_forge::{account::Account, ci::checks::CheckRequests, review::view::ViewRequests};
 use shoal_protocol::views::Viewed;
 
 impl Manager {
-    /// The items `selection` names in `context`, each issue and PR among
-    /// them read as the account of `caller`, a scoped caller's agent
-    /// account or the user's own logins, in selection order.
+    /// The items `selection` names in the `target` repository, each issue
+    /// and PR among them read as the account of `caller`, a scoped caller's
+    /// agent account or the user's own logins, in selection order.
     pub async fn view_items(
         &self,
-        context: &ItemContext,
+        target: &RepoTarget,
         selection: &Selection,
         comments: bool,
         caller: Option<&Caller>,
     ) -> Result<Viewed> {
         let account = self.read_account(caller);
-        let place = self.place(context, Access::Read).await?;
-        let items = self.view_selection(&place, selection, &account).await?;
+        let target = self
+            .selection_target(target, selection, true, caller)
+            .await?;
+        let items = self.view_selection(&target, selection, &account).await?;
         // Nothing to read, so no forge is needed, as for a local repository.
         if !items.iter().any(|item| item.kind().item().is_some()) {
             return Ok(Viewed {
@@ -43,36 +42,34 @@ impl Manager {
                 views: Vec::new(),
             });
         }
-        let own = self.place_forge(&place).await?;
-        let mut views = self.read_views(&own, &account, &items, comments).await;
+        let forge = target.forge()?;
+        let mut views = self.read_views(forge, &account, &items, comments).await;
         // Logs are read as the agent account, whose token is the reading
         // one's for a scoped caller and the user's without one of its own.
-        let own_token = caller.is_none() && self.config().machine.forges.has_agent_token(&own.host);
+        let own_token =
+            caller.is_none() && self.config().machine.forges.has_agent_token(&forge.host);
         let agent = own_token.then(|| self.agent_account());
-        own.read_failed_logs(agent.as_ref().unwrap_or(&account), &mut views)
+        forge
+            .read_failed_logs(agent.as_ref().unwrap_or(&account), &mut views)
             .await;
         Ok(Viewed { items, views })
     }
 
-    /// The items `selection` names: in a space, where it may name linked
-    /// ones, or in the repository of the registered checkout. An issue, PR
-    /// or CI run URL of another repository selects that item.
+    /// The items `selection` names in `target`: in a space's own
+    /// repository, where it may name linked ones and a number takes the
+    /// kind of the linked item with it, otherwise the one its number or URL
+    /// names.
     async fn view_selection(
         &self,
-        place: &Place,
+        target: &ForgeTarget,
         selection: &Selection,
         account: &Account,
     ) -> Result<Vec<SelectedItem>> {
-        match place {
-            Place::Space(space) => {
-                let selection = self.classify_number(space, selection, account).await?;
-                Ok(self.select_items(space, &selection, true).await?.items)
-            }
-            Place::Checkout(checkout) => {
-                let item = (self.checkout_item(checkout, selection, true, account)).await?;
-                Ok(vec![item])
-            }
-        }
+        let selection = match target.own_place().and_then(Place::space) {
+            Some(space) => self.classify_number(space, selection, account).await?,
+            None => selection.clone(),
+        };
+        (self.target_selection(target, &selection, true, account)).await
     }
 
     /// `selection` with the kind of a number selected without one: the kind
@@ -121,7 +118,8 @@ impl Manager {
         .await
     }
 
-    /// The repository `item` is in: `own`, or the other one its URL names.
+    /// The repository `item` is in: `own`, the one the view reads in, or
+    /// the other one its URL names.
     async fn viewed_item_forge(&self, own: &ForgeRepo, item: &ItemRef) -> Result<ForgeRepo> {
         if item.repository() == own {
             return Ok(own.clone());

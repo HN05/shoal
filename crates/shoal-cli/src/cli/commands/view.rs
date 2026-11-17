@@ -19,7 +19,7 @@ use crate::{
         review::view::{AutoMerge, Details, PrDetails, Review},
     },
     model::Relation,
-    protocol::ItemContext,
+    protocol::{ItemContext, RepoTarget},
 };
 
 /// Show or open what `args` selects: one CI run as `ci` reads it, otherwise
@@ -56,17 +56,17 @@ async fn view(
     // Plain `shoal view` in a workspace adds its latest review.
     let plain = items.kind_or_url.is_none();
     if let Some(check) = check {
-        let (context, selection) = links::select_in_context(ctx, items, repo).await?;
-        return show_log(ctx, context, selection, check).await;
+        let (target, selection) = links::select_in_context(ctx, items, repo).await?;
+        return show_log(ctx, target, selection, check).await;
     }
-    let (context, selection) = links::in_context(ctx, items, repo).await?;
-    let read = views::read(&ctx.paths, context.clone(), selection, !no_comments);
+    let (target, selection) = links::in_context(ctx, items, repo).await?;
+    let read = views::read(&ctx.paths, target.clone(), selection, !no_comments);
     let mut views = ctx.progress("Reading items", read).await?;
     if plain
-        && let ItemContext::Space {
-            space: workspace,
-            repository: None,
-        } = &context
+        && links::in_own_space(&target)
+        && let Some(ItemContext::Space {
+            space: workspace, ..
+        }) = &target.context
     {
         let latest = super::review::show::latest(ctx, workspace.clone()).await;
         views.extend(latest.map(|review| {
@@ -130,8 +130,8 @@ fn render_views(views: &[Shown], json: bool) {
 /// the opener fails, for a terminal elsewhere; workspace processes cannot.
 async fn open(ctx: &Context, items: ItemArgs, repo: Option<String>) -> Result<i32> {
     may_open_browser(ctx)?;
-    let (context, selection) = links::select_in_context(ctx, items, repo).await?;
-    let selected = client::select_items(&ctx.paths, context, selection, true).await?;
+    let (target, selection) = links::select_in_context(ctx, items, repo).await?;
+    let selected = client::select_items(&ctx.paths, target, selection, true).await?;
     open_urls(
         ctx,
         (selected.items.into_iter())
@@ -163,14 +163,14 @@ pub(super) fn may_open_browser(ctx: &Context) -> Result<()> {
 /// The log of the selected PR's `check`.
 async fn show_log(
     ctx: &Context,
-    context: ItemContext,
+    target: RepoTarget,
     selection: Selection,
     check: String,
 ) -> Result<i32> {
     let log: CheckLog = ctx
         .progress(
             "Reading check log",
-            crate::client::ci::check_log(&ctx.paths, context, selection, check),
+            crate::client::ci::check_log(&ctx.paths, target, selection, check),
         )
         .await?;
     ctx.show(&log, render_log)?;

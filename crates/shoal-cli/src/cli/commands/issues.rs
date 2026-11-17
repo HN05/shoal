@@ -264,7 +264,7 @@ pub(in crate::cli) async fn issue(
         input: Some(input.clone()),
     };
     let context = read_context(ctx, repo).await?;
-    let selected = client::select_items(&ctx.paths, context, selection, true).await?;
+    let selected = client::select_items(&ctx.paths, context.into(), selection, true).await?;
     let issue = selected.items.into_iter().next();
     Ok(issue.context("no issue selected")?.url)
 }

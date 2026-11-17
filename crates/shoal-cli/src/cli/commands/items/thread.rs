@@ -1,7 +1,7 @@
 //! `shoal pr reply`, `resolve` and `unresolve`: changes to a review thread.
 use anyhow::{Context as _, Result, ensure};
 
-use super::{content::read_body, item_context};
+use super::{content::read_body, item_target};
 use crate::{
     cli::{
         args::{BodyArgs, changes::ItemSelector},
@@ -52,8 +52,8 @@ async fn confirm_unanswered(
     selector: &ItemSelector,
     comment: CommentId,
 ) -> Result<()> {
-    let context = item_context(ctx, selector).await?;
-    let read = client::review_thread(&ctx.paths, context, selector.item.clone(), comment);
+    let target = item_target(ctx, selector).await?;
+    let read = client::review_thread(&ctx.paths, target, selector.item.clone(), comment);
     let thread = ctx.progress("Reading thread", read).await?;
     if thread.replies == 0 {
         ensure!(

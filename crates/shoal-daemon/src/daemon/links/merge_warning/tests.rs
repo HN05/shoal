@@ -172,7 +172,9 @@ async fn a_merge_is_refused_once_its_warning_is_not_the_one_confirmed() {
         &checkout.path,
         &["remote", "add", "origin", "https://github.com/team/repo"],
     );
-    let context = ItemContext::space(SpaceSelector::id(&workspace.id));
+    let context = RepoTarget::from(crate::protocol::ItemContext::space(SpaceSelector::id(
+        &workspace.id,
+    )));
     // Nothing links PR 7, so merging it warns about nothing.
     let confirmed = ConfirmedWarning {
         warning: Some(MergeWarning {
@@ -271,7 +273,9 @@ async fn a_confirmed_merge_keeps_the_pr_whose_warning_it_read() {
     let first = format!("http://{host}/team/repo/pulls/1");
     link_pull(&manager.paths.database(), workspace.id.as_str(), &first);
 
-    let context = ItemContext::space(SpaceSelector::id(&workspace.id));
+    let context = RepoTarget::from(crate::protocol::ItemContext::space(SpaceSelector::id(
+        &workspace.id,
+    )));
     let warning = manager.merge_warning(&context, None).await.unwrap();
     assert!(warning.is_some());
     let merge = Action::Merge {
@@ -323,7 +327,15 @@ async fn a_merge_binds_the_head_the_pr_has_unless_it_names_one() {
     .await;
     let origin = format!("http://{host}/team/repo");
     crate::daemon::test_support::git(&repo, &["remote", "add", "origin", &origin]);
-    let context = ItemContext::space(SpaceSelector::id(&workspace.id));
+    let context = RepoTarget::from(crate::protocol::ItemContext::space(SpaceSelector::id(
+        &workspace.id,
+    )));
+    let caller = Caller {
+        space_id: workspace.id.clone(),
+        execution: None,
+        granted: None,
+        read_only: false,
+    };
     let merge = |head| Action::AutoMerge {
         method: crate::forge::items::action::MergeMethod::Merge,
         delete_branch: false,
@@ -331,13 +343,13 @@ async fn a_merge_binds_the_head_the_pr_has_unless_it_names_one() {
     };
 
     let mut read = merge(None);
-    let subject = manager.bind_merge(&context, Some("1".parse().unwrap()), &mut read);
+    let subject = manager.bind_merge(&context, Some("1".parse().unwrap()), &mut read, &caller);
     assert!(subject.await.unwrap().ends_with(&format!(" at {head}")));
     assert_eq!(read.merge_head(), Some(&head));
     // A merge that names its head, as an approval bound it, keeps it.
     let named = CommitId::from("b".repeat(40));
     let mut kept = merge(Some(named.clone()));
-    let subject = manager.bind_merge(&context, Some("1".parse().unwrap()), &mut kept);
+    let subject = manager.bind_merge(&context, Some("1".parse().unwrap()), &mut kept, &caller);
     assert!(subject.await.unwrap().ends_with(&format!(" at {named}")));
     assert_eq!(kept.merge_head(), Some(&named));
 }

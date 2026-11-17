@@ -120,7 +120,7 @@ impl Manager {
                 .collect(),
         };
         Ok(Selected {
-            path: space.origin_path().to_owned(),
+            path: Some(space.origin_path().to_owned()),
             items,
         })
     }

@@ -129,17 +129,6 @@ impl Manager {
         }
     }
 
-    /// [`Self::context_space`], or none for a registered checkout.
-    pub(crate) async fn context_space_if_any(
-        &self,
-        context: &ItemContext,
-    ) -> Result<Option<LinkSpace>> {
-        match context {
-            ItemContext::Checkout(_) => Ok(None),
-            ItemContext::Space { .. } => self.context_space(context).await.map(Some),
-        }
-    }
-
     /// The space `space` names acting in the registered repository
     /// `repository` names: its own, or for a space without one, a chat, any,
     /// which then counts as its own. A space with a repository acts only in

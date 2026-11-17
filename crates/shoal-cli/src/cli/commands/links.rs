@@ -18,7 +18,7 @@ use crate::{
         reference::ItemInput,
     },
     model::{ReadyMarks, Relation, ReviewMark},
-    protocol::ItemContext,
+    protocol::{ItemContext, RepoTarget},
 };
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::space_names::SpaceSelector;
@@ -28,24 +28,24 @@ use shoal_protocol::space_names::SpaceSelector;
 pub(super) async fn select(ctx: &Context, items: ItemArgs) -> Result<(SpaceSelector, Selection)> {
     let selection = items.selection()?;
     let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory).await?;
-    let context = ItemContext::space(space.clone());
-    let selection = resolve_kind(ctx, context, selection).await?;
+    let target = ItemContext::space(space.clone()).into();
+    let selection = resolve_kind(ctx, target, selection).await?;
     Ok((space, selection))
 }
 
-/// The items selected in the named or current space, or in the checkout of
-/// the registered repository `repo` names or the current directory or a URL
-/// is in, where only a number or URL selects one. A bare number keeps no
+/// The items selected in the named or current space, or in the repository
+/// `repo` names, of the checkout the current directory or a URL is in, or
+/// of a URL, where only a number or URL selects one. A bare number keeps no
 /// kind, which the daemon gives it as it reads.
 pub(super) async fn in_context(
     ctx: &Context,
     items: ItemArgs,
     repo: Option<String>,
-) -> Result<(ItemContext, Selection)> {
+) -> Result<(RepoTarget, Selection)> {
     let selection = items.selection()?;
     let input = selection.input.as_ref();
-    let context = super::items::select_space_item_context(ctx, items.space, repo, input).await?;
-    Ok((context, selection))
+    let target = super::items::select_item_target(ctx, items.space, repo, input).await?;
+    Ok((target, selection))
 }
 
 /// [`in_context`], with the kind of a bare number selected in a space
@@ -54,29 +54,40 @@ pub(super) async fn select_in_context(
     ctx: &Context,
     items: ItemArgs,
     repo: Option<String>,
-) -> Result<(ItemContext, Selection)> {
-    let (context, selection) = in_context(ctx, items, repo).await?;
-    let selection = match &context {
-        ItemContext::Space {
-            repository: None, ..
-        } => resolve_kind(ctx, context.clone(), selection).await?,
-        ItemContext::Space { .. } | ItemContext::Checkout(_) => selection,
+) -> Result<(RepoTarget, Selection)> {
+    let (target, selection) = in_context(ctx, items, repo).await?;
+    let selection = match in_own_space(&target) {
+        true => resolve_kind(ctx, target.clone(), selection).await?,
+        false => selection,
     };
-    Ok((context, selection))
+    Ok((target, selection))
+}
+
+/// Whether `target` is the own repository of the space it comes from, whose
+/// linked items a number may name.
+pub(super) fn in_own_space(target: &RepoTarget) -> bool {
+    let own = matches!(
+        &target.context,
+        Some(ItemContext::Space {
+            repository: None,
+            ..
+        })
+    );
+    own && target.repository.is_none()
 }
 
 /// Give a number selected without a kind the kind of the item with that
-/// number in `context`: in a space, that of the linked one, otherwise the
-/// kind the forge reports for it.
+/// number in the `target` repository: in a space's own, that of the linked
+/// one, otherwise the kind the forge reports for it.
 async fn resolve_kind(
     ctx: &Context,
-    context: ItemContext,
+    target: RepoTarget,
     selection: Selection,
 ) -> Result<Selection> {
     let (None, Some(ItemInput::Number(number))) = (selection.kind, &selection.input) else {
         return Ok(selection);
     };
-    let kind = client::number_kind(&ctx.paths, context, *number).await?;
+    let kind = client::number_kind(&ctx.paths, target, *number).await?;
     Ok(Selection {
         kind: Some(kind),
         ..selection
@@ -92,7 +103,7 @@ pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
     );
     let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory).await?;
     let context = ItemContext::space(space.clone());
-    let selected = resolve_kind(ctx, context.clone(), selected).await?;
+    let selected = resolve_kind(ctx, context.clone().into(), selected).await?;
     let (kind, input) = match selected {
         Selection {
             kind: Some(kind),
@@ -202,7 +213,7 @@ pub(super) async fn watch(
     let selection = items.selection()?;
     let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory).await?;
     let (context, repository) = watch_context(ctx, &space, repo.as_deref()).await?;
-    let selection = resolve_kind(ctx, context, selection).await?;
+    let selection = resolve_kind(ctx, context.into(), selection).await?;
     spaces::watch_items(ctx, space, selection, repository, timeout, resumed).await
 }
 

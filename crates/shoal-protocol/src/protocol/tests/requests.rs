@@ -177,7 +177,7 @@ const REQUESTS: &[&str] = &[
     r#"{"issue_details":{"checkout":"repo","item":"12"}}"#,
     r#"{"issue_blockers":{"checkout":"repo","item":"https://forge.example/o/r/issues/12"}}"#,
     r#"{"pull_request":{"space":{"space":"talk"},"item":"7"}}"#,
-    r#"{"view_items":{"space":{"space":"talk"},"selection":{"kind":"pr","input":"12"},"comments":true}}"#,
+    r#"{"view_items":{"repository":"https://forge.example/team/tool","selection":{"kind":"pr","input":"12"},"comments":true}}"#,
     r#"{"forge_api":{"space":{"space":"fix"},"request":{"method":"GET","path":"repos/{owner}/{repo}","body":null}}}"#,
     r#"{"forge_download":{"space":{"space":"fix"},"url":"https://forge.example/attachments/a1"}}"#,
     r#"{"select_items":{"checkout":"repo","selection":{"kind":null,"input":"12"},"elsewhere":true}}"#,

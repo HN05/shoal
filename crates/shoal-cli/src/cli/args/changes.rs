@@ -457,7 +457,7 @@ pub struct ListArgs {
 }
 
 // An issue or PR of the repository of the space, a workspace or chat, or of
-// the registered repository --repo names.
+// the repository --repo or the item's URL names.
 #[derive(Debug, Args)]
 pub struct ItemSelector {
     /// Number or URL; defaults to the linked one.
@@ -468,7 +468,18 @@ pub struct ItemSelector {
     #[arg(short = 's', long, conflicts_with = "repo")]
     pub space: Option<SpaceSelector>,
     #[command(flatten)]
-    pub repo: RegisteredRepo,
+    pub repo: TargetRepo,
+}
+
+// Any repository to act in instead of the space's, which conflicts with the
+// flag that names a space where it is flattened.
+#[derive(Debug, Default, Args)]
+pub struct TargetRepo {
+    /// Act in this repository: a registered repository's name, OWNER/NAME on
+    /// the current repository's forge, or a repository URL on any forge;
+    /// workspace processes read it, and change only their own.
+    #[arg(id = "repo", short = 'r', long = "repo", value_name = "REPOSITORY")]
+    pub name: Option<String>,
 }
 
 // A registered repository to act in instead of a workspace or chat, which

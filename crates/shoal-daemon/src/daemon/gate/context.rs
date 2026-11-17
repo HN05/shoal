@@ -126,12 +126,12 @@ impl Manager {
     /// The space's linked issues and PRs as the opening lists them; a failed
     /// lookup leaves them out.
     async fn gate_items(&self, space: &Space) -> Vec<String> {
-        let context = ItemContext::space(SpaceSelector::id(&space.id));
+        let target = ItemContext::space(SpaceSelector::id(&space.id)).into();
         let selection = Selection {
             kind: None,
             input: None,
         };
-        let viewed = match self.view_items(&context, &selection, false, None).await {
+        let viewed = match self.view_items(&target, &selection, false, None).await {
             Ok(viewed) => viewed,
             Err(error) => {
                 log!("the gate's view of {}: {error:#}", &space.name);

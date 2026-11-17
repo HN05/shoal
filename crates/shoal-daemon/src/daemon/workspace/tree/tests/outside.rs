@@ -377,7 +377,7 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
     let reading = crate::daemon::scope::authorize(&manager, Some(&scoped), &mut own).await;
     assert!(reading.is_err());
     let mut close = ItemMethod::ItemAction {
-        context: ItemContext::Checkout(repos[1].id.clone()),
+        target: ItemContext::Checkout(repos[1].id.clone()).into(),
         kind: crate::forge::items::link::ItemKind::Issue,
         item: Some("7".parse().unwrap()),
         action: crate::forge::items::action::Action::Close,
@@ -386,15 +386,15 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
     crate::daemon::scope::authorize(&manager, Some(&token), &mut close)
         .await
         .unwrap();
-    let ItemMethod::ItemAction { context, .. } = close else {
+    let ItemMethod::ItemAction { target, .. } = close else {
         unreachable!("the method stays an item action");
     };
-    let ItemContext::Space {
+    let Some(ItemContext::Space {
         space: acting,
         repository: Some(repository),
-    } = context
+    }) = target.context
     else {
-        panic!("expected the chat acting in the checkout: {context:?}");
+        panic!("expected the chat acting in the checkout: {target:?}");
     };
     assert_eq!(
         (acting, repository),
@@ -419,7 +419,7 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
 
     // What the scope keeps from every agent stays the user's.
     let mut merge = ItemMethod::ItemAction {
-        context: ItemContext::space(SpaceSelector::id(&master.id)),
+        target: ItemContext::space(SpaceSelector::id(&master.id)).into(),
         kind: crate::forge::items::link::ItemKind::Pr,
         item: Some("1".parse().unwrap()),
         action: crate::forge::items::action::Action::CancelAutoMerge,

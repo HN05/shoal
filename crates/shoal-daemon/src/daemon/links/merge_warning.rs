@@ -7,7 +7,11 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 
 use crate::{
-    daemon::workspace::{Manager, conflicts::recorded},
+    daemon::{
+        links::place::Access,
+        scope::Caller,
+        workspace::{Manager, conflicts::recorded},
+    },
     forge::{
         ForgeRepo,
         items::{
@@ -19,21 +23,21 @@ use crate::{
     },
     git::{self, default_branch::DefaultBranchLookup},
     model::{ChangedOnBothSides, ConfirmedWarning, MergeWarning},
-    protocol::ItemContext,
+    protocol::RepoTarget,
 };
 use shoal_forge::{RepoRequests, items::action::ActionRequests};
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
-    /// The warning for merging the PR `input` names in the repository of
-    /// `context`, or the space's linked PR, as the workspaces that link it
+    /// The warning for merging the PR `input` names in the `target`
+    /// repository, or the space's linked PR, as the workspaces that link it
     /// last checked its head against its base branch.
     pub async fn merge_warning(
         &self,
-        context: &ItemContext,
+        target: &RepoTarget,
         input: Option<ItemInput>,
     ) -> Result<Option<MergeWarning>> {
-        let (forge, url) = self.context_pull(context, input).await?;
+        let (forge, url) = self.context_pull(target, input, Access::Read, None).await?;
         let number = url.pull()?;
         let recorded = self.recorded_for_pull(url.clone()).await?;
         if recorded.is_empty() {
@@ -60,22 +64,20 @@ impl Manager {
     /// the warning is read leaves the merge with the PR it checked.
     pub async fn confirmed_merge(
         &self,
-        context: &ItemContext,
+        target: &RepoTarget,
         input: Option<ItemInput>,
         action: Action,
         confirmed: &ConfirmedWarning,
-        caller: Option<&crate::daemon::scope::Caller>,
+        caller: Option<&Caller>,
     ) -> Result<Item> {
         ensure!(action.merges(), "only a merge confirms a merge warning");
-        let (_, url) = self.context_pull(context, input).await?;
-        let current = self
-            .merge_warning(context, Some(url.clone().into()))
-            .await?;
+        let (_, url) = self.context_pull(target, input, Access::Read, None).await?;
+        let current = self.merge_warning(target, Some(url.clone().into())).await?;
         ensure!(
             current == confirmed.warning,
             "the merge warning changed since you confirmed the merge; run shoal pr merge again"
         );
-        self.item_action(context, ItemKind::Pr, Some(url.into()), action, caller)
+        self.item_action(target, ItemKind::Pr, Some(url.into()), action, caller)
             .await
     }
 
@@ -102,17 +104,19 @@ impl Manager {
         Ok(warning(branch.into(), vec![recorded], &merged))
     }
 
-    /// Bind a merge in `action` of the PR `input` names, or of `context`'s
-    /// linked PR, to the commit the PR's head has now, unless it names one,
+    /// Bind a merge in `action` of the PR `input` names, or of `target`'s
+    /// linked PR, for a scoped `caller`, to the commit the PR's head has now, unless it names one,
     /// and return what it does as an approval of it binds it: a later
     /// commit needs another decision, and the forge refuses to merge one.
     pub(crate) async fn bind_merge(
         &self,
-        context: &ItemContext,
+        target: &RepoTarget,
         input: Option<ItemInput>,
         action: &mut Action,
+        caller: &Caller,
     ) -> Result<String> {
-        let (forge, url) = self.context_pull(context, input).await?;
+        let pull = self.context_pull(target, input, Access::Change, Some(caller));
+        let (forge, url) = pull.await?;
         if action.merges() && action.merge_head().is_none() {
             let pull = forge.pull_request(&self.agent_account(), &url).await?;
             let head = pull.head_commit.context("the forge names no PR head")?;
@@ -122,29 +126,19 @@ impl Manager {
         Ok(format!("{} {url}{at}", action.name()))
     }
 
-    /// The forge and the PR `input` names in the repository of `context`, or
-    /// the space's linked PR.
+    /// The forge and the PR `input` names in the `target` repository, or
+    /// the space's linked PR, refusing a scoped `caller` a change elsewhere
+    /// than in its own repository.
     pub(super) async fn context_pull(
         &self,
-        context: &ItemContext,
+        target: &RepoTarget,
         input: Option<ItemInput>,
+        access: Access,
+        caller: Option<&Caller>,
     ) -> Result<(ForgeRepo, ItemRef)> {
-        match context {
-            ItemContext::Checkout(selector) => {
-                let checkout = self.repository(selector).await?;
-                let input = input.context(super::actions::NOTHING_LINKED)?;
-                let forge = self.checkout_forge(&checkout).await?;
-                let pull = ItemRef::in_repository(&forge, ItemKind::Pr.into(), &input)?;
-                Ok((forge, pull))
-            }
-            ItemContext::Space { .. } => {
-                let space = self.context_space(context).await?;
-                let forge = self.space_forge(&space).await?;
-                let pull =
-                    (self.named_or_linked(input, Some(&space.id), &forge, ItemKind::Pr)).await?;
-                Ok((forge, pull))
-            }
-        }
+        let (target, pull) =
+            (self.target_item(target, input, ItemKind::Pr, access, caller)).await?;
+        Ok((target.into_forge()?, pull))
     }
 
     /// The records of the workspaces that link the PR `url` which list

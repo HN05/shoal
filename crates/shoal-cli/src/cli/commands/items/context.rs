@@ -24,11 +24,8 @@ const NO_REPOSITORY: &str =
     "no current workspace or registered checkout; run this in one, or pass --repo";
 
 /// Where a command that acts on a space, a workspace or chat, runs: the
-/// registered repository `repo` names, else in a chat without a repository
-/// the registered repository of the issue or PR URL `item`, else the space
-/// `space` names or the chat this runs in, else the current workspace or
-/// checkout, else the registered repository of `item`, else a space the
-/// user picks.
+/// registered repository `repo` names, else as [`known_item_context`] finds
+/// it, else a space the user picks.
 pub(in crate::cli::commands) async fn select_space_item_context(
     ctx: &Context,
     space: Option<SpaceSelector>,
@@ -40,22 +37,63 @@ pub(in crate::cli::commands) async fn select_space_item_context(
             named_repository(ctx, &repo).await?.id,
         ));
     }
+    match known_item_context(ctx, space, item).await? {
+        Some(context) => Ok(context),
+        None => picked_space(ctx).await,
+    }
+}
+
+/// The repository a command about an issue, PR or CI run acts in: the one
+/// `repo` names, as [`select_repo_context`] finds it, else that of the
+/// context [`known_item_context`] finds, else the one the URL `item` names
+/// from nowhere, else that of a space the user picks.
+pub(in crate::cli::commands) async fn select_item_target(
+    ctx: &Context,
+    space: Option<SpaceSelector>,
+    repo: Option<String>,
+    item: Option<&ItemInput>,
+) -> Result<RepoTarget> {
+    if repo.is_some() {
+        return select_repo_context(ctx, repo).await;
+    }
+    let context = match known_item_context(ctx, space, item).await? {
+        Some(context) => Some(context),
+        None if matches!(item, Some(ItemInput::Url(_))) => None,
+        None => Some(picked_space(ctx).await?),
+    };
+    Ok(RepoTarget {
+        context,
+        repository: None,
+    })
+}
+
+/// Where a command about the space's items runs without asking: in a chat
+/// without a repository the registered repository of the issue or PR URL
+/// `item`, else the space `space` names or the chat this runs in, else the
+/// current workspace or checkout, else the registered repository of `item`.
+async fn known_item_context(
+    ctx: &Context,
+    space: Option<SpaceSelector>,
+    item: Option<&ItemInput>,
+) -> Result<Option<ItemContext>> {
     if space.is_none()
         && in_chat_outside_repositories(ctx).await?
         && let Some(checkout) = item_checkout(ctx, item).await?
     {
-        return Ok(checkout);
+        return Ok(Some(checkout));
     }
     if space.is_some() || ui::current_chat(&space).is_some() {
         let space = ui::select_space(ctx, space, ui::Fallback::CurrentDirectory).await?;
-        return Ok(ItemContext::space(space));
+        return Ok(Some(ItemContext::space(space)));
     }
     if let Some(context) = current_context(ctx).await? {
-        return Ok(context);
+        return Ok(Some(context));
     }
-    if let Some(checkout) = item_checkout(ctx, item).await? {
-        return Ok(checkout);
-    }
+    item_checkout(ctx, item).await
+}
+
+/// A space the user picks.
+async fn picked_space(ctx: &Context) -> Result<ItemContext> {
     ensure!(ctx.interactive(), "{NO_CONTEXT}");
     let space = ui::select_space(ctx, None, ui::Fallback::CurrentDirectory).await?;
     Ok(ItemContext::space(space))

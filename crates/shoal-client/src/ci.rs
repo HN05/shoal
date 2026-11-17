@@ -19,7 +19,7 @@ use crate::{
         items::link::Selection,
     },
 };
-use shoal_protocol::protocol::{CiMethod, ItemContext};
+use shoal_protocol::protocol::{CiMethod, ItemContext, RepoTarget};
 
 /// The newest runs in `context`'s repository that `filter` selects, or those
 /// on the head of the PR `pr`.
@@ -115,12 +115,12 @@ pub async fn approve(
 /// The log of `check` on the item `selection` selects.
 pub async fn check_log(
     daemon: &impl Daemon,
-    context: ItemContext,
+    target: RepoTarget,
     selection: Selection,
     check: String,
 ) -> Result<CheckLog> {
     let method = CiMethod::CheckLog {
-        context,
+        target,
         selection,
         check,
     };

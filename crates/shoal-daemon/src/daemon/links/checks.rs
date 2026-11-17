@@ -4,7 +4,11 @@ use anyhow::{Context as _, Result, bail};
 
 use crate::{
     daemon::{
-        links::{place::Access, space::LinkSpace},
+        links::{
+            place::{Access, Place},
+            space::LinkSpace,
+        },
+        scope::Caller,
         workspace::Manager,
     },
     forge::{
@@ -17,7 +21,7 @@ use crate::{
         },
         updates::Update,
     },
-    protocol::ItemContext,
+    protocol::RepoTarget,
 };
 use shoal_forge::{
     capability::CapabilityRequests,
@@ -38,7 +42,7 @@ impl Manager {
         let Ok(space) = self.link_space(space).await else {
             return;
         };
-        let context = space.item_context();
+        let target = RepoTarget::from(space.item_context());
         for index in 0..updates.len() {
             let update = &updates[index];
             let Some(check) = &update.check else { continue };
@@ -58,7 +62,7 @@ impl Manager {
                 kind: Some(LinkKind::Pr),
                 input: Some(pull.into()),
             };
-            let log = self.check_log(&context, &selection, &check.name).await;
+            let log = self.check_log(&target, &selection, &check.name, None).await;
             let Some(summary) = failed_log_summary(log) else {
                 continue;
             };
@@ -78,18 +82,25 @@ impl Manager {
     }
 
     /// The log of the failed check `name` of the PR `selection` names in
-    /// the repository of `context`, or of the space's linked PR.
+    /// the `target` repository, or of the space's linked PR, read as the
+    /// agent account in the request's own repository and as `caller`
+    /// elsewhere.
     pub async fn check_log(
         &self,
-        context: &ItemContext,
+        target: &RepoTarget,
         selection: &Selection,
         name: &str,
+        caller: Option<&Caller>,
     ) -> Result<CheckLog> {
         validate_check_name(name)?;
-        let place = self.place(context, Access::Change).await?;
-        let (forge, account) = self.place_forge_account(&place).await?;
-        let space = self.context_space_if_any(context).await?;
-        let pull = self.check_log_pr(space.as_ref(), &forge, selection).await?;
+        let target = (self.selection_target(target, selection, true, caller)).await?;
+        let account = match target.own {
+            true => self.agent_account(),
+            false => self.elsewhere_account(Access::Read, caller),
+        };
+        let space = target.own_place().and_then(Place::space);
+        let forge = target.forge()?;
+        let pull = self.check_log_pr(space, forge, selection).await?;
         forge.failed_check_log(&account, &pull, name).await
     }
 

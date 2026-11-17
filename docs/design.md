@@ -3262,9 +3262,16 @@ as without an agent to run, notifies the user too, since only the config fixes
 it.
 Agents also find problems that belong to another repository, such as a tool the
 project uses, so `issue open --repo` files an issue there, on any forge, as the
-agent account; every other item action stays within the workspace's repository.
-Item commands that need only a repository also run from a registered checkout
-outside any space: they act as the repository's agent account under its
+agent account. Decision: every command that only talks to the forge names any
+repository, registered or not, by `--repo` or an item's or run's URL, which
+needs no space or checkout; a registered checkout is one way to name a
+repository, never a requirement. Every caller reads another repository as it
+reads its own, since `forge api` already reads it, while changing it stays the
+user's, with the user's own logins, and a scoped caller's change there is
+refused. Commands that
+need a space or checkout, such as `link`, `watch` and `pr open`, keep their
+rules. Item commands that need only a repository also run from a registered
+checkout outside any space: they act as the repository's agent account under its
 settings, open without a proposal, and link or record nothing, since a checkout
 holds no links; workspace processes act from their workspace. A chat acts the
 same way from its repository's checkout, under its own scope, but records

@@ -743,7 +743,7 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
         workspace: SpaceSelector::id(&workspace.id),
     });
     let items = Operation::from(ItemMethod::SelectItems {
-        context: ItemContext::space(SpaceSelector::id(&workspace.id)),
+        target: ItemContext::space(SpaceSelector::id(&workspace.id)).into(),
         selection: Selection::default(),
         elsewhere: false,
     });

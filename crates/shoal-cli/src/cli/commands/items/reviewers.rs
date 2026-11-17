@@ -2,15 +2,15 @@
 //! `shoal pr edit --add-reviewer` takes them.
 use anyhow::Result;
 
-use super::item_context;
+use super::item_target;
 use crate::{
     cli::{args::changes::ItemSelector, client, context::Context},
     forge::review::reviewers::Reviewer,
 };
 
 pub(super) async fn reviewers(ctx: &Context, selector: &ItemSelector) -> Result<i32> {
-    let context = item_context(ctx, selector).await?;
-    let read = client::reviewers(&ctx.paths, context, selector.item.clone());
+    let target = item_target(ctx, selector).await?;
+    let read = client::reviewers(&ctx.paths, target, selector.item.clone());
     let reviewers = ctx.progress("Reading reviewers", read).await?;
     ctx.show(&reviewers, |reviewers| render(reviewers))?;
     Ok(0)

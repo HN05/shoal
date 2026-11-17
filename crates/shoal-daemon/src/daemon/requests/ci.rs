@@ -30,10 +30,14 @@ pub(super) async fn handle(
             return Ok(Answer::pages(listed, Body::CiRuns));
         }
         CiMethod::CheckLog {
-            context,
+            target,
             selection,
             check,
-        } => Body::CheckLog(manager.check_log(&context, &selection, &check).await?),
+        } => Body::CheckLog(
+            manager
+                .check_log(&target, &selection, &check, caller)
+                .await?,
+        ),
         CiMethod::CiAction {
             context,
             item,
@@ -91,9 +95,11 @@ impl Scoped for CiMethod {
             }
             // A chat without a repository acts in a registered checkout as
             // its own space, with its agent account.
-            CiMethod::CheckLog { context, .. }
-            | CiMethod::CiAction { context, .. }
-            | CiMethod::ListCiRuns { context, .. } => {
+            CiMethod::CheckLog { target, .. } => {
+                let context = super::items::own_context(caller, target);
+                Some(super::items::change_context_space(manager, caller, context).await?)
+            }
+            CiMethod::CiAction { context, .. } | CiMethod::ListCiRuns { context, .. } => {
                 Some(super::items::change_context_space(manager, caller, context).await?)
             }
             // A workspace process acts from its own workspace, so only on

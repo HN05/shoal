@@ -3,16 +3,11 @@
 //! a repository, and whether it reads or changes what it acts on there.
 use anyhow::Result;
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
+use std::path::Path;
 
 use crate::{
     daemon::{links::space::LinkSpace, workspace::Manager},
-    forge::{
-        ForgeRepo,
-        items::{
-            link::ItemKind,
-            reference::{ItemInput, ItemRef},
-        },
-    },
+    forge::ForgeRepo,
     model::{Repository, Workspace},
     protocol::ItemContext,
 };
@@ -46,6 +41,22 @@ impl Place {
         match self {
             Self::Space(space) => space.repository_id(),
             Self::Checkout(checkout) => &checkout.id,
+        }
+    }
+
+    /// The directory whose `origin` names the place's repository.
+    pub(in crate::daemon::links) fn origin_path(&self) -> &Path {
+        match self {
+            Self::Space(space) => space.origin_path(),
+            Self::Checkout(checkout) => &checkout.path,
+        }
+    }
+
+    /// The workspace or chat the place is.
+    pub(in crate::daemon::links) fn space(&self) -> Option<&LinkSpace> {
+        match self {
+            Self::Space(space) => Some(space),
+            Self::Checkout(_) => None,
         }
     }
 
@@ -92,18 +103,5 @@ impl Manager {
             Place::Space(space) => self.space_forge(space).await,
             Place::Checkout(checkout) => self.checkout_forge(checkout).await,
         }
-    }
-
-    /// The item `item` names in `forge`, the repository `place` runs in,
-    /// or the space's linked one of `kind`.
-    pub(in crate::daemon::links) async fn place_item(
-        &self,
-        item: Option<ItemInput>,
-        place: &Place,
-        forge: &ForgeRepo,
-        kind: ItemKind,
-    ) -> Result<ItemRef> {
-        self.named_or_linked(item, place.space_id(), forge, kind)
-            .await
     }
 }

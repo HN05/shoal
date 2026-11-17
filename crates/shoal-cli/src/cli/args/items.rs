@@ -82,7 +82,7 @@ pub struct ViewArgs {
     #[command(flatten)]
     pub items: ItemArgs,
     #[command(flatten)]
-    pub repo: crate::cli::args::changes::RegisteredRepo,
+    pub repo: crate::cli::args::changes::TargetRepo,
     /// Leave out comments and reviews.
     #[arg(long)]
     pub no_comments: bool,

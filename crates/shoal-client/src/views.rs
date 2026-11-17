@@ -20,21 +20,22 @@ use crate::{
 };
 use shoal_protocol::{
     model::SelectedItem,
-    protocol::{CiMethod, ItemContext, ItemMethod},
+    protocol::{CiMethod, ItemContext, ItemMethod, RepoTarget},
 };
 
-/// The items `selection` names in `context`, each as the forge reports it
-/// now, in selection order: issues and PRs with their comments when
-/// `comments` is set and the logs of a PR's failed checks, and runs with
-/// their jobs and failed jobs' logs.
+/// The items `selection` names in the `target` repository, each as the
+/// forge reports it now, in selection order: issues and PRs with their
+/// comments when `comments` is set and the logs of a PR's failed checks, and
+/// runs with their jobs and failed jobs' logs.
 pub async fn read(
     daemon: &impl Daemon,
-    context: ItemContext,
+    target: RepoTarget,
     selection: Selection,
     comments: bool,
 ) -> Result<Vec<Shown>> {
-    let viewed = view_items(daemon, context.clone(), selection, comments).await?;
-    let runs = read_runs(daemon, &context, &viewed.items).await;
+    let context = target.context.clone();
+    let viewed = view_items(daemon, target, selection, comments).await?;
+    let runs = read_runs(daemon, context.as_ref(), &viewed.items).await;
     Ok(in_selection_order(&viewed.items, viewed.views, runs))
 }
 
@@ -42,12 +43,12 @@ pub async fn read(
 /// pieces of JSON the daemon sends them in.
 async fn view_items(
     daemon: &impl Daemon,
-    context: ItemContext,
+    target: RepoTarget,
     selection: Selection,
     comments: bool,
 ) -> Result<Viewed> {
     let method = ItemMethod::ViewItems {
-        context,
+        target,
         selection,
         comments,
     };
@@ -55,10 +56,10 @@ async fn view_items(
 }
 
 /// Each selected run with its jobs and failed jobs' logs, read in the
-/// context the items were selected in.
+/// context the items were selected in, if any.
 async fn read_runs(
     daemon: &impl Daemon,
-    context: &ItemContext,
+    context: Option<&ItemContext>,
     items: &[SelectedItem],
 ) -> Vec<ShownRun> {
     let mut runs = Vec::new();
@@ -67,7 +68,7 @@ async fn read_runs(
             continue;
         }
         let run = ItemInput::Url(item.url.clone());
-        let read = read_run(daemon, Some(context), &run).await;
+        let read = read_run(daemon, context, &run).await;
         let read = read
             .map(RunRead::Read)
             .unwrap_or_else(|error| RunRead::Failed {

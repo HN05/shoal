@@ -81,18 +81,18 @@ pub enum ItemMethod {
         issue: crate::forge::items::create::NewIssue,
         link: bool,
     },
-    /// What merging the PR `item` names in the context's repository, or the
+    /// What merging the PR `item` names in the target repository, or the
     /// space's linked PR, warns about.
     MergeWarning {
         #[serde(flatten)]
-        context: ItemContext,
+        target: RepoTarget,
         item: Option<crate::forge::items::reference::ItemInput>,
     },
-    /// Change an issue or PR of the context's repository: the one `item`
+    /// Change an issue or PR of the target repository: the one `item`
     /// names, or the workspace's linked one of `kind`.
     ItemAction {
         #[serde(flatten)]
-        context: ItemContext,
+        target: RepoTarget,
         kind: crate::forge::items::link::ItemKind,
         item: Option<crate::forge::items::reference::ItemInput>,
         action: crate::forge::items::action::Action,
@@ -116,12 +116,12 @@ pub enum ItemMethod {
         #[serde(flatten)]
         target: RepoTarget,
     },
-    /// Who the PR `item` names in the context's repository, or the space's
+    /// Who the PR `item` names in the target repository, or the space's
     /// linked PR, can ask for a review, answered in one or more `reviewers`
     /// frames and then `ok`.
     Reviewers {
         #[serde(flatten)]
-        context: ItemContext,
+        target: RepoTarget,
         item: Option<crate::forge::items::reference::ItemInput>,
     },
     /// The selected issues and PRs as the forge reports them, with the logs
@@ -130,7 +130,7 @@ pub enum ItemMethod {
     /// and then `ok`.
     ViewItems {
         #[serde(flatten)]
-        context: ItemContext,
+        target: RepoTarget,
         selection: crate::forge::items::link::Selection,
         comments: bool,
     },
@@ -161,19 +161,20 @@ pub enum ItemMethod {
         #[serde(flatten)]
         target: RepoTarget,
     },
-    /// The review thread of `comment` on the PR `item` names in the
-    /// context's repository, or on the space's linked PR.
+    /// The review thread of `comment` on the PR `item` names in the target
+    /// repository, or on the space's linked PR.
     ReviewThread {
         #[serde(flatten)]
-        context: ItemContext,
+        target: RepoTarget,
         item: Option<crate::forge::items::reference::ItemInput>,
         comment: CommentId,
     },
-    /// The kind of the item numbered `number`: in a space, that of the
-    /// linked item with that number, otherwise the kind the forge reports.
+    /// The kind of the item numbered `number` in the target repository: in
+    /// a space's own, that of the linked item with that number, otherwise
+    /// the kind the forge reports.
     NumberKind {
         #[serde(flatten)]
-        context: ItemContext,
+        target: RepoTarget,
         number: u64,
     },
     /// The open issue `item` names in the context's repository, by number
@@ -204,11 +205,11 @@ pub enum ItemMethod {
     },
     /// Linked items, or an explicit one, for the client to look up; with
     /// `elsewhere`, also an issue, PR or CI run of another repository by its
-    /// URL. In a registered checkout, where nothing is linked, only a number
-    /// or URL selects an item.
+    /// URL. Outside a space's own repository, where nothing is linked, only
+    /// a number or URL selects an item.
     SelectItems {
         #[serde(flatten)]
-        context: ItemContext,
+        target: RepoTarget,
         selection: crate::forge::items::link::Selection,
         #[serde(default)]
         elsewhere: bool,

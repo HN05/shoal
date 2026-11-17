@@ -8,6 +8,7 @@ use shoal_refs::BranchName;
 
 use super::{
     issue::{Assigner, AssignerOf},
+    place::{Access, Place},
     proposals::OpenOutcome,
     space::LinkSpace,
     wait::{OwnChange, record_received_change},
@@ -26,7 +27,7 @@ use crate::{
         },
     },
     model::{Relation, ReviewMark, Workspace},
-    protocol::ItemContext,
+    protocol::RepoTarget,
 };
 use shoal_forge::{
     account::Account,
@@ -44,45 +45,45 @@ mod accounts;
 mod open_issue;
 
 impl Manager {
-    /// Apply `action` to the item `input` names in the repository of
-    /// `context`, or to the workspace's linked item of `kind`.
+    /// Apply `action` to the item `input` names in the `target` repository,
+    /// or to the workspace's linked item of `kind`.
     pub async fn item_action(
         &self,
-        context: &ItemContext,
+        target: &RepoTarget,
         kind: ItemKind,
         input: Option<ItemInput>,
         action: Action,
         caller: Option<&Caller>,
     ) -> Result<Item> {
         action.validate(kind)?;
-        match context {
-            ItemContext::Checkout(id) => {
-                let input = input.context(NOTHING_LINKED)?;
-                self.checkout_item_action(id, kind, &input, action).await
+        let (target, item) =
+            (self.target_item(target, input, kind, Access::Change, caller)).await?;
+        let forge = target.forge()?;
+        match target.own_place() {
+            Some(Place::Space(space)) => {
+                (self.space_item_action(space, forge, kind, &item, action, caller)).await
             }
-            ItemContext::Space { .. } => {
-                let space = self.context_space(context).await?;
-                self.space_item_action(space, kind, input, action, caller)
-                    .await
+            place => {
+                let repository = place.map(Place::repository_id);
+                (self.user_item_action(repository, forge, kind, &item, action)).await
             }
         }
     }
 
-    /// Apply `action` for the workspace or chat and record it as its own
-    /// change: the user's decisions with the user's login, unless a scoped
-    /// `caller` takes one as its permissions allow, as the review account
-    /// for a review's verdict and the agent account otherwise.
+    /// Apply `action` to `item` of the workspace's or chat's repository,
+    /// `forge`, and record it as the space's own change: the user's
+    /// decisions with the user's login, unless a scoped `caller` takes one
+    /// as its permissions allow, as the review account for a review's
+    /// verdict and the agent account otherwise.
     async fn space_item_action(
         &self,
-        space: LinkSpace,
+        space: &LinkSpace,
+        forge: &ForgeRepo,
         kind: ItemKind,
-        input: Option<ItemInput>,
+        item: &ItemRef,
         action: Action,
         caller: Option<&Caller>,
     ) -> Result<Item> {
-        self.verify_space(&space).await?;
-        let forge = self.space_forge(&space).await?;
-        let item = (self.named_or_linked(input, Some(&space.id), &forge, kind)).await?;
         let (number, url) = (item.number().get(), item.to_string());
         let account = match caller {
             None if users_decision(&action) => self.user_account(),
@@ -94,7 +95,7 @@ impl Manager {
         let _gate = self.lock_change_gates(&space.id, &[]).await?;
         let target = Target { kind, number, url };
         let item = self
-            .apply_own(&space.id, &forge, &account, target, &action, caller)
+            .apply_own(&space.id, forge, &account, target, &action, caller)
             .await?;
         self.sync_after_merge(space.repository_id(), &action, &item);
         Ok(item)
@@ -130,27 +131,28 @@ impl Manager {
         only_assigned(kind, assigned)
     }
 
-    /// Apply `action` from the repository's registered checkout, which no
-    /// workspace watches, with the user's own logins: only the user acts
+    /// Apply `action` to `item` with the user's own logins, from the
+    /// registered checkout of `repository`, which no workspace watches, or
+    /// in another repository than the request's own: only the user acts
     /// there.
-    async fn checkout_item_action(
+    async fn user_item_action(
         &self,
-        id: &RepositoryId,
+        repository: Option<&RepositoryId>,
+        forge: &ForgeRepo,
         kind: ItemKind,
-        input: &ItemInput,
+        item: &ItemRef,
         action: Action,
     ) -> Result<Item> {
-        let checkout = self.repository(id).await?;
-        let forge = self.checkout_forge(&checkout).await?;
-        let url = ItemRef::in_repository(&forge, kind.into(), input)?;
-        let number = url.number().get();
-        let item = forge
+        let number = item.number().get();
+        let changed = forge
             .apply(&self.user_account(), kind, number, &action)
             .await
-            .with_context(|| format!("could not {} {url}", action.verb()))?
+            .with_context(|| format!("could not {} {item}", action.verb()))?
             .item;
-        self.sync_after_merge(&checkout.id, &action, &item);
-        Ok(item)
+        if let Some(repository) = repository {
+            self.sync_after_merge(repository, &action, &changed);
+        }
+        Ok(changed)
     }
 
     /// Sync the repository a merge just changed, without waiting for it, so

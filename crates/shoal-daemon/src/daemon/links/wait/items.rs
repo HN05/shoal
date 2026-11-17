@@ -42,7 +42,7 @@ impl Manager {
         let kind = selection.kind.context("explicit items need a kind")?;
         // A run's URL may name another repository.
         let named = match kind {
-            LinkKind::Ci => self.named_run_forge(input).await?,
+            LinkKind::Ci => self.input_forge(input).await?,
             LinkKind::Issue | LinkKind::Pr => None,
         };
         let item = ItemRef::in_repository(&named.unwrap_or(forge), kind, input)?;

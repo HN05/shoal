@@ -9,12 +9,13 @@ use crate::{
             actions::NOTHING_LINKED,
             place::{Access, Place},
             space::LinkSpace,
+            target::ForgeTarget,
         },
         scope::Caller,
         workspace::Manager,
     },
     forge::{
-        PullRequest,
+        ForgeRepo, PullRequest,
         capability::Capability,
         items::{
             issue::IssueDetails,
@@ -24,8 +25,8 @@ use crate::{
         numbers::CommentId,
         review::{reviewers::Reviewer, thread::Thread},
     },
-    model::{Blocker, Repository, Selected, SelectedItem},
-    protocol::ItemContext,
+    model::{Blocker, Selected, SelectedItem},
+    protocol::{ItemContext, RepoTarget},
 };
 use shoal_forge::{
     RepoRequests,
@@ -36,80 +37,95 @@ use shoal_forge::{
 };
 
 impl Manager {
-    /// The items `selection` names in `context`: in a space, where it may
-    /// name linked ones, or in a registered checkout, where only a number or
-    /// URL selects one and a number without a kind takes the one the forge
-    /// reports for it. With `elsewhere`, an issue, PR or CI run URL of
+    /// The items `selection` names in the `target` repository: in a space's
+    /// own, where it may name linked ones, or elsewhere, where only a number
+    /// or URL selects one and a number without a kind takes the one the
+    /// forge reports for it. With `elsewhere`, an issue, PR or CI run URL of
     /// another repository selects that item.
     pub async fn select_context_items(
         &self,
-        context: &ItemContext,
+        target: &RepoTarget,
         selection: &Selection,
         elsewhere: bool,
         caller: Option<&Caller>,
     ) -> Result<Selected> {
-        match context {
-            ItemContext::Space { .. } => {
-                let space = self.context_space(context).await?;
-                self.select_items(&space, selection, elsewhere).await
-            }
-            ItemContext::Checkout(selector) => {
-                let checkout = self.repository(selector).await?;
-                let account = self.read_account(caller);
-                let item = (self.checkout_item(&checkout, selection, elsewhere, &account)).await?;
-                Ok(Selected {
-                    path: checkout.path,
-                    items: vec![item],
-                })
-            }
-        }
+        let account = self.read_account(caller);
+        let target = (self.selection_target(target, selection, elsewhere, caller)).await?;
+        let items = (self.target_selection(&target, selection, elsewhere, &account)).await?;
+        let path = (target.origin.as_ref()).map(|place| place.origin_path().to_owned());
+        Ok(Selected { path, items })
     }
 
-    /// The item `selection` names in the repository of the registered
-    /// checkout, where nothing is linked, or with `elsewhere` the item of
-    /// another repository its URL names. A number without a kind takes the
-    /// one the forge reports for it.
-    pub(in crate::daemon::links) async fn checkout_item(
+    /// The repository `target` names for reading what `selection` names,
+    /// which with `elsewhere` may be another repository by its URL.
+    pub(in crate::daemon::links) async fn selection_target(
         &self,
-        checkout: &Repository,
+        target: &RepoTarget,
+        selection: &Selection,
+        elsewhere: bool,
+        caller: Option<&Caller>,
+    ) -> Result<ForgeTarget> {
+        let named = match (&selection.input, elsewhere) {
+            (Some(input), true) => self.input_forge(input).await?,
+            _ => None,
+        };
+        (self.forge_target(target, named, Access::Read, caller)).await
+    }
+
+    /// The items `selection` names in `target`: in a space's own
+    /// repository, where it may name linked ones, otherwise the one its
+    /// number or URL names.
+    pub(in crate::daemon::links) async fn target_selection(
+        &self,
+        target: &ForgeTarget,
         selection: &Selection,
         elsewhere: bool,
         account: &Account,
+    ) -> Result<Vec<SelectedItem>> {
+        match target.own_place().and_then(Place::space) {
+            Some(space) => Ok(self.select_items(space, selection, elsewhere).await?.items),
+            None => Ok(vec![
+                self.unlinked_item(target.forge()?, selection, account)
+                    .await?,
+            ]),
+        }
+    }
+
+    /// The item `selection` names by number or URL in `forge`, where nothing
+    /// is linked. A number without a kind takes the one the forge reports
+    /// for it.
+    async fn unlinked_item(
+        &self,
+        forge: &ForgeRepo,
+        selection: &Selection,
+        account: &Account,
     ) -> Result<SelectedItem> {
         let input = selection.input.as_ref().context(NOTHING_LINKED)?;
-        // A URL names its item in any repository, so the checkout's origin
-        // need not decide.
-        if elsewhere && let Some((_, item)) = self.item_at_url(selection).await? {
-            return Ok(item);
-        }
-        let forge = self.checkout_forge(checkout).await?;
         let kind = match (selection.kind, input) {
             (Some(kind), _) => kind,
             (None, ItemInput::Number(number)) => forge.item_kind(account, *number).await?.into(),
             (None, ItemInput::Url(item)) => item.kind(),
         };
         Ok(SelectedItem {
-            url: ItemRef::in_repository(&forge, kind, input)?,
+            url: ItemRef::in_repository(forge, kind, input)?,
             relations: Vec::new(),
         })
     }
 
-    /// The kind of the item numbered `number` in `context`: in a space,
-    /// that of the linked item with that number, otherwise the kind the
-    /// forge reports for it.
+    /// The kind of the item numbered `number` in the `target` repository:
+    /// in a space's own, that of the linked item with that number,
+    /// otherwise the kind the forge reports for it.
     pub async fn number_kind(
         &self,
-        context: &ItemContext,
+        target: &RepoTarget,
         number: u64,
         caller: Option<&Caller>,
     ) -> Result<LinkKind> {
         let account = self.read_account(caller);
-        match self.place(context, Access::Read).await? {
-            Place::Space(space) => self.space_number_kind(&space, number, &account).await,
-            Place::Checkout(checkout) => {
-                let forge = self.checkout_forge(&checkout).await?;
-                Ok(forge.item_kind(&account, number).await?.into())
-            }
+        let target = (self.forge_target(target, None, Access::Read, caller)).await?;
+        match target.own_place().and_then(Place::space) {
+            Some(space) => self.space_number_kind(space, number, &account).await,
+            None => Ok(target.forge()?.item_kind(&account, number).await?.into()),
         }
     }
 
@@ -176,35 +192,35 @@ impl Manager {
         forge.pull_request(&self.read_account(caller), &pull).await
     }
 
-    /// Who the PR `item` names in the repository of `context`, or the
-    /// space's linked PR, can ask for a review.
+    /// Who the PR `item` names in the `target` repository, or the space's
+    /// linked PR, can ask for a review.
     pub async fn reviewers(
         &self,
-        context: &ItemContext,
+        target: &RepoTarget,
         item: Option<ItemInput>,
         caller: Option<&Caller>,
     ) -> Result<Vec<Reviewer>> {
-        let place = self.place(context, Access::Read).await?;
-        let forge = self.place_forge(&place).await?;
-        let pull = self.place_item(item, &place, &forge, ItemKind::Pr).await?;
+        let read = self.target_item(target, item, ItemKind::Pr, Access::Read, caller);
+        let (target, pull) = read.await?;
+        let forge = target.forge()?;
         forge
             .reviewers(&self.read_account(caller), pull.pull()?)
             .await
     }
 
     /// The review thread of `comment` on the PR `item` names in the
-    /// repository of `context`, or on the space's linked PR, refused where
-    /// the forge cannot resolve threads.
+    /// `target` repository, or on the space's linked PR, refused where the
+    /// forge cannot resolve threads.
     pub async fn review_thread(
         &self,
-        context: &ItemContext,
+        target: &RepoTarget,
         item: Option<ItemInput>,
         comment: CommentId,
         caller: Option<&Caller>,
     ) -> Result<Thread> {
-        let place = self.place(context, Access::Read).await?;
-        let forge = self.place_forge(&place).await?;
-        let pull = self.place_item(item, &place, &forge, ItemKind::Pr).await?;
+        let read = self.target_item(target, item, ItemKind::Pr, Access::Read, caller);
+        let (target, pull) = read.await?;
+        let forge = target.forge()?;
         forge.require(Capability::ResolveThreads)?;
         forge
             .thread(&self.read_account(caller), pull.pull()?, comment)
@@ -216,7 +232,7 @@ impl Manager {
 /// relation.
 async fn linked_kind(space: &LinkSpace, number: u64) -> Result<Option<LinkKind>> {
     let linked = Selected {
-        path: space.origin_path().to_owned(),
+        path: Some(space.origin_path().to_owned()),
         items: (space.links.items().into_iter())
             .map(|item| SelectedItem {
                 url: item.url,

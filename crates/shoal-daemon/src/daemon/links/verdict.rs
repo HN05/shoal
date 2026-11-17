@@ -8,12 +8,12 @@ use shoal_refs::CommitId;
 
 use crate::{
     config::permissions::PermissionKey,
-    daemon::{permissions, workspace::Manager},
+    daemon::{links::place::Access, permissions, scope::Caller, workspace::Manager},
     forge::{
         items::reference::ItemInput,
         review::submit::{LineComment, NewReview, ReviewVerdict},
     },
-    protocol::ItemContext,
+    protocol::RepoTarget,
 };
 use shoal_forge::review::submit::{OwnPull, SubmitRequests};
 use shoal_ids::repository_ids::RepositoryId;
@@ -29,19 +29,22 @@ struct Verdict<'a> {
 }
 
 impl Manager {
-    /// The `pr_review` action of `review` of the PR `input` names in the
-    /// repository of `context`, or the space's linked PR, in `repository`:
-    /// the PR, the head it covers, to which the review is pinned, and its
-    /// text. A host without a `review_token`, and a PR its account opened,
-    /// refuse it before anything is sent or asked.
+    /// The `pr_review` action of a scoped `caller`'s `review` of the PR
+    /// `input` names in the `target` repository, or the space's linked PR,
+    /// in `repository`: the PR, the head it covers, to which the review is
+    /// pinned, and its text. A host without a `review_token`, a PR its
+    /// account opened and another repository than the caller's refuse it
+    /// before anything is sent or asked.
     pub(crate) async fn verdict_action(
         &self,
-        context: &ItemContext,
+        target: &RepoTarget,
         input: Option<ItemInput>,
         review: &mut NewReview,
         repository: RepositoryId,
+        caller: &Caller,
     ) -> Result<permissions::Action> {
-        let (forge, url) = self.context_pull(context, input).await?;
+        let pull = self.context_pull(target, input, Access::Change, Some(caller));
+        let (forge, url) = pull.await?;
         let account = self.review_account();
         let head = forge.verdict_head(&account, url.pull()?).await;
         let head = head.map_err(|error| naming_review_token(error, &forge.host))?;

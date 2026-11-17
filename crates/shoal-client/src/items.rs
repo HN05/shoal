@@ -18,7 +18,7 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     links::{OpenOutcome, Updates},
     model::Relation,
-    protocol::{Body, ItemContext, ItemMethod, RepoTarget},
+    protocol::{Body, ItemMethod, RepoTarget},
 };
 
 /// Link the `kind` item `item` names to `space` as `relation`, with the
@@ -159,17 +159,17 @@ pub async fn revert_pull(
     request(daemon, method).await
 }
 
-/// Carry out `action` on `item` in `context`, or on the space's linked item
-/// of `kind`.
+/// Carry out `action` on `item` in the `target` repository, or on the
+/// space's linked item of `kind`.
 pub async fn act(
     daemon: &impl Daemon,
-    context: ItemContext,
+    target: RepoTarget,
     kind: ItemKind,
     item: Option<ItemInput>,
     action: Action,
 ) -> Result<Item> {
     let method = ItemMethod::ItemAction {
-        context,
+        target,
         kind,
         item,
         action,
@@ -184,13 +184,13 @@ pub async fn act(
 /// about.
 pub async fn merge(
     daemon: &impl Daemon,
-    context: ItemContext,
+    target: RepoTarget,
     item: Option<ItemInput>,
     action: Action,
     confirmed: Option<shoal_protocol::model::ConfirmedWarning>,
 ) -> Result<Item> {
     let method = ItemMethod::ItemAction {
-        context,
+        target,
         kind: ItemKind::Pr,
         item,
         action,

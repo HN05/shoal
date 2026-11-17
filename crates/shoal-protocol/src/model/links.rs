@@ -171,10 +171,11 @@ impl TryFrom<LinkedFields> for LinkedItem {
 }
 
 /// The items a selection names and the worktree or checkout whose origin
-/// names their repository.
+/// names their repository, unless they were selected from none.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Selected {
-    pub path: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<PathBuf>,
     pub items: Vec<SelectedItem>,
 }
 

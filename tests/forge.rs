@@ -481,7 +481,7 @@ fn apps_read_forge_items_through_the_daemon() {
         let reviewers = runtime
             .block_on(forge_reads::reviewers(
                 &app,
-                context.clone(),
+                context.clone().into(),
                 Some("8".parse().unwrap()),
             ))
             .unwrap();
@@ -503,7 +503,7 @@ fn apps_read_forge_items_through_the_daemon() {
         );
 
         let shown = runtime
-            .block_on(views::read(&app, context, pr_8(), false))
+            .block_on(views::read(&app, context.into(), pr_8(), false))
             .unwrap();
         let [Shown::Item(ShownItem { view, .. })] = shown.as_slice() else {
             panic!("expected one item view");
@@ -528,7 +528,7 @@ fn apps_read_forge_items_through_the_daemon() {
         input: Some("8".parse().unwrap()),
     };
     let shown = runtime
-        .block_on(views::read(&app, workspace(), bare_8(), false))
+        .block_on(views::read(&app, workspace().into(), bare_8(), false))
         .unwrap();
     assert!(
         matches!(shown.as_slice(), [Shown::Item(ShownItem { view, .. })] if view.kind == ItemKind::Pr && view.details.is_some()),
@@ -544,11 +544,16 @@ fn apps_read_forge_items_through_the_daemon() {
         .unwrap();
     assert_eq!(reactions.names, ["+1", "heart"]);
     let kind = runtime
-        .block_on(forge_reads::number_kind(&app, checkout(), 8))
+        .block_on(forge_reads::number_kind(&app, checkout().into(), 8))
         .unwrap();
     assert_eq!(kind, LinkKind::Pr);
     let selected = runtime
-        .block_on(forge_reads::select_items(&app, checkout(), bare_8(), false))
+        .block_on(forge_reads::select_items(
+            &app,
+            checkout().into(),
+            bare_8(),
+            false,
+        ))
         .unwrap();
     assert_eq!(selected.items.len(), 1);
     assert_eq!(selected.items[0].kind(), LinkKind::Pr);
@@ -632,7 +637,7 @@ fn apps_read_forge_items_through_the_daemon() {
     ]);
     fixture.respond(responses);
     let shown = runtime
-        .block_on(views::read(&agent, workspace(), pr_8(), false))
+        .block_on(views::read(&agent, workspace().into(), pr_8(), false))
         .unwrap();
     let [Shown::Item(ShownItem { view, .. })] = shown.as_slice() else {
         panic!("expected one item view");
@@ -653,7 +658,7 @@ fn apps_read_forge_items_through_the_daemon() {
     fixture.write_config(&user_only);
     fixture.ok(&["config", "reload"]);
     let shown = runtime
-        .block_on(views::read(&app, workspace(), pr_8(), false))
+        .block_on(views::read(&app, workspace().into(), pr_8(), false))
         .unwrap();
     let [Shown::Item(ShownItem { view, .. })] = shown.as_slice() else {
         panic!("expected one item view");
@@ -1521,6 +1526,12 @@ fn views_read_another_repositorys_item_by_its_url() {
     assert_eq!(view["comments"][0]["body"], "Same", "{view}");
     assert!(view.get("errors").is_none(), "{view}");
     assert_eq!(scoped(&fixture, &["view", &url])[0]["title"], "Crash");
+    // Its repository's URL and its number name it from outside any space.
+    let tool = fixture.web.replace("team/project", "team/tool");
+    let mut outside = fixture.command();
+    outside.current_dir(fixture.root.path());
+    let view = &fixture.ok_from(&mut outside, &["view", "--repo", &tool, "5"])[0];
+    assert_eq!(view["url"], url, "{view}");
     // Watching it stays limited to the workspace's repository.
     let watched = fixture.run(&[
         "watch",
@@ -1532,6 +1543,51 @@ fn views_read_another_repositorys_item_by_its_url() {
         "1",
     ]);
     assert!(!watched.status.success(), "{}", printed(&watched));
+}
+
+#[test]
+fn changes_in_another_repository_are_the_users_alone() {
+    let fixture = Fixture::new(Forge::Forgejo, AGENT_TOKEN);
+    let issue = "repos/team/tool/issues/5";
+    fixture.respond(json!({
+        format!("GET {issue}"): {"body": {"number": 5, "title": "Crash", "state": "open",
+            "labels": [], "user": {"login": "ann"}}},
+        format!("POST {issue}/comments"): {"body": {"id": 9, "body": "Same",
+            "user": {"login": "me"}}},
+    }));
+    let url = fixture.web.replace("team/project", "team/tool") + "/issues/5";
+    let comment = ["issue", "comment", url.as_str(), "--body", "Same"];
+    // A workspace process reads it but leaves changing it to the user.
+    let output = fixture.run(
+        &[
+            &["run", "--workspace", &fixture.id("topic"), "--"][..],
+            &[support::shoal_binary()],
+            &comment,
+        ]
+        .concat(),
+    );
+    let refused = String::from_utf8_lossy(&output.stderr);
+    assert!(refused.contains("own repository"), "{}", printed(&output));
+    assert!(fixture.requests().is_empty());
+    // The user comments from outside any space, with nothing registered
+    // there, as the user's own login.
+    let mut outside = fixture.command();
+    outside.current_dir(fixture.root.path());
+    let commented = fixture.ok_from(&mut outside, &comment);
+    assert_eq!(commented["url"], url, "{commented}");
+    let requests = fixture.requests();
+    assert!(
+        requests
+            .iter()
+            .any(|request| request[0] == format!("POST {issue}/comments")),
+        "{requests:?}"
+    );
+    assert!(
+        requests
+            .iter()
+            .all(|request| request[2] == "token usertoken"),
+        "{requests:?}"
+    );
 }
 
 #[test]
@@ -3489,7 +3545,8 @@ fn scoped_check_logs_resolve_web_indices_and_use_the_agent_account() {
     assert_eq!(result["type"], "error", "{result}");
     assert_eq!(fixture.requests().len(), 2);
 
-    // Scoped protocol clients cannot select another workspace or repository.
+    // Scoped protocol clients cannot select another workspace, but read
+    // another repository, whose host is asked here which forge it serves.
     fixture.ok(&[
         "start",
         fixture.repo.to_str().unwrap(),
@@ -3507,8 +3564,13 @@ fn scoped_check_logs_resolve_web_indices_and_use_the_agent_account() {
     let mut other = method.clone();
     other["check_log"]["selection"]["input"] =
         json!("https://elsewhere.example/team/project/pulls/8");
-    assert_eq!(fixture.request_as(other, Some(scope))["type"], "error");
-    assert!(fixture.requests().is_empty());
+    let read = fixture.request_as(other, Some(scope));
+    assert_ne!(read["data"]["code"], "scope_denied", "{read}");
+    let asked = fixture.requests();
+    assert!(
+        asked.iter().any(|request| request[0] == "GET meta"),
+        "{asked:?}"
+    );
 
     // Missing API support is an explicit failure, not an empty successful log.
     responses["GET repos/team/project/commits/head/statuses?limit=50&page=1"]["body"][0]["status"] =

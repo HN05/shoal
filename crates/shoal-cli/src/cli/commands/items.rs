@@ -15,7 +15,7 @@ use crate::{
         link::ItemKind,
         reference::ItemInput,
     },
-    protocol::ItemContext,
+    protocol::RepoTarget,
 };
 
 mod content;
@@ -37,7 +37,8 @@ use self::{
 };
 pub(crate) use content::read_body;
 pub(super) use context::{
-    current_context, named_repository, select_repo_context, select_space_item_context,
+    current_context, named_repository, select_item_target, select_repo_context,
+    select_space_item_context,
 };
 
 pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
@@ -183,17 +184,17 @@ async fn merge_pr(
 ) -> Result<i32> {
     // An invalid action fails before a picker asks for its context.
     action.validate(ItemKind::Pr)?;
-    let context = item_context(ctx, &selector).await?;
+    let target = item_target(ctx, &selector).await?;
     let item = selector.item;
     if matches!(action, Action::CancelAutoMerge) {
-        return act_in(ctx, context, item, ItemKind::Pr, action, outcome).await;
+        return act_in(ctx, target, item, ItemKind::Pr, action, outcome).await;
     }
     let confirmed = match yes {
         true => None,
-        false => Some(super::merge_warning::confirm_pull(ctx, &context, item.clone()).await?),
+        false => Some(super::merge_warning::confirm_pull(ctx, &target, item.clone()).await?),
     };
     let auto_merge = matches!(action, Action::AutoMerge { .. });
-    let item = crate::client::items::merge(&ctx.paths, context, item, action, confirmed).await?;
+    let item = crate::client::items::merge(&ctx.paths, target, item, action, confirmed).await?;
     // The forge merges now a PR whose checks already pass.
     let outcome = match auto_merge && item.state == ItemState::Merged {
         true => "PR merged",
@@ -210,27 +211,28 @@ async fn act(
     outcome: &str,
 ) -> Result<i32> {
     action.validate(kind)?;
-    let context = item_context(ctx, &selector).await?;
-    act_in(ctx, context, selector.item, kind, action, outcome).await
+    let target = item_target(ctx, &selector).await?;
+    act_in(ctx, target, selector.item, kind, action, outcome).await
 }
 
-/// The context `selector` names an item in.
-async fn item_context(ctx: &Context, selector: &ItemSelector) -> Result<ItemContext> {
+/// The repository `selector` names an item in.
+async fn item_target(ctx: &Context, selector: &ItemSelector) -> Result<RepoTarget> {
     let (space, repo) = (selector.space.clone(), selector.repo.name.clone());
-    select_space_item_context(ctx, space, repo, selector.item.as_ref()).await
+    select_item_target(ctx, space, repo, selector.item.as_ref()).await
 }
 
-/// Carry out `action`, which the caller validated, on `item` in `context`,
-/// or on the space's linked item of `kind`, and report `outcome`.
+/// Carry out `action`, which the caller validated, on `item` in the
+/// `target` repository, or on the space's linked item of `kind`, and report
+/// `outcome`.
 async fn act_in(
     ctx: &Context,
-    context: ItemContext,
+    target: RepoTarget,
     item: Option<ItemInput>,
     kind: ItemKind,
     action: Action,
     outcome: &str,
 ) -> Result<i32> {
-    let item = crate::client::items::act(&ctx.paths, context, kind, item, action).await?;
+    let item = crate::client::items::act(&ctx.paths, target, kind, item, action).await?;
     report(ctx, &item, outcome)
 }
 

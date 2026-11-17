@@ -9,7 +9,7 @@ pub enum CiMethod {
     /// The log of a failed check of a PR.
     CheckLog {
         #[serde(flatten)]
-        context: super::ItemContext,
+        target: super::RepoTarget,
         selection: crate::forge::items::link::Selection,
         check: String,
     },
