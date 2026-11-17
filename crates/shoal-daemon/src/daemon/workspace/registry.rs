@@ -93,7 +93,8 @@ impl Manager {
             validate::name("repository", name)?;
         }
         let repositories = self.repositories().await?;
-        let source = match repository::select(&repositories, &source).await {
+        let origins = repository::Origins::default();
+        let source = match repository::select_with(&repositories, &source, &origins).await {
             Ok(existing)
                 if existing.id == source.value()
                     || existing.source == source.value()
@@ -119,7 +120,7 @@ impl Manager {
         } else {
             source.trim_end_matches('/').to_owned()
         };
-        if let Some(existing) = find_existing(&repositories, &source).await? {
+        if let Some(existing) = find_existing(&repositories, &source, &origins).await? {
             check_clone_path(existing, clone_path.as_deref())?;
             return match name {
                 Some(name) => self.rename_repository(&existing.id, name).await,
@@ -260,15 +261,17 @@ impl Manager {
     }
 }
 
-/// A registration with the same source string or the same remote identity.
+/// A registration with the same source string or the same remote identity,
+/// reading the checkouts' origins through `origins`.
 async fn find_existing<'a>(
     repositories: &'a [Repository],
     source: &str,
+    origins: &repository::Origins,
 ) -> Result<Option<&'a Repository>> {
     if let Some(repo) = repositories.iter().find(|r| r.source == source) {
         return Ok(Some(repo));
     }
-    repository::find_by_identity(repositories, source).await
+    repository::find_by_identity(repositories, source, origins).await
 }
 
 /// Locate a local checkout and retain its existing repository directory when

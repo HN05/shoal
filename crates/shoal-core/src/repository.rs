@@ -1,7 +1,11 @@
 //! Resolving repository selectors against the registered repositories, and
 //! the remote identity of a checkout, which Git reads.
 use anyhow::{Context, Result, ensure};
-use std::path::Path;
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::{Mutex, PoisonError},
+};
 
 use crate::{
     forge::{
@@ -18,18 +22,51 @@ pub use shoal_protocol::repository::*;
 /// Local checkouts use origin; clones retain their original source URL even
 /// when their checkout is temporarily unavailable. No network access is needed.
 pub async fn identity(source: &str) -> Result<Option<String>> {
-    Ok(remote_url_from_source(source)
-        .await?
-        .map(|url| url_key(&url)))
+    Origins::default().identity(source).await
 }
 
 /// Resolve a source that may be an existing checkout or a clone URL.
 pub async fn remote_url_from_source(source: &str) -> Result<Option<String>> {
-    let path = Path::new(source);
-    if path.exists() {
-        remote_url_from_path(path).await
-    } else {
-        Ok(Some(source.to_owned()))
+    Origins::default().source_url(source).await
+}
+
+/// The origin URLs of local checkouts, each read from Git when a lookup
+/// first needs it and kept for the rest of one operation, which may look
+/// up several sources among the same registered repositories.
+#[derive(Default)]
+pub struct Origins {
+    read: Mutex<HashMap<PathBuf, Option<String>>>,
+}
+
+impl Origins {
+    /// The remote identity of `source`, as [`identity`] reads it.
+    async fn identity(&self, source: &str) -> Result<Option<String>> {
+        Ok(self.source_url(source).await?.map(|url| url_key(&url)))
+    }
+
+    /// The URL of `source`, as [`remote_url_from_source`] reads it.
+    async fn source_url(&self, source: &str) -> Result<Option<String>> {
+        let path = Path::new(source);
+        if path.exists() {
+            self.of(path).await
+        } else {
+            Ok(Some(source.to_owned()))
+        }
+    }
+
+    /// The origin URL of the checkout at `path`, as
+    /// [`remote_url_from_path`] reads it.
+    async fn of(&self, path: &Path) -> Result<Option<String>> {
+        if let Some(origin) = self.lock().get(path) {
+            return Ok(origin.clone());
+        }
+        let origin = remote_url_from_path(path).await?;
+        self.lock().insert(path.to_owned(), origin.clone());
+        Ok(origin)
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<PathBuf, Option<String>>> {
+        self.read.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
@@ -56,6 +93,16 @@ pub async fn select(
     repositories: &[Repository],
     selector: impl Into<Selector>,
 ) -> Result<&Repository> {
+    select_with(repositories, selector, &Origins::default()).await
+}
+
+/// [`select`], reading the checkouts' origins through `origins`, which the
+/// caller's operation shares with its other lookups.
+pub async fn select_with<'a>(
+    repositories: &'a [Repository],
+    selector: impl Into<Selector>,
+    origins: &Origins,
+) -> Result<&'a Repository> {
     let selector = selector.into();
     if let Selector::Id(id) = &selector {
         return repositories
@@ -100,7 +147,7 @@ pub async fn select(
         return Ok(repo);
     }
     if (canonical.is_some() || RemoteUrl::parse(value).is_some())
-        && let Some(repo) = find_by_identity(repositories, selector.source()?)
+        && let Some(repo) = find_by_identity(repositories, selector.source()?, origins)
             .await
             .with_context(|| match &canonical {
                 Some(path) => format!(
@@ -113,14 +160,14 @@ pub async fn select(
         return Ok(repo);
     }
     if let Some(path) = &canonical
-        && let Some(repo) = find_by_origin_path(repositories, path).await
+        && let Some(repo) = find_by_origin_path(repositories, path, origins).await
     {
         return Ok(repo);
     }
     Err(NotRegistered {
         value: value.to_owned(),
         path: canonical,
-        item: ItemOf::find(repositories, value).await?,
+        item: ItemOf::find(repositories, value, origins).await?,
     }
     .into())
 }
@@ -164,7 +211,11 @@ struct ItemOf {
 
 impl ItemOf {
     /// The repository of the item `value` is the URL of, if it is one.
-    async fn find(repositories: &[Repository], value: &str) -> Result<Option<Self>> {
+    async fn find(
+        repositories: &[Repository],
+        value: &str,
+        origins: &Origins,
+    ) -> Result<Option<Self>> {
         let Ok(item) = value.parse::<ItemRef>() else {
             return Ok(None);
         };
@@ -174,7 +225,7 @@ impl ItemOf {
             LinkKind::Ci => "a CI run URL",
         };
         let repository = item.repository().repository_url();
-        let registered = find_by_identity(repositories, &repository).await?;
+        let registered = find_by_identity(repositories, &repository, origins).await?;
         Ok(Some(Self {
             kind,
             registered: registered.map(|repo| name(repo).to_owned()),
@@ -206,19 +257,22 @@ pub fn registrable(selector: &str) -> bool {
         || RemoteUrl::parse(selector).is_some() && selector.parse::<ItemRef>().is_err()
 }
 
+/// The registered repository with the remote identity of `source`, reading
+/// the checkouts' origins through `origins`.
 pub async fn find_by_identity<'a>(
     repositories: &'a [Repository],
     source: &str,
+    origins: &Origins,
 ) -> Result<Option<&'a Repository>> {
     // Reading the source's identity costs Git a process.
     if repositories.is_empty() {
         return Ok(None);
     }
-    let Some(source_identity) = identity(source).await? else {
+    let Some(source_identity) = origins.identity(source).await? else {
         return Ok(None);
     };
     for repo in repositories {
-        if identity(&repo.source).await?.as_ref() == Some(&source_identity) {
+        if origins.identity(&repo.source).await?.as_ref() == Some(&source_identity) {
             return Ok(Some(repo));
         }
     }
@@ -230,10 +284,11 @@ pub async fn find_by_identity<'a>(
 async fn find_by_origin_path<'a>(
     repositories: &'a [Repository],
     path: &Path,
+    origins: &Origins,
 ) -> Option<&'a Repository> {
     for repo in repositories {
         // An unavailable checkout, or one without origin, matches nothing.
-        let Ok(Some(origin)) = remote_url_from_path(&repo.path).await else {
+        let Ok(Some(origin)) = origins.of(&repo.path).await else {
             continue;
         };
         let origin = origin.strip_prefix("file://").unwrap_or(&origin);

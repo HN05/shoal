@@ -111,6 +111,32 @@ async fn source_lookup_keeps_urls_and_reads_only_origin_from_checkouts() {
     );
 }
 
+#[tokio::test]
+async fn one_operation_reads_a_checkouts_origin_once() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path();
+    git::run(path, &["init", "--quiet", "--template="])
+        .await
+        .unwrap();
+    let first = "https://example.test/team/first";
+    git::run(path, &["remote", "add", "origin", first])
+        .await
+        .unwrap();
+    let source = path.to_str().unwrap();
+    let origins = Origins::default();
+    let read = origins.identity(source).await.unwrap();
+    assert_eq!(read, identity(first).await.unwrap());
+    let second = "https://example.test/team/second";
+    git::run(path, &["remote", "set-url", "origin", second])
+        .await
+        .unwrap();
+    assert_eq!(origins.identity(source).await.unwrap(), read);
+    assert_eq!(
+        identity(source).await.unwrap(),
+        identity(second).await.unwrap()
+    );
+}
+
 // macOS filesystems reject non-UTF-8 directory names.
 #[cfg(target_os = "linux")]
 #[tokio::test]
