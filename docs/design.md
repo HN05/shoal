@@ -2783,8 +2783,9 @@ An idle report that ends a turn also starts the agent's prompt cache lifetime,
 which each request renews, so the `cache` schedule knows which restores find
 their cache warm. The AI tool's configured lifetime wins, then the one the
 agent's own settings give, which only its hook reads from the environment the
-agent runs with, then 30 minutes, the least OpenAI keeps a GPT-5.6 or later
-cache, and a guess for other tools.
+agent runs with, then the tool's default: for Codex 45 minutes, the least its
+OpenAI models keep a session's cache, which a resume in a new process reads
+too, though some keep it for hours, and a 30-minute guess for other tools.
 
 Progress is where a space's agent is in its work, beside its turn: a status
 line in the agent's own words and the steps of its plan. Agents already keep

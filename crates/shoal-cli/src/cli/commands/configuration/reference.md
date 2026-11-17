@@ -400,7 +400,9 @@ Each option merges on its own across layers, so a repository can replace
   [agents](../../../../../../docs/reference.md#agents).
 - `prompt_cache_minutes` sets how long the tool's prompt cache lives after its
   last request; without it, Claude Code's is what its environment and settings
-  give, and every other tool's is 30 minutes.
+  give, Codex's is 45 minutes, the least any OpenAI model it runs keeps a
+  session's cache, a resumed one's included, and every other tool's is 30
+  minutes.
 
 What a tool needs of the machine goes under
 [`[machine.agents.<name>]`](#agent-tools-on-this-machine).

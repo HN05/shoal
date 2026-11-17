@@ -5419,7 +5419,7 @@ agent waits for the user or for activity that [wakes it](#agent-messages); `stat
 lifetime: until the agent works again, `status` shows `Prompt cache` with when
 the cache expires, and the JSON adds `prompt_cache_expires_at` in Unix seconds.
 The lifetime is the AI tool's [`prompt_cache_minutes`](#agents), else what the
-agent's own settings give, else 30 minutes. A state
+agent's own settings give, else the tool's default. A state
 reported from a tracked execution shows only while that execution runs, so an
 agent whose process died, such as with a reboot, shows none, and the state ends
 with the execution's record; one reported from outside lasts until the next

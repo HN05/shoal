@@ -48,6 +48,10 @@ pub struct Tool {
     pub proxy: Option<String>,
     /// `prompt_cache_minutes` configured nearest in its lineage.
     configured_prompt_cache: Option<Duration>,
+    /// The lifetime of its prompt cache when neither its configuration nor
+    /// its agent says: the built-in tool's its lineage ends at, else
+    /// [`DEFAULT_PROMPT_CACHE`].
+    default_prompt_cache: Duration,
     /// The `model` and `effort` each configured nearest in its lineage.
     pub model: ModelChoice,
     /// How its review result comes back: as the built-in tool its lineage
@@ -56,9 +60,8 @@ pub struct Tool {
 }
 
 /// How long an agent's prompt cache lives after a turn when neither its AI
-/// tool's configuration nor its own settings say: the least OpenAI keeps a
-/// GPT-5.6 or later cache, which Codex has no setting for, and a guess for
-/// other tools that keeps idle stop from treating their caches as expired.
+/// tool, its configuration nor its own settings say: a guess that keeps idle
+/// stop from treating the cache as expired the moment a turn ends.
 pub const DEFAULT_PROMPT_CACHE: Duration = Duration::from_secs(30 * 60);
 
 /// What a tool's launcher takes besides its command, which `[commands]` may
@@ -96,11 +99,11 @@ enum SkillDir {
 impl Tool {
     /// How long its prompt cache lives after a turn whose agent `reported`
     /// the lifetime its own settings give: as configured, else as reported,
-    /// else [`DEFAULT_PROMPT_CACHE`].
+    /// else its default.
     pub fn prompt_cache(&self, reported: Option<Duration>) -> Duration {
         self.configured_prompt_cache
             .or(reported)
-            .unwrap_or(DEFAULT_PROMPT_CACHE)
+            .unwrap_or(self.default_prompt_cache)
     }
 
     /// The tool's user-level skill directory for a launch from this process;
@@ -180,7 +183,10 @@ fn tool(entries: &Agents, name: &str) -> Tool {
         configured_prompt_cache: configured
             .iter()
             .find_map(|agent| agent.prompt_cache_minutes)
-            .map(|minutes| Duration::from_secs(minutes * 60)),
+            .map(minutes),
+        default_prompt_cache: builtin
+            .and_then(|provider| provider.prompt_cache_minutes)
+            .map_or(DEFAULT_PROMPT_CACHE, minutes),
         model: ModelChoice {
             model: configured.iter().find_map(|agent| agent.model.clone()),
             effort: configured.iter().find_map(|agent| agent.effort.clone()),
@@ -205,6 +211,10 @@ fn skill_directory(configured: &[&Agent], builtin: Option<&Provider>) -> Option<
         .find_map(|agent| agent.skill_dir.clone())
         .map(SkillDir::Configured)
         .or_else(|| builtin.map(|provider| SkillDir::Builtin(provider.skill_dir)))
+}
+
+fn minutes(minutes: u64) -> Duration {
+    Duration::from_secs(minutes * 60)
 }
 
 /// The `retry` configured nearest in `configured`, the entries of a lineage;

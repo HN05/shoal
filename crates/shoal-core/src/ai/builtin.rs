@@ -39,6 +39,10 @@ pub struct Provider {
     pub(super) gate_resume: Option<&'static [&'static str]>,
     /// How its review result comes back.
     pub(super) review_result: &'static ResultFormat,
+    /// How long its prompt cache lives after a turn when neither its
+    /// configuration nor its agent's own settings say; `None` leaves it to
+    /// [`super::DEFAULT_PROMPT_CACHE`].
+    pub(super) prompt_cache_minutes: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -64,6 +68,11 @@ impl SkillDir {
         })
     }
 }
+
+/// How long the prompt cache of a Codex session lives after its last
+/// request, which a resume in a new process reads as well: the least the
+/// OpenAI models Codex runs keep it, though some keep it for hours.
+const CODEX_PROMPT_CACHE_MINUTES: u64 = 45;
 
 pub const PROVIDERS: &[Provider] = &[
     Provider {
@@ -157,6 +166,7 @@ pub const PROVIDERS: &[Provider] = &[
             "{prompt}",
         ]),
         review_result: &output::CODEX,
+        prompt_cache_minutes: Some(CODEX_PROMPT_CACHE_MINUTES),
     },
     Provider {
         name: "claude",
@@ -239,6 +249,7 @@ pub const PROVIDERS: &[Provider] = &[
             "{session}",
         ]),
         review_result: &output::CLAUDE,
+        prompt_cache_minutes: None,
     },
     // opencode and pi also read `~/.agents/skills`, so they share Codex's copy.
     Provider {
@@ -259,6 +270,7 @@ pub const PROVIDERS: &[Provider] = &[
         gate: None,
         gate_resume: None,
         review_result: &output::PLAIN,
+        prompt_cache_minutes: None,
     },
     Provider {
         name: "pi",
@@ -278,6 +290,7 @@ pub const PROVIDERS: &[Provider] = &[
         gate: None,
         gate_resume: None,
         review_result: &output::PLAIN,
+        prompt_cache_minutes: None,
     },
     Provider {
         name: "grok",
@@ -297,6 +310,7 @@ pub const PROVIDERS: &[Provider] = &[
         gate: None,
         gate_resume: None,
         review_result: &output::PLAIN,
+        prompt_cache_minutes: None,
     },
 ];
 

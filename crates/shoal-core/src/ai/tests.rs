@@ -314,9 +314,9 @@ fn launch_profiles_need_a_reachable_base_and_valid_variables() {
 }
 
 #[test]
-fn prompt_cache_lifetime_prefers_configured_then_reported_then_the_default() {
+fn prompt_cache_lifetime_prefers_configured_then_reported_then_the_tools_default() {
     let agents = parse(
-        "[agents.claude-short]\nbase = 'claude'\nprompt_cache_minutes = 5\n[agents.claude-shorter]\nbase = 'claude-short'\n[agents.codex-long]\nbase = 'codex'\nprompt_cache_minutes = 720\n",
+        "[agents.claude-short]\nbase = 'claude'\nprompt_cache_minutes = 5\n[agents.claude-shorter]\nbase = 'claude-short'\n[agents.codex-long]\nbase = 'codex'\nprompt_cache_minutes = 720\n[agents.codex-fast]\nbase = 'codex'\n",
     )
     .unwrap();
     let minutes = |minutes: u64| Duration::from_secs(minutes * 60);
@@ -329,6 +329,16 @@ fn prompt_cache_lifetime_prefers_configured_then_reported_then_the_default() {
         minutes(5)
     );
     assert_eq!(agents["codex-long"].prompt_cache(None), minutes(720));
+    // A launch profile keeps its built-in tool's lifetime, which a report
+    // from the agent's own settings overrides.
+    assert_eq!(
+        agents["codex-fast"].prompt_cache(None),
+        agents["codex"].prompt_cache(None)
+    );
+    assert_eq!(
+        agents["codex-fast"].prompt_cache(Some(minutes(7))),
+        minutes(7)
+    );
     // Every tool has a lifetime, so idle stop never takes a cache for gone
     // the moment a turn ends.
     for tool in ["claude", "codex", "pi", "opencode", "grok"] {
