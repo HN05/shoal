@@ -345,3 +345,78 @@ async fn a_stopped_start_without_an_agent_stays_stopped_once_disk_allows() {
     let waits = read(&manager, &ui).await.part.preparation_waits;
     assert_eq!(waits, Some(PreparationWait::Stopped));
 }
+
+/// Start a copy of `source`, which `selector` names, that waits for `api`,
+/// with `git_profile`.
+async fn start_copy(
+    manager: &Arc<Manager>,
+    repo: &Repository,
+    (selector, api): (SpaceSelector, &Workspace),
+    git_profile: Option<&str>,
+) -> Workspace {
+    let opening = Opening {
+        start: WorkspaceStart::Copy {
+            source: crate::protocol::CopySource {
+                workspace: selector,
+                checkpoint: None,
+            },
+            branch: Some("copy".into()),
+            typed: false,
+        },
+        base: None,
+        new: crate::daemon::workspace::NewWorkspace {
+            git_profile,
+            ..Default::default()
+        },
+        parent: None,
+    };
+    let preparing = Preparing {
+        issue: None,
+        pr: None,
+        agent: Some(Box::new(LaunchRequest::new(Some(
+            "claude".parse().unwrap(),
+        )))),
+        waiting: None,
+        queue_entry: None,
+        blockers: vec![Blocker::Space(api.id.to_string())],
+        unfollowed: false,
+        env: None,
+    };
+    let started = manager
+        .start_workspace((&repo.id).into(), opening, preparing, None)
+        .await
+        .unwrap();
+    assert!(started.operation.is_none());
+    *started.workspace
+}
+
+#[tokio::test]
+async fn a_blocked_copy_takes_its_source_as_it_is_once_its_blockers_clear() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let api = create(&manager, &repo, "api").await;
+    let source = create(&manager, &repo, "source").await;
+    // Named by its number, which the wait may free and give another.
+    let selector = SpaceSelector::parse(&source.number.to_string()).unwrap();
+    let copy = start_copy(&manager, &repo, (selector, &api), None).await;
+    assert!(copy.pending_worktree && !copy.path.exists());
+    let id = copy.id.clone();
+    let plan: String = (manager.store)
+        .run(move |db| {
+            let sql = "SELECT plan FROM pending_worktrees WHERE workspace_id=?1";
+            Ok(db.query_row(sql, [&id], |row| row.get(0))?)
+        })
+        .await
+        .unwrap();
+    assert!(plan.contains(source.id.as_str()), "{plan}");
+    // The source's work goes on while the copy waits.
+    std::fs::write(source.path.join("later"), "later\n").unwrap();
+    done(&manager, &api).await;
+    manager.start_waiting_preparations().await.unwrap();
+    assert!(manager.operation_runs_in(&copy.id));
+    let selector = SpaceSelector::id(&copy.id);
+    let created = manager.create_pending_worktree(&selector).await.unwrap();
+    assert!(created.path.join("later").exists());
+    assert!(!created.pending_worktree);
+    assert!(created.copied_from.is_some());
+}
