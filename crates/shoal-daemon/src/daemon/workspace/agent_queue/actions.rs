@@ -43,7 +43,7 @@ impl Manager {
 
     /// The waiting entry `selector` names; `starting` says what to do with
     /// one that already starts.
-    async fn waiting_entry(
+    pub(super) async fn waiting_entry(
         &self,
         selector: &str,
         caller: Option<&Caller>,

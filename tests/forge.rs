@@ -79,7 +79,8 @@ impl Fixture {
             base: Base::start(root, &config, "repo", &[("tracked", "committed\n")]),
             web,
         };
-        fixture.ok(&["start", fixture.repo.to_str().unwrap(), "--branch", "topic"]);
+        let repo = fixture.repo.to_str().unwrap();
+        fixture.ok(&["start", "--wait", repo, "--branch", "topic"]);
         git(&fixture.repo, &["remote", "add", "origin", &origin]);
         git(
             &fixture.repo,
@@ -3589,6 +3590,7 @@ fn scoped_check_logs_resolve_web_indices_and_use_the_agent_account() {
     // another repository, whose host is asked here which forge it serves.
     fixture.ok(&[
         "start",
+        "--wait",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "other",
@@ -5860,6 +5862,7 @@ fn a_parent_with_the_permission_opens_a_proposal_below_it_with_its_edits() {
     let repo = fixture.repo.to_str().unwrap();
     fixture.ok(&[
         "start",
+        "--wait",
         repo,
         "--branch",
         "helper",

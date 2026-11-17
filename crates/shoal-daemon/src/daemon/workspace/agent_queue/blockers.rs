@@ -202,18 +202,20 @@ impl Manager {
     }
 
     /// Let the launches waiting for the setup of `workspace` go, once a
-    /// preparation there got past its post-setup hook.
+    /// preparation there got past its post-setup hook, those whose start
+    /// asked for it at once.
     pub(crate) async fn release_setup_waits(&self, workspace: &SpaceId) -> Result<()> {
-        let workspace = workspace.to_owned();
+        let released = workspace.to_owned();
         self.store
             .run(move |db| {
                 db.execute(
                     "DELETE FROM agent_queue_blockers WHERE kind=?1 AND target=?2",
-                    params![BlockerKind::Setup, workspace],
+                    params![BlockerKind::Setup, released],
                 )?;
                 Ok(())
             })
             .await?;
+        self.start_released_at_once(workspace).await?;
         self.agent_queue.wake();
         Ok(())
     }

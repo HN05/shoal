@@ -174,6 +174,7 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
     let (output, transcript) = fixture.terminal_command(
         fixture.command().args([
             "start",
+            "--wait",
             repo,
             "--branch",
             "background",
@@ -239,7 +240,9 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
         fixture
             .command()
             .env("SHOAL_SHELL_DIRECTIVE", &directive)
-            .args(["start", repo, "--branch", "focused", "--agent", "pi"]),
+            .args([
+                "start", "--wait", repo, "--branch", "focused", "--agent", "pi",
+            ]),
         "",
         true,
     );
@@ -260,7 +263,7 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
         fixture
             .command()
             .env("SHOAL_SHELL_DIRECTIVE", &directive)
-            .args(["start", repo, "--branch", "shell-here", "--focus"]),
+            .args(["start", "--wait", repo, "--branch", "shell-here", "--focus"]),
         "",
         true,
     );
@@ -285,6 +288,7 @@ fn background_add_without_an_agent_opens_the_workspace_shell_in_its_session() {
     let (output, transcript) = fixture.terminal_command(
         fixture.command().env("SHELL", &shell).args([
             "start",
+            "--wait",
             fixture.repo.to_str().unwrap(),
             "--branch",
             "shell-only",
@@ -463,6 +467,7 @@ fn a_detached_session_ends_once_a_kept_completion_resolves_its_agent() {
             .env("SHOAL_TEST_BINARY", support::shoal_binary())
             .args([
                 "start",
+                "--wait",
                 fixture.repo.to_str().unwrap(),
                 "--branch",
                 "kept",
@@ -503,6 +508,7 @@ fn a_detached_session_stays_open_without_close_when_done() {
     let (output, transcript) = fixture.terminal_command(
         fixture.command().args([
             "start",
+            "--wait",
             fixture.repo.to_str().unwrap(),
             "--branch",
             "open",
@@ -543,6 +549,7 @@ fn a_detached_session_ends_with_its_agent_whatever_its_exit() {
     let (output, transcript) = fixture.terminal_command(
         fixture.command().env("SHELL", &shell).args([
             "start",
+            "--wait",
             fixture.repo.to_str().unwrap(),
             "--branch",
             "failing",
@@ -1066,9 +1073,9 @@ fn terminal_agent_launches_refuse_a_missing_zmx_before_creating_anything() {
     fs::remove_file(fixture.root.path().join("runner-bin/zmx")).unwrap();
     let repo = fixture.repo.to_str().unwrap();
     let (output, transcript) = fixture.terminal_command(
-        fixture
-            .command()
-            .args(["start", repo, "--branch", "no-zmx", "--agent", "claude"]),
+        fixture.command().args([
+            "start", "--wait", repo, "--branch", "no-zmx", "--agent", "claude",
+        ]),
         "",
         true,
     );
@@ -1085,7 +1092,9 @@ fn terminal_agent_launches_refuse_a_missing_zmx_before_creating_anything() {
     let start = |here: &[&str]| {
         fixture
             .command()
-            .args(["start", repo, "--branch", "no-zmx", "--agent", "claude"])
+            .args([
+                "start", "--wait", repo, "--branch", "no-zmx", "--agent", "claude",
+            ])
             .args(here)
             .env("PATH", &path)
             .output()

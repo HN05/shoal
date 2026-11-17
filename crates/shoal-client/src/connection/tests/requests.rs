@@ -586,10 +586,8 @@ async fn a_start_without_an_agent_queues_the_configured_default() {
     .await;
     let started: StartedWorkspace = connection::request(&app, create("api")).await.unwrap();
     let worker = fake::take(&started.operation);
-    let OperationSpec::Prepare { steps, .. } = worker.order.spec.clone() else {
-        panic!("expected a preparation: {:?}", worker.order);
-    };
-    assert_eq!(steps.agent.map(|launch| launch.agent), Some("probe".into()));
+    let entry = started.entry.expect("the start queued its agent");
+    assert_eq!(entry.agent, "probe");
     worker.exit(1);
 }
 

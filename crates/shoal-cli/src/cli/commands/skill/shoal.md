@@ -77,8 +77,11 @@ start detached; `--here` runs one in the calling terminal until it exits, as
 the new space's own agent. `--fork` starts the caller's
 own agent from a fork of its session, so it needs only its task after `--`.
 
-`start` returns once the workspace is set up, with the workspace and the
-agent's queue entry. The daemon starts queued agents of heavy modes as `max_heavy_agents` allows
+`start` returns once the daemon records a new workspace, with the workspace
+and the agent's queue entry, which waits while the daemon creates the
+worktree and runs setup and the post-setup hook; until the worktree exists,
+commands that read it refuse the workspace. `--wait` returns once that
+preparation ends. The daemon starts queued agents of heavy modes as `max_heavy_agents` allows
 (`state: queued`, `position`), work close to finished, work that other work
 waits on and new workspaces whose issues share fewer `[issue] area_prefix`
 labels with existing workspaces first (`rank`), higher priority before all

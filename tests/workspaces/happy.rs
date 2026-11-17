@@ -37,6 +37,7 @@ fn happy_agents_are_refused_until_enabled() {
         .command()
         .args([
             "start",
+            "--wait",
             fixture.repo.to_str().unwrap(),
             "--branch",
             "happy-off",
@@ -68,6 +69,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
                 .args([
                     "--json",
                     "start",
+                    "--wait",
                     fixture.repo.to_str().unwrap(),
                     "--branch",
                     &name,
@@ -238,6 +240,7 @@ fn happy_issue_prompts_reach_claude_as_arguments_and_codex_as_its_first_message(
             .args([
                 "--json",
                 "start",
+                "--wait",
                 fixture.repo.to_str().unwrap(),
                 "--base",
                 "HEAD",
@@ -686,6 +689,7 @@ done
         .args([
             "--json",
             "start",
+            "--wait",
             fixture.repo.to_str().unwrap(),
             "--branch",
             "concurrent",
@@ -919,7 +923,7 @@ fn a_start_without_a_terminal_hands_a_happy_agent_over_here() {
     let start = |args: &[&str]| {
         fixture
             .command()
-            .args(["--json", "start", repo])
+            .args(["--json", "start", "--wait", repo])
             .args(args)
             .args(["--agent", "happy-codex"])
             .env("HAPPY_RECORD", &record)
@@ -968,7 +972,7 @@ fn a_start_without_a_terminal_admits_a_happy_agent_before_it_opens_here() {
     let mut first = fixture
         .command()
         .args([
-            "start", repo, "--branch", "first", "--here", "--agent", "waiter",
+            "start", "--wait", repo, "--branch", "first", "--here", "--agent", "waiter",
         ])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -985,6 +989,7 @@ fn a_start_without_a_terminal_admits_a_happy_agent_before_it_opens_here() {
         .args([
             "--json",
             "start",
+            "--wait",
             repo,
             "--branch",
             "happy",

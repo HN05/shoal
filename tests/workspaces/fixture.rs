@@ -163,8 +163,10 @@ impl Fixture {
         support::forge::respond(self.root.path(), &Value::from(responses.clone()));
     }
 
+    /// Start the workspace on the new branch `name`, once it is set up.
     pub(crate) fn add(&self, name: &str) -> Value {
-        self.ok(&["start", self.repo.to_str().unwrap(), "--branch", name])
+        let repo = self.repo.to_str().unwrap();
+        self.ok(&["start", "--wait", repo, "--branch", name])
     }
 
     /// The ID of the agent queue's entry named `name`, which queue commands

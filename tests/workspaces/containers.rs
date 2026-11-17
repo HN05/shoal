@@ -308,6 +308,7 @@ fn containers_that_do_not_start_fail_setup_until_it_is_retried() {
     fs::write(fixture.root.path().join("compose-fail"), "up").unwrap();
     let failed = fixture.run(&[
         "start",
+        "--wait",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "worker",
@@ -348,6 +349,7 @@ fn the_workspaces_agent_takes_over_the_project_setup_started_for_it() {
     );
     let started = fixture.run(&[
         "start",
+        "--wait",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "worker",
@@ -389,6 +391,7 @@ fn a_retried_setup_leaves_the_project_to_the_agent_that_waited_for_it() {
     fs::write(fixture.root.path().join("compose-fail"), "up").unwrap();
     let failed = fixture.run(&[
         "start",
+        "--wait",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "worker",

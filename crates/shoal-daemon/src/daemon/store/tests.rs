@@ -653,6 +653,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 215 {
         db.execute_batch(include_str!("pending_worktrees.sql"))?;
     }
+    if version >= 216 {
+        db.execute_batch(include_str!("queue_starts_at_once.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"

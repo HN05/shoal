@@ -395,6 +395,7 @@ async fn in_new_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> R
     let options = workspaces::AddOptions {
         here: args.here,
         focus: args.focus,
+        wait: args.wait,
         now: args.now,
         blockers: args.add_blocker,
         model: args.model.into(),
@@ -421,6 +422,7 @@ async fn worker_in(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Result<i
     let options = workspaces::AddOptions {
         here: args.here,
         focus: args.focus,
+        wait: args.wait,
         now: args.now,
         blockers: args.add_blocker,
         model: args.model.into(),

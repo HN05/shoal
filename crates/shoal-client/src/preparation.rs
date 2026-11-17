@@ -13,7 +13,7 @@ use crate::{
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_protocol::{
-    model::Workspace,
+    model::{QueueEntry, Workspace},
     protocol::{
         CopySource, CreationOptions, OperationMethod,
         operations::{
@@ -212,6 +212,7 @@ pub async fn prepare<'d, D: Daemon>(
         operation,
         workspace: Box::new(workspace.clone()),
         reused: true,
+        entry: None,
         warnings: Vec::new(),
     };
     Preparing::follow(daemon, started).await
@@ -222,6 +223,9 @@ pub struct Preparing<'d, D> {
     daemon: &'d D,
     workspace: Box<Workspace>,
     reused: bool,
+    /// The queue entry of the agent the start queued there, which waits for
+    /// the preparation.
+    entry: Option<Box<QueueEntry>>,
     /// What assigning its issue on the forge warned of.
     warnings: Vec<String>,
     operation: String,
@@ -238,6 +242,7 @@ impl<'d, D: Daemon> Preparing<'d, D> {
             operation,
             workspace,
             reused,
+            entry,
             warnings,
         } = started;
         let following = Following::open(daemon, operation.clone(), 0).await?;
@@ -245,6 +250,7 @@ impl<'d, D: Daemon> Preparing<'d, D> {
             daemon,
             workspace,
             reused,
+            entry,
             warnings,
             operation,
             following,
@@ -255,6 +261,12 @@ impl<'d, D: Daemon> Preparing<'d, D> {
     /// The workspace as it was before its preparation.
     pub fn workspace(&self) -> &Workspace {
         &self.workspace
+    }
+
+    /// The queue entry of the agent the start queued in the workspace,
+    /// which waits for its preparation.
+    pub fn entry(&self) -> Option<&QueueEntry> {
+        self.entry.as_deref()
     }
 
     /// Whether the workspace existed before, so it was reopened rather than

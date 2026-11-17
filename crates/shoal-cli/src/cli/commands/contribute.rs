@@ -23,6 +23,7 @@ pub(super) async fn contribute(ctx: &Context, args: ContributeArgs) -> Result<i3
     let ContributeArgs {
         here,
         focus,
+        wait,
         target,
         branch,
         agent,
@@ -40,6 +41,7 @@ pub(super) async fn contribute(ctx: &Context, args: ContributeArgs) -> Result<i3
     let start = StartArgs {
         here,
         focus,
+        wait,
         now,
         agent,
         model,

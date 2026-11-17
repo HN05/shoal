@@ -151,12 +151,18 @@ it through `shoal_client`, as an app does, showing its output where it showed
 it before, so the CLI and apps cannot drift. `shoal start`, `split` and apps open a
 workspace and start its preparation through one request, `StartWorkspace` or
 `StartSplit`: it refuses an agent that cannot run, an issue that is not open or
-a branch that is not a literal Git branch name before creating anything, creates the workspace or reopens the one on the
-branch, PR head or record it names, assigns the issue, removing a new workspace
-it cannot assign, and starts the operation, which sets it up, links its PR, runs
-a new workspace's post-setup hook and queues the detached agent the request
-asks for, with its mode, model, arguments, fork, issue and caller's place, as a
-scoped `start --agent` starts its agent. The request names an agent, mode or
+a branch that is not a literal Git branch name before creating anything, records
+a new workspace on a branch, `preparing` without its worktree, or creates one
+at a commit or as a copy, or reopens the one on the branch, PR head or record
+it names, assigns the issue, removing a new workspace it cannot assign, queues
+the detached agent the request asks for, with its mode, model, arguments,
+fork, issue and caller's place, as a scoped `start --agent` starts its agent,
+which waits in the queue for the preparation, and starts the operation, which
+creates the worktree, sets it up, links its PR and runs a new workspace's
+post-setup hook. The request answers once the workspace is recorded, so a
+caller gets its number and its agent's entry without waiting for Git or
+setup; until its worktree exists, what reads it refuses the workspace, and
+removal takes only its record and leases. The request names an agent, mode or
 model only where the caller chose one; the daemon resolves the rest under the
 workspace's settings, `agent.default` for the agent, and the agent works on the
 start's issue unless the request gives it an issue or a task, so an app needs
@@ -189,10 +195,11 @@ environment and the session `--fork` forks, and what only its terminal can
 check, such as a host to place the agent in; it keeps what attaches a
 terminal: a start here or beside it, and an agent that runs its own way, such
 as Happy's, which starts in the caller's process for a chat as for a
-workspace. One `shoal_client` call sends the
-request and follows the preparation, returning the prepared workspace or the
-typed failure with the workspace as it left it, ready when only what follows
-setup failed. The CLI makes that call and keeps its prompt for a failed setup
+workspace. A detached start reports the recorded workspace and its agent's
+entry without following the preparation, unless `--wait` asks it to. One
+`shoal_client` call sends the request and follows the preparation, returning
+the prepared workspace or the typed failure with the workspace as it left it,
+ready when only what follows setup failed. The CLI makes that call and keeps its prompt for a failed setup
 and an agent it launches in the terminal. An interrupt or termination of the CLI cancels the operation, which
 interrupts the worker as it interrupted the CLI; a CLI that ends otherwise leaves
 it running. The daemon keeps an operation in memory until ten minutes after it
@@ -1109,9 +1116,10 @@ ignore (which repairs verified state first), or keep; a setup that never
 started offers only retry or keep. JSON callers get a nonzero exit.
 `setup` and `restore` rerun setup explicitly; nothing retries automatically.
 The agent a start launches in a workspace whose setup fails waits in the
-queue for that setup instead of holding its slot, queued by the
-preparation, which also carries the agent a CLI would run itself, so no
-follower is needed. A start whose preparation ended without queuing it, such
+queue for that setup instead of holding its slot, queued with the workspace's
+record for a start the daemon carries out, or by the preparation, which
+carries the agent a CLI would run itself, so no follower is needed; one that
+starts now starts once the setup releases it, regardless of the limits. A start whose preparation ended without queuing it, such
 as when its worker died, goes back to the queue as a new entry, which no hold
 on the old one keeps back, with its plan opening the workspace. A persisted
 dependency that only a preparation getting past its post-setup hook releases

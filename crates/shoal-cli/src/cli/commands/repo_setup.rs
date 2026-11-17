@@ -139,6 +139,7 @@ fn add_options(options: &Options, prompt: String, on_terminal: bool) -> workspac
     workspaces::AddOptions {
         here: options.here,
         focus: on_terminal,
+        wait: false,
         now: true,
         model: options.model.clone(),
         mode: Some(ModeChoice::Named(modes::ModeName::SETUP)),

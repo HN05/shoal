@@ -1242,7 +1242,13 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
     }
     // A process with the exported environment opens workspaces only below
     // its own.
-    let below = scoped(&["start", fixture.repo.to_str().unwrap(), "--branch", "below"]);
+    let below = scoped(&[
+        "start",
+        "--wait",
+        fixture.repo.to_str().unwrap(),
+        "--branch",
+        "below",
+    ]);
     assert!(below.status.success(), "{}", printed(&below));
     let below = fixture.ok(&["status", &fixture.id("below")]);
     assert_eq!(below["workspace"]["parent"]["name"], "external", "{below}");
@@ -1330,6 +1336,7 @@ fn exported_tokens_expire_on_revocation_and_successful_removal() {
     // The branch had no commits, so removal deleted it too.
     fixture.ok(&[
         "start",
+        "--wait",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "external",

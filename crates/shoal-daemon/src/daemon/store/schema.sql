@@ -279,7 +279,7 @@ CREATE TABLE "agent_queue" (
     opens_workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
     base_branch TEXT,
     automatic INTEGER NOT NULL DEFAULT 0 CHECK(automatic IN (0,1)),
-    job TEXT, mode TEXT, narrowing TEXT, scope_space_id TEXT, priority INTEGER CHECK(priority BETWEEN 0 AND 100), stop_reason TEXT, wakes_when TEXT, issue_labels TEXT, source TEXT,
+    job TEXT, mode TEXT, narrowing TEXT, scope_space_id TEXT, priority INTEGER CHECK(priority BETWEEN 0 AND 100), stop_reason TEXT, wakes_when TEXT, issue_labels TEXT, source TEXT, starts_at_once INTEGER NOT NULL DEFAULT 0,
     CHECK(CASE kind
         WHEN 'launch' THEN plan IS NOT NULL AND env IS NOT NULL AND execution_id IS NULL AND job IS NULL
         WHEN 'restore' THEN plan IS NULL AND execution_id IS NOT NULL AND space_id IS NOT NULL AND job IS NULL

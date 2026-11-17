@@ -163,6 +163,7 @@ fn assert_failed_labelling_refuses_launches(
         ],
         vec![
             "start",
+            "--wait",
             repo,
             "--branch",
             "blocked-add",
@@ -512,7 +513,9 @@ fn removals_from_a_pane_split_off_a_recorded_pane_go_on() -> anyhow::Result<()> 
     let repo = fixture.repo.to_str().unwrap_or_default();
     let (caller, _) = herdr_call(
         &fixture,
-        &["start", repo, "--branch", "tabbed", "--agent", "pi"],
+        &[
+            "start", "--wait", repo, "--branch", "tabbed", "--agent", "pi",
+        ],
         "",
     );
     assert!(caller.status.success());

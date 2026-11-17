@@ -306,6 +306,7 @@ async fn pull_request(
                 super::super::workspaces::AddOptions {
                     here: true,
                     focus: false,
+                    wait: false,
                     now: false,
                     blockers: Vec::new(),
                     ..Default::default()

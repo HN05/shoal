@@ -180,6 +180,10 @@ pub struct StartArgs {
     /// its agent starts now, as with --now.
     #[arg(short = 'f', long, conflicts_with = "here")]
     pub focus: bool,
+    /// Return only once a new workspace is set up, with its worktree, setup
+    /// and post-setup hook done, instead of once it is recorded.
+    #[arg(long)]
+    pub wait: bool,
     /// Registered repository, or an issue, PR or branch URL; defaults to the
     /// current checkout or workspace, else a picker.
     #[arg(value_parser = start_target)]
@@ -319,6 +323,7 @@ impl StartArgs {
             parent,
             here,
             focus,
+            wait,
             repository,
             repository_override,
             checked_repository: _,
@@ -359,6 +364,7 @@ impl StartArgs {
         line.values("parent", parent.as_ref().map(ToString::to_string));
         line.switch("here", *here);
         line.switch("focus", *focus);
+        line.switch("wait", *wait);
         line.values("repository_override", repository_override);
         line.values("branch", branch);
         line.optional(
@@ -453,6 +459,10 @@ pub struct ContributeArgs {
     /// its agent starts now, as with --now.
     #[arg(short = 'f', long, conflicts_with = "here")]
     pub focus: bool,
+    /// Return only once a new workspace is set up, with its worktree, setup
+    /// and post-setup hook done, instead of once it is recorded.
+    #[arg(long)]
+    pub wait: bool,
     /// Repository URL, or an issue, PR or branch URL.
     #[arg(value_parser = start_target)]
     pub target: StartTarget,

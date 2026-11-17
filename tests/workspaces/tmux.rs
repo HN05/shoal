@@ -190,12 +190,9 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_panes() {
     };
     let repo = fixture.repo.to_str().unwrap();
     let (output, transcript) = fixture.interactive_command(
-        tmux.inside(
-            fixture
-                .command()
-                .current_dir(&fixture.repo)
-                .args(["start", repo, "--branch", "placed", "--agent", "pi"]),
-        ),
+        tmux.inside(fixture.command().current_dir(&fixture.repo).args([
+            "start", "--wait", repo, "--branch", "placed", "--agent", "pi",
+        ])),
         "",
     );
     assert!(output.status.success(), "{} {transcript}", printed(&output));
@@ -231,12 +228,9 @@ fn split_placement_opens_additions_beside_the_callers_pane() {
     let windows = tmux.windows();
     let repo = fixture.repo.to_str().unwrap();
     let (output, transcript) = fixture.interactive_command(
-        tmux.inside(
-            fixture
-                .command()
-                .current_dir(&fixture.repo)
-                .args(["start", repo, "--branch", "placed", "--agent", "pi"]),
-        ),
+        tmux.inside(fixture.command().current_dir(&fixture.repo).args([
+            "start", "--wait", repo, "--branch", "placed", "--agent", "pi",
+        ])),
         "",
     );
     assert!(output.status.success(), "{} {transcript}", printed(&output));

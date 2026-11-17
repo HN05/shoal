@@ -1,4 +1,5 @@
-//! The launches waiting for the setup of a workspace whose setup failed:
+//! The launches waiting for the setup of a workspace: starting a launch
+//! whose start asked for it at once when its preparation releases it,
 //! returning a start whose preparation left none waiting to the queue,
 //! finding the one waiting for a workspace's, and changing the permissions
 //! its plan starts its agent with before a retried setup lets it start.
@@ -42,6 +43,54 @@ enum Returned {
 }
 
 impl Manager {
+    /// Have the waiting launch `entry` start at once, regardless of the
+    /// limits, when the setup it waits for releases it.
+    pub(super) async fn start_at_once_after_setup(&self, entry: &QueueEntryId) -> Result<()> {
+        let entry = entry.to_owned();
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE agent_queue SET starts_at_once=1 WHERE id=?1",
+                    [&entry],
+                )?;
+                Ok(())
+            })
+            .await
+    }
+
+    /// Start at once each launch waiting to open `workspace` that its start
+    /// asked to, now that nothing holds it back; one that cannot start stays
+    /// for the queue to admit.
+    pub(super) async fn start_released_at_once(&self, workspace: &SpaceId) -> Result<()> {
+        let _gate = self.agent_queue.lock_admission().await;
+        let workspace = workspace.to_owned();
+        let released: Vec<QueueEntryId> = self
+            .store
+            .run(move |db| {
+                Ok(db
+                    .prepare(&format!(
+                        "SELECT id {AWAITING_SETUP} AND starts_at_once
+                            AND NOT EXISTS (SELECT 1 FROM agent_queue_blockers b WHERE b.entry_id=agent_queue.id)"
+                    ))?
+                    .query_map(
+                        params![workspace, QueueKind::Launch, QueueState::Queued],
+                        |row| row.get(0),
+                    )?
+                    .collect::<rusqlite::Result<_>>()?)
+            })
+            .await?;
+        for id in released {
+            let started = match self.waiting_entry(id.as_str(), None, "").await {
+                Ok(entry) => self.start_waiting(entry, false).await.map(drop),
+                Err(error) => Err(error),
+            };
+            if let Err(error) = started {
+                log!("{id} did not start at once after its setup: {error:#}");
+            }
+        }
+        Ok(())
+    }
+
     /// Return to the queue each starting launch of a workspace whose setup
     /// failed once no operation works there, so no preparation leaves its
     /// agent waiting in its place, such as when the preparation's worker

@@ -2111,14 +2111,17 @@ once readings are healthy.
 branch and agent. When none is free it prints the entry's place and returns
 (`--json` emits the entry); the workspace is created only when the entry
 starts, from the then-current default branch. A start that runs detached, from
-a scoped caller or one without a terminal creates the
-workspace and sets it up
-first, reporting setup errors to the caller. A scoped caller's preparation then
-queues the agent in it; for the user's, the caller queues it once setup ends,
-from the workspace's own settings, except that an agent Happy runs opens in
-place when the limits admit it, otherwise waiting in the queue. The
-daemon starts a queued agent, and the call returns reporting the entry
-(`--json` emits the workspace record, then the entry). `--now` starts that agent
+a scoped caller or one without a terminal, returns once the daemon has
+recorded the workspace, `preparing`, and queued its agent there, reporting
+both (`--json` emits the workspace record, then the entry); the daemon then
+prepares the workspace in the background, creating its worktree and running
+setup and the post-setup hook, while the agent waits in the queue for that,
+holding no slot. Until its worktree exists, commands that read it refuse
+the workspace, and `shoal rm` removes only its record and leases. `--wait`
+returns once the preparation ends, reporting its failure as a start from a
+terminal does. The user's start without a terminal of an agent Happy runs
+instead sets the workspace up first, then opens the agent in place when the
+limits admit it, otherwise waiting in the queue. `--now` starts that agent
 regardless of the limits, as does `--focus` for a scoped caller, as its
 space's [`limits` permission](#permitted-actions) allows. A detached start that waits for other work queues as a whole as from
 a terminal, starting in the background once the work is complete; a scoped
@@ -3469,8 +3472,9 @@ look into; an ignored directory Git lists whole is otherwise copied whole.
 your CLI environment. Setup and the post-setup hook, like the push of `shoal pr open`
 and `shoal merge`, run in a process the daemon starts: the command shows their output,
 and interrupting the command interrupts them, while they go on when the command ends
-otherwise, such as when its terminal closes. `shoal start` waits for setup before
-entering the worktree or launching an agent; the workspace stays `preparing` until it exits 0 with no
+otherwise, such as when its terminal closes. `shoal start` from a terminal, or
+with `--wait`, waits for setup before entering the worktree or launching an
+agent; the workspace stays `preparing` until it exits 0 with no
 surviving processes. When that command is interrupted before setup starts,
 `shoal setup` prepares the workspace and `shoal rm` removes it. On failure, interactive mode asks whether to retry setup, delete the
 new workspace and branch, ignore the failure and continue, or keep it for

@@ -125,6 +125,12 @@ pub(super) async fn entries(ctx: &Context) -> Result<Vec<QueueEntry>> {
     queue::entries(&ctx.paths).await
 }
 
+/// `launch` as the queue has it now, gone once its agent started.
+pub(super) async fn current(ctx: &Context, launch: &QueueEntry) -> Result<Option<QueueEntry>> {
+    let entries = entries(ctx).await?;
+    Ok(entries.into_iter().find(|entry| entry.id == launch.id))
+}
+
 /// The entries `shoal list` and `shoal queue` show under `filter`.
 pub(super) async fn listed(ctx: &Context, filter: &ListFilter) -> Result<Vec<QueueEntry>> {
     let mut entries = entries(ctx).await?;

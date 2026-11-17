@@ -1,7 +1,7 @@
 use crate::connection::{self};
 use crate::test_daemon::{Connect as _, code, queued_plan};
 use shoal_daemon::test_daemon::{TestDaemon, fake};
-use shoal_protocol::launches::{Launch, LaunchSource, Launched, SpaceChoice, StartTarget};
+use shoal_protocol::launches::{Launch, Launched, SpaceChoice, StartTarget};
 use shoal_protocol::model::Workspace;
 use shoal_protocol::protocol::{ChatStart, ErrorCode, WorkspaceMethod, operations::OperationSpec};
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
@@ -80,13 +80,14 @@ async fn a_launch_opens_a_new_workspace_and_prepares_it() {
     };
     assert_eq!(started.workspace.branch().map(|b| b.as_str()), Some("new"));
     let worker = fake::take(&started.operation);
+    // Its agent waits in the queue for the preparation, which queues none.
     let OperationSpec::Prepare { steps, .. } = worker.order.spec.clone() else {
         panic!("expected a preparation: {:?}", worker.order);
     };
-    // Its agent queues once the workspace is set up, as the launch made it.
-    let agent = steps.agent.unwrap();
-    assert_eq!(agent.agent, "probe");
-    assert_eq!(agent.source, Some(LaunchSource::Manual));
+    assert!(steps.agent.is_none(), "{steps:?}");
+    let entry = started.entry.expect("the launch queued its agent");
+    assert_eq!(entry.agent, "probe");
+    assert_eq!(entry.blockers, ["setup of new".to_owned()]);
     worker.exit(1);
 }
 

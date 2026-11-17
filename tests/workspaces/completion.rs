@@ -44,6 +44,7 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
     );
     let agent = fixture.run(&[
         "start",
+        "--wait",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "agent-work",
@@ -81,6 +82,7 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
     ]);
     let agent = fixture.run(&[
         "start",
+        "--wait",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "agent-work",
@@ -119,6 +121,7 @@ fn agent_exit_hook_can_signal_completion_without_a_post_done_hook() {
     );
     let agent = fixture.run(&[
         "start",
+        "--wait",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "agent-work",
@@ -159,6 +162,7 @@ fn agent_exit_acknowledgement_does_not_wait_for_the_hook() {
         .command()
         .args([
             "start",
+            "--wait",
             fixture.repo.to_str().unwrap(),
             "--branch",
             "agent-work",

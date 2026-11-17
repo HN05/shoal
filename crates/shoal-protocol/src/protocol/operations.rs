@@ -171,13 +171,17 @@ pub enum WorkspaceStart {
 }
 
 /// An operation preparing a workspace a request opened, and the workspace
-/// as it began: a new one, or with `reused` one it reopened.
+/// as it began: a new one, or with `reused` one it reopened, with the queue
+/// entry of the agent the request queued there, which waits for the
+/// preparation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StartedWorkspace {
     pub operation: String,
     pub workspace: Box<Workspace>,
     #[serde(default)]
     pub reused: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry: Option<Box<crate::model::QueueEntry>>,
     /// What assigning its issue on the forge warns of.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,

@@ -73,6 +73,7 @@ pub(in crate::cli::commands::start) async fn start(
     launch.setup_env = Some(crate::env::without_secrets());
     let options = workspaces::AddOptions {
         focus: args.focus,
+        wait: args.wait,
         ..Default::default()
     };
     workspaces::launch_workspace(ctx, launch, mode, (&options, &settings)).await

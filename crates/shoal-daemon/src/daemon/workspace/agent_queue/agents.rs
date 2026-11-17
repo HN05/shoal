@@ -1,5 +1,6 @@
 //! Queuing the worker of an existing workspace in one request, as an app
-//! and `shoal start` queue one in a ready workspace.
+//! and `shoal start` queue one in a ready workspace, or of a new one with
+//! its record, to start once its preparation lets it.
 use anyhow::{Context as _, Result};
 
 use crate::{
@@ -7,8 +8,9 @@ use crate::{
     daemon::workspace::Manager,
     forge::items::reference::ItemInput,
     model::{Blocker, QueueEntry, Workspace},
-    protocol::operations::{LaunchIssue, LaunchRequest},
+    protocol::operations::{LaunchIssue, LaunchRequest, QueuedLaunch},
     start_plan::queued_agent_request,
+    state::WorkspaceState,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -36,6 +38,26 @@ impl Manager {
             .await?
             .entry
             .context("the daemon queued the agent without an entry")
+    }
+
+    /// Queue `launch` in the `workspace` a start opened, which waits until
+    /// the workspace's preparation gets past its post-setup hook unless it
+    /// is ready already, then starts as the queue admits it or, for one
+    /// that starts now, at once regardless of the limits.
+    pub(crate) async fn queue_for_preparation(
+        &self,
+        workspace: &Workspace,
+        mut launch: QueuedLaunch,
+    ) -> Result<QueueEntry> {
+        let waits = workspace.state != WorkspaceState::Ready;
+        let at_once = waits && std::mem::take(&mut launch.now);
+        let request = queued_agent_request(workspace, launch, None)?;
+        let entry = (self.queue_add(request).await?.entry)
+            .context("the daemon queued the agent without an entry")?;
+        if at_once {
+            self.start_at_once_after_setup(&entry.id).await?;
+        }
+        Ok(entry)
     }
 }
 

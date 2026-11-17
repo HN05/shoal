@@ -146,3 +146,58 @@ async fn a_failed_start_that_cannot_open_its_workspace_ends_and_says_so() {
         .collect();
     assert_eq!(failed, [Some(child.id)]);
 }
+
+/// A new workspace of `repository` whose preparation has yet to set it up.
+async fn preparing(manager: &Manager, repository: &Repository, name: &str) -> Workspace {
+    let workspace = manager
+        .create_workspace(&repository.id, name.into(), None, None, None)
+        .await
+        .unwrap();
+    let id = workspace.id.clone();
+    (manager.set_state(&id, WorkspaceState::Preparing, None))
+        .await
+        .unwrap();
+    manager.workspace_by_id(&id).await.unwrap()
+}
+
+#[tokio::test]
+async fn a_start_now_waits_for_its_preparation_then_starts_past_the_limits() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    add(&manager, &repo, "first").await;
+    let workspace = preparing(&manager, &repo, "child").await;
+    let launch = crate::protocol::operations::QueuedLaunch {
+        now: true,
+        ..crate::protocol::operations::QueuedLaunch::new("claude".parse().unwrap())
+    };
+    let entry = manager
+        .queue_for_preparation(&workspace, launch)
+        .await
+        .unwrap();
+    assert_eq!(entry.state, QueueState::Queued);
+    assert_eq!(entry.blockers, vec!["setup of child".to_owned()]);
+    manager.release_setup_waits(&workspace.id).await.unwrap();
+    let entries = manager.queue_entries().await.unwrap();
+    let started = entries.iter().find(|queued| queued.id == entry.id).unwrap();
+    assert_eq!(started.state, QueueState::Starting);
+}
+
+#[tokio::test]
+async fn a_queued_start_waits_for_its_preparation_then_for_the_limits() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    add(&manager, &repo, "first").await;
+    let workspace = preparing(&manager, &repo, "child").await;
+    let launch = crate::protocol::operations::QueuedLaunch::new("claude".parse().unwrap());
+    let entry = manager
+        .queue_for_preparation(&workspace, launch)
+        .await
+        .unwrap();
+    manager.release_setup_waits(&workspace.id).await.unwrap();
+    let entries = manager.queue_entries().await.unwrap();
+    let waiting = entries.iter().find(|queued| queued.id == entry.id).unwrap();
+    assert_eq!(waiting.state, QueueState::Queued);
+    assert!(waiting.blockers.is_empty(), "{waiting:?}");
+}

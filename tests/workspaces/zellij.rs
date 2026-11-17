@@ -526,12 +526,9 @@ fn add_inside(fixture: &Fixture, zellij: &mut ZellijServer, workspace: &str) {
     zellij.show();
     let repo = fixture.repo.to_str().unwrap();
     let (output, transcript) = fixture.interactive_command(
-        zellij.inside(
-            fixture
-                .command()
-                .current_dir(&fixture.repo)
-                .args(["start", repo, "--branch", workspace, "--agent", "pi"]),
-        ),
+        zellij.inside(fixture.command().current_dir(&fixture.repo).args([
+            "start", "--wait", repo, "--branch", workspace, "--agent", "pi",
+        ])),
         "",
     );
     assert!(output.status.success(), "{} {transcript}", printed(&output));
@@ -660,12 +657,9 @@ fn additions_outside_zellij_open_sessions_that_removal_ends() {
         // The launch attaches this terminal to the new session until it ends.
         let added = scope.spawn(|| {
             fixture.terminal_command(
-                zellij.reaching(
-                    fixture
-                        .command()
-                        .current_dir(&fixture.repo)
-                        .args(["start", repo, "--branch", "outside", "--agent", "pi"]),
-                ),
+                zellij.reaching(fixture.command().current_dir(&fixture.repo).args([
+                    "start", "--wait", repo, "--branch", "outside", "--agent", "pi",
+                ])),
                 "",
                 true,
             )

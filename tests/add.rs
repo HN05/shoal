@@ -15,9 +15,9 @@ use std::{
 fn an_issue_numbered_zero_is_refused_before_any_request() {
     let url = "https://forge.example/team/repo/issues/0";
     for args in [
-        vec!["start", url],
-        vec!["start", "--issue", url, "--agent", "custom"],
-        vec!["start", "0", "--repo", "test"],
+        vec!["start", "--wait", url],
+        vec!["start", "--wait", "--issue", url, "--agent", "custom"],
+        vec!["start", "--wait", "0", "--repo", "test"],
     ] {
         let daemon = FakeDaemon::start();
         let output = daemon
@@ -53,13 +53,13 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
         // A start without a terminal reads its repository's settings once,
         // then leaves the rest of it to the daemon.
         (
-            vec!["start", "test", "--branch", "new"],
+            vec!["start", "--wait", "test", "--branch", "new"],
             vec!["list_repositories", "layered_config id:test", "launch"],
             "creation reached",
         ),
         (
             vec![
-                "start", "test", "--branch", "new", "--here", "--agent", "codex",
+                "start", "--wait", "test", "--branch", "new", "--here", "--agent", "codex",
             ],
             vec![
                 "list_repositories",
@@ -140,7 +140,9 @@ fn a_scoped_start_here_takes_its_own_slot_without_skipping_the_limits() {
     let output = daemon
         .command()
         .env("SHOAL_SCOPE_TOKEN", "scope")
-        .args(["--json", "start", "test", "--branch", "new", "--here"])
+        .args([
+            "--json", "start", "--wait", "test", "--branch", "new", "--here",
+        ])
         .args(["--agent", "codex"])
         .stdin(Stdio::null())
         .output()
@@ -168,8 +170,18 @@ fn unregistered_repositories_are_registered_on_confirmation() {
         "check_creation id:registered",
         "layered_config id:registered",
     ];
-    let url_args: &[&str] = &["start", "https://other.example/team/repo/issues/7"];
-    let explicit_args: &[&str] = &["start", "7", "--repo", "https://other.example/team/repo"];
+    let url_args: &[&str] = &[
+        "start",
+        "--wait",
+        "https://other.example/team/repo/issues/7",
+    ];
+    let explicit_args: &[&str] = &[
+        "start",
+        "--wait",
+        "7",
+        "--repo",
+        "https://other.example/team/repo",
+    ];
     for (args, answer, expected) in [
         (url_args, "y\n", registered.clone()),
         (url_args, "n\n", vec!["list_repositories"]),
@@ -191,14 +203,14 @@ fn unregistered_repositories_are_registered_on_confirmation() {
 fn interactive_commands_refuse_their_arguments_before_prompting() {
     for (args, answer, expected, refusal) in [
         (
-            &["start", "missing"][..],
+            &["start", "--wait", "missing"][..],
             "",
             &["check_creation missing"][..],
             "repository is not registered",
         ),
         // Without a branch it begins as a chat, which takes no base.
         (
-            &["start", "test", "--base", "main"],
+            &["start", "--wait", "test", "--base", "main"],
             "",
             &["check_creation test", "layered_config test"],
             "--base applies to a new workspace's branch",

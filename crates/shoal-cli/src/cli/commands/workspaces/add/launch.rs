@@ -1,6 +1,6 @@
 //! A detached start the daemon carries out: once this process has picked
 //! what a terminal picks, it sends the start as one [`Launch`] and reports
-//! what the daemon started, following the setup of a workspace it opened.
+//! what the daemon started, leaving a workspace's preparation to the daemon.
 use std::ffi::OsString;
 
 use anyhow::Result;
@@ -19,14 +19,16 @@ use super::{
 use crate::{
     cli::{
         agents,
-        commands::{queued_agents, start},
+        commands::{links, queued_agents, start},
         context::Context,
+        output::{Palette, Style},
         ui::ModeChoice,
     },
     config::Effective,
-    model::Workspace,
+    model::{QueueEntry, Workspace},
     protocol::operations::{Prepared, StartedWorkspace},
     start_plan::{Creation, ResolvedAddAgent},
+    state::QueueState,
 };
 use shoal_protocol::launches::{
     IssueChoice, Launch, Launched, QueuedWorker, SpaceChoice, StartTarget,
@@ -56,7 +58,7 @@ pub(super) async fn launch_worker(
         env: Some(crate::terminal::start_environment()),
         ..Default::default()
     };
-    send(ctx, launch, None).await
+    send(ctx, launch, (false, None)).await
 }
 
 /// Have the daemon start `launch` in a new workspace, in the mode `mode`
@@ -81,7 +83,7 @@ pub(in crate::cli::commands) async fn launch_workspace(
     };
     let agent = starting_agent(&launch, settings);
     launch.unplaceable = unplaceable(settings, agent.as_ref(), options)?;
-    send(ctx, launch, agent).await
+    send(ctx, launch, (options.wait, agent)).await
 }
 
 /// The agent `launch` starts under `settings`: the one it names, else for a
@@ -171,10 +173,14 @@ async fn has_default(settings: &AddSettings<'_>) -> Result<bool> {
 }
 
 /// Send `launch`, which `agent` runs if it names one, and report what the
-/// daemon started.
-async fn send(ctx: &Context, launch: Launch, agent: Option<crate::agent::Agent>) -> Result<i32> {
-    let launched = crate::client::launches::launch(&ctx.paths, launch);
-    match launched.await? {
+/// daemon started: a new workspace once it is recorded, or with `wait` once
+/// its preparation ends.
+async fn send(
+    ctx: &Context,
+    launch: Launch,
+    (wait, agent): (bool, Option<crate::agent::Agent>),
+) -> Result<i32> {
+    match crate::client::launches::launch(&ctx.paths, launch).await? {
         Launched::Chat(started) => start::report_started(ctx, started),
         Launched::Worker(worker) => {
             let QueuedWorker { workspace, entry } = *worker;
@@ -184,21 +190,22 @@ async fn send(ctx: &Context, launch: Launch, agent: Option<crate::agent::Agent>)
                 None => Ok(0),
             }
         }
-        Launched::Workspace(started) => follow_workspace(ctx, *started, agent).await,
+        Launched::Workspace(started) if wait => follow_workspace(ctx, *started, agent).await,
+        Launched::Workspace(started) => report_workspace(ctx, *started),
         Launched::Waiting { entry, waiting } => queued_agents::report_queued(ctx, &entry, waiting),
     }
 }
 
-/// Follow the preparation of the workspace the daemon `started`, which
-/// queues `agent`'s launch once it is set up, and report the workspace and
-/// the agent's entry.
+/// Follow the preparation of the workspace the daemon `started`, and report
+/// the workspace and the entry of its agent as the queue has it then.
 async fn follow_workspace(
     ctx: &Context,
     started: StartedWorkspace,
     agent: Option<crate::agent::Agent>,
 ) -> Result<i32> {
+    let entry = started.entry.clone();
     let preparing = crate::client::preparation::Preparing::follow(&ctx.paths, started).await?;
-    // The preparation leaves the agent waiting should setup fail.
+    // The daemon queued the agent, which waits for a failed setup itself.
     let mut rest = AfterSetup {
         pr: None,
         waiting: None,
@@ -208,13 +215,43 @@ async fn follow_workspace(
         model: Default::default(),
     };
     let finished = finish_add_workspace(ctx, preparing, &mut rest, &agent, false).await?;
-    let Some(Prepared {
-        workspace,
-        agent: entry,
-    }) = finished
-    else {
+    let Some(Prepared { workspace, .. }) = finished else {
         return Ok(1);
     };
+    let Some(entry) = entry else {
+        return Ok(0);
+    };
+    let entry = match queued_agents::current(ctx, &entry).await? {
+        Some(entry) => entry,
+        // It left the queue once its agent started.
+        None => QueueEntry {
+            state: QueueState::Starting,
+            position: None,
+            ..*entry
+        },
+    };
+    report_queued_in(ctx, &workspace, &entry)
+}
+
+/// Report the workspace the daemon `started`, whose preparation goes on
+/// without this process, and the entry of its agent, which waits for it.
+fn report_workspace(ctx: &Context, started: StartedWorkspace) -> Result<i32> {
+    links::print_warnings(&started.warnings);
+    let StartedWorkspace {
+        workspace,
+        reused,
+        entry,
+        ..
+    } = started;
+    ctx.show(&*workspace, |workspace| {
+        outln!(
+            "{} {} {}; `shoal status {}` shows its preparation",
+            if reused { "Opened" } else { "Created" },
+            Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
+            super::super::location_phrase(workspace),
+            workspace.number,
+        );
+    })?;
     match entry {
         Some(entry) => report_queued_in(ctx, &workspace, &entry),
         None => Ok(0),

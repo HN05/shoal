@@ -10,7 +10,15 @@ fn one_off_workspace_paths_preserve_repository_defaults_and_ownership() {
         .path()
         .join("elsewhere/one off ' {{ branch }} path");
     let path = destination.to_str().unwrap();
-    let workspace = fixture.ok(&["start", repo, "--branch", "custom/topic", "--path", path]);
+    let workspace = fixture.ok(&[
+        "start",
+        "--wait",
+        repo,
+        "--branch",
+        "custom/topic",
+        "--path",
+        path,
+    ]);
     assert_eq!(
         Path::new(workspace["path"].as_str().unwrap()),
         fs::canonicalize(path).unwrap()
@@ -21,6 +29,7 @@ fn one_off_workspace_paths_preserve_repository_defaults_and_ownership() {
         !fixture
             .run(&[
                 "start",
+                "--wait",
                 repo,
                 "--branch",
                 "custom/topic",
@@ -36,7 +45,15 @@ fn one_off_workspace_paths_preserve_repository_defaults_and_ownership() {
     assert!(!destination.exists());
     assert!(destination.parent().unwrap().exists());
     git(&fixture.repo, &["branch", "existing-path"]);
-    fixture.ok(&["start", repo, "--branch", "existing-path", "--path", path]);
+    fixture.ok(&[
+        "start",
+        "--wait",
+        repo,
+        "--branch",
+        "existing-path",
+        "--path",
+        path,
+    ]);
 }
 
 #[test]
@@ -62,6 +79,7 @@ fn one_off_workspace_paths_reject_existing_and_protected_directories() {
     ] {
         let output = fixture.run(&[
             "start",
+            "--wait",
             repo,
             "--branch",
             "rejected",
@@ -332,6 +350,7 @@ fn explicit_locations_do_not_require_unrelated_checkouts_to_be_readable() {
     let destination = fixture.root.path().join("custom");
     fixture.ok(&[
         "start",
+        "--wait",
         repo,
         "--branch",
         "custom",
@@ -358,6 +377,7 @@ fn explicit_locations_do_not_require_unrelated_checkouts_to_be_readable() {
             !fixture
                 .run(&[
                     "start",
+                    "--wait",
                     repo,
                     "--branch",
                     "rejected",

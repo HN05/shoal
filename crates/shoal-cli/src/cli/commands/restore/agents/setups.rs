@@ -105,7 +105,7 @@ async fn retry(ctx: &Context, setup: &FailedSetup, now: bool) -> Result<SetUp> {
 async fn retry_queued(ctx: &Context, setup: &FailedSetup) -> Result<SetUp> {
     let workspace = set_up(ctx, &setup.workspace).await?;
     let launch = match &setup.launch {
-        Some(launch) => current(ctx, launch).await?,
+        Some(launch) => queued_agents::current(ctx, launch).await?,
         None => None,
     };
     Ok(SetUp { workspace, launch })
@@ -152,10 +152,4 @@ async fn set_up(ctx: &Context, workspace: &Workspace) -> Result<Workspace> {
     let set_up =
         set_up.with_context(|| format!("the setup of {} did not complete", workspace.name))?;
     set_up.finish(ctx).await
-}
-
-/// `launch` as the queue has it now, gone once its agent started.
-async fn current(ctx: &Context, launch: &QueueEntry) -> Result<Option<QueueEntry>> {
-    let entries = queued_agents::entries(ctx).await?;
-    Ok(entries.into_iter().find(|entry| entry.id == launch.id))
 }

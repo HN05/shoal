@@ -162,6 +162,8 @@ impl Manager {
                 .await;
             opening.new.options.name = title.map(|title| SpaceName::derive(&title, "workspace"));
         }
+        self.authorize_start_now(caller, &preparing, &repo.id)
+            .await?;
         let asked = opening.new.options.priority;
         let given = self.given_priority(caller, asked).await?;
         let opened = (self.open_for_start(repository, opening, caller)).await?;
@@ -169,6 +171,25 @@ impl Manager {
         let priority = if opened.reused { asked } else { given };
         self.give_priority(&opened.workspace.id, priority).await?;
         self.prepare_new(opened, issue, preparing, caller).await
+    }
+
+    /// Let the scoped `caller` start the agent `preparing` queues in
+    /// `repository` regardless of the limits, as its `limits` permission
+    /// allows, before the start creates anything.
+    async fn authorize_start_now(
+        &self,
+        caller: Option<&Caller>,
+        preparing: &Preparing,
+        repository: &RepositoryId,
+    ) -> Result<()> {
+        let (Some(caller), Some(agent)) = (caller, &preparing.agent) else {
+            return Ok(());
+        };
+        if !agent.now {
+            return Ok(());
+        }
+        let start = "start the agent of a new workspace now".to_owned();
+        (self.authorize_beyond_limits(caller, start, Some(repository.clone()))).await
     }
 
     /// The settings the agent of a start that opens `start` in `repository`
@@ -230,6 +251,7 @@ impl Manager {
         };
         preparing.work_on(issue.as_ref());
         name_after_issue(&mut split.options, issue.as_ref());
+        (self.authorize_start_now(caller, &preparing, parent.repository())).await?;
         let priority = (self.given_priority(caller, split.options.priority)).await?;
         let child = self.create_child(&parent, split).await?;
         self.give_priority(&child.id, priority).await?;
@@ -365,11 +387,12 @@ impl Manager {
         }
     }
 
-    /// Assign `issue` to the `opened` workspace and give it the start's
-    /// queue entry, then start preparing it: the worktree it has yet to
-    /// get, its setup while it is preparing, linking the PR, the post-setup
-    /// hook of a new workspace, then queuing the agent. A new workspace whose issue cannot be
-    /// assigned is removed, since nothing ran in it yet.
+    /// Assign `issue` to the `opened` workspace, give it the start's queue
+    /// entry and queue its agent, which waits for its preparation, then
+    /// start preparing it: the worktree it has yet to get, its setup while
+    /// it is preparing, linking the PR, then the post-setup hook of a new
+    /// workspace. A new workspace whose issue cannot be assigned is
+    /// removed, since nothing ran in it yet.
     pub(crate) async fn prepare_new(
         self: &Arc<Self>,
         OpenedWorkspace { workspace, reused }: OpenedWorkspace,
@@ -383,11 +406,17 @@ impl Manager {
         if let Some(entry) = &preparing.queue_entry {
             self.give_start_entry(entry, &workspace).await?;
         }
+        let entry = match preparing.agent {
+            Some(agent) => Some(Box::new(
+                self.queue_for_preparation(&workspace, *agent).await?,
+            )),
+            None => None,
+        };
         let steps = Preparation {
             setup: workspace.state == WorkspaceState::Preparing,
             post_setup: !reused,
             pr: preparing.pr,
-            agent: preparing.agent,
+            agent: None,
             waiting: preparing.waiting,
         };
         let spec = OperationSpec::Prepare {
@@ -399,6 +428,7 @@ impl Manager {
             operation,
             workspace: Box::new(self.workspace_by_id(&workspace.id).await?),
             reused,
+            entry,
             warnings,
         })
     }

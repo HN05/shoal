@@ -307,6 +307,7 @@ fn a_workspaces_agent_resumes_the_agents_below_whoever_stopped_them() {
     let repo = fixture.repo.to_str().unwrap();
     let child = fixture.ok(&[
         "start",
+        "--wait",
         repo,
         "--branch",
         "child",
@@ -414,6 +415,7 @@ fn restarts_the_agents_below(fixture: &Fixture, parent: &Parent) {
     let repo = fixture.repo.to_str().unwrap();
     let child = fixture.ok(&[
         "start",
+        "--wait",
         repo,
         "--branch",
         "child",

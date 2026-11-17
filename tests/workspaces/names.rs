@@ -120,6 +120,7 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
     let id = workspace["id"].as_str().unwrap();
     fixture.ok(&[
         "start",
+        "--wait",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "dependent",
@@ -206,7 +207,9 @@ fn workspace_rename_issue_reopens_the_associated_workspace() {
     fixture.add_github_origin();
     fixture.script_github(&github_issue(34, "Fix API timeout", ""));
     let repo = fixture.repo.to_str().unwrap();
-    let issue = ["start", "34", "--repo", repo, "--here", "--agent", "pi"];
+    let issue = [
+        "start", "--wait", "34", "--repo", repo, "--here", "--agent", "pi",
+    ];
     let created = fixture.ok(&[&issue[..], &["--base", "HEAD"]].concat());
     let renamed = fixture.ok(&[
         "branch",
@@ -474,7 +477,13 @@ fn concurrent_adds_take_their_own_branches_and_directories() {
     let start = |branch: &str| {
         fixture
             .command()
-            .args(["start", fixture.repo.to_str().unwrap(), "--branch", branch])
+            .args([
+                "start",
+                "--wait",
+                fixture.repo.to_str().unwrap(),
+                "--branch",
+                branch,
+            ])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -572,7 +581,13 @@ fn invalid_branch_names_fail_and_normalized_directories_take_suffixes() {
     ] {
         assert!(
             !fixture
-                .run(&["start", fixture.repo.to_str().unwrap(), "--branch", branch])
+                .run(&[
+                    "start",
+                    "--wait",
+                    fixture.repo.to_str().unwrap(),
+                    "--branch",
+                    branch
+                ])
                 .status
                 .success(),
             "{branch}"

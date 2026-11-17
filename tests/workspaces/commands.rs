@@ -9,6 +9,7 @@ fn configured_commands_preserve_arguments_scope_and_exit_status() {
     ));
     let workspace = fixture.ok(&[
         "start",
+        "--wait",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "custom",

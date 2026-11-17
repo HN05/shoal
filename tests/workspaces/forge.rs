@@ -413,6 +413,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
         .args([
             "--json",
             "start",
+            "--wait",
             "https://forge.example/team/project/pulls/7",
         ])
         .env("PATH", &path)
@@ -425,6 +426,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     assert_eq!(added["links"]["prs"], serde_json::json!([pr]));
     let branch = fixture.ok(&[
         "start",
+        "--wait",
         "https://forge.example/team/project/src/branch/stack%2Ftop",
     ]);
     assert_eq!(branch["id"], added["id"]);
@@ -2058,7 +2060,9 @@ fn restack_on_merge(github: bool, lower_prs: &[(u64, &str, &str)], upper_base: &
     ));
     let lower = fixture.add("lower");
     let repo = fixture.repo.to_str().unwrap().to_owned();
-    fixture.ok(&["start", &repo, "--branch", "upper", "--base", "lower"]);
+    fixture.ok(&[
+        "start", "--wait", &repo, "--branch", "upper", "--base", "lower",
+    ]);
     let origin = if github {
         "git@github.com:team/project.git"
     } else {
@@ -2202,7 +2206,9 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     let mut fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     let lower = fixture.add("lower");
     let repo = fixture.repo.to_str().unwrap().to_owned();
-    fixture.ok(&["start", &repo, "--branch", "upper", "--base", "lower"]);
+    fixture.ok(&[
+        "start", "--wait", &repo, "--branch", "upper", "--base", "lower",
+    ]);
     fixture.add_github_origin();
     let root = fixture.root.path().to_owned();
     // Fail the requests whose URL contains the pattern in ~/fail, with
@@ -2417,24 +2423,24 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     assert_eq!(workspace["links"]["prs"], serde_json::json!([pr]));
 
     // Adding the PR reuses its workspace; it holds no agent.
-    let output = run(&["--json", "start", url]);
+    let output = run(&["--json", "start", "--wait", url]);
     assert!(output.status.success(), "{}", printed(&output));
     let added: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(added["id"], workspace["id"]);
-    let output = run(&["start", url, "--agent", "reviewer"]);
+    let output = run(&["start", "--wait", url, "--agent", "reviewer"]);
     assert!(!output.status.success());
     // On a terminal too, the PR settles what the addition opens.
     let (output, transcript) = fixture.interactive_command(
         fixture
             .command()
-            .args(["start", url])
+            .args(["start", "--wait", url])
             .current_dir(&fixture.repo)
             .env("PATH", &path),
         "",
     );
     assert!(output.status.success(), "{} {transcript}", printed(&output));
     assert!(!transcript.contains("Workspace>"), "{transcript}");
-    let output = run(&["start", url, "--git-profile", "work"]);
+    let output = run(&["start", "--wait", url, "--git-profile", "work"]);
     assert!(!output.status.success());
 
     // A moved head moves the workspace with it.
@@ -2474,7 +2480,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     install_test_script(&hook, "#!/bin/sh\necho ran >> \"$HOME/post-setup-ran\"\n");
     fs::write(&local, format!("hooks.post_setup = '{}'\n", hook.display())).unwrap();
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &local);
-    let output = run(&["start", url]);
+    let output = run(&["start", "--wait", url]);
     assert!(output.status.success(), "{}", printed(&output));
     let output = run(&["review", "run", url, "--agent", "reviewer", "--no-post"]);
     assert!(output.status.success(), "{}", printed(&output));

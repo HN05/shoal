@@ -41,7 +41,7 @@ fn background_additions_open_tabs_in_the_repository_workspace() {
     for name in ["first", "second"] {
         let (output, transcript) = plain_terminal(
             &fixture,
-            &["start", repo, "--branch", name, "--agent", "pi"],
+            &["start", "--wait", repo, "--branch", name, "--agent", "pi"],
         );
         assert!(output.status.success(), "{} {transcript}", printed(&output));
     }
@@ -74,7 +74,9 @@ fn launches_from_a_terminal_need_no_zmx_while_herdr_is_the_default() {
     let repo = fixture.repo.to_str().unwrap();
     let (output, transcript) = plain_terminal(
         &fixture,
-        &["start", repo, "--branch", "first", "--agent", "pi"],
+        &[
+            "start", "--wait", repo, "--branch", "first", "--agent", "pi",
+        ],
     );
     assert!(output.status.success(), "{} {transcript}", printed(&output));
     assert_eq!(calls_of(&fixture, &["tab", "create"]).len(), 1);
@@ -94,7 +96,9 @@ fn a_fixed_workspace_name_is_reused_as_herdr_lists_it() {
     let repo = fixture.repo.to_str().unwrap();
     let (output, transcript) = plain_terminal(
         &fixture,
-        &["start", repo, "--branch", "fixed", "--agent", "pi"],
+        &[
+            "start", "--wait", repo, "--branch", "fixed", "--agent", "pi",
+        ],
     );
     assert!(output.status.success(), "{} {transcript}", printed(&output));
     assert!(calls_of(&fixture, &["workspace", "create"]).is_empty());
@@ -113,7 +117,7 @@ fn focused_starts_attach_the_terminal_to_their_herdr_tab() {
     fixture.add("agent");
     let repo = fixture.repo.to_str().unwrap();
     for args in [
-        vec!["start", repo, "--branch", "shell"],
+        vec!["start", "--wait", repo, "--branch", "shell"],
         vec![
             "start", "--mode", "chat", repo, "--name", "talk", "--agent", "pi",
         ],
@@ -176,7 +180,7 @@ fn a_herdr_only_herdr_bin_path_names_serves_a_focused_start() {
     let (output, transcript) = fixture.terminal_command(
         fixture
             .command()
-            .args(["start", repo, "--branch", "shell"])
+            .args(["start", "--wait", repo, "--branch", "shell"])
             .env("HERDR_BIN_PATH", elsewhere.join("herdr")),
         "",
         true,
@@ -199,7 +203,7 @@ fn a_start_queued_outside_herdr_keeps_the_herdr_session_it_chose() {
     let mut first = fixture
         .command()
         .args([
-            "start", repo, "--branch", "first", "--here", "--agent", "waiter",
+            "start", "--wait", repo, "--branch", "first", "--here", "--agent", "waiter",
         ])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -219,7 +223,7 @@ fn a_start_queued_outside_herdr_keeps_the_herdr_session_it_chose() {
         .command()
         .env("HERDR_SESSION", "work")
         .args([
-            "--json", "start", repo, "--branch", "second", "--agent", "waiter",
+            "--json", "start", "--wait", repo, "--branch", "second", "--agent", "waiter",
         ])
         .output()
         .unwrap();
@@ -301,6 +305,7 @@ fn a_default_host_config_turns_off_leaves_zmx_alone() {
         "--",
         support::shoal_binary(),
         "start",
+        "--wait",
         fixture.repo.to_str().unwrap(),
         "--branch",
         "child",

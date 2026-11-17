@@ -344,6 +344,7 @@ fn a_chats_commands_act_on_the_workspace_below_it_whose_directory_they_run_in() 
         .args([
             "--json",
             "start",
+            "--wait",
             fixture.repo.to_str().unwrap(),
             "--branch",
             "opened",
@@ -361,6 +362,7 @@ fn a_chats_commands_act_on_the_workspace_below_it_whose_directory_they_run_in() 
         .args([
             "--json",
             "start",
+            "--wait",
             fixture.repo.to_str().unwrap(),
             "--branch",
             "deeper",
@@ -595,6 +597,7 @@ fn completion_cleanup_removes_a_done_chat_with_the_workspaces_below_it() {
         .args([
             "--json",
             "start",
+            "--wait",
             fixture.repo.to_str().unwrap(),
             "--branch",
             "opened",
@@ -1050,6 +1053,7 @@ fn removing_a_chat_removes_the_workspaces_below_it_and_stops_its_agent() {
         .args([
             "--json",
             "start",
+            "--wait",
             fixture.repo.to_str().unwrap(),
             "--branch",
             "opened",
@@ -1104,6 +1108,7 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
             .args([
                 "--json",
                 "start",
+                "--wait",
                 repository.to_str().unwrap(),
                 "--branch",
                 name,
@@ -1141,6 +1146,7 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
         .args([
             "--json",
             "start",
+            "--wait",
             other.to_str().unwrap(),
             "--branch",
             "queued",
@@ -1160,6 +1166,7 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
             .args([
                 "--text",
                 "start",
+                "--wait",
                 unregistered.to_str().unwrap(),
                 "--branch",
                 "third-work",
@@ -1257,7 +1264,7 @@ fn a_chats_agent_is_scoped_to_the_chat_and_the_spaces_below_it() {
             r#"#!/bin/sh
 shoal='{}'
 run() {{ name=$1; shift; "$shoal" "$@" </dev/null >"$HOME/$name.out" 2>"$HOME/$name.err"; echo $? > "$HOME/$name"; }}
-run start --json start "$PWD" --branch below
+run start --json start --wait "$PWD" --branch below
 below=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$HOME/start.out")
 run stop stop --interrupt "$below"
 run env internal env "$below"
@@ -1465,7 +1472,11 @@ fn a_workspaces_agent_reads_the_issue_it_adds_or_plans_in_its_workspace() {
     // The workspace's scope reads the issue and its blockers only in its
     // workspace, never in the repository's registered checkout.
     let repo = fixture.repo.to_str().unwrap();
-    let added = scoped_command(&fixture, "parent", &["start", repo, "--issue", "12"]);
+    let added = scoped_command(
+        &fixture,
+        "parent",
+        &["start", "--wait", repo, "--issue", "12"],
+    );
     assert!(added.status.success(), "{}", printed(&added));
     let worker = fixture.ok(&["status", &fixture.id("Clarify retries")]);
     assert_eq!(worker["workspace"]["parent"]["name"], "parent", "{worker}");
@@ -1594,7 +1605,11 @@ fn any_space_opens_any_kind_of_child() {
     fixture.add("parent");
     // A workspace's agent opens a workspace below its own...
     let repo = fixture.repo.to_str().unwrap();
-    let below = scoped_command(&fixture, "parent", &["start", repo, "--branch", "below"]);
+    let below = scoped_command(
+        &fixture,
+        "parent",
+        &["start", "--wait", repo, "--branch", "below"],
+    );
     assert!(below.status.success(), "{}", printed(&below));
     let parent = |space: &Value| space["parent"]["name"].as_str().map(str::to_owned);
     let status = fixture.ok(&["status", &fixture.id("below")]);
@@ -1706,7 +1721,7 @@ fn a_chat_between_workspaces_decides_and_coordinates_for_the_one_below() {
              while [ ! -e \"$HOME/release\" ]; do sleep 0.1; done\n\
              exit 0\n\
              fi\n\
-             \"$shoal\" start \"$PWD\" --branch deep </dev/null > \"$HOME/deep\" 2>&1\n\
+             \"$shoal\" start --wait \"$PWD\" --branch deep </dev/null > \"$HOME/deep\" 2>&1\n\
              touch \"$HOME/chat-ready\"\n\
              trap 'exit 0' TERM\n\
              while :; do sleep 1; done\n",
