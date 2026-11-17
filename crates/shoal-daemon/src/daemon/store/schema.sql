@@ -646,6 +646,7 @@ CREATE TABLE merge_runs (
     merged_at INTEGER NOT NULL,
     looking INTEGER NOT NULL DEFAULT 1 CHECK(looking IN (0,1)),
     runs TEXT NOT NULL DEFAULT '[]',
+    ended INTEGER NOT NULL DEFAULT 0 CHECK(ended IN (0,1)),
     PRIMARY KEY(space_id,pr_url)
 );
 

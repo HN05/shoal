@@ -499,3 +499,34 @@ async fn completion_cleanup_waits_for_a_poll_to_see_a_done_chats_merge() {
     manager.sweep_completed().await.unwrap();
     assert!(!present().await);
 }
+
+#[tokio::test]
+async fn a_cursor_that_sees_the_merge_after_its_lookup_ended_starts_none() {
+    let following = following(true, json!([])).await;
+    let (pr, id) = (following.pr.clone(), following.workspace.id.clone());
+    hold_a_comment(&following).await;
+    for snapshot in [pull("open", None), pull("merged", Some(MERGED))] {
+        (following.manager)
+            .record_background_activity(&id, vec![(pr.clone(), snapshot)])
+            .await
+            .unwrap();
+    }
+    following.end_window().await;
+    following.follow().await;
+    assert!(!following.awaits().await);
+    assert_eq!(following.events(EventKind::NoMergeRuns).await, 1);
+
+    // The agent takes the held comment, and the cursor then sees the merge.
+    let held = following.observe(&pr, pull("merged", Some(MERGED))).await;
+    let deliveries = held.into_iter().map(|update| update.delivery).collect();
+    (following.manager)
+        .acknowledge_pr_updates(&SpaceSelector::id(&id), deliveries)
+        .await
+        .unwrap();
+    let merged = following.observe(&pr, pull("merged", Some(MERGED))).await;
+    let kinds: Vec<_> = merged.iter().map(|update| update.kind).collect();
+    assert!(kinds.contains(&UpdateKind::Merged), "{merged:?}");
+    assert!(!following.awaits().await);
+    following.follow().await;
+    assert_eq!(following.events(EventKind::NoMergeRuns).await, 1);
+}

@@ -296,10 +296,10 @@ fn unseen_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
     Ok(unseen)
 }
 
-/// The spaces with a lookup of a merge's runs.
+/// The spaces with a lookup of a merge's runs that has not ended.
 pub(super) fn merge_run_spaces(db: &rusqlite::Connection) -> Result<Vec<SpaceId>> {
     Ok(db
-        .prepare("SELECT DISTINCT space_id FROM merge_runs")?
+        .prepare("SELECT DISTINCT space_id FROM merge_runs WHERE NOT ended")?
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }
@@ -347,7 +347,9 @@ fn link_new_runs(
 }
 
 /// End the space `id`'s `lookup`, recording that no run started for its
-/// merge when it `found_none`.
+/// merge when it `found_none`. The ended lookup stays, so a read that sees
+/// the merge later, such as a cursor that held older updates back, starts
+/// none again.
 fn end_lookup(
     db: &rusqlite::Connection,
     id: &SpaceId,
@@ -362,7 +364,7 @@ fn end_lookup(
         events::record_no_merge_runs(db, id, &merge)?;
     }
     db.execute(
-        "DELETE FROM merge_runs WHERE space_id=?1 AND pr_url=?2",
+        "UPDATE merge_runs SET looking=0, ended=1 WHERE space_id=?1 AND pr_url=?2",
         params![id, lookup.pr],
     )?;
     Ok(())
@@ -418,11 +420,11 @@ fn run_finished(db: &rusqlite::Connection, id: &SpaceId, run: &ItemRef) -> Resul
     Ok(polled.is_some_and(|read| read.run_finished()))
 }
 
-/// The space `id`'s lookups of its merges' runs.
+/// The space `id`'s lookups of its merges' runs that have not ended.
 fn merge_lookups(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<MergeLookup>> {
     let mut statement = db.prepare(
         "SELECT pr_url, merge_commit, branch, merged_at, looking, runs FROM merge_runs
-         WHERE space_id=?1 ORDER BY merged_at, pr_url",
+         WHERE space_id=?1 AND NOT ended ORDER BY merged_at, pr_url",
     )?;
     let rows = statement.query_map([id], |row| {
         Ok((
