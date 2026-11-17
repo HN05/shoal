@@ -246,3 +246,39 @@ async fn stopping_everything_stops_a_waiting_workspace() {
     let targets = manager.stop_targets(QueuedLaunches::Cancel).await.unwrap();
     assert!(targets.iter().any(|space| space.id == ui.id), "{targets:?}");
 }
+
+#[tokio::test]
+async fn a_pass_that_read_the_wait_before_a_stop_keeps_the_stop() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let api = create(&manager, &repo, "api").await;
+    let blocker = Blocker::Space(api.id.to_string());
+    let ui = *start(&manager, &repo, "ui", vec![blocker]).await.workspace;
+    let read_before = read(&manager, &ui).await.part.preparation_waits.unwrap();
+    manager
+        .cancel_launches_while_preparation_waits(&ui.id)
+        .await
+        .unwrap();
+    let pass = (&read_before, &PreparationWait::Disk);
+    manager.note_preparation_wait(&ui.id, pass).await.unwrap();
+    let waits = read(&manager, &ui).await.part.preparation_waits;
+    assert_eq!(waits, Some(PreparationWait::Stopped));
+}
+
+#[tokio::test]
+async fn a_released_preparation_never_stacks_its_blocker_on_itself() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let api = create(&manager, &repo, "api").await;
+    let blocker = Blocker::Space(api.id.to_string());
+    let ui = *start(&manager, &repo, "ui", vec![blocker]).await.workspace;
+    // Meanwhile the blocker came to build on the waiting workspace.
+    let ui_selector = SpaceSelector::id(&ui.id).to_string();
+    let api_selector = SpaceSelector::id(&api.id);
+    (manager.set_base_workspace(&api_selector, Some(ui_selector)))
+        .await
+        .unwrap();
+    let refused = manager.build_pending_on(&ui.id, "api".into()).await;
+    assert!(refused.is_err(), "{refused:?}");
+    assert_eq!(read(&manager, &ui).await.part.base_workspace, None);
+}

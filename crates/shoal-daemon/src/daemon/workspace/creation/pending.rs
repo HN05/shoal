@@ -1,7 +1,7 @@
 //! Pending worktrees: how a recorded workspace that has no worktree yet
 //! gets one, which its preparation creates.
 
-use super::{Configured, WorkspaceSource, stack};
+use super::{Configured, WorkspaceSource};
 use crate::{
     daemon::{events::EventCause, workspace::Manager},
     model::Workspace,
@@ -10,9 +10,7 @@ use crate::{
 };
 use anyhow::{Result, bail, ensure};
 use rusqlite::{OptionalExtension, params};
-use shoal_ids::{
-    checkpoint_numbers::CheckpointNumber, repository_ids::RepositoryId, space_ids::SpaceId,
-};
+use shoal_ids::{checkpoint_numbers::CheckpointNumber, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::{BranchName, CommitId};
 
@@ -136,36 +134,38 @@ impl Manager {
     /// workspace that owns it as its base, as a start on `--base` does. One
     /// that names a base of its own or opens an existing branch keeps it.
     pub(crate) async fn build_pending_on(&self, id: &SpaceId, base: BranchName) -> Result<()> {
-        let id = id.to_owned();
+        let Some(mut pending) = self.unbased_pending_worktree(id).await? else {
+            return Ok(());
+        };
+        let workspace = self.workspace_by_id(id).await?;
+        (self.stack_on_branch(&workspace, base.clone(), EventCause::Blocker)).await?;
+        pending.source = PendingSource::New {
+            base: Some(base.to_string()),
+        };
+        let (id, plan) = (id.to_owned(), serde_json::to_string(&pending)?);
         self.store
-            .write(move |tx| {
-                let plan: String = tx.query_row(
-                    "SELECT plan FROM pending_worktrees WHERE workspace_id=?1",
-                    [&id],
-                    |row| row.get(0),
-                )?;
-                let mut pending: PendingWorktree = serde_json::from_str(&plan)?;
-                let PendingSource::New { base: unset @ None } = &mut pending.source else {
-                    return Ok(());
-                };
-                *unset = Some(base.to_string());
-                tx.execute(
+            .run(move |db| {
+                db.execute(
                     "UPDATE pending_worktrees SET plan=?2 WHERE workspace_id=?1",
-                    params![id, serde_json::to_string(&pending)?],
+                    params![id, plan],
                 )?;
-                let repository: RepositoryId = tx.query_row(
-                    "SELECT repository_id FROM spaces WHERE id=?1",
-                    [&id],
-                    |row| row.get(0),
-                )?;
-                let owner = stack::owner(tx, &repository, &base)?;
-                tx.execute(
-                    "UPDATE workspaces SET base_workspace_id=?2 WHERE id=?1",
-                    params![id, owner],
-                )?;
-                stack::record_base_changed(tx, &id, EventCause::Blocker)
+                Ok(())
             })
             .await
+    }
+
+    /// The pending worktree of the workspace `id` while it is a new branch
+    /// without a base of its own.
+    async fn unbased_pending_worktree(&self, id: &SpaceId) -> Result<Option<PendingWorktree>> {
+        let id = id.to_owned();
+        let plan: String = (self.store)
+            .run(move |db| {
+                let sql = "SELECT plan FROM pending_worktrees WHERE workspace_id=?1";
+                Ok(db.query_row(sql, [&id], |row| row.get(0))?)
+            })
+            .await?;
+        let pending: PendingWorktree = serde_json::from_str(&plan)?;
+        Ok(matches!(pending.source, PendingSource::New { base: None }).then_some(pending))
     }
 
     /// Create the worktree the recorded `workspace` is still to get, as its

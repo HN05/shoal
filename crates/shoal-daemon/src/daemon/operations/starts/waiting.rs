@@ -154,7 +154,7 @@ impl Manager {
         } = waiting;
         match self.preparation_gate(&workspace, for_agent).await? {
             Gate::Closed(now) if now == waits => Ok(()),
-            Gate::Closed(now) => self.note_preparation_wait(&workspace, &now).await,
+            Gate::Closed(now) => (self.note_preparation_wait(&workspace, (&waits, &now))).await,
             Gate::Open { base } => {
                 self.release_preparation(&workspace, base).await;
                 Ok(())
@@ -222,15 +222,21 @@ impl Manager {
             .await
     }
 
-    /// Record that the waiting preparation of the workspace `id` now waits
-    /// for what `waits` says.
-    async fn note_preparation_wait(&self, id: &SpaceId, waits: &PreparationWait) -> Result<()> {
-        let (id, waits) = (id.clone(), serde_json::to_string(waits)?);
+    /// Record that the waiting preparation of the workspace `id`, which
+    /// waited for `was`, now waits for `now`, unless what it waits for
+    /// changed since, as a stop that cancelled its agent changes it.
+    async fn note_preparation_wait(
+        &self,
+        id: &SpaceId,
+        (was, now): (&PreparationWait, &PreparationWait),
+    ) -> Result<()> {
+        let id = id.clone();
+        let (was, now) = (serde_json::to_string(was)?, serde_json::to_string(now)?);
         self.store
             .run(move |db| {
                 db.execute(
-                    "UPDATE waiting_preparations SET waits=?2 WHERE workspace_id=?1",
-                    params![id, waits],
+                    "UPDATE waiting_preparations SET waits=?3 WHERE workspace_id=?1 AND waits=?2",
+                    params![id, was, now],
                 )?;
                 Ok(())
             })

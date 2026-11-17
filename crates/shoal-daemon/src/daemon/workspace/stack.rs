@@ -20,6 +20,35 @@ use crate::{
 };
 
 impl Manager {
+    /// Record the workspace that owns `branch` in `workspace`'s repository
+    /// as the base of `workspace`, for `cause`, under the gates and the
+    /// check of any base change; nothing when no workspace owns it.
+    pub(crate) async fn stack_on_branch(
+        &self,
+        workspace: &Workspace,
+        branch: BranchName,
+        cause: EventCause,
+    ) -> Result<()> {
+        let (id, repository_id) = (workspace.id.clone(), workspace.repository().clone());
+        let owner = (self.store)
+            .run(move |db| owner(db, &repository_id, &branch))
+            .await?;
+        let Some(owner) = owner else {
+            return Ok(());
+        };
+        let _gate = self.gates.lock_prs([&owner, &id]).await;
+        self.store
+            .write(move |tx| {
+                ensure_acyclic(tx, &id, &owner)?;
+                tx.execute(
+                    "UPDATE workspaces SET base_workspace_id=?2 WHERE id=?1",
+                    params![id, owner],
+                )?;
+                record_base_changed(tx, &id, cause)
+            })
+            .await
+    }
+
     /// Record or clear the workspace whose branch this one builds on, which
     /// must change it.
     pub async fn set_base_workspace(
@@ -66,17 +95,7 @@ fn change_base(
 ) -> Result<()> {
     if let Some(base) = base {
         ensure_base(tx, repository_id, base, base.as_str())?;
-        ensure!(
-            !store::exists(
-                tx,
-                "WITH RECURSIVE chain(id) AS (
-                    SELECT ?1 UNION SELECT base_workspace_id FROM workspaces
-                    JOIN chain USING(id) WHERE base_workspace_id IS NOT NULL
-                ) SELECT 1 FROM chain WHERE id=?2",
-                [base, id],
-            )?,
-            "a workspace cannot build on itself or a workspace stacked on it"
-        );
+        ensure_acyclic(tx, id, base)?;
     }
     let changed = tx.execute(
         "UPDATE workspaces SET base_workspace_id=?2 WHERE id=?1 AND base_workspace_id IS NOT ?2",
@@ -87,6 +106,23 @@ fn change_base(
         None => ensure!(changed > 0, "the workspace has no base workspace"),
     }
     record_base_changed(tx, id, EventCause::Manual)?;
+    Ok(())
+}
+
+/// Refuse to record `base` as the base of workspace `id` where that
+/// would make `id` build on itself.
+fn ensure_acyclic(db: &Connection, id: &SpaceId, base: &SpaceId) -> Result<()> {
+    ensure!(
+        !store::exists(
+            db,
+            "WITH RECURSIVE chain(id) AS (
+                SELECT ?1 UNION SELECT base_workspace_id FROM workspaces
+                JOIN chain USING(id) WHERE base_workspace_id IS NOT NULL
+            ) SELECT 1 FROM chain WHERE id=?2",
+            [base, id],
+        )?,
+        "a workspace cannot build on itself or a workspace stacked on it"
+    );
     Ok(())
 }
 
