@@ -10,15 +10,22 @@ use crate::{
         test_support::{git, global_config, manager, repository, repository_with},
         workspace::Manager,
     },
+    forge::numbers::PullNumber,
     model::{Repository, Workspace},
-    protocol::operations::{
-        Ended, Failure, LaunchRequest, OperationSpec, Report, StartedWorkspace, WorkspaceStart,
+    protocol::{
+        CreationOptions, PullHead,
+        operations::{
+            Ended, Failure, LaunchRequest, OperationSpec, Report, StartedWorkspace, WorkspaceStart,
+        },
     },
     removal::{InspectionPolicy, UnsavedWork},
     state::WorkspaceState,
 };
 use shoal_ids::space_ids::SpaceNumber;
-use shoal_protocol::{notifications::Notification, space_names::SpaceSelector};
+use shoal_protocol::{
+    notifications::Notification,
+    space_names::{SpaceName, SpaceSelector},
+};
 
 /// A generous guard against a hang; no test waits this long when it passes.
 const HANG: Duration = Duration::from_secs(60);
@@ -44,18 +51,31 @@ async fn start(
         new: Default::default(),
         parent: None,
     };
-    let preparing = Preparing {
+    start_opening(manager, repository, opening).await
+}
+
+/// Start the workspace `opening` names, without an agent.
+async fn start_opening(
+    manager: &Arc<Manager>,
+    repository: &Repository,
+    opening: Opening<'_>,
+) -> StartedWorkspace {
+    manager
+        .start_workspace((&repository.id).into(), opening, without_agent(), None)
+        .await
+        .unwrap()
+}
+
+/// A preparation that queues no agent.
+fn without_agent() -> Preparing<LaunchRequest> {
+    Preparing {
         issue: None,
         pr: None,
         agent: None,
         waiting: None,
         queue_entry: None,
         env: None,
-    };
-    manager
-        .start_workspace((&repository.id).into(), opening, preparing, None)
-        .await
-        .unwrap()
+    }
 }
 
 async fn read(manager: &Manager, workspace: &Workspace) -> Workspace {
@@ -85,6 +105,54 @@ async fn a_start_records_the_workspace_and_leaves_its_worktree_to_its_preparatio
         git(&created.path, &["branch", "--show-current"]).trim(),
         "child"
     );
+}
+
+#[tokio::test]
+async fn a_start_at_a_prs_head_leaves_its_worktree_to_its_preparation() {
+    let (root, manager) = manager().await;
+    let origin = repository(root.path(), "origin");
+    let clone = root.path().join("clone");
+    git(
+        root.path(),
+        &["clone", "-q", origin.to_str().unwrap(), "clone"],
+    );
+    let head = git(&origin, &["rev-parse", "HEAD"]).trim().to_owned();
+    git(&origin, &["update-ref", "refs/pull/9/head", &head]);
+    let repository = (manager.register_repository(clone.to_str().unwrap().into(), None, None))
+        .await
+        .unwrap();
+    let opening = Opening {
+        start: WorkspaceStart::PullHead {
+            url: "https://forge.example/team/repo/pulls/9".parse().unwrap(),
+            head: PullHead {
+                number: PullNumber::new(9),
+                reference: "refs/pull/9/head".into(),
+                commit: head.clone().into(),
+                base: None,
+            },
+        },
+        base: None,
+        new: crate::daemon::workspace::NewWorkspace {
+            // Named, so the start reads no PR title from the forge.
+            options: CreationOptions {
+                name: Some(SpaceName::derive("pr", "workspace")),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        parent: None,
+    };
+    let started = start_opening(&manager, &repository, opening).await;
+    let workspace = *started.workspace;
+    assert!(workspace.pending_worktree);
+    assert!(!workspace.path.exists());
+    let _worker = fake::take(&started.operation);
+    let selector = SpaceSelector::id(&workspace.id);
+    let created = manager.create_pending_worktree(&selector).await.unwrap();
+    assert!(!created.pending_worktree);
+    assert_eq!(git(&created.path, &["rev-parse", "HEAD"]).trim(), head);
+    let branch = git(&created.path, &["branch", "--show-current"]);
+    assert_eq!(branch.trim(), "");
 }
 
 #[tokio::test]
@@ -212,16 +280,8 @@ async fn a_split_reports_its_failed_preparation_too() {
         base: None,
         options: Default::default(),
     };
-    let preparing = Preparing {
-        issue: None,
-        pr: None,
-        agent: None,
-        waiting: None,
-        queue_entry: None,
-        env: None,
-    };
     let selector = SpaceSelector::id(&parent.id);
-    let started = (manager.start_split(&selector, split, preparing, None))
+    let started = (manager.start_split(&selector, split, without_agent(), None))
         .await
         .unwrap();
     let message = "setup exited with status 1".to_owned();

@@ -344,7 +344,7 @@ impl Manager {
         record.base_ref = source.base_ref.clone();
         record.setup_skipped = new.options.skip_setup;
         record.disposable = new.options.disposable;
-        self.insert_workspace(record, base_branch, new.parent.clone(), chosen)
+        self.insert_workspace(record, base_branch, new.parent.clone(), None, chosen)
             .await
     }
 

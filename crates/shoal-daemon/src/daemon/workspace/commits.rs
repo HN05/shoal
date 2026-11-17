@@ -7,7 +7,11 @@ use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 
-use super::{Manager, creation::Configured, restore::RestoredFiles};
+use super::{
+    Manager, NewWorkspace,
+    creation::{Configured, PendingWorktree},
+    restore::RestoredFiles,
+};
 use crate::{
     daemon::scope::Caller,
     git,
@@ -48,11 +52,13 @@ impl RecordedJobWorkspace {
 }
 
 /// The ID a new workspace's record takes, a new one unless a restore keeps
-/// its own, and the space it goes below, or none at the top.
+/// its own, the space it goes below, or none at the top, and the worktree
+/// its preparation is still to create, if any.
 #[derive(Default)]
 pub(super) struct NewRecord {
     pub id: Option<SpaceId>,
     pub parent: Option<SpaceId>,
+    pub pending: Option<PendingWorktree>,
 }
 
 impl Manager {
@@ -67,38 +73,36 @@ impl Manager {
         start: CommitStart,
         options: CreationOptions,
     ) -> Result<Workspace> {
+        let new = NewWorkspace {
+            options,
+            parent,
+            ..Default::default()
+        };
         if let CommitStart::Copy(source) = start {
-            let new = super::NewWorkspace {
-                options,
-                parent,
-                ..Default::default()
-            };
             return (self.create_copy(repository, &source, super::CopyPlace::Commit, new)).await;
         }
         // Checked before resolving the start, which may fetch: a scoped
         // process reaches only its own repository.
-        self.ensure_parent_repository(&repository, parent.as_ref())
+        self.ensure_parent_repository(&repository, new.parent.as_ref())
             .await?;
         let (repo, git) = self.lock_repository(repository).await?;
-        self.create_at_start(&repo, parent, start, options, git)
-            .await
+        self.create_at_start(&repo, start, new, git).await
     }
 
     /// Open PR `url`'s `head` in a workspace at a commit in `repository`:
     /// the one made for or linked to the PR, moved to `head` when the PR's
-    /// head moved, so there is at most one per PR, or else a new one below
-    /// the space `parent`, or a top-level one of the user's. A scoped
-    /// `caller` takes over no workspace outside its scope.
-    pub async fn open_pull_head(
+    /// head moved, so there is at most one per PR, or else a new one as
+    /// `new` says, below the space it names or a top-level one of the
+    /// user's. A scoped `caller` takes over no workspace outside its scope.
+    pub(crate) async fn open_pull_head(
         &self,
         repository: crate::repository::Selector,
         url: crate::forge::items::reference::ItemRef,
         head: PullHead,
-        parent: Option<SpaceId>,
-        options: CreationOptions,
+        new: NewWorkspace<'_>,
         caller: Option<&Caller>,
     ) -> Result<OpenedWorkspace> {
-        self.ensure_parent_repository(&repository, parent.as_ref())
+        self.ensure_parent_repository(&repository, new.parent.as_ref())
             .await?;
         let (repo, git) = self.lock_repository(repository).await?;
         if let Some(workspace) = self.pull_workspace(&repo.id, &url, head.number).await? {
@@ -114,7 +118,7 @@ impl Manager {
                     self.workspace_by_id(&workspace.id).await?
                 }
                 _ => {
-                    self.give_to_parent(&SpaceSelector::id(&workspace.id), parent)
+                    self.give_to_parent(&SpaceSelector::id(&workspace.id), new.parent)
                         .await?
                 }
             };
@@ -125,19 +129,24 @@ impl Manager {
         }
         let start = CommitStart::PullHead(head);
         Ok(OpenedWorkspace {
-            workspace: (self.create_at_start(&repo, parent, start, options, git)).await?,
+            workspace: (self.create_at_start(&repo, start, new, git)).await?,
             reused: false,
         })
     }
 
     /// Create a workspace at `start` in `repo` under its Git gate `git`, as
-    /// [`Self::create_commit_workspace`] does.
+    /// [`Self::create_commit_workspace`] does, below the space `new` names;
+    /// a pending one's worktree waits in its record for its preparation.
     async fn create_at_start(
         &self,
         repo: &Repository,
-        parent: Option<SpaceId>,
         start: CommitStart,
-        options: CreationOptions,
+        NewWorkspace {
+            parent,
+            options,
+            pending,
+            ..
+        }: NewWorkspace<'_>,
         git: OwnedMutexGuard<()>,
     ) -> Result<Workspace> {
         // Recorded below its parent, a workspace or a chat, with its
@@ -148,16 +157,24 @@ impl Manager {
             Some(given) => given.checked()?,
             None => start.name,
         };
+        let new = NewRecord {
+            id: None,
+            parent,
+            pending: pending.then(|| PendingWorktree::commit(head.clone())),
+        };
         let workspace = self
             .record_commit_workspace(
                 repo,
                 (&start.directory, name),
                 start.at,
                 start.diff_ref,
-                NewRecord { id: None, parent },
+                new,
                 options,
             )
             .await?;
+        if pending {
+            return self.workspace_by_id(&workspace.id).await;
+        }
         let result = self
             .materialize_commit_worktree(repo, &workspace, &head, None)
             .await;
@@ -436,13 +453,13 @@ impl Manager {
         workspace.base_ref = diff_ref;
         workspace.setup_skipped = options.skip_setup;
         workspace.disposable = options.disposable;
-        self.insert_workspace(workspace, None, new.parent, true)
+        self.insert_workspace(workspace, None, new.parent, new.pending, true)
             .await
     }
 
     /// Check out `head` and configure the worktree with `files` written into
     /// it.
-    async fn materialize_commit_worktree(
+    pub(super) async fn materialize_commit_worktree(
         &self,
         repo: &Repository,
         workspace: &Workspace,

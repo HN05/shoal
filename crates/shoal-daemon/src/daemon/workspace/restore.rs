@@ -153,6 +153,7 @@ impl Manager {
         let new = NewRecord {
             id: Some(removed.space_id.clone()),
             parent: (self.restored_parent(&removed, caller, &mut warnings)).await?,
+            pending: None,
         };
         let kept = removed.kept_workspace()?;
         let checkpoint = &kept.checkpoint;

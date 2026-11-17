@@ -327,7 +327,6 @@ async fn a_prs_workspace_at_a_commit_moves_to_the_head_its_forge_reports() {
                 commit: first.into(),
                 base: None,
             },
-            None,
             Default::default(),
             None,
         )

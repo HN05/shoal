@@ -316,11 +316,11 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<OpenedWorkspace> {
         let placed = base.is_some() || new.path.is_some() || new.git_profile.is_some();
-        // A branch's worktree waits for the preparation the start runs.
+        // A new worktree waits for the preparation the start runs.
         let new = NewWorkspace {
-            pending: matches!(
+            pending: !matches!(
                 start,
-                WorkspaceStart::Name(_) | WorkspaceStart::Typed(_) | WorkspaceStart::Branch(_)
+                WorkspaceStart::Workspace(_) | WorkspaceStart::Copy { .. }
             ),
             ..new
         };
@@ -376,8 +376,8 @@ impl Manager {
                     !placed,
                     "a workspace at a PR's head takes no base, path or Git profile"
                 );
-                self.open_pull_head(repository, url, head, parent, new.options, caller)
-                    .await
+                let new = NewWorkspace { parent, ..new };
+                (self.open_pull_head(repository, url, head, new, caller)).await
             }
             WorkspaceStart::Workspace(workspace) => {
                 ensure!(

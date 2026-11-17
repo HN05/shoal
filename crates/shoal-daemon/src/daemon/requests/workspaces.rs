@@ -118,8 +118,11 @@ pub(super) async fn handle(
                     repository,
                     url,
                     head,
-                    manager.space_id(parent.as_ref()).await?,
-                    options,
+                    workspace::NewWorkspace {
+                        parent: manager.space_id(parent.as_ref()).await?,
+                        options,
+                        ..Default::default()
+                    },
                     caller,
                 )
                 .await?,

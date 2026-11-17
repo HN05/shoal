@@ -2,22 +2,27 @@
 //! gets one, which its preparation creates.
 
 use super::{Configured, WorkspaceSource};
-use crate::{daemon::workspace::Manager, model::Workspace, state::WorkspaceState};
+use crate::{
+    daemon::workspace::Manager,
+    model::{Repository, Workspace},
+    state::WorkspaceState,
+};
 use anyhow::{Result, bail, ensure};
 use rusqlite::{OptionalExtension, params};
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_refs::CommitId;
 
 /// How the worktree of a recorded workspace that has none yet is created,
 /// as `pending_worktrees` keeps it until it is.
 #[derive(serde::Serialize, serde::Deserialize)]
-pub(super) struct PendingWorktree {
+pub(in crate::daemon::workspace) struct PendingWorktree {
     source: PendingSource,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     git_profile: Option<String>,
 }
 
-/// What a pending worktree checks out, as [`WorkspaceSource`] names it
-/// without what only a restore writes into it.
+/// What a pending worktree checks out: a branch, as [`WorkspaceSource`]
+/// names it without what only a restore writes into it, or a commit.
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum PendingSource {
@@ -30,6 +35,8 @@ enum PendingSource {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         base: Option<String>,
     },
+    /// Detached at `head`, as a workspace at a commit is.
+    Commit { head: CommitId },
 }
 
 impl PendingWorktree {
@@ -54,15 +61,11 @@ impl PendingWorktree {
         })
     }
 
-    /// What creating the worktree checks out.
-    fn source(self) -> WorkspaceSource {
-        match self.source {
-            PendingSource::New { base } => WorkspaceSource::New { base, parent: None },
-            PendingSource::Existing { branch, base } => WorkspaceSource::Existing {
-                branch,
-                base,
-                files: None,
-            },
+    /// The worktree of a workspace at a commit, detached at `head`.
+    pub(in crate::daemon::workspace) fn commit(head: CommitId) -> Self {
+        Self {
+            source: PendingSource::Commit { head },
+            git_profile: None,
         }
     }
 }
@@ -80,20 +83,42 @@ impl Manager {
         let (repo, git) = self.lock_repository(workspace.repository()).await?;
         // Read again under the Git gate, which a removal takes first.
         let workspace = self.workspace_by_id(&workspace.id).await?;
-        let pending = self.claim_pending_worktree(&workspace).await?;
-        let git_profile = pending.git_profile.clone();
+        let PendingWorktree {
+            source,
+            git_profile,
+        } = self.claim_pending_worktree(&workspace).await?;
+        let git_profile = git_profile.as_deref();
         let result = match workspace.git_dir {
             // An earlier try created it, then failed to configure it.
-            Some(_) => {
-                self.reconfigure_worktree(&workspace, git_profile.as_deref())
-                    .await
-            }
-            None => {
-                let source = pending.source();
-                (self.materialize_worktree(&repo, &workspace, source, git_profile.as_deref())).await
-            }
+            Some(_) => self.reconfigure_worktree(&workspace, git_profile).await,
+            None => (self.materialize_pending(&repo, &workspace, source, git_profile)).await,
         };
         self.settle_creation(&repo, &workspace, result, git).await
+    }
+
+    /// Create and configure the worktree `source` checks out for
+    /// `workspace`.
+    async fn materialize_pending(
+        &self,
+        repo: &Repository,
+        workspace: &Workspace,
+        source: PendingSource,
+        git_profile: Option<&str>,
+    ) -> Result<Configured> {
+        let source = match source {
+            PendingSource::New { base } => WorkspaceSource::New { base, parent: None },
+            PendingSource::Existing { branch, base } => WorkspaceSource::Existing {
+                branch,
+                base,
+                files: None,
+            },
+            PendingSource::Commit { head } => {
+                return self
+                    .materialize_commit_worktree(repo, workspace, &head, None)
+                    .await;
+            }
+        };
+        (self.materialize_worktree(repo, workspace, source, git_profile)).await
     }
 
     /// Configure the worktree an earlier creation of `workspace` left once

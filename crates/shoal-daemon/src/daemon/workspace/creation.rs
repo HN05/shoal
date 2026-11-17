@@ -15,7 +15,7 @@ use crate::{
     state::WorkspaceState,
 };
 use anyhow::{Context, Result, bail, ensure};
-use pending::PendingWorktree;
+pub(super) use pending::PendingWorktree;
 use rusqlite::params;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceName;
@@ -312,21 +312,22 @@ impl Manager {
     }
 
     /// Record a new workspace, stacked on the workspace that owns `base_branch`
-    /// and below `parent`, refusing a parent chat being removed, which takes
-    /// no new workspace, and a directory Shoal chose, when `chosen`, whose
-    /// name another workspace took meanwhile. Returns the record with the
-    /// number it took.
+    /// and below `parent`, with the `pending` worktree it is still to get,
+    /// refusing a parent chat being removed, which takes no new workspace,
+    /// and a directory Shoal chose, when `chosen`, whose name another
+    /// workspace took meanwhile. Returns the record with the number it took.
     pub(super) async fn insert_workspace(
         &self,
         record: Workspace,
         base_branch: Option<BranchName>,
         parent: Option<SpaceId>,
+        pending: Option<PendingWorktree>,
         chosen: bool,
     ) -> Result<Workspace> {
         let inserted = Inserted {
             placement: Placement::Below(parent),
             chosen,
-            pending: None,
+            pending,
         };
         self.insert_workspace_as(record, base_branch, inserted)
             .await

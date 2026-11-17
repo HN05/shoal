@@ -5,6 +5,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 use std::path::Path;
 
+use super::NewWorkspace;
 use crate::{
     daemon::{
         scope::{Caller, ScopedExecution},
@@ -408,7 +409,6 @@ async fn a_prs_workspace_is_reused_and_moved_to_its_new_head_unless_it_has_work(
                 commit: commit.into(),
                 base: Some("refs/remotes/origin/main".into()),
             },
-            None,
             Default::default(),
             None,
         )
@@ -578,7 +578,6 @@ async fn reopening_a_prs_workspace_records_the_prs_base() {
                 commit: head.clone().into(),
                 base: base.map(str::to_owned),
             },
-            None,
             Default::default(),
             None,
         )
@@ -635,7 +634,6 @@ async fn a_restored_prs_workspace_drops_a_base_that_is_gone() {
                 commit: head.clone().into(),
                 base: Some("refs/remotes/origin/release".into()),
             },
-            None,
             Default::default(),
             None,
         )
@@ -715,8 +713,10 @@ async fn reopening_a_prs_workspace_gives_it_to_its_opener() {
                 (&repo.id).into(),
                 url,
                 head,
-                chat,
-                Default::default(),
+                NewWorkspace {
+                    parent: chat,
+                    ..Default::default()
+                },
                 caller.as_ref(),
             ))
             .await
@@ -851,8 +851,10 @@ async fn a_chat_opens_no_workspace_at_a_commit_in_another_repository() {
                 commit: "0000000".into(),
                 base: None,
             },
-            Some(chat.id.clone()),
-            Default::default(),
+            NewWorkspace {
+                parent: Some(chat.id.clone()),
+                ..Default::default()
+            },
             Some(&Caller {
                 space_id: chat.id.clone(),
                 execution: None,

@@ -89,7 +89,8 @@ impl Manager {
         self.verify_worktree(&workspace).await?;
         // Record the admin directory, base and readiness together: a crash
         // must never leave an adopted directory with pending setup.
-        self.insert_workspace(workspace, None, None, false).await
+        self.insert_workspace(workspace, None, None, None, false)
+            .await
     }
 
     async fn copy_and_adopt(
@@ -115,7 +116,9 @@ impl Manager {
             WorkspaceState::Preparing,
         );
         // Reserve the branch and destination before Git creates the worktree.
-        let workspace = self.insert_workspace(workspace, None, None, true).await?;
+        let workspace = self
+            .insert_workspace(workspace, None, None, None, true)
+            .await?;
         let result = self.materialize_copy(repo, source, &workspace).await;
         match result {
             Ok(()) => self.workspace_by_id(&workspace.id).await,
