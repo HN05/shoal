@@ -1201,13 +1201,25 @@ async fn removal_stops_detached_processes_running_from_the_worktree() {
     attached.kill().await.unwrap();
 }
 
+/// The program `built`, a copy of this test binary, built in the worktree
+/// of `workspace`. Built output is ignored, as `target/` is, so the
+/// worktree stays clean and no checkpoint keeps the program.
+fn build_program(workspace: &crate::model::Workspace) -> std::path::PathBuf {
+    let common = git(&workspace.path, &["rev-parse", "--git-common-dir"]);
+    let exclude = workspace.path.join(common.trim()).join("info/exclude");
+    fs::create_dir_all(exclude.parent().unwrap()).unwrap();
+    fs::write(&exclude, "built\n").unwrap();
+    let built = workspace.path.join("built");
+    crate::daemon::test_support::copy_test_binary(&built);
+    built
+}
+
 /// A program built in the worktree and left running elsewhere, as a
 /// recording's daemon is, is the workspace's to stop.
 #[tokio::test]
 async fn removal_stops_detached_programs_built_in_the_worktree() {
     let (root, manager, workspace) = fixture().await;
-    let built = workspace.path.join("built");
-    crate::daemon::test_support::copy_test_binary(&built);
+    let built = build_program(&workspace);
     let elsewhere = root.path().join("elsewhere");
     fs::create_dir(&elsewhere).unwrap();
     let detached = crate::daemon::test_support::Adopted::start(
@@ -1235,13 +1247,7 @@ async fn removal_stops_detached_programs_built_in_the_worktree() {
 #[tokio::test]
 async fn automatic_removal_stops_detached_programs_built_in_the_worktree() {
     let (root, manager, workspace) = fixture().await;
-    // Built output is ignored, as `target/` is, so the worktree stays clean.
-    let common = git(&workspace.path, &["rev-parse", "--git-common-dir"]);
-    let exclude = workspace.path.join(common.trim()).join("info/exclude");
-    fs::create_dir_all(exclude.parent().unwrap()).unwrap();
-    fs::write(&exclude, "built\n").unwrap();
-    let built = workspace.path.join("built");
-    crate::daemon::test_support::copy_test_binary(&built);
+    let built = build_program(&workspace);
     let elsewhere = root.path().join("elsewhere");
     fs::create_dir(&elsewhere).unwrap();
     let detached = crate::daemon::test_support::Adopted::start(
