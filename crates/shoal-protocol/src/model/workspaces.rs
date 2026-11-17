@@ -25,6 +25,10 @@ pub struct Worktree {
     pub copied_from: Option<CopiedFrom>,
     pub state: WorkspaceState,
     pub error: Option<String>,
+    /// The commit it was created from, and the ref that named it, if any,
+    /// which `shoal diff` compares against. Creation records them before
+    /// Git creates the worktree: `None` while it is preparing, or once it
+    /// failed before that.
     pub base_commit: Option<CommitId>,
     pub base_ref: Option<String>,
     /// Git's per-worktree admin directory, whose owner marker verifies the
