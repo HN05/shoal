@@ -12,6 +12,7 @@ use std::{
 
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
+use tokio::sync::watch;
 
 use super::{
     activity::follows,
@@ -130,21 +131,37 @@ impl Manager {
         }
     }
 
+    /// Start each watch of the space `id` again from a read of its items, as
+    /// for an agent that begins a new session there. It reads them holding
+    /// the space's PR gate, so no poll records them meanwhile and the read
+    /// is the latest when recorded. A `stop` asked for while it waits for the
+    /// gate or reads, as by a removal that holds the gate, ends it; once it
+    /// has read, it records the read and the read's place among the polls in
+    /// full, which later polls depend on.
+    pub(crate) async fn restart_watches(
+        &self,
+        id: &SpaceId,
+        mut stop: watch::Receiver<bool>,
+    ) -> Result<()> {
+        let gated = async {
+            let gate = self.gates.lock_prs([id]).await;
+            anyhow::Ok((gate, self.read_followed(id).await?))
+        };
+        let (_gate, read) = tokio::select! {
+            gated = gated => gated?,
+            _ = stop.wait_for(|stop| *stop) => return Ok(()),
+        };
+        self.record_watch_start(id, read, Start::Every).await
+    }
+
     /// Read each item the space `id` follows, for its watch to start again
     /// from.
-    pub(crate) async fn read_followed(&self, id: &SpaceId) -> Result<StartRead> {
+    async fn read_followed(&self, id: &SpaceId) -> Result<StartRead> {
         let owned = id.to_owned();
         let items = (self.store)
             .run(move |db| followed_items(db, &owned, None))
             .await?;
         Ok(self.read_for_start(items).await)
-    }
-
-    /// Start each watch of the space `id` again from `read`, for a caller
-    /// holding the space's PR gate. A watch of an item the forge did not
-    /// read in full stays as it was.
-    pub(crate) async fn restart_watches_gated(&self, id: &SpaceId, read: StartRead) -> Result<()> {
-        self.record_watch_start(id, read, Start::Every).await
     }
 
     /// A read of `items` made now, leaving out those the forge does not read
