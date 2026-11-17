@@ -847,6 +847,8 @@ INSERT INTO "sqlite_sequence" VALUES ('space_messages', 0);
 
 INSERT INTO "sqlite_sequence" VALUES ('questions', 0);
 
+INSERT INTO "sqlite_sequence" VALUES ('notifications', 0);
+
 INSERT INTO "journal_pruned" VALUES (0);
 
 CREATE TRIGGER simulator_owner_insert

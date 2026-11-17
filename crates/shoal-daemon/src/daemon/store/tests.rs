@@ -713,6 +713,9 @@ pub(super) const V0_17_0: i64 = 178;
 /// of the migrations that fill it stop before.
 const DROPS_UPGRADE_STATE: i64 = 180;
 
+/// The migration that drops queued launches that create their workspace.
+const DROPS_CREATING_LAUNCHES: i64 = 226;
+
 /// Upgrade `db` as v0.17.0 does when its daemon starts: migrate it to that
 /// release's version, then consume the upgrade state the next migration
 /// refuses. A database already past it stays as it is.
@@ -1299,7 +1302,8 @@ fn queued_launches_keep_their_order_as_typed_entries() -> Result<()> {
                 VALUES (7,'later','repo','later','claude','{}','{}','queued',1),
                        (3,'first','repo','first','claude','{}','{}','queued',1);",
     )?;
-    migrate_through_v0_17_0(&mut db)?;
+    start_v0_17_0(&mut db)?;
+    migrate_to(&mut db, DROPS_CREATING_LAUNCHES - 1)?;
     let entries = db
         .prepare("SELECT id,kind FROM agent_queue ORDER BY seq")?
         .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
@@ -1325,7 +1329,8 @@ fn restores_outlive_their_execution_and_launches_keep_their_blockers() -> Result
          INSERT INTO agent_queue(seq,id,kind,repository_id,name,agent,execution_id,state,created_at,workspace_id)
                 VALUES (2,'restore','restore','repo','worker','claude','execution','queued',1,'workspace');",
     )?;
-    migrate_through_v0_17_0(&mut db)?;
+    start_v0_17_0(&mut db)?;
+    migrate_to(&mut db, DROPS_CREATING_LAUNCHES - 1)?;
     let count = |sql: &str| -> Result<i64> { Ok(db.query_row(sql, [], |r| r.get(0))?) };
     assert_eq!(
         count("SELECT COUNT(*) FROM agent_queue_blockers WHERE kind='space'")?,
@@ -1674,6 +1679,29 @@ fn migration_names_the_error_of_each_reported_failure_that_persists() -> Result<
         record["reported"],
         serde_json::json!({"CI": {"at": 1000, "error": "refused"}, "discussion": {"at": 900}})
     );
+    Ok(())
+}
+
+#[test]
+fn migration_drops_the_queued_launches_that_create_their_workspace() -> Result<()> {
+    let mut db = historical_database(225)?;
+    db.execute_batch(
+        r#"INSERT INTO agent_queue(id,kind,repository_id,name,agent,plan,env,state,created_at,opens_workspace_id)
+            VALUES ('creates','launch','repo','new-topic','claude','{"creation":{"branch":"new-topic"}}','{}','queued',1,NULL),
+                ('chat','launch','repo','talk','claude','{"chat_start":{"resolved":{}}}','{}','queued',1,NULL),
+                ('opens','launch','repo','worker','claude','{}','{}','queued',1,'workspace');"#,
+    )?;
+    migrate(&mut db)?;
+    let kept: Vec<String> = (db.prepare("SELECT id FROM agent_queue ORDER BY id")?)
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    assert_eq!(kept, ["chat", "opens"]);
+    let told: String = db.query_row(
+        "SELECT message FROM notifications WHERE kind='queue_failed'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert!(told.starts_with("new-topic did not start"), "{told}");
     Ok(())
 }
 
