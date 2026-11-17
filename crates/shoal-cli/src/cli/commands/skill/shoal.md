@@ -81,8 +81,9 @@ own agent from a fork of its session, so it needs only its task after `--`.
 and the agent's queue entry, which waits while the daemon creates the
 worktree and runs setup and the post-setup hook; until the worktree exists,
 commands that read it refuse the workspace. A failed preparation reaches the
-agent of the nearest space above with one, or else the user, naming
-`shoal restore <space>`, which retries it, and `shoal rm <space>`. `--wait`
+agent of the nearest space above with one, or else the user, naming what
+retries it, `shoal restore <space>`, or `shoal setup <space>` for a failed
+post-setup hook, and `shoal rm <space>`. `--wait`
 returns once that preparation ends. The daemon starts queued agents of heavy modes as `max_heavy_agents` allows
 (`state: queued`, `position`), work close to finished, work that other work
 waits on and new workspaces whose issues share fewer `[issue] area_prefix`

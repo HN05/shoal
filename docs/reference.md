@@ -2121,9 +2121,10 @@ the workspace, and `shoal rm` removes only its record and leases. A
 preparation that fails, creating the worktree or in setup or the post-setup
 hook, leaves the workspace failed and its agent waiting, and records a
 `preparation_failed` notification, which reaches the agent of the nearest
-space above with one as a message, or else the user, naming
-`shoal restore <space>`, which retries the preparation, creating the
-worktree first when it has none, and `shoal rm <space>`. `--wait` returns
+space above with one as a message, or else the user, naming what retries
+it, `shoal restore <space>`, which creates the worktree first when it has
+none, or `shoal setup <space>` for a failed post-setup hook, and
+`shoal rm <space>`. `--wait` returns
 once the preparation ends, reporting its failure as a start from a terminal
 does. The user's start without a terminal of an agent Happy runs
 instead sets the workspace up first, then opens the agent in place when the

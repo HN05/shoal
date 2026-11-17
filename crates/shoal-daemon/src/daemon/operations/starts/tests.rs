@@ -15,7 +15,8 @@ use crate::{
     removal::{InspectionPolicy, UnsavedWork},
     state::WorkspaceState,
 };
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_ids::space_ids::SpaceNumber;
+use shoal_protocol::{notifications::Notification, space_names::SpaceSelector};
 
 /// A generous guard against a hang; no test waits this long when it passes.
 const HANG: Duration = Duration::from_secs(60);
@@ -138,19 +139,18 @@ async fn a_workspace_whose_worktree_failed_goes_with_its_record() {
     assert!(manager.workspace(&selector).await.is_err());
 }
 
-#[tokio::test]
-async fn a_failed_preparation_reaches_the_user_with_what_retries_it() {
+/// The notification a start's preparation ending with `failure` records,
+/// and the started workspace's number.
+async fn reported(failure: Failure) -> (Notification, SpaceNumber) {
     let (root, manager) = manager().await;
     let repository = registered(root.path(), &manager).await;
     let started = start(&manager, &repository, "child", "HEAD").await;
     let worker = fake::take(&started.operation);
-    let message = "fatal: no space left".to_owned();
-    let failed = Ended::Failed(Failure::WorktreeFailed { message });
-    (manager.report_operation(&started.operation, Report::Ended(failed), None))
+    let failed = Report::Ended(Ended::Failed(failure));
+    (manager.report_operation(&started.operation, failed, None))
         .await
         .unwrap();
     worker.exit(0);
-    let number = started.workspace.number;
     let notification = tokio::time::timeout(HANG, async {
         loop {
             let notifications = manager.notifications(false, 10).await.unwrap();
@@ -165,17 +165,29 @@ async fn a_failed_preparation_reaches_the_user_with_what_retries_it() {
     .await
     .expect("the failure was reported");
     assert_eq!(notification.space_id.as_ref(), Some(&started.workspace.id));
+    (notification, started.workspace.number)
+}
+
+#[tokio::test]
+async fn a_failed_preparation_reaches_the_user_with_what_retries_it() {
+    let message = "fatal: no space left".to_owned();
+    let (notification, number) = reported(Failure::WorktreeFailed { message }).await;
+    let message = &notification.message;
+    assert!(message.contains("fatal: no space left"), "{message}");
     assert!(
-        notification.message.contains("fatal: no space left"),
-        "{}",
-        notification.message
+        message.contains(&format!("`shoal restore {number}`")),
+        "{message}"
     );
+}
+
+#[tokio::test]
+async fn a_failed_post_setup_hook_is_retried_by_setup() {
+    let message = "hook exited with status 3".to_owned();
+    let (notification, number) = reported(Failure::HookFailed { message }).await;
+    let message = &notification.message;
     assert!(
-        notification
-            .message
-            .contains(&format!("`shoal restore {number}`")),
-        "{}",
-        notification.message
+        message.contains(&format!("`shoal setup {number}`")),
+        "{message}"
     );
 }
 
