@@ -52,7 +52,10 @@ async fn startup_answers_status_with_its_step_and_serves_other_requests_after() 
             hooked: None,
         };
         let mut retried = send(&socket, 8, wake).await;
-        let Body::Error { message, .. } = reply(send(&socket, 9, DaemonMethod::Status).await).await
+        let Body::Error {
+            code: ErrorCode::Starting,
+            message,
+        } = reply(send(&socket, 9, DaemonMethod::Status).await).await
         else {
             panic!("expected the startup step");
         };

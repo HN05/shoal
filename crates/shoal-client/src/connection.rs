@@ -720,7 +720,16 @@ pub fn scope_denied(error: &anyhow::Error) -> bool {
         .is_some_and(|remote| remote.code == protocol::ErrorCode::ScopeDenied)
 }
 
-/// Wait for the daemon to be running (or stopped).
+/// The daemon answered that it is still starting.
+fn starting(error: &anyhow::Error) -> bool {
+    error
+        .downcast_ref::<protocol::RemoteError>()
+        .is_some_and(|remote| remote.code == protocol::ErrorCode::Starting)
+}
+
+/// Wait for the daemon to be running (or stopped). A daemon that answers
+/// with the startup step it runs is at work, so the limit counts only the
+/// time since its last such answer.
 pub async fn wait(daemon: &impl Daemon, running: bool) -> Result<()> {
     // A stopping daemon first stops its connected executions.
     let limit = if running {
@@ -728,13 +737,16 @@ pub async fn wait(daemon: &impl Daemon, running: bool) -> Result<()> {
     } else {
         timing::DAEMON_WAIT_TIMEOUT + timing::WORKSPACE_STOP_TIMEOUT
     };
-    let deadline = Instant::now() + limit;
+    let mut deadline = Instant::now() + limit;
     loop {
         let last_error = match status(daemon).await {
             Ok(status) if status.is_some() == running => return Ok(()),
             Ok(_) => None,
             Err(error) => Some(error),
         };
+        if running && last_error.as_ref().is_some_and(starting) {
+            deadline = Instant::now() + limit;
+        }
         ensure!(
             Instant::now() < deadline,
             "daemon did not {} within {} seconds{}",

@@ -114,7 +114,10 @@ directory holding the worktree once as an `access_stalled` alert, which names a
 privacy prompt only as a possible cause, and it stays listed until a check there
 finishes. It also says, in `cleanup_error`, when a step of automatic cleanup
 fails other than in a workspace or no pass has finished for 10 minutes. While the daemon starts, its answer names the step, a stalled
-directory, or a path whose check has waited five seconds. A daemon that
+directory, or a path whose check has waited five seconds, under the
+`starting` error code; the commands that wait for a daemon to start, such as
+`daemon install`, keep waiting while it answers so and give up once it has
+not for 10 seconds. A daemon that
 owns the state directory but does not answer is reported with its PID by every
 command. The status request, `daemon stop` and `restart` need no request capacity;
 when a daemon with full request slots refuses to say which space the current

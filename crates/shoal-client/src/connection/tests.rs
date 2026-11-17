@@ -182,6 +182,37 @@ async fn requests_after_a_restart_wait_for_the_scope() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test(start_paused = true)]
+async fn a_daemon_that_reports_its_startup_step_is_waited_for_until_it_goes_quiet() -> Result<()> {
+    let temp = tempfile::tempdir_in("/tmp")?;
+    let paths = Paths::for_test(temp.path());
+    paths.prepare()?;
+    let listener = UnixListener::bind(&paths.socket)?;
+    let waiting = tokio::spawn({
+        let paths = paths.clone();
+        async move { wait(&paths, true).await }
+    });
+    // The daemon answers with its startup step for longer than the limit.
+    let started = Instant::now();
+    while started.elapsed() < timing::DAEMON_WAIT_TIMEOUT * 3 {
+        let (mut stream, _) = listener.accept().await?;
+        let request: Request = protocol::read(&mut stream).await?;
+        sleep(timing::STARTUP_STATUS_WAIT).await;
+        let body = Body::error(ErrorCode::Starting, "the daemon is starting");
+        protocol::write(&mut stream, &Response::new(request.id, body)).await?;
+    }
+    assert!(!waiting.is_finished());
+
+    // A daemon that goes away is given up on once the limit passes.
+    drop(listener);
+    std::fs::remove_file(&paths.socket)?;
+    let quiet = Instant::now();
+    let error = waiting.await?.unwrap_err();
+    assert!(error.to_string().contains("did not start"), "{error:#}");
+    assert!(quiet.elapsed() >= timing::DAEMON_WAIT_TIMEOUT);
+    Ok(())
+}
+
 #[tokio::test]
 async fn typed_requests_extract_payloads_and_acknowledgements() {
     let status = DaemonStatus {

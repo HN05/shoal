@@ -166,7 +166,7 @@ async fn answer_step(mut stream: UnixStream, request_id: u64, progress: &Progres
     if let Some(waiting) = progress.access.get().and_then(|access| waiting(access)) {
         message.push_str(&format!("; {waiting}"));
     }
-    let response = Response::new(request_id, Body::error(ErrorCode::OperationFailed, message));
+    let response = Response::new(request_id, Body::error(ErrorCode::Starting, message));
     let _ = protocol::write(&mut stream, &response).await;
 }
 
