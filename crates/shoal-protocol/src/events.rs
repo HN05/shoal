@@ -152,6 +152,9 @@ states!(EventKind {
     /// Shoal ended the workspace's CI job, whose runner kept running after
     /// the forge finished the job's run.
     JobEnded => "job_ended",
+    /// No CI run of the default branch started for the merge commit of a
+    /// PR the space watched merge within the time Shoal looked for one.
+    NoMergeRuns => "no_merge_runs",
 });
 
 states!(
@@ -285,6 +288,9 @@ pub struct EventDetails {
     /// The blocker added, removed or cleared.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocker: Option<Box<BlockerEvent>>,
+    /// The merge whose default branch runs Shoal looked for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge: Option<Box<MergeEvent>>,
 }
 
 /// The kind of space that recorded an event, with what only that kind has.
@@ -430,6 +436,15 @@ pub struct GateEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlertEvent {
     pub message: String,
+}
+
+/// A PR's merge into the default branch.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MergeEvent {
+    /// The merged PR's URL.
+    pub pr: String,
+    /// The commit the merge left on the default branch.
+    pub commit: shoal_refs::CommitId,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

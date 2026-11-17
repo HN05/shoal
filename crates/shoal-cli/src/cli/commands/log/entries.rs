@@ -98,6 +98,7 @@ fn event_line(event: &EventDetails) -> (String, String) {
         EventKind::ChildCreated => fixed("Child created", child(event)),
         EventKind::ChildRemoved => fixed("Child removed", child(event)),
         EventKind::JobEnded => fixed("CI job ended", job(event)),
+        EventKind::NoMergeRuns => fixed("No CI run of the merge", merge(event)),
         EventKind::BlockerAdded => fixed("Blocker added", blocker(event)),
         EventKind::BlockerRemoved => fixed("Blocker removed", blocker(event)),
         EventKind::BlockerCleared => fixed("Blocker cleared", blocker(event)),
@@ -383,6 +384,14 @@ fn job(event: &EventDetails) -> String {
         stopped.push(format!("{} more", job.omitted));
     }
     format!("{ended}; stopped {}", stopped.join(", "))
+}
+
+/// The merged PR and its merge commit, as `#12 at 0a1b2c3`.
+fn merge(event: &EventDetails) -> String {
+    let Some(merge) = &event.merge else {
+        return String::new();
+    };
+    format!("{} at {}", reference(&merge.pr), merge.commit.short())
 }
 
 fn error(event: &EventDetails) -> String {
