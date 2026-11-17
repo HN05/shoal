@@ -91,7 +91,7 @@ async fn a_subscription_sends_its_snapshot_then_each_kind_of_change() {
         .map(|record| record.key().kind)
         .collect();
     assert!(kinds.contains(&RecordKind::Repository), "{kinds:?}");
-    assert!(kinds.contains(&RecordKind::Workspace), "{kinds:?}");
+    assert!(kinds.contains(&RecordKind::Space), "{kinds:?}");
 
     let manager = &daemon.manager;
     let other = shoal_core::test_support::repository(&manager.paths.home, "other");
@@ -111,7 +111,7 @@ async fn a_subscription_sends_its_snapshot_then_each_kind_of_change() {
         .await
         .unwrap();
     until(&mut subscription, |update| {
-        matches!(update, Update::Changed(record) if matches!(&**record, Record::Workspace(w) if w.workspace.holds.len() == 1))
+        matches!(update, Update::Changed(record) if matches!(&**record, Record::Space(s) if s.space.holds.len() == 1))
     })
     .await;
 
@@ -189,7 +189,7 @@ async fn a_subscription_sends_its_snapshot_then_each_kind_of_change() {
         .await
         .unwrap();
     until(&mut subscription, |update| {
-        matches!(update, Update::Removed(key) if key.kind == RecordKind::Workspace && key.id == workspace.id)
+        matches!(update, Update::Removed(key) if key.kind == RecordKind::Space && key.id == workspace.id)
     })
     .await;
 }
@@ -314,6 +314,60 @@ async fn the_user_sees_the_questions_of_a_chat() {
 }
 
 #[tokio::test]
+async fn a_chat_reaches_a_subscription_with_its_agent_links_and_messages() {
+    use shoal_protocol::model::SpaceKind;
+    let daemon = TestDaemon::start().await;
+    let manager = &daemon.manager;
+    let chat = manager
+        .start_chat(
+            daemon.repository.id.clone().into(),
+            "planning".into(),
+            "claude".into(),
+            None,
+        )
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&chat.id);
+    manager
+        .link_item(
+            &selector,
+            LinkKind::Issue,
+            &"40".parse().unwrap(),
+            Relation::Related,
+            Some("Report".into()),
+            None,
+        )
+        .await
+        .unwrap();
+    manager
+        .send_space_message(&selector, "Plan it".into(), Vec::new(), &Attacher::User)
+        .await
+        .unwrap();
+    let topics = [Topic::Spaces, Topic::Links, Topic::Messages];
+    let mut subscription = subscribe(daemon.connector(), &topics).await;
+    let records = snapshot(&mut subscription).await;
+    let [
+        Record::Space(space),
+        Record::Link(link),
+        Record::Message(message),
+    ] = records.as_slice()
+    else {
+        panic!("expected the chat, its link and its message: {records:?}");
+    };
+    assert_eq!(
+        (&space.space.id, space.space.kind()),
+        (&chat.id, SpaceKind::Chat)
+    );
+    let agent = space.agent.as_ref().and_then(|agent| agent.agent.as_ref());
+    assert_eq!(agent.map(AsRef::<str>::as_ref), Some("claude"));
+    assert_eq!(link.space_id, chat.id);
+    assert_eq!(
+        (message.space_id.as_ref(), message.space.as_deref()),
+        (Some(&chat.id), Some("planning"))
+    );
+}
+
+#[tokio::test]
 async fn a_session_an_agent_reports_reaches_a_subscription() {
     use shoal_core::execution::TrackedAgent;
     use shoal_protocol::transcripts::ReportedSession;
@@ -418,7 +472,7 @@ async fn a_scoped_subscription_covers_its_tree_without_notifications() {
             .map(|key| key.id.as_str())
             .collect::<Vec<_>>()
     };
-    assert_eq!(ids(RecordKind::Workspace), [own.id.as_str()]);
+    assert_eq!(ids(RecordKind::Space), [own.id.as_str()]);
     assert_eq!(ids(RecordKind::Repository), [daemon.repository.id.as_str()]);
     assert!(
         keys.iter()
@@ -510,7 +564,7 @@ async fn a_log_subscription_keeps_following_its_space_after_a_rename() {
 }
 
 #[tokio::test]
-async fn a_scoped_subscription_without_workspace_records_names_its_tree() {
+async fn a_scoped_subscription_without_space_records_names_its_tree() {
     let daemon = TestDaemon::start().await;
     let own = daemon.workspace("own").await;
     let other = daemon.workspace("other").await;
@@ -544,8 +598,8 @@ async fn a_scoped_subscription_without_workspace_records_names_its_tree() {
         match record {
             Record::Question(question) => assert_eq!(question.space_id, own.id),
             Record::Message(message) => {
-                assert_eq!(message.workspace_id.as_ref(), Some(&own.id));
-                assert_eq!(message.workspace.as_deref(), Some(own.name.as_str()));
+                assert_eq!(message.space_id.as_ref(), Some(&own.id));
+                assert_eq!(message.space.as_deref(), Some(own.name.as_str()));
             }
             other => panic!("unexpected record: {other:?}"),
         }
@@ -558,14 +612,14 @@ async fn a_revoked_scope_token_ends_its_subscriptions() {
     let workspace = daemon.workspace("revoked").await;
     let token = daemon.scope_token(&workspace).await;
     let connector = || daemon.connector().scope(token.clone());
-    let mut subscription = subscribe(connector(), &[Topic::Workspaces]).await;
+    let mut subscription = subscribe(connector(), &[Topic::Spaces]).await;
     snapshot(&mut subscription).await;
     daemon
         .manager
         .revoke_scope(&SpaceSelector::id(&workspace.id), token.clone())
         .await
         .unwrap();
-    let refused = Subscription::open(connector(), vec![Topic::Workspaces]).await;
+    let refused = Subscription::open(connector(), vec![Topic::Spaces]).await;
     assert_eq!(code(refused.err().unwrap()), ErrorCode::ScopeDenied);
     daemon
         .manager
@@ -594,7 +648,7 @@ async fn discarding_a_stopped_session_reaches_a_subscription() {
         &shoal_ids::execution_ids::ExecutionId::from("execution"),
     )
     .unwrap();
-    let mut subscription = subscribe(daemon.connector(), &[Topic::Workspaces]).await;
+    let mut subscription = subscribe(daemon.connector(), &[Topic::Spaces]).await;
     snapshot(&mut subscription).await;
     daemon
         .manager
@@ -603,7 +657,7 @@ async fn discarding_a_stopped_session_reaches_a_subscription() {
         .unwrap();
     until(
         &mut subscription,
-        |update| matches!(update, Update::Changed(record) if matches!(&**record, Record::Workspace(w) if w.agent.is_none())),
+        |update| matches!(update, Update::Changed(record) if matches!(&**record, Record::Space(s) if s.agent.is_none())),
     )
     .await;
 }
@@ -616,7 +670,7 @@ async fn a_daemon_quiescing_for_an_update_closes_a_subscription_instead_of_writi
     let (reader, mut writer) = stream.into_split();
     let mut reader = tokio::io::BufReader::new(reader);
     let subscribe = SubscriptionMethod::Subscribe {
-        topics: vec![Topic::Workspaces],
+        topics: vec![Topic::Spaces],
         log: None,
     };
     let request = Request {
@@ -647,7 +701,7 @@ async fn a_daemon_quiescing_for_an_update_closes_a_subscription_instead_of_writi
 async fn after_a_restart_the_subscription_resyncs() {
     let mut daemon = TestDaemon::start().await;
     let workspace = daemon.workspace("kept").await;
-    let mut subscription = subscribe(daemon.connector(), &[Topic::Workspaces]).await;
+    let mut subscription = subscribe(daemon.connector(), &[Topic::Spaces]).await;
     snapshot(&mut subscription).await;
     daemon.restart().await;
     daemon
@@ -668,8 +722,8 @@ async fn after_a_restart_the_subscription_resyncs() {
         unreachable!();
     };
     assert!(resynced);
-    let Some(Record::Workspace(kept)) = records.first() else {
+    let Some(Record::Space(kept)) = records.first() else {
         panic!("expected the workspace: {records:?}");
     };
-    assert_eq!(kept.workspace.holds.len(), 1);
+    assert_eq!(kept.space.holds.len(), 1);
 }

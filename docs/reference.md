@@ -702,7 +702,7 @@ shoal-protocol = { git = "https://git.henriknordvik.com/HN05/shoal", tag = "<rel
 module for its subject, such as `questions::ask` or `leases::acquire_port`,
 returning its reply's types; `connection` sends them to the daemon a
 `Connector` names, and `subscriptions`
-follows repositories, workspaces with their agents, linked issues, PRs and CI
+follows repositories, spaces with their agents, linked issues, PRs and CI
 runs, the sessions each space's agents reported, open questions, pending
 approval requests, messages and notifications as they change, subscribing again
 after a daemon restart. `operations` follows work

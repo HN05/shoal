@@ -1,7 +1,6 @@
 //! The records a subscription covers, as they are now: those of the topics
 //! it asked for that its caller may read.
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::space_names::SpaceName;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use anyhow::Result;
@@ -15,14 +14,14 @@ use crate::{
         scope::Caller,
         workspace::Manager,
     },
-    model::{Relation, Space, Workspace},
+    model::{Relation, Space},
 };
 use shoal_forge::updates::Snapshot;
 use shoal_protocol::{
     log::LogTopic,
     subscriptions::records::{
         Check, Link, LookupError, Message, MessageRecipient, Record, RecordKey, ReportedSessions,
-        Topic, WorkspaceRecord,
+        SpaceRecord, Topic,
     },
 };
 
@@ -63,11 +62,11 @@ pub(super) async fn take(
     if topics.has(Topic::Repositories) {
         found.extend(repositories(manager, caller).await?);
     }
-    if topics.has(Topic::Workspaces) {
-        found.extend(workspace_records(manager, &visible.workspaces).await?);
+    if topics.has(Topic::Spaces) {
+        found.extend(space_records(manager, &visible.spaces).await?);
     }
     if topics.has(Topic::Links) {
-        found.extend(links(manager, &visible.workspaces).await?);
+        found.extend(links(manager, &visible.spaces).await?);
     }
     if topics.has(Topic::Sessions) {
         found.extend(sessions(manager, &visible.spaces).await?);
@@ -106,17 +105,13 @@ pub(super) async fn take(
 /// sees, read only for the topics that need them.
 #[derive(Default)]
 struct Visible {
-    /// Each space with its details, for the topics that show them.
     spaces: Vec<Space>,
-    /// Each workspace among them, for the topics whose records are a
-    /// workspace's.
-    workspaces: Vec<Workspace>,
 }
 
 impl Visible {
     async fn load(manager: &Manager, caller: Option<&Caller>, topics: &Topics) -> Result<Self> {
         let reading_spaces = [
-            Topic::Workspaces,
+            Topic::Spaces,
             Topic::Links,
             Topic::Sessions,
             Topic::Questions,
@@ -127,19 +122,16 @@ impl Visible {
             return Ok(Self::default());
         }
         let spaces = manager.visible_spaces(caller).await?;
-        let workspaces = spaces.iter().filter_map(Space::to_workspace).collect();
-        Ok(Self { spaces, workspaces })
+        Ok(Self { spaces })
     }
 
     fn contains(&self, id: &SpaceId) -> bool {
-        self.spaces.iter().any(|space| space.id == *id)
+        self.space(id).is_some()
     }
 
-    /// The name of the workspace `id` among them.
-    fn workspace_name(&self, id: &SpaceId) -> Option<&SpaceName> {
-        (self.workspaces.iter())
-            .find(|workspace| workspace.id == *id)
-            .map(|workspace| &workspace.name)
+    /// The space `id` among them.
+    fn space(&self, id: &SpaceId) -> Option<&Space> {
+        self.spaces.iter().find(|space| space.id == *id)
     }
 }
 
@@ -153,35 +145,35 @@ async fn repositories(manager: &Manager, caller: Option<&Caller>) -> Result<Vec<
         .collect())
 }
 
-async fn workspace_records(manager: &Manager, workspaces: &[Workspace]) -> Result<Vec<Record>> {
-    let agents = agents::load(manager, workspaces).await?;
-    Ok(workspaces
+async fn space_records(manager: &Manager, spaces: &[Space]) -> Result<Vec<Record>> {
+    let agents = agents::load(manager, spaces).await?;
+    Ok(spaces
         .iter()
-        .map(|workspace| {
-            Record::Workspace(Box::new(WorkspaceRecord {
-                agent: agents.activity(workspace),
-                workspace: workspace.clone(),
+        .map(|space| {
+            Record::Space(Box::new(SpaceRecord {
+                agent: agents.activity(space),
+                space: space.clone(),
             }))
         })
         .collect())
 }
 
-async fn links(manager: &Manager, workspaces: &[Workspace]) -> Result<Vec<Record>> {
+async fn links(manager: &Manager, spaces: &[Space]) -> Result<Vec<Record>> {
     let mut activity = item_activity(manager).await?;
-    Ok(workspaces
+    Ok(spaces
         .iter()
-        .flat_map(|workspace| {
-            let observed = activity.remove(&workspace.id).unwrap_or_default();
-            workspace_links(workspace, &observed)
+        .flat_map(|space| {
+            let observed = activity.remove(&space.id).unwrap_or_default();
+            space_links(space, &observed)
         })
         .map(|link| Record::Link(Box::new(link)))
         .collect())
 }
 
-/// Each item `workspace` links, with what the daemon last observed of it on
-/// its forge, from `activity` by URL.
-fn workspace_links(workspace: &Workspace, activity: &HashMap<String, Snapshot>) -> Vec<Link> {
-    let links = &workspace.links;
+/// Each item `space` links, with what the daemon last observed of it on its
+/// forge, from `activity` by URL.
+fn space_links(space: &Space, activity: &HashMap<String, Snapshot>) -> Vec<Link> {
+    let links = &space.links;
     let assigned = (links.issues.iter().chain(&links.prs)).map(|item| {
         (
             Relation::Assigned,
@@ -205,8 +197,8 @@ fn workspace_links(workspace: &Workspace, activity: &HashMap<String, Snapshot>) 
         .map(|(relation, kind, url, title)| {
             let observed = activity.get(url.url());
             Link {
-                id: format!("{}/{relation}/{url}", workspace.id),
-                workspace_id: workspace.id.clone(),
+                id: format!("{}/{relation}/{url}", space.id),
+                space_id: space.id.clone(),
                 kind,
                 url: url.clone(),
                 relation,
@@ -287,8 +279,8 @@ async fn approvals(
         .collect())
 }
 
-/// Messages queued for the agents of the visible workspaces, and for the
-/// user, who alone reads the messages agents send it.
+/// Messages queued for the agents of the visible spaces, and for the user,
+/// who alone reads the messages agents send it.
 async fn messages(
     manager: &Manager,
     caller: Option<&Caller>,
@@ -298,9 +290,9 @@ async fn messages(
         .read(|db| crate::daemon::agent_messages::every_unread(db))
         .await?
         .into_iter()
-        .filter_map(|(workspace_id, message)| {
-            let name = visible.workspace_name(&workspace_id)?.clone();
-            Some(Record::Message(agent_message(message, workspace_id, name)))
+        .filter_map(|(space_id, message)| {
+            let space = visible.space(&space_id)?;
+            Some(Record::Message(agent_message(message, space)))
         })
         .collect();
     if caller.is_none() {
@@ -316,26 +308,26 @@ async fn messages(
     Ok(messages)
 }
 
-/// A message queued for the agent of the workspace with this ID and name.
-fn agent_message(message: AgentMessage, workspace_id: SpaceId, workspace: SpaceName) -> Message {
+/// A message queued for the agent of `space`.
+fn agent_message(message: AgentMessage, space: &Space) -> Message {
     Message {
         id: format!("agent/{}", message.id),
         recipient: MessageRecipient::Agent,
-        workspace_id: Some(workspace_id),
-        workspace: Some(workspace),
+        space_id: Some(space.id.clone()),
+        space: Some(space.name.clone()),
         text: message.message,
         attachments: message.attachments,
         created_at: message.created_at,
     }
 }
 
-/// A workspace process's message to the user, which its notification records.
+/// A space's message to the user, which its notification records.
 fn user_message(notification: &Notification) -> Message {
     Message {
         id: format!("user/{}", notification.id),
         recipient: MessageRecipient::User,
-        workspace_id: None,
-        workspace: notification.workspace.clone(),
+        space_id: None,
+        space: notification.workspace.clone(),
         text: notification.message.clone(),
         attachments: Vec::new(),
         created_at: notification.created_at,
@@ -351,8 +343,8 @@ async fn notifications(manager: &Manager) -> Result<Vec<Record>> {
         .collect())
 }
 
-/// What the daemon last observed of each linked item on its forge, by
-/// workspace ID and URL.
+/// What the daemon last observed of each linked item on its forge, by space
+/// ID and URL.
 async fn item_activity(manager: &Manager) -> Result<HashMap<SpaceId, HashMap<String, Snapshot>>> {
     let rows = manager
         .store
@@ -364,10 +356,10 @@ async fn item_activity(manager: &Manager) -> Result<HashMap<SpaceId, HashMap<Str
         })
         .await?;
     let mut activity: HashMap<SpaceId, HashMap<String, Snapshot>> = HashMap::new();
-    for (workspace, url, record) in rows {
+    for (space, url, record) in rows {
         // An unreadable observation shows the link without one.
         if let Ok(snapshot) = serde_json::from_str(&record) {
-            activity.entry(workspace).or_default().insert(url, snapshot);
+            activity.entry(space).or_default().insert(url, snapshot);
         }
     }
     Ok(activity)

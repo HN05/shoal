@@ -1,5 +1,5 @@
-//! The records subscriptions carry: repositories, workspaces with their
-//! agents, the issues, PRs and CI runs they link with their forge state,
+//! The records subscriptions carry: repositories, spaces with their agents,
+//! the issues, PRs and CI runs they link with their forge state,
 //! the sessions each space's agents reported, open questions, pending
 //! approval requests, messages and notifications, each named by a
 //! [`RecordKey`].
@@ -14,7 +14,7 @@ use shoal_states::states;
 use crate::{
     approvals::ApprovalRequest,
     forge::{ci::check_state::CheckState, items::link::LinkKind, updates::SnapshotState},
-    model::{Relation, Repository, Workspace},
+    model::{Relation, Repository, Space},
     notifications::Notification,
     questions::Question,
     transcripts::ReportedSession,
@@ -24,10 +24,10 @@ states!(
     /// What a subscription covers.
     Topic: Variants {
         Repositories => "repositories",
-        /// Workspaces with their lifecycle state, base workspace, holds,
-        /// ready-for-review marks and agent.
-        Workspaces => "workspaces",
-        /// The issues, PRs and CI runs workspaces link, with their forge state.
+        /// Workspaces and chats with their state, holds, ready-for-review
+        /// marks and agent.
+        Spaces => "spaces",
+        /// The issues, PRs and CI runs spaces link, with their forge state.
         Links => "links",
         /// The sessions each workspace's and chat's agents reported.
         Sessions => "sessions",
@@ -37,7 +37,7 @@ states!(
         Approvals => "approvals",
         /// Messages to agents, and from agents to the user.
         Messages => "messages",
-        /// The user's notifications; workspace processes cannot subscribe.
+        /// The user's notifications; scoped callers cannot subscribe.
         Notifications => "notifications",
     }
 );
@@ -47,7 +47,7 @@ states!(
     #[derive(PartialOrd, Ord)]
     RecordKind {
         Repository => "repository",
-        Workspace => "workspace",
+        Space => "space",
         Link => "link",
         Sessions => "sessions",
         Question => "question",
@@ -71,7 +71,7 @@ pub struct RecordKey {
 #[serde(tag = "kind", content = "record", rename_all = "snake_case")]
 pub enum Record {
     Repository(Repository),
-    Workspace(Box<WorkspaceRecord>),
+    Space(Box<SpaceRecord>),
     Link(Box<Link>),
     Sessions(ReportedSessions),
     Question(Question),
@@ -86,7 +86,7 @@ impl Record {
     pub fn key(&self) -> RecordKey {
         let (kind, id) = match self {
             Self::Repository(record) => (RecordKind::Repository, record.id.to_string()),
-            Self::Workspace(record) => (RecordKind::Workspace, record.workspace.id.to_string()),
+            Self::Space(record) => (RecordKind::Space, record.space.id.to_string()),
             Self::Link(record) => (RecordKind::Link, record.id.clone()),
             Self::Sessions(record) => (RecordKind::Sessions, record.space_id.to_string()),
             Self::Question(record) => (RecordKind::Question, record.number.to_string()),
@@ -100,17 +100,18 @@ impl Record {
     }
 }
 
-/// A workspace, with its agent.
+/// A space, with its agent.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorkspaceRecord {
-    pub workspace: Workspace,
+pub struct SpaceRecord {
+    /// A workspace's record carries its worktree, a chat's its own part.
+    pub space: Space,
     /// Its agent, when one runs, waits in the queue or stopped with a
     /// session to restore.
     pub agent: Option<AgentActivity>,
 }
 
 states!(
-    /// What a workspace's agent is doing.
+    /// What a space's agent is doing.
     ActivityState {
         /// Running and working on a turn.
         Working => "working",
@@ -132,7 +133,7 @@ states!(
     }
 );
 
-/// A workspace's agent and what it is doing.
+/// A space's agent and what it is doing.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentActivity {
     pub state: ActivityState,
@@ -142,12 +143,12 @@ pub struct AgentActivity {
     pub since: Option<crate::time::UnixTime>,
 }
 
-/// An issue, PR or CI run a workspace links, with its state as the daemon
-/// last recorded it from the forge.
+/// An issue, PR or CI run a space links, with its state as the daemon last
+/// recorded it from the forge.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Link {
     pub id: String,
-    pub workspace_id: SpaceId,
+    pub space_id: SpaceId,
     pub kind: LinkKind,
     pub url: crate::forge::items::reference::ItemRef,
     pub relation: Relation,
@@ -194,22 +195,22 @@ pub struct LookupError {
 states!(
     /// Who a message is for.
     MessageRecipient {
-        /// A workspace's agent, until it is delivered.
+        /// A space's agent, until it is delivered.
         Agent => "agent",
-        /// The user, from a workspace process.
+        /// The user, from a space's process.
         User => "user",
     }
 );
 
-/// A message to a workspace's agent, or from one to the user.
+/// A message to a space's agent, or from one to the user.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Message {
     pub id: String,
     pub recipient: MessageRecipient,
-    /// The workspace's ID, for a message to its agent.
-    pub workspace_id: Option<SpaceId>,
-    /// The workspace's name.
-    pub workspace: Option<SpaceName>,
+    /// The space's ID, for a message to its agent.
+    pub space_id: Option<SpaceId>,
+    /// The space's name.
+    pub space: Option<SpaceName>,
     /// Empty when the message is only its attachments.
     pub text: String,
     /// Shoal's copies of the attached files.

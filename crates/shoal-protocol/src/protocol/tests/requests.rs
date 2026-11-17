@@ -267,7 +267,7 @@ const REQUESTS: &[&str] = &[
     r#"{"sim_release":{"workspace":"fix","name":"default"}}"#,
     r#"{"sim_history":{"workspace":null,"limit":20,"before":null}}"#,
     // Subscriptions.
-    r#"{"subscribe":{"topics":["workspaces","questions"]}}"#,
+    r#"{"subscribe":{"topics":["spaces","questions"]}}"#,
     // Operations that create a workspace.
     r#"{"start_workspace":{"repository":"app","name":"fix","issue":"https://forge.example/team/app/issues/42","agent":{"agent":"claude","prompt":null}}}"#,
     r#"{"start_split":{"workspace":"fix","name":"part","base":"HEAD"}}"#,
