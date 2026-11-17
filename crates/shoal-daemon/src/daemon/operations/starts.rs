@@ -145,11 +145,11 @@ impl Preparing {
         workspace.pending_worktree && (!self.blockers.is_empty() || self.unfollowed)
     }
 
-    /// Queue its agent on the start's `issue` unless it names a task of its
-    /// own.
+    /// Queue its agent on the start's `issue`, which prompts it, with the
+    /// task it names passed on beside it.
     fn work_on(&mut self, issue: Option<&OpenIssue>) {
         if let (Some(agent), Some(OpenIssue { url, title, labels })) = (&mut self.agent, issue) {
-            agent.default_issue(LaunchIssue {
+            agent.issue.get_or_insert_with(|| LaunchIssue {
                 url: url.clone(),
                 title: title.clone(),
                 labels: labels.clone(),
