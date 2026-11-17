@@ -19,6 +19,7 @@ pub(crate) mod done;
 mod environment;
 mod export;
 mod find;
+mod hooks;
 mod naming;
 pub(crate) mod priority;
 pub(crate) mod records;

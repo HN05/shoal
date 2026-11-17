@@ -1,5 +1,4 @@
 //! Recording a space's completion: `shoal done` and its withdrawal.
-use crate::config::hooks::HookCommand;
 use anyhow::{Context, Result, ensure};
 use rusqlite::OptionalExtension;
 use shoal_ids::space_ids::SpaceId;
@@ -16,7 +15,7 @@ use crate::{
         workspace::{GuardMode, Manager, ResourceGuard, turn_retry},
         workspace_files::Attacher,
     },
-    hooks::{self, Hook, HookKind},
+    hooks::{Hook, HookKind},
     model::{Completion, HandedBack, Space},
 };
 use shoal_protocol::{assignments::Done, space_names::SpaceSelector};
@@ -214,16 +213,15 @@ impl Manager {
         space: &Space,
         settings: &Effective,
     ) -> Result<Option<(PathBuf, ResourceGuard)>> {
-        let Some(path) = HookKind::PostDone.command(settings) else {
+        let Some(command) = Self::space_hook(space, HookKind::PostDone, settings) else {
             return Ok(None);
         };
         let guard = (self.gates).resource_guard(&space.id, GuardMode::Exclusive)?;
-        Ok(Some((space.workdir.path().join(path), guard)))
+        Ok(Some((command, guard)))
     }
 
-    /// Run `hooks.post_done` in `space` with what its repository's `[env]`
-    /// adds, which a space without a repository goes without. Failure only
-    /// notifies; it never undoes completion.
+    /// Run `hooks.post_done` in `space`. Failure only notifies; it never
+    /// undoes completion.
     async fn run_done_hook(
         &self,
         space: &Space,
@@ -231,16 +229,8 @@ impl Manager {
         command: &Path,
         completion: &Completion,
     ) {
-        let result = async {
-            let configured_env = match &space.repository_id {
-                Some(repository) => (self.hook_environment(space, repository, settings)).await?,
-                None => Default::default(),
-            };
-            let hook = Hook::PostDone(completion);
-            (hooks::run_detached(hook, space, command, &self.paths, &configured_env)).await
-        }
-        .await;
-        if let Err(error) = result {
+        let hook = Hook::PostDone(completion);
+        if let Err(error) = (self.run_space_hook(hook, space, settings, command)).await {
             let kind = NotificationKind::HookFailed;
             let message = format!("finished; {error:#}");
             (self.notify_space(&space.name, &space.id, kind, message)).await;
