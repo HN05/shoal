@@ -152,3 +152,71 @@ async fn a_scoped_chat_start_now_elsewhere_is_refused_without_asking() {
         .unwrap_err();
     assert!(error.downcast_ref::<Undecided>().is_none(), "{error:#}");
 }
+
+/// A machine whose one heavy slot the launch of a heavy chat `pair` holds,
+/// with `claude` a program every runner has; and the start of a chat in
+/// that mode in `repo`.
+async fn full_machine(manager: &Manager, repo: &crate::model::Repository) -> ChatStart {
+    manager.publish_config(global_config(
+        "[machine]\nmax_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n\
+         [modes.pair]\nkind = 'chat'\n[agents.claude]\ncommand = ['sh']\n",
+    ));
+    let start = ChatStart {
+        repository: Some((&repo.id).into()),
+        name: Some("talk".into()),
+        agent: Some("claude".into()),
+        mode: Some("pair".into()),
+        ..ChatStart::default()
+    };
+    let holding = manager.queue_chat_add(pair_launch(false), None).await;
+    assert!(holding.unwrap().start);
+    start
+}
+
+/// The launch of a heavy chat's agent, recorded at once when it waits
+/// when `records`.
+fn pair_launch(records: bool) -> ChatQueueRequest {
+    ChatQueueRequest {
+        source: None,
+        repository: None,
+        name: "talk".into(),
+        agent: "claude".into(),
+        mode: "pair".into(),
+        narrowing: Default::default(),
+        plan: "{}".into(),
+        env: BTreeMap::new(),
+        now: false,
+        priority: None,
+        records_when_waiting: records,
+    }
+}
+
+/// A client without a terminal, as the user, records the chat its waiting
+/// launch starts in, which the launch then holds.
+#[tokio::test]
+async fn an_unscoped_client_records_the_chat_of_its_waiting_launch() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let start = full_machine(&manager, &repo).await;
+    let waiting = manager
+        .queue_chat_add(pair_launch(true), None)
+        .await
+        .unwrap();
+    let entry = waiting.entry.unwrap();
+    assert!(!waiting.start);
+
+    let launched = Launched {
+        chat: None,
+        origin: None,
+        entry: Some(entry.id.clone()),
+    };
+    let launched = launched.take(&manager, start, None).await.unwrap();
+
+    let entries = manager.queue_entries().await.unwrap();
+    let queued = entries.iter().find(|queued| queued.id == entry.id).unwrap();
+    assert_eq!(queued.space_id.as_ref(), Some(&launched.chat.id));
+}

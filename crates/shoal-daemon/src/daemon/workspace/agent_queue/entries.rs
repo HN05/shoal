@@ -455,14 +455,29 @@ impl Manager {
         &self,
         id: &QueueEntryId,
     ) -> Result<Option<Caller>> {
+        self.launch_scope(id, QueueState::Starting).await
+    }
+
+    /// The caller as which the launch `id`, waiting or starting, records the
+    /// chat it starts in, as [`Self::queued_scope`] says.
+    pub(in crate::daemon) async fn chat_launch_scope(
+        &self,
+        id: &QueueEntryId,
+    ) -> Result<Option<Caller>> {
+        self.launch_scope(id, QueueState::Queued).await
+    }
+
+    /// [`Self::queued_scope`] of the launch `id` that is starting or in
+    /// `state`.
+    async fn launch_scope(&self, id: &QueueEntryId, state: QueueState) -> Result<Option<Caller>> {
         let id = id.to_owned();
         let scope: Option<Option<SpaceId>> = self
             .store
             .run(move |db| {
                 Ok(db
                     .query_row(
-                        "SELECT scope_space_id FROM agent_queue WHERE id=?1 AND state=?2",
-                        params![id, QueueState::Starting],
+                        "SELECT scope_space_id FROM agent_queue WHERE id=?1 AND state IN (?2,?3)",
+                        params![id, QueueState::Starting, state],
                         |row| row.get(0),
                     )
                     .optional()?)

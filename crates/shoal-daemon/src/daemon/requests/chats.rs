@@ -121,7 +121,7 @@ async fn queued_scope(
     let (None, Some(entry)) = (caller, entry) else {
         return Ok(None);
     };
-    let Some(queued) = manager.queued_scope(entry).await? else {
+    let Some(queued) = manager.chat_launch_scope(entry).await? else {
         return Ok(None);
     };
     manager.parent_below(&queued, parent).await?;
