@@ -4,10 +4,10 @@
 use std::{
     ffi::OsStr,
     io::{self, Read},
-    process::{Command, Output, Stdio},
-    sync::{Arc, Mutex, PoisonError},
+    process::{Child, Command, Output, Stdio},
+    sync::{Arc, Mutex, PoisonError, mpsc},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 /// What `command` printed once it ended; see [`output_within`].
@@ -36,12 +36,11 @@ pub fn try_output_within(command: &mut Command, limit: Duration) -> io::Result<O
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
-    let stdout = Pipe::drain(child.stdout.take());
-    let stderr = Pipe::drain(child.stderr.take());
-    let status = super::wait::try_wait_within(limit, || {
-        let status = child.try_wait().transpose()?;
-        (stdout.closed() && stderr.closed()).then_some(status)
-    });
+    let deadline = Instant::now() + limit;
+    let (closing, closed) = mpsc::channel();
+    let stdout = Pipe::drain(child.stdout.take(), closing.clone());
+    let stderr = Pipe::drain(child.stderr.take(), closing);
+    let status = ended(&mut child, &closed, deadline);
     let Some(status) = status else {
         let _ = child.kill();
         let _ = child.wait();
@@ -62,6 +61,31 @@ pub fn try_output_within(command: &mut Command, limit: Duration) -> io::Result<O
     })
 }
 
+/// How `child` exited once both its pipes closed, as `closed` hears, or
+/// `None` at `deadline`. Pipes close as the child exits, so only one whose
+/// descendants keep them open, or that closes them before exiting, waits.
+fn ended(
+    child: &mut Child,
+    closed: &mpsc::Receiver<()>,
+    deadline: Instant,
+) -> Option<io::Result<std::process::ExitStatus>> {
+    for _ in 0..2 {
+        closed
+            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+            .ok()?;
+    }
+    // Exit follows within moments, so a short pause between checks.
+    loop {
+        if let Some(status) = child.try_wait().transpose() {
+            return Some(status);
+        }
+        if Instant::now() >= deadline {
+            return None;
+        }
+        thread::sleep(Duration::from_millis(1));
+    }
+}
+
 /// `command`'s program and arguments, as a shell would show them.
 fn described(command: &Command) -> String {
     std::iter::once(command.get_program())
@@ -75,35 +99,31 @@ fn described(command: &Command) -> String {
 /// pipe closes.
 struct Pipe {
     printed: Arc<Mutex<Vec<u8>>>,
-    reader: thread::JoinHandle<()>,
 }
 
 impl Pipe {
-    fn drain(pipe: Option<impl Read + Send + 'static>) -> Self {
+    /// Read `pipe` until it closes, then say so on `closing`.
+    fn drain(pipe: Option<impl Read + Send + 'static>, closing: mpsc::Sender<()>) -> Self {
         let printed = Arc::<Mutex<Vec<u8>>>::default();
         let kept = Arc::clone(&printed);
-        let reader = thread::spawn(move || {
-            let Some(mut pipe) = pipe else {
-                return;
-            };
-            let mut buffer = [0; 4096];
-            loop {
-                match pipe.read(&mut buffer) {
-                    Ok(0) => return,
-                    Ok(count) => kept
-                        .lock()
-                        .unwrap_or_else(PoisonError::into_inner)
-                        .extend_from_slice(&buffer[..count]),
-                    Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
-                    Err(_) => return,
+        thread::spawn(move || {
+            if let Some(mut pipe) = pipe {
+                let mut buffer = [0; 4096];
+                loop {
+                    match pipe.read(&mut buffer) {
+                        Ok(0) => break,
+                        Ok(count) => kept
+                            .lock()
+                            .unwrap_or_else(PoisonError::into_inner)
+                            .extend_from_slice(&buffer[..count]),
+                        Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                        Err(_) => break,
+                    }
                 }
             }
+            let _ = closing.send(());
         });
-        Self { printed, reader }
-    }
-
-    fn closed(&self) -> bool {
-        self.reader.is_finished()
+        Self { printed }
     }
 
     fn printed(&self) -> Vec<u8> {
