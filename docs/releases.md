@@ -14,11 +14,13 @@ since the nearest earlier published ancestor release, link referenced issues, an
 are copied to GitHub, with runtime dependency links to each host's tagged README.
 Dependent jobs then work from that exact tag:
 `shoal-vX.Y.Z-<os>-<arch>.tar.gz` is cross-built
-for `linux` (static musl) and `macos` on `x86_64` and `arm64`, macOS archives
-also holding the binary as a signed `Shoal.app`, and attached to the
+for `linux` (static musl) and `macos` on `x86_64` and `arm64`, with
+`shoal-vX.Y.Z-macos-<arch>-app.tar.gz` holding the signed binary as a signed
+`Shoal.app`, and attached to the
 Forgejo release with a `SHA256SUMS` file, and the same release with the same
 files is created on GitHub once the push mirror carries the tag. Both Homebrew
-taps then use their host's published checksums to install the matching archive.
+taps then use their host's published checksums to install the matching archive,
+on macOS the one with `Shoal.app`.
 Push mirrors
 copy branches and tags only, never releases, which is why GitHub needs its own
 token. There is no separate Homebrew or GitHub workflow to run.

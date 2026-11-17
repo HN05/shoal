@@ -221,21 +221,25 @@ jobs:
           # gzip timestamp). The macOS signature records its signing time, so
           # only a rerun's Linux archives carry the same bytes as before.
           epoch=$(git log -1 --format=%ct)
+          # Pack the entries that follow the archive's name, with the skills.
+          archive() {
+            local name=$1
+            shift
+            tar --sort=name --mtime="@$epoch" --owner=0 --group=0 --numeric-owner \
+              -cf - "$@" -C "$staged" skills \
+              | gzip -n -9 > "dist/$name"
+          }
           while read -r target platform _selectors <&3; do
             ../cross-build.sh "$target" 3<&-
             release="$CARGO_TARGET_DIR/$target/release"
-            # macOS archives add the signed Shoal.app, which Homebrew installs,
-            # beside the bare binary that downloaded installations update.
-            entries=(-C "$release" shoal)
+            # Shoal.app, which Homebrew installs, has an archive of its own,
+            # named so that earlier releases' `shoal update` skips it.
             case "$target" in
               *-apple-darwin)
                 ../sign-macos.sh "$pem" "$release/shoal" "${RELEASE_TAG#v}" "$release/app/Shoal.app" 3<&-
-                entries+=(-C "$release/app" Shoal.app) ;;
+                archive "shoal-$RELEASE_TAG-$platform-app.tar.gz" -C "$release/app" Shoal.app ;;
             esac
-            tar --sort=name --mtime="@$epoch" --owner=0 --group=0 --numeric-owner \
-              -cf - "${entries[@]}" \
-              -C "$staged" skills \
-              | gzip -n -9 > "dist/shoal-$RELEASE_TAG-$platform.tar.gz"
+            archive "shoal-$RELEASE_TAG-$platform.tar.gz" -C "$release" shoal
           done 3< ../release-targets.txt
           (cd dist && sha256sum shoal-*.tar.gz > SHA256SUMS && cat SHA256SUMS)
       - name: Attach to the Forgejo release

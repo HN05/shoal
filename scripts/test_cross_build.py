@@ -46,12 +46,16 @@ class CrossBuildTests(unittest.TestCase):
             for workflow in ("cross-build.yml", "release.yml"):
                 with self.subTest(workflow=workflow):
                     text = (SCRIPTS.parent / "workflows" / workflow).read_text()
-                    loop = re.search(r"          while read.*?\n          done[^\n]*", text, re.S)[0]
+                    # The release defines its archive helper just before the loop.
+                    loop = re.search(r"          (?:archive\(\)|while read).*?\n          done[^\n]*",
+                                     text, re.S)[0]
                     result = subprocess.run(
-                        ["bash", "-eu", "-c", 'tar() { :; }; gzip() { cat; };\n' + loop],
+                        ["bash", "-eu", "-o", "pipefail", "-c",
+                         'tar() { printf "%s\\n" "$*"; }; gzip() { cat; };\n' + loop],
                         cwd=source, input="build input\n", capture_output=True, text=True, check=True,
                         env={**os.environ, "CARGO_TARGET_DIR": str(root / "target"),
-                             "RELEASE_TAG": "v0.2.0", "epoch": "0", "pem": "key.pem"},
+                             "RELEASE_TAG": "v0.2.0", "epoch": "0", "pem": "key.pem",
+                             "staged": str(root / "staged")},
                     )
                     expected = []
                     for target, *_ in release_targets():
@@ -62,6 +66,22 @@ class CrossBuildTests(unittest.TestCase):
                             expected.append(
                                 f"signed {release}/shoal 0.2.0 into {release}/app/Shoal.app with key.pem")
                     self.assertEqual(result.stdout.splitlines(), expected)
+                    if workflow == "release.yml":
+                        self.assert_archive_entries(root, source / "dist")
+
+    def assert_archive_entries(self, root, dist):
+        """Each archive holds one copy of Shoal, macOS's Shoal.app in an archive of its own."""
+        skills = (f"{root}/staged", "skills")
+        expected = {}
+        for target, platform, *_ in release_targets():
+            release = f"{root}/target/{target}/release"
+            expected[f"shoal-v0.2.0-{platform}.tar.gz"] = [(release, "shoal"), skills]
+            if target.endswith("-apple-darwin"):
+                expected[f"shoal-v0.2.0-{platform}-app.tar.gz"] = [(f"{release}/app", "Shoal.app"), skills]
+        # The tar stub writes its arguments into the archive.
+        actual = {archive.name: re.findall(r"-C (\S+) (\S+)", archive.read_text())
+                  for archive in dist.iterdir()}
+        self.assertEqual(actual, expected)
 
     def test_target_validation_follows_the_table_beside_the_helper(self):
         with tempfile.TemporaryDirectory() as root:

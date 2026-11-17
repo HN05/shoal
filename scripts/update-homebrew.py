@@ -20,22 +20,41 @@ def release_targets():
     return [tuple(line.split()) for line in TARGETS_FILE.read_text().splitlines()]
 
 
-def release_platforms():
-    return tuple(platform for _, platform, _, _ in release_targets())
+def binary_archive(version, platform):
+    """The archive holding the bare binary, which `shoal update` of every release reads."""
+    return f"shoal-v{version}-{platform}.tar.gz"
 
 
-def release_checksums(manifest, version, platforms=None):
+def app_archive(version, platform):
+    """The archive holding a macOS platform's Shoal.app."""
+    return f"shoal-v{version}-{platform}-app.tar.gz"
+
+
+def formula_archive(version, platform, platform_os):
+    """The archive the formula installs: Shoal.app on macOS, the bare binary elsewhere."""
+    if platform_os == "macos":
+        return app_archive(version, platform)
+    return binary_archive(version, platform)
+
+
+def release_archives(version):
+    """Every archive a release publishes."""
+    archives = set()
+    for _, platform, platform_os, _ in release_targets():
+        archives.add(binary_archive(version, platform))
+        archives.add(formula_archive(version, platform, platform_os))
+    return archives
+
+
+def release_checksums(manifest, archives):
     checksums = {}
     for line in manifest.splitlines():
         match = re.fullmatch(r"([0-9a-f]{64}) [ *](\S+)", line)
         if not match or match[2] in checksums:
             raise ValueError("invalid or duplicate release checksum")
         checksums[match[2]] = match[1]
-    if platforms is None:
-        platforms = release_platforms()
-    expected = {f"shoal-v{version}-{platform}.tar.gz" for platform in platforms}
-    if checksums.keys() != expected:
-        raise ValueError("expected checksums for every release platform")
+    if checksums.keys() != archives:
+        raise ValueError("expected checksums for every release archive")
     return checksums
 
 
@@ -73,17 +92,15 @@ def formula_checksums(text, version, repository):
     """Return a generated formula's checksums once its assets match its version and source."""
     assets = re.findall(r'^      url "([^"\n]+)"\n      sha256 "([0-9a-f]{64})"$', text, re.M)
     manifest = "\n".join(f"{checksum}  {url.rsplit('/', 1)[-1]}" for url, checksum in assets)
-    # Older formulas may predate a change to the supported platform set.
-    platforms = []
-    for url, _ in assets:
-        match = re.fullmatch(rf"shoal-v{re.escape(version)}-([a-z0-9_-]+)\.tar\.gz",
-                             url.rsplit('/', 1)[-1])
-        if not match:
-            raise ValueError("unexpected release asset names")
-        platforms.append(match[1])
-    if not platforms:
+    # Older formulas may predate a change to the supported platforms or to
+    # the archive each installs, such as the bare binary's on macOS.
+    archives = {url.rsplit('/', 1)[-1] for url, _ in assets}
+    if not archives:
         raise ValueError("expected release asset URLs")
-    checksums = release_checksums(manifest, version, platforms)
+    if not all(re.fullmatch(rf"shoal-v{re.escape(version)}-[a-z0-9_-]+\.tar\.gz", name)
+               for name in archives):
+        raise ValueError("unexpected release asset names")
+    checksums = release_checksums(manifest, archives)
     expected_urls = {f"{repository}/releases/download/v{version}/{name}" for name in checksums}
     if {url for url, _ in assets} != expected_urls:
         raise ValueError("unexpected release asset URLs")
@@ -108,7 +125,7 @@ def release_sources(repository, version, checksums):
     for platform_os, platforms in platforms_by_os.items():
         blocks.append(f"  on_{platform_os} do")
         for platform, arch in platforms:
-            name = f"shoal-v{version}-{platform}.tar.gz"
+            name = formula_archive(version, platform, platform_os)
             blocks.extend([f"    on_{arch} do", f'      url "{download}/{name}"',
                            f'      sha256 "{checksums[name]}"', "    end"])
         blocks.append("  end")
@@ -123,11 +140,12 @@ def update_formula(text, version, revision, manifest,
     published = published_release(text, source_url)
     if new_version < release_version(published.version):
         raise ValueError("refusing to downgrade the release channel")
-    checksums = release_checksums(manifest, version)
+    checksums = release_checksums(manifest, release_archives(version))
     if version == published.version:
         if published.revision and published.revision != revision:
             raise ValueError("refusing to move an already pinned release tag")
-        if published.checksums is not None and checksums != published.checksums:
+        if published.checksums is not None and any(
+                checksums.get(name) != checksum for name, checksum in published.checksums.items()):
             raise ValueError("refusing to change already pinned release checksums")
     return render_formula(repository, version, revision, checksums)
 

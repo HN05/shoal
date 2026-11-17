@@ -1,6 +1,7 @@
 import unittest
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+import re
 import tempfile
 from unittest.mock import patch
 
@@ -19,8 +20,16 @@ end
 
     @staticmethod
     def manifest(version, checksum="c" * 64):
-        return "\n".join(f"{checksum}  shoal-v{version}-{platform}.tar.gz"
-                         for platform in updater.release_platforms())
+        return "\n".join(f"{checksum}  {name}" for name in sorted(updater.release_archives(version)))
+
+    @staticmethod
+    def formula_archives(version):
+        return [updater.formula_archive(version, platform, platform_os)
+                for _, platform, platform_os, _ in updater.release_targets()]
+
+    @staticmethod
+    def asset_names(formula):
+        return re.findall(r'^      url "[^"\n]+/([^/"\n]+)"$', formula, re.M)
 
     def update(self, text, version, revision, source_url="https://github.com/HN05/shoal.git"):
         return updater.update_formula(text, version, revision, self.manifest(version), source_url)
@@ -28,9 +37,9 @@ end
     def test_migrates_source_formula_to_binaries_and_is_idempotent(self):
         result = self.update(self.formula, "0.2.0", "a" * 40)
         self.assertIn("# Release commit: " + "a" * 40, result)
-        for platform in updater.release_platforms():
-            self.assertIn(f'https://github.com/HN05/shoal/releases/download/v0.2.0/shoal-v0.2.0-{platform}.tar.gz', result)
-        self.assertEqual(result.count('sha256 "' + "c" * 64 + '"'), len(updater.release_platforms()))
+        for name in self.formula_archives("0.2.0"):
+            self.assertIn(f'https://github.com/HN05/shoal/releases/download/v0.2.0/{name}', result)
+        self.assertEqual(result.count('sha256 "' + "c" * 64 + '"'), len(updater.release_targets()))
         self.assertIn('  version "0.2.0"', result)
         self.assertNotRegex(result, r"\bhead\b")
         self.assertIn('libexec.install "Shoal.app"', result)
@@ -47,6 +56,22 @@ end
             self.update(result, "0.2.0", "b" * 40)
         with self.assertRaises(ValueError):
             self.update(result, "0.1.0", "a" * 40)
+
+    def test_macos_installs_the_app_archive_only(self):
+        result = self.update(self.formula, "0.2.0", "a" * 40)
+        expected = []
+        for _, platform, platform_os, _ in updater.release_targets():
+            suffix = "-app" if platform_os == "macos" else ""
+            expected.append(f"shoal-v0.2.0-{platform}{suffix}.tar.gz")
+        self.assertEqual(self.asset_names(result), expected)
+
+    def test_upgrades_a_formula_that_installs_the_macos_binary_archive(self):
+        current = self.update(self.formula, "0.1.0", "a" * 40)
+        earlier = current.replace("-app.tar.gz", ".tar.gz")
+        self.assertNotEqual(earlier, current)
+        self.assertEqual(self.update(earlier, "0.2.0", "b" * 40), self.update(current, "0.2.0", "b" * 40))
+        with self.assertRaisesRegex(ValueError, "pinned release checksums"):
+            updater.update_formula(earlier, "0.1.0", "a" * 40, self.manifest("0.1.0", "d" * 64))
 
     def test_rejects_unexpected_formula_and_invalid_release(self):
         for text, version, revision in [
@@ -96,13 +121,13 @@ end
                     updater.update_formula(self.formula, "0.2.0", "a" * 40, invalid)
 
     def test_checksums_follow_asset_names_not_manifest_order(self):
-        assets = {f"shoal-v0.2.0-{platform}.tar.gz": f"{index:064x}"
-                  for index, platform in enumerate(updater.release_platforms())}
+        assets = {name: f"{index:064x}"
+                  for index, name in enumerate(sorted(updater.release_archives("0.2.0")))}
         manifest = "\n".join(f"{checksum}  {name}"
                              for name, checksum in reversed(list(assets.items())))
         result = updater.update_formula(self.formula, "0.2.0", "a" * 40, manifest)
-        for name, checksum in assets.items():
-            self.assertIn(f'/{name}"\n      sha256 "{checksum}"', result)
+        for name in self.formula_archives("0.2.0"):
+            self.assertIn(f'/{name}"\n      sha256 "{assets[name]}"', result)
         self.assertEqual(updater.update_formula(result, "0.2.0", "a" * 40, manifest), result)
 
     def test_formula_selectors_and_required_checksums_follow_the_table(self):
@@ -121,8 +146,9 @@ end
                 self.assertEqual(updater.update_formula(previous, "0.2.0", "a" * 40, manifest), result)
                 with self.assertRaisesRegex(ValueError, "pinned release checksums"):
                     self.update(previous, "0.1.0", "b" * 40)
-                with self.assertRaisesRegex(ValueError, "every release platform"):
-                    updater.release_checksums(manifest.replace("custom-platform", "old-platform"), "0.2.0")
+                with self.assertRaisesRegex(ValueError, "every release archive"):
+                    updater.release_checksums(manifest.replace("custom-platform", "old-platform"),
+                                              updater.release_archives("0.2.0"))
 
 
 if __name__ == "__main__":
