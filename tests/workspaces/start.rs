@@ -189,7 +189,13 @@ fn start_runs_a_copys_agent_from_a_fork_of_the_copied_workspaces_session() {
     assert!(output.status.success(), "{}", printed(&output));
     let home = fixture.root.path();
     let errors = fs::read_to_string(home.join("copy.err")).unwrap();
-    let copy = &fixture.ok(&["status", &fixture.id("parent-copy")])["workspace"];
+    // The start returns once the copy is recorded; its preparation fills
+    // it and records what it was copied from.
+    let id = fixture.id("parent-copy");
+    wait_until("the copy's preparation", || {
+        fixture.ok(&["status", &id])["workspace"]["state"] == "ready"
+    });
+    let copy = &fixture.ok(&["status", &id])["workspace"];
     assert_eq!(copy["branch"], "parent-copy", "{copy} {errors}");
     assert_eq!(copy["copied_from"]["workspace"]["name"], "parent", "{copy}");
     let path = Path::new(copy["path"].as_str().unwrap());
