@@ -351,7 +351,7 @@ CREATE TABLE "ci_job_usage" (
     name TEXT NOT NULL,
     ended_at INTEGER NOT NULL,
     peak_memory INTEGER NOT NULL
-, seconds INTEGER);
+);
 
 CREATE TABLE "owned_places" (
             host TEXT NOT NULL,

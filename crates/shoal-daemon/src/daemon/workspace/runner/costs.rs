@@ -1,8 +1,8 @@
-//! What each repository's CI jobs use: the peak resident memory and the
-//! duration of every run, read from its workspace's usage samples and kept
-//! per repository, workflow and job name, the cost a waiting or starting
-//! run of a job counts at in admission: the peak memory of its recent runs,
-//! none before it has run.
+//! What each repository's CI jobs use: the peak resident memory of every
+//! run, read from its workspace's usage samples and kept per repository,
+//! workflow and job name, the cost a waiting or starting run of a job counts
+//! at in admission: the peak memory of its recent runs, none before it has
+//! run.
 use anyhow::Result;
 use rusqlite::{OptionalExtension, params};
 use shoal_ids::repository_ids::RepositoryId;
@@ -43,17 +43,13 @@ impl Manager {
         Ok(())
     }
 
-    /// Keep the peak memory of the ended `job` as its latest run, with how
-    /// long it ran when its start is known, unless no sample saw it run or
-    /// it is kept already, as before a removal that is tried again,
-    /// forgetting runs older than [`RECENT_RUNS`].
+    /// Keep the peak memory of the ended `job` as its latest run, unless no
+    /// sample saw it run or it is kept already, as before a removal that is
+    /// tried again, forgetting runs older than [`RECENT_RUNS`].
     pub(super) async fn record_job_usage(&self, job: &ClaimedJob) -> Result<()> {
         let (id, repository) = (job.id.clone(), job.repository_id.clone());
         let (workflow, name) = key(&job.job);
         let now = crate::time::UnixTime::now();
-        let seconds = (job.launched_at).map(|launched| {
-            i64::try_from(now.duration_since(launched).as_secs()).unwrap_or(i64::MAX)
-        });
         self.store
             .write(move |tx| {
                 let peak: Option<Option<i64>> = tx
@@ -68,9 +64,9 @@ impl Manager {
                 };
                 tx.execute("UPDATE ci_jobs SET usage_recorded=1 WHERE id=?1", [&id])?;
                 tx.execute(
-                    "INSERT INTO ci_job_usage(repository_id,workflow,name,ended_at,peak_memory,seconds)
-                     VALUES (?1,?2,?3,?4,?5,?6)",
-                    params![repository, workflow, name, now, memory, seconds],
+                    "INSERT INTO ci_job_usage(repository_id,workflow,name,ended_at,peak_memory)
+                     VALUES (?1,?2,?3,?4,?5)",
+                    params![repository, workflow, name, now, memory],
                 )?;
                 tx.execute(
                     "DELETE FROM ci_job_usage WHERE repository_id=?1 AND workflow=?2 AND name=?3
