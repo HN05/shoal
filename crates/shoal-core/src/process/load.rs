@@ -128,21 +128,34 @@ pub fn critical_memory(_used_percent: u8) -> Result<bool> {
 #[cfg(test)]
 mod tests;
 
-/// Cumulative CPU ticks across every core. I/O wait and niced time are idle:
-/// work at low priority, such as CI jobs, takes only cores nothing else
-/// wants. Linux guest ticks are already included in user/nice and must not be
-/// counted twice.
+/// Cumulative CPU ticks across every core: those used at normal priority,
+/// those niced and the total, in which I/O wait counts as idle. Linux guest
+/// ticks are already included in user/nice and must not be counted twice.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct CpuTicks {
-    pub busy: u64,
+    pub used: u64,
+    pub niced: u64,
     pub total: u64,
 }
 
 impl CpuTicks {
+    /// The share of ticks since `previous` used at normal priority, with
+    /// niced time idle: work at low priority, such as CI jobs, takes only
+    /// cores nothing else wants.
     pub fn used_percent_since(self, previous: Self) -> Option<f64> {
+        self.percent_since(previous, |ticks| Some(ticks.used))
+    }
+
+    /// The share of ticks since `previous` that ran any work, niced time
+    /// included, which work at low priority competes for with each other.
+    pub fn busy_percent_since(self, previous: Self) -> Option<f64> {
+        self.percent_since(previous, |ticks| ticks.used.checked_add(ticks.niced))
+    }
+
+    fn percent_since(self, previous: Self, part: impl Fn(Self) -> Option<u64>) -> Option<f64> {
         let total = self.total.checked_sub(previous.total)?;
-        let busy = self.busy.checked_sub(previous.busy)?;
-        (total > 0 && busy <= total).then(|| busy as f64 * 100.0 / total as f64)
+        let part = part(self)?.checked_sub(part(previous)?)?;
+        (total > 0 && part <= total).then(|| part as f64 * 100.0 / total as f64)
     }
 }
 
@@ -171,15 +184,17 @@ fn linux_cpu(text: &str) -> Result<CpuTicks> {
         .iter()
         .try_fold(0u64, |sum, value| sum.checked_add(*value))
         .context("CPU ticks overflow")?;
-    // nice, idle and iowait
-    let idle = [1, 3, 4]
+    let niced = values[1];
+    // idle and iowait
+    let idle = [3, 4]
         .into_iter()
         .try_fold(0u64, |sum, index| {
             sum.checked_add(values.get(index).copied().unwrap_or_default())
         })
         .context("idle ticks overflow")?;
     Ok(CpuTicks {
-        busy: total - idle,
+        used: total - idle - niced,
+        niced,
         total,
     })
 }
@@ -222,13 +237,14 @@ const _: () = assert!(
     MACH_IDLE == libc::CPU_STATE_IDLE as usize && MACH_NICE == libc::CPU_STATE_NICE as usize
 );
 
-/// The busy and total ticks of Mach's per-state `ticks`.
+/// The used, niced and total ticks of Mach's per-state `ticks`.
 #[cfg(any(target_os = "macos", test))]
 fn mach_cpu(ticks: [u64; 4]) -> CpuTicks {
     let total = ticks.iter().sum();
     CpuTicks {
         total,
-        busy: total - ticks[MACH_IDLE] - ticks[MACH_NICE],
+        niced: ticks[MACH_NICE],
+        used: total - ticks[MACH_IDLE] - ticks[MACH_NICE],
     }
 }
 

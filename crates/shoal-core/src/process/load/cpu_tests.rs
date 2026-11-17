@@ -7,9 +7,11 @@ fn cpu_usage_measures_all_cores_without_guest_double_counting() {
     assert_eq!(next.used_percent_since(first), Some(90.0));
     assert_eq!(first.used_percent_since(first), None);
     assert_eq!(first.used_percent_since(next), None);
-    // Niced time, such as a CI job's, is idle.
+    // Niced time, such as a CI job's, is idle to overload protection and
+    // busy to job admission.
     let niced = linux_cpu("cpu 110 70 110 805 5 0 0 0 180 0").unwrap();
     assert_eq!(niced.used_percent_since(first), Some(20.0));
+    assert_eq!(niced.busy_percent_since(first), Some(90.0));
     for text in [
         "cpu0 1 2 3 4",
         "cpu 1 2 3",
@@ -21,9 +23,10 @@ fn cpu_usage_measures_all_cores_without_guest_double_counting() {
 }
 
 #[test]
-fn mach_cpu_usage_counts_niced_time_as_idle() {
+fn mach_cpu_usage_counts_niced_time_apart() {
     let first = mach_cpu([100, 100, 800, 0]);
     // User, system, idle, then nice.
     let next = mach_cpu([110, 110, 805, 75]);
     assert_eq!(next.used_percent_since(first), Some(20.0));
+    assert_eq!(next.busy_percent_since(first), Some(95.0));
 }

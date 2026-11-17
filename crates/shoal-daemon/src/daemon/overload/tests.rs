@@ -156,7 +156,8 @@ fn cpu_is_opt_in_and_requires_continuous_samples() {
     let mut monitor = Monitor::default();
     let ticks = |n: u64| {
         Ok(crate::process::load::CpuTicks {
-            busy: 95 * n,
+            used: 95 * n,
+            niced: 0,
             total: 100 * n,
         })
     };
