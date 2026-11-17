@@ -33,6 +33,9 @@ pub(crate) enum Retention {
     /// A conversion's agent restarts in or from the workspace once its turn
     /// ends.
     Converting,
+    /// The space looks for the default branch's CI runs for a merge it
+    /// watched, or follows one that has not finished.
+    MergeRuns,
 }
 
 impl From<Retention> for CleanupReason {
@@ -45,6 +48,7 @@ impl From<Retention> for CleanupReason {
             Retention::QueuedAgent => Self::QueuedAgent,
             Retention::ChatRunning => Self::ChatRunning,
             Retention::Converting => Self::Converting,
+            Retention::MergeRuns => Self::MergeRuns,
         }
     }
 }
@@ -60,6 +64,7 @@ impl std::fmt::Display for Retention {
             Self::QueuedAgent => "its agent waits to start",
             Self::ChatRunning => "a chat runs in it",
             Self::Converting => "its agent restarts after a conversion",
+            Self::MergeRuns => "it waits for CI runs of its merge",
         })
     }
 }

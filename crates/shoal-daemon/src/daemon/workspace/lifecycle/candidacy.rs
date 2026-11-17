@@ -37,6 +37,9 @@ impl Manager {
         if self.converting(id).await? {
             return Ok(Some(Retention::Converting));
         }
+        if self.awaits_merge_runs(id).await? {
+            return Ok(Some(Retention::MergeRuns));
+        }
         let waits = self.has_queued_launch(id).await?;
         Ok(waits.then_some(Retention::QueuedAgent))
     }

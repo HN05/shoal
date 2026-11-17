@@ -9,11 +9,13 @@ use crate::{
         events::{EventItem, EventKind},
         links::wait::{branch_report::BranchReport, tests::register_watch},
         test_support::{configure, manager, repository},
+        workspace_files::Attacher,
     },
     forge::items::link::Selection,
-    model::Workspace,
+    model::{CleanupReason, Workspace},
 };
 use shoal_forge::test_support::Server;
+use shoal_protocol::{assignments::Done, space_names::SpaceSelector};
 
 /// The merge commit the forge reports for the merged PR.
 const MERGED: &str = "0123456789abcdef0123456789abcdef01234567";
@@ -117,6 +119,12 @@ impl Following {
         self.manager.follow_merge_runs(&space).await.unwrap();
     }
 
+    async fn awaits(&self) -> bool {
+        (self.manager.awaits_merge_runs(&self.workspace.id))
+            .await
+            .unwrap()
+    }
+
     /// The run lists the forge received.
     fn listings(&self) -> Vec<String> {
         (self.server.received().into_iter())
@@ -174,6 +182,7 @@ async fn a_merge_links_the_default_branchs_runs_for_its_merge_commit() {
     let merged = following.merge(Some(MERGED)).await;
     assert_eq!(merged[0].kind, UpdateKind::Merged, "{merged:?}");
     assert!(!merged[0].message.contains(UNFOLLOWED_MERGE));
+    assert!(following.awaits().await);
 
     following.follow().await;
     let listings = following.listings();
@@ -191,11 +200,13 @@ async fn a_merge_links_the_default_branchs_runs_for_its_merge_commit() {
     following.end_window().await;
     following.follow().await;
     assert_eq!(following.related().await, std::slice::from_ref(&run));
+    assert!(following.awaits().await);
     let finished = serde_json::from_value(json!({"comments": {}, "checks": {},
         "conflict": null, "state": "failed", "errors": {}}))
     .unwrap();
     let reported = following.observe(&run, finished).await;
     assert_eq!(reported[0].kind, UpdateKind::CiCompleted, "{reported:?}");
+    assert!(!following.awaits().await);
     following.follow().await;
     assert_eq!(following.listings().len(), 2);
     assert_eq!(following.events(EventKind::NoMergeRuns).await, 0);
@@ -207,6 +218,7 @@ async fn a_merge_without_a_reported_merge_commit_says_its_runs_are_not_followed(
     let merged = following.merge(None).await;
     assert_eq!(merged[0].kind, UpdateKind::Merged, "{merged:?}");
     assert!(merged[0].message.ends_with(UNFOLLOWED_MERGE), "{merged:?}");
+    assert!(!following.awaits().await);
     following.follow().await;
     assert!(following.listings().is_empty());
     assert!(following.related().await.is_empty());
@@ -217,6 +229,7 @@ async fn a_merge_is_not_followed_where_the_option_is_off() {
     let following = following(false, json!([listed_run("running")])).await;
     let merged = following.merge(Some(MERGED)).await;
     assert!(!merged[0].message.contains(UNFOLLOWED_MERGE), "{merged:?}");
+    assert!(!following.awaits().await);
     following.follow().await;
     assert!(following.listings().is_empty());
     assert!(following.related().await.is_empty());
@@ -227,13 +240,55 @@ async fn a_lookup_that_finds_no_run_in_its_window_ends_in_the_log() {
     let following = following(true, json!([])).await;
     following.merge(Some(MERGED)).await;
     following.follow().await;
+    assert!(following.awaits().await);
     assert_eq!(following.events(EventKind::NoMergeRuns).await, 0);
 
     following.end_window().await;
     // The window's last listing still looks once more.
     following.follow().await;
     assert_eq!(following.listings().len(), 2);
+    assert!(!following.awaits().await);
     assert_eq!(following.events(EventKind::NoMergeRuns).await, 1);
     following.follow().await;
     assert_eq!(following.listings().len(), 2);
+}
+
+#[tokio::test]
+async fn completion_cleanup_waits_for_the_runs_of_a_merge() {
+    let following = following(true, json!([])).await;
+    let (manager, workspace) = (&following.manager, &following.workspace);
+    // Without a PR watch, completion cleanup alone decides the removal.
+    let (id, pr) = (workspace.id.clone(), following.pr.clone());
+    (manager.store)
+        .run(move |db| {
+            db.execute("DELETE FROM pr_cleanup WHERE space_id=?1", [&id])?;
+            db.execute(
+                "INSERT INTO merge_runs(space_id,pr_url,merge_commit,branch,merged_at)
+                 VALUES (?1,?2,?3,'main',?4)",
+                params![id, pr, MERGED, UnixTime::now()],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager
+        .mark_space_done(
+            &SpaceSelector::id(&workspace.id),
+            Done::default(),
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    manager.sweep_completed().await.unwrap();
+    assert!(workspace.path.exists());
+    let space = manager.space_by_id(&workspace.id).await.unwrap();
+    assert_eq!(
+        manager.cleanup_reason(&space).await,
+        CleanupReason::MergeRuns
+    );
+
+    following.end_window().await;
+    following.follow().await;
+    manager.sweep_completed().await.unwrap();
+    assert!(!workspace.path.exists());
 }

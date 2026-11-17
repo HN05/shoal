@@ -150,6 +150,13 @@ impl Manager {
         (forge.list_runs(&self.user_account(), &filter).await)
             .with_context(|| format!("could not list the CI runs of {}", lookup.commit))
     }
+
+    /// Whether the space `id` looks for the runs of a merge or follows one
+    /// it linked that has not finished.
+    pub(crate) async fn awaits_merge_runs(&self, id: &SpaceId) -> Result<bool> {
+        let id = id.to_owned();
+        self.store.read(move |db| awaits_merge_runs(db, &id)).await
+    }
 }
 
 /// Follow the merge `record` newly reports for the PR at `url`, which the
@@ -203,6 +210,17 @@ fn start_lookup(
         params![id, url, commit, branch, now],
     )?;
     Ok(())
+}
+
+/// Whether the space `id` looks for the runs of a merge or follows one it
+/// linked that has not finished.
+pub(crate) fn awaits_merge_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<bool> {
+    for lookup in merge_lookups(db, id)? {
+        if lookup.looking || any_running(db, id, &lookup.runs)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// The spaces with a lookup of a merge's runs.

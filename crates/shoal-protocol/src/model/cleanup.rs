@@ -26,6 +26,9 @@ pub enum CleanupReason {
     /// The space was converted, and its agent restarts in the new place
     /// once its turn ends.
     Converting,
+    /// The space looks for the default branch's CI runs for the merge
+    /// commit of a PR it watched, or follows one that has not finished.
+    MergeRuns,
     PrWatch,
     /// An ancestor finished its assignment with cleanup, which takes this
     /// workspace too.
@@ -77,6 +80,7 @@ impl std::fmt::Display for CleanupReason {
             Self::AgentRunning => f.write_str("Agent running"),
             Self::ChatRunning => f.write_str("Chat running"),
             Self::Converting => f.write_str("Agent restarting after a conversion"),
+            Self::MergeRuns => f.write_str("Waiting for CI runs of the merge"),
             Self::PrWatch => f.write_str("Waiting for watched PRs to merge"),
             Self::AncestorCompleted { workspace } => {
                 write!(f, "{workspace} done; completion cleanup pending")

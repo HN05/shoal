@@ -19,7 +19,10 @@ use super::{
     sleep_cost::Free,
 };
 use crate::{
-    daemon::links::wait::watches_open_pr, model::HeldBy, state::QueueState, time::UnixTime,
+    daemon::links::wait::{awaits_merge_runs, watches_open_pr},
+    model::HeldBy,
+    state::QueueState,
+    time::UnixTime,
 };
 
 /// A queued entry waiting for room, with its priority and what it needs.
@@ -164,8 +167,8 @@ impl Manager {
     }
 
     /// Whether something will wake the agent of the space `id` once it
-    /// sleeps: an open PR it watches, a blocker, an open question or a
-    /// request waiting for a decision.
+    /// sleeps: an open PR it watches or the CI runs of a merge it follows,
+    /// a blocker, an open question or a request waiting for a decision.
     async fn awaits_wake(&self, id: &SpaceId) -> Result<bool> {
         let space = id.to_owned();
         if self
@@ -179,10 +182,10 @@ impl Manager {
     }
 }
 
-/// Whether the space `id` watches an open PR or has a request waiting for
-/// a decision, its own or one it decides.
+/// Whether the space `id` watches an open PR or the CI runs of a merge, or
+/// has a request waiting for a decision, its own or one it decides.
 fn watches_or_asks(db: &Connection, id: &SpaceId) -> Result<bool> {
-    if watches_open_pr(db, id)? {
+    if watches_open_pr(db, id)? || awaits_merge_runs(db, id)? {
         return Ok(true);
     }
     Ok(crate::daemon::approvals::pending_count(db, id)? > 0)
