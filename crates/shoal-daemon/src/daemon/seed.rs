@@ -401,13 +401,19 @@ impl Manager {
     /// spare refills out until the returned guard drops. Take it before the
     /// Git gate, which a build takes while holding its own.
     pub(super) async fn stop_seed_build(&self, repository_id: &RepositoryId) -> SeedStop {
+        self.pause_seed_build(repository_id).await.stop().await
+    }
+
+    /// Stop the repository's seed build, if one runs, and keep new ones out
+    /// until the returned guard drops, while new worktrees still clone the
+    /// snapshot. Take it before the Git gate, which a build takes while
+    /// holding its own.
+    pub(super) async fn pause_seed_build(&self, repository_id: &RepositoryId) -> SeedPause {
         let slot = self.seeds.slot(repository_id);
         slot.cancel.send_replace(true);
         let guard = slot.gate.clone().lock_owned().await;
-        let snapshot = slot.snapshot.clone().write_owned().await;
-        SeedStop {
+        SeedPause {
             _guard: guard,
-            _snapshot: snapshot,
             slot,
         }
     }
@@ -571,18 +577,36 @@ impl Default for SeedSlot {
     }
 }
 
-/// Keeps seed builds and spare refills out of a repository; dropping it
-/// allows them again.
-pub(super) struct SeedStop {
+/// Keeps seed builds out of a repository; dropping it allows them again.
+pub(super) struct SeedPause {
     _guard: tokio::sync::OwnedMutexGuard<()>,
-    _snapshot: tokio::sync::OwnedRwLockWriteGuard<()>,
     slot: Arc<SeedSlot>,
 }
 
-impl Drop for SeedStop {
+impl SeedPause {
+    /// Keep spare refills and clones of the snapshot out too, once those
+    /// under way end. Only clones hold the snapshot while builds are
+    /// paused, so the Git gate may be held already.
+    pub(super) async fn stop(self) -> SeedStop {
+        let snapshot = self.slot.snapshot.clone().write_owned().await;
+        SeedStop {
+            _pause: self,
+            _snapshot: snapshot,
+        }
+    }
+}
+
+impl Drop for SeedPause {
     fn drop(&mut self) {
         self.slot.cancel.send_replace(false);
     }
+}
+
+/// Keeps seed builds, spare refills and clones of the snapshot out of a
+/// repository; dropping it allows them again.
+pub(super) struct SeedStop {
+    _pause: SeedPause,
+    _snapshot: tokio::sync::OwnedRwLockWriteGuard<()>,
 }
 
 /// What a seed build that went to its end built with, and how its soft
