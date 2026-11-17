@@ -841,8 +841,10 @@ issue proposal, kept branch or borrowed resource, nothing `shoal restore` could
 use, no files a removed space keeps, and no work in its checkout that the remotes' advertised branches and tags
 lack. The final
 check records the removal in the same transaction, under the gates creation
-takes, and queue and chat records refuse a repository being removed. An existing
-registration is never turned into one.
+takes, and queue and chat records refuse a repository being removed. Removal
+never deletes the fork: Shoal does not record whether it created it, deleting a
+forge repository cannot be undone, and the fork may hold the only copy of a
+PR's branch. An existing registration is never turned into one.
 
 A new branch starts from the repository default branch: `origin/HEAD`, the sole
 remote's HEAD, or the checkout's current branch without remotes, never a guessed

@@ -259,3 +259,20 @@ async fn an_ended_chats_files_keep_a_contribution_until_they_expire() {
     manager.sweep_contributions().await.unwrap();
     assert!(!registered(&manager, &repo).await);
 }
+
+#[tokio::test]
+async fn a_removed_contribution_names_the_fork_it_leaves() {
+    let (root, manager) = manager().await;
+    let repo = contribution(&manager, root.path()).await;
+    let fork = repository(root.path(), "fork");
+    let fork = fork.to_str().unwrap();
+    git(&repo.path, &["remote", "add", "fork", fork]);
+    manager.sweep_contributions().await.unwrap();
+    assert!(!registered(&manager, &repo).await);
+    let notifications = manager.notifications(false, 10).await.unwrap();
+    let removed = notifications
+        .iter()
+        .find(|notification| notification.kind == NotificationKind::RepositoryRemoved)
+        .unwrap();
+    assert!(removed.message.contains(fork), "{}", removed.message);
+}

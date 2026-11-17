@@ -50,13 +50,11 @@ impl Manager {
         {
             return Ok(());
         }
+        // Read before the removal deletes the checkout with its remotes.
+        let fork = fork_url(&repo.path).await?;
         if let Some(removal) = self.remove_finished_contribution(&repo.id).await? {
             self.forget_trust(repo, &removal.workspace_paths).await;
-            let message = format!(
-                "Removed contribution repository {} at {}",
-                crate::repository::name(repo),
-                removal.path.display()
-            );
+            let message = removal_notice(repo, &removal.path, fork.as_deref());
             self.notify(None, NotificationKind::RepositoryRemoved, message)
                 .await;
         }
@@ -141,6 +139,36 @@ async fn fetch_remotes(checkout: &std::path::Path) -> Result<()> {
             .with_context(|| format!("could not fetch {remote}"))?;
     }
     Ok(())
+}
+
+/// The URL of the user's fork the checkout pushes to, if it has one; a
+/// missing checkout has none.
+async fn fork_url(checkout: &std::path::Path) -> Result<Option<String>> {
+    if !checkout.is_dir() {
+        return Ok(None);
+    }
+    let remotes = git::remotes(checkout, git::run_isolated).await?;
+    if !remotes.lines().any(|remote| remote == git::FORK_REMOTE) {
+        return Ok(None);
+    }
+    let url = git::remote_url(checkout, git::FORK_REMOTE).await?;
+    Ok(Some(url.trim().to_owned()))
+}
+
+/// The notice of a removed contribution, naming the fork it leaves on the
+/// forge, which a later `shoal contribute` reuses.
+fn removal_notice(repo: &Repository, path: &std::path::Path, fork: Option<&str>) -> String {
+    let removed = format!(
+        "Removed contribution repository {} at {}",
+        crate::repository::name(repo),
+        path.display()
+    );
+    match fork {
+        Some(fork) => format!(
+            "{removed}. Your fork {fork} stays on the forge; delete it there when you no longer need it"
+        ),
+        None => removed,
+    }
 }
 
 /// The branches and tags every remote of the checkout advertises now.

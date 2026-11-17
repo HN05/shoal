@@ -3147,7 +3147,9 @@ resource another repository's workspace borrows, no unexpired
 [files](#attached-files), and no changed files,
 stash, Git operation under way or commits in its checkout that no branch or tag
 its remotes advertise has, for
-`[cleanup] grace_minutes`, then records a `repository_removed` notification.
+`[cleanup] grace_minutes`, then records a `repository_removed` notification,
+which names your fork when the clone pushed to one. The fork stays on the forge,
+where a later `contribute` reuses it; delete it there when you no longer need it.
 From the start of the removal, new workspaces, queued agents and chats in it are
 refused.
 
