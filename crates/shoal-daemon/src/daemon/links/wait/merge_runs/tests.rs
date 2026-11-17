@@ -384,3 +384,23 @@ async fn pr_cleanup_waits_for_a_poll_to_see_the_merge() {
     manager.sweep_prs().await.unwrap();
     assert!(!workspace.path.exists());
 }
+
+#[tokio::test]
+async fn a_merge_seen_while_its_default_branch_is_unknown_is_followed_by_the_next_read() {
+    let following = following(true, json!([])).await;
+    let (pr, id) = (following.pr.clone(), following.workspace.id.clone());
+    let record = |snapshot| {
+        let observations = vec![(pr.clone(), snapshot)];
+        (following.manager).record_background_activity(&id, observations)
+    };
+    record(pull("open", None)).await.unwrap();
+    // Without a remote, the checkout's branch names the default branch.
+    let checkout = following._root.path().join("repo");
+    crate::daemon::test_support::git(&checkout, &["checkout", "-q", "--detach"]);
+    assert!(record(pull("merged", Some(MERGED))).await.is_err());
+    assert!(!following.awaits().await);
+
+    crate::daemon::test_support::git(&checkout, &["checkout", "-q", "main"]);
+    record(pull("merged", Some(MERGED))).await.unwrap();
+    assert!(following.awaits().await);
+}

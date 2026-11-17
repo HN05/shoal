@@ -39,7 +39,7 @@ impl Manager {
         // Checked before recording, so a change that starts later comes
         // after the poll's read, and one that ended was recorded first.
         let changing = self.assignees_changing(&observations);
-        let merges = self.merge_target(id, &observations).await;
+        let merges = self.merge_target(id, &observations).await?;
         let poll = Poll {
             selection: selection.clone(),
             report,

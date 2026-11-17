@@ -185,7 +185,7 @@ impl Manager {
         observations: Vec<(String, Snapshot)>,
     ) -> Result<Seen> {
         // The baseline sees a merge whatever the cursor still delivers.
-        let merges = self.merge_target(id, &observations).await;
+        let merges = self.merge_target(id, &observations).await?;
         let id = id.to_owned();
         self.store
             .write(move |tx| record_baseline(tx, &id, observations, merges.as_ref()))

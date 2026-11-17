@@ -15,7 +15,7 @@ use super::{
     items::{linked_items, observed_item},
 };
 use crate::{
-    daemon::{events, links::space::LinkSpace, log, workspace::Manager},
+    daemon::{events, links::space::LinkSpace, workspace::Manager},
     forge::{
         capability::Capability,
         ci::{run_action::Run, run_view::RunFilter},
@@ -67,24 +67,19 @@ struct MergeLookup {
 impl Manager {
     /// Where the merges among `observations` of the space `id`'s items are
     /// followed, when one shows a PR merged and its repository follows
-    /// merge runs. A failure to tell follows none, since the merge itself
-    /// is still reported.
+    /// merge runs. A failure to tell fails the recording of the
+    /// observations, so the next read follows the merge it shows.
     pub(super) async fn merge_target(
         &self,
         id: &SpaceId,
         observations: &[(String, Snapshot)],
-    ) -> Option<MergeTarget> {
+    ) -> Result<Option<MergeTarget>> {
         let merged = |snapshot: &Snapshot| snapshot.state() == Some(SnapshotState::Merged);
         if !observations.iter().any(|(_, snapshot)| merged(snapshot)) {
-            return None;
+            return Ok(None);
         }
-        match self.configured_merge_target(id).await {
-            Ok(target) => target,
-            Err(error) => {
-                log!("merge runs of {id} not followed: {error:#}");
-                None
-            }
-        }
+        (self.configured_merge_target(id).await)
+            .with_context(|| format!("could not tell whether {id} follows the runs of merges"))
     }
 
     async fn configured_merge_target(&self, id: &SpaceId) -> Result<Option<MergeTarget>> {
