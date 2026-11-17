@@ -271,43 +271,43 @@ impl RemovedWithAgent {
         let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
         install_fake_agent(&path);
         fs::write(path.join("resume.sh"), "touch resumed\n").unwrap();
-        let spawn = |args: &[&str]| {
-            fixture
-                .command()
-                .args(args)
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::piped())
-                .spawn()
-                .unwrap()
-        };
-        let agent = spawn(&[
-            "start",
-            "--in",
-            &fixture.id("removed"),
-            "--here",
-            "--agent",
-            "claude",
-        ]);
-        let command = spawn(&[
-            "run",
-            "--workspace",
-            &fixture.id("removed"),
-            "--",
-            "sh",
-            "-c",
-            "touch command-started; while :; do sleep 1; done",
-        ]);
-        assert!(
-            try_wait_for(|| (path.join("agent-started").exists()
-                && path.join("command-started").exists())
-            .then_some(()))
-            .is_some(),
-            "executions did not start"
-        );
-        fixture.ok(&["rm", "--wait", &fixture.id("removed"), "--yes"]);
-        agent.wait_with_output().unwrap();
-        command.wait_with_output().unwrap();
+        let workspace_id = fixture.id("removed");
+        let mut launches = [
+            Launch::spawn(
+                &fixture,
+                "agent",
+                Some("claude"),
+                &[
+                    "start",
+                    "--in",
+                    &workspace_id,
+                    "--here",
+                    "--agent",
+                    "claude",
+                ],
+                path.join("agent-started"),
+            ),
+            Launch::spawn(
+                &fixture,
+                "command",
+                None,
+                &[
+                    "run",
+                    "--workspace",
+                    &workspace_id,
+                    "--",
+                    "sh",
+                    "-c",
+                    "touch command-started; while :; do sleep 1; done",
+                ],
+                path.join("command-started"),
+            ),
+        ];
+        Launch::wait_started(&fixture, &workspace_id, &mut launches);
+        fixture.ok(&["rm", "--wait", &workspace_id, "--yes"]);
+        for launch in &mut launches {
+            launch.wait_exited();
+        }
         assert!(!path.exists());
         let removed = fixture.ok(&["restore"])["removed"].clone();
         let agents = removed[0]["agents"].as_array().unwrap();
@@ -349,6 +349,127 @@ impl RemovedWithAgent {
             .map(|entry| entry.unwrap().file_name().into_string().unwrap())
             .filter(|name| name.ends_with(".recovery.json") || name.ends_with(".command.json"))
             .collect()
+    }
+}
+
+/// A command started in the workspace a test removes, which writes its
+/// stderr beside the fixture and touches `marker` once it runs.
+struct Launch {
+    name: &'static str,
+    /// The agent its execution records, `None` for a plain command.
+    agent: Option<&'static str>,
+    child: Child,
+    stderr: PathBuf,
+    marker: PathBuf,
+}
+
+impl Launch {
+    fn spawn(
+        fixture: &Fixture,
+        name: &'static str,
+        agent: Option<&'static str>,
+        args: &[&str],
+        marker: PathBuf,
+    ) -> Self {
+        let stderr = fixture.root.path().join(format!("{name}.stderr"));
+        let child = fixture
+            .command()
+            .args(args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(fs::File::create(&stderr).unwrap())
+            .spawn()
+            .unwrap();
+        Self {
+            name,
+            agent,
+            child,
+            stderr,
+            marker,
+        }
+    }
+
+    /// Wait until the daemon records every launch's execution with its child
+    /// and each has touched its marker, which the removal stops and saves.
+    /// A launch that exits first fails the test at once, and one that never
+    /// starts fails it at the hang guard, naming it with what each printed.
+    fn wait_started(fixture: &Fixture, workspace: &str, launches: &mut [Self]) {
+        let mut executions = Value::Null;
+        let started = try_wait_for(|| {
+            if launches.iter_mut().any(|launch| launch.exited().is_some()) {
+                return Some(false);
+            }
+            executions = fixture.ok(&["status", workspace])["executions"].clone();
+            launches
+                .iter()
+                .all(|launch| launch.started(&executions))
+                .then_some(true)
+        });
+        if started == Some(true) {
+            return;
+        }
+        let report: Vec<_> = launches
+            .iter_mut()
+            .map(|launch| launch.report(&executions))
+            .collect();
+        for launch in launches {
+            let _ = launch.child.kill();
+        }
+        panic!(
+            "executions did not start; recorded: {executions}\n{}",
+            report.join("\n")
+        );
+    }
+
+    /// Whether the daemon records this launch's execution with its child and
+    /// the launch touched its marker.
+    fn started(&self, executions: &Value) -> bool {
+        self.recorded(executions) && self.marker.exists()
+    }
+
+    fn recorded(&self, executions: &Value) -> bool {
+        executions.as_array().is_some_and(|executions| {
+            executions.iter().any(|execution| {
+                execution.get("agent").and_then(Value::as_str) == self.agent
+                    && !execution["child"].is_null()
+            })
+        })
+    }
+
+    fn exited(&mut self) -> Option<std::process::ExitStatus> {
+        self.child.try_wait().unwrap()
+    }
+
+    /// Whether this launch started, how it ended if it did, and its stderr.
+    fn report(&mut self, executions: &Value) -> String {
+        let exit = match self.exited() {
+            Some(status) => format!("exited with {status}"),
+            None => "still running".to_owned(),
+        };
+        format!(
+            "{}: recorded {}, marker {}, {exit}; stderr:\n{}",
+            self.name,
+            self.recorded(executions),
+            self.marker.exists(),
+            self.printed(),
+        )
+    }
+
+    /// What the launch wrote to stderr so far.
+    fn printed(&self) -> String {
+        fs::read_to_string(&self.stderr).unwrap_or_default()
+    }
+
+    /// Wait for the launch to end once its workspace is removed.
+    fn wait_exited(&mut self) {
+        if try_wait_for(|| self.exited()).is_none() {
+            let _ = self.child.kill();
+            panic!(
+                "{} did not exit after removal; stderr:\n{}",
+                self.name,
+                self.printed()
+            );
+        }
     }
 }
 
