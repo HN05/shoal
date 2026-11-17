@@ -9,6 +9,7 @@ use std::{
 };
 
 use anyhow::{Result, anyhow};
+use shoal_ids::member_ids::MemberId;
 use shoal_protocol::hub::{
     HubRole, Membership, Route,
     link::{Call, Intent, Refusal, RefusalReason, Reply},
@@ -43,6 +44,9 @@ pub(super) struct Link {
     state: Mutex<State>,
     /// Wakes the link to read its membership and route again.
     wake: Notify,
+    /// Held while the membership is joined or left, so neither overwrites
+    /// what the other recorded.
+    changes: tokio::sync::Mutex<()>,
 }
 
 #[derive(Default)]
@@ -89,7 +93,12 @@ pub(super) async fn run(manager: Arc<Manager>) {
                     Some(backoff)
                 }
                 Kept::Failed => Some(backoff),
-                Kept::Stopped => None,
+                // What the link reads changed, and the notice that said so
+                // is spent: read it again at once.
+                Kept::Stopped => {
+                    manager.hub.member.set(None, None);
+                    continue;
+                }
             },
             Err(error) => {
                 log!("hub: {error:#}");
@@ -115,13 +124,28 @@ pub(super) async fn run(manager: Arc<Manager>) {
     }
 }
 
+/// The hub's refusal of the link of `member`, and whether it came sealed.
+struct HubRefusal<'a> {
+    refusal: Refusal,
+    sealed: bool,
+    member: Option<&'a MemberId>,
+}
+
+/// The member `attempt` connects as.
+fn plan_member(attempt: &Attempt) -> Option<&MemberId> {
+    match attempt {
+        Attempt::Connect { joined, .. } => Some(&joined.membership.member),
+        Attempt::Idle(_) => None,
+    }
+}
+
 /// How keeping a link ended.
 enum Kept {
     /// It was open, then ended.
     Served,
     /// It did not open.
     Failed,
-    /// The hub refused it for good, or what the link reads changed.
+    /// What the link reads changed, so it stopped.
     Stopped,
 }
 
@@ -160,7 +184,14 @@ impl Manager {
         let route = plan.route.clone();
         let transport = match self.open_attempt(plan).await {
             Ok(Ok(transport)) => transport,
-            Ok(Err((refusal, sealed))) => return self.refused(&route, refusal, sealed).await,
+            Ok(Err((refusal, sealed))) => {
+                let refused = HubRefusal {
+                    refusal,
+                    sealed,
+                    member: plan_member(&attempt),
+                };
+                return self.refused(&route, refused).await;
+            }
             Err(error) => return self.link_failed(&error),
         };
         self.serve_hub(transport, &route, stop).await
@@ -226,6 +257,11 @@ impl Manager {
         let mut reloaded = self.config_state.watch();
         let attempt = attempt.clone();
         async move {
+            // A reload between reading the attempt and subscribing counts
+            // as seen, so read the attempt again once subscribed.
+            if self.link_attempt().await.ok().as_ref() != Some(&attempt) {
+                return;
+            }
             loop {
                 tokio::select! {
                     () = self.hub.member.wake.notified() => return,
@@ -252,7 +288,12 @@ impl Manager {
     /// Back off after the hub's `refusal`, telling the user. A revocation
     /// that came `sealed`, which only the hub can send, is recorded, so the
     /// link waits for a new join; any other refusal is tried again.
-    async fn refused(&self, route: &Route, refusal: Refusal, sealed: bool) -> Kept {
+    async fn refused(&self, route: &Route, refused: HubRefusal<'_>) -> Kept {
+        let HubRefusal {
+            refusal,
+            sealed,
+            member,
+        } = refused;
         let message = format!(
             "The hub at {route} refused this machine: {}",
             refusal.message
@@ -262,7 +303,8 @@ impl Manager {
         // the membership revoked.
         if sealed
             && refusal.reason == RefusalReason::Revoked
-            && let Err(error) = self.store.write(membership::revoked).await
+            && let Some(member) = member
+            && let Err(error) = self.record_revoked(member).await
         {
             log!("hub: could not record the revoked membership: {error:#}");
         }
@@ -270,6 +312,15 @@ impl Manager {
         self.notify(None, NotificationKind::HubRefused, &message)
             .await;
         Kept::Failed
+    }
+
+    /// Record that the hub revoked the membership of `member`, unless a
+    /// later join replaced it meanwhile.
+    async fn record_revoked(&self, member: &MemberId) -> Result<()> {
+        let member = member.clone();
+        self.store
+            .write(move |tx| membership::revoked(tx, &member))
+            .await
     }
 
     /// The hub's reply to `call`, over this machine's link.

@@ -3,6 +3,7 @@
 //! paired at or the command it joined through.
 use anyhow::Result;
 use rusqlite::{OptionalExtension as _, Transaction, params};
+use shoal_ids::member_ids::MemberId;
 use shoal_protocol::hub::{Membership, PublicKey, Route};
 
 use super::identity::KeyPair;
@@ -87,9 +88,13 @@ pub(super) fn save(tx: &Transaction<'_>, joined: &Joined) -> Result<()> {
     Ok(())
 }
 
-/// Record that the hub revoked the membership.
-pub(super) fn revoked(tx: &Transaction<'_>) -> Result<()> {
-    tx.execute("UPDATE hub_membership SET revoked=1 WHERE id=1", [])?;
+/// Record that the hub revoked the membership of `member`, which a later
+/// join may have replaced.
+pub(super) fn revoked(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
+    tx.execute(
+        "UPDATE hub_membership SET revoked=1 WHERE id=1 AND member_id=?1",
+        [member],
+    )?;
     Ok(())
 }
 

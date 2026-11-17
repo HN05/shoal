@@ -30,7 +30,10 @@ use tokio_tungstenite::{
     tungstenite::{handshake::derive_accept_key, protocol::Role},
 };
 
-use super::{accept::Over, transport::Channel};
+use super::{
+    accept::Over,
+    transport::{self, Channel},
+};
 use crate::daemon::{log, notifications::NotificationKind, workspace::Manager};
 
 /// How long a client may take to send a request's headers, and then the
@@ -64,6 +67,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
                     .map(|listener| (address, listener));
             } else {
                 *manager.hub.listener.0.lock().unwrap() = None;
+                manager.hub.links.stop_all();
             }
         }
         let listener = listening.as_ref().map(|(_, listener)| listener);
@@ -214,7 +218,12 @@ fn respond(
         match hyper::upgrade::on(request).await {
             Ok(upgraded) => {
                 let socket = TokioIo::new(upgraded);
-                let socket = WebSocketStream::from_raw_socket(socket, Role::Server, None).await;
+                let socket = WebSocketStream::from_raw_socket(
+                    socket,
+                    Role::Server,
+                    Some(transport::websocket_limits()),
+                )
+                .await;
                 manager.open_listener_link(Channel::websocket(socket)).await;
                 drop(permit);
             }

@@ -21,8 +21,8 @@ use crate::{
 
 /// What an answer holds until its reply is written: the daemon operation,
 /// so an update never exits between a change and the reply that reports
-/// it, and for a member that left, the end of its link once it has read
-/// that it did.
+/// it, and for a member whose credential the call revoked, by leaving or
+/// revoking itself, the end of its link once it has read that it did.
 pub(super) struct Held {
     _operation: Option<OwnedRwLockReadGuard<()>>,
     ends: Option<(Arc<Manager>, MemberId)>,
@@ -52,12 +52,15 @@ impl Manager {
             };
             return (Reply::Failed { message }, held);
         };
-        let leaves = matches!(call, Call::Leave);
         let reply = super::session::reply(self.answer_call(member, call).await);
-        let left = leaves && matches!(reply, Reply::Left);
+        let revoked_itself = match &reply {
+            Reply::Left => true,
+            Reply::Revoked(revoked) => revoked.id == member.id,
+            _ => false,
+        };
         let held = Held {
             _operation: Some(operation),
-            ends: left.then(|| (self.clone(), member.id.clone())),
+            ends: revoked_itself.then(|| (self.clone(), member.id.clone())),
         };
         (reply, held)
     }
@@ -65,16 +68,26 @@ impl Manager {
     /// The hub's reply to `member`'s `call`, refused once the hub revoked
     /// the member, whose link may still be closing.
     async fn answer_call(&self, member: &Member, call: Call) -> Result<Reply> {
+        self.ensure_hub()?;
         self.ensure_not_revoked(&member.id).await?;
         Ok(match call {
             Call::Pair => Reply::Pairing(self.issue_pairing().await?),
             Call::Members => Reply::Members(self.local_hub_overview().await?),
-            Call::Revoke { member } => Reply::Revoked(self.revoke_member(&member).await?),
+            Call::Revoke { member: selector } => {
+                Reply::Revoked(self.revoke_member(&selector, Some(&member.id)).await?)
+            }
             Call::Leave => {
                 self.release_member(&member.id).await?;
                 Reply::Left
             }
         })
+    }
+
+    /// Refuse a member's call once this daemon no longer takes the hub
+    /// role, whose links are then closing.
+    fn ensure_hub(&self) -> Result<()> {
+        anyhow::ensure!(self.is_hub(), "this daemon no longer takes the hub role");
+        Ok(())
     }
 
     /// Refuse a call of the member `id` once the hub revoked it.
@@ -108,8 +121,13 @@ impl Manager {
     }
 
     /// Revoke the credential of the member `selector` names, ending its
-    /// link.
-    pub(super) async fn revoke_member(&self, selector: &str) -> Result<Member> {
+    /// link, unless it is the `caller`'s, which ends once the caller has
+    /// read the reply.
+    pub(super) async fn revoke_member(
+        &self,
+        selector: &str,
+        caller: Option<&MemberId>,
+    ) -> Result<Member> {
         let own = self.hub_identity().await?.public.clone();
         let selector = selector.to_owned();
         let _admission = self.hub.admissions.lock().await;
@@ -128,7 +146,9 @@ impl Manager {
                 Ok(member)
             })
             .await?;
-        self.hub.links.stop(&member.id);
+        if caller != Some(&member.id) {
+            self.hub.links.stop(&member.id);
+        }
         Ok(member)
     }
 
@@ -157,7 +177,7 @@ impl Manager {
     /// this machine's link.
     pub(crate) async fn revoke_hub_member(&self, selector: String) -> Result<Member> {
         if self.is_hub() {
-            return self.revoke_member(&selector).await;
+            return self.revoke_member(&selector, None).await;
         }
         match self.through_hub(Call::Revoke { member: selector }).await? {
             Reply::Revoked(member) => Ok(member),

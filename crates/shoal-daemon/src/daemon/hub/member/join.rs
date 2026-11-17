@@ -27,6 +27,7 @@ impl Manager {
     /// Join the hub `via` reaches, as a machine named `name`, or after its
     /// host.
     pub(crate) async fn join_hub(&self, via: JoinVia, name: Option<String>) -> Result<Membership> {
+        let _change = self.hub.member.changes.lock().await;
         self.ensure_joinable().await?;
         let key = KeyPair::generate()?;
         let identity = Identity::new(&key)?;
@@ -120,6 +121,7 @@ impl Manager {
     /// Leave the hub: revoke this machine's credential there, when the hub
     /// is reachable, and forget the membership.
     pub(crate) async fn leave_hub(&self) -> Result<Left> {
+        let _change = self.hub.member.changes.lock().await;
         let Some(joined) = self.store.read(membership::load).await? else {
             return Err(Refusal::new(Reason::NotFound, "this machine joined no hub").into());
         };

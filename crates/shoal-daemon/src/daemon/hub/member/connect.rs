@@ -16,7 +16,10 @@ use tokio::{
 };
 use tokio_tungstenite::Connector;
 
-use crate::daemon::{hub::transport::Channel, log};
+use crate::daemon::{
+    hub::transport::{self, Channel},
+    log,
+};
 
 /// The lines of a command's standard error kept to explain its failure.
 const KEPT_LINES: usize = 20;
@@ -49,7 +52,7 @@ impl Transport {
         let connector = Connector::Rustls(tls());
         let connected = tokio_tungstenite::connect_async_tls_with_config(
             url.link(),
-            None,
+            Some(transport::websocket_limits()),
             false,
             Some(connector),
         );

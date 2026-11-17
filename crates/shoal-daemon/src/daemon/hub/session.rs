@@ -22,7 +22,9 @@ const CALL_TIMEOUT: Duration = Duration::from_secs(120);
 /// The calls this side sends over a link, each waiting for its reply.
 pub(crate) struct Calls {
     sender: Sender,
-    pending: Mutex<HashMap<u64, oneshot::Sender<Reply>>>,
+    /// The calls waiting for replies, none once the session ended, which
+    /// fails them.
+    pending: Mutex<Option<HashMap<u64, oneshot::Sender<Reply>>>>,
     next: AtomicU64,
 }
 
@@ -30,7 +32,7 @@ impl Calls {
     pub(super) fn new(sender: Sender) -> Arc<Self> {
         Arc::new(Self {
             sender,
-            pending: Mutex::default(),
+            pending: Mutex::new(Some(HashMap::new())),
             next: AtomicU64::new(1),
         })
     }
@@ -39,30 +41,55 @@ impl Calls {
     pub(crate) async fn call(&self, call: Call) -> Result<Reply> {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         let (replied, reply) = oneshot::channel();
-        self.pending.lock().unwrap().insert(id, replied);
-        let sent = self.sender.send(&Frame::Call { id, call }).await;
-        let reply = match sent {
-            Ok(()) => tokio::time::timeout(CALL_TIMEOUT, reply).await,
-            Err(error) => {
-                self.pending.lock().unwrap().remove(&id);
+        match self.pending.lock().unwrap().as_mut() {
+            Some(pending) => pending.insert(id, replied),
+            None => bail!("the link to the hub closed"),
+        };
+        let sent_and_replied = async {
+            self.sender.send(&Frame::Call { id, call }).await?;
+            anyhow::Ok(reply.await)
+        };
+        let reply = match tokio::time::timeout(CALL_TIMEOUT, sent_and_replied).await {
+            Ok(Ok(reply)) => Ok(reply),
+            Ok(Err(error)) => {
+                self.forget(id);
                 return Err(error);
             }
+            Err(timeout) => Err(timeout),
         };
         match reply {
             Ok(Ok(Reply::Failed { message })) => bail!("{message}"),
             Ok(Ok(reply)) => Ok(reply),
             Ok(Err(_)) => bail!("the link to the hub closed before it answered"),
             Err(_) => {
-                self.pending.lock().unwrap().remove(&id);
+                self.forget(id);
                 bail!("the hub did not answer within {}s", CALL_TIMEOUT.as_secs())
             }
         }
     }
 
     fn replied(&self, id: u64, reply: Reply) {
-        if let Some(waiting) = self.pending.lock().unwrap().remove(&id) {
+        let waiting = self
+            .pending
+            .lock()
+            .unwrap()
+            .as_mut()
+            .and_then(|pending| pending.remove(&id));
+        if let Some(waiting) = waiting {
             let _ = waiting.send(reply);
         }
+    }
+
+    fn forget(&self, id: u64) {
+        if let Some(pending) = self.pending.lock().unwrap().as_mut() {
+            pending.remove(&id);
+        }
+    }
+
+    /// Fail every call waiting for a reply, and refuse those made later,
+    /// once the session ended.
+    fn close(&self) {
+        self.pending.lock().unwrap().take();
     }
 }
 
@@ -82,6 +109,23 @@ pub(super) enum End {
 /// operation that keeps an update from exiting between a change and the
 /// reply that reports it.
 pub(super) async fn serve<A, F, H>(
+    channel: Channel,
+    calls: &Calls,
+    answer: A,
+    stop: impl Future<Output = ()>,
+) -> End
+where
+    A: Fn(Call) -> F,
+    F: Future<Output = (Reply, H)> + Send + 'static,
+    H: Send + 'static,
+{
+    let end = exchange(channel, calls, answer, stop).await;
+    calls.close();
+    end
+}
+
+/// Exchange frames on `channel` until it ends or `stop` resolves.
+async fn exchange<A, F, H>(
     mut channel: Channel,
     calls: &Calls,
     answer: A,
@@ -100,7 +144,7 @@ where
         tokio::select! {
             () = &mut stop => return End::Stopped,
             _ = pings.tick() => {
-                if let Err(error) = sender.send(&Frame::Ping).await {
+                if let Err(error) = sender.try_send(&Frame::Ping) {
                     return End::Lost(error);
                 }
             }
@@ -116,7 +160,7 @@ where
                 };
                 match frame {
                     Frame::Ping => {
-                        if let Err(error) = sender.send(&Frame::Pong).await {
+                        if let Err(error) = sender.try_send(&Frame::Pong) {
                             return End::Lost(error);
                         }
                     }
@@ -145,3 +189,6 @@ pub(super) fn reply(result: Result<Reply>) -> Reply {
         message: format!("{error:#}"),
     })
 }
+
+#[cfg(test)]
+mod tests;

@@ -2,19 +2,23 @@
 //! daemon's socket or a command's standard input and output, or as text
 //! messages of a WebSocket. Each direction runs in a task of its own, so
 //! that waiting for a frame never holds up sending one. The reader stops
-//! with its channel; the writer once every sender is gone, after sending
-//! what they queued. Once sealed, the writer seals each frame it sends and
+//! with its channel, as does the writer, so a peer that stopped reading
+//! holds up no one past the end of its session; closing a channel lets the
+//! writer send what was queued first. Once sealed, the writer seals each frame it sends and
 //! the channel opens each it receives.
 use anyhow::{Context as _, Result, anyhow, bail, ensure};
 use futures_util::{Sink, SinkExt as _, StreamExt as _};
 use serde::{Serialize, de::DeserializeOwned};
-use shoal_protocol::hub::link::Sealed;
+use shoal_protocol::hub::link::{SILENCE, Sealed};
 use tokio::{
     io::{AsyncBufRead, AsyncBufReadExt as _, AsyncReadExt as _, AsyncWrite, AsyncWriteExt as _},
     sync::{mpsc, oneshot},
     task::{AbortHandle, JoinHandle},
 };
-use tokio_tungstenite::{WebSocketStream, tungstenite::Message};
+use tokio_tungstenite::{
+    WebSocketStream,
+    tungstenite::{Message, protocol::WebSocketConfig},
+};
 
 use super::sealing::{Keys, Opener, Sealer};
 
@@ -27,6 +31,14 @@ const QUEUED: usize = 64;
 /// How long closing a channel waits for its queued frames to go.
 const CLOSE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
+/// The limits a link's WebSocket holds a message, and each of its
+/// fragments, to: [`MAX_FRAME`].
+pub(super) fn websocket_limits() -> WebSocketConfig {
+    WebSocketConfig::default()
+        .max_message_size(Some(MAX_FRAME))
+        .max_frame_size(Some(MAX_FRAME))
+}
+
 /// One side of an open transport.
 pub(super) struct Channel {
     incoming: mpsc::Receiver<Result<String>>,
@@ -37,7 +49,16 @@ pub(super) struct Channel {
     /// side of the key exchange can send.
     sealed_last: bool,
     _reader: Reader,
-    writer: JoinHandle<()>,
+    writer: Writer,
+}
+
+/// The task that writes a channel's frames, which ends with it.
+struct Writer(JoinHandle<()>);
+
+impl Drop for Writer {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
 }
 
 /// What the writer takes, in the order senders queued it.
@@ -70,13 +91,35 @@ impl Sender {
         self.queue(frame, None).await
     }
 
-    /// Send `frame` and return once it is written to the transport.
+    /// Queue `frame` unless the queue is full, as it stays once the other
+    /// side stopped reading, so a loop that sends it never waits.
+    pub(super) fn try_send(&self, frame: &impl Serialize) -> Result<()> {
+        let text = serde_json::to_string(frame)?;
+        let out = Out::Frame {
+            text,
+            written: None,
+        };
+        self.0.try_send(out).map_err(|error| match error {
+            mpsc::error::TrySendError::Full(_) => anyhow!("the other side stopped reading"),
+            mpsc::error::TrySendError::Closed(_) => anyhow!("the link closed"),
+        })
+    }
+
+    /// Send `frame` and return once it is written to the transport, or
+    /// fail once the other side has read nothing for [`SILENCE`], whether
+    /// the frame waited to be queued or to be written.
     pub(super) async fn send_written(&self, frame: &impl Serialize) -> Result<()> {
-        let (written, wrote) = oneshot::channel();
-        self.queue(frame, Some(written)).await?;
-        wrote
-            .await
-            .map_err(|_| anyhow!("the link closed before the frame went"))
+        let written = async {
+            let (written, wrote) = oneshot::channel();
+            self.queue(frame, Some(written)).await?;
+            wrote
+                .await
+                .map_err(|_| anyhow!("the link closed before the frame went"))
+        };
+        match tokio::time::timeout(SILENCE, written).await {
+            Ok(written) => written,
+            Err(_) => bail!("the other side read nothing for {}s", SILENCE.as_secs()),
+        }
     }
 
     async fn queue(
@@ -104,7 +147,7 @@ impl Channel {
             opener: None,
             sealed_last: false,
             _reader: Reader(tokio::spawn(read_lines(reader, incoming)).abort_handle()),
-            writer: tokio::spawn(write_frames(Lines(writer), to_send)),
+            writer: Writer(tokio::spawn(write_frames(Lines(writer), to_send))),
         }
     }
 
@@ -137,7 +180,7 @@ impl Channel {
             opener: None,
             sealed_last: false,
             _reader: Reader(reader.abort_handle()),
-            writer: tokio::spawn(write_frames(Messages(sink), to_send)),
+            writer: Writer(tokio::spawn(write_frames(Messages(sink), to_send))),
         }
     }
 
@@ -163,10 +206,12 @@ impl Channel {
     pub(super) async fn close_with(self, frame: &impl Serialize) {
         let _ = self.send(frame).await;
         let Self {
-            outgoing, writer, ..
+            outgoing,
+            mut writer,
+            ..
         } = self;
         drop(outgoing);
-        let _ = tokio::time::timeout(CLOSE_TIMEOUT, writer).await;
+        let _ = tokio::time::timeout(CLOSE_TIMEOUT, &mut writer.0).await;
     }
 
     /// The next frame, none once the other side closed the link.
@@ -337,3 +382,6 @@ async fn read_line(reader: &mut (impl AsyncBufRead + Send + Unpin)) -> Result<Op
     bytes.pop();
     Ok(Some(String::from_utf8(bytes)?))
 }
+
+#[cfg(test)]
+mod tests;

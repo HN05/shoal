@@ -88,6 +88,14 @@ impl Links {
         }
     }
 
+    /// End every open link, as once the daemon no longer takes the hub
+    /// role.
+    pub(super) fn stop_all(&self) {
+        for open in self.open.lock().unwrap().values() {
+            open.stop.notify_one();
+        }
+    }
+
     /// The members whose links are open.
     pub(super) fn connected(&self) -> HashSet<MemberId> {
         self.open.lock().unwrap().keys().cloned().collect()

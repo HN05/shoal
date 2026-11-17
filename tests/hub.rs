@@ -290,3 +290,47 @@ fn the_hub_takes_no_link_from_a_space_s_scope() {
         .clone();
     assert_eq!(members.len(), 1);
 }
+
+#[test]
+fn joins_at_once_leave_one_membership() {
+    let hub = Machine::hub();
+    let laptop = Machine::start("");
+    let joins = std::thread::scope(|scope| {
+        let joining = ["first", "second"].map(|name| {
+            let (laptop, hub) = (&laptop, &hub);
+            scope.spawn(move || {
+                let connect = hub.connect();
+                laptop.run(&[
+                    "hub",
+                    "join",
+                    "--connect",
+                    &connect,
+                    "--name",
+                    name,
+                    "--json",
+                ])
+            })
+        });
+        joining.map(|join| join.join().unwrap())
+    });
+    let joined: Vec<_> = (joins.iter())
+        .filter(|output| output.status.success())
+        .collect();
+    assert_eq!(joined.len(), 1);
+    let membership: Value = serde_json::from_slice(&joined[0].stdout).unwrap();
+    let role = laptop.connected();
+    assert_eq!(role["membership"]["member"], membership["member"]);
+}
+
+#[test]
+fn a_machine_that_revokes_itself_hears_that_it_did() {
+    let hub = Machine::hub();
+    let laptop = Machine::start("");
+    let membership = laptop.join_through_command(&hub, "laptop");
+    laptop.connected();
+    let revoked = laptop.json(&["hub", "revoke", membership["member"].as_str().unwrap()]);
+    assert_eq!(revoked["id"], membership["member"]);
+    laptop.role_once(|role| {
+        (role["problem"].as_str()).is_some_and(|problem| problem.contains("revoked"))
+    });
+}
