@@ -1167,8 +1167,36 @@ pub(super) const REMOVED_WORKSPACES: &str = "CREATE TABLE removed_workspaces (
     record TEXT NOT NULL
 );";
 
+/// The schema the migrations up to [`SCHEMA_VERSION`] make, which a new
+/// database takes in one step: SQLite checks the whole schema on every
+/// `ALTER TABLE`, so applying each migration in turn takes a new database a
+/// good part of a second on a busy machine. The tests check that it is what
+/// the migrations make, and say how to write it anew.
+const SCHEMA: &str = include_str!("schema.sql");
+
 pub(super) fn migrate(db: &mut Connection) -> Result<()> {
+    if is_new(db)? {
+        return create_current(db);
+    }
     migrate_to(db, SCHEMA_VERSION)
+}
+
+/// Whether `db` holds nothing yet, not even the tables of a database that
+/// predates schema versions.
+fn is_new(db: &Connection) -> Result<bool> {
+    let version: i64 = db.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    let objects: i64 = db.query_row("SELECT COUNT(*) FROM sqlite_schema", [], |row| row.get(0))?;
+    Ok(version == 0 && objects == 0)
+}
+
+/// Give the new database `db` the current [`SCHEMA`].
+fn create_current(db: &mut Connection) -> Result<()> {
+    let tx = db.transaction()?;
+    tx.execute_batch(SCHEMA)
+        .context("create the current schema")?;
+    tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    tx.commit()?;
+    Ok(())
 }
 
 /// Apply the migrations up to version `last`.
@@ -1244,3 +1272,6 @@ fn validate_simulator_records(db: &Connection) -> Result<()> {
         .context("validate simulator records before indexing ownership")?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;
