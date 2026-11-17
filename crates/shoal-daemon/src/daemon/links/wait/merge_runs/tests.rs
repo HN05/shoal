@@ -292,3 +292,26 @@ async fn completion_cleanup_waits_for_the_runs_of_a_merge() {
     manager.sweep_completed().await.unwrap();
     assert!(!workspace.path.exists());
 }
+
+#[tokio::test]
+async fn the_background_poll_follows_a_merge_while_older_updates_wait() {
+    let following = following(true, json!([])).await;
+    let (pr, id) = (following.pr.clone(), following.workspace.id.clone());
+    following.observe(&pr, pull("open", None)).await;
+    // A comment waits for an agent that does not take it.
+    let mut commented = serde_json::to_value(pull("open", None)).unwrap();
+    commented["comments"] = json!({"discussion:1": {"fingerprint": "first"}});
+    let waiting = (following.observe(&pr, serde_json::from_value(commented).unwrap())).await;
+    assert_eq!(waiting[0].kind, UpdateKind::Comment, "{waiting:?}");
+    let replayed = following.observe(&pr, pull("merged", Some(MERGED))).await;
+    assert_eq!(replayed, waiting);
+    assert!(!following.awaits().await);
+
+    for snapshot in [pull("open", None), pull("merged", Some(MERGED))] {
+        (following.manager)
+            .record_background_activity(&id, vec![(pr.clone(), snapshot)])
+            .await
+            .unwrap();
+    }
+    assert!(following.awaits().await);
+}

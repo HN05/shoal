@@ -10,7 +10,7 @@ use super::{
         save_pending,
     },
     items::{NO_LINKED_ITEMS, followed_items, links_kind},
-    merge_runs::{MergeTarget, follow_merge},
+    merge_runs::{MergeTarget, follow_reported_merge},
 };
 use crate::{
     daemon::{links::space::require_ready_space, workspace::Manager},
@@ -156,7 +156,7 @@ fn record_observations(
         let replayed = !record.pending.is_empty();
         record.observe(snapshot, &url, observed_at);
         if let Some(target) = poll.merges.as_ref().filter(|_| !replayed) {
-            follow_merge(tx, id, &url, &mut record, target, UnixTime::now())?;
+            follow_reported_merge(tx, id, &url, &mut record, target, UnixTime::now())?;
         }
         updates.extend(record.pending.iter().cloned());
         save_cursor_record(tx, id, &url, &record)?;

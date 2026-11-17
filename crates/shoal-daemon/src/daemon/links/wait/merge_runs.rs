@@ -20,7 +20,7 @@ use crate::{
             link::{ItemKind, LinkKind},
             reference::ItemRef,
         },
-        updates::{SnapshotState, UpdateKind},
+        updates::{SnapshotState, Update, UpdateKind},
     },
     git::{self, default_branch::DefaultBranchLookup},
     model::Relation,
@@ -159,11 +159,10 @@ impl Manager {
     }
 }
 
-/// Follow the merge `record` newly reports for the PR at `url`, which the
-/// space `id` watches, when it merged into `target`'s branch: look up the
-/// runs of its merge commit from `now`, or, where the forge reported none,
-/// say so in the merge's update.
-pub(super) fn follow_merge(
+/// Follow the merge `record` newly reports for the PR at `url`, as
+/// [`follow_merge`] does, and say in the merge's update when the forge
+/// reported no merge commit to follow.
+pub(super) fn follow_reported_merge(
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
     url: &str,
@@ -171,21 +170,47 @@ pub(super) fn follow_merge(
     target: &MergeTarget,
     now: UnixTime,
 ) -> Result<()> {
-    let snapshot = &record.snapshot;
-    let Some(update) = (record.pending.iter_mut()).find(|update| update.kind == UpdateKind::Merged)
-    else {
+    let merged = |update: &&mut Update| update.kind == UpdateKind::Merged;
+    let Some(update) = record.pending.iter_mut().find(merged) else {
         return Ok(());
     };
-    if snapshot.base_branch() != Some(&target.default_branch) || !watches_pr(tx, id, url)? {
-        return Ok(());
+    if follow_merge(tx, id, url, &record.snapshot, target, now)? == Following::NoMergeCommit {
+        update.message = format!("{}\n{UNFOLLOWED_MERGE}", update.message);
     }
-    match snapshot.merge_commit() {
-        Some(commit) => start_lookup(tx, id, url, commit, &target.default_branch, now),
-        None => {
-            update.message = format!("{}\n{UNFOLLOWED_MERGE}", update.message);
-            Ok(())
-        }
+    Ok(())
+}
+
+/// How a space follows the merge of a PR.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum Following {
+    /// It does not: the space does not watch the PR, or it merged into
+    /// another branch.
+    Not,
+    /// It looks up the runs of the merge commit.
+    Runs,
+    /// It cannot: the forge reported no merge commit.
+    NoMergeCommit,
+}
+
+/// Follow the merge that `snapshot` shows of the PR at `url`, when the
+/// space `id` watches it and it merged into `target`'s branch: look up the
+/// runs of its merge commit from `now`, unless a lookup already does.
+pub(super) fn follow_merge(
+    db: &rusqlite::Connection,
+    id: &SpaceId,
+    url: &str,
+    snapshot: &Snapshot,
+    target: &MergeTarget,
+    now: UnixTime,
+) -> Result<Following> {
+    if snapshot.base_branch() != Some(&target.default_branch) || !watches_pr(db, id, url)? {
+        return Ok(Following::Not);
     }
+    let Some(commit) = snapshot.merge_commit() else {
+        return Ok(Following::NoMergeCommit);
+    };
+    start_lookup(db, id, url, commit, &target.default_branch, now)?;
+    Ok(Following::Runs)
 }
 
 /// Whether the space `id` watches the PR at `url`.

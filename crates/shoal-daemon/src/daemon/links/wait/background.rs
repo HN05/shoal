@@ -8,14 +8,17 @@ use rusqlite::{OptionalExtension, params};
 use super::{
     branch_report::{BranchReport, branch_report},
     items::{polled_items, watches_open_pr},
-    merge_runs::merge_run_spaces,
+    merge_runs::{MergeTarget, follow_merge, merge_run_spaces},
 };
 use crate::{
     daemon::{
         links::space::{LinkSpace, require_ready_space},
         workspace::Manager,
     },
-    forge::{items::link::Selection, updates::UpdateKind},
+    forge::{
+        items::link::{LinkKind, Selection},
+        updates::UpdateKind,
+    },
     model::Chat,
     time::UnixTime,
 };
@@ -181,54 +184,94 @@ impl Manager {
         id: &SpaceId,
         observations: Vec<(String, Snapshot)>,
     ) -> Result<Seen> {
+        // The baseline sees a merge whatever the cursor still delivers.
+        let merges = self.merge_target(id, &observations).await;
         let id = id.to_owned();
         self.store
-            .write(move |tx| {
-                require_ready_space(tx, &id)?;
-                let linked = polled_items(tx, &id)?;
-                let mut seen = Seen::default();
-                for (url, kind, mut snapshot) in
-                    observations.into_iter().filter_map(|(url, snapshot)| {
-                        linked
-                            .iter()
-                            .find(|linked| linked.url() == url)
-                            .map(|linked| (url, linked.kind(), snapshot))
-                    })
-                {
-                    let previous: Option<String> = tx
-                        .query_row(
-                            "SELECT record FROM space_item_activity WHERE space_id=?1 AND url=?2",
-                            params![id, url],
-                            |row| row.get(0),
-                        )
-                        .optional()?;
-                    let previous: Option<Snapshot> = previous
-                        .map(|text| serde_json::from_str(&text))
-                        .transpose()?;
-                    // The first item read establishes the baseline.
-                    if previous.is_none() && snapshot.unread() {
-                        continue;
-                    }
-                    snapshot.normalize(
-                        previous.as_ref().unwrap_or(&Snapshot::default()),
-                        UnixTime::now(),
-                    );
-                    if let Some(previous) = previous {
-                        seen.changed_draft |= previous.draft_changed(&snapshot);
-                        seen.lost_assignee |= previous.assignee_removed(&snapshot);
-                        for update in previous.changes(&snapshot, &url) {
-                            seen.merged |= update.kind == UpdateKind::Merged;
-                            crate::daemon::events::record_item_activity(
-                                tx, &id, kind, &url, &update,
-                            )?;
-                        }
-                    }
-                    save_observation(tx, &id, &url, &snapshot)?;
-                }
-                Ok(seen)
-            })
+            .write(move |tx| record_baseline(tx, &id, observations, merges.as_ref()))
             .await
     }
+}
+
+/// Record `observations` on the background baseline of the space `id`, one
+/// of each item it polls, journaling what changed and following the
+/// merges they show into `merges`' branch.
+fn record_baseline(
+    tx: &rusqlite::Transaction<'_>,
+    id: &SpaceId,
+    observations: Vec<(String, Snapshot)>,
+    merges: Option<&MergeTarget>,
+) -> Result<Seen> {
+    require_ready_space(tx, id)?;
+    let linked = polled_items(tx, id)?;
+    let mut seen = Seen::default();
+    for (url, snapshot) in observations {
+        let Some(item) = linked.iter().find(|linked| linked.url() == url) else {
+            continue;
+        };
+        let observed = Observed {
+            url: &url,
+            kind: item.kind(),
+            snapshot,
+        };
+        record_baseline_item(tx, id, observed, merges, &mut seen)?;
+    }
+    Ok(seen)
+}
+
+/// A background read of one linked item.
+struct Observed<'a> {
+    url: &'a str,
+    kind: LinkKind,
+    snapshot: Snapshot,
+}
+
+/// Record `observed` on the space `id`'s baseline, adding what changed
+/// since the last read to `seen`. The first read establishes the baseline.
+fn record_baseline_item(
+    tx: &rusqlite::Transaction<'_>,
+    id: &SpaceId,
+    observed: Observed<'_>,
+    merges: Option<&MergeTarget>,
+    seen: &mut Seen,
+) -> Result<()> {
+    let (url, mut snapshot) = (observed.url, observed.snapshot);
+    let previous = saved_observation(tx, id, url)?;
+    if previous.is_none() && snapshot.unread() {
+        return Ok(());
+    }
+    let now = UnixTime::now();
+    snapshot.normalize(previous.as_ref().unwrap_or(&Snapshot::default()), now);
+    if let Some(previous) = previous {
+        seen.changed_draft |= previous.draft_changed(&snapshot);
+        seen.lost_assignee |= previous.assignee_removed(&snapshot);
+        for update in previous.changes(&snapshot, url) {
+            let merged = update.kind == UpdateKind::Merged;
+            seen.merged |= merged;
+            if let Some(target) = merges.filter(|_| merged) {
+                follow_merge(tx, id, url, &snapshot, target, now)?;
+            }
+            crate::daemon::events::record_item_activity(tx, id, observed.kind, url, &update)?;
+        }
+    }
+    save_observation(tx, id, url, &snapshot)
+}
+
+/// The background poll's last observation of the item at `url` for the
+/// space `id`, if one is recorded.
+fn saved_observation(
+    db: &rusqlite::Connection,
+    id: &SpaceId,
+    url: &str,
+) -> Result<Option<Snapshot>> {
+    let record: Option<String> = db
+        .query_row(
+            "SELECT record FROM space_item_activity WHERE space_id=?1 AND url=?2",
+            params![id, url],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(record.map(|text| serde_json::from_str(&text)).transpose()?)
 }
 
 /// The spaces among `ids` whose activity is still to come: they watch an
