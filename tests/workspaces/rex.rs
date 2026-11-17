@@ -301,9 +301,12 @@ fn split_placement_opens_additions_and_chats_beside_the_callers_block() {
             && executions(&fixture, "placed") == 1
             && fixture.ok(&["status", &fixture.id("placed")])["setup_finished"] == true
     });
-    // The split names itself, never the caller's window.
+    // The split names itself, never the caller's window. The queue's start
+    // records the place it opened once its worker runs there.
+    wait_until("the split to record its place", || {
+        sessions(&fixture, "placed") == ["placed"]
+    });
     assert_eq!(rex.windows(&session), windows);
-    assert_eq!(sessions(&fixture, "placed"), ["placed"]);
     launch(&[
         "start", "--mode", "chat", repo, "--name", "talk", "--agent", "pi",
     ]);

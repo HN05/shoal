@@ -24,11 +24,12 @@ impl Attach {
     /// agent that runs its own way does without a terminal; on a terminal a
     /// focused start runs in a focused place, as a shell or an agent that
     /// runs its own way takes a place beside it, or here where no host
-    /// opens places. `None` leaves the
-    /// agent's start to the daemon.
+    /// opens places. `None` leaves the agent's start to the daemon. An
+    /// `issue_linked` workspace's own issue prompts the agent where the
+    /// launch names nothing to start on.
     pub(in crate::cli::commands::workspaces::add) fn of(
         ctx: &Context,
-        launch: &Launch,
+        (launch, issue_linked): (&Launch, bool),
         agent: Option<&crate::agent::Agent>,
         settings: &Effective,
         options: &AddOptions,
@@ -44,7 +45,7 @@ impl Attach {
             return Some(Self::Here);
         }
         let requested = options.focus.then_some(terminal::Placement::Focus);
-        let waits_for_user = agent.is_none() || waits(launch);
+        let waits_for_user = agent.is_none() || waits(launch, issue_linked);
         let placement = terminal::Placement::of(settings, &mode(launch), requested, waits_for_user);
         // The queue starts only an agent of its own in the background; a
         // shell, or an agent that runs its own way, takes a place from here.
@@ -58,31 +59,33 @@ impl Attach {
 }
 
 /// `launch` with its agent run in this caller, skipping the queue where
-/// the user waits for it under `settings`, unless a scoped caller makes it.
+/// the user waits for it under `settings`, unless a scoped caller makes it;
+/// an `issue_linked` workspace's own issue prompts the agent where the
+/// launch names nothing to start on.
 pub(in crate::cli::commands::workspaces::add) fn in_caller(
     ctx: &Context,
-    launch: &mut Launch,
+    (launch, issue_linked): (&mut Launch, bool),
     settings: &Effective,
     options: &AddOptions,
 ) {
     launch.here = true;
     let setting = settings.focus(&mode(launch));
-    let now = starts_now(launch, setting, options, ctx.on_terminal());
+    let waits_for_user = ctx.on_terminal() && waits(launch, issue_linked);
+    let now = starts_now(launch, setting, options, waits_for_user);
     launch.now |= !crate::env::is_scoped() && now;
 }
 
 /// Whether the agent of `launch`, which runs in its caller, skips the
-/// queue: the user waits for one `--focus` focuses, or, from a call
-/// `on_terminal`, one waiting for the user's input that the `focus`
-/// `setting` does not send to the background; the setting alone does not,
-/// so it cannot switch the limit off. A start that waits for work queues.
+/// queue: the user waits for one `--focus` focuses, or one that
+/// `waits_for_user` on a terminal and the `focus` `setting` does not send
+/// to the background; the setting alone does not, so it cannot switch the
+/// limit off. A start that waits for work queues.
 fn starts_now(
     launch: &Launch,
     setting: Option<bool>,
     options: &AddOptions,
-    on_terminal: bool,
+    waits_for_user: bool,
 ) -> bool {
-    let waits_for_user = on_terminal && waits(launch);
     options.focus || (launch.blockers.is_empty() && waits_for_user && setting != Some(false))
 }
 
@@ -92,9 +95,11 @@ fn mode(launch: &Launch) -> ModeName {
 }
 
 /// Whether the agent of `launch` waits for the user's input: it starts on
-/// no issue, task or prompt.
-fn waits(launch: &Launch) -> bool {
-    let on_issue = launch.issue.is_some()
+/// no issue, task or prompt, nor on the issue of an `issue_linked`
+/// workspace.
+fn waits(launch: &Launch, issue_linked: bool) -> bool {
+    let on_issue = issue_linked
+        || launch.issue.is_some()
         || matches!(
             launch.target,
             Some(StartTarget::Issue(_) | StartTarget::Number(_))

@@ -33,7 +33,7 @@ fn creating(repository: &Repository, branch: &str) -> String {
         chat: None,
         parent: None,
         workspace: None,
-        preparation: None,
+        handoff: None,
     };
     serde_json::to_string(&plan).unwrap()
 }

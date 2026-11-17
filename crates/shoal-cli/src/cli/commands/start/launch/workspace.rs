@@ -3,7 +3,7 @@
 //! as where the start is made and the session `--fork` forks, what a picker
 //! on a terminal picks, and runs the agent where it runs in this caller.
 use anyhow::Result;
-use shoal_protocol::launches::{Launch, StartTarget};
+use shoal_protocol::launches::{Launch, SpaceChoice, StartTarget};
 use shoal_protocol::space_names::SpaceSelector;
 
 use super::super::{fork_from, mode_repository};
@@ -45,6 +45,17 @@ pub(in crate::cli::commands::start) fn checked_launch(
     launch
 }
 
+/// `launch` copying the workspace `copied` names, which a picker may have
+/// picked, in its repository unless the start names one.
+fn copy_from(launch: &mut Launch, copied: &copies::Copied) {
+    launch.copy = Some(SpaceChoice::Space(copied.source.workspace.clone()));
+    let names_repository =
+        launch.repository.is_some() || matches!(launch.target, Some(StartTarget::Repository(_)));
+    if !names_repository {
+        launch.repository = Some(copied.repository.to_string());
+    }
+}
+
 /// Have the daemon start the new workspace `args` ask for in `mode`, which
 /// a terminal-free start checks under the repository's settings.
 pub(in crate::cli::commands::start) async fn start(
@@ -54,8 +65,11 @@ pub(in crate::cli::commands::start) async fn start(
 ) -> Result<i32> {
     let settings = launch_settings(ctx, &args).await?;
     let mut launch = checked_launch(args.launch(), args.checked_repository.as_ref());
+    let copied = copies::source(ctx, args.copy.clone()).await?;
+    if let Some(copied) = &copied {
+        copy_from(&mut launch, copied);
+    }
     if args.fork {
-        let copied = copies::source(ctx, args.copy.clone()).await?;
         let copied = copied.map(|copy| copy.source.workspace);
         let (parent, agent, fork) =
             fork_from(ctx, copied, args.parent.clone(), args.agent.clone()).await?;

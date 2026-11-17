@@ -212,9 +212,46 @@ fn interactive_commands_refuse_their_arguments_before_prompting() {
                 "list_repositories",
                 "layered_config id:test",
                 "list_repositories",
+                "check_creation test",
                 "layered_config test",
             ],
             "--base applies to a new workspace's branch",
+        ),
+        // A named agent that cannot start is refused before anything is created.
+        (
+            &[
+                "start", "--wait", "test", "--branch", "topic", "--agent", "missing",
+            ],
+            "",
+            &[
+                "list_repositories",
+                "layered_config id:test",
+                "list_repositories",
+                "list_spaces",
+                "check_creation test topic",
+                "layered_config test",
+            ],
+            "unknown agent",
+        ),
+        // So is a blocker the daemon knows nothing of.
+        (
+            &[
+                "start",
+                "--wait",
+                "test",
+                "--branch",
+                "topic",
+                "--add-blocker",
+                "missing",
+            ],
+            "",
+            &[
+                "list_repositories",
+                "layered_config id:test",
+                "list_repositories",
+                "check_blockers",
+            ],
+            "missing is neither a workspace nor a queued agent",
         ),
         (
             &["repo", "rename", "missing"],

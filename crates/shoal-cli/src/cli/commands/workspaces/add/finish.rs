@@ -38,7 +38,7 @@ use shoal_protocol::space_names::SpaceSelector;
 /// run its agent once the queue lets it, as a focused start's place does,
 /// or else open what it names and launch its agent.
 pub(in crate::cli) async fn execute_add(ctx: &Context, plan: AddPlan) -> Result<i32> {
-    if plan.preparation.is_some() {
+    if plan.handoff.is_some() {
         return Box::pin(super::attach::run_in_place(ctx, plan)).await;
     }
     let target = AddTarget {
@@ -139,7 +139,7 @@ async fn add_planned(
         chat,
         parent,
         workspace,
-        preparation: _,
+        handoff: _,
     } = plan;
     let pr = creation.pr.clone();
     let told = (&prompt, args.as_slice(), &fork);

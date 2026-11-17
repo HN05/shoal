@@ -209,6 +209,14 @@ pub fn queued_agent_request(
     })
 }
 
+/// What the place a start opens beside its terminal hands over to: the
+/// operation preparing its workspace, which it follows first, if any.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct PlaceHandoff {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preparation: Option<String>,
+}
+
 /// What an addition creates and the agent it starts there, which a terminal
 /// host or the agent queue's worker carries out.
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -252,10 +260,11 @@ pub struct AddPlan {
     /// The existing workspace a launch in it reopens; it never creates one.
     #[serde(default)]
     pub workspace: Option<SpaceId>,
-    /// The operation preparing `workspace`, which the place a focused start
-    /// opens follows before its agent starts there.
+    /// The recorded launch the place a start opens beside its terminal
+    /// carries out: it follows the preparation the handoff names, if any,
+    /// then starts the launch's queued agent there, or opens a shell.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub preparation: Option<String>,
+    pub handoff: Option<PlaceHandoff>,
 }
 
 impl AddPlan {
@@ -319,7 +328,7 @@ impl AddPlan {
             chat: None,
             parent: None,
             workspace: Some(workspace.id.clone()),
-            preparation: None,
+            handoff: None,
         }
     }
 

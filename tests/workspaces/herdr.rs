@@ -15,12 +15,15 @@ args = sys.argv[1:]
 # Place watchers poll `pane get` and `tab get`; keep reads out of the recorded
 # actions.
 log = 'herdr-gets' if args[1:2] == ['get'] else 'herdr-calls'
+# A run's worker is written before the run is logged, so a test that sees
+# the run reads its worker.
+if args[:2] == ['pane', 'run']:
+    (root / 'herdr-worker').write_text(json.dumps(shlex.split(args[3])))
 with (root / log).open('a') as calls:
     calls.write(json.dumps(args) + '\n')
 if args[:2] == ['tab', 'create']:
     print(json.dumps({'result': {'tab': {'tab_id': 'w1:t9'}, 'root_pane': {'pane_id': 'w1:p9'}}}))
 elif args[:2] == ['pane', 'run']:
-    (root / 'herdr-worker').write_text(json.dumps(shlex.split(args[3])))
     if (root / 'herdr-runs-panes').exists():
         import subprocess
         pane = subprocess.Popen(['sh', '-c', args[3]], start_new_session=True,
@@ -95,11 +98,23 @@ pub(crate) fn herdr_call(fixture: &Fixture, args: &[&str], answer: &str) -> (Out
     )
 }
 
-/// The worker the last tab runs, once a tab runs one: the queue opens the
-/// tab of a start whose agent it starts in the background.
+/// The worker the newest tab runs, once it runs one: the queue opens the
+/// tab of a start whose agent it starts in the background, and an earlier
+/// tab's worker stays until the new one replaces it.
 pub(crate) fn herdr_worker(fixture: &Fixture) -> Vec<String> {
-    let worker = fixture.root.path().join("herdr-worker");
-    let worker = support::wait::wait_for("a herdr tab's worker", || fs::read(&worker).ok());
+    let root = fixture.root.path();
+    let worker = support::wait::wait_for("the newest herdr tab's worker", || {
+        let calls = fs::read_to_string(root.join("herdr-calls")).unwrap_or_default();
+        let count = |prefix: &str| {
+            calls
+                .lines()
+                .filter(|call| call.starts_with(prefix))
+                .count()
+        };
+        let ran = count(r#"["pane", "run""#) >= count(r#"["tab", "create""#);
+        ran.then(|| fs::read(root.join("herdr-worker")).ok())
+            .flatten()
+    });
     serde_json::from_slice(&worker).unwrap()
 }
 
@@ -521,14 +536,22 @@ fn herdr_tab_name_templates_survive_handoff() {
         "Literal {branch} $(touch injected)",
         "Details",
     ));
-    for (issue, initial, renamed) in [
+    for (issue, focus, initial, renamed) in [
         (
             Some("https://github.com/team/project/issues/34"),
+            false,
             "project topic #34: Literal {branch} $(touch injected)",
             "project topic #34: Literal {branch} $(touch injected)",
         ),
-        // Removal deleted the first topic, which had no commits.
-        (None, "project topic #: ", "project topic #: "),
+        // A focused start's place, opened from here, takes the issue too.
+        (
+            Some("https://github.com/team/project/issues/34"),
+            true,
+            "project topic #34: Literal {branch} $(touch injected)",
+            "project topic #34: Literal {branch} $(touch injected)",
+        ),
+        // Removal deleted the earlier topics, which had no commits.
+        (None, false, "project topic #: ", "project topic #: "),
     ] {
         fixture.ok(&[
             "config",
@@ -550,6 +573,9 @@ fn herdr_tab_name_templates_survive_handoff() {
         ];
         if let Some(url) = issue {
             args.extend(["--issue", url]);
+        }
+        if focus {
+            args.push("--focus");
         }
         let tabs = herdr_tabs(&fixture);
         let (caller, transcript) = herdr_call(&fixture, &args, "");
@@ -1388,4 +1414,25 @@ fn attach_previous_returns_to_a_herdr_tab_after_its_client_detaches() {
         printed(&output)
     );
     assert_eq!(attached(), 2);
+}
+
+/// A focused start of an existing workspace's agent opens its tab here, and
+/// the agent there starts with the task the start gave it.
+#[test]
+fn a_focused_worker_start_keeps_its_task_in_the_tab_it_opens() {
+    let fixture = Fixture::with_config(Some(
+        "[agents.pi]\ncommand = ['sh', '-c', 'printf \"%s\\0\" \"$@\" > \"$HOME/agent-args\"', 'agent', '{args}']\n",
+    ));
+    let workspace = fixture.add("worker");
+    install_fake_herdr(&fixture);
+    let id = workspace["id"].as_str().unwrap();
+    let args = [
+        "start", "--in", id, "--agent", "pi", "--focus", "--", "do it",
+    ];
+    let (caller, transcript) = herdr_call(&fixture, &args, "");
+    assert!(caller.status.success(), "{} {transcript}", printed(&caller));
+    let (worker, transcript) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
+    assert!(worker.status.success(), "{} {transcript}", printed(&worker));
+    let told = fs::read_to_string(fixture.root.path().join("agent-args")).unwrap();
+    assert!(told.split('\0').any(|arg| arg == "do it"), "{told:?}");
 }

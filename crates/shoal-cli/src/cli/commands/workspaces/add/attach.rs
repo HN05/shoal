@@ -21,7 +21,7 @@ use crate::{
     config::Effective,
     model::{QueueEntry, Workspace},
     protocol::operations::{Prepared, StartedWorkspace},
-    start_plan::{AddPlan, ResolvedAddAgent},
+    start_plan::{AddPlan, PlaceHandoff, ResolvedAddAgent},
     state::QueueState,
     terminal::PlaceName,
 };
@@ -166,7 +166,7 @@ pub(in crate::cli) async fn run_in_place(ctx: &Context, plan: AddPlan) -> Result
         None => None,
     };
     let started = StartedWorkspace {
-        operation: plan.preparation,
+        operation: plan.handoff.and_then(|handoff| handoff.preparation),
         workspace: Box::new(workspace),
         reused: false,
         entry: entry.map(Box::new),
@@ -236,8 +236,12 @@ async fn claimed(ctx: &Context, workspace: &Workspace, entry: &QueueEntry) -> Re
 /// the queue lets it start.
 fn place_plan(started: &StartedWorkspace, entry: Option<&QueueEntry>) -> AddPlan {
     let mut plan = AddPlan::opening(&started.workspace);
+    // The place takes its name from the workspace's issue, as a template asks.
+    plan.issue = (started.workspace.links.issue()).map(|issue| issue.url.clone());
     plan.agent.agent = entry.map(|entry| entry.agent.clone());
     plan.queue_entry = entry.map(|entry| entry.id.clone());
-    plan.preparation.clone_from(&started.operation);
+    plan.handoff = Some(PlaceHandoff {
+        preparation: started.operation.clone(),
+    });
     plan
 }
