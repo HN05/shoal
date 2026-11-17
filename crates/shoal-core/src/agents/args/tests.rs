@@ -56,18 +56,22 @@ fn a_restored_agent_whose_mode_is_gone_gets_the_default_rules() {
     let settings = crate::config::Config::default()
         .resolve(&Default::default())
         .unwrap();
-    let workspace: crate::model::Workspace = serde_json::from_value(serde_json::json!({
-        "workdir": {"kind": "worktree", "path": "/work/topic", "workspace": {"id": "id", "name": "topic", "branch": "topic"}},
-        "id": "id", "repository_id": "repo", "name": "topic", "branch": "topic",
-        "path": "/work/topic", "state": "ready", "created_at": 0, "updated_at": 0,
-    }))
-    .unwrap();
+    let workspace = workspace();
     let told = |mode: &modes::ModeName| {
         restored_instruction_args(&settings, &"claude".into(), &workspace, mode)
     };
     let kept = told(&modes::ModeName::DEFAULT);
     assert!(!kept.is_empty());
     assert_eq!(told(&"removed".into()), kept);
+}
+
+fn workspace() -> crate::model::Workspace {
+    serde_json::from_value(serde_json::json!({
+        "workdir": {"kind": "worktree", "path": "/work/topic", "workspace": {"id": "id", "name": "topic", "branch": "topic"}},
+        "id": "id", "repository_id": "repo", "name": "topic", "branch": "topic",
+        "path": "/work/topic", "state": "ready", "created_at": 0, "updated_at": 0,
+    }))
+    .unwrap()
 }
 
 fn chat(
@@ -151,4 +155,49 @@ fn a_setup_chat_without_a_repository_may_write_the_global_config() {
     let other = chat(crate::config::modes::ModeName::ORCHESTRATE, None, None);
     let args = chat_dir_args(&defaults, &"codex".into(), home.path(), &other);
     assert_eq!(args, [OsString::from("--add-dir"), tmp]);
+}
+
+#[test]
+fn workspace_and_chat_agents_start_the_mcp_servers_of_their_settings() {
+    let settings = |text: &str| {
+        let layers = crate::config::repo::ConfigLayers {
+            worktree_file: crate::config::repo::parse(text).unwrap(),
+            ..Default::default()
+        };
+        crate::config::Config::default().resolve(&layers).unwrap()
+    };
+    let user_home = tempfile::tempdir().unwrap();
+    let workspace = workspace();
+    let chat = chat("chat", Some("repo"), None);
+    let homes = [
+        AgentHome::Workspace(&workspace),
+        AgentHome::Chat {
+            chat: &chat,
+            home: crate::model::ChatHome::Root(Path::new("/root")),
+            repo: Some("repo"),
+        },
+    ];
+    // What each agent receives that names an MCP server.
+    let mcp = |settings: &Effective, name: &str, space: AgentHome| -> Vec<String> {
+        let args = space.args(settings, &name.into(), user_home.path(), None);
+        (args.unwrap().iter())
+            .filter_map(|arg| arg.to_str())
+            .filter(|arg| arg.contains("mcpServers") || arg.contains("mcp_servers"))
+            .map(str::to_owned)
+            .collect()
+    };
+    let xcode = settings("setup.presets = ['xcode']\n");
+    for space in homes {
+        for name in ["claude", "codex"] {
+            assert!(mcp(&settings("setup.presets = ['cargo']\n"), name, space).is_empty());
+            let servers = mcp(&xcode, name, space);
+            assert!(
+                servers.iter().any(|arg| arg.contains("xcrun")),
+                "{name}: {servers:?}"
+            );
+        }
+        assert!(mcp(&xcode, "pi", space).is_empty());
+    }
+    let off = settings("setup.presets = ['xcode']\n[mcp.xcode]\nenabled = false\n");
+    assert!(mcp(&off, "claude", homes[0]).is_empty());
 }

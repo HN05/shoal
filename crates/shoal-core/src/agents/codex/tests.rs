@@ -81,3 +81,29 @@ fn proxied_codex_sends_the_provider_its_config_uses_to_the_proxy() {
             .any(|arg| arg == PROVIDER)
     );
 }
+
+#[test]
+fn mcp_servers_set_every_field_as_a_config_override() {
+    let server = crate::config::mcp::Server {
+        command: "xcrun".into(),
+        args: vec!["mcpbridge".into()],
+        env: [("LOG".to_owned(), "1 \"quoted\"".to_owned())].into(),
+        enabled: true,
+    };
+    let args = Codex.mcp_args(&[("xcode", &server)]);
+    let overrides: Vec<&str> = args.iter().map(|arg| arg.to_str().unwrap()).collect();
+    let (flags, values): (Vec<_>, Vec<_>) =
+        overrides.chunks(2).map(|pair| (pair[0], pair[1])).unzip();
+    assert!(flags.iter().all(|flag| *flag == "-c"));
+    // Each value parses as the TOML line Codex reads it as.
+    let config: toml::Table = toml::from_str(&values.join("\n")).unwrap();
+    assert_eq!(
+        config["mcp_servers"]["xcode"],
+        toml::toml! {
+            command = "xcrun"
+            args = ["mcpbridge"]
+            env = { LOG = "1 \"quoted\"" }
+        }
+        .into()
+    );
+}

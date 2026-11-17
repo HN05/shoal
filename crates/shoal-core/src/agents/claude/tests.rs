@@ -167,3 +167,24 @@ fn the_proxys_key_joins_the_agents_own_headers() {
         )]
     );
 }
+
+#[test]
+fn mcp_servers_join_the_users_own_in_one_joined_config() {
+    let server = crate::config::mcp::Server {
+        command: "xcrun".into(),
+        args: vec!["mcpbridge".into()],
+        env: [("LOG".to_owned(), "1".to_owned())].into(),
+        enabled: true,
+    };
+    let args = Claude.mcp_args(&[("xcode", &server)]);
+    let [arg] = args.as_slice() else {
+        panic!("one argument: {args:?}")
+    };
+    let config = arg.to_str().unwrap().strip_prefix("--mcp-config=").unwrap();
+    assert_eq!(
+        serde_json::from_str::<Value>(config).unwrap(),
+        json!({"mcpServers": {"xcode": {
+            "type": "stdio", "command": "xcrun", "args": ["mcpbridge"], "env": {"LOG": "1"},
+        }}})
+    );
+}

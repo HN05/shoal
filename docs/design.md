@@ -1400,6 +1400,15 @@ those nothing pins go, and only after a day unused, since a build that resolves
 packages rewrites its pins while it runs. Xcode trims the compilation cache
 itself, by default to half the space available to it.
 
+A preset also brings the MCP servers its tool's agents use, as `xcode` brings
+Xcode's bridge, and `[mcp.NAME]` adds, changes or turns off servers by name in
+every layer, as `[env]` does a preset's variables. Shoal gives each workspace
+and chat agent its repository's servers in the agent's own syntax, beside the
+servers the user's config names, so a server only some repositories need
+belongs to their config rather than to the user's, which every session starts.
+Shoal never edits the agent's own config to do it, and an agent whose
+integration has no such syntax starts none.
+
 Tool caches whose tools lock or address entries by content, such as `GOCACHE` or
 sccache's directory, are the exception: `[caches.NAME]` with `scope = "shared"`
 gives a repository one directory per cache, and `[env]` maps it to the tool's

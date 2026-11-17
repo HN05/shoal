@@ -8,7 +8,7 @@ use std::{
 
 use anyhow::{Context as _, Result};
 
-use super::{agent_integration, args, delivery, hook_args};
+use super::{agent_integration, args, delivery};
 use crate::{
     agent::Agent,
     config::{Effective, named_commands, templates},
@@ -90,9 +90,9 @@ impl<'a> AgentHome<'a> {
     }
 
     /// What agent `name` runs with here besides its instructions, prompt and
-    /// forwarded arguments: Shoal's hooks and the other working directories
-    /// it may use, `workspaces_dir` among them for a workspace, as `home`,
-    /// the user's home, resolves the configured ones.
+    /// forwarded arguments: Shoal's hooks, its MCP servers and the other
+    /// working directories it may use, `workspaces_dir` among them for a
+    /// workspace, as `home`, the user's home, resolves the configured ones.
     pub fn args(
         self,
         settings: &Effective,
@@ -105,9 +105,7 @@ impl<'a> AgentHome<'a> {
                 args::workspace_args(settings, name, workspace, home, workspaces_dir)
             }
             Self::Chat { chat, .. } => {
-                let proxied = settings.proxy(name).is_some();
-                let integration = settings.integration(name);
-                let mut args = hook_args(integration, super::AgentSpace::Chat, proxied)?;
+                let mut args = args::space_args(settings, name, super::AgentSpace::Chat)?;
                 args.extend(args::chat_dir_args(settings, name, home, chat));
                 Ok(args)
             }

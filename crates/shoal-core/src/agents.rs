@@ -26,7 +26,7 @@ use anyhow::Result;
 use crate::{
     agent::Agent,
     ai::IntegrationKind,
-    config::{Effective, templates},
+    config::{Effective, mcp, templates},
     model::Workspace,
 };
 
@@ -55,6 +55,12 @@ pub trait Integration: Sync {
     /// at Shoal's proxy. They inherit the space's identity.
     fn hook_args(&self, _space: AgentSpace, _proxied: bool) -> std::io::Result<Vec<OsString>> {
         Ok(Vec::new())
+    }
+
+    /// Arguments that start `servers`, each by its name, beside the MCP
+    /// servers the agent's own config names.
+    fn mcp_args(&self, _servers: &[(&str, &mcp::Server)]) -> Vec<OsString> {
+        Vec::new()
     }
 
     /// Whether its launches can send their API requests to Shoal's proxy:
@@ -340,6 +346,16 @@ pub fn hook_args(
     proxied: bool,
 ) -> std::io::Result<Vec<OsString>> {
     integration(kind).hook_args(space, proxied)
+}
+
+/// Arguments that start the enabled ones of `servers` for an agent with
+/// integration `kind`; none when no server is enabled.
+pub fn mcp_args(kind: IntegrationKind, servers: &mcp::Servers) -> Vec<OsString> {
+    let enabled: Vec<_> = servers.enabled().collect();
+    if enabled.is_empty() {
+        return Vec::new();
+    }
+    integration(kind).mcp_args(&enabled)
 }
 
 /// How long the prompt cache of an agent with integration `kind` lives after

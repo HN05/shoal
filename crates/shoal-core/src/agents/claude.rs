@@ -23,6 +23,24 @@ impl Integration for Claude {
         settings(space)
     }
 
+    /// One `--mcp-config`, which adds to the servers Claude Code's own
+    /// config names; its variadic form would take the prompt too.
+    fn mcp_args(&self, servers: &[(&str, &crate::config::mcp::Server)]) -> Vec<OsString> {
+        let servers: serde_json::Map<String, Value> = (servers.iter())
+            .map(|(name, server)| {
+                let server = json!({
+                    "type": "stdio",
+                    "command": server.command,
+                    "args": server.args,
+                    "env": server.env,
+                });
+                ((*name).to_owned(), server)
+            })
+            .collect();
+        let config = json!({"mcpServers": servers});
+        vec![format!("--mcp-config={config}").into()]
+    }
+
     /// Every `--settings` becomes one with the proxy's URL, since Claude
     /// Code takes only the last.
     fn route_through_proxy(

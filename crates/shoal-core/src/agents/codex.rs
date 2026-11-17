@@ -23,6 +23,31 @@ impl Integration for Codex {
         Ok(args)
     }
 
+    /// Each server's fields as `-c mcp_servers.<name>.<field>=` TOML
+    /// values, every one set so none keeps the value Codex's own config
+    /// gives a server of the same name.
+    fn mcp_args(&self, servers: &[(&str, &crate::config::mcp::Server)]) -> Vec<OsString> {
+        (servers.iter())
+            .flat_map(|(name, server)| {
+                let env: toml::Table = (server.env.iter())
+                    .map(|(variable, value)| (variable.clone(), value.as_str().into()))
+                    .collect();
+                [
+                    ("command", toml::Value::from(server.command.as_str())),
+                    ("args", toml::Value::from(server.args.clone())),
+                    ("env", toml::Value::Table(env)),
+                ]
+                .into_iter()
+                .flat_map(move |(field, value)| {
+                    [
+                        "-c".into(),
+                        format!("mcp_servers.{name}.{field}={value}").into(),
+                    ]
+                })
+            })
+            .collect()
+    }
+
     /// The provider placeholder becomes the overrides that send the
     /// provider the launch uses to the proxy.
     fn route_through_proxy(

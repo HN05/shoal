@@ -1,6 +1,7 @@
 //! The arguments a workspace agent's command gets from Shoal besides its
-//! instructions and prompt: its model, Shoal's hooks, its rules again when
-//! it is restored, and the other working directories it may use.
+//! instructions and prompt: its model, Shoal's hooks and MCP servers, its
+//! rules again when it is restored, and the other working directories it
+//! may use.
 use std::{
     collections::BTreeSet,
     ffi::OsString,
@@ -9,7 +10,7 @@ use std::{
 
 use anyhow::{Context as _, Result};
 
-use super::{AgentHome, hook_args};
+use super::{AgentHome, AgentSpace, hook_args, mcp_args};
 use crate::{
     agent::{Agent, ModelChoice},
     config::{Config, Effective, modes},
@@ -80,7 +81,7 @@ pub fn insert_options(command: &mut Vec<OsString>, options: Vec<OsString>) {
 }
 
 /// What a workspace's agent `name` runs with besides its instructions, prompt
-/// and forwarded arguments: Shoal's hooks and [`workspace_dir_args`].
+/// and forwarded arguments: [`space_args`] and [`workspace_dir_args`].
 pub fn workspace_args(
     settings: &Effective,
     name: &Agent,
@@ -88,9 +89,22 @@ pub fn workspace_args(
     home: &Path,
     workspaces_dir: Option<&Path>,
 ) -> Result<Vec<OsString>> {
-    let proxied = settings.proxy(name).is_some();
-    let mut args = hook_args(settings.integration(name), workspace.into(), proxied)?;
+    let mut args = space_args(settings, name, workspace.into())?;
     args.extend(workspace_dir_args(settings, name, home, workspaces_dir));
+    Ok(args)
+}
+
+/// What agent `name` of `space` runs with in a workspace or a chat alike:
+/// Shoal's hooks and the MCP servers `settings` give it.
+pub(super) fn space_args(
+    settings: &Effective,
+    name: &Agent,
+    space: AgentSpace,
+) -> Result<Vec<OsString>> {
+    let proxied = settings.proxy(name).is_some();
+    let integration = settings.integration(name);
+    let mut args = hook_args(integration, space, proxied)?;
+    args.extend(mcp_args(integration, &settings.mcp));
     Ok(args)
 }
 

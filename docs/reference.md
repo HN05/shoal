@@ -3584,7 +3584,7 @@ Shoal sets each one up so its workspaces stop repeating the same work:
 | `yarn` | A seed running `yarn install --frozen-lockfile`, keeping `node_modules` |
 | `bun` | A seed running `bun install --frozen-lockfile`, keeping `node_modules` |
 | `go` | `GOFLAGS=-trimpath`, and a seed running `go build ./...` |
-| `xcode` | One compilation cache for every workspace's `xcodebuild`, with shared Swift package checkouts |
+| `xcode` | One compilation cache for every workspace's `xcodebuild`, with shared Swift package checkouts, and Xcode's MCP server, `xcrun mcpbridge`, for agents |
 | `zig` | The shared cache `preset.zig` as `ZIG_LOCAL_CACHE_DIR`, and a seed running `zig build` |
 | `ccache` | ccache as the compiler launcher of CMake builds, with the workspace as its base directory |
 
@@ -3660,6 +3660,13 @@ DerivedData location when that is absolute and in
 `~/Library/Developer/Xcode/DerivedData` otherwise. It also deletes the package
 checkouts that no build used for a day and no `Package.resolved` pins in the
 registered checkout, an existing worktree or the default branch's tip.
+
+A preset's MCP server reaches every Claude Code and Codex agent of the
+repository's workspaces and chats, beside the servers the agent's own config
+names; [`[mcp.NAME]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#mcp-servers)
+changes or turns it off, and defines other servers. Claude Code receives them
+as one `--mcp-config`, Codex as `-c mcp_servers.NAME` overrides, which replace
+a server of the same name in its own config.
 
 ### Seed builds
 

@@ -770,7 +770,8 @@ and `copy_ignored_exclude` leaves out what its patterns match.
 `yarn`, `bun`, `go`, `xcode`, `zig` and `ccache`. The global list applies to
 every repository that names none, and `presets = []` turns it off. Presets that
 keep the same seed output cannot be combined, and a variable `[env]` sets takes
-precedence over a preset's. See [build tool presets](../../../../../../docs/reference.md#build-tool-presets)
+precedence over a preset's, as an [`[mcp]`](#mcp-servers) table over a preset's
+server. See [build tool presets](../../../../../../docs/reference.md#build-tool-presets)
 and [setup and hooks](../../../../../../docs/reference.md#workspace-setup-and-hooks).
 
 ### Seed builds
@@ -837,6 +838,29 @@ Each `[caches.NAME]` is a directory every workspace of the repository shares,
 which `{cache.NAME}` names in `[env]`; names are lowercase like port names. Use
 it only for tools that lock or address their entries by content, never for
 build output directories. See [shared caches](../../../../../../docs/reference.md#shared-caches).
+
+### MCP servers
+
+```toml
+[mcp.docs]
+command = "docs-mcp"         # The server's program; required for a new server
+args = ["--stdio"]           # Its arguments; default []
+env = { DOCS_TOKEN = "..." } # Variables it runs with
+enabled = true               # Whether agents start it; default true
+
+[mcp.xcode]
+enabled = false              # Keeps the xcode preset's caches without its server
+```
+
+Each `[mcp.NAME]` is a stdio MCP server the agents of the repository's
+workspaces and chats start, added to their own; a chat without a repository
+reads the global config. [Presets](#setup) bring servers of their own: `xcode`
+brings `xcode`, which runs `xcrun mcpbridge`. A table with `command` defines its
+server whole, replacing a preset's of the same name; one without changes the
+preset's `args`, `env` or `enabled`, and is refused when no preset brings a
+server of that name. Layers merge each server field by field, and `env` per
+variable. Names are lowercase like port names. See
+[build tool presets](../../../../../../docs/reference.md#build-tool-presets).
 
 ### Commands
 
