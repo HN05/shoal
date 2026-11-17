@@ -32,7 +32,9 @@ pub struct Worktree {
     pub base_commit: Option<CommitId>,
     pub base_ref: Option<String>,
     /// Git's per-worktree admin directory, whose owner marker verifies the
-    /// worktree was not moved or replaced.
+    /// worktree was not moved or replaced. Recorded once Git has created the
+    /// worktree: `None` while it is preparing, or when creation failed or was
+    /// cut short before then.
     pub git_dir: Option<PathBuf>,
     /// Its newest local review.
     #[serde(default, skip_serializing_if = "Option::is_none")]

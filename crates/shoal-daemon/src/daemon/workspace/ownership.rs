@@ -329,9 +329,10 @@ impl Manager {
             let workspace = workspace.clone();
             return off_runtime::run(move || moved_worktree(&workspace, &directory)).await;
         }
-        // Older records cannot prove identity after a move; a branch match at
-        // another existing path is enough to block forgetting the workspace.
-        // Every workspace without a branch records its Git directory.
+        // A creation cut short after Git created the worktree, before the
+        // admin directory was recorded, leaves nothing to prove a move; a
+        // branch match at another existing path is enough to block
+        // forgetting the workspace. One without a branch has nothing to match.
         let Some(branch) = workspace.branch().cloned() else {
             return Ok(None);
         };
