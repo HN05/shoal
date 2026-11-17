@@ -8,8 +8,11 @@ use crate::protocol::Protection;
 /// Hide the cursor and reset text attributes, which the agent's interface
 /// may have left behind.
 const OPEN: &str = "\x1b[?25l\x1b[0m";
-/// Show the cursor again.
-const CLOSE: &str = "\x1b[?25h";
+/// Leave the alternate screen an agent stopped on it left the terminal on,
+/// and show the cursor again. `?1047`, unlike `?1049`, restores no saved
+/// cursor position, which on the main screen would move the cursor over
+/// the block.
+const CLOSE: &str = "\x1b[?1047l\x1b[?25h";
 /// Clear from the cursor to the end of the screen.
 const CLEAR_BELOW: &str = "\x1b[J";
 /// Switch the terminal's line wrapping off while the block draws, so each
