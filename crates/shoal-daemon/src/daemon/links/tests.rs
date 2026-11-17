@@ -267,18 +267,22 @@ async fn a_moved_worktree_takes_no_recorded_relations() {
 }
 
 /// A server for the Forgejo repository `team/repo` that shows each issue and
-/// PR but number 9, titled by its kind and number.
+/// PR but number 9, titled by its kind and number, without comments or
+/// reviews, which a linked item's watch reads.
 fn titled_items() -> shoal_forge::test_support::Server {
     shoal_forge::test_support::Server::start(|request| {
         let path = request.line.strip_prefix("GET /api/v1/repos/team/repo/");
         let item = path.and_then(|path| {
-            (path.strip_prefix("issues/").map(|number| ("Issue", number)))
-                .or_else(|| path.strip_prefix("pulls/").map(|number| ("PR", number)))
+            (path.strip_prefix("issues/").map(|rest| ("Issue", rest)))
+                .or_else(|| path.strip_prefix("pulls/").map(|rest| ("PR", rest)))
         });
-        let Some((kind, number)) = item.filter(|(_, number)| *number != "9") else {
+        let Some((kind, rest)) = item.filter(|(_, rest)| *rest != "9") else {
             return (404, Vec::new(), Vec::new());
         };
-        let item = serde_json::json!({"number": number.parse::<u64>().unwrap(),
+        let Ok(number) = rest.parse::<u64>() else {
+            return (200, Vec::new(), b"[]".to_vec());
+        };
+        let item = serde_json::json!({"number": number,
             "title": format!("{kind} {number}"), "state": "open", "merged": false,
             "head": {"ref": "topic"}, "base": {"ref": "main"}});
         (200, Vec::new(), item.to_string().into())
