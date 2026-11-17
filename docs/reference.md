@@ -66,7 +66,8 @@ hn05/tap/shoal`. `shoal update` refuses Homebrew installations; for a downloaded
 it installs the latest GitHub release's archive for this platform when that
 release is newer, after checking it against the release's `SHA256SUMS` and its
 reported version, by replacing the resolved executable file, or on macOS the
-`Shoal.app` bundle holding it. Managed daemons notice the replacement and restart once daemon operations are
+`Shoal.app` bundle holding it, which comes from the platform's archive ending
+in `-app`. Managed daemons notice the replacement and restart once daemon operations are
 idle and no setup or merge runs; until then, commands of the new release wait
 up to ten minutes for it. Followed event and notification streams and
 item waits reconnect across the handoff, continuing in the installed release

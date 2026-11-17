@@ -18,11 +18,12 @@ const MAX_CHECKSUMS_BYTES: usize = 64 * 1024;
 
 pub(super) async fn run(ctx: &Context) -> Result<i32> {
     let target = installed_binary()?;
+    let installation = Installation::of(&target);
     let current = env!("CARGO_PKG_VERSION");
     let release = ctx
         .progress(
             "Checking for a new release",
-            Release::latest(RELEASES, &platform()?),
+            Release::latest(RELEASES, &installation.archive_suffix(&platform()?)),
         )
         .await?;
     if !newer(&release.version, current)? {
@@ -40,7 +41,7 @@ pub(super) async fn run(ctx: &Context) -> Result<i32> {
     }
     ctx.progress(
         &format!("Installing Shoal {}", release.version),
-        release.install(&Installation::of(&target)),
+        release.install(&installation),
     )
     .await?;
     ctx.emit(
@@ -89,6 +90,16 @@ impl Installation {
     fn path(&self) -> &Path {
         match self {
             Self::Binary(path) | Self::Bundle(path) => path,
+        }
+    }
+
+    /// The end of the name of the release archive for `platform` that holds
+    /// this installation's entry. Earlier releases' updates read only the
+    /// bare binary's name, so a bundle's archive ends with another.
+    fn archive_suffix(&self, platform: &str) -> String {
+        match self {
+            Self::Binary(_) => format!("-{platform}.tar.gz"),
+            Self::Bundle(_) => format!("-{platform}-app.tar.gz"),
         }
     }
 
@@ -179,7 +190,7 @@ fn version(text: &str) -> Result<(u64, u64, u64)> {
     }
 }
 
-/// One platform's archive in a published release.
+/// One archive in a published release.
 #[derive(Debug, PartialEq)]
 struct Release {
     base: String,
@@ -189,8 +200,9 @@ struct Release {
 }
 
 impl Release {
-    /// The latest release's archive for `platform`, named by its checksum list.
-    async fn latest(base: &str, platform: &str) -> Result<Self> {
+    /// The latest release's archive whose name ends with `suffix`, named by
+    /// its checksum list.
+    async fn latest(base: &str, suffix: &str) -> Result<Self> {
         let mut curl = curl();
         curl.arg(format!("{base}/latest/download/SHA256SUMS"));
         let checksums = Run::new(curl)
@@ -199,16 +211,15 @@ impl Release {
             .output()
             .await
             .context("fetch the latest release's checksums")?;
-        Self::from_checksums(base, platform, &checksums)
+        Self::from_checksums(base, suffix, &checksums)
     }
 
-    fn from_checksums(base: &str, platform: &str, checksums: &str) -> Result<Self> {
-        let suffix = format!("-{platform}.tar.gz");
+    fn from_checksums(base: &str, suffix: &str, checksums: &str) -> Result<Self> {
         checksums
             .lines()
             .find_map(|line| {
                 let (sha256, archive) = line.split_once("  ")?;
-                let version = archive.strip_prefix("shoal-v")?.strip_suffix(&suffix)?;
+                let version = archive.strip_prefix("shoal-v")?.strip_suffix(suffix)?;
                 Some(Self {
                     base: base.to_owned(),
                     version: version.to_owned(),
@@ -216,7 +227,7 @@ impl Release {
                     sha256: sha256.to_owned(),
                 })
             })
-            .with_context(|| format!("the latest release has no {platform} archive"))
+            .with_context(|| format!("the latest release has no shoal-v*{suffix} archive"))
     }
 
     /// Download, verify and unpack the archive beside `installation`, then

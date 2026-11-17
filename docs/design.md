@@ -696,8 +696,8 @@ The formula links `bin/shoal` to the bundle's executable, so the daemon, the
 execution wrappers and every command share the bundle's grant. The bundle and
 the bare binary carry different signatures, so each has an archive of its own:
 the bare binary's keeps the name earlier releases' `shoal update` reads, for
-downloaded installations, which stay at one path, and Homebrew reads the
-bundle's, named so that earlier releases skip it. Packaged files
+downloaded installations, which stay at one path, and Homebrew and `shoal update`
+of a bundle read the bundle's, named so that earlier releases skip it. Packaged files
 such as the skills link sit beside the bundle, since a file added inside it
 breaks its signature. Only a stable
 requirement is needed, not Gatekeeper trust, so there is no Developer ID or
