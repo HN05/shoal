@@ -196,7 +196,13 @@ async fn a_job_ranks_with_its_workspace_ahead_of_that_workspaces_restore() {
         })
         .await
         .unwrap();
-    let queued = |handle: &str, space_ids: Vec<SpaceId>| QueuedJob {
+    // A settled forge relinks each job without asking the host.
+    configure(
+        &manager,
+        "[machine.forges.\"forge.example\"]\ntype = \"forgejo\"\n",
+    )
+    .await;
+    let queued = |handle: &str, trigger, space_ids: Vec<SpaceId>| QueuedJob {
         job: serde_json::from_value(json!({
             "handle": handle, "id": 1, "run": 2, "name": handle, "labels": ["shoal"],
         }))
@@ -207,15 +213,15 @@ async fn a_job_ranks_with_its_workspace_ahead_of_that_workspaces_restore() {
                 .unwrap(),
             workflow: None,
             commit: "abc".into(),
-            trigger: Trigger::Other,
+            trigger,
             reference: None,
         },
         space_ids,
         default_branch: false,
     };
     let (unlinked, linked) = (
-        queued("unlinked", Vec::new()),
-        queued("linked", vec![topic.id]),
+        queued("unlinked", Trigger::Other, Vec::new()),
+        queued("linked", Trigger::Branch("topic".into()), vec![topic.id]),
     );
     let id = repo.id.clone();
     manager
