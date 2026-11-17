@@ -127,6 +127,7 @@ fn show_progress(ctx: &Context, spinner: &mut Spinner<impl Write>, progress: Pro
 fn doing(step: Option<Step>) -> &'static str {
     match step {
         None => "Starting",
+        Some(Step::WorktreeStarted) => "Creating worktree",
         Some(Step::SetupStarted) => "Running setup",
         Some(Step::Ready | Step::PrLinked | Step::PostSetupEnded) => "Preparing workspace",
         Some(Step::PostSetupStarted) => "Running post-setup hook",

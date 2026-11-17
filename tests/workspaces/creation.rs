@@ -2321,7 +2321,11 @@ fn an_app_follows_the_setup_of_a_workspace_it_creates() {
             .collect()
     };
 
-    let (events, ended) = follow(&start("api"));
+    let started = start("api");
+    // The start answers once the workspace is recorded, before its worktree.
+    assert!(started.workspace.pending_worktree);
+    assert_eq!(started.workspace.state, WorkspaceState::Preparing);
+    let (events, ended) = follow(&started);
     let Ended::Succeeded(outcome) = ended else {
         panic!("expected the prepared workspace: {ended:?} after {events:?}");
     };
@@ -2339,12 +2343,14 @@ fn an_app_follows_the_setup_of_a_workspace_it_creates() {
     assert_eq!(
         steps,
         [
+            Step::WorktreeStarted,
             Step::SetupStarted,
             Step::Ready,
             Step::PostSetupStarted,
             Step::PostSetupEnded
         ]
     );
+    assert!(!prepared.workspace.pending_worktree);
     let lines = lines(&events);
     for line in ["setting up", "set up", "post-setup ran"] {
         assert!(lines.iter().any(|shown| shown == line), "{line}: {lines:?}");

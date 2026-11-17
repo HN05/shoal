@@ -44,6 +44,10 @@ pub struct Worktree {
     /// Whether it was created without setup, which `shoal setup` runs.
     #[serde(default)]
     pub setup_skipped: bool,
+    /// Whether its worktree is still to be created, which its preparation
+    /// does before its setup; until then nothing exists at `path`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pending_worktree: bool,
     /// Whether every removal deletes it whatever it holds, keeping no
     /// checkpoint.
     #[serde(default)]
@@ -77,6 +81,12 @@ impl Worktree {
     /// The commit it was created at; `None` for a workspace on a branch.
     pub fn at(&self) -> Option<&StartingCommit> {
         self.head.at()
+    }
+
+    /// Whether it has no worktree yet: its creation is pending, and Git has
+    /// not created one that recorded its identity.
+    pub fn unborn(&self) -> bool {
+        self.pending_worktree && self.git_dir.is_none()
     }
 }
 
@@ -269,6 +279,7 @@ impl Workspace {
                 coordinator_state: None,
                 done: false,
                 setup_skipped: false,
+                pending_worktree: false,
                 disposable: false,
                 base_workspace: None,
                 stacked_workspaces: Vec::new(),

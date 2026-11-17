@@ -292,7 +292,7 @@ impl Manager {
         issues: &[ItemRef],
     ) {
         let mut warnings = self.release_assignees(dropped).await;
-        match crate::daemon::links::space::LinkSpace::own(space.clone()) {
+        match self.own_link_space(space.clone()).await {
             Ok(linked) => warnings.extend(self.settle_issue_agents(&linked, issues).await),
             Err(error) => crate::daemon::log!(
                 "agent assignees of removed {} not settled: {error:#}",

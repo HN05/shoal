@@ -1,6 +1,7 @@
-//! Preparing a workspace: its tracked setup and the containers that start
-//! with it, failing as the operation reports it, then linking its PR, then
-//! its post-setup hook, failing in turn, then queuing its agent.
+//! Preparing a workspace: creating the worktree it has yet to get, then its
+//! tracked setup and the containers that start with it, failing as the
+//! operation reports it, then linking its PR, then its post-setup hook,
+//! failing in turn, then queuing its agent.
 use anyhow::{Result, ensure};
 
 use super::{Failed, Reporter};
@@ -26,22 +27,19 @@ pub(super) async fn prepare(
     let mut workspace = crate::client::workspaces::inspect(paths, workspace)
         .await?
         .workspace;
-    if steps.setup {
-        reporter.step(Step::SetupStarted).await?;
-        let for_agent = steps.agent.is_some() || steps.waiting.is_some();
-        workspace = match set_up(paths, &workspace, for_agent).await {
-            Ok(set_up) => set_up,
-            Err(error) => {
-                // The workspace stays for a retried setup, with the agent
-                // that waits for it and links its PR once it starts.
-                if let Some(launch) = steps.agent.or(steps.waiting) {
-                    leave_waiting(paths, &workspace, *launch, steps.pr).await;
-                }
-                return Err(error);
+    let for_agent = steps.agent.is_some() || steps.waiting.is_some();
+    let readied = ready(paths, workspace.clone(), (steps.setup, for_agent), reporter);
+    workspace = match readied.await {
+        Ok(readied) => readied,
+        Err(error) => {
+            // The workspace stays for a retried preparation, with the agent
+            // that waits for it and links its PR once it starts.
+            if let Some(launch) = steps.agent.or(steps.waiting) {
+                leave_waiting(paths, &workspace, *launch, steps.pr).await;
             }
-        };
-        reporter.step(Step::Ready).await?;
-    }
+            return Err(error);
+        }
+    };
     if let Some(pr) = steps.pr {
         workspace = link_pr(paths, workspace, &pr, reporter).await?;
     }
@@ -71,6 +69,50 @@ pub(super) async fn prepare(
     };
     let workspace = Box::new(workspace);
     Ok(Prepared { workspace, agent })
+}
+
+/// Create the worktree `workspace` has yet to get, then, when `setup`, run
+/// its setup for the agent that starts there when `for_agent`, unless the
+/// new worktree needs none, returning the workspace it leaves.
+async fn ready(
+    paths: &CommandPaths,
+    workspace: Workspace,
+    (setup, for_agent): (bool, bool),
+    reporter: &Reporter<'_>,
+) -> Result<Workspace> {
+    let pending = workspace.pending_worktree;
+    let workspace = match pending {
+        true => create_worktree(paths, &workspace, reporter).await?,
+        false => workspace,
+    };
+    if !setup {
+        return Ok(workspace);
+    }
+    // A new worktree without setup to run is ready already.
+    let workspace = match pending && workspace.state == WorkspaceState::Ready {
+        true => workspace,
+        false => {
+            reporter.step(Step::SetupStarted).await?;
+            set_up(paths, &workspace, for_agent).await?
+        }
+    };
+    reporter.step(Step::Ready).await?;
+    Ok(workspace)
+}
+
+/// Create the worktree `workspace` has yet to get, failing as the operation
+/// reports it.
+async fn create_worktree(
+    paths: &CommandPaths,
+    workspace: &Workspace,
+    reporter: &Reporter<'_>,
+) -> Result<Workspace> {
+    reporter.step(Step::WorktreeStarted).await?;
+    let selector = SpaceSelector::id(&workspace.id);
+    (crate::client::workspaces::create_pending_worktree(paths, selector).await).map_err(|error| {
+        let message = format!("{error:#}");
+        Failed(Failure::WorktreeFailed { message }).into()
+    })
 }
 
 /// Run the setup command, then start the containers that start with setup,

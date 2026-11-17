@@ -29,6 +29,9 @@ pub struct LinkSpace {
     /// The checkout of that registered repository, where a chat without a
     /// repository of its own acts.
     acting_in: Option<PathBuf>,
+    /// The registered checkout whose `origin` a workspace whose worktree is
+    /// still to be created reads in its place.
+    origin_in: Option<PathBuf>,
 }
 
 impl std::ops::Deref for LinkSpace {
@@ -46,6 +49,7 @@ impl From<Workspace> for LinkSpace {
             space: workspace.into(),
             repository,
             acting_in: None,
+            origin_in: None,
         }
     }
 }
@@ -60,6 +64,7 @@ impl LinkSpace {
             space,
             repository,
             acting_in: None,
+            origin_in: None,
         })
     }
 
@@ -70,6 +75,7 @@ impl LinkSpace {
             space,
             repository: checkout.id,
             acting_in: Some(checkout.path),
+            origin_in: None,
         }
     }
 
@@ -100,16 +106,29 @@ impl LinkSpace {
 
     /// The directory whose `origin` names the space's repository on its
     /// forge: where it works, or the checkout a chat without a repository
-    /// acts in.
+    /// acts in, or a workspace without its worktree yet reads.
     pub(crate) fn origin_path(&self) -> &Path {
-        (self.acting_in.as_deref()).unwrap_or_else(|| self.workdir.path())
+        (self.acting_in.as_deref())
+            .or(self.origin_in.as_deref())
+            .unwrap_or_else(|| self.workdir.path())
     }
 }
 
 impl Manager {
     /// The workspace or running chat `selector` names, by ID or name.
     pub async fn link_space(&self, selector: &SpaceSelector) -> Result<LinkSpace> {
-        LinkSpace::own(self.space(selector).await?)
+        self.own_link_space(self.space(selector).await?).await
+    }
+
+    /// `space` acting in its own repository, reading its `origin` in the
+    /// registered checkout while its worktree is still to be created.
+    pub(crate) async fn own_link_space(&self, space: Space) -> Result<LinkSpace> {
+        let pending = (space.worktree()).is_some_and(|worktree| worktree.pending_worktree);
+        let mut linked = LinkSpace::own(space)?;
+        if pending {
+            linked.origin_in = Some(self.repository(linked.repository_id()).await?.path);
+        }
+        Ok(linked)
     }
 
     /// The space `context` names, a workspace or a chat, acting in its own
@@ -146,7 +165,7 @@ impl Manager {
                     "space {} acts only in its own repository",
                     space.name
                 );
-                LinkSpace::own(space)
+                self.own_link_space(space).await
             }
             None => Ok(LinkSpace::acting_in(
                 space,
@@ -178,11 +197,12 @@ impl Manager {
     }
 
     /// Verify a workspace's worktree before a request relies on it; a
-    /// chat owns no worktree to verify.
+    /// chat owns no worktree to verify, nor does a workspace whose worktree
+    /// is still to be created, which reads its forge in the checkout.
     pub(crate) async fn verify_space(&self, space: &Space) -> Result<()> {
         match space.to_workspace() {
-            Some(workspace) => self.verify_worktree(&workspace).await,
-            None => Ok(()),
+            Some(workspace) if !workspace.unborn() => self.verify_worktree(&workspace).await,
+            _ => Ok(()),
         }
     }
 

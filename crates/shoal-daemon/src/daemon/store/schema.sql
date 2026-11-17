@@ -650,6 +650,11 @@ CREATE TABLE merge_runs (
     PRIMARY KEY(space_id,pr_url)
 );
 
+CREATE TABLE pending_worktrees (
+    workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+    plan TEXT NOT NULL
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);

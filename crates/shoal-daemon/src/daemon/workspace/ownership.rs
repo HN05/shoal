@@ -137,7 +137,15 @@ impl Manager {
         Ok(workspace)
     }
 
+    /// Verify that the worktree of `workspace` is the one it recorded,
+    /// refusing a workspace whose worktree Git has yet to create.
     pub(crate) async fn verify_worktree(&self, workspace: &Workspace) -> Result<()> {
+        if workspace.unborn() {
+            let name = &workspace.name;
+            let message =
+                format!("workspace {name} has no worktree yet; its preparation creates it");
+            return Err(Refusal::new(Reason::NotReady, message).into());
+        }
         self.verify_worktree_identity(workspace)
             .await
             .map_err(|error| Refusal::wrap(Reason::NotReady, error))

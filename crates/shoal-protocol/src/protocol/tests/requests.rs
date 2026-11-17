@@ -63,6 +63,7 @@ const REQUESTS: &[&str] = &[
     r#"{"diff_base":{"workspace":"fix"}}"#,
     r#"{"conflicts":{"workspace":"fix","target":null}}"#,
     r#"{"preview_merge":{"workspace":"fix","push":true}}"#,
+    r#"{"create_pending_worktree":{"workspace":"fix"}}"#,
     r#"{"workspace_hook":{"workspace":"fix","kind":"post_setup"}}"#,
     r#"{"layered_config":{"target":{"space":"fix"}}}"#,
     r#"{"keep_agent_environment":{"workspace":"fix","environment":{}}}"#,

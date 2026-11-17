@@ -516,6 +516,11 @@ fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<
         "SELECT 1 FROM space_completion WHERE space_id=?1",
         [&workspace.id],
     )?;
+    workspace.pending_worktree = store::exists(
+        db,
+        "SELECT 1 FROM pending_worktrees WHERE workspace_id=?1",
+        [&workspace.id],
+    )?;
     Ok(())
 }
 

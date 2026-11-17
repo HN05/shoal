@@ -205,6 +205,8 @@ async fn a_reopened_workspace_keeps_its_priority_unless_one_is_asked_for() {
         .await
         .unwrap();
     let _worker = crate::daemon::operations::fake::take(&child.operation);
+    let selector = SpaceSelector::id(&child.workspace.id);
+    manager.create_pending_worktree(&selector).await.unwrap();
     let caller = Caller {
         space_id: parent.id.clone(),
         execution: None,

@@ -465,10 +465,20 @@ impl Manager {
         selector: &str,
         options: NewWorktreeOptions<'_>,
     ) -> Result<OpenTarget> {
+        let workspaces = self.list_workspaces().await?;
+        // A new branch exists only once its pending worktree is created.
+        let local = git::strip_local(selector).unwrap_or(selector);
+        let pending = (workspaces.iter()).find(|w| {
+            w.pending_worktree
+                && w.repository() == &repo.id
+                && w.branch().is_some_and(|branch| branch.as_str() == local)
+        });
+        if let Some(workspace) = pending {
+            check_reopen_options(workspace, options).await?;
+            return Ok(OpenTarget::Reopen(Box::new(workspace.clone())));
+        }
         let branch = self.select_existing_branch(repo, selector).await?;
-        let Some(workspace) = self
-            .list_workspaces()
-            .await?
+        let Some(workspace) = workspaces
             .into_iter()
             .find(|w| w.repository() == &repo.id && w.branch() == Some(&branch.name))
         else {

@@ -138,7 +138,9 @@ pub async fn inspect(
         default_branch: default_branch.map(str::to_owned),
         idle_restores,
     };
-    if !off_runtime::exists(&inspection.workspace.path).await? {
+    // What is at the path of a workspace without a worktree yet is its
+    // creation's, not work of its own.
+    if inspection.workspace.unborn() || !off_runtime::exists(&inspection.workspace.path).await? {
         return Ok(inspection);
     }
     inspect_git(&mut inspection.check, repo, default_branch).await?;

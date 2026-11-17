@@ -255,6 +255,11 @@ pub enum WorkspaceMethod {
         space: SpaceSelector,
         place: crate::sessions::Origin,
     },
+    /// Create the worktree the recorded workspace is still to get, as its
+    /// preparation does first, answering with the workspace it leaves.
+    CreatePendingWorktree {
+        workspace: SpaceSelector,
+    },
     /// One effective hook, resolved against the directory where it runs.
     WorkspaceHook {
         workspace: SpaceSelector,

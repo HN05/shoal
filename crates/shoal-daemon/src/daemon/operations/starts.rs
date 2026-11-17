@@ -1,6 +1,7 @@
 //! Opening a workspace and starting its preparation in one request, as
 //! `shoal start` and `shoal split` do: the checks before anything is created,
-//! the workspace and its issue, then the operation that prepares it.
+//! the workspace and its issue, then the operation that prepares it, which
+//! creates a new branch's worktree first.
 use crate::daemon::links::issue::{Assigner, AssignerOf};
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_ids::repository_ids::RepositoryId;
@@ -266,8 +267,9 @@ impl Manager {
         (self.create_copy(repository, &copy, CopyPlace::Branch(name), new)).await
     }
 
-    /// Create the workspace `opening` names in `repository` on a new
-    /// branch, or open the one on its existing branch or PR head, or the
+    /// Record the workspace `opening` names in `repository` on a new
+    /// branch, or on its existing branch, whose worktree its preparation
+    /// creates, or open the one on that branch or its PR head, or the
     /// recorded one it names. For a scoped `caller`, the parent takes over
     /// no workspace outside its subtree.
     async fn open_for_start(
@@ -282,6 +284,14 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<OpenedWorkspace> {
         let placed = base.is_some() || new.path.is_some() || new.git_profile.is_some();
+        // A branch's worktree waits for the preparation the start runs.
+        let new = NewWorkspace {
+            pending: matches!(
+                start,
+                WorkspaceStart::Name(_) | WorkspaceStart::Typed(_) | WorkspaceStart::Branch(_)
+            ),
+            ..new
+        };
         match start {
             WorkspaceStart::Name(name) => {
                 let workspace = self
@@ -356,9 +366,9 @@ impl Manager {
     }
 
     /// Assign `issue` to the `opened` workspace and give it the start's
-    /// queue entry, then start preparing it: its setup while it is
-    /// preparing, linking the PR, the post-setup hook of a new workspace,
-    /// then queuing the agent. A new workspace whose issue cannot be
+    /// queue entry, then start preparing it: the worktree it has yet to
+    /// get, its setup while it is preparing, linking the PR, the post-setup
+    /// hook of a new workspace, then queuing the agent. A new workspace whose issue cannot be
     /// assigned is removed, since nothing ran in it yet.
     pub(crate) async fn prepare_new(
         self: &Arc<Self>,
@@ -454,3 +464,6 @@ impl Manager {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

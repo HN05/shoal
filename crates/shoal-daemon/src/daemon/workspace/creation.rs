@@ -14,9 +14,9 @@ use crate::{
     state::WorkspaceState,
 };
 use anyhow::{Context, Result, bail, ensure};
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::space_names::SpaceName;
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use shoal_refs::BranchName;
 use tokio::sync::OwnedMutexGuard;
 
@@ -37,6 +37,10 @@ pub(crate) struct NewWorkspace<'a> {
     pub exact_branch: bool,
     /// The ID it keeps, as a restored space does; a new one otherwise.
     pub id: Option<SpaceId>,
+    /// Its worktree is left to its preparation, which creates it through
+    /// [`Manager::create_pending_worktree`], so the record returns before
+    /// Git runs.
+    pub pending: bool,
 }
 
 /// A worktree Git created and Shoal configured, which settling seeds.
@@ -46,6 +50,66 @@ pub(super) struct Configured {
     /// The worktree's settings, under which it starts from the seed build,
     /// or `None` for a worktree that takes no seed.
     pub seed: Option<crate::config::Effective>,
+}
+
+/// How the worktree of a recorded workspace that has none yet is created,
+/// as `pending_worktrees` keeps it until it is.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct PendingWorktree {
+    source: PendingSource,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    git_profile: Option<String>,
+}
+
+/// What a pending worktree checks out, as [`WorkspaceSource`] names it
+/// without what only a restore writes into it.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum PendingSource {
+    New {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        base: Option<String>,
+    },
+    Existing {
+        branch: crate::git::existing_branch::Branch,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        base: Option<String>,
+    },
+}
+
+impl PendingWorktree {
+    /// The worktree `source` creates with `git_profile`, refusing a
+    /// restore's files, which go in before anything can use the workspace.
+    fn of(source: WorkspaceSource, git_profile: Option<&str>) -> Result<Self> {
+        let source = match source {
+            WorkspaceSource::New { base, .. } => PendingSource::New { base },
+            WorkspaceSource::Existing {
+                branch,
+                base,
+                files: None,
+            } => PendingSource::Existing { branch, base },
+            WorkspaceSource::Existing { files: Some(_), .. } => {
+                bail!("a restore's worktree is created with its record")
+            }
+        };
+        let git_profile = git_profile.map(str::to_owned);
+        Ok(Self {
+            source,
+            git_profile,
+        })
+    }
+
+    /// What creating the worktree checks out.
+    fn source(self) -> WorkspaceSource {
+        match self.source {
+            PendingSource::New { base } => WorkspaceSource::New { base, parent: None },
+            PendingSource::Existing { branch, base } => WorkspaceSource::Existing {
+                branch,
+                base,
+                files: None,
+            },
+        }
+    }
 }
 
 pub(super) enum WorkspaceSource {
@@ -158,6 +222,7 @@ impl Manager {
             converts,
             exact_branch: _,
             id,
+            pending,
         } = new;
         let existing = match &source {
             WorkspaceSource::Existing { .. } => Some(branch.as_str()),
@@ -201,9 +266,22 @@ impl Manager {
             Some(converting) => Placement::Replacing(Box::new(converting)),
             None => Placement::Below(parent),
         };
+        // A pending worktree's source waits in its record for its preparation.
+        let (source, pending) = match pending {
+            true => (None, Some(PendingWorktree::of(source, git_profile)?)),
+            false => (Some(source), None),
+        };
+        let record = Inserted {
+            placement,
+            chosen,
+            pending,
+        };
         let workspace = self
-            .insert_workspace_as(workspace, base_branch, placement, chosen)
+            .insert_workspace_as(workspace, base_branch, record)
             .await?;
+        let Some(source) = source else {
+            return self.workspace_by_id(&workspace.id).await;
+        };
         let mut result = self
             .materialize_worktree(repo, &workspace, source, git_profile)
             .await;
@@ -214,6 +292,55 @@ impl Manager {
             result = Err(error);
         }
         self.settle_creation(repo, &workspace, result, git).await
+    }
+
+    /// Create the worktree the recorded `workspace` is still to get, as its
+    /// preparation does first, and record how creation went as a creation
+    /// with its record does. One that fails leaves the workspace failed
+    /// with its pending worktree, which a retried preparation creates.
+    pub(crate) async fn create_pending_worktree(
+        &self,
+        workspace: &SpaceSelector,
+    ) -> Result<Workspace> {
+        let workspace = self.workspace(workspace).await?;
+        let (repo, git) = self.lock_repository(workspace.repository()).await?;
+        // Read again under the Git gate, which a removal takes first.
+        let workspace = self.workspace_by_id(&workspace.id).await?;
+        let pending = self.claim_pending_worktree(&workspace).await?;
+        let git_profile = pending.git_profile.clone();
+        let result = self
+            .materialize_worktree(&repo, &workspace, pending.source(), git_profile.as_deref())
+            .await;
+        self.settle_creation(&repo, &workspace, result, git).await
+    }
+
+    /// The pending worktree of `workspace`, which goes back to preparing
+    /// for its creation, refusing a workspace that has its worktree or
+    /// that another operation, such as a removal, holds.
+    async fn claim_pending_worktree(&self, workspace: &Workspace) -> Result<PendingWorktree> {
+        let (id, name) = (workspace.id.clone(), workspace.name.clone());
+        let plan = self
+            .store
+            .write(move |tx| {
+                let plan: Option<String> = tx
+                    .query_row(
+                        "SELECT plan FROM pending_worktrees WHERE workspace_id=?1",
+                        [&id],
+                        |row| row.get(0),
+                    )
+                    .optional()?;
+                let Some(plan) = plan else {
+                    bail!("{name} already has its worktree");
+                };
+                let claimed = tx.execute(
+                    "UPDATE workspaces SET state=?2,error=NULL WHERE id=?1 AND state IN (?2,?3)",
+                    params![id, WorkspaceState::Preparing, WorkspaceState::Failed],
+                )?;
+                ensure!(claimed == 1, "another operation holds {name}");
+                Ok(plan)
+            })
+            .await?;
+        Ok(serde_json::from_str(&plan)?)
     }
 
     /// Settle the creation of the recorded `workspace`, whose worktree was
@@ -279,10 +406,13 @@ impl Manager {
                     Some(format!("{error:#}")),
                 )
                 .await?;
-                bail!(
-                    "workspace {} failed; inspect or remove it with Shoal: {error:#}",
-                    workspace.name
-                );
+                let (name, number) = (&workspace.name, workspace.number);
+                if workspace.pending_worktree {
+                    bail!(
+                        "creating the worktree of {name} failed: {error:#}; `shoal restore {number}` retries it, and `shoal rm {number}` removes the workspace"
+                    );
+                }
+                bail!("workspace {name} failed; inspect or remove it with Shoal: {error:#}");
             }
         }
         self.workspace_by_id(&workspace.id).await
@@ -300,19 +430,29 @@ impl Manager {
         parent: Option<SpaceId>,
         chosen: bool,
     ) -> Result<Workspace> {
-        self.insert_workspace_as(record, base_branch, Placement::Below(parent), chosen)
+        let inserted = Inserted {
+            placement: Placement::Below(parent),
+            chosen,
+            pending: None,
+        };
+        self.insert_workspace_as(record, base_branch, inserted)
             .await
     }
 
     /// Record a new workspace as [`Self::insert_workspace`] does, below a
-    /// parent or in place of the chat it converts, as `placement` says.
+    /// parent or in place of the chat it converts, as `inserted` says, with
+    /// the worktree it is still to get.
     async fn insert_workspace_as(
         &self,
         record: Workspace,
         base_branch: Option<BranchName>,
-        placement: Placement,
-        chosen: bool,
+        Inserted {
+            placement,
+            chosen,
+            pending,
+        }: Inserted,
     ) -> Result<Workspace> {
+        let pending = pending.as_ref().map(serde_json::to_string).transpose()?;
         let record = match &placement {
             Placement::Replacing(converting) => converting.workspace(record),
             Placement::Below(_) => record,
@@ -404,6 +544,12 @@ impl Manager {
                         created_at: crate::time::UnixTime::now(),
                     })?,
                 };
+                if let Some(plan) = &pending {
+                    tx.execute(
+                        "INSERT INTO pending_worktrees(workspace_id,plan) VALUES (?1,?2)",
+                        params![record.id, plan],
+                    )?;
+                }
                 tx.execute(
                     "UPDATE repositories SET last_used=(SELECT COALESCE(MAX(last_used),0)+1 FROM repositories) WHERE id=?1",
                     [&record.repository_id],
@@ -570,7 +716,8 @@ impl Manager {
     async fn finish_materialization(&self, id: &SpaceId, needs_setup: bool) -> Result<()> {
         let id = id.to_owned();
         self.store
-            .run(move |db| {
+            .write(move |db| {
+                db.execute("DELETE FROM pending_worktrees WHERE workspace_id=?1", [&id])?;
                 db.execute(
                     "UPDATE workspaces SET state=?2,error=NULL,setup_finished=?3 AND NOT setup_skipped WHERE id=?1",
                     params![
@@ -587,6 +734,14 @@ impl Manager {
             })
             .await
     }
+}
+
+/// How a new workspace is recorded: where its record goes, whether Shoal
+/// chose its directory, and the worktree it is still to get, if any.
+struct Inserted {
+    placement: Placement,
+    chosen: bool,
+    pending: Option<PendingWorktree>,
 }
 
 /// Where a new workspace's record goes.

@@ -76,7 +76,7 @@ impl Manager {
         policy: InspectionPolicy,
         executions: CleanupExecutions,
     ) -> Result<Inspection> {
-        if off_runtime::exists(&workspace.path).await? {
+        if !workspace.unborn() && off_runtime::exists(&workspace.path).await? {
             self.verify_removed_worktree(&workspace).await?;
         }
         let repo = self.repository(workspace.repository()).await?;

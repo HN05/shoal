@@ -321,6 +321,15 @@ pub async fn keep_agent_environment(
     Ok(())
 }
 
+/// Create the worktree the recorded `workspace` is still to get, returning
+/// the workspace it leaves.
+pub async fn create_pending_worktree(
+    daemon: &impl Daemon,
+    workspace: SpaceSelector,
+) -> Result<Workspace> {
+    request(daemon, WorkspaceMethod::CreatePendingWorktree { workspace }).await
+}
+
 /// The command of `workspace`'s hook of `kind`, if its configuration has one.
 pub async fn hook(
     daemon: &impl Daemon,

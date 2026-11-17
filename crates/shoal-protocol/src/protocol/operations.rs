@@ -220,10 +220,11 @@ pub enum OperationSpec {
     },
 }
 
-/// What preparing a workspace runs: its setup when `setup`, then linking
-/// `pr`, which only warns when refused, then its post-setup hook when
-/// `post_setup`, then queuing `agent`. A failed setup leaves `agent`, or
-/// else `waiting`, waiting in the queue for a retried setup.
+/// What preparing a workspace runs: creating its worktree when it has none
+/// yet, then its setup when `setup`, then linking `pr`, which only warns
+/// when refused, then its post-setup hook when `post_setup`, then queuing
+/// `agent`. A failed worktree or setup leaves `agent`, or else `waiting`,
+/// waiting in the queue for a retried preparation.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Preparation {
     pub setup: bool,
@@ -402,6 +403,7 @@ shoal_states::states!(
 );
 
 shoal_states::states!(Step {
+    WorktreeStarted => "worktree_started",
     SetupStarted => "setup_started",
     PostSetupStarted => "post_setup_started",
     /// What preparation runs after setup and its hook may start now.
@@ -504,6 +506,11 @@ outcomes!(
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "reason", rename_all = "snake_case")]
 pub enum Failure {
+    /// Creating the worktree failed; the workspace is kept as failed, with
+    /// its worktree still to create.
+    WorktreeFailed {
+        message: String,
+    },
     /// The setup command failed; the workspace is kept as failed.
     SetupFailed {
         message: String,
@@ -544,7 +551,8 @@ impl Failure {
     /// The code a caller acts on.
     pub fn code(&self) -> ErrorCode {
         match self {
-            Self::SetupFailed { .. }
+            Self::WorktreeFailed { .. }
+            | Self::SetupFailed { .. }
             | Self::SetupNotStarted { .. }
             | Self::SetupUnverified { .. } => ErrorCode::SetupFailed,
             Self::HookFailed { .. } => ErrorCode::HookFailed,

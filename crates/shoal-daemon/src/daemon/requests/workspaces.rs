@@ -291,6 +291,9 @@ pub(super) async fn handle(
                 .await?;
             Body::Ok
         }
+        WorkspaceMethod::CreatePendingWorktree { workspace } => {
+            Body::Workspace(manager.create_pending_worktree(&workspace).await?)
+        }
         WorkspaceMethod::WorkspaceHook { workspace, kind } => {
             Body::Hook(manager.selected_workspace_hook(&workspace, kind).await?)
         }
@@ -397,6 +400,7 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::Conflicts { workspace, .. }
             | WorkspaceMethod::PreviewMerge { workspace, .. }
             | WorkspaceMethod::WorkspaceHook { workspace, .. }
+            | WorkspaceMethod::CreatePendingWorktree { workspace }
             | WorkspaceMethod::KeepAgentEnvironment { workspace, .. }
             | WorkspaceMethod::RecordOwnedPlace { workspace, .. }
             | WorkspaceMethod::LayeredConfig {

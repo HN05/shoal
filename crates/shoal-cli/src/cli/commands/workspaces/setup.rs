@@ -204,6 +204,13 @@ pub(in crate::cli::commands) async fn settle_setup(
         Failure::SetupUnverified { exit_code } => {
             report_setup_verification_failure(ctx, &workspace, exit_code)
         }
+        // Nothing exists to ignore or delete until a retry creates it.
+        failure @ Failure::WorktreeFailed { .. } => {
+            if let Some(waiting) = waiting {
+                waiting.park(ctx, &workspace).await;
+            }
+            Err(crate::operations::error(failure))
+        }
         Failure::HookFailed { .. } => Ok(Some(SetUp {
             workspace: *workspace,
             post_setup: Some(Err(crate::operations::error(failure))),
