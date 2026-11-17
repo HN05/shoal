@@ -449,9 +449,9 @@ reported; `shoal view` shows them. A wait for an item the space does not follow
 includes its existing activity, and waits share a cursor per workspace. A newer wait
 supersedes a running one, which returns `superseded: true`. Without
 `--timeout` (1–3600 seconds) the wait is unbounded; `timed_out` with empty
-`updates` means no update. A `lookup_failed` entry names a failed lookup and
-repeats every 10 minutes while it persists, except a conflict check whose file
-access timed out, which repeats only when its error changes. A `base_merged` update means the
+`updates` means no update. A `lookup_failed` entry names a failed lookup,
+once until the lookup succeeds or fails differently, and at most every 10
+minutes per source. A `base_merged` update means the
 base workspace merged; it says whether Shoal retargeted the PR and gives the
 rebase command.
 

@@ -130,23 +130,46 @@ fn a_sources_failures_are_reported_once_per_interval() {
 }
 
 #[test]
-fn a_failure_shown_elsewhere_is_reported_again_only_once_its_error_changes() {
+fn a_failure_that_repeats_is_reported_once_until_it_changes_or_passes() {
     let start = UnixTime::from_seconds(1000);
-    let poll = |previous: &Snapshot, error: &str, now| {
+    let second = Duration::from_secs(1);
+    let poll = |previous: &Snapshot, error: Option<&str>, now| {
         let mut next = Snapshot::default();
-        next.errors.insert("merge conflicts".into(), error.into());
-        next.shown_elsewhere();
+        if let Some(error) = error {
+            next.errors.insert("merge conflicts".into(), error.into());
+        }
         next.normalize(previous, now);
         let reported = !previous.changes(&next, "branch").is_empty();
         (next, reported)
     };
-    let (first, reported) = poll(&Snapshot::default(), "timed out", start);
+    let later = start + FAILURE_REPORT_INTERVAL * 3;
+    let (first, reported) = poll(&Snapshot::default(), Some("timed out"), start);
     assert!(reported);
-    let (same, reported) = poll(&first, "timed out", start + FAILURE_REPORT_INTERVAL);
+    let (same, reported) = poll(&first, Some("timed out"), start + FAILURE_REPORT_INTERVAL);
     assert!(!reported);
-    let (_, reported) = poll(&same, "timed out", start + FAILURE_REPORT_INTERVAL * 3);
+    let (same, reported) = poll(&same, Some("timed out"), later);
     assert!(!reported);
-    let (_, reported) = poll(&same, "interrupted", start + FAILURE_REPORT_INTERVAL * 3);
+    let (_, reported) = poll(&same, Some("interrupted"), later);
+    assert!(reported);
+    let (passed, _) = poll(&same, None, later);
+    let (_, reported) = poll(&passed, Some("timed out"), later + second);
+    assert!(reported);
+    // An error that changed within the interval was never reported, so it
+    // is once the interval passes, though it no longer changes.
+    let (changed, reported) = poll(&first, Some("interrupted"), start + second);
+    assert!(!reported);
+    let (_, reported) = poll(
+        &changed,
+        Some("interrupted"),
+        start + FAILURE_REPORT_INTERVAL,
+    );
+    assert!(reported);
+    // A read within the interval leaves the same failure after it to be
+    // reported once the interval passes.
+    let (recovered, _) = poll(&first, None, start + second);
+    let (failed, reported) = poll(&recovered, Some("timed out"), start + second * 2);
+    assert!(!reported);
+    let (_, reported) = poll(&failed, Some("timed out"), start + FAILURE_REPORT_INTERVAL);
     assert!(reported);
 }
 

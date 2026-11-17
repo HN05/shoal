@@ -337,6 +337,32 @@ fn write_saved(path: &Path, saved: &Map<String, Value>) -> Result<()> {
     Ok(())
 }
 
+/// Snapshots name the error of each source's last reported failure beside
+/// its time, where earlier ones kept the time alone: the error the source
+/// fails with now, and none for a source that no longer fails.
+pub(super) fn reported_failures(db: &Connection) -> Result<()> {
+    for table in ["pr_activity", "space_item_activity"] {
+        rewrite(db, table, reported_errors)?;
+    }
+    Ok(())
+}
+
+/// `snapshot`'s report time of each source, beside the error it fails with.
+fn reported_errors(snapshot: &mut Map<String, Value>) {
+    let Some(Value::Object(reported)) = snapshot.remove("reported") else {
+        return;
+    };
+    let errors = snapshot.get("errors").and_then(Value::as_object);
+    let reported = reported.into_iter().map(|(source, at)| {
+        let failure = match errors.and_then(|errors| errors.get(&source)) {
+            Some(error) => json!({"at": at, "error": error}),
+            None => json!({"at": at}),
+        };
+        (source, failure)
+    });
+    snapshot.insert("reported".into(), Value::Object(reported.collect()));
+}
+
 /// Rewrite every record of `table` with `change`, writing back those it
 /// changed.
 fn rewrite(db: &Connection, table: &str, change: impl Fn(&mut Map<String, Value>)) -> Result<()> {

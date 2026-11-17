@@ -25,9 +25,9 @@ use shoal_forge_types::{
     updates::{SnapshotKind, SnapshotState, Update, UpdateKind},
 };
 
-/// How long after a source's failure was reported it is not reported again,
-/// however its error changes or it passes in between, so a failing source
-/// cannot silence a wait indefinitely nor end one on every poll.
+/// How long after a source's failure was reported another is not, however its
+/// error changes or it passes in between, so a source failing intermittently
+/// cannot end a wait on every poll.
 const FAILURE_REPORT_INTERVAL: Duration = Duration::from_secs(600);
 
 /// The failed jobs a finished run's update names; `view ci` lists them all.
@@ -93,10 +93,10 @@ pub struct Snapshot {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) failed_jobs: Vec<FailedJob>,
     pub(crate) errors: BTreeMap<String, String>,
-    /// When each source that failed within the report interval was last
-    /// reported.
+    /// The failure last reported of each source that failed within the
+    /// report interval, or fails with that error still.
     #[serde(default)]
-    pub(crate) reported: BTreeMap<String, UnixTime>,
+    pub(crate) reported: BTreeMap<String, ReportedFailure>,
     /// The rate limit a source's lookup ran into, which leaves the snapshot
     /// incomplete without that source having failed.
     #[serde(skip)]
@@ -105,11 +105,15 @@ pub struct Snapshot {
     /// observation stands beside the failure in `errors`.
     #[serde(skip)]
     pub(crate) unread: bool,
-    /// Whether the user learns of the lookup's failures elsewhere, so a
-    /// source that keeps failing with the error last seen is not reported
-    /// again.
-    #[serde(skip)]
-    pub(crate) failures_shown_elsewhere: bool,
+}
+
+/// When a source's failure was reported, and its error until the source
+/// is read again.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct ReportedFailure {
+    pub(crate) at: UnixTime,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) error: Option<String>,
 }
 
 /// A failed job of a run, with the step that failed where its log names one.
@@ -156,14 +160,6 @@ impl Snapshot {
             self.schedule_conflict_reports(previous);
         }
         self.schedule_failure_reports(previous, now);
-    }
-
-    /// Take the lookup's failures as shown to the user elsewhere, as the
-    /// daemon shows a local check that timed out: a source failing with the
-    /// error last seen is not reported again once its interval passes, which
-    /// would only wake an idle agent with nothing new.
-    pub fn shown_elsewhere(&mut self) {
-        self.failures_shown_elsewhere = true;
     }
 
     /// Whether the lookup read nothing of the item, only its failure.
@@ -459,28 +455,33 @@ impl Snapshot {
         self.state = state;
     }
 
-    /// Keeps each source's report time until the interval passes, or while
-    /// it fails with the same error shown elsewhere, and takes `now` for a
-    /// failing source without one, so `changes` reports a source's failures
-    /// at most once per interval.
+    /// Keeps each source's reported failure while the source fails with that
+    /// error, or until the interval passes, and reports a failing source
+    /// without one at `now`; a source read meanwhile forgets the error, so
+    /// it keeps only the interval. So `changes` reports a failure that
+    /// repeats once, until its source is read or fails differently, since
+    /// each repeat would only wake an idle agent with nothing new, and a
+    /// source's failures at most once per interval.
     fn schedule_failure_reports(&mut self, previous: &Self, now: UnixTime) {
-        let unchanged = |source: &String| {
-            self.failures_shown_elsewhere
-                && self
-                    .errors
-                    .get(source)
-                    .is_some_and(|error| previous.errors.get(source) == Some(error))
-        };
-        self.reported = previous
-            .reported
-            .iter()
-            .filter(|&(source, &at)| {
-                now.duration_since(at) < FAILURE_REPORT_INTERVAL || unchanged(source)
+        let errors = &self.errors;
+        self.reported = (previous.reported.iter())
+            .filter_map(|(source, reported)| {
+                let failing = errors.get(source);
+                let repeats = failing.is_some() && failing == reported.error.as_ref();
+                let recent = now.duration_since(reported.at) < FAILURE_REPORT_INTERVAL;
+                let error = reported.error.clone().filter(|_| failing.is_some());
+                let reported = ReportedFailure {
+                    at: reported.at,
+                    error,
+                };
+                (repeats || recent).then(|| (source.clone(), reported))
             })
-            .map(|(source, &at)| (source.clone(), at))
             .collect();
-        for source in self.errors.keys() {
-            self.reported.entry(source.clone()).or_insert(now);
+        for (source, error) in &self.errors {
+            (self.reported.entry(source.clone())).or_insert_with(|| ReportedFailure {
+                at: now,
+                error: Some(error.clone()),
+            });
         }
     }
 

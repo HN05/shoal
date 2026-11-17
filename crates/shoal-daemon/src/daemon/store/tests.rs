@@ -1585,6 +1585,24 @@ fn migration_moves_pending_updates_out_of_activity_records() -> Result<()> {
 }
 
 #[test]
+fn migration_names_the_error_of_each_reported_failure_that_persists() -> Result<()> {
+    let mut db = historical_database(219)?;
+    db.execute_batch(
+        r#"INSERT INTO space_item_activity(space_id,url,record) VALUES
+            ('workspace','pr','{"errors":{"CI":"refused"},"reported":{"CI":1000,"discussion":900}}');"#,
+    )?;
+    migrate(&mut db)?;
+    let record: String =
+        db.query_row("SELECT record FROM space_item_activity", [], |r| r.get(0))?;
+    let record: serde_json::Value = serde_json::from_str(&record)?;
+    assert_eq!(
+        record["reported"],
+        serde_json::json!({"CI": {"at": 1000, "error": "refused"}, "discussion": {"at": 900}})
+    );
+    Ok(())
+}
+
+#[test]
 fn migration_makes_the_restores_waiting_wrappers_carry_out_automatic() -> Result<()> {
     let mut db = historical_database(140)?;
     db.execute_batch(
