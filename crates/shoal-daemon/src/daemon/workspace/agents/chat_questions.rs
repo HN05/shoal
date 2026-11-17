@@ -76,14 +76,16 @@ impl Manager {
     }
 
     /// The user replied in the conversation of the agent `execution` runs in
-    /// the space `selector` names: close the questions the space's agents
-    /// asked in their conversations, and the mark of a turn underway, and
-    /// return the closed questions' numbers.
+    /// the space `selector` names: record their interaction with it, close
+    /// the questions the space's agents asked in their conversations, and
+    /// the mark of a turn underway, and return the closed questions'
+    /// numbers.
     pub(crate) async fn reply_in_chat(
         &self,
         selector: &SpaceSelector,
         execution: Option<&ExecutionId>,
     ) -> Result<Vec<crate::daemon::item_numbers::ItemNumber>> {
+        self.note_interaction(selector).await;
         (self.close_chat_questions(selector, execution.cloned())).await
     }
 }

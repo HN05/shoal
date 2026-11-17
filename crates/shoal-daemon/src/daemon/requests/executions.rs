@@ -79,6 +79,10 @@ pub(super) async fn handle(
         } => Body::RestartedPlace(match join {
             Some(joined) => manager.join_restart(&execution, joined.run, run).await?,
             None => {
+                // The user's restart is their interaction with the agent.
+                if caller.is_none() {
+                    manager.record_agent_interaction(&execution).await;
+                }
                 let giver = caller.map(|caller| &caller.space_id);
                 manager
                     .restart_agent(&execution, run, in_place, giver, change)

@@ -10,6 +10,7 @@ use super::super::{
     workspace::Manager,
 };
 use crate::protocol::{Body, QueueMethod};
+use crate::state::QueueKind;
 use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn handle(
@@ -29,11 +30,11 @@ pub(super) async fn handle(
             launch,
             blockers,
             pr,
-        } => Body::QueueEntry(
-            manager
-                .queue_agent(&workspace, *launch, blockers, pr)
-                .await?,
-        ),
+        } => {
+            manager.record_user_interaction(caller, &workspace).await;
+            let entry = manager.queue_agent(&workspace, *launch, blockers, pr);
+            Body::QueueEntry(entry.await?)
+        }
         QueueMethod::QueueAdd { request } => {
             Body::QueueAdmission(manager.queue_add_as(*request, caller).await?)
         }
@@ -46,7 +47,13 @@ pub(super) async fn handle(
             Body::QueueEntry(manager.queue_remove(&entry, caller).await?)
         }
         QueueMethod::QueueStart { entry, here } => {
-            Body::QueueEntry(manager.queue_start(&entry, here).await?)
+            let entry = manager.queue_start(&entry, here).await?;
+            if entry.kind == QueueKind::Restore
+                && let Some(space) = entry.space()
+            {
+                (manager.record_user_interaction(caller, &SpaceSelector::id(space))).await;
+            }
+            Body::QueueEntry(entry)
         }
         QueueMethod::StartedLaunch { entry } => {
             Body::StartedLaunch(manager.started_launch(&entry).await?)
@@ -66,22 +73,14 @@ pub(super) async fn handle(
             workspace,
             execution,
             env,
-            now: false,
-        } => Body::QueueEntry(
-            manager
-                .queue_stopped_restore(&workspace, &execution, env)
-                .await?,
-        ),
-        QueueMethod::QueueRestore {
-            workspace,
-            execution,
-            env,
-            now: true,
-        } => Body::QueueEntry(
-            manager
-                .start_stopped_restore(&workspace, &execution, env)
-                .await?,
-        ),
+            now,
+        } => {
+            manager.record_user_interaction(caller, &workspace).await;
+            Body::QueueEntry(match now {
+                false => (manager.queue_stopped_restore(&workspace, &execution, env)).await?,
+                true => (manager.start_stopped_restore(&workspace, &execution, env)).await?,
+            })
+        }
     }))
 }
 

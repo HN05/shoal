@@ -221,6 +221,7 @@ fn remove_schema_objects(db: &Connection) -> Result<()> {
     // One transaction syncs the whole removal once instead of every statement.
     let tx = db.unchecked_transaction()?;
     let db: &Connection = &tx;
+    db.execute_batch(include_str!("space_engagement_undo.sql"))?;
     db.execute_batch("ALTER TABLE workspaces ADD COLUMN git_dir_id TEXT;")?;
     db.execute_batch(include_str!("execution_subagents_undo.sql"))?;
     db.execute_batch(include_str!("space_wake_timers_undo.sql"))?;

@@ -674,6 +674,19 @@ CREATE TABLE execution_subagent_requests (
     at INTEGER NOT NULL
 );
 
+CREATE TABLE space_engagement (
+    space_id TEXT PRIMARY KEY,
+    interacted_at INTEGER,
+    turn_ended_at INTEGER,
+    previous_turn_ended_at INTEGER
+);
+
+CREATE TABLE reply_times (
+    id INTEGER PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    seconds INTEGER NOT NULL
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
@@ -752,6 +765,8 @@ CREATE INDEX resource_lease_acquirers ON resource_leases(acquirer_execution)
 CREATE INDEX trigger_runs_by_trigger ON trigger_runs(scope, name, id);
 
 CREATE INDEX workspaces_base ON workspaces(base_workspace_id);
+
+CREATE INDEX reply_times_space ON reply_times(space_id, id);
 
 CREATE VIEW space_refs AS
     SELECT spaces.id, CASE spaces.kind
@@ -1145,4 +1160,8 @@ END;
 
 CREATE TRIGGER space_wake_timer_removed AFTER DELETE ON spaces BEGIN
     DELETE FROM space_wake_timers WHERE space_id=OLD.id;
+END;
+
+CREATE TRIGGER space_engagement_removed AFTER DELETE ON spaces BEGIN
+    DELETE FROM space_engagement WHERE space_id=OLD.id;
 END;
