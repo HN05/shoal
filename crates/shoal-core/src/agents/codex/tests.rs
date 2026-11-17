@@ -83,7 +83,7 @@ fn proxied_codex_sends_the_provider_its_config_uses_to_the_proxy() {
 }
 
 #[test]
-fn mcp_servers_set_every_field_as_a_config_override() {
+fn each_mcp_server_replaces_codexs_own_whole() {
     let server = crate::config::mcp::Server {
         command: "xcrun".into(),
         args: vec!["mcpbridge".into()],
@@ -91,14 +91,16 @@ fn mcp_servers_set_every_field_as_a_config_override() {
         enabled: true,
     };
     let args = Codex.mcp_args(&[("xcode", &server)]);
-    let overrides: Vec<&str> = args.iter().map(|arg| arg.to_str().unwrap()).collect();
-    let (flags, values): (Vec<_>, Vec<_>) =
-        overrides.chunks(2).map(|pair| (pair[0], pair[1])).unzip();
-    assert!(flags.iter().all(|flag| *flag == "-c"));
-    // Each value parses as the TOML line Codex reads it as.
-    let config: toml::Table = toml::from_str(&values.join("\n")).unwrap();
+    let [flag, value] = args.as_slice() else {
+        panic!("one override: {args:?}")
+    };
+    assert_eq!(flag, "-c");
+    // The value is the TOML line Codex reads, setting the server's table.
+    let (key, table) = value.to_str().unwrap().split_once('=').unwrap();
+    assert_eq!(key, "mcp_servers.xcode");
+    let config: toml::Table = toml::from_str(&format!("server = {table}")).unwrap();
     assert_eq!(
-        config["mcp_servers"]["xcode"],
+        config["server"],
         toml::toml! {
             command = "xcrun"
             args = ["mcpbridge"]

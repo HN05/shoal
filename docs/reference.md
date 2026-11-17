@@ -3665,8 +3665,8 @@ A preset's MCP server reaches every Claude Code and Codex agent of the
 repository's workspaces and chats, beside the servers the agent's own config
 names; [`[mcp.NAME]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#mcp-servers)
 changes or turns it off, and defines other servers. Claude Code receives them
-as one `--mcp-config`, Codex as `-c mcp_servers.NAME` overrides, which replace
-a server of the same name in its own config.
+as one `--mcp-config`, Codex as one `-c mcp_servers.NAME` table each, which
+replaces a server of the same name in its own config whole.
 
 ### Seed builds
 

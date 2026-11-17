@@ -350,7 +350,7 @@ pub fn hook_args(
 
 /// Arguments that start the enabled ones of `servers` for an agent with
 /// integration `kind`; none when no server is enabled.
-pub fn mcp_args(kind: IntegrationKind, servers: &mcp::Servers) -> Vec<OsString> {
+fn mcp_args(kind: IntegrationKind, servers: &mcp::Servers) -> Vec<OsString> {
     let enabled: Vec<_> = servers.enabled().collect();
     if enabled.is_empty() {
         return Vec::new();

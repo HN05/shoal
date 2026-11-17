@@ -43,7 +43,7 @@ pub struct Servers(BTreeMap<String, Server>);
 
 impl Servers {
     /// The servers agents start, by name.
-    pub fn enabled(&self) -> impl Iterator<Item = (&str, &Server)> {
+    pub(crate) fn enabled(&self) -> impl Iterator<Item = (&str, &Server)> {
         (self.0.iter())
             .filter(|(_, server)| server.enabled)
             .map(|(name, server)| (name.as_str(), server))

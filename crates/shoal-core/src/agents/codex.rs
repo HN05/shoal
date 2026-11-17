@@ -23,27 +23,22 @@ impl Integration for Codex {
         Ok(args)
     }
 
-    /// Each server's fields as `-c mcp_servers.<name>.<field>=` TOML
-    /// values, every one set so none keeps the value Codex's own config
-    /// gives a server of the same name.
+    /// Each server as one `-c mcp_servers.<name>=` TOML table, which
+    /// replaces a server of the same name in Codex's own config whole, so
+    /// none of its fields, such as `enabled`, stays.
     fn mcp_args(&self, servers: &[(&str, &crate::config::mcp::Server)]) -> Vec<OsString> {
         (servers.iter())
             .flat_map(|(name, server)| {
                 let env: toml::Table = (server.env.iter())
                     .map(|(variable, value)| (variable.clone(), value.as_str().into()))
                     .collect();
-                [
-                    ("command", toml::Value::from(server.command.as_str())),
-                    ("args", toml::Value::from(server.args.clone())),
-                    ("env", toml::Value::Table(env)),
-                ]
-                .into_iter()
-                .flat_map(move |(field, value)| {
-                    [
-                        "-c".into(),
-                        format!("mcp_servers.{name}.{field}={value}").into(),
-                    ]
-                })
+                let table = toml::Table::from_iter([
+                    ("command".to_owned(), server.command.as_str().into()),
+                    ("args".to_owned(), server.args.clone().into()),
+                    ("env".to_owned(), toml::Value::Table(env)),
+                ]);
+                let table = toml::Value::Table(table);
+                ["-c".into(), format!("mcp_servers.{name}={table}").into()]
             })
             .collect()
     }
