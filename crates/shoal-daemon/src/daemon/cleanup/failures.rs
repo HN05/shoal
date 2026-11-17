@@ -66,7 +66,7 @@ struct Failed {
 
 impl SweepFailures {
     /// Record the result of the step `step`.
-    pub(super) fn step(&mut self, step: &str, result: Result<()>) {
+    pub(crate) fn step(&mut self, step: &str, result: Result<()>) {
         let Err(error) = result else {
             return;
         };
@@ -85,7 +85,7 @@ impl SweepFailures {
     }
 
     /// Fails with the recorded failures, if there are any.
-    pub(super) fn into_result(self) -> Result<(), Self> {
+    pub(crate) fn into_result(self) -> Result<(), Self> {
         match self.general.is_empty() && self.spaces.is_empty() {
             true => Ok(()),
             false => Err(self),
@@ -124,12 +124,12 @@ impl fmt::Display for SweepFailures {
 /// The failures of the pass before, which repeat on every pass until fixed,
 /// so that the log has each once.
 #[derive(Debug, Default)]
-pub(super) struct LoggedFailures(Option<String>);
+pub(crate) struct LoggedFailures(Option<String>);
 
 impl LoggedFailures {
     /// The failures of a pass with `result` to log: none when they are
     /// those of the pass before.
-    pub(super) fn new_failures(&mut self, result: &Result<(), SweepFailures>) -> Option<String> {
+    pub(crate) fn new_failures(&mut self, result: &Result<(), SweepFailures>) -> Option<String> {
         let failed = result.as_ref().err().map(ToString::to_string);
         let repeated = failed == self.0;
         self.0.clone_from(&failed);

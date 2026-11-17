@@ -55,7 +55,10 @@ async fn idle_in_held_done_workspace(
 /// Run the idle stop as the cleanup sweep does, holding an operation.
 async fn sweep(manager: &Manager) {
     let _operation = manager.gates.operation().await;
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
 }
 
 #[tokio::test]

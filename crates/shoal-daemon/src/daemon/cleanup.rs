@@ -43,8 +43,7 @@ mod kept_branches;
 mod merged;
 mod runs;
 
-use failures::LoggedFailures;
-pub(crate) use failures::{SpaceFailures, SweepFailures};
+pub(crate) use failures::{LoggedFailures, SpaceFailures, SweepFailures};
 pub(crate) use health::CleanupHealth;
 pub(crate) use runs::Removed;
 
@@ -225,7 +224,6 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<(), SweepFa
     // Every step that asks which processes use a worktree reads one listing.
     let users = DirectoryUsers::default();
     step("idle cleanup", sweep_idle(manager, timers, &users).await);
-    step("idle agents", manager.stop_idle_agents().await);
     step(
         "merged cleanup",
         merged::sweep(manager, &mut timers.merged, &users).await,

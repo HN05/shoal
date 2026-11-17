@@ -1,0 +1,30 @@
+//! Look for idle agents to put to sleep every few seconds, so that each
+//! sleeps soon after it may, which the cleanup sweep's pace would stretch.
+//! Its passes report failures and stalls as cleanup's do.
+use std::{sync::Arc, time::Duration};
+
+use super::{
+    cleanup::{LoggedFailures, SweepFailures},
+    log,
+    workspace::Manager,
+};
+use crate::time::UnixTime;
+
+/// How often Shoal looks for idle agents to put to sleep.
+const SWEEP_INTERVAL: Duration = Duration::from_secs(3);
+
+pub(super) async fn run(manager: Arc<Manager>) {
+    let mut logged = LoggedFailures::default();
+    loop {
+        tokio::time::sleep(SWEEP_INTERVAL).await;
+        let _operation = manager.gates.background_pass().await;
+        let mut failures = SweepFailures::default();
+        let stopped = manager.stop_idle_agents(UnixTime::now()).await;
+        failures.step("idle agents", stopped);
+        let result = failures.into_result();
+        if let Some(failed) = logged.new_failures(&result) {
+            log!("idle sleep: {failed}");
+        }
+        manager.record_idle_sleep(result).await;
+    }
+}

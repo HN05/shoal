@@ -599,7 +599,7 @@ why it sleeps, ignoring other keys: Enter wakes the agent there, as
 the wait, leaving the agent stopped for `shoal restore`.
 
 While an entry in the [agent queue](#agent-queue) waits for a heavy slot or memory,
-each [cleanup sweep](#automatic-cleanup) makes room for it: for each such
+Shoal makes room for it: for each such
 entry in queue order, it puts to sleep the lowest-ranked idle agent whose
 priority is no higher than the entry's, of the entry's repository when that
 repository's `agent.max_heavy_running` holds it, and for an entry that waits for a
@@ -611,8 +611,8 @@ a request waiting for a decision or a [timer](#idle-wakes). Light agents keep ru
 or a chat, and an agent woken from its sleep works its turn before it can
 sleep again.
 
-An idle agent keeps its memory while it waits for its next update. Each
-[cleanup sweep](#automatic-cleanup) stops the [idle](#agent-state) heavy agents
+An idle agent keeps its memory while it waits for its next update. Shoal
+stops the [idle](#agent-state) heavy agents
 of done spaces that something besides their work and PRs keeps from
 [completion cleanup](#assignment-completion), such as a
 [hold](#holds) or an open [question](#questions), and with

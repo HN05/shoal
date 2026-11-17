@@ -129,11 +129,17 @@ async fn a_held_done_workspaces_idle_agent_stops_once_its_cache_expires() {
         .unwrap();
     let (workspace, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
     cache_expires_in(&manager, &workspace, 600).await;
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
     assert!(!*execution.stop.borrow(), "a warm cache keeps the agent");
 
     cache_expires_in(&manager, &workspace, 0).await;
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
     assert!(*execution.stop.borrow());
     let path =
         crate::execution::recovery::record_path(&manager.paths, &workspace.id, &execution.plan.id);
@@ -188,7 +194,10 @@ async fn other_agents_keep_running() {
     ] {
         executions.push((name, agent(&manager, &repo.id, name, setup).await.1));
     }
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
     for (name, execution) in executions {
         assert!(!*execution.stop.borrow(), "{name} keeps running");
     }
@@ -208,7 +217,10 @@ async fn sleep_idle_stops_any_agent_once_its_cache_expires() {
         ..HELD_DONE_IDLE
     };
     let (workspace, execution) = agent(&manager, &repo.id, "idle", unfinished).await;
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
     assert!(!*execution.stop.borrow(), "[sleep] idle is opt-in");
 
     manager
@@ -216,11 +228,17 @@ async fn sleep_idle_stops_any_agent_once_its_cache_expires() {
         .await
         .unwrap();
     cache_expires_in(&manager, &workspace, 60).await;
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
     assert!(!*execution.stop.borrow(), "a warm cache keeps the agent");
 
     cache_expires_in(&manager, &workspace, 0).await;
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
     assert!(*execution.stop.borrow());
     let notifications = manager.notifications(false, 10).await.unwrap();
     assert!(
@@ -311,7 +329,10 @@ async fn an_idle_agent_with_a_running_subagent_stops_once_the_subagent_stops() {
     };
     subagent(&manager, &workspace, &id, started).await;
     cache_expires_in(&manager, &workspace, 0).await;
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
     assert!(!*execution.stop.borrow(), "its subagent keeps the agent");
 
     subagent(
@@ -321,7 +342,10 @@ async fn an_idle_agent_with_a_running_subagent_stops_once_the_subagent_stops() {
         SubagentChange::Stopped { agent_id },
     )
     .await;
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
     assert!(*execution.stop.borrow());
 }
 
@@ -356,7 +380,10 @@ async fn a_wake_after_an_idle_stop_leaves_its_update_for_the_restore() {
         .unwrap();
     let (workspace, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
     let id = execution.plan.id.clone();
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
     assert!(*execution.stop.borrow());
     let woken = manager
         .start_woken_turn(&SpaceSelector::id(&workspace.id), Some(id))
@@ -449,7 +476,10 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
     };
     manager.set_progress(&selector, change).await.unwrap();
     cache_expires_in(&manager, &workspace, 600).await;
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
     assert!(
         !*execution.stop.borrow(),
         "a working agent finishes its turn"
@@ -465,7 +495,10 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
         .await
         .unwrap();
     cache_expires_in(&manager, &workspace, 600).await;
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
     assert!(
         *execution.stop.borrow(),
         "a warm cache keeps no blocked agent"
@@ -626,7 +659,10 @@ async fn a_heavy_chats_idle_agent_stops_once_its_cache_expires() {
     let (root, manager) = manager().await;
     let (_, execution) = idle_chat(&manager, root.path(), "pair").await;
 
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
 
     assert!(*execution.stop.borrow());
 }
@@ -637,7 +673,10 @@ async fn a_light_chats_idle_agent_keeps_running_once_its_cache_expires() {
     let (root, manager) = manager().await;
     let (_, execution) = idle_chat(&manager, root.path(), "chat").await;
 
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
 
     assert!(!*execution.stop.borrow());
 }
@@ -659,7 +698,10 @@ async fn a_blocked_chats_idle_agent_stops_until_its_space_clears() {
         .await
         .unwrap();
 
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
 
     assert!(*execution.stop.borrow());
     assert!(manager.restore_waits_for_unblock(&chat.id, &execution.plan.id));
@@ -692,11 +734,17 @@ async fn a_sleeping_agent_sleeps_once_its_cache_expires() {
         .await
         .unwrap();
     cache_expires_in(&manager, &workspace, 600).await;
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
     assert!(!*execution.stop.borrow(), "a warm cache keeps the agent");
 
     cache_expires_in(&manager, &workspace, 0).await;
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
     assert!(*execution.stop.borrow());
     assert_eq!(
         stop_reason(&manager, &execution).await,
@@ -726,7 +774,10 @@ async fn an_asleep_agents_timer_keeps_its_workspace_and_restores_it() {
         .await
         .unwrap();
     cache_expires_in(&manager, &workspace, 0).await;
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
     assert!(*execution.stop.borrow());
     let agent = crate::agent::Agent::from("claude");
     manager
@@ -769,7 +820,10 @@ async fn a_light_agent_that_sleeps_keeps_running() {
         .unwrap();
     cache_expires_in(&manager, &workspace, 0).await;
 
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
 
     assert!(!*execution.stop.borrow());
 }
@@ -791,7 +845,10 @@ async fn under_the_speed_schedule_a_sleeping_agent_sleeps_at_once() {
         .await
         .unwrap();
     cache_expires_in(&manager, &workspace, 600).await;
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
     assert!(*execution.stop.borrow());
 }
 
@@ -841,7 +898,10 @@ async fn an_agent_something_will_wake_sleeps_to_make_room_for_queued_work() {
         .await
         .unwrap();
     // Without queued work, nothing sleeps for room.
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
     assert!(!*asking.stop.borrow());
 
     let launch = manager
@@ -852,7 +912,10 @@ async fn an_agent_something_will_wake_sleeps_to_make_room_for_queued_work() {
         .unwrap();
     assert!(!launch.start);
     manager.dispatch_queue().await.unwrap();
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
     assert_eq!(
         stop_reason(&manager, asking).await,
         Some(Protection::making_room().reason)
@@ -895,7 +958,10 @@ async fn an_agent_its_timer_will_wake_sleeps_to_make_room() {
         .await
         .unwrap();
     manager.dispatch_queue().await.unwrap();
-    manager.stop_idle_agents().await.unwrap();
+    manager
+        .stop_idle_agents(crate::time::UnixTime::now())
+        .await
+        .unwrap();
     assert_eq!(
         stop_reason(&manager, &execution).await,
         Some(Protection::making_room().reason)

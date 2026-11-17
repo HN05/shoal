@@ -118,6 +118,8 @@ pub struct Manager {
     /// The reads of items for watches, and those watches started from.
     pub(crate) watch_starts: crate::daemon::links::wait::WatchStarts,
     pub(super) cleanup_health: super::cleanup::CleanupHealth,
+    /// How the loop that puts idle agents to sleep is doing.
+    pub(super) idle_sleep_health: super::cleanup::CleanupHealth,
     /// The spaces automatic cleanup removed since Shoal's log recorded it.
     pub(crate) cleanup_removals: super::cleanup::Removed,
     pub(crate) syncs: super::checkout_sync::Syncs,
@@ -192,6 +194,7 @@ impl Manager {
             waits: Default::default(),
             watch_starts: Default::default(),
             cleanup_health: Default::default(),
+            idle_sleep_health: super::cleanup::CleanupHealth::of("Idle sleep"),
             cleanup_removals: Default::default(),
             syncs: Default::default(),
             triggers: Default::default(),

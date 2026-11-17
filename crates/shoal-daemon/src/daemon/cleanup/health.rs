@@ -1,6 +1,6 @@
-//! How automatic cleanup is doing: whether its passes fail, in which
-//! workspaces, or have stalled, and telling the user once when they start
-//! failing.
+//! How a background loop of passes, such as automatic cleanup's or idle
+//! sleep's, is doing: whether its passes fail, in which workspaces, or have
+//! stalled, and telling the user once when they start failing.
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceName;
 use std::{collections::HashMap, sync::PoisonError, time::Duration};
@@ -23,6 +23,8 @@ const STALLED_AFTER: Duration = Duration::from_secs(10 * 60);
 /// The outcome of recent passes: Shoal's status reports a failing or stalled
 /// loop, and workspace status the workspace's own failures.
 pub struct Health {
+    /// The loop's name, as messages start with it.
+    name: &'static str,
     started: Moment,
     finished: Option<Moment>,
     /// Consecutive passes with failures that concern no workspace.
@@ -71,9 +73,9 @@ impl Failure {
         failure
     }
 
-    fn describe(&self) -> String {
+    fn describe(&self, name: &str) -> String {
         format!(
-            "Automatic cleanup failed {} consecutive passes since {}: {}",
+            "{name} failed {} consecutive passes since {}: {}",
             self.passes,
             self.since.local_seconds(),
             self.error
@@ -89,12 +91,21 @@ struct Unreported {
     error: String,
 }
 
-/// [`Health`] as the sweep records it and status reads it; each operation
+/// [`Health`] as the loop records it and status reads it; each operation
 /// holds the lock only while it runs.
 #[derive(Default)]
 pub(crate) struct CleanupHealth(std::sync::Mutex<Health>);
 
 impl CleanupHealth {
+    /// The health of the loop `name`.
+    pub(crate) fn of(name: &'static str) -> Self {
+        Self(std::sync::Mutex::new(Health::named(name)))
+    }
+
+    fn name(&self) -> &'static str {
+        self.lock().name
+    }
+
     fn lock(&self) -> std::sync::MutexGuard<'_, Health> {
         self.0.lock().unwrap_or_else(PoisonError::into_inner)
     }
@@ -125,23 +136,31 @@ impl CleanupHealth {
     }
 }
 
+/// The loop whose health [`Health::default`] is.
+const AUTOMATIC_CLEANUP: &str = "Automatic cleanup";
+
 impl Default for Health {
     fn default() -> Self {
+        Self::named(AUTOMATIC_CLEANUP)
+    }
+}
+
+impl Health {
+    fn named(name: &'static str) -> Self {
         Self {
+            name,
             started: Moment::now(),
             finished: None,
             failure: None,
             workspaces: HashMap::new(),
         }
     }
-}
 
-impl Health {
     /// A short description of a loop that fails other than in a workspace,
     /// or has stalled.
     fn problem(&self, now: Instant) -> Option<String> {
         if let Some(failure) = &self.failure {
-            Some(failure.describe())
+            Some(failure.describe(self.name))
         } else if self.stalled(now) {
             Some(format!(
                 "{}; the daemon log has details",
@@ -154,7 +173,7 @@ impl Health {
 
     /// A short description of the failures in the workspace `id`.
     fn workspace_problem(&self, id: &SpaceId) -> Option<String> {
-        self.workspaces.get(id).map(Failure::describe)
+        (self.workspaces.get(id)).map(|failure| failure.describe(self.name))
     }
 
     fn stalled(&self, now: Instant) -> bool {
@@ -164,11 +183,13 @@ impl Health {
     fn stalled_message(&self) -> String {
         match self.finished {
             Some(finished) => format!(
-                "Automatic cleanup has not finished a pass since {}",
+                "{} has not finished a pass since {}",
+                self.name,
                 finished.unix.local_seconds()
             ),
             None => format!(
-                "Automatic cleanup has not finished a pass since the daemon started at {}",
+                "{} has not finished a pass since the daemon started at {}",
+                self.name,
                 self.started.unix.local_seconds()
             ),
         }
@@ -207,34 +228,51 @@ impl Health {
 }
 
 impl Manager {
-    /// Why automatic cleanup is not working other than in a workspace, if it
-    /// is not.
+    /// Why automatic cleanup or idle sleep is not working other than in a
+    /// workspace, if one is not.
     pub fn cleanup_problem(&self) -> Option<String> {
-        self.cleanup_health.problem(Instant::now())
+        let now = Instant::now();
+        (self.cleanup_health.problem(now)).or_else(|| self.idle_sleep_health.problem(now))
     }
 
-    /// Why automatic cleanup fails in the workspace `id`, if it does.
+    /// Why automatic cleanup or idle sleep fails in the workspace `id`, if
+    /// one does.
     pub fn workspace_cleanup_problem(&self, id: &SpaceId) -> Option<String> {
-        self.cleanup_health.workspace_problem(id)
+        (self.cleanup_health.workspace_problem(id))
+            .or_else(|| self.idle_sleep_health.workspace_problem(id))
     }
 
-    /// Notify the user when passes start failing, about the workspace each
-    /// failure concerns. A notification that cannot be recorded, as when the
-    /// disk is full, is retried on the next pass.
+    /// Record a finished cleanup sweep with `result`, as [`Self::record_pass`]
+    /// does.
     pub(super) async fn record_sweep(&self, result: Result<(), SweepFailures>) {
-        for unreported in self.cleanup_health.record(Moment::now(), &result) {
+        self.record_pass(&self.cleanup_health, result).await;
+    }
+
+    /// Record a finished idle sleep pass with `result`, as
+    /// [`Self::record_pass`] does.
+    pub(crate) async fn record_idle_sleep(&self, result: Result<(), SweepFailures>) {
+        self.record_pass(&self.idle_sleep_health, result).await;
+    }
+
+    /// Record a finished pass of the loop `health` follows, notifying the
+    /// user when its passes start failing, about the workspace each failure
+    /// concerns. A notification that cannot be recorded, as when the disk is
+    /// full, is retried on the next pass.
+    async fn record_pass(&self, health: &CleanupHealth, result: Result<(), SweepFailures>) {
+        for unreported in health.record(Moment::now(), &result) {
             let about = match &unreported.workspace {
                 Some((id, name)) => About::space(name, id),
                 None => About::default(),
             };
-            let message = format!("automatic cleanup failed: {}", unreported.error);
+            let name = health.name().to_lowercase();
+            let message = format!("{name} failed: {}", unreported.error);
             match self
                 .record_notification(about, NotificationKind::CleanupFailed, message)
                 .await
             {
                 Ok(_) => {
                     let id = unreported.workspace.as_ref().map(|(id, _)| id.as_str());
-                    self.cleanup_health.failure_notified(id);
+                    health.failure_notified(id);
                 }
                 Err(error) => log!("notification not recorded: {error:#}"),
             }

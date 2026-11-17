@@ -41,12 +41,12 @@ impl Manager {
     /// which could otherwise run until the space goes, or in any space
     /// whose `[sleep] idle` is enabled; each heavy one whose space sleeps
     /// after `shoal sleep` once that costs nothing; and those that make room
-    /// for queued work. A failure in one space does not skip the others.
-    pub async fn stop_idle_agents(&self) -> Result<()> {
+    /// for queued work, at `now`. A failure in one space does not skip the
+    /// others.
+    pub async fn stop_idle_agents(&self, now: UnixTime) -> Result<()> {
         // The process scan that tells agents with work in flight waits until
         // some agent would stop.
         let turns = self.reported_turns().await?;
-        let now = UnixTime::now();
         let candidates = self.idle_candidates(&turns).await?;
         let mut chosen = HashMap::new();
         let mut failed = crate::daemon::cleanup::SpaceFailures::default();

@@ -156,3 +156,25 @@ async fn failing_passes_notify_once_and_show_where_they_belong() {
         .0;
     assert_eq!(status.cleanup_error, None);
 }
+
+#[tokio::test]
+async fn idle_sleep_reports_its_failures_as_cleanup_does_under_its_own_name() {
+    let (_root, manager) = crate::daemon::test_support::manager().await;
+    manager
+        .record_idle_sleep(failed("idle agents", None, "store is locked"))
+        .await;
+    let problem = manager.cleanup_problem().unwrap();
+    assert!(problem.starts_with("Idle sleep failed"), "{problem}");
+    let notifications = manager.notifications(true, 100).await.unwrap();
+    assert!(
+        notifications.iter().any(|notification| notification.kind
+            == NotificationKind::CleanupFailed
+            && notification.message.starts_with("idle sleep failed")),
+        "{notifications:?}"
+    );
+    // A cleanup sweep that passes leaves the idle sleep's failure.
+    manager.record_sweep(Ok(())).await;
+    assert!(manager.cleanup_problem().is_some());
+    manager.record_idle_sleep(Ok(())).await;
+    assert_eq!(manager.cleanup_problem(), None);
+}
