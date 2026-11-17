@@ -126,3 +126,19 @@ fn a_restart_keeps_only_the_queued_updates_of_the_items_condition() {
         [UpdateKind::Closed]
     );
 }
+
+#[test]
+fn a_restart_reports_a_condition_its_read_first_shows() {
+    let mut record = WatchRecord::default();
+    record.observe(snapshot(json!({}), "open"), "pr", UnixTime::EPOCH);
+    record.pending.clear();
+    record.start_from(snapshot(json!({}), "closed"), "pr", UnixTime::EPOCH);
+    assert_eq!(
+        record
+            .pending
+            .iter()
+            .map(|update| update.kind)
+            .collect::<Vec<_>>(),
+        [UpdateKind::Closed]
+    );
+}

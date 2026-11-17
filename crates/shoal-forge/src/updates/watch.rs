@@ -37,18 +37,16 @@ impl WatchRecord {
     /// Start the watch from `snapshot` of the item at `url`, read by a
     /// lookup that began at `read_at`, as when its space links the item or
     /// an agent begins a new session there. What the item's discussion and
-    /// details show then is history, which `shoal view` shows: of the
-    /// updates not yet acknowledged only those of the item's condition
-    /// stay, and a watch that never read the item reports its condition,
-    /// such as failed checks, a conflict or its closing.
+    /// details show then is history, which `shoal view` shows; changes to
+    /// its condition since the watch last read it, such as a failed check,
+    /// a conflict or its closing, are reported, and of the updates not yet
+    /// acknowledged only those of its condition stay.
     pub fn start_from(&mut self, mut snapshot: Snapshot, url: &str, read_at: UnixTime) {
         snapshot.normalize(&self.snapshot, UnixTime::now());
         self.pending.retain(|update| of_condition(update.kind));
-        if self.snapshot.before_first_read() {
-            let mut condition = self.snapshot.changes(&snapshot, url);
-            condition.retain(|update| of_condition(update.kind));
-            (self.pending).extend(one_delivery(self.held.deliver(&snapshot, condition)));
-        }
+        let mut condition = self.snapshot.changes(&snapshot, url);
+        condition.retain(|update| of_condition(update.kind));
+        (self.pending).extend(one_delivery(self.held.deliver(&snapshot, condition)));
         self.snapshot = snapshot;
         self.started_at = Some(read_at);
     }
