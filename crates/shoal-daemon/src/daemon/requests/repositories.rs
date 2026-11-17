@@ -164,9 +164,14 @@ impl Scoped for RepositoryMethod {
     ) -> Result<Option<&mut SpaceSelector>> {
         let repository = match self {
             RepositoryMethod::ListRepositories => return Ok(None),
-            // It only keeps a registered repository from cleanup while its
-            // connection lives, resuming the hold of a registration.
-            RepositoryMethod::HoldContribution { .. } => return Ok(None),
+            // It resumes a registration's hold, which a scoped caller makes
+            // only where it may administer: asking again for the approval
+            // the registration took would leave the contribution unheld.
+            RepositoryMethod::HoldContribution { repository } => {
+                let key = PermissionKey::Admin;
+                manager.refuse_denied(caller, key, Some(repository)).await?;
+                return Ok(None);
+            }
             // The inbox lists them with the user's notifications.
             RepositoryMethod::FailingSyncs => {
                 let action = Action::new(PermissionKey::Notifications, "the failing syncs");

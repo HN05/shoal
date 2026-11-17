@@ -301,3 +301,36 @@ async fn a_removed_contribution_names_the_fork_it_leaves() {
         .unwrap();
     assert!(removed.message.contains(fork), "{}", removed.message);
 }
+
+#[tokio::test]
+async fn a_scoped_caller_resumes_a_hold_only_where_it_may_administer() {
+    use crate::daemon::{scope::Caller, test_support::chat};
+    use crate::protocol::RepositoryMethod;
+    let (root, manager) = manager().await;
+    let repo = contribution(&manager, root.path()).await;
+    let config = "[modes.chat.permissions]\nadmin = 'deny'\n\
+                  [modes.plan.permissions]\nadmin = 'propose'\n";
+    (manager.write_local_config(&repo.id, Some(config.into())))
+        .await
+        .unwrap();
+    for (mode, allowed) in [("chat", false), ("plan", true)] {
+        let space = chat(&manager, mode, mode, Some(&repo), None).await;
+        let caller = Caller {
+            space_id: space.id,
+            execution: None,
+            granted: None,
+            read_only: false,
+        };
+        let token = format!("scope-{mode}");
+        manager
+            .executions
+            .issue_scope(token.clone().into(), caller)
+            .await;
+        let mut method = RepositoryMethod::HoldContribution {
+            repository: repo.id.clone(),
+        };
+        let authorized =
+            crate::daemon::scope::authorize(&manager, Some(&token.into()), &mut method).await;
+        assert_eq!(authorized.is_ok(), allowed, "{mode}");
+    }
+}
