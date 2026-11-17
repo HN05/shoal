@@ -20,8 +20,9 @@ pub(crate) use queries::{
     remote_urls,
 };
 pub use queries::{
-    checkout_dirs, current_branch, git_dir, head_and_branch, latest_subject, log_stat, push_remote,
-    remote_url, remotes, revision, symbolic_revision, verify_revision, worktree_root,
+    checkout_dirs, configured_remote_url, current_branch, git_dir, head_and_branch, latest_subject,
+    log_stat, push_remote, remote_url, remotes, revision, symbolic_revision, verify_revision,
+    worktree_root,
 };
 pub mod checkpoint;
 pub mod repo;

@@ -212,6 +212,24 @@ pub async fn remote_url(repo: &Path, remote: &str) -> Result<String> {
     run(repo, &["remote", "get-url", remote]).await
 }
 
+/// Git's exit status for a remote the repository does not configure.
+const NO_SUCH_REMOTE: i32 = 2;
+
+/// The URL of the remote `remote`, as [`remote_url`] reads it, or `None`
+/// when the repository has no such remote.
+pub async fn configured_remote_url(repo: &Path, remote: &str) -> Result<Option<String>> {
+    let mut command = super::command(repo);
+    command.args(["remote", "get-url", remote]);
+    let output = super::bounded(command).capture().await;
+    if let Ok(output) = &output
+        && output.status.code() == Some(NO_SUCH_REMOTE)
+    {
+        return Ok(None);
+    }
+    let url = crate::subprocess::checked_output("git remote get-url", output)?;
+    Ok(Some(url.trim().to_owned()))
+}
+
 /// The remote a push of `branch` goes to: `branch.<name>.pushRemote`, else
 /// `remote.pushDefault`, else `origin`.
 pub async fn push_remote(repo: &Path, branch: &BranchName) -> Result<String> {

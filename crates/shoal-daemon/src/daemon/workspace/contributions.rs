@@ -156,12 +156,7 @@ async fn fork_url(checkout: &std::path::Path) -> Result<Option<String>> {
     if !checkout.is_dir() {
         return Ok(None);
     }
-    let remotes = git::remotes(checkout, git::run_isolated).await?;
-    if !remotes.lines().any(|remote| remote == git::FORK_REMOTE) {
-        return Ok(None);
-    }
-    let url = git::remote_url(checkout, git::FORK_REMOTE).await?;
-    Ok(Some(url.trim().to_owned()))
+    git::configured_remote_url(checkout, git::FORK_REMOTE).await
 }
 
 /// The notice of a removed contribution, naming the fork it leaves on the

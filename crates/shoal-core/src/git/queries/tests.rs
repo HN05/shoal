@@ -126,3 +126,32 @@ async fn a_rebased_branchs_log_leaves_out_its_base_and_what_was_seen() {
     assert!(log.contains("More topic work"), "{log}");
     assert!(!log.contains("Main work"), "{log}");
 }
+
+#[tokio::test]
+async fn a_configured_remote_url_is_none_only_without_that_remote() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    assert_eq!(configured_remote_url(&repo, "origin").await.unwrap(), None);
+    git(
+        &repo,
+        &["remote", "add", "origin", "https://example.com/a/b"],
+    );
+    git(
+        &repo,
+        &[
+            "config",
+            "url.https://mirror.test/.insteadOf",
+            "https://example.com/",
+        ],
+    );
+    assert_eq!(
+        configured_remote_url(&repo, "origin")
+            .await
+            .unwrap()
+            .as_deref(),
+        Some("https://mirror.test/a/b")
+    );
+    // Any other failure stays an error.
+    let missing = root.path().join("missing");
+    configured_remote_url(&missing, "origin").await.unwrap_err();
+}
