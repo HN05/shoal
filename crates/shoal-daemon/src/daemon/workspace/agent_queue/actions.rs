@@ -213,6 +213,33 @@ impl Manager {
         Ok(cancelled)
     }
 
+    /// [`Self::cancel_waiting_launches`] while the preparation of
+    /// `workspace_id` waits, in one transaction with that check, so its
+    /// release, which needs the launch it waits for, and this cancellation
+    /// exclude each other; `None` once the preparation no longer waits.
+    pub(crate) async fn cancel_launches_while_preparation_waits(
+        &self,
+        workspace_id: &SpaceId,
+    ) -> Result<Option<Vec<QueueEntry>>> {
+        let _gate = self.agent_queue.lock_admission().await;
+        let id = workspace_id.to_owned();
+        let cancelled = (self.store)
+            .write(move |tx| {
+                if crate::daemon::operations::starts::preparation_waits(tx, &id)?.is_none() {
+                    return Ok(None);
+                }
+                delete_waiting_launches(tx, &id).map(Some)
+            })
+            .await?;
+        if cancelled
+            .as_ref()
+            .is_some_and(|cancelled| !cancelled.is_empty())
+        {
+            self.agent_settles.request(workspace_id);
+        }
+        Ok(cancelled)
+    }
+
     /// The workspaces a waiting launch opens. Requires the queue gate, which
     /// keeps them waiting until it is released.
     pub(in crate::daemon::workspace) async fn waiting_launch_workspaces(

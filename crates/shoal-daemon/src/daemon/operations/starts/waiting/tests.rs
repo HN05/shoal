@@ -196,3 +196,22 @@ async fn a_release_after_its_agent_was_stopped_keeps_the_preparation_waiting() {
     assert!(!manager.operation_runs_in(&ui.id));
     assert!(read(&manager, &ui).await.preparation_waits.is_some());
 }
+
+#[tokio::test]
+async fn a_stop_after_the_release_leaves_the_launch_to_the_started_preparation() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let api = create(&manager, &repo, "api").await;
+    let blocker = Blocker::Space(api.id.to_string());
+    let ui = *start(&manager, &repo, "ui", vec![blocker]).await.workspace;
+    done(&manager, &api).await;
+    manager.start_waiting_preparations().await.unwrap();
+    assert!(manager.operation_runs_in(&ui.id));
+    // A stop that read the wait before the release cancels nothing.
+    let cancelled = manager
+        .cancel_launches_while_preparation_waits(&ui.id)
+        .await
+        .unwrap();
+    assert!(cancelled.is_none());
+    assert_eq!(manager.queue_entries().await.unwrap().len(), 1);
+}

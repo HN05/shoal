@@ -3,6 +3,7 @@
 use super::super::Manager;
 use super::Connections;
 use crate::daemon::log;
+use crate::daemon::operations::starts::preparation_waits;
 use crate::{
     daemon::{
         space_processes::{Selection, WorktreeTies},
@@ -409,9 +410,12 @@ impl Manager {
         {
             return Ok(Vec::new());
         }
-        // Nothing runs where the preparation waits, which goes on waiting.
-        if workspace.preparation_waits.is_some() {
-            return self.cancel_launches(&workspace.id, &stopping.keep).await;
+        // Nothing runs where the preparation waits, which goes on waiting;
+        // one that started meanwhile is stopped as any preparing workspace.
+        if workspace.preparation_waits.is_some()
+            && let Some(cancelled) = (self.stop_waiting(&workspace.id, &stopping.keep)).await?
+        {
+            return Ok(cancelled);
         }
         let reserved_state = self
             .reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
@@ -453,6 +457,23 @@ impl Manager {
                 ..
             } => self.cancel_waiting_launches(id).await,
             Keep::LastSessions { .. } | Keep::Records => Ok(Vec::new()),
+        }
+    }
+
+    /// Stop the workspace `id` while its preparation waits, where nothing
+    /// runs, cancelling the launches waiting there where `keep` says so and
+    /// returning them; `None` once its preparation no longer waits.
+    async fn stop_waiting(&self, id: &SpaceId, keep: &Keep) -> Result<Option<Vec<QueueEntry>>> {
+        match keep {
+            Keep::LastSessions {
+                launches: QueuedLaunches::Cancel,
+                ..
+            } => self.cancel_launches_while_preparation_waits(id).await,
+            Keep::LastSessions { .. } | Keep::Records => {
+                let id = id.to_owned();
+                let waits = self.store.run(move |db| preparation_waits(db, &id)).await?;
+                Ok(waits.map(|_| Vec::new()))
+            }
         }
     }
 
