@@ -273,7 +273,7 @@ impl Manager {
         } = admitted;
         self.member_seen(&member.id, &version).await;
         log!("hub: {} {} connected", member.kind, member.name);
-        let calls = Calls::new();
+        let calls = Calls::new(channel.sender());
         let answer = |call| {
             let (manager, member) = (self.clone(), member.clone());
             async move { session::reply(manager.answer_member(&member, call).await) }

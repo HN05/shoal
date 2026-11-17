@@ -1,7 +1,7 @@
 //! What the hub answers, to its members' calls and to the requests of its
 //! own machine's callers alike: pairing codes, its listener and members, and
 //! revoking credentials.
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use shoal_protocol::hub::{
     Member, Overview,
     link::{Call, Reply},
@@ -75,14 +75,36 @@ impl Manager {
 
     /// A pairing code, from the hub itself or through this machine's link.
     pub(crate) async fn hub_pairing(&self) -> Result<Pairing> {
-        self.ensure_hub()?;
-        self.issue_pairing().await
+        if self.is_hub() {
+            return self.issue_pairing().await;
+        }
+        match self.through_hub(Call::Pair).await? {
+            Reply::Pairing(pairing) => Ok(pairing),
+            reply => Err(unexpected(reply)),
+        }
     }
 
     /// Revoke the member `selector` names, on the hub itself or through
     /// this machine's link.
     pub(crate) async fn revoke_hub_member(&self, selector: String) -> Result<Member> {
-        self.ensure_hub()?;
-        self.revoke_member(&selector).await
+        if self.is_hub() {
+            return self.revoke_member(&selector).await;
+        }
+        match self.through_hub(Call::Revoke { member: selector }).await? {
+            Reply::Revoked(member) => Ok(member),
+            reply => Err(unexpected(reply)),
+        }
     }
+}
+
+/// The overview a [`Call::Members`] reply carries.
+pub(crate) fn overview(reply: Reply) -> Result<Overview> {
+    match reply {
+        Reply::Members(overview) => Ok(overview),
+        reply => Err(unexpected(reply)),
+    }
+}
+
+fn unexpected(reply: Reply) -> anyhow::Error {
+    anyhow!("the hub answered with an unexpected {reply:?}")
 }

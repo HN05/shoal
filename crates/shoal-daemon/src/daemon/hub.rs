@@ -13,11 +13,13 @@ use shoal_protocol::hub::{HubRole, Overview};
 use super::workspace::Manager;
 
 mod accept;
-mod answers;
+pub(crate) mod answers;
 mod identity;
 mod links;
 mod listener;
+mod member;
 mod members;
+mod membership;
 mod pairing;
 mod session;
 mod transport;
@@ -32,12 +34,14 @@ pub(crate) struct Hub {
     links: links::Links,
     /// As the hub: where its listener is bound, or why it is not.
     listener: listener::Bound,
+    /// As a member: its link to the hub.
+    member: member::Link,
 }
 
-/// Serve the hub's listener while this daemon is the hub, until the
-/// daemon stops.
+/// Serve the hub's listener while this daemon is the hub, and keep a link
+/// to the hub while it is a member of one, until the daemon stops.
 pub(crate) async fn run(manager: Arc<Manager>) {
-    listener::run(manager).await
+    tokio::join!(listener::run(manager.clone()), member::run(manager));
 }
 
 /// Serve the link a member opened on the daemon's socket with `hello`, in a
@@ -67,28 +71,23 @@ impl Manager {
 
     /// The hub role this daemon takes, for `shoal status`.
     pub(crate) async fn hub_role(&self) -> Result<Option<HubRole>> {
-        Ok(self.is_hub().then(|| HubRole::Hub {
-            listener: self.hub_listener(),
-        }))
+        if self.is_hub() {
+            return Ok(Some(HubRole::Hub {
+                listener: self.hub_listener(),
+            }));
+        }
+        self.membership_role().await
     }
 
     /// The hub's listener and members, from the hub itself or through this
     /// machine's link to it.
     pub(crate) async fn hub_overview(&self) -> Result<Overview> {
-        self.ensure_hub()?;
-        self.local_hub_overview().await
-    }
-
-    /// Refuse a request only the hub answers on a daemon that is not it.
-    fn ensure_hub(&self) -> Result<()> {
         if self.is_hub() {
-            return Ok(());
+            return self.local_hub_overview().await;
         }
-        Err(crate::refusal::Refusal::new(
-            crate::refusal::Reason::NotFound,
-            "this machine is not the hub; set [machine.hub] enabled on the hub",
-        )
-        .into())
+        self.through_hub(shoal_protocol::hub::link::Call::Members)
+            .await
+            .and_then(answers::overview)
     }
 
     /// The ID of the hub's own machine, recording it the first time.

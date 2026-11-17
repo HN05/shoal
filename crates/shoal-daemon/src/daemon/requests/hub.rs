@@ -30,6 +30,8 @@ pub(super) async fn handle(
     }
     Ok(Answer::Body(match method {
         HubMethod::PairHub => Body::Pairing(manager.hub_pairing().await?),
+        HubMethod::JoinHub { via, name } => Body::Membership(manager.join_hub(via, name).await?),
+        HubMethod::LeaveHub => Body::LeftHub(manager.leave_hub().await?),
         HubMethod::HubMembers => Body::HubOverview(manager.hub_overview().await?),
         HubMethod::RevokeHubMember { member } => {
             Body::HubMember(manager.revoke_hub_member(member).await?)

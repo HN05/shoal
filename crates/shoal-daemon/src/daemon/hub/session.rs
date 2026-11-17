@@ -3,24 +3,60 @@
 //! silent, as one whose network dropped away, from a quiet one.
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
+    time::Duration,
 };
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 use shoal_protocol::hub::link::{Call, Frame, Reply, SILENCE};
 use tokio::{sync::oneshot, task::JoinSet, time::Instant};
 
-use super::transport::Channel;
+use super::transport::{Channel, Sender};
 
-/// The calls this side sent over a link, each waiting for its reply.
-#[derive(Default)]
+/// How long a call waits for its reply.
+const CALL_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// The calls this side sends over a link, each waiting for its reply.
 pub(crate) struct Calls {
+    sender: Sender,
     pending: Mutex<HashMap<u64, oneshot::Sender<Reply>>>,
+    next: AtomicU64,
 }
 
 impl Calls {
-    pub(super) fn new() -> Arc<Self> {
-        Arc::default()
+    pub(super) fn new(sender: Sender) -> Arc<Self> {
+        Arc::new(Self {
+            sender,
+            pending: Mutex::default(),
+            next: AtomicU64::new(1),
+        })
+    }
+
+    /// The other side's reply to `call`, failing as [`Reply::Failed`] does.
+    pub(crate) async fn call(&self, call: Call) -> Result<Reply> {
+        let id = self.next.fetch_add(1, Ordering::Relaxed);
+        let (replied, reply) = oneshot::channel();
+        self.pending.lock().unwrap().insert(id, replied);
+        let sent = self.sender.send(&Frame::Call { id, call }).await;
+        let reply = match sent {
+            Ok(()) => tokio::time::timeout(CALL_TIMEOUT, reply).await,
+            Err(error) => {
+                self.pending.lock().unwrap().remove(&id);
+                return Err(error);
+            }
+        };
+        match reply {
+            Ok(Ok(Reply::Failed { message })) => bail!("{message}"),
+            Ok(Ok(reply)) => Ok(reply),
+            Ok(Err(_)) => bail!("the link to the hub closed before it answered"),
+            Err(_) => {
+                self.pending.lock().unwrap().remove(&id);
+                bail!("the hub did not answer within {}s", CALL_TIMEOUT.as_secs())
+            }
+        }
     }
 
     fn replied(&self, id: u64, reply: Reply) {

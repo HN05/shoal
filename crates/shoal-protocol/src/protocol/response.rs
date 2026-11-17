@@ -208,6 +208,8 @@ response_bodies! {
     Trigger(crate::triggers::TriggerStatus),
     TriggerFired(crate::triggers::Fired),
     Pairing(crate::hub::pairing::Pairing),
+    Membership(crate::hub::Membership),
+    LeftHub(crate::hub::Left),
     HubOverview(crate::hub::Overview),
     HubMember(crate::hub::Member),
     ScopeToken(crate::scope_tokens::ScopeToken),

@@ -160,6 +160,8 @@ const REQUESTS: &[&str] = &[
     r#"{"pause_trigger":{"context":null,"name":"triage","paused":true}}"#,
     r#"{"run_trigger":{"context":null,"name":"labelled","request":{"headers":[["X-Forgejo-Event","issues"]],"body":"{}"}}}"#,
     r#""pair_hub""#,
+    r#"{"join_hub":{"via":{"command":["ssh","desk","shoal","daemon","connect"]},"name":"laptop"}}"#,
+    r#""leave_hub""#,
     r#""hub_members""#,
     r#"{"revoke_hub_member":{"member":"laptop"}}"#,
     // Issues and PRs.
