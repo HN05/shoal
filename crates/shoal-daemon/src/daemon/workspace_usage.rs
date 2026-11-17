@@ -1,5 +1,6 @@
-//! What each workspace's processes use, sampled on a fixed cadence from the
-//! processes carrying its identity, with what its containers use.
+//! What each workspace's processes use, sampled on a fixed cadence, and at
+//! once when a workspace's containers start, from the processes carrying its
+//! identity, with what its containers use.
 use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::{HashMap, HashSet},
@@ -334,7 +335,10 @@ pub(super) async fn run(manager: Arc<Manager>) {
         manager
             .usage
             .with_workspaces(|usages| usages.record(sample, containers));
-        tokio::time::sleep(SAMPLE_INTERVAL).await;
+        tokio::select! {
+            () = manager.signals.usage_woken() => {}
+            () = tokio::time::sleep(SAMPLE_INTERVAL) => {}
+        }
     }
 }
 

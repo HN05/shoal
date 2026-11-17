@@ -818,7 +818,8 @@ space's number, then names the workspace, its repository when the
 rows span several, its status, what its processes and containers use while any run, and the
 linked issue's title or CI job, cut with `…` to fit a terminal's width. Usage counts every
 process carrying the workspace's `SHOAL_SPACE`: CPU as a percent of one
-core over the daemon's last ten-second sample, including children those
+core since the daemon's sample before, which it takes every ten seconds and
+when a workspace's containers start, including children those
 processes have waited for, then memory, resident on Linux and the physical
 footprint on macOS, with what its [containers](#containers) use. `shoal status` adds the process count, and `--json` gives
 `usage` in bytes and percent. The status is the

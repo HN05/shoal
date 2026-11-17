@@ -204,6 +204,7 @@ impl Manager {
         recorded.project.error = up.as_ref().err().map(|error| format!("{error:#}"));
         self.save_containers(&recorded).await?;
         up.with_context(|| format!("the containers of {} did not start", workspace.name))?;
+        self.signals.containers_started();
         Ok(recorded.project)
     }
 

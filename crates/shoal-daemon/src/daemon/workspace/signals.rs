@@ -17,6 +17,7 @@ pub(crate) struct Signals {
     execution_unknown: Notify,
     lost_reports: Notify,
     simulator_idle: Notify,
+    usage: Notify,
 }
 
 impl Signals {
@@ -119,6 +120,16 @@ impl Signals {
 
     pub(crate) fn simulator_idled(&self) -> Notified<'_> {
         self.simulator_idle.notified()
+    }
+
+    /// Sample the workspaces' usage now, since a workspace's containers
+    /// started.
+    pub(crate) fn containers_started(&self) {
+        self.usage.notify_one();
+    }
+
+    pub(crate) fn usage_woken(&self) -> Notified<'_> {
+        self.usage.notified()
     }
 }
 
