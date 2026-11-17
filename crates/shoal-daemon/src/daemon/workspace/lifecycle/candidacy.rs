@@ -88,6 +88,11 @@ impl Manager {
             AgentState::Saved if rule == Rule::Idle => return Ok(Err(CleanupReason::Recovering)),
             AgentState::Saved | AgentState::Stopped => {}
         }
+        // Merged cleanup reads the merge from Git, which can show it before
+        // the poll that starts the lookup of its runs.
+        if rule == Rule::Merged && self.merge_unseen(id).await? {
+            return Ok(Err(CleanupReason::MergeRuns));
+        }
         if rule == Rule::Idle {
             if let Some(reason) = self.assignment_reason(id).await? {
                 return Ok(Err(reason));

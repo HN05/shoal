@@ -155,9 +155,9 @@ impl Manager {
     }
 
     /// Whether a PR the space `id` watches may have merged unseen: where
-    /// `[pr] watch_merge_runs` is on, no read of Shoal's own has recorded
-    /// its merge, which starts the lookup of its runs. PR cleanup, which
-    /// reads the forge itself, waits for that read.
+    /// `[pr] watch_merge_runs` is on, no read of Shoal's own has seen it
+    /// merge or close, and the read that sees it merge starts the lookup of
+    /// its runs. Cleanup that finds the merge another way waits for it.
     pub(crate) async fn merge_unseen(&self, id: &SpaceId) -> Result<bool> {
         if self.configured_merge_target(id).await?.is_none() {
             return Ok(false);
@@ -264,14 +264,13 @@ pub(crate) fn awaits_merge_runs(db: &rusqlite::Connection, id: &SpaceId) -> Resu
 }
 
 /// Whether neither the background poll's baseline nor the watch cursor of
-/// the space `id` shows a PR it watches merged.
+/// the space `id` shows a PR it watches merged or closed.
 fn merge_unseen(db: &rusqlite::Connection, id: &SpaceId) -> Result<bool> {
-    let merged = |read: &Snapshot| read.state() == Some(SnapshotState::Merged);
     for pull in linked_items(db, id, Some(ItemKind::Pr))? {
         let polled = observed_item(db, id, pull.url())?;
         let watched = cursor_record(db, id, pull.url())?;
-        if !polled.is_some_and(|read| merged(&read))
-            && !watched.is_some_and(|record| merged(&record.snapshot))
+        if !polled.is_some_and(|read| read.concluded())
+            && !watched.is_some_and(|record| record.snapshot.concluded())
         {
             return Ok(true);
         }

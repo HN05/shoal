@@ -615,3 +615,53 @@ async fn merged_cleanup_removes_a_chat_stopped_for_its_idle_period() {
         .unwrap();
     assert!(manager.chats().await.unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn merged_cleanup_waits_for_a_poll_to_see_a_watched_prs_merge() {
+    let f = Fixture::new().await;
+    f.unlink_issue().await;
+    crate::daemon::test_support::configure(
+        &f.manager,
+        "[cleanup]\ngrace_minutes = 0\n\n[pr]\nwatch_merge_runs = true\n",
+    )
+    .await;
+    let pr = "http://127.0.0.1:1/team/repo/pulls/1";
+    let registration = crate::daemon::links::pr::Registration {
+        kind: crate::daemon::links::pr::RegistrationKind::Watch {
+            urls: vec![pr.parse().unwrap()],
+            merged_head: None,
+        },
+        error: None,
+    };
+    let id = f.workspace.id.clone();
+    (f.manager.store)
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
+                rusqlite::params![id, serde_json::to_string(&registration)?],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    f.squash_merge();
+    assert!(f.kept_after(5).await, "the merge is unseen");
+
+    // The poll sees the merge, without a merge commit to look up runs of.
+    let id = f.workspace.id.clone();
+    (f.manager.store)
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO space_item_activity(space_id,url,record) VALUES (?1,?2,?3)",
+                rusqlite::params![
+                    id,
+                    pr,
+                    r#"{"comments":{},"checks":{},"conflict":null,"state":"merged","errors":{}}"#
+                ],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert!(!f.kept_after(5).await);
+}
