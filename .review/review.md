@@ -753,8 +753,11 @@ configured command for another agent, plus proven child
   capacity. Shoal promises earlier versions no compatibility: flag an
   alias, fallback or second reader kept for a shape only an earlier Shoal
   wrote, and a shape change whose migration leaves the store holding the old
-  one; do not ask a change to keep an old representation, except for what a
-  process an upgrade leaves running, such as an agent's wrapper, sends.
+  one; do not ask a change to keep an old representation. For what a process
+  an upgrade leaves running, such as an agent's wrapper, sends, ask only
+  where that process would otherwise become unusable and keeping it so is
+  easy; odd behaviour of it, such as a report the daemon no longer takes,
+  is accepted.
   `install` preserves compatible daemons and commands,
   deferring service changes until restart; incompatible daemons restart. Service
   installation refuses state-directory changes until the existing service stops.

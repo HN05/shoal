@@ -22,9 +22,10 @@ for delivering a PR, under Committing near the end, decide when work is done.
   store migration rewrites what the store holds into the new shape in the
   same change, so code reads one shape and keeps no alias, fallback or
   second reader for an old one; what another version sends, such as a
-  `shoal move` package, is refused, not converted. Only a process an
-  upgrade leaves running, such as an agent's wrapper, keeps being served in
-  its version's shape, since no migration can rewrite it.
+  `shoal move` package, is refused, not converted. A process an upgrade
+  leaves running, such as an agent's wrapper, runs its version's code, which
+  no migration can rewrite: keep it usable where that is easy, and accept
+  what it then does oddly, such as a report the daemon no longer takes.
 - Treat function abstraction as a correctness requirement and a review gate.
   Every function must stay at one abstraction level: orchestration calls named
   domain operations, and helpers own lower-level implementation details. If a
