@@ -116,8 +116,8 @@ pub enum HeldBy {
 pub struct QueuedJob {
     pub job: crate::forge::ci::runner::WaitingJob,
     pub run: crate::forge::ci::runner::JobRun,
-    /// The spaces its run is for: the workspace that links the run's PR or
-    /// owns the branch it ran on, first, then the chats that link its PR.
+    /// The spaces its run is for: those that link the run's PR, workspaces
+    /// first, or the workspace that owns the branch it ran on.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub space_ids: Vec<SpaceId>,
     /// Whether its run is on the repository's default branch.

@@ -1,11 +1,10 @@
-//! The spaces a job's run is for: the workspace that links the run's PR or
-//! owns the branch it ran on, and the chats that link its PR. Linking a job
-//! lists it in their status; it places none of them above the job's own
-//! workspace. Links change after a job is queued, so whatever reads the
-//! spaces a job is for links it again first.
+//! The spaces a job's run is for: those that link the run's PR, or the
+//! workspace that owns the branch it ran on. Linking a job lists it in
+//! their status; it places none of them above the job's own workspace.
+//! Links change after a job is queued, so whatever reads the spaces a job
+//! is for links it again first.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
-use shoal_refs::BranchName;
 use std::collections::HashMap;
 
 use anyhow::Result;
@@ -18,25 +17,11 @@ use crate::{
         ci::runner::{JobRun, Trigger, WaitingJob},
         numbers::PullNumber,
     },
-    model::{Chat, QueuedJob, SpaceLinks, Workspace},
+    model::{QueuedJob, Space, SpaceLinks},
     state::{QueueKind, QueueState},
 };
 
-/// The spaces as they are now, which a job's run can be for.
-pub(super) struct Spaces {
-    workspaces: Vec<Workspace>,
-    chats: Vec<Chat>,
-}
-
 impl Manager {
-    /// The spaces as they are now.
-    pub(super) async fn spaces_now(&self) -> Result<Spaces> {
-        Ok(Spaces {
-            workspaces: self.list_workspaces().await?,
-            chats: self.chats().await?,
-        })
-    }
-
     /// `job` of `run` in `repository_id`, linked to the spaces its run is
     /// for now.
     pub(super) async fn link_job(
@@ -46,10 +31,8 @@ impl Manager {
         job: WaitingJob,
         run: JobRun,
     ) -> Result<QueuedJob> {
-        let space_ids = self
-            .spaces_now()
-            .await?
-            .run_spaces(forge, repository_id, &run);
+        let spaces = self.present_spaces().await?;
+        let space_ids = run_spaces(&spaces, forge, repository_id, &run);
         Ok(QueuedJob {
             job,
             run,
@@ -65,7 +48,7 @@ impl Manager {
         if waiting.is_empty() {
             return Ok(linked);
         }
-        let spaces = self.spaces_now().await?;
+        let spaces = self.present_spaces().await?;
         for (id, repository, mut job) in waiting {
             self.relink_job(&spaces, &repository, &mut job).await;
             linked.insert(id, job.space_ids);
@@ -78,12 +61,12 @@ impl Manager {
     /// the spaces it had.
     pub(super) async fn relink_job(
         &self,
-        spaces: &Spaces,
+        spaces: &[Space],
         repository_id: &RepositoryId,
         job: &mut QueuedJob,
     ) {
         match self.item_forge(&job.run.url).await {
-            Ok(forge) => job.space_ids = spaces.run_spaces(&forge, repository_id, &job.run),
+            Ok(forge) => job.space_ids = run_spaces(spaces, &forge, repository_id, &job.run),
             Err(error) => crate::daemon::log!("runner: {}: {error:#}", job.job.name),
         }
     }
@@ -109,67 +92,32 @@ pub(super) fn waiting_jobs(
     Ok(jobs)
 }
 
-impl Spaces {
-    /// The spaces of `repository_id` the run `run` of `forge` is for: the
-    /// workspace first, then the chats.
-    fn run_spaces(
-        &self,
-        forge: &ForgeRepo,
-        repository_id: &RepositoryId,
-        run: &JobRun,
-    ) -> Vec<SpaceId> {
-        let workspace = self.run_workspace(forge, repository_id, run);
-        let chats = self.run_chats(forge, repository_id, run);
-        workspace.into_iter().chain(chats).collect()
-    }
+/// The spaces among `spaces`, of `repository_id` or of no repository,
+/// that the run `run` of `forge` is for, in their order there.
+fn run_spaces(
+    spaces: &[Space],
+    forge: &ForgeRepo,
+    repository_id: &RepositoryId,
+    run: &JobRun,
+) -> Vec<SpaceId> {
+    (spaces.iter())
+        .filter(|space| {
+            (space.repository_id.as_ref()).is_none_or(|id| id == repository_id)
+                && runs_for(space, forge, run)
+        })
+        .map(|space| space.id.clone())
+        .collect()
+}
 
-    /// The workspace of `repository_id` that links the PR `run` ran for, or
-    /// owns the branch it ran on.
-    fn run_workspace(
-        &self,
-        forge: &ForgeRepo,
-        repository_id: &RepositoryId,
-        run: &JobRun,
-    ) -> Option<SpaceId> {
-        let mut own = self
-            .workspaces
-            .iter()
-            .filter(|workspace| workspace.repository() == repository_id);
-        match &run.trigger {
-            Trigger::Pull { number } => {
-                own.find(|workspace| links_pull(forge, &workspace.links, *number))
-            }
-            Trigger::Branch(branch) => own.find(|workspace| {
-                workspace.branch().map(BranchName::as_str) == Some(branch.as_str())
-            }),
-            Trigger::Other => None,
-        }
-        .map(|workspace| workspace.id.clone())
-    }
-
-    /// The chats of `repository_id`, or of no repository, that link the PR
-    /// `run` ran for.
-    fn run_chats<'a>(
-        &'a self,
-        forge: &'a ForgeRepo,
-        repository_id: &'a RepositoryId,
-        run: &JobRun,
-    ) -> impl Iterator<Item = SpaceId> + 'a {
-        let number = match run.trigger {
-            Trigger::Pull { number } => Some(number),
-            _ => None,
-        };
-        self.chats
-            .iter()
-            .filter(move |chat| {
-                number.is_some_and(|number| {
-                    chat.repository_id
-                        .as_ref()
-                        .is_none_or(|id| id == repository_id)
-                        && links_pull(forge, &chat.links, number)
-                })
-            })
-            .map(|chat| chat.id.clone())
+/// Whether the run `run` of `forge` is for `space`: it links the PR the
+/// run ran for, or its worktree has the branch it ran on.
+fn runs_for(space: &Space, forge: &ForgeRepo, run: &JobRun) -> bool {
+    match &run.trigger {
+        Trigger::Pull { number } => links_pull(forge, &space.links, *number),
+        Trigger::Branch(branch) => (space.worktree())
+            .and_then(|worktree| worktree.branch())
+            .is_some_and(|own| own.as_str() == branch.as_str()),
+        Trigger::Other => false,
     }
 }
 

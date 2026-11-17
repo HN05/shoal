@@ -797,7 +797,7 @@ async fn watch_pull(manager: &Manager, space: &SpaceId, url: Option<String>) {
 }
 
 #[tokio::test]
-async fn a_chat_that_links_a_jobs_pr_lists_the_job_waiting_and_running() {
+async fn every_space_that_links_a_jobs_pr_lists_the_job_waiting_and_running() {
     let fixture = fixture(
         vec![job("h2", 4, 2)],
         "permit = \"builds\"\n[resources.builds]\n",
@@ -815,10 +815,15 @@ async fn a_chat_that_links_a_jobs_pr_lists_the_job_waiting_and_running() {
         .create_workspace(&fixture.repository, "pull".into(), None, None, None)
         .await
         .unwrap();
+    let second = manager
+        .create_workspace(&fixture.repository, "second".into(), None, None, None)
+        .await
+        .unwrap();
     let chat =
         crate::daemon::test_support::chat(manager, "talk", "chat", Some(&repository), None).await;
     let url = format!("http://{}/team/repo/pulls/12", fixture.server.host);
     watch_pull(manager, &pull.id, Some(url.clone())).await;
+    watch_pull(manager, &second.id, Some(url.clone())).await;
     let other = hold_the_builds_permit(&fixture).await;
     admit_and_claim(manager).await;
     manager.dispatch_queue().await.unwrap();
@@ -831,12 +836,15 @@ async fn a_chat_that_links_a_jobs_pr_lists_the_job_waiting_and_running() {
     assert!(chat_status().await.waiting_jobs.is_empty());
 
     // Linked after the job queued, the chat lists it waiting with what
-    // holds it, after the workspace that links the PR too.
+    // holds it, after each workspace that links the PR too.
     watch_pull(manager, &chat.id, Some(url)).await;
     let status = chat_status().await;
     assert_eq!(status.waiting_jobs.len(), 1);
     let waiting = status.waiting_jobs[0].job.as_ref().unwrap();
-    assert_eq!(waiting.space_ids, [pull.id.clone(), chat.id.clone()]);
+    assert_eq!(
+        waiting.space_ids,
+        [pull.id.clone(), second.id.clone(), chat.id.clone()]
+    );
     assert_eq!(
         status.waiting_jobs[0].held_by,
         Some(crate::model::HeldBy::Permits)

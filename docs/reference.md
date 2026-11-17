@@ -3851,13 +3851,14 @@ was cancelled. A job that cannot start is passed over with a
 checkout failed or a restart cut short; a removal that fails is tried again
 until it succeeds.
 
-`shoal list` shows a running job's workspace below the workspace that links its
-run's PR, or owns the branch it ran on, with the job and what its processes
-use. That workspace's `shoal status`, and that of every chat that links the
-run's PR, lists the job under `CI jobs`, and each job still waiting to start
-under `Waiting jobs` with what holds it back, as `shoal queue` shows it. The
-job is not a child of either: it starts from the seed rather than the
-workspace's build, and neither agent's scope reaches it.
+`shoal list` shows a running job's workspace below the first workspace that
+links its run's PR, or owns the branch it ran on, with the job and what its
+processes use. The `shoal status` of every space that links the run's PR, and
+of the workspace that owns its branch, lists the job under `CI jobs`, and each
+job still waiting to start under `Waiting jobs` with what holds it back, as
+`shoal queue` shows it. The job is not a child of any of them: it starts from
+the seed rather than a workspace's build, and no agent's scope there reaches
+it.
 
 `forgejo-runner`'s host backend starts each step in a directory of its own,
 not the job's workspace, so a job for this runner names the workspace as its

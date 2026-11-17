@@ -70,7 +70,7 @@ impl Manager {
         if entries.is_empty() {
             return Ok(entries);
         }
-        let spaces = self.spaces_now().await?;
+        let spaces = self.present_spaces().await?;
         for entry in &mut entries {
             if let (Some(job), Some(repository)) =
                 (entry.job.as_deref_mut(), entry.repository_id.as_ref())
@@ -87,7 +87,7 @@ impl Manager {
         if claimed.is_empty() {
             return Ok(claimed);
         }
-        let spaces = self.spaces_now().await?;
+        let spaces = self.present_spaces().await?;
         for job in &mut claimed {
             self.relink_job(&spaces, &job.repository_id, &mut job.job)
                 .await;
