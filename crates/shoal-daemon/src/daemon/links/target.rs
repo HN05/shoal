@@ -123,6 +123,23 @@ impl Manager {
         })
     }
 
+    /// The account a request acts as in `target`: that of the place it
+    /// comes from in its own repository, and the [`elsewhere_account`]
+    /// in another.
+    ///
+    /// [`elsewhere_account`]: Self::elsewhere_account
+    pub(in crate::daemon::links) fn target_account(
+        &self,
+        target: &ForgeTarget,
+        access: Access,
+        caller: Option<&Caller>,
+    ) -> Account {
+        match target.own_place() {
+            Some(place) => self.place_account(place),
+            None => self.elsewhere_account(access, caller),
+        }
+    }
+
     /// The account a request acts as in `target` when that is not its own
     /// repository: the caller's to read, and the user's own logins for a
     /// change, which only the user makes there.

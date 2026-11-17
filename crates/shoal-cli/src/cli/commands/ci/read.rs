@@ -5,7 +5,7 @@ use anyhow::{Context as _, Result};
 use crate::{
     cli::{
         args::items::ItemArgs,
-        commands::{items::select_space_item_context, view as items_view},
+        commands::{items::select_item_target, view as items_view},
         context::Context,
     },
     client::views,
@@ -19,7 +19,7 @@ use crate::{
         items::reference::ItemInput,
     },
     model::Relation,
-    protocol::ItemContext,
+    protocol::RepoTarget,
 };
 use shoal_forge::ci::run_view::validate_filter;
 use shoal_protocol::space_names::SpaceSelector;
@@ -34,28 +34,27 @@ pub(in crate::cli::commands) async fn view(
     web: bool,
 ) -> Result<i32> {
     let run = (items.selection()?.input).context("view ci needs a run's number or URL")?;
-    let url = matches!(run, ItemInput::Url(_));
-    let context = super::input_context(ctx, items.space, repo, url).await?;
+    let target = select_item_target(ctx, items.space, repo, Some(&run)).await?;
     if web {
-        return open(ctx, context, run).await;
+        return open(ctx, target, run).await;
     }
-    let context = context.as_ref();
+    let target = &target;
     if let Some(job) = job {
-        let log = views::job_log(&ctx.paths, context, &run, job).await?;
+        let log = views::job_log(&ctx.paths, target, &run, job).await?;
         ctx.show(&log, items_view::render_log)?;
         return Ok(0);
     }
     let view = ctx
-        .progress("Reading run", views::read_run(&ctx.paths, context, &run))
+        .progress("Reading run", views::read_run(&ctx.paths, target, &run))
         .await?;
     ctx.show(&view, |view| render_run(view, &[]))?;
     Ok(0)
 }
 
 /// Open the run in the browser, by its URL the forge reports.
-async fn open(ctx: &Context, context: Option<ItemContext>, run: ItemInput) -> Result<i32> {
+async fn open(ctx: &Context, target: RepoTarget, run: ItemInput) -> Result<i32> {
     items_view::may_open_browser(ctx)?;
-    let run = crate::client::ci::run(&ctx.paths, context, run).await?;
+    let run = crate::client::ci::run(&ctx.paths, target, run).await?;
     items_view::open_urls(ctx, vec![run.url])
 }
 
@@ -68,8 +67,8 @@ pub(super) async fn list(
     filter: RunFilter,
 ) -> Result<i32> {
     validate_filter(&filter)?;
-    let context = select_space_item_context(ctx, space, repo, pr.as_ref()).await?;
-    let runs = crate::client::ci::runs(&ctx.paths, context, pr, filter).await?;
+    let target = select_item_target(ctx, space, repo, pr.as_ref()).await?;
+    let runs = crate::client::ci::runs(&ctx.paths, target, pr, filter).await?;
     ctx.show(&runs, render_runs)?;
     Ok(0)
 }

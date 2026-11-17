@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-/// Requests about CI checks and workflow runs of the repository of a
-/// workspace or registered checkout, or of another repository a run's or
-/// workflow's URL names.
+/// Requests about CI checks and workflow runs of the target repository: that
+/// of a workspace or registered checkout, or another one `--repo` or a run's,
+/// PR's or workflow's URL names.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CiMethod {
@@ -16,17 +16,16 @@ pub enum CiMethod {
     /// Rerun failed or cancel running checks on a PR's head; none named means all.
     CiAction {
         #[serde(flatten)]
-        context: super::ItemContext,
+        target: super::RepoTarget,
         item: Option<crate::forge::items::reference::ItemInput>,
         action: crate::forge::ci::CiAction,
         checks: Vec<String>,
     },
     /// Rerun or cancel one CI workflow run, named by its web URL or the
-    /// number in it; `failed` reruns only its failed jobs. A run of another
-    /// repository than the context's, or without one, is named by its URL.
+    /// number in it; `failed` reruns only its failed jobs.
     CiRunAction {
         #[serde(flatten)]
-        context: Option<super::ItemContext>,
+        target: super::RepoTarget,
         run: crate::forge::items::reference::ItemInput,
         action: crate::forge::ci::CiAction,
         failed: bool,
@@ -34,28 +33,28 @@ pub enum CiMethod {
     /// One CI workflow run.
     ViewCiRun {
         #[serde(flatten)]
-        context: Option<super::ItemContext>,
+        target: super::RepoTarget,
         run: crate::forge::items::reference::ItemInput,
     },
     /// A CI workflow run's jobs, sent in pages.
     CiRunJobs {
         #[serde(flatten)]
-        context: Option<super::ItemContext>,
+        target: super::RepoTarget,
         run: crate::forge::items::reference::ItemInput,
     },
     /// The log of one job of a CI workflow run.
     CiRunJobLog {
         #[serde(flatten)]
-        context: Option<super::ItemContext>,
+        target: super::RepoTarget,
         run: crate::forge::items::reference::ItemInput,
         job: crate::forge::ci::run_view::JobRef,
     },
     /// The newest CI workflow runs, on the head commit of the PR `pr`
-    /// names, otherwise by default on the workspace's branch or a checkout
+    /// names, otherwise by default on the workspace's branch or else the
     /// repository's default branch, sent in pages.
     ListCiRuns {
         #[serde(flatten)]
-        context: super::ItemContext,
+        target: super::RepoTarget,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pr: Option<crate::forge::items::reference::ItemInput>,
         filter: crate::forge::ci::run_view::RunFilter,
@@ -65,16 +64,16 @@ pub enum CiMethod {
     /// user.
     ApproveCiRuns {
         #[serde(flatten)]
-        context: super::ItemContext,
+        target: super::RepoTarget,
         run: Option<crate::forge::items::reference::ItemInput>,
         pr: Option<crate::forge::items::reference::ItemInput>,
     },
     /// Start a CI workflow run on a branch, by default the one a workflow
     /// file's URL names, the workspace's, or else the repository's default
-    /// branch; a workflow URL needs no context.
+    /// branch.
     StartCiRun {
         #[serde(flatten)]
-        context: Option<super::ItemContext>,
+        target: super::RepoTarget,
         workflow: Option<String>,
         branch: Option<String>,
         inputs: std::collections::BTreeMap<String, String>,

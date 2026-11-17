@@ -1,13 +1,16 @@
 //! Where a CI run request acts: the repository of the workspace or
-//! registered checkout it comes from as its agent account, or another
-//! repository a run or workflow URL names as the user's own logins, which
-//! workspace processes may not use, and the branch a run starts on there.
+//! registered checkout it comes from as its account there, or another
+//! repository `--repo` or a run's or workflow's URL names, which a scoped
+//! caller only reads, and the branch a run starts on there.
 use anyhow::{Context, Result, ensure};
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 
 use crate::{
     daemon::{
-        links::place::{Access, Place},
+        links::{
+            place::{Access, Place},
+            target::ForgeTarget,
+        },
         scope::Caller,
         workspace::Manager,
     },
@@ -19,7 +22,7 @@ use crate::{
         },
     },
     model::Workspace,
-    protocol::ItemContext,
+    protocol::RepoTarget,
 };
 use shoal_forge::{
     account::Account,
@@ -27,40 +30,38 @@ use shoal_forge::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The refusal of a workspace process's request about another repository.
-pub(super) const ELSEWHERE: &str =
-    "workspace processes act only on CI runs and workflows of their own repository";
+/// The refusal of a workspace process's watch of a run of another
+/// repository.
+pub(super) const ELSEWHERE: &str = "workspace processes watch only CI runs of their own repository";
 
 /// The repository a CI run request acts in and the account it acts as.
 pub(in crate::daemon::links) struct RunPlace {
-    /// Where the request came from, if anywhere.
-    pub origin: Option<Place>,
-    pub forge: ForgeRepo,
+    pub target: ForgeTarget,
+    forge: ForgeRepo,
     pub account: Account,
-    /// Whether `forge` is the repository the request came from.
-    pub own: bool,
 }
 
 impl RunPlace {
+    /// The repository the request acts in.
+    pub fn forge(&self) -> &ForgeRepo {
+        &self.forge
+    }
+
     /// The workspace whose own repository the request acts in.
     pub fn own_workspace(&self) -> Option<Workspace> {
-        (self.origin.as_ref())
-            .and_then(Place::workspace)
-            .filter(|_| self.own)
+        self.target.own_place().and_then(Place::workspace)
     }
 
     /// The repository the request acts in when it is the one the request
     /// came from.
     pub fn repository_id(&self) -> Option<&RepositoryId> {
-        (self.origin.as_ref())
-            .map(Place::repository_id)
-            .filter(|_| self.own)
+        self.target.own_place().map(Place::repository_id)
     }
 
     /// The workspace or chat the request came from, which links the runs
     /// it starts.
     pub fn space_id(&self) -> Option<&SpaceId> {
-        self.origin.as_ref().and_then(Place::space_id)
+        self.target.origin.as_ref().and_then(Place::space_id)
     }
 
     /// The branch a run starts on or is listed on: the `named` one,
@@ -75,10 +76,10 @@ impl RunPlace {
                 .require_branch("a CI run without --branch")?
                 .to_owned())
             .into()),
-            None => (self.forge.default_branch(&self.account).await).with_context(|| {
+            None => (self.forge().default_branch(&self.account).await).with_context(|| {
                 format!(
                     "could not read the default branch of {}; name one with --branch",
-                    self.forge.repository_url()
+                    self.forge().repository_url()
                 )
             }),
         }
@@ -86,62 +87,39 @@ impl RunPlace {
 }
 
 impl Manager {
-    /// Where a request from `context`, if any, acts on the run or workflow
-    /// of `named`, the repository its URL names, if any: the repository of
-    /// the workspace or checkout unless `named` is another, which a scoped
-    /// `caller` may not act in.
+    /// Where a request from `target` acts with `access` on the run or
+    /// workflow of `named`, the repository its URL names, if any: as the
+    /// account of the place it comes from in its own repository, and
+    /// elsewhere as the caller to read and the user to change.
     pub(in crate::daemon::links) async fn run_place(
         &self,
-        context: Option<&ItemContext>,
+        target: &RepoTarget,
         named: Option<ForgeRepo>,
+        access: Access,
         caller: Option<&Caller>,
     ) -> Result<RunPlace> {
-        let origin = match context {
-            Some(context) => Some(self.place(context, Access::Change).await?),
-            None => None,
-        };
-        if let Some(place) = &origin {
-            let (own, account) = self.place_change_account(place).await?;
-            if named.as_ref().is_none_or(|named| *named == own) {
-                return Ok(RunPlace {
-                    origin,
-                    forge: own,
-                    account,
-                    own: true,
-                });
-            }
-        }
-        let forge = named.context("outside a workspace, name it by its URL")?;
-        ensure!(caller.is_none(), ELSEWHERE);
+        let target = self.forge_target(target, named, access, caller).await?;
+        let account = self.target_account(&target, access, caller);
+        let forge = target.forge()?.clone();
         Ok(RunPlace {
-            origin,
+            target,
             forge,
-            account: self.user_account(),
-            own: false,
+            account,
         })
     }
 
-    /// Where a request acts on the run `input`, its web URL or the number
-    /// in it, names.
-    pub(in crate::daemon::links) async fn run_input_place(
-        &self,
-        context: Option<&ItemContext>,
-        input: &ItemInput,
-        caller: Option<&Caller>,
-    ) -> Result<RunPlace> {
-        let named = self.input_forge(input).await?;
-        self.run_place(context, named, caller).await
-    }
-
-    /// Where a request acts on the run `input` names, and the run.
+    /// Where a request acts with `access` on the run `input`, its web URL
+    /// or the number in it, names, and the run.
     pub(in crate::daemon::links) async fn named_run(
         &self,
-        context: Option<&ItemContext>,
+        target: &RepoTarget,
         input: &ItemInput,
+        access: Access,
         caller: Option<&Caller>,
     ) -> Result<(RunPlace, ItemRef)> {
-        let place = self.run_input_place(context, input, caller).await?;
-        let run = ItemRef::in_repository(&place.forge, LinkKind::Ci, input)?;
+        let named = self.input_forge(input).await?;
+        let place = self.run_place(target, named, access, caller).await?;
+        let run = ItemRef::in_repository(place.forge(), LinkKind::Ci, input)?;
         Ok((place, run))
     }
 
@@ -149,17 +127,17 @@ impl Manager {
     /// or by its web URL, with the workflow and the branch the URL names.
     pub(in crate::daemon::links) async fn workflow_place(
         &self,
-        context: Option<&ItemContext>,
+        target: &RepoTarget,
         input: Option<String>,
         caller: Option<&Caller>,
     ) -> Result<(RunPlace, Option<String>, Option<String>)> {
         let Some(url) = input.as_deref().filter(|input| is_workflow_url(input)) else {
-            let place = self.run_place(context, None, caller).await?;
+            let place = self.run_place(target, None, Access::Change, caller).await?;
             return Ok((place, input, None));
         };
         let hosts = self.forge_hosts();
         let (named, link) = ForgeRepo::resolve_workflow_url(url, &hosts).await?;
-        let place = self.run_place(context, Some(named), caller).await?;
+        let place = (self.run_place(target, Some(named), Access::Change, caller)).await?;
         Ok((place, Some(link.workflow), link.branch))
     }
 

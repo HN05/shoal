@@ -3469,10 +3469,11 @@ run. Scoped processes act only on runs of the default branch and of the
 branches of the workspaces their scope reaches, in the repository they act in,
 which the daemon reads from the run before acting, and read any run of their
 repository.
-A run or workflow URL of another repository is the user's to act on: the
-daemon starts, reads, links, reruns and cancels runs there with the user's own
-logins, as it merges, also outside a workspace, and refuses workspace
-processes, which stay within their own repository. A workflow file's URL also
+A run or workflow URL, or `--repo`, of another repository is read by anyone and
+acted on by the user: the daemon starts, links, reruns and cancels runs there
+with the user's own logins, as it merges, also outside a workspace, and
+refuses workspace processes those actions, which stay within their own
+repository. A workflow file's URL also
 names the branch a run starts on.
 Forges hold the runs of fork and first-time contributors' PRs for approval, which
 leaves such a PR without checks; `view` and `status` report the waiting runs

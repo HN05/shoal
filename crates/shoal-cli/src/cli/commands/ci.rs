@@ -1,6 +1,6 @@
 //! `shoal ci` and `shoal view ci`: list, start, read, rerun and cancel CI runs
-//! of the workspace's repository, or of another one by their URLs, and the
-//! checks on a PR's head.
+//! of the workspace's repository, or of another one --repo or their URLs
+//! name, and the checks on a PR's head.
 mod act;
 mod read;
 
@@ -10,7 +10,7 @@ pub(super) use self::read::{render_run, view};
 use crate::{
     cli::{
         args::ci::CiCommand,
-        commands::items::{current_context, select_space_item_context},
+        commands::items::{current_context, select_item_target},
         context::Context,
         ui,
     },
@@ -19,7 +19,7 @@ use crate::{
         ci::{CiAction, run_view::RunFilter},
         items::reference::ItemRef,
     },
-    protocol::ItemContext,
+    protocol::RepoTarget,
 };
 use shoal_forge::capability::CapabilityRequests;
 use shoal_protocol::space_names::SpaceSelector;
@@ -42,23 +42,23 @@ pub(super) async fn run(ctx: &Context, command: CiCommand) -> Result<i32> {
     }
 }
 
-/// Where a request about a run or workflow runs: the named workspace or the
-/// registered repository `repo` names, else the current workspace or
-/// checkout, which a run number or workflow name needs, so they fall back to
-/// the picker; a run or workflow named by its URL, `url`, names its
-/// repository and needs neither.
-async fn input_context(
+/// The repository `ci run` starts a workflow in: as [`select_item_target`]
+/// finds it, except that a workflow named by its URL, `url`, names its
+/// repository and needs no context.
+async fn workflow_target(
     ctx: &Context,
     space: Option<SpaceSelector>,
     repo: Option<String>,
     url: bool,
-) -> Result<Option<ItemContext>> {
+) -> Result<RepoTarget> {
     if space.is_none() && repo.is_none() && url && ui::current_chat(&space).is_none() {
-        return current_context(ctx).await;
+        let context = current_context(ctx).await?;
+        return Ok(RepoTarget {
+            context,
+            repository: None,
+        });
     }
-    Ok(Some(
-        select_space_item_context(ctx, space, repo, None).await?,
-    ))
+    select_item_target(ctx, space, repo, None).await
 }
 
 /// What `view` and `status` say of the `waiting` runs on the head of the PR

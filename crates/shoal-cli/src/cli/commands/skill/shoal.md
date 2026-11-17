@@ -458,8 +458,8 @@ on the default branch, or on `--branch`. A space's agent acts on the runs of
 the default branch and of the branches of the workspaces below it, and of
 their PRs on any commit. It is a new run, not a rerun: on Forgejo a failed
 check on the PR stays failed. When `ci run` links the run as opened, a watch
-reports when it finishes. Runs of other repositories are the user's to read,
-link and act on. A PR from a fork or first-time contributor can show runs that
+reports when it finishes. `--repo` or a run's URL names another repository,
+whose runs anyone reads and only the user links and acts on. A PR from a fork or first-time contributor can show runs that
 wait for approval instead of checks; `shoal view` lists them in `waiting_runs`.
 
 ## Local reviews

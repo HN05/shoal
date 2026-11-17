@@ -188,7 +188,7 @@ const REQUESTS: &[&str] = &[
     r#"{"view_ci_run":{"space":{"space":"fix"},"run":"12"}}"#,
     r#"{"ci_run_jobs":{"space":{"space":"fix"},"run":"12"}}"#,
     r#"{"ci_run_job_log":{"space":{"space":"fix"},"run":"12","job":{"name":"rust"}}}"#,
-    r#"{"list_ci_runs":{"space":{"space":"fix"},"filter":{"branch":null,"workflow":"ci.yml","limit":10}}}"#,
+    r#"{"list_ci_runs":{"repository":"https://forge.example/team/tool","filter":{"branch":null,"workflow":"ci.yml","limit":10}}}"#,
     r#"{"start_ci_run":{"space":{"space":"fix"},"workflow":null,"branch":null,"inputs":{"level":"high"}}}"#,
     r#"{"approve_ci_runs":{"space":{"space":"fix"},"run":null,"pr":"7"}}"#,
     // Reconciliation.

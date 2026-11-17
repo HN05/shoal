@@ -170,10 +170,12 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<()> {
         let space = self.link_space(selector).await?;
-        let context = space.item_context();
-        let place = (self.run_input_place(Some(&context), input, caller)).await?;
-        let url = ItemRef::in_repository(&place.forge, LinkKind::Ci, input)?;
-        let run = (place.forge.view_run(&place.account, &url).await)
+        // A watch reads the run as the user where it is not the space's own,
+        // so linking it is a change there.
+        let target = space.item_context().into();
+        let linked = self.named_run(&target, input, place::Access::Change, caller);
+        let (place, url) = linked.await?;
+        let run = (place.forge().view_run(&place.account, &url).await)
             .with_context(|| format!("could not read CI run {url}"))?;
         let item = LinkedItem {
             url,

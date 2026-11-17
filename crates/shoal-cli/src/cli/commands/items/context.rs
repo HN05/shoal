@@ -23,20 +23,13 @@ const NO_CONTEXT: &str =
 const NO_REPOSITORY: &str =
     "no current workspace or registered checkout; run this in one, or pass --repo";
 
-/// Where a command that acts on a space, a workspace or chat, runs: the
-/// registered repository `repo` names, else as [`known_item_context`] finds
-/// it, else a space the user picks.
+/// Where a command that acts on a space, a workspace or chat, runs: as
+/// [`known_item_context`] finds it, else a space the user picks.
 pub(in crate::cli::commands) async fn select_space_item_context(
     ctx: &Context,
     space: Option<SpaceSelector>,
-    repo: Option<String>,
     item: Option<&ItemInput>,
 ) -> Result<ItemContext> {
-    if let Some(repo) = repo {
-        return Ok(ItemContext::Checkout(
-            named_repository(ctx, &repo).await?.id,
-        ));
-    }
     match known_item_context(ctx, space, item).await? {
         Some(context) => Ok(context),
         None => picked_space(ctx).await,
@@ -158,7 +151,7 @@ pub(in crate::cli::commands) async fn select_open_context(
             repository: repo,
         });
     }
-    let context = select_space_item_context(ctx, space, None, None).await?;
+    let context = select_space_item_context(ctx, space, None).await?;
     Ok(RepoTarget {
         context: Some(context),
         repository: repo,

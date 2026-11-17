@@ -20,7 +20,7 @@ use crate::{
 };
 use shoal_protocol::{
     model::SelectedItem,
-    protocol::{CiMethod, ItemContext, ItemMethod, RepoTarget},
+    protocol::{CiMethod, ItemMethod, RepoTarget},
 };
 
 /// The items `selection` names in the `target` repository, each as the
@@ -33,9 +33,13 @@ pub async fn read(
     selection: Selection,
     comments: bool,
 ) -> Result<Vec<Shown>> {
-    let context = target.context.clone();
+    // Each run's URL names its repository.
+    let runs_target = RepoTarget {
+        repository: None,
+        ..target.clone()
+    };
     let viewed = view_items(daemon, target, selection, comments).await?;
-    let runs = read_runs(daemon, context.as_ref(), &viewed.items).await;
+    let runs = read_runs(daemon, &runs_target, &viewed.items).await;
     Ok(in_selection_order(&viewed.items, viewed.views, runs))
 }
 
@@ -55,11 +59,11 @@ async fn view_items(
     connection::joined(daemon, method, "view").await
 }
 
-/// Each selected run with its jobs and failed jobs' logs, read in the
-/// context the items were selected in, if any.
+/// Each selected run with its jobs and failed jobs' logs, read from
+/// `target`'s context.
 async fn read_runs(
     daemon: &impl Daemon,
-    context: Option<&ItemContext>,
+    target: &RepoTarget,
     items: &[SelectedItem],
 ) -> Vec<ShownRun> {
     let mut runs = Vec::new();
@@ -68,7 +72,7 @@ async fn read_runs(
             continue;
         }
         let run = ItemInput::Url(item.url.clone());
-        let read = read_run(daemon, context, &run).await;
+        let read = read_run(daemon, target, &run).await;
         let read = read
             .map(RunRead::Read)
             .unwrap_or_else(|error| RunRead::Failed {
@@ -107,47 +111,41 @@ fn in_selection_order(
 }
 
 /// The run `run` names with its jobs and the log tails of its failed jobs,
-/// read in `context`, or without one by the run's URL.
+/// read in the `target` repository, or the one the run's URL names.
 pub async fn read_run(
     daemon: &impl Daemon,
-    context: Option<&ItemContext>,
+    target: &RepoTarget,
     run: &ItemInput,
 ) -> Result<RunView> {
-    let mut view = run_with_jobs(daemon, context, run).await?;
-    read_failed_job_logs(daemon, context, run, &mut view).await;
+    let mut view = run_with_jobs(daemon, target, run).await?;
+    read_failed_job_logs(daemon, target, run, &mut view).await;
     Ok(view)
 }
 
 /// The run with its jobs, which arrive in pages of their own.
 async fn run_with_jobs(
     daemon: &impl Daemon,
-    context: Option<&ItemContext>,
+    target: &RepoTarget,
     run: &ItemInput,
 ) -> Result<RunView> {
-    let (context, input) = (context.cloned(), run.clone());
+    let (target, input) = (target.clone(), run.clone());
     let run = connection::request(
         daemon,
         CiMethod::ViewCiRun {
-            context: context.clone(),
+            target: target.clone(),
             run: input.clone(),
         },
     )
     .await?;
-    let jobs = connection::pages::<RunJob>(
-        daemon,
-        CiMethod::CiRunJobs {
-            context,
-            run: input,
-        },
-    )
-    .await?;
+    let jobs =
+        connection::pages::<RunJob>(daemon, CiMethod::CiRunJobs { target, run: input }).await?;
     Ok(RunView::new(run, jobs))
 }
 
 /// Add the logs of the run's failed jobs, recording those it cannot read.
 async fn read_failed_job_logs(
     daemon: &impl Daemon,
-    context: Option<&ItemContext>,
+    target: &RepoTarget,
     run: &ItemInput,
     view: &mut RunView,
 ) {
@@ -158,7 +156,7 @@ async fn read_failed_job_logs(
         .map(|job| (job.id, job.name.clone()))
         .collect::<Vec<_>>();
     for (id, name) in failed {
-        match job_log(daemon, context, run, JobRef::Id(id)).await {
+        match job_log(daemon, target, run, JobRef::Id(id)).await {
             Ok(log) => view.logs.push(log.tail()),
             Err(error) => view
                 .errors
@@ -167,16 +165,16 @@ async fn read_failed_job_logs(
     }
 }
 
-/// The whole log of the run's `job`, read in `context`, or without one by
-/// the run's URL.
+/// The whole log of the run's `job`, read in the `target` repository, or
+/// the one the run's URL names.
 pub async fn job_log(
     daemon: &impl Daemon,
-    context: Option<&ItemContext>,
+    target: &RepoTarget,
     run: &ItemInput,
     job: JobRef,
 ) -> Result<CheckLog> {
     let method = CiMethod::CiRunJobLog {
-        context: context.cloned(),
+        target: target.clone(),
         run: run.clone(),
         job,
     };

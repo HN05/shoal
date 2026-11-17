@@ -4909,11 +4909,12 @@ runs of a PR in its repository whose head is one of those branches, on any
 commit of the PR.
 `--json` returns the run's `url` and the `action`.
 
-A run's URL may name another repository than that of the workspace or
-checkout, and outside both it names the run's repository. `ci rerun`, `ci
-cancel`, `view ci` and `link ci` then act there with the user's own logins, as
-merging does; processes inside a workspace read, link and act only on runs of
-its own repository.
+A run's URL, or `--repo`, may name another repository than that of the
+workspace or checkout, registered or not, and outside both it needs neither.
+Anyone reads its runs with `view ci` and `ci ls`, which lists its default
+branch's without `--branch`; `ci run`, `ci rerun`, `ci cancel`, `ci approve`
+and `link ci` act there with the user's own logins, as merging does, and
+processes inside a workspace link and act only on runs of its own repository.
 
 Without a run, `shoal ci rerun` reruns failed jobs on the current head of the
 linked PR or the one `--pr` names, and `shoal ci cancel` cancels running or

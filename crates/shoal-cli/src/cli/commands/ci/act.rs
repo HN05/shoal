@@ -6,14 +6,14 @@ use crate::client::ci;
 use crate::{
     cli::{
         args::ci::{RunArgs, Subject, Target},
-        commands::items::select_space_item_context,
+        commands::items::select_item_target,
         context::Context,
     },
     forge::{
         ci::{CiAction, approval::RunsApproved, run::StartedRun},
         items::reference::ItemInput,
     },
-    protocol::ItemContext,
+    protocol::{ItemContext, RepoTarget},
 };
 use shoal_forge::ci::{run::validate_run, workflow::is_workflow_url};
 
@@ -21,10 +21,10 @@ pub(super) async fn start(ctx: &Context, args: RunArgs) -> Result<i32> {
     // Refuse bad arguments before the workspace picker asks for anything.
     validate_run(args.workflow.as_deref(), args.branch.as_deref())?;
     let url = args.workflow.as_deref().is_some_and(is_workflow_url);
-    let context = super::input_context(ctx, args.space, args.repo.name, url).await?;
-    let follow = follow_hint(context.as_ref(), url);
+    let target = super::workflow_target(ctx, args.space, args.repo.name, url).await?;
+    let follow = follow_hint(target.context.as_ref(), url);
     let inputs = args.inputs.into_iter().collect();
-    let started = ci::start(&ctx.paths, context, args.workflow, args.branch, inputs).await?;
+    let started = ci::start(&ctx.paths, target, args.workflow, args.branch, inputs).await?;
     for warning in &started.warnings {
         eprintln!("{warning}");
     }
@@ -43,14 +43,12 @@ pub(super) async fn act(
     let subject = target.subject;
     match subject.run.clone() {
         Some(run) => {
-            let (space, repo) = (subject.space.clone(), subject.repo.name.clone());
-            let url = matches!(run, ItemInput::Url(_));
-            let context = super::input_context(ctx, space, repo, url).await?;
-            act_on_run(ctx, context, run, action, failed).await
+            let target = subject_target(ctx, &subject).await?;
+            act_on_run(ctx, target, run, action, failed).await
         }
         None => {
-            let context = subject_context(ctx, &subject).await?;
-            act_on_checks(ctx, context, subject.pr, action, target.checks).await
+            let subject_target = subject_target(ctx, &subject).await?;
+            act_on_checks(ctx, subject_target, subject.pr, action, target.checks).await
         }
     }
 }
@@ -58,23 +56,18 @@ pub(super) async fn act(
 /// Approve the run `subject` names, otherwise every waiting run on its PR's
 /// head.
 pub(super) async fn approve(ctx: &Context, subject: Subject) -> Result<i32> {
-    let context = subject_context(ctx, &subject).await?;
-    let approved = ci::approve(&ctx.paths, context, subject.run, subject.pr).await?;
+    let target = subject_target(ctx, &subject).await?;
+    let approved = ci::approve(&ctx.paths, target, subject.run, subject.pr).await?;
     ctx.emit(&approved_text(&approved), &approved)?;
     Ok(0)
 }
 
-/// Where the subject's run or PR is acted on: the named or current space,
-/// or the checkout of the registered repository `--repo` names or the
-/// current directory or the PR's URL is in.
-async fn subject_context(ctx: &Context, subject: &Subject) -> Result<ItemContext> {
-    select_space_item_context(
-        ctx,
-        subject.space.clone(),
-        subject.repo.name.clone(),
-        subject.pr.as_ref(),
-    )
-    .await
+/// The repository the subject's run or PR is acted on in, as
+/// [`select_item_target`] finds it for the run or PR.
+async fn subject_target(ctx: &Context, subject: &Subject) -> Result<RepoTarget> {
+    let item = subject.run.as_ref().or(subject.pr.as_ref());
+    let (space, repo) = (subject.space.clone(), subject.repo.name.clone());
+    select_item_target(ctx, space, repo, item).await
 }
 
 /// One line per approved run.
@@ -89,12 +82,12 @@ fn approved_text(approved: &RunsApproved) -> String {
 
 async fn act_on_run(
     ctx: &Context,
-    context: Option<ItemContext>,
+    target: RepoTarget,
     run: ItemInput,
     action: CiAction,
     failed: bool,
 ) -> Result<i32> {
-    let acted = ci::act_on_run(&ctx.paths, context, run, action, failed).await?;
+    let acted = ci::act_on_run(&ctx.paths, target, run, action, failed).await?;
     ctx.emit(&format!("{}: {}", outcome(action), acted.url), &acted)?;
     Ok(0)
 }
@@ -103,12 +96,12 @@ async fn act_on_run(
 /// linked one.
 async fn act_on_checks(
     ctx: &Context,
-    context: ItemContext,
+    target: RepoTarget,
     item: Option<ItemInput>,
     action: CiAction,
     checks: Vec<String>,
 ) -> Result<i32> {
-    let acted = ci::act_on_checks(&ctx.paths, context, item, action, checks).await?;
+    let acted = ci::act_on_checks(&ctx.paths, target, item, action, checks).await?;
     ctx.emit(
         &format!(
             "{} for {}: {}",

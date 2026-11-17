@@ -69,7 +69,7 @@ pub struct Subject {
     #[arg(short = 's', long, conflicts_with = "repo")]
     pub space: Option<SpaceSelector>,
     #[command(flatten)]
-    pub repo: crate::cli::args::changes::RegisteredRepo,
+    pub repo: crate::cli::args::changes::TargetRepo,
 }
 
 // Which runs `shoal ci ls` lists.
@@ -87,7 +87,7 @@ pub struct ListArgs {
     #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "branch", value_parser = pull_input)]
     pub pr: Option<crate::forge::items::reference::ItemInput>,
     #[command(flatten)]
-    pub repo: crate::cli::args::changes::RegisteredRepo,
+    pub repo: crate::cli::args::changes::TargetRepo,
     /// List only this workflow file's runs; GitLab has none.
     #[arg(long)]
     pub workflow: Option<String>,
@@ -115,7 +115,7 @@ pub struct RunArgs {
     #[arg(long)]
     pub branch: Option<String>,
     #[command(flatten)]
-    pub repo: crate::cli::args::changes::RegisteredRepo,
+    pub repo: crate::cli::args::changes::TargetRepo,
     /// Pass a workflow input; repeat for more.
     #[arg(long = "input", value_name = "NAME=VALUE", value_parser = workflow_input)]
     pub inputs: Vec<(String, String)>,

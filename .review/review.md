@@ -201,7 +201,7 @@ instead of the PR delivery guidance below.
   merge acknowledgements, messages to the user, reading their own agent messages, ready-for-review marks,
   assignment completion and its withdrawal, listing issues and PRs of any repository, opening and changing
   those of the own repository, approving or requesting changes only as their `pr_review` permission allows, rerunning or cancelling their CI jobs,
-  starting, rerunning or cancelling CI runs of the default branch and of the branches of the workspaces their scope reaches, and reading the own repository's,
+  starting, rerunning or cancelling CI runs of the default branch and of the branches of the workspaces their scope reaches, and reading any repository's issues, PRs and runs,
   GET requests to any repository's forge API, or other methods to the own repository's where
   their `api_writes` permission allows them, own-repository sync and
   effective-configuration reads are allowed, as are issuing and revoking scope

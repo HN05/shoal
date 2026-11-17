@@ -482,16 +482,6 @@ pub struct TargetRepo {
     pub name: Option<String>,
 }
 
-// A registered repository to act in instead of a workspace or chat, which
-// conflicts with the flag that names one where it is flattened.
-#[derive(Debug, Default, Args)]
-pub struct RegisteredRepo {
-    /// Act in this registered repository without a workspace, named by name,
-    /// ID, path or remote URL; workspace processes act only in their own.
-    #[arg(id = "repo", short = 'r', long = "repo", value_name = "REPOSITORY")]
-    pub name: Option<String>,
-}
-
 // A merged PR of the space's repository to revert.
 #[derive(Debug, Args)]
 pub struct RevertedPr {

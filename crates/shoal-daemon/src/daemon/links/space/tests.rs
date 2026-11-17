@@ -204,7 +204,7 @@ async fn a_chat_without_a_repository_follows_ci_in_a_registered_checkout_as_itse
     let master = chat(&manager, "master", None).await;
     let planning = chat(&manager, "planning", Some(&repos[0])).await;
     let list = || crate::protocol::CiMethod::ListCiRuns {
-        context: ItemContext::Checkout(repos[1].id.clone()),
+        target: ItemContext::Checkout(repos[1].id.clone()).into(),
         pr: None,
         filter: crate::forge::ci::run_view::RunFilter {
             branch: None,
@@ -218,15 +218,15 @@ async fn a_chat_without_a_repository_follows_ci_in_a_registered_checkout_as_itse
     crate::daemon::scope::authorize(&manager, Some(&token), &mut method)
         .await
         .unwrap();
-    let crate::protocol::CiMethod::ListCiRuns { context, .. } = method else {
+    let crate::protocol::CiMethod::ListCiRuns { target, .. } = method else {
         unreachable!("the method stays a run listing");
     };
-    let ItemContext::Space {
+    let Some(ItemContext::Space {
         space: chat,
         repository: Some(repository),
-    } = context
+    }) = target.context
     else {
-        panic!("expected the chat acting in the checkout: {context:?}");
+        panic!("expected the chat acting in the checkout: {target:?}");
     };
     assert_eq!(
         (chat, repository),

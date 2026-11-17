@@ -10,7 +10,11 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result, bail, ensure};
 
 use crate::{
-    daemon::{links::place::Place, scope::Caller, workspace::Manager},
+    daemon::{
+        links::place::{Access, Place},
+        scope::Caller,
+        workspace::Manager,
+    },
     forge::{
         ForgeRepo,
         capability::Capability,
@@ -27,7 +31,7 @@ use crate::{
         },
     },
     model::{LinkedItem, Relation},
-    protocol::ItemContext,
+    protocol::RepoTarget,
 };
 use shoal_forge::{
     capability::CapabilityRequests,
@@ -47,13 +51,13 @@ impl Manager {
     /// reaches.
     pub async fn start_ci_run(
         &self,
-        context: Option<&ItemContext>,
+        target: &RepoTarget,
         workflow: Option<String>,
         branch: Option<String>,
         inputs: BTreeMap<String, String>,
         caller: Option<&Caller>,
     ) -> Result<StartedRun> {
-        let (place, workflow, linked) = self.workflow_place(context, workflow, caller).await?;
+        let (place, workflow, linked) = self.workflow_place(target, workflow, caller).await?;
         let branch = place.run_branch(branch.or(linked)).await?;
         if let Some(caller) = caller {
             (self.ensure_run_branch_in_reach(caller, &place, Some(&branch))).await?;
@@ -67,10 +71,10 @@ impl Manager {
             // Refuse before the run starts what would refuse its link after.
             self.ensure_links_accepted(id).await?;
         }
-        let mut started = (place.forge.start_run(&place.account, &run).await)
+        let mut started = (place.forge().start_run(&place.account, &run).await)
             .with_context(|| format!("could not start a CI run on {}", run.branch))?;
         if let Some(id) = place.space_id() {
-            (self.link_started(id, &place.forge, &mut started)).await;
+            (self.link_started(id, place.forge(), &mut started)).await;
         }
         Ok(started)
     }
@@ -99,19 +103,19 @@ impl Manager {
         }
     }
 
-    /// Rerun or cancel the run `input` names in the repository of `context`,
-    /// or of its URL; scoped processes act only on the runs of the branches
-    /// their scope reaches and of PRs from them.
+    /// Rerun or cancel the run `input` names in the `target` repository, or
+    /// that of its URL; scoped processes act only on the runs of the
+    /// branches their scope reaches and of PRs from them.
     pub async fn ci_run_action(
         &self,
-        context: Option<&ItemContext>,
+        target: &RepoTarget,
         input: ItemInput,
         action: CiAction,
         failed: bool,
         caller: Option<&Caller>,
     ) -> Result<RunActed> {
-        let (place, run) = self.named_run(context, &input, caller).await?;
-        let (forge, account) = (&place.forge, &place.account);
+        let (place, run) = (self.named_run(target, &input, Access::Change, caller)).await?;
+        let (forge, account) = (place.forge(), &place.account);
         let run = forge
             .find_run(account, &run, action)
             .await
@@ -129,13 +133,13 @@ impl Manager {
     /// The run `input` names.
     pub async fn view_ci_run(
         &self,
-        context: Option<&ItemContext>,
+        target: &RepoTarget,
         input: ItemInput,
         caller: Option<&Caller>,
     ) -> Result<Run> {
-        let (place, run) = self.named_run(context, &input, caller).await?;
+        let (place, run) = (self.named_run(target, &input, Access::Read, caller)).await?;
         place
-            .forge
+            .forge()
             .view_run(&place.account, &run)
             .await
             .with_context(|| format!("could not read CI run {run}"))
@@ -144,13 +148,13 @@ impl Manager {
     /// Every job of the run `input` names.
     pub async fn ci_run_jobs(
         &self,
-        context: Option<&ItemContext>,
+        target: &RepoTarget,
         input: ItemInput,
         caller: Option<&Caller>,
     ) -> Result<Vec<RunJob>> {
-        let (place, run) = self.named_run(context, &input, caller).await?;
+        let (place, run) = (self.named_run(target, &input, Access::Read, caller)).await?;
         place
-            .forge
+            .forge()
             .run_jobs(&place.account, &run)
             .await
             .with_context(|| format!("could not read the jobs of CI run {run}"))
@@ -159,14 +163,14 @@ impl Manager {
     /// The log of the job `job` of the run `input` names.
     pub async fn ci_run_job_log(
         &self,
-        context: Option<&ItemContext>,
+        target: &RepoTarget,
         input: ItemInput,
         job: JobRef,
         caller: Option<&Caller>,
     ) -> Result<CheckLog> {
-        let (place, run) = self.named_run(context, &input, caller).await?;
+        let (place, run) = (self.named_run(target, &input, Access::Read, caller)).await?;
         place
-            .forge
+            .forge()
             .run_job_log(&place.account, &run, &job)
             .await
             .with_context(|| format!("could not read a job log of CI run {run}"))
@@ -177,25 +181,31 @@ impl Manager {
     /// a chat's linked PR's head, or else the repository's default branch.
     pub async fn list_ci_runs(
         &self,
-        context: &ItemContext,
+        target: &RepoTarget,
         pr: Option<ItemInput>,
         mut filter: RunFilter,
+        caller: Option<&Caller>,
     ) -> Result<Vec<Run>> {
         validate_filter(&filter)?;
         ensure!(
             pr.is_none() || filter.branch.is_none(),
             "list the runs of a branch or of a PR, not both"
         );
-        let place = self.run_place(Some(context), None, None).await?;
-        let (forge, account) = (&place.forge, &place.account);
+        let named = match &pr {
+            Some(pr) => self.input_forge(pr).await?,
+            None => None,
+        };
+        let place = self.run_place(target, named, Access::Read, caller).await?;
+        let (forge, account) = (place.forge(), &place.account);
         // Refuse a forge without runs before reading the PR.
         forge.require(Capability::ReadRuns)?;
         // A chat's checkout is not on its PR's branch, so its runs are
         // those of its linked PR.
-        let pr = match (pr, &filter.branch, &place.origin) {
-            (None, None, Some(Place::Space(space))) if space.worktree().is_none() => {
-                self.linked_pr(&space.id).await?
-            }
+        let chat = (place.target.own_place())
+            .and_then(Place::space)
+            .filter(|space| space.worktree().is_none());
+        let pr = match (pr, &filter.branch, chat) {
+            (None, None, Some(chat)) => self.linked_pr(&chat.id).await?,
             (Some(pr), ..) => Some(ItemRef::in_repository(forge, LinkKind::Pr, &pr)?),
             (None, ..) => None,
         };

@@ -19,46 +19,34 @@ use crate::{
         items::link::Selection,
     },
 };
-use shoal_protocol::protocol::{CiMethod, ItemContext, RepoTarget};
+use shoal_protocol::protocol::{CiMethod, RepoTarget};
 
-/// The newest runs in `context`'s repository that `filter` selects, or those
-/// on the head of the PR `pr`.
+/// The newest runs in the `target` repository that `filter` selects, or
+/// those on the head of the PR `pr`.
 pub async fn runs(
     daemon: &impl Daemon,
-    context: ItemContext,
+    target: RepoTarget,
     pr: Option<ItemInput>,
     filter: RunFilter,
 ) -> Result<Vec<Run>> {
-    pages(
-        daemon,
-        CiMethod::ListCiRuns {
-            context,
-            pr,
-            filter,
-        },
-    )
-    .await
+    pages(daemon, CiMethod::ListCiRuns { target, pr, filter }).await
 }
 
 /// The run `run` names.
-pub async fn run(
-    daemon: &impl Daemon,
-    context: Option<ItemContext>,
-    run: ItemInput,
-) -> Result<Run> {
-    request(daemon, CiMethod::ViewCiRun { context, run }).await
+pub async fn run(daemon: &impl Daemon, target: RepoTarget, run: ItemInput) -> Result<Run> {
+    request(daemon, CiMethod::ViewCiRun { target, run }).await
 }
 
 /// Start `workflow`, or the only one, on `branch` with `inputs`.
 pub async fn start(
     daemon: &impl Daemon,
-    context: Option<ItemContext>,
+    target: RepoTarget,
     workflow: Option<String>,
     branch: Option<String>,
     inputs: BTreeMap<String, String>,
 ) -> Result<StartedRun> {
     let method = CiMethod::StartCiRun {
-        context,
+        target,
         workflow,
         branch,
         inputs,
@@ -69,13 +57,13 @@ pub async fn start(
 /// Apply `action` to the run `run` names, only its failed jobs when `failed`.
 pub async fn act_on_run(
     daemon: &impl Daemon,
-    context: Option<ItemContext>,
+    target: RepoTarget,
     run: ItemInput,
     action: CiAction,
     failed: bool,
 ) -> Result<RunActed> {
     let method = CiMethod::CiRunAction {
-        context,
+        target,
         run,
         action,
         failed,
@@ -87,13 +75,13 @@ pub async fn act_on_run(
 /// the linked one, or to all of them.
 pub async fn act_on_checks(
     daemon: &impl Daemon,
-    context: ItemContext,
+    target: RepoTarget,
     item: Option<ItemInput>,
     action: CiAction,
     checks: Vec<String>,
 ) -> Result<CiActed> {
     let method = CiMethod::CiAction {
-        context,
+        target,
         item,
         action,
         checks,
@@ -105,11 +93,11 @@ pub async fn act_on_checks(
 /// the PR `pr`.
 pub async fn approve(
     daemon: &impl Daemon,
-    context: ItemContext,
+    target: RepoTarget,
     run: Option<ItemInput>,
     pr: Option<ItemInput>,
 ) -> Result<RunsApproved> {
-    request(daemon, CiMethod::ApproveCiRuns { context, run, pr }).await
+    request(daemon, CiMethod::ApproveCiRuns { target, run, pr }).await
 }
 
 /// The log of `check` on the item `selection` selects.

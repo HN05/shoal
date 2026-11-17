@@ -5147,6 +5147,10 @@ fn runs_of_another_repository_are_read_linked_and_acted_on_by_the_user() {
         ]},
         "GET repos/other/project/actions/jobs/701/logs": {"body": "advisory found\n"},
         "POST repos/other/project/actions/runs/70/cancel": {"status": 204},
+        "GET repos/other/project": {"body": {"default_branch": "main"}},
+        "GET repos/other/project/actions/runs?limit=10&page=1&ref=refs%2Fheads%2Fmain":
+            {"body": {"workflow_runs": [{"id": 70, "index_in_repo": 7, "prettyref": "main",
+                "workflow_id": "deps.yml", "status": "failure"}], "total_count": 1}},
     }));
     let other = format!(
         "{}/actions/runs/7",
@@ -5160,6 +5164,10 @@ fn runs_of_another_repository_are_read_linked_and_acted_on_by_the_user() {
         (&json!(other), &json!("main"))
     );
     assert_eq!(view["logs"][0]["text"], "advisory found\n", "{view}");
+    // Its repository's URL lists its runs, on its default branch.
+    let repository = fixture.web.replace("/team/project", "/other/project");
+    let runs = fixture.ok(&["ci", "ls", "--repo", &repository]);
+    assert_eq!(runs[0]["url"], other, "{runs}");
     let cancelled = fixture.ok(&["ci", "cancel", &other]);
     assert_eq!(cancelled["url"], other, "{cancelled}");
     assert_eq!(
@@ -5197,12 +5205,20 @@ fn runs_of_another_repository_are_read_linked_and_acted_on_by_the_user() {
     );
     fixture.ok(&["unlink", &other, "related", "--space", &fixture.id("topic")]);
 
-    // Workspace processes read, link and act only within their repository.
+    // Workspace processes read its runs, and link, watch and act only
+    // within their own repository.
     let exported = fixture.ok(&["internal", "env", &fixture.id("topic")]);
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     for method in [
         json!({"view_ci_run": {"run": other}}),
         json!({"ci_run_jobs": {"space": {"space": fixture.id("topic")}, "run": other}}),
+        json!({"list_ci_runs": {"repository": repository, "filter": {"branch": null,
+            "workflow": null, "limit": 10}}}),
+    ] {
+        let read = fixture.request_as(method.clone(), Some(scope));
+        assert_ne!(read["type"], "error", "{method}: {read}");
+    }
+    for method in [
         json!({"ci_run_action": {"run": other, "action": "cancel", "failed": false}}),
         json!({"link_item": {"space": fixture.id("topic"), "kind": "ci", "item": other,
             "relation": "related"}}),
