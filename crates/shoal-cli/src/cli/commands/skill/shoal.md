@@ -73,8 +73,8 @@ one, on a branch from the default branch;
 a chat-kind mode starts a child chat in a background place and returns once the chat
 has started. Outside any space it creates top-level
 spaces. Without a terminal, as from a tool call, and from inside a space, agents
-start detached; `--here` runs one in the calling terminal until it exits, as
-the new space's own agent. `--fork` starts the caller's
+start detached; `--here` runs one in the calling terminal, once its workspace
+is prepared, until it exits, as the new space's own agent. `--fork` starts the caller's
 own agent from a fork of its session, so it needs only its task after `--`.
 
 `start` returns once the daemon records a new workspace, with the workspace

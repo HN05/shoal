@@ -18,11 +18,9 @@ use crate::{
         ui::{self, ModeChoice},
     },
     config::modes,
-    git,
     model::Repository,
     protocol::ConfigTarget,
     repository,
-    start_plan::Creation,
 };
 
 /// The branch the setup agent works on, whose workspace a later setup
@@ -62,10 +60,7 @@ pub(super) async fn start(
     let local_config = local_config(ctx, selector).await?;
     let prompt = subject(repository::name(&repo), &local_config);
     let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
-    match workspaces::daemon_starts(ctx, options.here, Some(&agent), &settings) {
-        true => launch(ctx, &repo, (agent, prompt), options, &settings).await,
-        false => start_here(ctx, &repo, (agent, prompt), options).await,
-    }
+    launch(ctx, &repo, (agent, prompt), options, &settings).await
 }
 
 /// Have the daemon start the setup `agent` of `repo` on `prompt` in setup
@@ -78,31 +73,21 @@ async fn launch(
     options: Options,
     settings: &crate::config::Effective,
 ) -> Result<i32> {
+    let start = launch_options(options.here, ctx.on_terminal());
     let launch = setup_launch(repo, (agent, prompt), options)?;
     let mode = ModeChoice::Named(modes::ModeName::SETUP);
-    let options = workspaces::AddOptions::default();
-    workspaces::launch_workspace(ctx, launch, mode, (&options, settings)).await
+    workspaces::launch_workspace(ctx, launch, mode, (&start, settings)).await
 }
 
-/// Start the setup `agent` of `repo` on `prompt` from this process, in this
-/// terminal or beside it, as `options` ask.
-async fn start_here(
-    ctx: &Context,
-    repo: &Repository,
-    (agent, prompt): (Agent, String),
-    options: Options,
-) -> Result<i32> {
-    let launch = add_options(&options, prompt, ctx.on_terminal());
-    workspaces::add(
-        ctx,
-        Some(repo.id.clone().into()),
-        creation(repo).await?,
-        None,
-        workspaces::AgentLaunch::Explicit(Some(agent)),
-        options.args,
-        launch,
-    )
-    .await
+/// How the setup agent's start runs, `here` or not: the user waits for it,
+/// so from a call `on_terminal` it takes a focused place whatever the
+/// `focus` setting says.
+fn launch_options(here: bool, on_terminal: bool) -> workspaces::AddOptions {
+    workspaces::AddOptions {
+        here,
+        focus: on_terminal,
+        ..Default::default()
+    }
 }
 
 /// The launch that has the daemon start the setup `agent` of `repo` on
@@ -132,22 +117,6 @@ fn setup_launch(
     })
 }
 
-/// How the setup agent starts on `prompt` as `options` ask: the user waits
-/// for it, so it skips the queue and, from a call `on_terminal`, takes a
-/// focused tab whatever the `focus` setting says.
-fn add_options(options: &Options, prompt: String, on_terminal: bool) -> workspaces::AddOptions {
-    workspaces::AddOptions {
-        here: options.here,
-        focus: on_terminal,
-        wait: false,
-        now: true,
-        model: options.model.clone(),
-        mode: Some(ModeChoice::Named(modes::ModeName::SETUP)),
-        prompt: Some(prompt),
-        ..Default::default()
-    }
-}
-
 /// The repository's local config file, in a directory that exists and is
 /// named as the agent's working directories name it. The daemon refuses one
 /// where a checkout lies before the agent is told to write there.
@@ -158,22 +127,6 @@ async fn local_config(ctx: &Context, repository: repository::Selector) -> Result
         path.file_name()
             .context("the local config has no file name")?,
     ))
-}
-
-/// The setup branch, which opens its workspace or the branch an earlier
-/// setup left, else a new branch.
-async fn creation(repo: &Repository) -> Result<Creation> {
-    let exists = git::ref_exists(
-        &repo.path,
-        &git::local_ref(&BRANCH.into()),
-        git::isolated_command,
-    )
-    .await?;
-    Ok(Creation {
-        branch: (!exists).then(|| BRANCH.to_owned()),
-        existing: exists.then(|| BRANCH.to_owned()),
-        ..Default::default()
-    })
 }
 
 /// What the setup agent of repository `name`, whose local config is

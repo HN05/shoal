@@ -120,23 +120,6 @@ async fn read_context(ctx: &Context, target: &AddTarget) -> Result<ItemContext> 
     issues::read_context(ctx, target.repository(ctx).await?).await
 }
 
-/// The branch an issue's addition opens, unless one is chosen already.
-pub(super) async fn select_add_creation(
-    ctx: &Context,
-    target: &AddTarget,
-    creation: Creation,
-    issue: Option<&issues::Issue>,
-) -> Result<Creation> {
-    match issue {
-        Some(issue) if creation.unsettled() => {
-            let repo = target.repository(ctx).await?;
-            let branch = (issue.branch_name(), &issue.url);
-            workspace::issue_creation(&DaemonReads(ctx), repo, creation, branch).await
-        }
-        _ => Ok(creation),
-    }
-}
-
 async fn pick_add_branch(ctx: &Context, target: &AddTarget) -> Result<String> {
     let branches =
         crate::client::repositories::branches(&ctx.paths, target.selector.clone()).await?;

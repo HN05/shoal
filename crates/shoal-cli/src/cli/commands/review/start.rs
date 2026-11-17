@@ -27,6 +27,7 @@ use crate::{
     protocol::{ConfigTarget, CreationOptions, ItemContext, operations::WorkspaceStart},
     reviews::ReviewTarget,
 };
+use shoal_protocol::launches::{Launch, StartTarget};
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 /// The configured command a manual review runs.
@@ -283,36 +284,15 @@ async fn pull_request(
             workspace.id
         }
         None => {
-            let tracking =
-                crate::launches::workspace::fetch_pull_branch(&repo.path, "base", &pull.base)
-                    .await?;
-            let creation = crate::start_plan::Creation {
-                existing: Some(git::remote_ref("origin", pull.head.as_str())),
-                base: Some(tracking),
-                pr: Some(pull.url.clone().into()),
-                options: CreationOptions {
-                    name: Some(SpaceName::derive(&pull.title, "workspace")),
-                    ..Default::default()
-                },
+            // The daemon opens the PR's head from origin, compared against
+            // its base, as any start on the PR does.
+            let launch = Launch {
+                target: Some(StartTarget::Pull(pull.url.clone())),
+                repository: Some(repo.id.to_string()),
+                setup_env: Some(crate::env::without_secrets()),
                 ..Default::default()
             };
-            let code = super::super::workspaces::add(
-                ctx,
-                Some(repo.id.clone().into()),
-                creation,
-                None,
-                super::super::workspaces::AgentLaunch::Explicit(None),
-                Vec::new(),
-                super::super::workspaces::AddOptions {
-                    here: true,
-                    focus: false,
-                    wait: false,
-                    now: false,
-                    blockers: Vec::new(),
-                    ..Default::default()
-                },
-            )
-            .await?;
+            let code = super::super::workspaces::open_here(ctx, launch).await?;
             if code != 0 {
                 return Ok(code);
             }

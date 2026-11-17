@@ -1,4 +1,5 @@
 use super::*;
+use crate::forge::items::link::LinkKind;
 use crate::forge::numbers::IssueNumber;
 use anyhow::Result;
 

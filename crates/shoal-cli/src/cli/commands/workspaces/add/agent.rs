@@ -8,24 +8,8 @@ use crate::{
     cli::{agents, context::Context, terminal},
     model::Workspace,
     protocol::ConfigTarget,
-    start_plan::{Creation, ResolvedAddAgent},
+    start_plan::ResolvedAddAgent,
 };
-
-pub(in crate::cli::commands) enum AgentLaunch {
-    Explicit(Option<Agent>),
-    /// An ordinary add uses the interactive picker when no agent is named.
-    Add(Option<Agent>),
-    IssueDefault(Option<Agent>),
-}
-
-impl AgentLaunch {
-    /// The agent named, if any.
-    pub(super) fn named(self) -> Option<Agent> {
-        match self {
-            Self::Explicit(agent) | Self::Add(agent) | Self::IssueDefault(agent) => agent,
-        }
-    }
-}
 
 /// The effective settings of the repository a workspace is added in, or of
 /// the existing workspace a launch goes to, loaded on first use.
@@ -62,62 +46,20 @@ impl<'a> AddSettings<'a> {
 
 pub(super) enum AgentChoice {
     Chosen(Option<Agent>),
-    /// No agent was named or configured; the picker runs after lookups.
-    Picker,
-    /// Ordinary additions pick only when attached to a terminal.
+    /// No agent was named; a start on a terminal picks one.
     PickerIfInteractive,
 }
 
-/// No agent for a fork PR's head, which a workspace at a commit holds,
-/// refusing one that was named.
-pub(super) fn for_creation(creation: &Creation, agent: AgentChoice) -> Result<AgentChoice> {
-    if creation.pull_head.is_none() {
-        return Ok(agent);
-    }
-    anyhow::ensure!(
-        !matches!(agent, AgentChoice::Chosen(Some(_))),
-        "the PR comes from a fork, so its head opens in a workspace at a commit, which holds no agent of its own"
-    );
-    Ok(AgentChoice::Chosen(None))
-}
-
-/// Validate a named agent before looking up the issue or creating work.
+/// The agent named, checked before anything is created, else the picker's.
 pub(super) async fn choose_add_agent(
     settings: &AddSettings<'_>,
-    agent: AgentLaunch,
+    agent: Option<Agent>,
 ) -> Result<AgentChoice> {
-    let agent = match agent {
-        AgentLaunch::Explicit(agent) => agent,
-        AgentLaunch::Add(agent) => {
-            if agent.is_none() {
-                return Ok(AgentChoice::PickerIfInteractive);
-            }
-            agent
-        }
-        AgentLaunch::IssueDefault(agent) => {
-            match agent.or(settings.get().await?.agent.default.clone()) {
-                Some(agent) => Some(agent),
-                None => return Ok(AgentChoice::Picker),
-            }
-        }
+    let Some(agent) = agent else {
+        return Ok(AgentChoice::PickerIfInteractive);
     };
-    if let Some(agent) = &agent {
-        crate::agents::ensure_available(agent, settings.get().await?)?;
-    }
-    Ok(AgentChoice::Chosen(agent))
-}
-
-/// Refuse `model` for an agent already chosen before any prompt asks for the
-/// rest of the addition; a picked agent is checked once picked.
-pub(super) async fn check_chosen_model(
-    settings: &AddSettings<'_>,
-    agent: &AgentChoice,
-    model: &ModelChoice,
-) -> Result<()> {
-    if let AgentChoice::Chosen(Some(agent)) = agent {
-        check_model(settings.get().await?, agent, model)?;
-    }
-    Ok(())
+    crate::agents::ensure_available(&agent, settings.get().await?)?;
+    Ok(AgentChoice::Chosen(Some(agent)))
 }
 
 /// Refuse `model` for `agent` when its launch cannot pass it on.
@@ -130,20 +72,6 @@ fn check_model(
     crate::agents::check_model(settings, agent, &resolved)
 }
 
-/// A picked issue defaults its agent as `--issue` does.
-pub(super) async fn choose_for_picked_issue(
-    settings: &AddSettings<'_>,
-    agent: AgentChoice,
-    picked: bool,
-) -> Result<AgentChoice> {
-    match agent {
-        AgentChoice::PickerIfInteractive if picked => {
-            choose_add_agent(settings, AgentLaunch::IssueDefault(None)).await
-        }
-        agent => Ok(agent),
-    }
-}
-
 /// The agent an addition starts, refusing a `model` it cannot run with
 /// before anything is created.
 pub(super) async fn resolve_add_agent(
@@ -154,7 +82,6 @@ pub(super) async fn resolve_add_agent(
 ) -> Result<ResolvedAddAgent> {
     let agent = match agent {
         AgentChoice::Chosen(agent) => agent,
-        AgentChoice::Picker => agents::pick_default_agent(ctx, settings.get().await?)?,
         AgentChoice::PickerIfInteractive if ctx.interactive() => {
             agents::pick_default_agent(ctx, settings.get().await?)?
         }

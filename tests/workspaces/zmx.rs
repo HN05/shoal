@@ -169,6 +169,8 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
         "machine.max_heavy_agents = 1\n[agents.pi]\ncommand = ['sh', '-c', 'shift; echo \"$ZMX_SESSION ${SHOAL_EXECUTION_ID:+tracked} $*\" >> \"$HOME/agent-runs\"', 'agent', '{args}']\n",
     ));
     let home = fixture.root.path();
+    // The queue starts an agent with input, so the daemon needs the fake zmx.
+    install_test_script(home.join("bin/zmx"), PASSTHROUGH_ZMX);
     let repo = fixture.repo.to_str().unwrap();
     let runs = || fs::read_to_string(home.join("agent-runs")).unwrap_or_default();
 
@@ -455,8 +457,12 @@ fn terminal_resume_of_one_agent_runs_in_a_detached_session_unless_focused() {
 
 #[test]
 fn a_detached_session_ends_once_a_kept_completion_resolves_its_agent() {
+    // The queue starts the agent from the daemon, so its command names the
+    // binary itself.
+    let shoal = support::shoal_binary();
     let fixture = Fixture::with_config(Some(&format!(
-        "{UNLIMITED_AGENTS}[cleanup.done]\nenabled = false\n[agents.pi]\ncommand = ['sh', '-c', '\"$SHOAL_TEST_BINARY\" done']\n"
+        "{UNLIMITED_AGENTS}[cleanup.done]\nenabled = false\n[agents.pi]\ncommand = ['sh', '-c', '\"{}\" done']\n",
+        shoal
     )));
     let home = fixture.root.path();
     // The daemon closes the session, so it needs the fake zmx too.
@@ -464,20 +470,17 @@ fn a_detached_session_ends_once_a_kept_completion_resolves_its_agent() {
     // The fake session outlives its agent, as one with a shell would.
     fs::write(home.join("zmx-keep-sessions"), "").unwrap();
     let (output, transcript) = fixture.terminal_command(
-        fixture
-            .command()
-            .env("SHOAL_TEST_BINARY", support::shoal_binary())
-            .args([
-                "start",
-                "--wait",
-                fixture.repo.to_str().unwrap(),
-                "--branch",
-                "kept",
-                "--agent",
-                "pi",
-                "--",
-                "go",
-            ]),
+        fixture.command().args([
+            "start",
+            "--wait",
+            fixture.repo.to_str().unwrap(),
+            "--branch",
+            "kept",
+            "--agent",
+            "pi",
+            "--",
+            "go",
+        ]),
         "",
         true,
     );
@@ -507,6 +510,8 @@ fn a_detached_session_stays_open_without_close_when_done() {
     let fixture = Fixture::with_config(Some(&format!(
         "terminal.close_when_done = false\n{UNLIMITED_AGENTS}[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n"
     )));
+    // The queue starts the agent, so the daemon needs the fake zmx.
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let (output, transcript) = fixture.terminal_command(
         fixture.command().args([
             "start",
@@ -527,14 +532,17 @@ fn a_detached_session_stays_open_without_close_when_done() {
         "{}\n{transcript}",
         printed(&output)
     );
+    // The queue opens the agent's session once it starts the agent.
+    let sent = try_wait_for(|| {
+        (zmx_calls(&fixture).into_iter())
+            .find(|call| call.starts_with(&["send".into(), "open".into()]))
+    });
     let calls = zmx_calls(&fixture);
-    let sent = calls
-        .iter()
-        .find(|call| call.starts_with(&["send".into(), "open".into()]));
     assert!(
-        sent.and_then(|call| call.get(2)).is_some_and(|text| {
-            text.ends_with(" internal add --host zmx && exit; exec \"$SHELL\" -l\r")
-        }),
+        sent.and_then(|call| call.get(2).cloned())
+            .is_some_and(|text| {
+                text.ends_with(" internal add --host zmx && exit; exec \"$SHELL\" -l\r")
+            }),
         "{calls:?}\n{transcript}"
     );
     assert!(!fixture.root.path().join("zmx-watch-calls").exists());

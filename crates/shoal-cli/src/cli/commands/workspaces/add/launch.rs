@@ -1,14 +1,17 @@
-//! A detached start the daemon carries out: once this process has picked
-//! what a terminal picks, it sends the start as one [`Launch`] and reports
-//! what the daemon started, leaving a workspace's preparation to the daemon.
+//! A start the daemon carries out, whoever makes it: once this process has
+//! picked what a terminal picks, it sends the start as one [`Launch`], and
+//! either reports what the daemon started, leaving a workspace's
+//! preparation and its agent's start to the daemon, or, for an agent that
+//! runs in this caller, attaches it here.
 use std::ffi::OsString;
 
 use anyhow::Result;
 
 use super::{
-    AddOptions,
+    AddOptions, StartsAsChat,
     agent::AddSettings,
-    detached::{ensure_detachable, unplaceable},
+    attach::{self, Attach},
+    detached::{ensure_detachable, leaves_caller, unplaceable},
     finish::{finish_add_workspace, report_queued_in},
     mode::choose_add_mode,
     plan::launch_args,
@@ -19,7 +22,7 @@ use super::{
 use crate::{
     cli::{
         agents,
-        commands::{links, queued_agents, start},
+        commands::{issues, links, queued_agents, start},
         context::Context,
         output::{Palette, Style},
         ui::ModeChoice,
@@ -36,7 +39,8 @@ use shoal_protocol::launches::{
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Have the daemon start `agent` as the worker of `workspace`, in `mode`,
-/// as `options` ask, with `args` as its task, and report it.
+/// as `options` ask, with `args` as its task, and report it, or run it here
+/// where it runs in this caller.
 pub(super) async fn launch_worker(
     ctx: &Context,
     workspace: &Workspace,
@@ -44,28 +48,35 @@ pub(super) async fn launch_worker(
     args: Vec<OsString>,
     (options, settings): (AddOptions, &AddSettings<'_>),
 ) -> Result<i32> {
-    ensure_detachable(settings.get().await?, agent.agent.as_ref(), &options)?;
-    let launch = Launch {
+    let settings = settings.get().await?;
+    let mut launch = Launch {
         in_workspace: Some(SpaceChoice::Space(SpaceSelector::id(&workspace.id))),
         mode,
         agent: agent.agent,
         model: agent.model,
-        fork: options.fork,
+        fork: options.fork.clone(),
         permissions: options.narrowing,
-        blockers: options.blockers,
+        blockers: options.blockers.clone(),
         now: options.now,
         task: launch_args(args)?,
         env: Some(crate::terminal::start_environment()),
         ..Default::default()
     };
-    send(ctx, launch, (false, None)).await
+    let attach = Attach::of(ctx, &launch, launch.agent.as_ref(), settings, &options);
+    match attach {
+        Some(_) => attach::in_caller(ctx, &mut launch, settings, &options),
+        None => ensure_detachable(settings, launch.agent.as_ref(), &options)?,
+    }
+    send(ctx, launch, (false, None), attach.zip(Some(settings))).await
 }
 
 /// Have the daemon start `launch` in a new workspace, in the mode `mode`
 /// names or, on a terminal, picks, once a terminal has picked what the
-/// launch leaves to a picker, refusing what only a terminal can show.
-/// The repository's `settings`, or the global config's without one, refuse
-/// an agent they cannot start detached when no terminal picks the rest.
+/// launch leaves to a picker, and run its agent here where it runs in this
+/// caller. A start on a terminal, or whose agent runs in this caller, that
+/// names no branch, issue, PR or copy begins as a chat instead. The
+/// repository's `settings`, or the global config's without one, refuse an
+/// agent they cannot start detached when no terminal picks the rest.
 pub(in crate::cli::commands) async fn launch_workspace(
     ctx: &Context,
     mut launch: Launch,
@@ -81,9 +92,81 @@ pub(in crate::cli::commands) async fn launch_workspace(
         Some(picked) => picked.get().await?,
         None => settings,
     };
+    let leaves = leaves_caller(ctx, options.here);
     let agent = starting_agent(&launch, settings);
-    launch.unplaceable = unplaceable(settings, agent.as_ref(), options)?;
-    send(ctx, launch, (options.wait, agent)).await
+    let attach = Attach::of(ctx, &launch, agent.as_ref(), settings, options);
+    if (!leaves || attach.is_some()) && begins_as_chat(&launch) {
+        return Err(starts_as_chat(ctx, &launch).await?.into());
+    }
+    place_agent(
+        ctx,
+        &mut launch,
+        (attach, agent.as_ref()),
+        settings,
+        options,
+    )?;
+    send(
+        ctx,
+        launch,
+        (options.wait, agent),
+        attach.zip(Some(settings)),
+    )
+    .await
+}
+
+/// Ready `launch` for where its `agent` runs: in this caller as `attach`
+/// says, which needs the agent here before anything is created, or else
+/// from the daemon, which refuses one no host can place for a start that
+/// leaves this caller, as `--focus` is refused there.
+fn place_agent(
+    ctx: &Context,
+    launch: &mut Launch,
+    (attach, agent): (Option<Attach>, Option<&crate::agent::Agent>),
+    settings: &Effective,
+    options: &AddOptions,
+) -> Result<()> {
+    if leaves_caller(ctx, options.here) {
+        let refused = unplaceable(settings, agent, options)?;
+        launch.unplaceable = refused.filter(|_| attach.is_none());
+    }
+    if attach.is_some() {
+        if let Some(agent) = agent {
+            crate::agents::ensure_available(agent, settings)?;
+        }
+        attach::in_caller(ctx, launch, settings, options);
+    }
+    Ok(())
+}
+
+/// Have the daemon open the workspace `launch` names without starting an
+/// agent, and follow its preparation here, where the caller's shell enters
+/// it.
+pub(in crate::cli::commands) async fn open_here(ctx: &Context, mut launch: Launch) -> Result<i32> {
+    launch.here = true;
+    match crate::client::launches::launch(&ctx.paths, launch).await? {
+        Launched::Workspace(started) if started.operation.is_some() => {
+            Box::pin(attach::run(ctx, *started)).await
+        }
+        Launched::Workspace(started) => report_workspace(ctx, *started),
+        Launched::Worker(worker) => Box::pin(attach::run(ctx, attach::of_worker(*worker))).await,
+        Launched::Chat(started) => start::report_started(ctx, started),
+    }
+}
+
+/// The chat a start in this caller begins as, since `launch` names nothing
+/// its workspace starts from: in the repository it names, else the
+/// current one.
+async fn starts_as_chat(ctx: &Context, launch: &Launch) -> Result<StartsAsChat> {
+    let named = (launch.repository.clone()).or_else(|| match &launch.target {
+        Some(StartTarget::Repository(named)) => Some(named.clone()),
+        _ => None,
+    });
+    let named = named.map(crate::repository::named).transpose()?;
+    let repository = resolve_add_target(ctx, named, None).await?.selector;
+    Ok(StartsAsChat {
+        repository,
+        mode: launch.mode.clone(),
+    })
 }
 
 /// The agent `launch` starts under `settings`: the one it names, else for a
@@ -111,7 +194,10 @@ async fn pick_missing<'a>(
         _ => None,
     });
     let issue = launch.issue.as_ref().and_then(IssueChoice::named).cloned();
-    let named = named.map(crate::repository::named).transpose()?;
+    let named = match named {
+        Some(named) => Some(crate::repository::named(named)?),
+        None => linked_repository(ctx, launch).await?,
+    };
     let target = resolve_add_target(ctx, named, issue.as_ref()).await?;
     launch.repository = Some(target.repository(ctx).await?.id.to_string());
     if matches!(launch.target, Some(StartTarget::Repository(_))) {
@@ -122,11 +208,70 @@ async fn pick_missing<'a>(
         let picked = pick_add_source(ctx, &target, &mut creation).await?;
         picked_source(launch, creation, picked);
     }
+    // An issue that cannot be read ends the start before a picker asks more.
+    if let Some(issue) = named_issue(launch)? {
+        let context = issues::read_context(ctx, target.repository(ctx).await?).await?;
+        issues::load(ctx, context, issue).await?;
+    }
     let settings = AddSettings::new(ctx, &target.selector);
+    // A start that begins as a chat picks its agent there.
+    if begins_as_chat(launch) {
+        return Ok(Some(settings));
+    }
     if launch.agent.is_none() && !(issue_default(launch) && has_default(&settings).await?) {
         launch.agent = agents::pick_default_agent(ctx, settings.get().await?)?;
+        if launch.agent.is_none() {
+            without_agent(launch)?;
+        }
     }
     Ok(Some(settings))
+}
+
+/// The issue `launch` starts on, by `--issue` or the positional argument.
+fn named_issue(launch: &Launch) -> Result<Option<crate::forge::items::reference::ItemInput>> {
+    if let Some(issue) = launch.issue.as_ref().and_then(IssueChoice::named) {
+        return Ok(Some(issue.clone()));
+    }
+    Ok(
+        match (launch.target.clone())
+            .map(|target| target.decided(false))
+            .transpose()?
+        {
+            Some(StartTarget::Issue(issue)) if issue_default(launch) => Some(issue),
+            _ => None,
+        },
+    )
+}
+
+/// `launch` starting no agent, as the picker chose: a positional issue,
+/// whose start would take `agent.default`, names the issue as `--issue`
+/// does instead, which starts none.
+fn without_agent(launch: &mut Launch) -> Result<()> {
+    if !issue_default(launch) {
+        return Ok(());
+    }
+    if let Some(StartTarget::Issue(issue)) = (launch.target.take())
+        .map(|target| target.decided(false))
+        .transpose()?
+    {
+        launch.issue = Some(IssueChoice::Named(issue));
+    }
+    Ok(())
+}
+
+/// The registered repository the link `launch` starts on belongs to,
+/// offering to register an unregistered one; none for a start on no link.
+async fn linked_repository(
+    ctx: &Context,
+    launch: &Launch,
+) -> Result<Option<crate::repository::Selector>> {
+    let Some(linked) = (launch.target.as_ref()).and_then(StartTarget::linked_repository) else {
+        return Ok(None);
+    };
+    let mut repos = crate::client::repositories::list(&ctx.paths).await?;
+    let retry = "shoal start <link> --repo <repository>";
+    let id = issues::registered_remote(ctx, &mut repos, linked.clone(), retry).await?;
+    Ok(Some(id.into()))
 }
 
 /// Whether `launch` names nothing a new workspace starts from: no branch,
@@ -138,6 +283,18 @@ fn names_nothing(launch: &Launch) -> bool {
         && launch.copy.is_none()
         && launch.checkpoint.is_none()
         && launch.target.is_none()
+}
+
+/// Whether `launch` names nothing its workspace's branch comes from, no
+/// branch, issue, link or copy, so it begins as a chat; a base or a
+/// repository alone settles no branch.
+fn begins_as_chat(launch: &Launch) -> bool {
+    let names_link = !matches!(launch.target, None | Some(StartTarget::Repository(_)));
+    launch.branch.is_none()
+        && launch.issue.is_none()
+        && launch.copy.is_none()
+        && launch.checkpoint.is_none()
+        && !names_link
 }
 
 /// `launch` starting from what a picker chose: the existing branch or PR
@@ -154,8 +311,22 @@ fn picked_source(
         Some(crate::forge::items::reference::ItemInput::Url(pull)) => {
             launch.target = Some(StartTarget::Pull(pull));
         }
-        _ => launch.branch = launch.branch.take().or(creation.existing),
+        _ => {
+            let picked = creation.existing.as_deref().map(switched_branch);
+            launch.branch = launch.branch.take().or(picked);
+        }
     }
+}
+
+/// The branch the picked ref `selector` names, as `git switch` takes it:
+/// a local branch by its name, and a remote's by the name it has there,
+/// which a new local branch then tracks.
+fn switched_branch(selector: &str) -> String {
+    let remote = (selector.strip_prefix("refs/remotes/"))
+        .and_then(|rest| rest.split_once('/'))
+        .map(|(_, name)| name);
+    let name = remote.or_else(|| crate::git::strip_local(selector));
+    name.unwrap_or(selector).to_owned()
 }
 
 /// Whether the agent of `launch` defaults to `agent.default`, as a start on
@@ -175,13 +346,20 @@ async fn has_default(settings: &AddSettings<'_>) -> Result<bool> {
 /// Send `launch`, which `agent` runs if it names one, and report what the
 /// daemon started: a new workspace once it is recorded, or with `wait` once
 /// its preparation ends, unless the preparation waits for other work or
-/// disk space, which leaves nothing to follow yet.
+/// disk space, which leaves nothing to follow yet. An agent that runs in
+/// this caller, as `attach` says under the start's settings, runs here once
+/// its workspace is prepared and the queue lets it start.
 async fn send(
     ctx: &Context,
     launch: Launch,
     (wait, agent): (bool, Option<crate::agent::Agent>),
+    attach: Option<(Attach, &Effective)>,
 ) -> Result<i32> {
-    match crate::client::launches::launch(&ctx.paths, launch).await? {
+    let launched = crate::client::launches::launch(&ctx.paths, launch).await?;
+    if let Some(attach) = attach {
+        return attached(ctx, launched, attach).await;
+    }
+    match launched {
         Launched::Chat(started) => start::report_started(ctx, started),
         Launched::Worker(worker) => {
             let QueuedWorker { workspace, entry } = *worker;
@@ -195,6 +373,34 @@ async fn send(
             follow_workspace(ctx, *started, agent).await
         }
         Launched::Workspace(started) => report_workspace(ctx, *started),
+    }
+}
+
+/// Run here the agent of the space the daemon `launched` for this caller,
+/// in this terminal or a focused place as `attach` says under `settings`.
+async fn attached(
+    ctx: &Context,
+    launched: Launched,
+    (attach, settings): (Attach, &Effective),
+) -> Result<i32> {
+    let started = match launched {
+        Launched::Chat(started) => return start::report_started(ctx, started),
+        Launched::Worker(worker) => attach::of_worker(*worker),
+        // A preparation that waits for other work or disk space leaves the
+        // agent to the queue's start once it is done.
+        Launched::Workspace(started) if started.operation.is_none() => {
+            return report_workspace(ctx, *started);
+        }
+        Launched::Workspace(started) => {
+            links::print_warnings(&started.warnings);
+            *started
+        }
+    };
+    match attach {
+        Attach::Here => Box::pin(attach::run(ctx, started)).await,
+        Attach::Beside { focused } => {
+            Box::pin(attach::run_beside(ctx, started, settings, focused)).await
+        }
     }
 }
 
@@ -259,3 +465,6 @@ pub(super) fn report_workspace(ctx: &Context, started: StartedWorkspace) -> Resu
         None => Ok(0),
     }
 }
+
+#[cfg(test)]
+mod tests;

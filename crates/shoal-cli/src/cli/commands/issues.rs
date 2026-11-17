@@ -1,12 +1,12 @@
 //! Resolve issue context before workspace creation and agent launch.
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Result, ensure};
 
 use crate::{
     cli::{client, context::Context, scoping::Scoping, ui},
     forge::{
         ForgeRepo,
         items::{
-            link::{ItemKind, LinkKind, Selection},
+            link::ItemKind,
             reference::{ItemInput, ItemRef},
         },
     },
@@ -268,22 +268,6 @@ fn comment_count(comments: Option<u64>) -> String {
         Some(count) => format!("The issue has {count} comments. "),
         None => String::new(),
     }
-}
-
-/// The issue `input` names: a number in the repository, or a URL.
-pub(in crate::cli) async fn issue(
-    ctx: &Context,
-    repo: &Repository,
-    input: &ItemInput,
-) -> Result<ItemRef> {
-    let selection = Selection {
-        kind: Some(LinkKind::Issue),
-        input: Some(input.clone()),
-    };
-    let context = read_context(ctx, repo).await?;
-    let selected = client::select_items(&ctx.paths, context.into(), selection, true).await?;
-    let issue = selected.items.into_iter().next();
-    Ok(issue.context("no issue selected")?.url)
 }
 
 #[cfg(test)]

@@ -18,9 +18,6 @@ pub(super) struct Copied {
     pub source: CopySource,
     /// The ID of the copied workspace's repository.
     pub repository: RepositoryId,
-    /// The name a copy takes without one of its own: the copied branch's,
-    /// or the workspace's, with `-copy` added.
-    pub name: String,
 }
 
 /// What `args` copy; `None` when they ask for no copy. The workspace is the
@@ -37,12 +34,8 @@ pub(super) async fn source(ctx: &Context, args: CopyArgs) -> Result<Option<Copie
         .into_workspaces();
     let live = (workspaces.into_iter())
         .find(|workspace| selector.selects(&workspace.id, workspace.number));
-    let (workspace, repository, named) = match live {
-        Some(workspace) => (
-            workspace.id.clone(),
-            workspace.repository().clone(),
-            workspace.branch_or_name().to_owned(),
-        ),
+    let (workspace, repository) = match live {
+        Some(workspace) => (workspace.id.clone(), workspace.repository().clone()),
         None if args.checkpoint.is_some() => removed(ctx, selector).await?,
         None => anyhow::bail!("no workspace {selector}"),
     };
@@ -50,26 +43,17 @@ pub(super) async fn source(ctx: &Context, args: CopyArgs) -> Result<Option<Copie
         workspace: SpaceSelector::id(&workspace),
         checkpoint: args.checkpoint,
     };
-    Ok(Some(Copied {
-        source,
-        repository,
-        name: format!("{named}-copy"),
-    }))
+    Ok(Some(Copied { source, repository }))
 }
 
-/// The ID of the removed workspace `selector` selects by ID, of its
-/// repository, and its branch or else its name.
-async fn removed(
-    ctx: &Context,
-    selector: SpaceSelector,
-) -> Result<(SpaceId, RepositoryId, String)> {
+/// The ID of the removed workspace `selector` selects by ID, and of its
+/// repository.
+async fn removed(ctx: &Context, selector: SpaceSelector) -> Result<(SpaceId, RepositoryId)> {
     let removed = crate::client::removal::removed(&ctx.paths).await?;
     let removed = removed
         .into_iter()
         .find(|removed| selector.given_id() == Some(&removed.space_id))
         .with_context(|| format!("no workspace or removed workspace {selector}"))?;
-    let head = &removed.kept_workspace()?.head;
-    let named = (head.branch()).map_or_else(|| removed.name.to_string(), ToString::to_string);
     let repository = removed.repository()?.clone();
-    Ok((removed.space_id, repository, named))
+    Ok((removed.space_id, repository))
 }

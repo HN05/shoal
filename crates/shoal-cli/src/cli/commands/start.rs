@@ -10,7 +10,7 @@
 use anyhow::{Context as _, Result, ensure};
 use shoal_ids::{agent_session_ids::AgentSessionId, space_ids::SpaceId};
 
-use super::workspaces::{self, DaemonReads, link::AddInput};
+use super::workspaces::{self, DaemonReads};
 use crate::{
     agent::Agent,
     cli::{
@@ -25,7 +25,6 @@ use crate::{
     launches,
     model::{AgentSession, Repository, SpaceKind},
     protocol::ConfigTarget,
-    start_plan::{CopyCreation, Creation},
 };
 use shoal_protocol::launches::{IssueChoice, Launch, StartTarget};
 use shoal_protocol::space_names::SpaceSelector;
@@ -300,11 +299,8 @@ fn located(args: &StartArgs) -> Result<Launch> {
 /// names no branch, issue, PR or copy, in a chat that its
 /// agent makes a workspace once it knows the work.
 pub(super) async fn in_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Result<i32> {
-    if let Some(settings) = launch::workspace::detached(ctx, &args).await? {
-        return launch::workspace::start(ctx, args, mode, settings).await;
-    }
     let unsettled = args.clone();
-    match in_new_workspace(ctx, args, mode).await {
+    match launch::workspace::start(ctx, args, mode).await {
         Err(error) if error.is::<workspaces::StartsAsChat>() => {
             let starts = error.downcast::<workspaces::StartsAsChat>()?;
             as_chat(ctx, unsettled, starts).await
@@ -335,79 +331,6 @@ async fn as_chat(
     in_chat_with(ctx, args, ModeChoice::Named(mode), options).await
 }
 
-/// Start the agent in a new or reopened workspace.
-async fn in_new_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Result<i32> {
-    let issue = match args.issue {
-        Some(None) => anyhow::bail!("--issue needs a number or URL outside plan mode"),
-        Some(Some(issue)) => Some(issue),
-        None => None,
-    };
-    let copy = super::copies::source(ctx, args.copy).await?;
-    let (parent, agent, fork) = match args.fork {
-        true => {
-            fork_from(
-                ctx,
-                copy.as_ref().map(|copy| copy.source.workspace.clone()),
-                args.parent,
-                args.agent,
-            )
-            .await?
-        }
-        false => (args.parent, args.agent, None),
-    };
-    // A copy goes in the copied workspace's repository unless one is named,
-    // which the daemon refuses when it is another.
-    let (positional, named) = named_repository(
-        args.repository,
-        args.repository_override,
-        args.checked_repository,
-    )?;
-    let repository = match (&copy, &positional) {
-        (Some(copy), None) => named.or_else(|| Some(copy.repository.clone().into())),
-        _ => named,
-    };
-    let input = AddInput {
-        positional,
-        repository,
-        issue,
-    };
-    let creation = Creation {
-        path: args.path,
-        // Settled once the repository is known: it may name a branch that
-        // exists, or one a workspace has.
-        branch: args.branch,
-        existing: None,
-        typed: false,
-        base: args.base,
-        git_profile: args.git_profile,
-        pr: None,
-        options: crate::protocol::CreationOptions {
-            name: args.name,
-            priority: args.priority,
-            ..args.creation.into()
-        },
-        pull_head: None,
-        copy: copy.map(|copy| CopyCreation {
-            source: copy.source,
-            name: copy.name,
-        }),
-    };
-    let options = workspaces::AddOptions {
-        here: args.here,
-        focus: args.focus,
-        wait: args.wait,
-        now: args.now,
-        blockers: args.add_blocker,
-        model: args.model.into(),
-        mode: Some(mode),
-        narrowing: given(&args.permissions),
-        prompt: None,
-        parent,
-        fork,
-    };
-    workspaces::link::add(ctx, input, creation, agent, args.args, options).await
-}
-
 /// Start the worker of the existing workspace `--in` names, in `mode`, with
 /// the arguments after `--`, else on the workspace's issue.
 async fn worker_in(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Result<i32> {
@@ -428,8 +351,6 @@ async fn worker_in(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Result<i
         model: args.model.into(),
         mode: Some(mode),
         narrowing: given(&args.permissions),
-        prompt: None,
-        parent: None,
         fork,
     };
     workspaces::start_worker(ctx, workspace, agent, args.args, options).await
@@ -488,25 +409,6 @@ async fn forked(
     let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
     crate::agents::ensure_forks(&settings, &agent)?;
     Ok((parent, agent, session))
-}
-
-/// The positional argument and the repository a workspace's start takes:
-/// the `checked` one, in place of the argument that named it, else the one
-/// `--repo` names.
-fn named_repository(
-    positional: Option<StartTarget>,
-    repository: Option<String>,
-    checked: Option<crate::repository::Selector>,
-) -> Result<(Option<StartTarget>, Option<crate::repository::Selector>)> {
-    let Some(checked) = checked else {
-        return Ok((
-            positional,
-            repository.map(ui::repository_selector).transpose()?,
-        ));
-    };
-    let positional =
-        positional.filter(|positional| !matches!(positional, StartTarget::Repository(_)));
-    Ok((positional, Some(checked)))
 }
 
 /// Start the agent in a chat in a repository's checkout, or with `--in` in

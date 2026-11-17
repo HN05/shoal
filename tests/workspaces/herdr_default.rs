@@ -45,6 +45,10 @@ fn background_additions_open_tabs_in_the_repository_workspace() {
         );
         assert!(output.status.success(), "{} {transcript}", printed(&output));
     }
+    // The queue opens each agent's tab once it starts the agent.
+    support::wait::wait_until("both agents' tabs", || {
+        calls_of(&fixture, &["tab", "create"]).len() == 2
+    });
     // The workspace is created once, then found by its label.
     let created = calls_of(&fixture, &["workspace", "create"]);
     assert_eq!(created.len(), 1, "{created:?}");
@@ -79,7 +83,9 @@ fn launches_from_a_terminal_need_no_zmx_while_herdr_is_the_default() {
         ],
     );
     assert!(output.status.success(), "{} {transcript}", printed(&output));
-    assert_eq!(calls_of(&fixture, &["tab", "create"]).len(), 1);
+    support::wait::wait_until("the agent's tab", || {
+        calls_of(&fixture, &["tab", "create"]).len() == 1
+    });
 }
 
 #[test]
@@ -101,6 +107,10 @@ fn a_fixed_workspace_name_is_reused_as_herdr_lists_it() {
         ],
     );
     assert!(output.status.success(), "{} {transcript}", printed(&output));
+    // The queue opens the agent's tab once it starts the agent.
+    support::wait::wait_until("the agent's tab", || {
+        !calls_of(&fixture, &["tab", "create"]).is_empty()
+    });
     assert!(calls_of(&fixture, &["workspace", "create"]).is_empty());
     assert_eq!(
         calls_of(&fixture, &["tab", "create"])[0][2..4],

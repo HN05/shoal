@@ -261,6 +261,10 @@ pub struct AddPlan {
     /// The existing workspace a launch in it reopens; it never creates one.
     #[serde(default)]
     pub workspace: Option<SpaceId>,
+    /// The operation preparing `workspace`, which the place a focused start
+    /// opens follows before its agent starts there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preparation: Option<String>,
 }
 
 impl AddPlan {
@@ -282,12 +286,6 @@ impl AddPlan {
             source: _,
         } = launch;
         Ok(Self {
-            repository: workspace.repository().into(),
-            creation: Creation {
-                existing: workspace.branch().map(ToString::to_string),
-                ..Default::default()
-            },
-            place_name: None,
             issue: issue.map(|issue| issue.url),
             agent: ResolvedAddAgent {
                 agent: Some(agent.name().parse()?),
@@ -298,11 +296,40 @@ impl AddPlan {
             mode,
             narrowing,
             fork,
+            ..Self::opening(workspace)
+        })
+    }
+
+    /// The plan that opens the existing `workspace` under its name without
+    /// an agent.
+    pub fn opening(workspace: &Workspace) -> Self {
+        Self {
+            repository: workspace.repository().into(),
+            creation: Creation {
+                existing: workspace.branch().map(ToString::to_string),
+                options: crate::protocol::CreationOptions {
+                    name: Some(workspace.name.clone()),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            place_name: None,
+            issue: None,
+            agent: ResolvedAddAgent {
+                agent: None,
+                model: ModelChoice::default(),
+            },
+            args: Vec::new(),
+            prompt: None,
+            mode: None,
+            narrowing: Default::default(),
+            fork: None,
             queue_entry: None,
             chat: None,
             parent: None,
             workspace: Some(workspace.id.clone()),
-        })
+            preparation: None,
+        }
     }
 
     /// Whether the plan opens `workspace`'s branch in its repository without

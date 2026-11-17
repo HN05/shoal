@@ -63,10 +63,8 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             ],
             vec![
                 "list_repositories",
-                "list_spaces",
-                "layered_config test",
-                "queue_add now=false starts_in_caller=true",
-                "start_workspace",
+                "layered_config id:test",
+                "launch here now=false",
             ],
             "creation reached",
         ),
@@ -130,8 +128,8 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
     }
 }
 
-/// A scoped caller's `--here` waits for a slot, which it starts its agent
-/// in itself, as the user's does, rather than leaving it to the daemon.
+/// A scoped caller's `--here` runs its agent itself, as the user's does,
+/// rather than leaving it to the daemon, and waits for a slot.
 #[test]
 fn a_scoped_start_here_takes_its_own_slot_without_skipping_the_limits() {
     let daemon = FakeDaemon::start();
@@ -152,10 +150,8 @@ fn a_scoped_start_here_takes_its_own_slot_without_skipping_the_limits() {
         daemon.methods(),
         [
             "list_repositories",
-            "list_spaces",
-            "layered_config test",
-            "queue_add now=false starts_in_caller=true",
-            "start_workspace",
+            "layered_config id:test",
+            "launch here now=false",
         ],
         "{}",
         printed(&output)
@@ -212,7 +208,12 @@ fn interactive_commands_refuse_their_arguments_before_prompting() {
         (
             &["start", "--wait", "test", "--base", "main"],
             "",
-            &["check_creation test", "layered_config test"],
+            &[
+                "list_repositories",
+                "layered_config id:test",
+                "list_repositories",
+                "layered_config test",
+            ],
             "--base applies to a new workspace's branch",
         ),
         (
@@ -342,13 +343,12 @@ impl FakeDaemon {
                         "code": "operation_failed", "message": "issue number must be positive"
                     }}),
                     "list_spaces" => json!({"type": "spaces", "data": []}),
-                    "queue_add" => {
-                        let queued = &request["method"]["queue_add"]["request"];
-                        let (now, caller) = (&queued["now"], &queued["starts_in_caller"]);
-                        method = format!("queue_add now={now} starts_in_caller={caller}");
-                        json!({"type": "queue_admission", "data": {
-                            "start": true, "entry": null, "waiting": 0
-                        }})
+                    "launch" => {
+                        let launch = &request["method"]["launch"]["launch"];
+                        if launch["here"] == true {
+                            method = format!("launch here now={}", launch["now"] == true);
+                        }
+                        json!({"type": "error", "data": {"code": "operation_failed", "message": "creation reached"}})
                     }
                     _ => {
                         json!({"type": "error", "data": {"code": "operation_failed", "message": "creation reached"}})

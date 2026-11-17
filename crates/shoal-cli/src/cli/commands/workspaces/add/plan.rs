@@ -4,94 +4,9 @@ use std::ffi::OsString;
 
 use anyhow::Result;
 
-use super::{AddOptions, reads::DaemonReads, target::AddTarget};
-use crate::{
-    cli::{
-        commands::{issues, repositories},
-        context::Context,
-    },
-    env,
-    launches::workspace,
-    start_plan::{AddPlan, Creation, ResolvedAddAgent},
-    terminal::PlaceName,
-};
-use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::space_names::SpaceName;
+use super::target::AddTarget;
+use crate::{cli::context::Context, env, start_plan::Creation};
 use shoal_protocol::space_names::SpaceSelector;
-
-/// `creation` with its path resolved against the current directory.
-pub(super) fn absolute(ctx: &Context, mut creation: Creation) -> Result<Creation> {
-    creation.path = creation
-        .path
-        .map(|path| repositories::absolute(ctx, path))
-        .transpose()?;
-    Ok(creation)
-}
-
-/// The plan to add `creation` in the chat this runs in, if any, starting
-/// `agent` with the found `issue` or with `args`.
-pub(super) async fn plan_addition(
-    ctx: &Context,
-    target: &AddTarget,
-    mut creation: Creation,
-    issue: Option<&issues::Issue>,
-    agent: ResolvedAddAgent,
-    args: Vec<OsString>,
-) -> Result<AddPlan> {
-    // Without a name of its own, the workspace takes the issue's title.
-    if let Some(issue) = issue {
-        (creation.options.name).get_or_insert_with(|| SpaceName::derive(&issue.title, "workspace"));
-    }
-    let place_name = match issue {
-        Some(issue) => Some(PlaceName::new(
-            None,
-            target.repository(ctx).await?,
-            Some(issue.place_issue()),
-        )),
-        None => None,
-    };
-    Ok(AddPlan {
-        repository: target.selector.clone(),
-        creation,
-        place_name,
-        issue: issue.map(|issue| issue.url.clone()),
-        agent,
-        args,
-        prompt: None,
-        mode: None,
-        narrowing: Default::default(),
-        fork: None,
-        queue_entry: None,
-        chat: env::own_chat(),
-        parent: None,
-        workspace: None,
-    })
-}
-
-/// The workspace name `creation` gives, else the one it will derive, as
-/// [`workspace::planned_name`] names it.
-pub(super) async fn planned_workspace_name(
-    ctx: &Context,
-    target: &AddTarget,
-    creation: &Creation,
-) -> Result<SpaceName> {
-    workspace::planned_name(target.repository(ctx).await?, creation).await
-}
-
-/// The existing workspace `plan` reopens: the one it names, else the one on
-/// the branch it opens. A launch there is that workspace's agent, which the
-/// daemon admits only while the workspace has none.
-pub(super) async fn reopened_workspace(
-    ctx: &Context,
-    target: &AddTarget,
-    plan: &AddPlan,
-) -> Result<Option<SpaceId>> {
-    if plan.workspace.is_some() {
-        return Ok(plan.workspace.clone());
-    }
-    let repo = target.repository(ctx).await?;
-    workspace::reopened_workspace(&DaemonReads(ctx), repo, &plan.creation).await
-}
 
 /// Agent arguments as a queued launch carries them, refusing one that is
 /// not UTF-8.
@@ -102,20 +17,6 @@ pub(in crate::cli::commands) fn launch_args(args: Vec<OsString>) -> Result<Vec<S
                 .map_err(|arg| anyhow::anyhow!("agent argument {arg:?} is not UTF-8"))
         })
         .collect()
-}
-
-/// Start `plan`'s agent in `mode` with the narrowing `options` gives,
-/// below the space it names, from a fork of the session it names.
-pub(super) fn start_as(
-    plan: &mut AddPlan,
-    options: &AddOptions,
-    mode: Option<crate::config::modes::ModeName>,
-) {
-    plan.mode = mode;
-    plan.narrowing = options.narrowing;
-    plan.prompt.clone_from(&options.prompt);
-    plan.parent.clone_from(&options.parent);
-    plan.fork.clone_from(&options.fork);
 }
 
 /// Refuse what creation would refuse in the given repository, branch and

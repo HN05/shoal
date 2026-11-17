@@ -36,24 +36,23 @@ async fn the_setup_mode_starts_only_with_its_own_commands() {
 
 #[test]
 fn a_workspace_start_takes_the_checked_repository_by_id() {
-    let checked = || Some(crate::repository::Selector::Id("repo-id".into()));
-    let id = |named: Option<crate::repository::Selector>| match named {
-        Some(crate::repository::Selector::Id(id)) => Some(id),
-        _ => None,
+    let checked = crate::repository::Selector::Id("repo-id".into());
+    let launch = |target: &str, repository: Option<&str>| Launch {
+        target: Some(target.parse().unwrap()),
+        repository: repository.map(Into::into),
+        ..Launch::default()
     };
     // It replaces the positional repository that named it.
-    let (positional, named) =
-        named_repository(Some("repo".parse().unwrap()), None, checked()).unwrap();
-    assert_eq!((positional, id(named)), (None, Some("repo-id".into())));
-    // A positional issue stays, beside the repository `--repo` named.
-    let (positional, named) =
-        named_repository(Some("37".parse().unwrap()), Some("repo".into()), checked()).unwrap();
+    let named = launch::workspace::checked_launch(launch("repo", None), Some(&checked));
     assert_eq!(
-        (positional, id(named)),
-        (Some("37".parse().unwrap()), Some("repo-id".into()))
+        (named.target, named.repository),
+        (None, Some("repo-id".into()))
     );
+    // A positional issue stays, beside the repository `--repo` named.
+    let issue = launch::workspace::checked_launch(launch("37", Some("repo")), Some(&checked));
+    assert_eq!(issue.target, Some("37".parse().unwrap()));
+    assert_eq!(issue.repository, Some("repo-id".into()));
     // Unchecked, `--repo` stays the user's text.
-    let (_, named) =
-        named_repository(Some("37".parse().unwrap()), Some("repo".into()), None).unwrap();
-    assert!(matches!(named, Some(crate::repository::Selector::Value(value)) if value == "repo"));
+    let unchecked = launch::workspace::checked_launch(launch("37", Some("repo")), None);
+    assert_eq!(unchecked.repository, Some("repo".into()));
 }

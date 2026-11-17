@@ -1332,12 +1332,12 @@ without a terminal, such as another agent's tool call, start the agents of `star
 through the daemon instead (see [Agent queue](#agent-queue) and `shoal restore`),
 so the call returns without running the agent and interrupting it leaves the
 agent running. An agent Happy runs leaves the call at once anyway, so a
-caller outside Shoal launches it as before; the new workspace's own settings
-decide, once it is set up. `start --here` and `contribute --here` run the agent in
+caller outside Shoal launches it as before, as its repository's settings
+decide. `start --here` and `contribute --here` run the agent in
 place, returning its exit code, and for callers outside Shoal so does `restore --focus`.
-A scoped caller's `--here` runs the agent here only when a slot is free: with
-none, it queues the agent and returns, as a detached start does, rather than
-skipping the limits. Its agent is its own space's, with that space's scope: the caller's stops leave it running. A launch that would start a zmx session refuses the agent when zmx is missing,
+A scoped caller's `--here` runs the agent here once its workspace is prepared
+and a slot is free: with none, it leaves the agent queued and returns, rather
+than skipping the limits. Its agent is its own space's, with that space's scope: the caller's stops leave it running. A launch that would start a zmx session refuses the agent when zmx is missing,
 as a missing agent executable does, or older than 1.0.1. A zmx reaches only
 sessions a zmx of its own version started: before upgrading from 0.8 or
 earlier, stop the agents in zmx sessions with `shoal stop`, and resume them
@@ -2190,16 +2190,22 @@ Overload protection stops a running reviewer before any agent, and disk
 protection stops every reviewer; the review is queued again and starts over
 once readings are healthy.
 
-`shoal start` with an agent asks the daemon for a heavy slot after resolving the issue,
-branch and agent. When none is free it prints the entry's place and returns
-(`--json` emits the entry); the workspace is created only when the entry
-starts, from the then-current default branch. A start that runs detached, from
-a scoped caller or one without a terminal, returns once the daemon has
-recorded the workspace, `preparing`, and queued its agent there, reporting
-both (`--json` emits the workspace record, then the entry); the daemon then
-prepares the workspace in the background, creating its worktree and running
-setup and the post-setup hook, while the agent waits in the queue for that,
-holding no slot. Until its worktree exists, commands that read it refuse
+`shoal start` of a new workspace sends the daemon one launch, whoever makes
+it: once a terminal has picked what the start leaves to a picker, the daemon
+records the workspace at once, `preparing`, below the caller or the space
+`--parent` names, queues its agent there and prepares the workspace in the
+background, creating its worktree and running setup and the post-setup hook,
+while the agent waits in the queue for that, holding no slot, then for a heavy
+slot. The start returns reporting both (`--json` emits the workspace record,
+then the entry), unless its agent runs in the caller: `--here` runs it in this
+terminal, a focused start from a terminal opens its place beside the terminal
+at once, and the user's agent Happy runs runs in the caller's process, while a
+start without an agent opens the workspace's shell where a focused one would
+open its agent. Such a start holds the agent's entry and shows the
+preparation, then starts the agent at once where `--now` or a focused start
+asked for that, otherwise when a slot is free, and otherwise leaves it to the
+queue; `--json` then emits the workspace record, or the entry when the agent
+waits. Until its worktree exists, commands that read it refuse
 the workspace, and `shoal rm` removes only its record and leases. A
 preparation that fails, creating the worktree or in setup or the post-setup
 hook, leaves the workspace failed and its agent waiting, and records a
@@ -2209,18 +2215,14 @@ it, `shoal restore <space>`, which creates the worktree first when it has
 none, or `shoal setup <space>` for a failed post-setup hook, and
 `shoal rm <space>`. `--wait` returns
 once the preparation ends, reporting its failure as a start from a terminal
-does. The user's start without a terminal of an agent Happy runs
-instead sets the workspace up first, then opens the agent in place when the
-limits admit it, otherwise waiting in the queue. `--now` starts that agent
+does. `--now` starts that agent
 regardless of the limits, as does `--focus` for a scoped caller, as its
 space's [`limits` permission](#permitted-actions) allows. A start whose agent
-waits for other work, from any caller, returns once the daemon has recorded
-its workspace, `preparing` without a worktree, below the caller or the space
-`--parent` names, with its agent queued there, reporting both as a detached
-start does; `shoal list` and `shoal status` show what it waits for. Once that
+waits for other work leaves the workspace `preparing` without a worktree;
+`shoal list` and `shoal status` show what it waits for. Once that
 work is complete the daemon creates the worktree on the done blocker's branch,
 or from the default branch when no blocker leaves one, and sets it up, which
-the agent waits for in turn. A detached start's preparation also waits before
+the agent waits for in turn. A preparation also waits before
 it creates the worktree while free disk space is below
 `[machine.overload.warning] disk_free_gib`, or unread, with disk protection on,
 and starts once disk space allows. `--wait` returns at once for a preparation
@@ -2242,14 +2244,14 @@ the upstream names, or, without one, 15 minutes after the proxy last met the
 limit, unless a request through it succeeds first. An entry queued from another host's pane, block
 or tab opens a background tab or window where it was queued; otherwise it runs where
 `terminal.default_host` puts it, by default a detached zmx session that `shoal attach`
-reaches. A start keeps its slot through setup until
-its agent registers; a start that fails, or whose launch ends without opening the
-workspace for two minutes, records a `queue_failed` notification with the reason
-and frees the slot. Deleting the workspace during setup frees it without one.
-`--now` starts at once and still takes a slot, and so does a launch the user
-waits for: one `--focus` focuses, or an agent added from a terminal without an
-issue or arguments that the `focus` setting does not send to the background, unless `--add-blocker`
-makes it wait for work.
+reaches. An admitted agent keeps its slot until it
+registers; a start that fails, or whose agent does not register for two
+minutes, records a `queue_failed` notification with the reason and frees the
+slot. `--now` starts the agent at once once its workspace is prepared, and
+still takes a slot, and so does a start the user waits for: one `--focus`
+focuses, or an agent started from a terminal without an issue or arguments
+that the `focus` setting does not send to the background, unless
+`--add-blocker` makes it wait for work.
 
 A workspace has one agent of its own. The daemon refuses a launch in an
 existing workspace, from any caller, while that workspace's agent runs, waits

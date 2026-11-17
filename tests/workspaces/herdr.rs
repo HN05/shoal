@@ -95,8 +95,12 @@ pub(crate) fn herdr_call(fixture: &Fixture, args: &[&str], answer: &str) -> (Out
     )
 }
 
+/// The worker the last tab runs, once a tab runs one: the queue opens the
+/// tab of a start whose agent it starts in the background.
 pub(crate) fn herdr_worker(fixture: &Fixture) -> Vec<String> {
-    serde_json::from_slice(&fs::read(fixture.root.path().join("herdr-worker")).unwrap()).unwrap()
+    let worker = fixture.root.path().join("herdr-worker");
+    let worker = support::wait::wait_for("a herdr tab's worker", || fs::read(&worker).ok());
+    serde_json::from_slice(&worker).unwrap()
 }
 
 /// The worker Herdr runs in the created tab, with that tab's environment.
@@ -139,9 +143,25 @@ pub(crate) fn herdr_changes(fixture: &Fixture) -> Vec<Vec<String>> {
         .collect()
 }
 
+/// How many tabs Shoal opened so far.
+pub(crate) fn herdr_tabs(fixture: &Fixture) -> usize {
+    let calls = fs::read_to_string(fixture.root.path().join("herdr-calls")).unwrap_or_default();
+    (calls.lines())
+        .filter(|call| call.starts_with(r#"["tab", "create""#))
+        .count()
+}
+
+/// Wait until Shoal opened a tab beyond the `before` it had opened, as the
+/// queue does for a start whose agent it starts in the background.
+pub(crate) fn wait_for_tab(fixture: &Fixture, before: usize) {
+    support::wait::wait_until("a new herdr tab", || herdr_tabs(fixture) > before);
+}
+
+/// The `herdr` calls made so far, once there is one: a start whose agent
+/// the queue starts in the background opens its tab once the queue does.
 pub(crate) fn herdr_calls(fixture: &Fixture) -> Vec<Vec<String>> {
-    fs::read_to_string(fixture.root.path().join("herdr-calls"))
-        .unwrap()
+    let calls = fixture.root.path().join("herdr-calls");
+    support::wait::wait_for("a herdr call", || fs::read_to_string(&calls).ok())
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
         .collect()
@@ -177,9 +197,13 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
         "",
     );
     assert!(caller.status.success(), "{}", printed(&caller));
-    assert!(fixture.ok(&["list"]).as_array().unwrap().is_empty());
+    // The workspace is recorded at once, and the queue opens its agent's tab.
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
     assert_eq!(fs::read_to_string(directive).unwrap(), "unchanged");
-    let calls = herdr_changes(&fixture);
+    let calls = support::wait::wait_for("the tab running its worker", || {
+        let calls = herdr_changes(&fixture);
+        (calls.len() >= 2).then_some(calls)
+    });
     assert_eq!(&calls[0][..3], ["tab", "create", "--workspace"]);
     assert!(calls[0].iter().any(|arg| arg == "--no-focus"));
     // The tab gets the caller's output setting, not the Herdr server's.
@@ -456,10 +480,14 @@ fn herdr_tabs_take_the_name_of_their_space() {
         } else if marker.exists() {
             fs::remove_file(&marker).unwrap();
         }
+        let tabs = herdr_tabs(&fixture);
         let (caller, transcript) = herdr_call(&fixture, &args, "");
         assert!(caller.status.success(), "{} {transcript}", printed(&caller));
+        wait_for_tab(&fixture, tabs);
         let calls = herdr_changes(&fixture);
-        let create = &calls[calls.len() - 2];
+        let create = (calls.iter())
+            .rfind(|call| call[..2] == ["tab", "create"])
+            .unwrap();
         let label = create.iter().position(|arg| arg == "--label").unwrap();
         assert_eq!(create[label + 1], initial);
         let (worker, transcript) =
@@ -523,10 +551,14 @@ fn herdr_tab_name_templates_survive_handoff() {
         if let Some(url) = issue {
             args.extend(["--issue", url]);
         }
+        let tabs = herdr_tabs(&fixture);
         let (caller, transcript) = herdr_call(&fixture, &args, "");
         assert!(caller.status.success(), "{} {transcript}", printed(&caller));
+        wait_for_tab(&fixture, tabs);
         let calls = herdr_changes(&fixture);
-        let create = &calls[calls.len() - 2];
+        let create = (calls.iter())
+            .rfind(|call| call[..2] == ["tab", "create"])
+            .unwrap();
         let label = create.iter().position(|arg| arg == "--label").unwrap();
         assert_eq!(create[label + 1], initial);
         fixture.ok(&[
@@ -741,8 +773,8 @@ fn a_json_start_opens_its_tab_only_from_a_terminal() {
         "{started}"
     );
     assert!(herdr_calls(&fixture)[0].iter().any(|arg| arg == "--focus"));
-    // An unattended agent's tab stays in the background, which the text
-    // output reports and JSON leaves to the planned workspace.
+    // An unattended agent's tab stays in the background: the queue opens
+    // it once the agent starts, and JSON reports the recorded workspace.
     let background = [
         "--json",
         "start",
@@ -757,9 +789,13 @@ fn a_json_start_opens_its_tab_only_from_a_terminal() {
     ];
     let (caller, transcript) = herdr_call(&fixture, &background, "");
     assert!(caller.status.success(), "{} {transcript}", printed(&caller));
-    let started: Value = serde_json::from_slice(&caller.stdout).unwrap();
-    assert_eq!(started["workspace"], "background", "{started}");
-    assert!(!herdr_calls(&fixture)[1].iter().any(|arg| arg == "--focus"));
+    let mut reported = serde_json::Deserializer::from_slice(&caller.stdout).into_iter::<Value>();
+    let started = reported.next().unwrap().unwrap();
+    assert_eq!(started["name"], "background", "{started}");
+    let tab = support::wait::wait_for("the background tab", || {
+        herdr_calls(&fixture).get(1).cloned()
+    });
+    assert!(!tab.iter().any(|arg| arg == "--focus"));
 }
 
 #[test]

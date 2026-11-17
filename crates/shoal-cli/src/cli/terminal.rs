@@ -19,8 +19,8 @@ pub(in crate::cli) use here::{
     record_owned_here,
 };
 pub(in crate::cli) use launch::{
-    ChatStarted, Placement, rerun_where_stopped, run_agent, run_in_background, start_add,
-    start_chat,
+    ChatStarted, Placement, opens_beside, rerun_where_stopped, run_agent, run_in_background,
+    start_add, start_chat,
 };
 pub(in crate::cli) use naming::{Renamed, relabel_space};
 pub(in crate::cli) use prompts::{CONTINUE_PROMPT, submitted_by_shoal};

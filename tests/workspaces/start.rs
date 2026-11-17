@@ -3174,8 +3174,8 @@ fn add_queues_agents_past_max_heavy_agents_until_removed() {
         fixture.ok(&["queue", "--repo", "other"]),
         serde_json::json!([])
     );
-    // A queued entry creates nothing until it starts.
-    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
+    // A queued entry's workspace is recorded at once, its agent waiting.
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 2);
 
     // Entries leave the queue when cancelled.
     fixture.ok(&[
@@ -3197,12 +3197,12 @@ fn add_queues_agents_past_max_heavy_agents_until_removed() {
     fixture.ok(&[
         "start", "--wait", repo, "--branch", "fourth", "--here", "--agent", "waiter",
     ]);
-    let stopped = fixture.ok(&["stop", &fixture.queued("fourth")]);
-    assert_eq!(stopped["name"], "fourth", "{stopped}");
+    let stopped = fixture.ok(&["stop", &fixture.id("fourth")]);
+    assert_eq!(stopped["cancelled"][0]["name"], "fourth", "{stopped}");
     assert_eq!(names(fixture.ok(&["queue"])), ["second"]);
 
-    let removed = fixture.ok(&["rm", "--wait", &fixture.queued("second")]);
-    assert_eq!(removed["name"], "second", "{removed}");
+    let removed = fixture.ok(&["rm", "--wait", &fixture.id("second"), "--yes"]);
+    assert_eq!(removed["branch"], "second", "{removed}");
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
 
     // Without a terminal nothing shows a focused launch, so it is refused,
@@ -3234,7 +3234,8 @@ fn add_queues_agents_past_max_heavy_agents_until_removed() {
     assert_eq!(shared["state"], "queued", "{shared}");
     let named = fixture.run(&["rm", "--wait", "first", "--yes"]);
     assert!(!named.status.success());
-    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
+    // Each start's workspace stays, its queued agent cancelled or stopped.
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 4);
     fixture.ok(&["rm", "--wait", shared["id"].as_str().unwrap()]);
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
     fixture.ok(&["stop", &fixture.id("first")]);

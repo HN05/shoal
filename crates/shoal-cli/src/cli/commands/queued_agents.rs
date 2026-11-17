@@ -7,66 +7,10 @@ use super::listing::ListFilter;
 use crate::client::queue;
 use crate::{
     cli::{context::Context, output::Palette, ui},
-    model::{QueueEntry, QueueRequest, Workspace},
-    start_plan::AddPlan,
+    model::QueueEntry,
     state::{QueueKind, QueueState},
-    terminal,
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
-use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::launches::LaunchSource;
-use shoal_protocol::space_names::SpaceName;
-use shoal_protocol::space_names::SpaceSelector;
-
-pub(super) enum Admission {
-    /// Start now; the entry, when one tracks the slot.
-    Start { entry: Option<QueueEntryId> },
-    /// Wait in the queue behind this many entries in total.
-    Queued(Box<QueueEntry>, usize),
-}
-
-/// An agent launch to admit.
-pub(super) struct Launch {
-    pub agent: crate::agent::Agent,
-    /// The workspace the launch opens.
-    pub name: SpaceName,
-    pub issue_title: Option<String>,
-    /// The labels of its issue, which may give it a priority.
-    pub issue_labels: Vec<String>,
-    pub now: bool,
-    /// The existing workspace the launch reopens, whose agent it becomes.
-    pub opens: Option<SpaceId>,
-}
-
-/// Ask the daemon for a slot for `launch`, which `plan` starts in this
-/// process once admitted, even in the existing workspace it opens.
-pub(super) async fn admit(ctx: &Context, plan: &AddPlan, launch: Launch) -> Result<Admission> {
-    let request = QueueRequest {
-        repository: plan.repository.clone(),
-        name: launch.name,
-        agent: launch.agent,
-        mode: plan.mode.clone(),
-        narrowing: plan.narrowing,
-        issue_title: launch.issue_title,
-        issue_labels: launch.issue_labels,
-        plan: serde_json::to_string(plan)?,
-        env: terminal::start_environment(),
-        now: launch.now,
-        workspace: launch.opens.map(SpaceSelector::Id),
-        starts_in_caller: true,
-        blockers: Vec::new(),
-        priority: plan.creation.options.priority,
-        source: Some(LaunchSource::Manual),
-    };
-    let admission = queue::add(&ctx.paths, request).await?;
-    Ok(match (admission.start, admission.entry) {
-        (true, entry) => Admission::Start {
-            entry: entry.map(|entry| entry.id),
-        },
-        (false, Some(entry)) => Admission::Queued(Box::new(entry), admission.waiting),
-        (false, None) => anyhow::bail!("the daemon queued the agent without an entry"),
-    })
-}
 
 /// Report the launch `entry`, which waits behind `waiting` entries in
 /// total, or which the daemon already starts in the background.
@@ -94,16 +38,6 @@ pub(super) fn starts_when(entry: &QueueEntry) -> String {
             blockers.join(", ")
         ),
     }
-}
-
-/// Record the workspace a starting entry opened, or the existing one a
-/// waiting launch opens.
-pub(super) async fn attach(
-    ctx: &Context,
-    entry: &QueueEntryId,
-    workspace: &Workspace,
-) -> Result<()> {
-    queue::attach(&ctx.paths, entry.clone(), SpaceSelector::id(&workspace.id)).await
 }
 
 pub(super) use crate::client::queue::Hold;

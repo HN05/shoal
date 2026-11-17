@@ -1,40 +1,24 @@
-//! `shoal start --in` in a mode that starts in a workspace, or with a
-//! `--branch` a workspace already has: the agent of an existing workspace,
-//! started as a new workspace's is, with no space created. The workspace
-//! keeps its place in the tree, its name and links.
-use shoal_refs::BranchName;
+//! `shoal start --in` in a mode that starts in a workspace: the agent of an
+//! existing workspace, started as a new workspace's is, with no space
+//! created. The workspace keeps its place in the tree, its name and links.
 use std::ffi::OsString;
 
 use anyhow::{Result, ensure};
 
 use super::{
-    AddOptions, Planned,
-    agent::{AddSettings, AgentLaunch, choose_add_agent, resolve_add_agent},
-    detached::daemon_starts,
+    AddOptions,
+    agent::{AddSettings, choose_add_agent, resolve_add_agent},
     launch::launch_worker,
     mode::choose_add_mode,
-    plan::start_as,
-    queue::named_blockers,
-    source::load_linked_issue,
-    target::AddTarget,
 };
-use crate::launches::workspace;
-use crate::{
-    agent::Agent,
-    cli::{commands::issues, context::Context},
-    forge::items::reference::ItemInput,
-    model::Workspace,
-    protocol::CreationOptions,
-    start_plan::{AddPlan, Creation, ResolvedAddAgent},
-};
+use crate::{agent::Agent, cli::context::Context};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Start `agent`, else on a terminal a picked one, as the worker of the
 /// existing `workspace`, with `args` forwarded as any start forwards them,
-/// else on the workspace's issue.
-/// The daemon refuses it while the workspace has an agent of its own.
-/// Without an agent it reopens the workspace, as a new workspace's start
-/// without one opens it.
+/// else on the workspace's issue, through the daemon, here where it runs in
+/// this caller. The daemon refuses it while the workspace has an agent of
+/// its own. Without an agent the caller's shell enters the workspace.
 pub(in crate::cli::commands) async fn start_worker(
     ctx: &Context,
     workspace: SpaceSelector,
@@ -51,124 +35,12 @@ pub(in crate::cli::commands) async fn start_worker(
     let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace)
         .await?
         .workspace;
-    let target = AddTarget {
-        selector: (workspace.repository()).into(),
-        repositories: tokio::sync::OnceCell::new(),
-    };
-    let blockers = named_blockers(ctx, &target, &options.blockers).await?;
     let settings = AddSettings::workspace(ctx, &workspace.id);
-    let repository = Some(target.selector.clone());
+    let repository = Some(workspace.repository().into());
     crate::cli::commands::permissions::ensure_held(ctx, repository, &options.narrowing).await?;
     let mode = choose_add_mode(ctx, &settings, options.mode.take()).await?;
-    let agent = choose_add_agent(&settings, AgentLaunch::Add(agent)).await?;
+    let agent = choose_add_agent(&settings, agent).await?;
     let agent = resolve_add_agent(ctx, &settings, agent, options.model.clone()).await?;
-    // Without an agent, the start reopens the workspace here, as a new
-    // workspace's start without one opens it.
-    let launches = agent.agent.is_some()
-        && daemon_starts(
-            ctx,
-            options.here,
-            agent.agent.as_ref(),
-            settings.get().await?,
-        );
-    if launches {
-        let picked = (mode, agent);
-        return launch_worker(ctx, &workspace, picked, args, (options, &settings)).await;
-    }
-    // A task after `--` replaces the issue as the agent's subject.
-    let issue = match agent.agent.is_some() && args.is_empty() {
-        true => {
-            let linked = workspace
-                .links
-                .issue()
-                .map(|issue| issue.url.clone().into());
-            load_linked_issue(ctx, &target, linked).await?
-        }
-        false => None,
-    };
-    let mut plan = worker_plan(&workspace, agent, issue.as_ref(), args);
-    start_as(&mut plan, &options, mode);
-    let planned = Planned {
-        plan,
-        target,
-        issue,
-        blockers,
-    };
-    super::start_planned(ctx, planned, &settings, options).await
+    let picked = (mode, agent);
+    launch_worker(ctx, &workspace, picked, args, (options, &settings)).await
 }
-
-/// Start the worker of `workspace`, which already has the branch a start
-/// named, as `--in` starts it, with `args` forwarded, refusing what only
-/// the new workspace of `creation`, on `issue` below `options.parent`, takes.
-pub(super) async fn start_on_branch(
-    ctx: &Context,
-    workspace: Workspace,
-    (creation, issue): (&Creation, Option<&ItemInput>),
-    agent: AgentLaunch,
-    args: Vec<OsString>,
-    options: AddOptions,
-) -> Result<i32> {
-    if let Some(flag) = new_space_flag(creation, issue, &options) {
-        anyhow::bail!(
-            "{flag} applies to a new workspace, and workspace {} already has branch {}; the start goes into it as --in does",
-            workspace.number,
-            workspace
-                .branch()
-                .map(BranchName::as_str)
-                .unwrap_or_default()
-        );
-    }
-    let selector = SpaceSelector::id(&workspace.id);
-    start_worker(ctx, selector, agent.named(), args, options).await
-}
-
-/// The first flag of a start that only the new workspace of `creation`, on
-/// `issue`, takes, as [`workspace::new_space_flag`] names it. The parent of
-/// a `--fork` start without a copy is the workspace whose agent it forks,
-/// which a start of an existing workspace's worker takes too, as `--in`
-/// does.
-fn new_space_flag(
-    creation: &Creation,
-    issue: Option<&ItemInput>,
-    options: &AddOptions,
-) -> Option<&'static str> {
-    let forks_parent = options.fork.is_some() && creation.copy.is_none();
-    let parent = options.parent.is_some() && !forks_parent;
-    workspace::new_space_flag(creation, issue.is_some(), parent)
-}
-
-/// The plan that starts `agent` in `workspace` on `issue` with `args`,
-/// opening its branch under its name and creating nothing.
-fn worker_plan(
-    workspace: &Workspace,
-    agent: ResolvedAddAgent,
-    issue: Option<&issues::Issue>,
-    args: Vec<OsString>,
-) -> AddPlan {
-    AddPlan {
-        repository: (workspace.repository()).into(),
-        creation: Creation {
-            existing: workspace.branch().map(ToString::to_string),
-            options: CreationOptions {
-                name: Some(workspace.name.clone()),
-                ..Default::default()
-            },
-            ..Default::default()
-        },
-        place_name: None,
-        issue: issue.map(|issue| issue.url.clone()),
-        agent,
-        args,
-        prompt: None,
-        mode: None,
-        narrowing: Default::default(),
-        fork: None,
-        queue_entry: None,
-        chat: None,
-        parent: None,
-        workspace: Some(workspace.id.clone()),
-    }
-}
-
-#[cfg(test)]
-mod tests;

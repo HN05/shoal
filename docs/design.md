@@ -208,8 +208,8 @@ workspace's settings, `agent.default` for the agent, and the agent works on the
 start's issue unless the request gives it an issue or a task, so an app needs
 no configuration of its own to start one as the CLI does. `QueueAgent` queues
 the worker of an existing workspace the same way, on the workspace's issue.
-Every start that does not run in the caller's terminal, a scoped caller's or
-one without a terminal, goes through one request, `Launch`, which carries
+Every start of a new workspace or of an existing workspace's agent, whoever
+makes it, goes through one request, `Launch`, which carries
 what `shoal start` takes, as its command line gave it, and what another
 command's start adds, such as the subject a repository's setup gives its
 agent and the setup mode, which no other launch starts in; the daemon records a
@@ -233,9 +233,16 @@ records with it. The CLI parses the start, picks on a terminal what a picker
 picks there, adds what only its process knows, such as its directory, its
 environment and the session `--fork` forks, and what only its terminal can
 check, such as a host to place the agent in; it keeps what attaches a
-terminal: a start here or beside it, and an agent that runs its own way, such
-as Happy's, which starts in the caller's process for a chat as for a
-workspace. A detached start reports the recorded workspace and its agent's
+terminal: a start here, a focused start that opens its place beside the
+terminal and shows the preparation there, and an agent that runs its own way,
+such as Happy's, which starts in the caller's process for a chat as for a
+workspace. Such a launch says so with `here`: the daemon queues the agent as
+for any start and keeps its entry for the caller, which holds it while it
+follows the preparation and then claims it; the claim starts the agent in the
+caller at once where the start asked for that, else when the limits admit it,
+and otherwise leaves it to the queue's background start. Every queue entry for
+a new workspace belongs to its recorded space, and the queue's start runs the
+agent in it. Any other start reports the recorded workspace and its agent's
 entry without following the preparation, unless `--wait` asks it to. One
 `shoal_client` call sends the request and follows the preparation, returning
 the prepared workspace or the typed failure with the workspace as it left it,
@@ -1795,16 +1802,14 @@ and a host such as Herdr reads agent state from the place's process. A caller wi
 orchestrating agent's tool call, starts the agents of `start` and `restore --now`
 detached through the daemon, as a scoped caller does: run in place, the agent
 would hold the call until it exits and die with an interrupt of the caller.
-An agent Happy runs leaves the call at once anyway, so such a caller hands it
-over in place. The caller places the agent once the workspace is set up, from
-its settings, and queues it itself rather than in the start request.
+An agent Happy runs leaves the call at once anyway, so such a caller runs it
+in its own process once the workspace is prepared, as a start here does.
 `start --here` keeps the in-place launch, for a script that waits on the agent's
 exit code and for a scoped caller, such as a master session's terminal, that runs
 an agent there; `restore --focus` keeps it for callers outside Shoal. A scoped
-caller's `--here` takes a free slot and holds its own launch's entry as the
-user's does; with none free it queues and returns, as a detached start does,
-rather than holding the terminal, since only the user's terminal starts agents
-beyond the limits. Its
+caller's `--here` claims its own launch's entry as the user's does; with no
+slot free it leaves the agent queued and returns rather than holding the
+terminal, since only the user's terminal starts agents beyond the limits. Its
 agent's execution is its own space's, with that space's scope: an agent's wrapper,
 and what it started, never count among the processes of another execution that
 started it, and the wrapper leaves its starter's process group, which the
