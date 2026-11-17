@@ -38,6 +38,26 @@ fn running_workspaces(db: &rusqlite::Connection) -> Result<HashSet<SpaceId>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// Whether `space` has settled, so a bulk stop may act on it: a worktree
+/// that is ready or whose setup failed; a space without a worktree has no
+/// setup to wait for.
+fn settled(space: &Space) -> bool {
+    (space.worktree()).is_none_or(|worktree| {
+        matches!(
+            worktree.state,
+            WorkspaceState::Ready | WorkspaceState::Failed
+        )
+    })
+}
+
+/// Whether an agent waits unstopped for the preparation of `space`'s
+/// worktree.
+fn awaits_preparation(space: &Space) -> bool {
+    (space.worktree())
+        .and_then(|worktree| worktree.preparation_waits.as_ref())
+        .is_some_and(|waits| *waits != PreparationWait::Stopped)
+}
+
 /// The workspaces in which a chat's agent has yet to restart after a
 /// conversion, which runs where the chat was whatever the workspace's state.
 fn converting_workspaces(db: &rusqlite::Connection) -> Result<HashSet<SpaceId>> {
@@ -241,11 +261,11 @@ enum Keep {
 }
 
 impl Manager {
-    /// The spaces `shoal stop --all` stops: the settled workspaces and the
-    /// chats with a running execution or a stopped agent whose restore is
-    /// requested or queued, and the workspaces a waiting launch opens when
-    /// the stop cancels `launches`, and then too those whose preparation
-    /// waits unstopped, with an agent or none.
+    /// The spaces `shoal stop --all` stops: the settled spaces with a
+    /// running execution or a stopped agent whose restore is requested or
+    /// queued, and the workspaces a waiting launch opens when the stop
+    /// cancels `launches`, and then too those whose preparation waits
+    /// unstopped, with an agent or none.
     /// The queue gate keeps restores and launches from moving between the
     /// queue and their agents meanwhile, and executions are read before
     /// requests, which an agent a signal stops saves before its execution
@@ -260,19 +280,12 @@ impl Manager {
             targets.extend(self.waiting_launch_workspaces().await?);
         }
         let cancels = launches == QueuedLaunches::Cancel;
-        let workspaces = (self.list_workspaces().await?.into_iter()).filter(|workspace| {
-            let stoppable = matches!(
-                workspace.state,
-                WorkspaceState::Ready | WorkspaceState::Failed
-            );
-            let waits = (workspace.preparation_waits.as_ref())
-                .is_some_and(|waits| *waits != PreparationWait::Stopped);
-            (stoppable || converting.contains(&workspace.id)) && targets.contains(&workspace.id)
-                || cancels && waits
-        });
-        let chats = (self.chats().await?.into_iter()).filter(|chat| targets.contains(&chat.id));
-        Ok((workspaces.map(Space::from))
-            .chain(chats.map(Space::from))
+        let spaces = self.present_spaces().await?;
+        Ok((spaces.into_iter())
+            .filter(|space| {
+                let settled = settled(space) || converting.contains(&space.id);
+                settled && targets.contains(&space.id) || cancels && awaits_preparation(space)
+            })
             .collect())
     }
 
