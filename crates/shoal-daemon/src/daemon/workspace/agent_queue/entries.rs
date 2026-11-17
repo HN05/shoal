@@ -81,7 +81,8 @@ impl Manager {
         let limits = self
             .agent_limits(vec![repository.id.clone()], &[], &[])
             .await?;
-        let detached = (target.is_some() || scope.is_some()) && !request.starts_in_caller;
+        let caller_starts = request.starts_in_caller;
+        let detached = (target.is_some() || scope.is_some()) && !caller_starts;
         // A launch in an existing workspace keeps its entry, which holds the
         // workspace's one agent until it registers, as does one on an
         // existing branch, which may reopen the branch's workspace.
@@ -120,6 +121,11 @@ impl Manager {
             .write(move |tx| insert_launch(tx, &launch, &removing))
             .await?;
         let admitted = now || self.admit_waiting(Some(&id)).await?;
+        // Kept before the gate opens, so no pass starts it in the background
+        // before its caller holds it.
+        if caller_starts && !admitted {
+            self.agent_queue.keep_for_attach(&id);
+        }
         // Read the response before a detached worker can take the entry.
         let admission = self.admission_of(&id, admitted && !detached).await?;
         if detached && admitted {

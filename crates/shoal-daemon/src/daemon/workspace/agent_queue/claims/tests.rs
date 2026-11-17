@@ -1,10 +1,11 @@
-use super::super::tests::{add, limit_globally, preparing, register, started};
+use super::super::tests::{add, limit_globally, preparing, register, request, started};
 use crate::{
     daemon::{test_support::manager, workspace::Manager},
-    model::{QueueEntry, Repository},
+    model::{QueueEntry, QueueRequest, Repository},
     protocol::operations::QueuedLaunch,
     state::QueueState,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The agent of a new workspace of `repository` that its caller runs
 /// here, asked to start `now` or not, queued on a machine whose one slot
@@ -67,4 +68,37 @@ async fn a_claim_starts_a_launch_run_here_only_within_the_limits() {
     let claimed = manager.queue_claim(&entry.id).await.unwrap();
     assert_eq!(claimed.state, QueueState::Starting);
     assert!(!started(&entry.id));
+}
+
+/// The worker of a ready workspace that its caller runs, queued on a full
+/// machine, stays the caller's when a slot frees before the caller claims
+/// it, rather than starting in the background too.
+#[tokio::test]
+async fn a_queued_worker_run_here_waits_for_its_callers_claim() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let busy = add(&manager, &repo, "busy").await.entry.unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "worker".into(), None, None, None)
+        .await
+        .unwrap();
+    let here = QueueRequest {
+        workspace: Some(SpaceSelector::id(&workspace.id)),
+        starts_in_caller: true,
+        ..request(&repo, "worker", false)
+    };
+    let entry = manager.queue_add(here).await.unwrap().entry.unwrap();
+    assert_eq!(entry.state, QueueState::Queued);
+
+    manager.fail_queue_entry(&busy.id, "done").await.unwrap();
+    manager.dispatch_queue().await.unwrap();
+    let waiting = manager
+        .selected_entry(entry.id.as_str(), None)
+        .await
+        .unwrap();
+    assert_eq!(waiting.state, QueueState::Queued);
+    assert!(!started(&entry.id));
+    let claimed = manager.queue_claim(&entry.id).await.unwrap();
+    assert_eq!(claimed.state, QueueState::Starting);
 }

@@ -59,15 +59,10 @@ impl Manager {
                 at_once: std::mem::take(&mut launch.now),
             },
         };
-        let here = launch.here;
         let mut request = queued_agent_request(workspace, launch, pr)?;
         request.blockers = blockers;
-        let entry = (self.queue_add_awaiting(request, None, awaits).await?.entry)
-            .context("the daemon queued the agent without an entry")?;
-        if here {
-            self.keep_for_caller(&entry);
-        }
-        Ok(entry)
+        (self.queue_add_awaiting(request, None, awaits).await?.entry)
+            .context("the daemon queued the agent without an entry")
     }
 }
 

@@ -1,7 +1,6 @@
-//! Launches their caller runs itself, in its terminal or process: the
-//! queue keeps one that waits for its workspace's preparation for the
-//! caller, which holds it meanwhile and claims it once the preparation
-//! ends.
+//! Launches their caller runs itself, in its terminal or process, which
+//! the queue keeps for the caller while they wait: the caller holds one
+//! meanwhile and claims it once its workspace's preparation ends.
 use anyhow::{Result, ensure};
 use rusqlite::{OptionalExtension, params};
 
@@ -13,14 +12,6 @@ use crate::{
 use shoal_ids::queue_entry_ids::QueueEntryId;
 
 impl Manager {
-    /// Keep the launch `entry`, whose caller runs its agent, out of
-    /// admission until the caller holds it, while it waits.
-    pub(crate) fn keep_for_caller(&self, entry: &QueueEntry) {
-        if entry.state == QueueState::Queued {
-            self.agent_queue.keep_for_attach(&entry.id);
-        }
-    }
-
     /// Start the launch `id`, which its caller held while its workspace was
     /// prepared, in the caller: at once when its start asked for that and
     /// nothing blocks it any longer, else when the limits admit it now. One
