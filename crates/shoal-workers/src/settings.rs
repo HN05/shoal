@@ -50,6 +50,6 @@ pub async fn configured_environment(
         // Only the daemon creates them; tools create a missing cache, and
         // the daemon gives out hooks with the temporary directory created.
         &crate::caches::locate(&repo, &settings.caches),
-        crate::tmp_dirs::locate(&repo, &workspace.id).as_deref(),
+        Some(&crate::tmp_dirs::locate(&repo, &workspace.id)),
     ))
 }

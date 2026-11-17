@@ -8,7 +8,7 @@ fn a_chat_on_an_issue_is_named_after_its_title_without_asking() {
         source: "https://forge.example/team/shoal.git".into(),
         last_used: 0,
         name: None,
-        workspaces_dir: None,
+        workspaces_dir: "/tmp/shoal/repo".into(),
         contribution: false,
     };
     let issue = Issue {

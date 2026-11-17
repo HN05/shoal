@@ -58,13 +58,9 @@ async fn new_workspaces_start_from_the_default_branch_build() {
         .unwrap();
     manager.refresh_seeds().await;
     // The build prepared and used the shared cache.
-    let cache = repo
-        .workspaces_dir
-        .as_ref()
-        .unwrap()
-        .join(".caches/shared/go");
+    let cache = repo.workspaces_dir.join(".caches/shared/go");
     assert!(cache.join("seed").exists());
-    let layout = Layout::of(&repo).unwrap();
+    let layout = Layout::of(&repo);
     if !native_cloning(layout.root()) {
         return assert_clone_refused(&manager, &layout).await;
     }
@@ -133,7 +129,7 @@ async fn a_failed_build_is_reported_once_per_commit() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let layout = Layout::of(&repo).unwrap();
+    let layout = Layout::of(&repo);
     // A warning threshold above any free space defers the build.
     configure(
         &manager,
@@ -202,7 +198,7 @@ async fn a_preset_builds_and_keeps_its_tool_outputs() {
         .await
         .unwrap();
     manager.refresh_seeds().await;
-    let layout = Layout::of(&repo).unwrap();
+    let layout = Layout::of(&repo);
     let log = fs::read_to_string(layout.log()).unwrap();
     let built = layout.worktree().join("target/debug/libseeded.rlib");
     assert!(built.is_file(), "{log}");
@@ -260,7 +256,7 @@ async fn new_workspaces_take_the_spare_which_is_then_refilled() {
     )
     .await;
     manager.refresh_seeds().await;
-    let layout = Layout::of(&repo).unwrap();
+    let layout = Layout::of(&repo);
     if !native_cloning(layout.root()) {
         return assert_clone_refused(&manager, &layout).await;
     }
@@ -296,7 +292,7 @@ async fn repository_removal_cancels_a_running_build() {
         "#!/bin/sh\ntouch started\nexec sleep 600\n",
     )
     .await;
-    let layout = Layout::of(&repo).unwrap();
+    let layout = Layout::of(&repo);
     let refresh = tokio::spawn({
         let manager = manager.clone();
         async move { manager.refresh_seeds().await }
@@ -329,7 +325,7 @@ async fn a_removed_seed_is_neither_applied_nor_kept() {
     )
     .await;
     manager.refresh_seeds().await;
-    let layout = Layout::of(&repo).unwrap();
+    let layout = Layout::of(&repo);
     if !native_cloning(layout.root()) {
         return assert_clone_refused(&manager, &layout).await;
     }
@@ -361,7 +357,7 @@ async fn a_removed_seed_is_neither_applied_nor_kept() {
 async fn removal_keeps_a_seed_worktree_shoal_did_not_create() {
     let (temp, manager) = manager().await;
     let (_, repo) = seeded(&manager, temp.path(), "#!/bin/sh\n").await;
-    let layout = Layout::of(&repo).unwrap();
+    let layout = Layout::of(&repo);
     fs::create_dir_all(layout.worktree()).unwrap();
     fs::write(layout.worktree().join("keep"), "user data").unwrap();
     assert!(manager.remove_repository(&repo.id).await.is_err());
@@ -379,7 +375,7 @@ async fn processes_a_build_leaves_behind_are_stopped() {
     )
     .await;
     manager.refresh_seeds().await;
-    let layout = Layout::of(&repo).unwrap();
+    let layout = Layout::of(&repo);
     let pid: i32 = fs::read_to_string(layout.root().join("leftover"))
         .unwrap()
         .trim()
@@ -411,7 +407,7 @@ async fn removal_keeps_a_symlinked_seed_worktree() {
     configure(&manager, NO_PRESSURE).await;
     let (_, repo) = seeded(&manager, temp.path(), "#!/bin/sh\nmkdir -p out\n").await;
     manager.refresh_seeds().await;
-    let layout = Layout::of(&repo).unwrap();
+    let layout = Layout::of(&repo);
     if !layout.worktree().exists() {
         return; // The seed was not created on this filesystem.
     }
@@ -471,7 +467,7 @@ async fn a_start_clones_while_a_refill_reads_the_snapshot() {
     )
     .await;
     manager.refresh_seeds().await;
-    let layout = Layout::of(&repo).unwrap();
+    let layout = Layout::of(&repo);
     if !native_cloning(layout.root()) {
         return assert_clone_refused(&manager, &layout).await;
     }
@@ -510,7 +506,7 @@ async fn a_copy_s_starting_checkpoint_holds_the_seed_it_started_with() {
         .await
         .unwrap();
     manager.refresh_seeds().await;
-    let layout = Layout::of(&repo).unwrap();
+    let layout = Layout::of(&repo);
     if !native_cloning(layout.root()) {
         return assert_clone_refused(&manager, &layout).await;
     }

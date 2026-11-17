@@ -386,7 +386,7 @@ async fn delete_results(
 
 /// Whether the repository keeps its shared caches on the filesystem.
 fn caches_on(repo: &Repository, filesystem: &Filesystem) -> bool {
-    Layout::of(repo).is_some_and(|layout| filesystem.holds(layout.root()))
+    filesystem.holds(Layout::of(repo).root())
 }
 
 /// The notification for emptying a repository's caches, if it did anything

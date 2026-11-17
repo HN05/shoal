@@ -103,12 +103,9 @@ impl ShoalDir {
         Self::marked(root_dir, state.display().to_string(), contents)
     }
 
-    /// The repository's directory of `contents`; registrations from before
-    /// the repository directory layout have none.
-    pub fn of(repo: &Repository, contents: Contents) -> Option<Self> {
-        repo.workspaces_dir
-            .as_deref()
-            .map(|directory| Self::new(directory, &repo.id, contents))
+    /// The repository's directory of `contents`.
+    pub fn of(repo: &Repository, contents: Contents) -> Self {
+        Self::new(&repo.workspaces_dir, &repo.id, contents)
     }
 
     fn marked(directory: &Path, owner: String, contents: Contents) -> Self {

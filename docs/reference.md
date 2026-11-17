@@ -3701,8 +3701,7 @@ workspace of a repository at once. Each [`[caches.NAME]`](../crates/shoal-cli/sr
 `.caches/shared`, which `{cache.NAME}` names in `[env]`, so every process Shoal
 starts in a workspace, and the seed build, uses it. The daemon creates the directory when it starts a process or exports the
 environment, and marks `.caches` with the repository, refusing to start one while
-an unmarked `.caches` is in the way; registrations without a repository directory leave the field
-literal. Build output directories such as Cargo's `target/` do not belong here:
+an unmarked `.caches` is in the way. Build output directories such as Cargo's `target/` do not belong here:
 concurrent builds serialize or corrupt them, so use a [seed](#seed-builds).
 
 `shoal cleanup caches` and [disk space](#overload-protection) cleanup empty a

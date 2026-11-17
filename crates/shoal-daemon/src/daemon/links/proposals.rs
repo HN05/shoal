@@ -90,9 +90,7 @@ impl Manager {
         proposer: Proposer,
     ) -> Result<Proposed> {
         let (id, home) = (&space.id, space.repository_id());
-        let files = self
-            .lock_proposal_files_of(home, &issue.attachments)
-            .await?;
+        let files = self.gates.lock_proposal_files().await;
         self.keep_attachments(id, home, &mut issue.body, &mut issue.attachments)
             .await?;
         let specification = Specification::Issue(IssueSpecification {
@@ -128,9 +126,7 @@ impl Manager {
         proposer: Proposer,
     ) -> Result<Proposed> {
         let repository = workspace.repository();
-        let files = self
-            .lock_proposal_files_of(repository, &pull.attachments)
-            .await?;
+        let files = self.gates.lock_proposal_files().await;
         self.keep_attachments(
             &workspace.id,
             repository,

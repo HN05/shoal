@@ -135,9 +135,7 @@ impl Manager {
     }
 
     async fn refresh_seed(&self, repo: &Repository) -> Result<()> {
-        let Some(layout) = Layout::of(repo) else {
-            return Ok(());
-        };
+        let layout = Layout::of(repo);
         let Some(plan) = self.seed_plan(repo, &layout).await? else {
             return self.discard_seed(repo, &layout).await;
         };
@@ -289,9 +287,7 @@ impl Manager {
         let Ok(repo) = self.repository(id).await else {
             return Ok(());
         };
-        let Some(layout) = Layout::of(&repo) else {
-            return Ok(());
-        };
+        let layout = Layout::of(&repo);
         let Some(snapshot) = Snapshot::open(&layout)? else {
             return Ok(());
         };
@@ -317,9 +313,7 @@ impl Manager {
         workspace: &Workspace,
         settings: &Effective,
     ) {
-        let Some(layout) = Layout::of(repo) else {
-            return;
-        };
+        let layout = Layout::of(repo);
         let started = async {
             let Some(plan) = Plan::new(repo, &layout, settings).await? else {
                 return Ok(());
@@ -415,9 +409,7 @@ impl Manager {
     /// Delete the repository's seed. The caller holds a [`SeedStop`] and the
     /// repository's Git gate.
     pub(super) async fn remove_seed(&self, repo: &Repository) -> Result<()> {
-        let Some(layout) = Layout::of(repo) else {
-            return Ok(());
-        };
+        let layout = Layout::of(repo);
         let worktree = layout.worktree();
         if worktree.symlink_metadata().is_ok() {
             ensure_seed_worktree(repo, &layout).await?;

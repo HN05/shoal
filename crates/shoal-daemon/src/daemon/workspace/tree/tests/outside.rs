@@ -144,7 +144,7 @@ async fn a_chat_without_a_repository_prepares_root_dir_as_registration_does() {
     assert!(root.is_dir(), "{}", root.display());
     // A repository registered afterwards keeps its directory there.
     let repos = repositories(&temp, &manager, &["repo"]).await;
-    let directory = repos[0].workspaces_dir.clone().unwrap();
+    let directory = repos[0].workspaces_dir.clone();
     let root = std::fs::canonicalize(root).unwrap();
     assert!(directory.starts_with(&root), "{}", directory.display());
 }

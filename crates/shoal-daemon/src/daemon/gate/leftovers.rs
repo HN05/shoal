@@ -16,9 +16,7 @@ impl Manager {
     /// would take from under it.
     pub(crate) async fn ensure_no_gate_runs_in(&self, id: &RepositoryId) -> Result<()> {
         let repository = self.repository(id).await?;
-        let Some(dir) = ShoalDir::of(&repository, Contents::GateRuns) else {
-            return Ok(());
-        };
+        let dir = ShoalDir::of(&repository, Contents::GateRuns);
         let running = tokio::task::spawn_blocking(move || -> Result<bool> {
             let entries = match dir.check_own()? {
                 true => std::fs::read_dir(dir.root()).ok(),
@@ -40,9 +38,7 @@ impl Manager {
     /// repository's directory; the requests they decided run again.
     pub(crate) async fn recover_gate_runs(&self) -> Result<()> {
         for repository in self.repositories().await? {
-            let Some(dir) = ShoalDir::of(&repository, Contents::GateRuns) else {
-                continue;
-            };
+            let dir = ShoalDir::of(&repository, Contents::GateRuns);
             if !dir.check_own()? {
                 continue;
             }

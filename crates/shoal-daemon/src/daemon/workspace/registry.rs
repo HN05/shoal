@@ -9,7 +9,6 @@ use crate::{
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::params;
 use shoal_forge::repo::fork::ForkRequests;
-use shoal_ids::repository_ids::RepositoryId;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -146,7 +145,7 @@ impl Manager {
             .await?
         };
         let repo = self
-            .insert_repository(path, source, Some(workspaces_dir), contribution)
+            .insert_repository(path, source, workspaces_dir, contribution)
             .await?;
         match name {
             Some(name) => self.rename_repository(&repo.id, name).await,
@@ -174,7 +173,7 @@ impl Manager {
         &self,
         path: PathBuf,
         source: String,
-        workspaces_dir: Option<PathBuf>,
+        workspaces_dir: PathBuf,
         contribution: bool,
     ) -> Result<Repository> {
         let path = path
@@ -182,12 +181,9 @@ impl Manager {
             .context("repository path is not UTF-8")?
             .to_owned();
         let workspaces_dir = workspaces_dir
-            .map(|dir| {
-                dir.to_str()
-                    .map(str::to_owned)
-                    .context("repository directory is not UTF-8")
-            })
-            .transpose()?;
+            .to_str()
+            .context("repository directory is not UTF-8")?
+            .to_owned();
         let id = Uuid::new_v4().to_string();
         self.store
             .run(move |db| {
@@ -202,73 +198,6 @@ impl Manager {
                 )?)
             })
             .await
-    }
-
-    /// The repository's directory under `root_dir`, reserved on first use for
-    /// registrations that predate it. Callers hold the repository's Git gate,
-    /// which serializes this with repository removal; the registry gate is not
-    /// taken here because removal acquires the two in the opposite order, and
-    /// `reserve_directory` is atomic against concurrent registrations anyway.
-    pub(crate) async fn workspaces_dir(&self, repo: &Repository) -> Result<PathBuf> {
-        if let Some(directory) = &repo.workspaces_dir {
-            return Ok(directory.clone());
-        }
-        let repositories = self.repositories().await?;
-        let current = repositories
-            .iter()
-            .find(|other| other.id == repo.id)
-            .context("repository was removed")?;
-        if let Some(directory) = &current.workspaces_dir {
-            return Ok(directory.clone());
-        }
-        let workspaces = self.list_workspaces().await?;
-        let recorded = Recorded {
-            repositories: &repositories,
-            workspaces: &workspaces,
-        };
-        let root = prepare_root(
-            &self.configured_root()?,
-            &fs::canonicalize(&self.paths.state)?,
-            &recorded,
-            None,
-        )
-        .await?;
-        let directory = reserve_directory(
-            &root,
-            &repository::directory_name(repository::name(repo)),
-            &repositories,
-            &[],
-        )?;
-        let id = repo.id.clone();
-        let recorded = directory
-            .to_str()
-            .context("repository directory is not UTF-8")?
-            .to_owned();
-        self.store
-            .run(move |db| {
-                db.execute(
-                    "UPDATE repositories SET workspaces_dir=?2 WHERE id=?1",
-                    params![id, recorded],
-                )?;
-                Ok(())
-            })
-            .await?;
-        Ok(directory)
-    }
-
-    /// The repository `id`, reserving its directory under `root_dir` first
-    /// when its registration predates it. Callers hold no Git gate.
-    pub(crate) async fn reserve_repository_directory(
-        &self,
-        id: &RepositoryId,
-    ) -> Result<Repository> {
-        let repo = self.repository(id).await?;
-        if repo.workspaces_dir.is_some() {
-            return Ok(repo);
-        }
-        let (repo, _git) = self.lock_repository(id).await?;
-        self.workspaces_dir(&repo).await?;
-        self.repository(id).await
     }
 
     pub async fn rename_repository(
@@ -352,7 +281,7 @@ async fn local_checkout_location(
         .filter(|parent| {
             !repositories
                 .iter()
-                .any(|repo| repo.path == *parent || repo.workspaces_dir.as_deref() == Some(parent))
+                .any(|repo| repo.path == *parent || repo.workspaces_dir == *parent)
         })
         .map(Path::to_path_buf);
     let workspaces_dir = match placed {
@@ -367,7 +296,7 @@ async fn local_checkout_location(
 fn outside_local_configs(path: &Path, repositories: &[Repository]) -> Result<()> {
     for directory in repositories
         .iter()
-        .filter_map(|repo| repo.workspaces_dir.as_deref())
+        .map(|repo| repo.workspaces_dir.as_path())
     {
         let local = directory.join(crate::config::repo::LOCAL_DIR);
         ensure!(
@@ -597,7 +526,7 @@ fn ensure_outside(
     }
     for directory in repositories
         .iter()
-        .filter_map(|repo| repo.workspaces_dir.as_deref())
+        .map(|repo| repo.workspaces_dir.as_path())
     {
         ensure!(
             !location.starts_with(directory),
@@ -633,7 +562,7 @@ pub(super) fn reserve_directory(
     let recorded = || {
         repositories
             .iter()
-            .flat_map(|repo| std::iter::once(&repo.path).chain(repo.workspaces_dir.as_ref()))
+            .flat_map(|repo| [&repo.path, &repo.workspaces_dir])
             .chain(workspaces)
     };
     // Every candidate would lie in it, whatever the suffix.

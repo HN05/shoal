@@ -287,17 +287,19 @@ impl FakeDaemon {
                 let reply = match method.as_str() {
                     "list_repositories" => json!({"type": "repositories", "data": [{
                         "id": "test", "path": repo_path,
-                        "source": "https://forge.example/team/repo", "last_used": 0
+                        "source": "https://forge.example/team/repo", "last_used": 0,
+                        "workspaces_dir": repo_path.join("shoal")
                     }, {
                         "id": "registered", "path": repo_path.join("registered"),
-                        "source": "https://forge.example/team/registered", "last_used": 0
+                        "source": "https://forge.example/team/registered", "last_used": 0,
+                        "workspaces_dir": repo_path.join("shoal-registered")
                     }]}),
                     "register_repository" | "register_contribution" => {
                         let source = &request["method"][&method]["source"];
                         method = format!("{method} {}", source.as_str().unwrap());
                         json!({"type": "repository", "data": {
                             "id": "registered", "path": repo_path, "source": source,
-                            "last_used": 0
+                            "last_used": 0, "workspaces_dir": repo_path.join("shoal-registered")
                         }})
                     }
                     "layered_config" => {

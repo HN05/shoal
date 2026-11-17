@@ -351,7 +351,8 @@ fn failed_startup_recovery_never_serves() {
         rusqlite::Connection::open(root.path().join("state/state.db"))
             .unwrap()
             .execute_batch(&format!(
-                "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+                "INSERT INTO repositories(id,path,source,last_used,workspaces_dir)
+                    VALUES ('repo','/repo','/repo',1,'/shoal/repo');
                 INSERT INTO spaces(id,kind,repository_id,name)
                     VALUES ('workspace','workspace','repo','worker');
                 INSERT INTO workspaces(id,path,branch,state)

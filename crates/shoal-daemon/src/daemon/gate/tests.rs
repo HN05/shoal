@@ -469,8 +469,7 @@ async fn a_gate_run_in_the_repository_directory_holds_back_its_move_and_removal(
     let repository = fixture.workspace.repository().clone();
     manager.ensure_no_gate_runs_in(&repository).await.unwrap();
     let registered = manager.repository(&repository).await.unwrap();
-    let runs = crate::shoal_dirs::ShoalDir::of(&registered, crate::shoal_dirs::Contents::GateRuns)
-        .unwrap();
+    let runs = crate::shoal_dirs::ShoalDir::of(&registered, crate::shoal_dirs::Contents::GateRuns);
     runs.create().unwrap();
     let run = runs.root().join("request");
     std::fs::create_dir_all(&run).unwrap();

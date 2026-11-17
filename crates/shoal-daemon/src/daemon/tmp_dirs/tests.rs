@@ -23,11 +23,7 @@ async fn a_workspace_has_its_own_tmpdir_until_it_is_removed() {
         .create_workspace(&repo.id, "feature".into(), None, None, None)
         .await
         .unwrap();
-    let expected = repo
-        .workspaces_dir
-        .unwrap()
-        .join(".tmp")
-        .join(&workspace.id);
+    let expected = repo.workspaces_dir.join(".tmp").join(&workspace.id);
 
     let exported = manager
         .space_environment(&SpaceSelector::id(&workspace.id))
@@ -97,46 +93,6 @@ async fn env_overrides_the_workspace_tmpdir() {
 }
 
 #[tokio::test]
-async fn a_tracked_execution_reserves_a_missing_repository_directory() {
-    let (root, manager) = manager().await;
-    let checkout = repository(root.path(), "repo");
-    let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let workspace = manager
-        .create_workspace(&repo.id, "feature".into(), None, None, None)
-        .await
-        .unwrap();
-    let id = repo.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "UPDATE repositories SET workspaces_dir=NULL WHERE id=?1",
-                [id],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-
-    let started = manager
-        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
-        .await
-        .unwrap();
-    let directory = manager
-        .repository(&repo.id)
-        .await
-        .unwrap()
-        .workspaces_dir
-        .unwrap();
-    let expected = directory.join(".tmp").join(&workspace.id);
-    assert_eq!(started.plan.environment[env::TMPDIR], expected.as_os_str());
-    assert!(expected.is_dir());
-}
-
-#[tokio::test]
 async fn the_sweep_deletes_temporary_directories_without_a_record() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
@@ -152,7 +108,7 @@ async fn the_sweep_deletes_temporary_directories_without_a_record() {
         .start_chat(repo.id.clone().into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
-    let layout = crate::tmp_dirs::Layout::of(&repo).unwrap();
+    let layout = crate::tmp_dirs::Layout::of(&repo);
     let kept = layout.prepare(&workspace.id).unwrap();
     let orphan = layout
         .prepare(&SpaceId::from("removed-workspace-id"))

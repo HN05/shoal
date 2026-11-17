@@ -393,21 +393,17 @@ impl Manager {
         workspaces: &[Workspace],
     ) -> Result<()> {
         // Removal deletes the checkout and the local config's directory.
-        let local = repo
-            .workspaces_dir
-            .as_ref()
-            .map(|directory| directory.join(crate::config::repo::LOCAL_DIR));
+        let local = repo.workspaces_dir.join(crate::config::repo::LOCAL_DIR);
         let other_repositories = self.repositories().await?;
         let other_workspaces = self.list_workspaces().await?;
-        for deleted in std::iter::once(&repo.path).chain(local.as_ref()) {
+        for deleted in [&repo.path, &local] {
             ensure!(
                 !contains_protected_directory(deleted, &self.paths)?,
                 "{} contains Shoal state or the home directory; refusing deletion",
                 deleted.display()
             );
             for other in &other_repositories {
-                let owned = std::iter::once(&other.path).chain(other.workspaces_dir.as_ref());
-                for path in owned {
+                for path in [&other.path, &other.workspaces_dir] {
                     ensure!(
                         other.id == repo.id || !path.starts_with(deleted),
                         "{} contains another registered repository: {}",
@@ -468,9 +464,7 @@ async fn delete_checkout(path: std::path::PathBuf) -> Result<()> {
 }
 
 async fn delete_caches(repo: &Repository) -> Result<()> {
-    let Some(caches) = crate::caches::Layout::of(repo) else {
-        return Ok(());
-    };
+    let caches = crate::caches::Layout::of(repo);
     tokio::task::spawn_blocking(move || caches.remove()).await?
 }
 
@@ -479,10 +473,7 @@ async fn delete_caches(repo: &Repository) -> Result<()> {
 /// recorded path is canonical, so a symlink at it or above it, or at `.shoal`,
 /// may lead to files that are not the repository's. A Git checkout there is
 /// never a local config.
-async fn delete_local_config(directory: Option<std::path::PathBuf>) -> Result<()> {
-    let Some(directory) = directory else {
-        return Ok(());
-    };
+async fn delete_local_config(directory: std::path::PathBuf) -> Result<()> {
     let local = directory.join(crate::config::repo::LOCAL_DIR);
     tokio::task::spawn_blocking(move || {
         let real = |path: &Path| {
@@ -501,16 +492,11 @@ async fn delete_local_config(directory: Option<std::path::PathBuf>) -> Result<()
 
 /// Delete the repository's directory of `contents`, which nothing outlives.
 async fn delete_shoal_dir(repo: &Repository, contents: Contents) -> Result<()> {
-    let Some(dir) = ShoalDir::of(repo, contents) else {
-        return Ok(());
-    };
+    let dir = ShoalDir::of(repo, contents);
     tokio::task::spawn_blocking(move || dir.remove()).await?
 }
 
-async fn delete_empty_workspaces_dir(directory: Option<std::path::PathBuf>) -> Result<()> {
-    let Some(directory) = directory else {
-        return Ok(());
-    };
+async fn delete_empty_workspaces_dir(directory: std::path::PathBuf) -> Result<()> {
     // Only an empty repository directory goes; anything else in it is the user's.
     tokio::task::spawn_blocking(move || crate::shoal_dirs::remove_if_empty(&directory)).await?
 }
@@ -567,7 +553,7 @@ async fn check_checkout(repo: &Repository, workspaces: &[Workspace]) -> Result<(
                 break;
             }
         }
-        let seed = crate::seed::Layout::of(repo).is_some_and(|seed| seed.is_worktree(&tree.path));
+        let seed = crate::seed::Layout::of(repo).is_worktree(&tree.path);
         ensure!(
             tree.path == repo.path || owned || seed,
             "repository has a worktree outside Shoal: {}; remove it first",

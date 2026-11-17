@@ -112,9 +112,7 @@ impl Manager {
     /// a whole build, so a busy gate leaves the deletion to a later pass.
     async fn delete_left_derived_data(&self, repo: &Repository, location: PathBuf) -> bool {
         let name = crate::repository::name(repo);
-        let Some(directory) = repo.workspaces_dir.clone() else {
-            return false;
-        };
+        let directory = repo.workspaces_dir.clone();
         if !off_runtime::try_exists(&directory).await.unwrap_or(false) {
             return false;
         }
@@ -233,7 +231,7 @@ fn xcode_cache(repo: &Repository, settings: &Effective) -> Option<PathBuf> {
     if !settings.caches.contains_key(presets::XCODE_CACHE) {
         return None;
     }
-    crate::caches::Layout::of(repo)?.owned(presets::XCODE_CACHE)
+    crate::caches::Layout::of(repo).owned(presets::XCODE_CACHE)
 }
 
 /// Whether the worktree directory holding `project` in the repository's

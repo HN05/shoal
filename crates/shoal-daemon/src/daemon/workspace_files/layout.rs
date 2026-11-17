@@ -30,10 +30,11 @@ pub(crate) struct Layout {
 }
 
 impl Layout {
-    /// The repository's attached files; registrations from before the
-    /// repository directory layout have none.
-    pub(crate) fn of(repo: &Repository) -> Option<Self> {
-        ShoalDir::of(repo, Contents::Attachments).map(|dir| Self { dir })
+    /// The repository's attached files.
+    pub(crate) fn of(repo: &Repository) -> Self {
+        Self {
+            dir: ShoalDir::of(repo, Contents::Attachments),
+        }
     }
 
     /// The attached files of the chats without a repository, in

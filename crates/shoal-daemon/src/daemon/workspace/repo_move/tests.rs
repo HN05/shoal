@@ -37,7 +37,7 @@ async fn cloned() -> Result<(
 #[tokio::test]
 async fn moves_the_clone_and_workspaces_into_the_new_root() -> Result<()> {
     let (_temp, manager, repo, workspace, root) = cloned().await?;
-    let old = repo.workspaces_dir.clone().context("no directory")?;
+    let old = repo.workspaces_dir.clone();
     // The seed's locked worktree moves and reconnects too.
     test_support::git(
         &repo.path,
@@ -47,7 +47,7 @@ async fn moves_the_clone_and_workspaces_into_the_new_root() -> Result<()> {
         .write_local_config(&repo.id, Some("[ports.web]\nport = 3000\n".into()))
         .await?;
     // So does the workspace's temporary directory.
-    let tmp_dir = crate::tmp_dirs::directory(&repo, &workspace.id)?.context("no directory")?;
+    let tmp_dir = crate::tmp_dirs::directory(&repo, &workspace.id)?;
     fs::write(tmp_dir.join("scratch"), "garbage")?;
 
     let moved = manager.move_repositories(Layout::Regular).await?;
@@ -57,7 +57,7 @@ async fn moves_the_clone_and_workspaces_into_the_new_root() -> Result<()> {
     let directory = root.join("origin");
     assert_eq!(moved.from, old);
     assert_eq!(moved.workspace_paths, std::slice::from_ref(&workspace.path));
-    assert_eq!(moved.repository.workspaces_dir.as_ref(), Some(&directory));
+    assert_eq!(moved.repository.workspaces_dir, directory);
     assert_eq!(moved.repository.path, directory.join(".checkout"));
     assert!(!old.exists());
     // The local config moves with the repository's directory.
@@ -106,7 +106,7 @@ async fn moves_the_clone_and_workspaces_into_the_new_root() -> Result<()> {
 #[tokio::test]
 async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> Result<()> {
     let (_temp, manager, repo, workspace, root) = cloned().await?;
-    let source = repo.workspaces_dir.clone().context("no directory")?;
+    let source = repo.workspaces_dir.clone();
     let destination = root.join("origin");
     fs::create_dir_all(&destination)?;
 
@@ -167,7 +167,7 @@ async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> R
 #[tokio::test]
 async fn a_copied_move_reconnects_worktrees_before_deleting_the_original() -> Result<()> {
     let (_temp, manager, repo, workspace, root) = cloned().await?;
-    let source = repo.workspaces_dir.clone().context("no directory")?;
+    let source = repo.workspaces_dir.clone();
     let destination = root.join("origin");
     fs::create_dir_all(&destination)?;
 
@@ -210,7 +210,7 @@ async fn a_copied_move_reconnects_worktrees_before_deleting_the_original() -> Re
 #[tokio::test]
 async fn a_checkpoint_waits_for_the_move_and_refuses_while_it_is_pending() -> Result<()> {
     let (_temp, manager, repo, workspace, root) = cloned().await?;
-    let source = repo.workspaces_dir.clone().context("no directory")?;
+    let source = repo.workspaces_dir.clone();
     let destination = root.join("origin");
     fs::create_dir_all(&destination)?;
 
@@ -249,10 +249,7 @@ async fn the_destination_avoids_a_deleted_workspace_recorded_there() -> Result<(
     let [moved] = moved.as_slice() else {
         anyhow::bail!("expected one move: {moved:?}");
     };
-    assert_eq!(
-        moved.repository.workspaces_dir.as_deref(),
-        Some(root.join("origin-2").as_path())
-    );
+    assert_eq!(moved.repository.workspaces_dir, root.join("origin-2"));
     Ok(())
 }
 
@@ -266,7 +263,7 @@ fn the_destination_avoids_a_missing_checkout_recorded_inside_it() -> Result<()> 
         source: "https://example.invalid/clone.git".into(),
         last_used: 1,
         name: None,
-        workspaces_dir: Some(root.join("elsewhere")),
+        workspaces_dir: root.join("elsewhere"),
         contribution: false,
     };
     let reserved =
@@ -282,7 +279,7 @@ fn the_destination_avoids_a_missing_checkout_recorded_inside_it() -> Result<()> 
 #[tokio::test]
 async fn a_move_destination_and_workspace_paths_exclude_each_other() -> Result<()> {
     let (temp, manager, repo, _workspace, root) = cloned().await?;
-    let source = repo.workspaces_dir.clone().context("no directory")?;
+    let source = repo.workspaces_dir.clone();
 
     // A workspace placed in the destination after its reservation keeps
     // the move from being recorded.
@@ -331,7 +328,7 @@ async fn a_move_destination_and_workspace_paths_exclude_each_other() -> Result<(
 #[tokio::test]
 async fn a_replaced_worktree_keeps_the_move_unfinished() -> Result<()> {
     let (_temp, manager, repo, workspace, root) = cloned().await?;
-    let source = repo.workspaces_dir.clone().context("no directory")?;
+    let source = repo.workspaces_dir.clone();
     let destination = root.join("origin");
     fs::create_dir_all(&destination)?;
     manager.record_move(&repo.id, &source, &destination).await?;
@@ -357,10 +354,7 @@ async fn a_checkout_placed_in_its_directory_moves_with_its_source() -> Result<()
     let repo = manager
         .register_repository(checkout.to_str().context("path")?.into(), None, None)
         .await?;
-    assert_eq!(
-        repo.workspaces_dir.as_deref(),
-        Some(fs::canonicalize(&directory)?.as_path())
-    );
+    assert_eq!(repo.workspaces_dir, fs::canonicalize(&directory)?);
     let root = fs::canonicalize(temp.path())?.join("new");
     test_support::configure(&manager, &format!("[machine]\nroot_dir = {:?}\n", root)).await;
 
@@ -390,7 +384,7 @@ async fn an_excluded_move_empties_the_indexed_root_and_links_it() -> Result<()> 
     let workspace = manager
         .create_workspace(&repo.id, "feature".into(), None, None, None)
         .await?;
-    let old = repo.workspaces_dir.clone().context("no directory")?;
+    let old = repo.workspaces_dir.clone();
     let root = old.parent().context("no root")?.to_owned();
     let excluded = root.with_file_name(".shoal.noindex");
 
@@ -409,7 +403,7 @@ async fn an_excluded_move_empties_the_indexed_root_and_links_it() -> Result<()> 
         anyhow::bail!("expected one move: {moved:?}");
     };
     let directory = excluded.join("origin");
-    assert_eq!(moved.repository.workspaces_dir.as_ref(), Some(&directory));
+    assert_eq!(moved.repository.workspaces_dir, directory);
     assert_eq!(fs::read_link(&root)?, Path::new(".shoal.noindex"));
     let workspace = manager.workspace_by_id(&workspace.id).await?;
     assert_eq!(workspace.path, directory.join("feature"));
@@ -420,10 +414,7 @@ async fn an_excluded_move_empties_the_indexed_root_and_links_it() -> Result<()> 
     let [moved] = moved.as_slice() else {
         anyhow::bail!("expected one move: {moved:?}");
     };
-    assert_eq!(
-        moved.repository.workspaces_dir.as_ref(),
-        Some(&root.join("origin"))
-    );
+    assert_eq!(moved.repository.workspaces_dir, root.join("origin"));
     assert!(fs::symlink_metadata(&root)?.is_dir());
     Ok(())
 }
@@ -540,7 +531,7 @@ async fn a_move_waits_for_a_send_keeping_attached_files() -> Result<()> {
     })
     .await
     .context("the move reaches the gate")?;
-    let old = repo.workspaces_dir.clone().context("no directory")?;
+    let old = repo.workspaces_dir.clone();
     assert!(old.exists(), "the move waits before moving the directory");
     drop(sending);
     moving.await??;
@@ -590,7 +581,7 @@ async fn a_plan_lists_running_executions_that_the_move_refuses() -> Result<()> {
     assert_eq!(listed.id, execution.plan.id);
 
     assert!(manager.move_repositories(Layout::Regular).await.is_err());
-    assert!(repo.workspaces_dir.as_ref().is_some_and(|dir| dir.exists()));
+    assert!(repo.workspaces_dir.exists());
 
     // Another process in the directory keeps even the plan from passing.
     let mut other = tokio::process::Command::new("sleep")
@@ -626,7 +617,7 @@ async fn a_queued_or_running_review_holds_back_the_move() -> Result<()> {
         })
         .await?;
     assert!(manager.move_repositories(Layout::Regular).await.is_err());
-    assert!(repo.workspaces_dir.as_ref().is_some_and(|dir| dir.exists()));
+    assert!(repo.workspaces_dir.exists());
     Ok(())
 }
 
@@ -646,7 +637,7 @@ async fn a_waiting_ci_job_lets_the_move_go_and_a_starting_one_holds_it_back() ->
     };
     queue(QueueState::Starting).await?;
     assert!(manager.move_repositories(Layout::Regular).await.is_err());
-    assert!(repo.workspaces_dir.as_ref().is_some_and(|dir| dir.exists()));
+    assert!(repo.workspaces_dir.exists());
 
     manager
         .store
@@ -657,11 +648,7 @@ async fn a_waiting_ci_job_lets_the_move_go_and_a_starting_one_holds_it_back() ->
         .await?;
     queue(QueueState::Queued).await?;
     manager.move_repositories(Layout::Regular).await?;
-    assert!(
-        repo.workspaces_dir
-            .as_ref()
-            .is_some_and(|dir| !dir.exists())
-    );
+    assert!(!repo.workspaces_dir.exists());
     Ok(())
 }
 
@@ -750,7 +737,7 @@ async fn disk_cleanup_behind_a_move_checks_where_results_went() -> Result<()> {
         manager.kept_results().await?.try_into().map_err(|kept| {
             anyhow::anyhow!("expected one removed workspace with results: {kept:?}")
         })?;
-    let old = repo.workspaces_dir.clone().context("no directory")?;
+    let old = repo.workspaces_dir.clone();
     // A move, then disk cleanup for the old place, wait for the gate.
     let held = manager.gates.lock_message_files(&repo.id).await;
     let gate = manager.gates.message_files_gate(&repo.id);
@@ -795,8 +782,7 @@ async fn with_master() -> Result<(tempfile::TempDir, Arc<Manager>, crate::model:
     let repo = manager
         .register_repository(format!("file://{}", origin.display()).into(), None, None)
         .await?;
-    let root = (repo.workspaces_dir.as_deref())
-        .and_then(Path::parent)
+    let root = (repo.workspaces_dir.parent())
         .context("no root")?
         .to_owned();
     let new = crate::daemon::chats::NewChat {

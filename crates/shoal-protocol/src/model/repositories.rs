@@ -13,9 +13,9 @@ pub struct Repository {
     pub last_used: i64,
     pub name: Option<String>,
     /// `<root_dir>/<name>`: parent of this repository's workspaces and of its
-    /// URL clone. Reserved once and moved only into a new `root_dir`; `None`
-    /// until first needed.
-    pub workspaces_dir: Option<PathBuf>,
+    /// URL clone. Reserved at registration and moved only into a new
+    /// `root_dir`.
+    pub workspaces_dir: PathBuf,
     /// Registered by `shoal contribute`: removed once nothing of it is left.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub contribution: bool,

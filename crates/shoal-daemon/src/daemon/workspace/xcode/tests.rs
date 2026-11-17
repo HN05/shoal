@@ -29,7 +29,7 @@ async fn cleanup_skips_a_busy_repository_and_recorded_worktrees() {
     // A worktree moved outside Shoal keeps its record and DerivedData.
     fs::rename(&worktrees[1], root.path().join("moved")).unwrap();
     let location = derived_data::location(&manager.paths.home).unwrap();
-    let directory = repo.workspaces_dir.clone().unwrap();
+    let directory = repo.workspaces_dir.clone();
     let left = derived_data::folder(&location, "App-gone", &directory.join("gone/App"));
     let moved = derived_data::folder(&location, "App-moved", &worktrees[1].join("App"));
     let settings = manager.repository_settings(&repo.id).await.unwrap();

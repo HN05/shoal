@@ -233,7 +233,7 @@ fn a_closed_stdout_ends_unterminated_output_quietly() {
 fn repository_progress_respects_output_mode_and_clears_before_errors() {
     let success = serde_json::json!({
         "type": "repository",
-        "data": {"id": "test", "path": "/test", "source": "/test", "last_used": 0}
+        "data": {"id": "test", "path": "/test", "source": "/test", "last_used": 0, "workspaces_dir": "/shoal/test"}
     });
     let repositories = serde_json::json!({
         "type": "repositories",
@@ -349,7 +349,7 @@ fn terminal_styles_respect_redirection_json_and_environment() {
 fn shoal_output_selects_the_format_of_results_and_errors() {
     let added = serde_json::json!({
         "type": "repository",
-        "data": {"id": "test", "path": "/test", "source": "/test", "last_used": 0}
+        "data": {"id": "test", "path": "/test", "source": "/test", "last_used": 0, "workspaces_dir": "/shoal/test"}
     });
     let json = [("SHOAL_OUTPUT", "json")];
     let (output, _) = run_with_reply(
@@ -392,7 +392,7 @@ fn shoal_output_json_refuses_to_prompt_on_a_terminal() {
         support::fake_daemon::answer(stream, |_| {
             serde_json::json!({
                 "type": "repositories",
-                "data": [{"id": "test", "path": "/test", "source": "/test", "last_used": 0}]
+                "data": [{"id": "test", "path": "/test", "source": "/test", "last_used": 0, "workspaces_dir": "/shoal/test"}]
             })
         });
     });
@@ -436,7 +436,7 @@ fn a_program_reads_json_output_with_the_librarys_types() {
     use shoal_protocol::model::Repository;
     let added = serde_json::json!({
         "type": "repository",
-        "data": {"id": "test", "path": "/test", "source": "/test", "last_used": 0}
+        "data": {"id": "test", "path": "/test", "source": "/test", "last_used": 0, "workspaces_dir": "/shoal/test"}
     });
     let (output, _) = run_with_reply(
         &["--json", "repo", "add", "/test"],

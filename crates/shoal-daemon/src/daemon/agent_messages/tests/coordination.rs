@@ -576,7 +576,7 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
     // The worker's repository directory moves, as a chat of another
     // repository may coordinate it.
     let repo = manager.repository(worker.repository()).await.unwrap();
-    let source = repo.workspaces_dir.unwrap();
+    let source = repo.workspaces_dir;
     let destination = temp.path().join("moved");
     std::fs::rename(&source, &destination).unwrap();
     let (from, to) = (source.clone(), destination.clone());

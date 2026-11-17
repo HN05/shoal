@@ -8,7 +8,7 @@ async fn workspaces_stay_out_of_the_directories_shoal_keeps() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let directory = repo.workspaces_dir.clone().unwrap();
+    let directory = repo.workspaces_dir.clone();
     for reserved in [
         ".seed/inside",
         ".caches",

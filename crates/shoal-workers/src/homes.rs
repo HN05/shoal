@@ -100,8 +100,8 @@ pub async fn expand(
 }
 
 /// The directory in which `workspace`'s repository keeps its workspaces,
-/// resolved as agents compare paths; `None`, with a warning when it cannot be
-/// looked up, when there is none.
+/// resolved as agents compare paths; `None`, with a warning, when it cannot be
+/// looked up.
 async fn workspaces_dir(paths: &CommandPaths, workspace: &Workspace) -> Option<PathBuf> {
     let directory = crate::client::repositories::list(paths)
         .await
@@ -113,9 +113,7 @@ async fn workspaces_dir(paths: &CommandPaths, workspace: &Workspace) -> Option<P
                 .context("workspace repository is missing")
         });
     match directory {
-        Ok(directory) => {
-            directory.map(|directory| std::fs::canonicalize(&directory).unwrap_or(directory))
-        }
+        Ok(directory) => Some(std::fs::canonicalize(&directory).unwrap_or(directory)),
         Err(error) => {
             eprintln!("warning: could not give the agent the workspaces directory: {error:#}");
             None

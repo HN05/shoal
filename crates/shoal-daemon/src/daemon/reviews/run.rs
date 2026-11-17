@@ -163,9 +163,7 @@ impl Manager {
         self.verify_worktree(&workspace).await?;
         let settings = self.workspace_settings_with_templates(&workspace).await?;
         let commits = self.review_commits(&workspace, &review.target).await?;
-        // The run's directory is the repository's, which a registration
-        // older than it reserves first.
-        let repository = (self.reserve_repository_directory(workspace.repository())).await?;
+        let repository = self.repository(workspace.repository()).await?;
         let place = run_files(&repository, &review)?;
         let held = self.hold_run(id, &repository.id, place).await?;
         if !self.start_review(id, &commits).await? {
@@ -358,7 +356,7 @@ impl Manager {
         files: &Files,
     ) -> Result<()> {
         let repository = self.repository(workspace.repository()).await?;
-        review_runs(&repository)?.create()?;
+        review_runs(&repository).create()?;
         std::fs::create_dir_all(&files.directory)
             .with_context(|| format!("create {}", files.directory.display()))?;
         reviewer::write_id(files, id)?;
@@ -701,9 +699,7 @@ impl Manager {
     async fn left_runs(&self) -> Result<Vec<LeftRun>> {
         let mut runs = Vec::new();
         for repository in self.repositories().await? {
-            let Some(dir) = ShoalDir::of(&repository, Contents::ReviewRuns) else {
-                continue;
-            };
+            let dir = review_runs(&repository);
             if !dir.check_own()? {
                 continue;
             }
@@ -736,9 +732,7 @@ impl Manager {
     /// repository whose link a move would break.
     pub(super) async fn review_runs_left(&self, id: &RepositoryId) -> Result<bool> {
         let repository = self.repository(id).await?;
-        let Some(dir) = ShoalDir::of(&repository, Contents::ReviewRuns) else {
-            return Ok(false);
-        };
+        let dir = review_runs(&repository);
         tokio::task::spawn_blocking(move || {
             Ok(dir.check_own()? && !run_directories(dir.root())?.is_empty())
         })
@@ -900,7 +894,7 @@ fn run_files(repository: &Repository, review: &Review) -> Result<Files> {
         ReviewTarget::Pr { url, .. } => format!("{workspace}-pr-{}", url.pull()?),
     };
     Ok(Files {
-        directory: review_runs(repository)?.root().join(place),
+        directory: review_runs(repository).root().join(place),
     })
 }
 
@@ -915,8 +909,8 @@ fn run_beside(place: &Files, id: ReviewId) -> Files {
 }
 
 /// The directory of the repository's review runs.
-fn review_runs(repository: &Repository) -> Result<ShoalDir> {
-    ShoalDir::of(repository, Contents::ReviewRuns).context("the repository has no directory")
+fn review_runs(repository: &Repository) -> ShoalDir {
+    ShoalDir::of(repository, Contents::ReviewRuns)
 }
 
 /// Remove a run's checkout and files.

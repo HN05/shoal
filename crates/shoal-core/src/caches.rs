@@ -38,10 +38,11 @@ impl Layout {
         }
     }
 
-    /// The repository's caches; registrations from before the repository
-    /// directory layout have none.
-    pub fn of(repo: &Repository) -> Option<Self> {
-        ShoalDir::of(repo, Contents::Caches).map(|dir| Self { dir })
+    /// The repository's caches.
+    pub fn of(repo: &Repository) -> Self {
+        Self {
+            dir: ShoalDir::of(repo, Contents::Caches),
+        }
     }
 
     pub fn root(&self) -> &Path {
@@ -146,7 +147,7 @@ impl Layout {
 
 /// The directories of the repository's configured caches, without creating them.
 pub fn locate(repo: &Repository, caches: &BTreeMap<String, Cache>) -> BTreeMap<String, PathBuf> {
-    Layout::of(repo).map_or_else(BTreeMap::new, |layout| layout.locate(caches))
+    Layout::of(repo).locate(caches)
 }
 
 /// The directories of the repository's configured caches, created when missing.
@@ -154,7 +155,7 @@ pub fn directories(
     repo: &Repository,
     caches: &BTreeMap<String, Cache>,
 ) -> Result<BTreeMap<String, PathBuf>> {
-    Layout::of(repo).map_or_else(|| Ok(BTreeMap::new()), |layout| layout.prepare(caches))
+    Layout::of(repo).prepare(caches)
 }
 
 #[cfg(test)]

@@ -854,26 +854,6 @@ async fn creation_check_refuses_what_creation_refuses_without_creating() {
             .is_err()
     );
 
-    // A registration without a reserved directory keeps it unreserved.
-    let id = f.repo_id.clone();
-    f.manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "UPDATE repositories SET workspaces_dir=NULL WHERE id=?1",
-                [id],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    f.manager
-        .check_creation(&f.repo_id, Some("other"), None, none)
-        .await
-        .unwrap();
-    let repo = f.manager.repository(&f.repo_id).await.unwrap();
-    assert_eq!(repo.workspaces_dir, None);
-
     // A record keeps its path after its directory and worktree are gone.
     let gone = f.add("gone").await;
     fs::remove_dir_all(&gone.path).unwrap();

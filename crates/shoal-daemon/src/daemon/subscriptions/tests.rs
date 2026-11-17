@@ -12,7 +12,7 @@ fn repository(id: &str, name: &str) -> (RecordKey, (Record, serde_json::Value)) 
         source: "/repo".into(),
         last_used: 0,
         name: Some(name.into()),
-        workspaces_dir: None,
+        workspaces_dir: "/tmp/shoal/repo".into(),
         contribution: false,
     });
     let value = serde_json::to_value(&record).unwrap();

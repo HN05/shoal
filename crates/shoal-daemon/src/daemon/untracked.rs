@@ -53,12 +53,10 @@ impl Manager {
     pub async fn untracked_worktrees(&self) -> Result<Vec<UntrackedWorktree>> {
         let mut untracked = Vec::new();
         for repo in self.repositories().await? {
-            let Some(root) = &repo.workspaces_dir else {
-                continue;
-            };
             let Some(_guard) = self.gates.try_lock_git(&repo.id) else {
                 continue;
             };
+            let root = &repo.workspaces_dir;
             let owned = self.owned_worktrees(&repo, root).await?;
             let trees = match git::worktrees(&repo.path, git::run).await {
                 Ok(trees) => trees,

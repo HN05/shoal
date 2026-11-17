@@ -347,7 +347,6 @@ async fn an_import_that_cannot_open_the_workspace_keeps_its_session_files_for_th
         .await
         .unwrap()
         .workspaces_dir
-        .unwrap()
         .join(".sessions");
     let kept = sessions.join(&removed[0].space_id);
     assert_eq!(fs::read_to_string(kept.join("0")).unwrap(), "{}\n");

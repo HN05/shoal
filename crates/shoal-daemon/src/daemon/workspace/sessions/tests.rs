@@ -958,7 +958,6 @@ async fn a_chat_that_fails_to_start_leaves_its_place_as_it_found_it() -> Result<
     // A temporary directory Shoal does not own keeps chats from starting.
     let directory = (manager.repository(workspace.repository()).await?)
         .workspaces_dir
-        .context("the repository has no workspaces directory")?
         .join(".tmp");
     if directory.exists() {
         std::fs::remove_dir_all(&directory)?;

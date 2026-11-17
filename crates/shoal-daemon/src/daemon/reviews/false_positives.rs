@@ -82,7 +82,7 @@ impl Manager {
             .repository()
             .clone();
         let path = match entry {
-            Some(_) => Some(self.false_positives_path_reserved(&repository_id).await?),
+            Some(_) => Some(self.writable_false_positives_path(&repository_id).await?),
             None => self.false_positives_path(&repository_id).await?,
         };
         let Some(path) = path else {

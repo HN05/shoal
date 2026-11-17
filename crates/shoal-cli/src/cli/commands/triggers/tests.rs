@@ -20,7 +20,7 @@ fn rows_name_where_each_trigger_is_and_what_its_last_run_did() {
         source: "/work/app".into(),
         last_used: 0,
         name: Some("app".into()),
-        workspaces_dir: None,
+        workspaces_dir: "/tmp/shoal/repo".into(),
         contribution: false,
     }];
     let queued = TriggerRun {

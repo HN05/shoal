@@ -18,9 +18,7 @@ impl Manager {
         repo: &Repository,
         dry_run: bool,
     ) -> Result<Option<Emptying>> {
-        let Some(layout) = Layout::of(repo) else {
-            return Ok(None);
-        };
+        let layout = Layout::of(repo);
         if !dry_run {
             // An interrupted pass may have left emptied caches behind.
             let purging = layout.clone();

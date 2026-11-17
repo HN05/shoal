@@ -7,7 +7,7 @@ fn repository(id: &str, path: &str, name: Option<&str>) -> Repository {
         source: format!("https://example.test/team/{id}"),
         last_used: 0,
         name: name.map(str::to_owned),
-        workspaces_dir: None,
+        workspaces_dir: format!("/tmp/shoal/{id}").into(),
         contribution: false,
     }
 }

@@ -5,7 +5,6 @@
 //! a directory per space named by its ID, holding each file under its place
 //! in the list beside them. Files a restore hands over but its caller does
 //! not put in place stay listed there for the space's next removal record.
-use shoal_ids::repository_ids::RepositoryId;
 use std::{
     collections::HashSet,
     io::ErrorKind,
@@ -38,16 +37,7 @@ impl Manager {
         let listed: Vec<_> = files.iter().map(|carried| carried.file.clone()).collect();
         removed.session_files = listed.clone();
         let home = self.removed_home(&removed).await?;
-        let layout = match (files.is_empty(), &home) {
-            (true, _) => self.sessions_layout(&home),
-            (false, HomeKey::Repository(repo)) => {
-                Some(Layout::new(&self.workspaces_dir(repo).await?, &repo.id))
-            }
-            (false, HomeKey::Root(root_dir)) => Some(self.outside_sessions_layout(root_dir)),
-        };
-        let Some(layout) = layout else {
-            return Ok(removed);
-        };
+        let layout = self.sessions_layout(&home);
         let copies: Vec<_> = files
             .iter()
             .zip(layout.kept(&removed.space_id, &listed))
@@ -68,9 +58,7 @@ impl Manager {
 
     /// Forget the session files `home` keeps for the space `id`.
     async fn discard_sessions_in(&self, home: &HomeKey, id: &SpaceId) -> Result<()> {
-        let Some(layout) = self.sessions_layout(home) else {
-            return Ok(());
-        };
+        let layout = self.sessions_layout(home);
         let id = id.clone();
         tokio::task::spawn_blocking(move || layout.remove_one(&id))
             .await
@@ -96,7 +84,7 @@ impl Manager {
             return Ok(Vec::new());
         }
         let home = self.removed_home(removed).await?;
-        let layout = (self.sessions_layout(&home)).context("the repository has no directory")?;
+        let layout = self.sessions_layout(&home);
         Ok(layout.kept(&removed.space_id, session_files))
     }
 
@@ -107,9 +95,7 @@ impl Manager {
         let Ok(home) = self.present_home(space).await else {
             return Vec::new();
         };
-        let Some(layout) = self.sessions_layout(&home) else {
-            return Vec::new();
-        };
+        let layout = self.sessions_layout(&home);
         let id = space.id.clone();
         match tokio::task::spawn_blocking(move || layout.listed(&id)).await {
             Ok(Ok(listed)) => listed,
@@ -120,9 +106,7 @@ impl Manager {
     /// Delete the session files `home` keeps for spaces that neither exist
     /// nor have a removal record left. The caller holds the checkpoint gate.
     pub(super) async fn expire_imported_sessions(&self, home: &HomeKey) -> Result<()> {
-        let Some(layout) = self.sessions_layout(home) else {
-            return Ok(());
-        };
+        let layout = self.sessions_layout(home);
         let owners = self.store.run(|db| session_owners(db)).await?;
         tokio::task::spawn_blocking(move || layout.remove_unowned(&owners))
             .await
@@ -137,9 +121,7 @@ impl Manager {
         let Ok(home) = self.removed_home(removed).await else {
             return Vec::new();
         };
-        let Some(layout) = self.sessions_layout(&home) else {
-            return Vec::new();
-        };
+        let layout = self.sessions_layout(&home);
         layout
             .kept(&removed.space_id, &removed.session_files)
             .into_iter()
@@ -164,12 +146,11 @@ impl Manager {
         (self.home_of(space.repository_id.as_ref(), space.workdir.root_dir())).await
     }
 
-    /// The kept session files of `home`; registrations from before the
-    /// repository directory layout have none until an import reserves it.
-    fn sessions_layout(&self, home: &HomeKey) -> Option<Layout> {
+    /// The kept session files of `home`.
+    fn sessions_layout(&self, home: &HomeKey) -> Layout {
         match home {
             HomeKey::Repository(repo) => Layout::of(repo),
-            HomeKey::Root(root_dir) => Some(self.outside_sessions_layout(root_dir)),
+            HomeKey::Root(root_dir) => self.outside_sessions_layout(root_dir),
         }
     }
 
@@ -190,9 +171,7 @@ impl Manager {
 /// repository goes; a directory Shoal did not create is the user's and
 /// stays.
 pub(super) async fn remove_imported_sessions(repo: &Repository) -> Result<()> {
-    let Some(layout) = Layout::of(repo) else {
-        return Ok(());
-    };
+    let layout = Layout::of(repo);
     tokio::task::spawn_blocking(move || layout.remove())
         .await
         .context("delete the kept session files")?
@@ -208,20 +187,15 @@ pub(super) struct Layout {
 }
 
 impl Layout {
-    fn new(workspaces_dir: &Path, repository_id: &RepositoryId) -> Self {
-        Self {
-            dir: ShoalDir::new(workspaces_dir, repository_id, Contents::ImportedSessions),
-        }
-    }
-
     fn root(&self) -> &Path {
         self.dir.root()
     }
 
-    /// The repository's kept session files; registrations from before the
-    /// repository directory layout have none until an import reserves it.
-    fn of(repo: &Repository) -> Option<Self> {
-        ShoalDir::of(repo, Contents::ImportedSessions).map(|dir| Self { dir })
+    /// The repository's kept session files.
+    fn of(repo: &Repository) -> Self {
+        Self {
+            dir: ShoalDir::of(repo, Contents::ImportedSessions),
+        }
     }
 
     /// The directory, when this Shoal created it for its owner.

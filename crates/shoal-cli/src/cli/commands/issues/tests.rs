@@ -44,7 +44,7 @@ async fn issue_urls_select_exactly_one_registered_repository() {
         source: source.into(),
         last_used: 0,
         name: None,
-        workspaces_dir: None,
+        workspaces_dir: "/tmp/shoal/repo".into(),
         contribution: false,
     };
     let repos = [

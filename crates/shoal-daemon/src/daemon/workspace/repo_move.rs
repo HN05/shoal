@@ -138,7 +138,7 @@ impl Manager {
         }
         let outside = self.outside_dirs(&target.path);
         let directories: Vec<_> = (moving.iter())
-            .filter_map(|repo| repo.workspaces_dir.as_deref())
+            .map(|repo| repo.workspaces_dir.as_path())
             .chain(outside.iter().map(PathBuf::as_path))
             .collect();
         plan.ensure_linkable(&directories)?;
@@ -210,10 +210,7 @@ impl Manager {
     /// workspaces are busy or not verifiably its own.
     async fn check_movable(&self, repo: &Repository, running: Running) -> Result<()> {
         self.ensure_repository_available(&repo.id).await?;
-        let directory = repo
-            .workspaces_dir
-            .as_deref()
-            .context("repository has no directory")?;
+        let directory = &repo.workspaces_dir;
         ensure!(
             directory.is_dir() && !directory.is_symlink(),
             "repository directory {} is missing",
@@ -272,9 +269,7 @@ impl Manager {
             if other.id == repo.id {
                 continue;
             }
-            let owned =
-                std::iter::once(other.path.as_path()).chain(other.workspaces_dir.as_deref());
-            for path in owned {
+            for path in [&other.path, &other.workspaces_dir] {
                 ensure!(
                     !path.starts_with(directory),
                     "{} contains {}, which belongs to the repository {}",
@@ -306,10 +301,7 @@ impl Manager {
         self.check_movable(&repo, Running::Refused).await?;
         let workspaces = self.repository_workspaces(&repo.id).await?;
         let _resources = self.exclude_resource_hooks(&workspaces).await?;
-        let source = repo
-            .workspaces_dir
-            .clone()
-            .context("repository has no directory")?;
+        let source = repo.workspaces_dir.clone();
         let destination = self.begin_move(&repo.id, root, &source).await?;
         let moved = async {
             fsutil::copy::move_directory(&source, &destination).await?;
@@ -548,9 +540,8 @@ impl Manager {
             }
         }
         let mut paths: Vec<_> = present.iter().map(|w| w.path.clone()).collect();
-        if let Some(seed) = seed::Layout::of(&repo).map(|layout| layout.worktree())
-            && off_runtime::exists(&seed).await?
-        {
+        let seed = seed::Layout::of(&repo).worktree();
+        if off_runtime::exists(&seed).await? {
             paths.push(seed);
         }
         git::repair_worktrees(&repo.path, &paths).await?;
@@ -632,9 +623,7 @@ impl Manager {
 
 /// Whether the repository's directory lies outside `root`.
 fn outside(repo: &Repository, root: &Path) -> bool {
-    repo.workspaces_dir
-        .as_deref()
-        .is_some_and(|directory| directory.parent() != Some(root))
+    repo.workspaces_dir.parent() != Some(root)
 }
 
 /// The processes of `executions`, running in `workspaces`, which stopping

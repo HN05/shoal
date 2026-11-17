@@ -392,9 +392,7 @@ pub fn repository(row: &Row<'_>) -> rusqlite::Result<Repository> {
         source: row.get("source")?,
         last_used: row.get("last_used")?,
         name: row.get("name")?,
-        workspaces_dir: row
-            .get::<_, Option<String>>("workspaces_dir")?
-            .map(PathBuf::from),
+        workspaces_dir: PathBuf::from(row.get::<_, String>("workspaces_dir")?),
         contribution: row.get("contribution")?,
     })
 }

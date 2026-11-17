@@ -25,22 +25,14 @@ mod rejected;
 pub(crate) use rejected::RejectedConfigs;
 
 impl Manager {
-    /// The repository's local config file; its directory is reserved when
-    /// the repository has none yet.
+    /// The repository's local config file.
     pub async fn local_config_path(
         &self,
         selector: impl Into<crate::repository::Selector>,
     ) -> Result<PathBuf> {
         let repo = self.repository(selector).await?;
-        let directory = match &repo.workspaces_dir {
-            Some(directory) => directory.clone(),
-            None => {
-                let _git = self.gates.lock_git(&repo.id).await;
-                self.ensure_repository_available(&repo.id).await?;
-                self.workspaces_dir(&repo).await?
-            }
-        };
-        self.local_config_outside_checkouts(&directory).await
+        self.local_config_outside_checkouts(&repo.workspaces_dir)
+            .await
     }
 
     /// Apply `changes` to the repository's local config, saving only a valid
@@ -54,11 +46,7 @@ impl Manager {
         let _registry = self.gates.lock_registry().await;
         let repo = self.repository(selector).await?;
         self.ensure_repository_available(&repo.id).await?;
-        let directory = {
-            let _git = self.gates.lock_git(&repo.id).await;
-            self.workspaces_dir(&repo).await?
-        };
-        let path = self.local_config_outside_checkouts(&directory).await?;
+        let path = (self.local_config_outside_checkouts(&repo.workspaces_dir)).await?;
         let (config, backup) = tokio::task::spawn_blocking(move || {
             crate::config_file::edit(path, &changes, |edited| {
                 config::repo::parse(edited)
@@ -235,38 +223,31 @@ impl Manager {
     }
 
     /// The file beside the repository's local config that keeps the claims
-    /// its reviews raised and that were resolved as wrong; none before the
-    /// repository has a directory or while a checkout lies where the local
-    /// config belongs.
+    /// its reviews raised and that were resolved as wrong; none while a
+    /// checkout lies where the local config belongs.
     pub(crate) async fn false_positives_path(
         &self,
         repository_id: &RepositoryId,
     ) -> Result<Option<PathBuf>> {
         let repository = self.repository(repository_id).await?;
-        Ok(match &repository.workspaces_dir {
-            Some(directory) if self.local_config_occupant(directory).await?.is_none() => {
-                Some(config::repo::false_positives_path(directory))
-            }
-            _ => None,
-        })
+        let directory = &repository.workspaces_dir;
+        Ok((self.local_config_occupant(directory).await?)
+            .is_none()
+            .then(|| config::repo::false_positives_path(directory)))
     }
 
-    /// [`Self::false_positives_path`] for an entry to add: the repository's
-    /// directory is reserved when it has none, and a checkout where the local
-    /// config belongs is refused. The caller holds the registry gate, as
-    /// local config edits do.
-    pub(crate) async fn false_positives_path_reserved(
+    /// [`Self::false_positives_path`] for an entry to add, refusing a
+    /// checkout where the local config belongs. The caller holds the
+    /// registry gate, as local config edits do.
+    pub(crate) async fn writable_false_positives_path(
         &self,
         repository_id: &RepositoryId,
     ) -> Result<PathBuf> {
         let repository = self.repository(repository_id).await?;
         self.ensure_repository_available(&repository.id).await?;
-        let directory = {
-            let _git = self.gates.lock_git(&repository.id).await;
-            self.workspaces_dir(&repository).await?
-        };
-        self.local_config_outside_checkouts(&directory).await?;
-        Ok(config::repo::false_positives_path(&directory))
+        let directory = &repository.workspaces_dir;
+        self.local_config_outside_checkouts(directory).await?;
+        Ok(config::repo::false_positives_path(directory))
     }
 
     /// A checkout or worktree, recorded or not, that lies where the local
@@ -292,13 +273,12 @@ impl Manager {
         // Registration and workspace creation keep checkouts out of the
         // local config's directory, so one there predates the local config,
         // which therefore has nothing to hold, and edits refuse.
-        let (local_config, local_template_files) = match &repository.workspaces_dir {
-            Some(directory) if self.local_config_occupant(directory).await?.is_none() => {
-                let directory = directory.clone();
-                off_runtime::run(move || config::repo::load_local(&directory)).await?
-            }
-            _ => Default::default(),
-        };
+        let directory = repository.workspaces_dir;
+        let (local_config, local_template_files) =
+            match self.local_config_occupant(&directory).await? {
+                None => off_runtime::run(move || config::repo::load_local(&directory)).await?,
+                Some(_) => Default::default(),
+            };
         Ok(ConfigLayers {
             worktree_file,
             local_config,

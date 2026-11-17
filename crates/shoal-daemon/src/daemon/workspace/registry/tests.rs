@@ -57,7 +57,7 @@ async fn an_excluded_root_refuses_a_recorded_repository_directory() {
         source: "https://example.invalid/recorded.git".into(),
         last_used: 1,
         name: None,
-        workspaces_dir: Some(root.path.clone()),
+        workspaces_dir: root.path.clone(),
         contribution: false,
     };
     let prepared = super::prepare_root(

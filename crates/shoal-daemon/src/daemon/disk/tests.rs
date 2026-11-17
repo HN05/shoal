@@ -30,7 +30,7 @@ async fn cleanup_deletes_xcode_data_of_removed_workspaces_first() {
     let folder =
         |name, project: &Path| crate::presets::derived_data::folder(&location, name, project);
     let live = folder("App-live", &project);
-    let directory = repo.workspaces_dir.as_deref().unwrap();
+    let directory = repo.workspaces_dir.as_path();
     let removed = folder("App-removed", &directory.join("gone/App.xcodeproj"));
     let elsewhere = folder("App-elsewhere", Path::new("/nonexistent/App.xcodeproj"));
     let settings = manager.repository_settings(&repo.id).await.unwrap();
@@ -332,7 +332,7 @@ async fn cleanup_reads_space_again_after_purging_leftover_caches() {
     )]);
     crate::caches::directories(&repo, &caches).unwrap();
     // A pass interrupted after moving the caches aside.
-    let layout = Layout::of(&repo).unwrap();
+    let layout = Layout::of(&repo);
     layout.move_aside().unwrap();
     let readings = AtomicUsize::new(0);
     let critical = manager.config().machine.overload.disk.stop_free_bytes() - 1;

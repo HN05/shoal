@@ -71,7 +71,7 @@ async fn caches_empty_only_while_nothing_uses_them() {
     assert_eq!(manager.empty_caches(&repo, false).await.unwrap(), None);
 
     // A pass interrupted before purging leaves nothing behind for long.
-    let layout = Layout::of(&repo).unwrap();
+    let layout = Layout::of(&repo);
     crate::caches::directories(&repo, &configured).unwrap();
     assert_eq!(layout.move_aside().unwrap(), ["go"]);
     let trash = layout.root().join("trash");
@@ -98,7 +98,7 @@ async fn executions_do_not_start_without_their_caches() {
         "[caches.go]\nscope = 'shared'\n",
     )
     .unwrap();
-    let caches = Layout::of(&repo).unwrap().root().to_owned();
+    let caches = Layout::of(&repo).root().to_owned();
     std::fs::create_dir_all(&caches).unwrap();
     std::fs::write(caches.join("owner"), "someone else\n").unwrap();
     let refused = manager
@@ -155,7 +155,7 @@ async fn hooks_the_cli_runs_find_their_caches_prepared() {
             scope: CacheScope::Shared,
         },
     )]);
-    let go = Layout::of(&repo).unwrap().locate(&configured)["go"].clone();
+    let go = Layout::of(&repo).locate(&configured)["go"].clone();
     assert!(go.is_dir());
     assert_eq!(
         crate::caches::directories(&repo, &configured).unwrap()["go"],

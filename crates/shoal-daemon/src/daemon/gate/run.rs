@@ -448,8 +448,7 @@ fn read_run(
 /// per run, so a run whose processes outlived it never shares its files or
 /// its processes' marker with the next.
 fn run_files(case: &Case, request: &ApprovalRequest) -> Result<PathBuf> {
-    let runs = ShoalDir::of(&case.repository, Contents::GateRuns)
-        .context("the repository has no directory")?;
+    let runs = ShoalDir::of(&case.repository, Contents::GateRuns);
     runs.create()?;
     let run = format!("{}-{}", request.key, uuid::Uuid::new_v4().simple());
     Ok(runs.root().join(run))

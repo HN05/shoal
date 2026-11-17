@@ -276,7 +276,7 @@ impl Manager {
     ) -> Result<Chat> {
         let home = match &chat.repository_id {
             Some(id) => ChatHome {
-                repository: Some(self.reserve_repository_directory(id).await?),
+                repository: Some(self.repository(id).await?),
                 root_dir: None,
                 _registry: None,
             },
@@ -323,14 +323,14 @@ impl Manager {
     }
 
     /// Where a new chat of `repository` keeps its temporary directory: the
-    /// repository's directory, reserved now, or for a chat without one the
+    /// repository's directory, or for a chat without one the
     /// configured `root_dir`, which stays its own however `root_dir` changes
     /// later. A chat without one is recorded under the registry gate, so a
     /// root move, which holds it, finds the chat before clearing `root_dir`.
     async fn reserve_chat_home(&self, repository: Option<RepositoryId>) -> Result<ChatHome<'_>> {
         Ok(match repository {
             Some(id) => ChatHome {
-                repository: Some(self.reserve_repository_directory(&id).await?),
+                repository: Some(self.repository(&id).await?),
                 root_dir: None,
                 _registry: None,
             },
@@ -679,12 +679,11 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
         let repository_id: Option<RepositoryId> = row.get("repository_id")?;
         let root_dir = row.get::<_, Option<String>>("root_dir")?.map(PathBuf::from);
         let directory = row.get::<_, Option<String>>("workspaces_dir")?;
-        let tmp_dir = match (&repository_id, directory) {
-            (Some(repository_id), Some(directory)) => {
-                Some(tmp_dirs::Layout::new(Path::new(&directory), repository_id).locate(&id))
-            }
-            (Some(_), None) => None,
-            (None, _) => (root_dir.as_deref())
+        let tmp_dir = match &repository_id {
+            Some(repository_id) => directory.map(|directory| {
+                tmp_dirs::Layout::new(Path::new(&directory), repository_id).locate(&id)
+            }),
+            None => (root_dir.as_deref())
                 .map(|root| tmp_dirs::Layout::outside_repositories(root, owner).locate(&id)),
         };
         Ok(Chat {

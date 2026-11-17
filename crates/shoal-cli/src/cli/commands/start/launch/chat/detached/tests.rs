@@ -16,7 +16,7 @@ fn repository() -> Repository {
         source: "/repos/shoal".into(),
         last_used: 0,
         name: Some("shoal".into()),
-        workspaces_dir: None,
+        workspaces_dir: "/tmp/shoal/repo".into(),
         contribution: false,
     }
 }

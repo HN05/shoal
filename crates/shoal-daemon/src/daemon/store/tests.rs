@@ -2722,13 +2722,19 @@ async fn migrates_original_database_without_losing_ownership_records() {
     let store = Store::open(path.clone()).await.unwrap();
     store
         .run(|db| {
-            let repo = db.query_row(
-                &format!("SELECT {REPOSITORY_COLUMNS} FROM repositories"),
+            let (id, name, directory) = db.query_row(
+                "SELECT id,name,workspaces_dir FROM repositories",
                 [],
-                repository,
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                    ))
+                },
             )?;
-            assert_eq!(repo.id, "repo");
-            assert!(repo.name.is_none() && repo.workspaces_dir.is_none());
+            assert_eq!(id, "repo");
+            assert!(name.is_none() && directory.is_none());
             let workspace = db.query_row(
                 &format!("SELECT {WORKSPACE_COLUMNS} FROM spaces JOIN workspaces USING(id)"),
                 [],

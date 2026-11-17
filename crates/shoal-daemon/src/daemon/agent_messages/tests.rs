@@ -580,7 +580,7 @@ async fn attached_files_are_copied_beside_the_workspaces_until_removal() {
     assert_eq!(std::fs::read_to_string(copy).unwrap(), "panic");
     assert_eq!(copy.file_name(), file.file_name());
     let repo = manager.repository(workspace.repository()).await.unwrap();
-    let workspaces_dir = repo.workspaces_dir.as_deref().unwrap();
+    let workspaces_dir = repo.workspaces_dir.as_path();
     assert!(copy.starts_with(workspaces_dir.join(".attachments").join(&workspace.id)));
 
     manager
@@ -638,7 +638,7 @@ async fn a_refused_message_leaves_no_copies() {
             .is_err()
     );
     let repo = manager.repository(workspace.repository()).await.unwrap();
-    let attachments = repo.workspaces_dir.unwrap().join(".attachments");
+    let attachments = repo.workspaces_dir.join(".attachments");
     assert!(!attachments.join(&workspace.id).exists());
 }
 
@@ -683,7 +683,7 @@ async fn an_attached_send_waits_for_the_files_gate() {
             .is_empty()
     );
     let repo = manager.repository(workspace.repository()).await.unwrap();
-    let attachments = repo.workspaces_dir.unwrap().join(".attachments");
+    let attachments = repo.workspaces_dir.join(".attachments");
     assert!(!attachments.join(&workspace.id).exists());
     drop(held);
     send.await.unwrap().unwrap();
@@ -742,7 +742,7 @@ async fn a_send_waiting_through_removal_leaves_no_files() {
     assert!(removal.await.unwrap().unwrap().removed);
     assert!(send.await.unwrap().is_err());
     let repo = manager.repository(workspace.repository()).await.unwrap();
-    let attachments = repo.workspaces_dir.unwrap().join(".attachments");
+    let attachments = repo.workspaces_dir.join(".attachments");
     assert!(!attachments.join(&workspace.id).exists());
 }
 

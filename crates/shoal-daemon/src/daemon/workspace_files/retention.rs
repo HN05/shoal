@@ -19,9 +19,8 @@ impl Manager {
     pub(crate) async fn delete_repository_files(&self, repo: &Repository) -> Result<()> {
         let _files = self.gates.lock_message_files(&repo.id).await;
         // Records outlive copies a failed deletion leaves, so they stay listed.
-        if let Some(layout) = super::layout::Layout::of(repo) {
-            tokio::task::spawn_blocking(move || layout.remove()).await??;
-        }
+        let layout = super::layout::Layout::of(repo);
+        tokio::task::spawn_blocking(move || layout.remove()).await??;
         let id = repo.id.clone();
         self.store
             .run(move |db| records::forget_repository(db, &id))
@@ -61,9 +60,7 @@ impl Manager {
     /// [`Self::delete_unrecorded_files`], returning its failure.
     async fn try_delete_unrecorded_files(&self, space: &Space) -> Result<()> {
         let (home, _files) = self.lock_files_home(&self.space_home(space).await?).await?;
-        let Some(layout) = home.layout() else {
-            return Ok(());
-        };
+        let layout = home.layout();
         // A restore may have given copies there to a workspace meanwhile.
         let directories = layout.kept(&space.id);
         if (self.store)
@@ -131,11 +128,9 @@ impl Manager {
             return Ok(false);
         }
         let copies = self.kept_copies(&space.id).await?;
-        let there = (home.layout()).is_some_and(|layout| {
-            (layout.kept(&space.id).iter())
-                .chain(&copies)
-                .any(|path| holds(path))
-        });
+        let there = (home.layout().kept(&space.id).iter())
+            .chain(&copies)
+            .any(|path| holds(path));
         if there {
             self.delete_kept_files(&home, space.id.clone()).await?;
         }
@@ -146,10 +141,9 @@ impl Manager {
     /// chat `space_id`, and then their records. Callers hold the gate of its
     /// files.
     async fn delete_kept_files(&self, home: &FilesHome, space_id: SpaceId) -> Result<()> {
-        if let Some(layout) = home.layout() {
-            let (id, copies) = (space_id.clone(), self.kept_copies(&space_id).await?);
-            tokio::task::spawn_blocking(move || layout.remove_kept(&id, &copies)).await??;
-        }
+        let (layout, id) = (home.layout(), space_id.clone());
+        let copies = self.kept_copies(&space_id).await?;
+        tokio::task::spawn_blocking(move || layout.remove_kept(&id, &copies)).await??;
         self.store
             .write(move |tx| records::forget_space(tx, &space_id))
             .await

@@ -121,7 +121,7 @@ impl ProcessDirectories {
     ) -> Result<Self> {
         Ok(Self {
             caches: crate::caches::directories(repository, caches)?,
-            tmp_dir: crate::tmp_dirs::directory(repository, workspace_id)?,
+            tmp_dir: Some(crate::tmp_dirs::directory(repository, workspace_id)?),
         })
     }
 }
@@ -523,9 +523,6 @@ impl Manager {
         }
         let preparation = match self.space(selector).await?.by_kind() {
             ByKind::Workspace(workspace) => {
-                // Its temporary directory goes in the repository's directory.
-                self.reserve_repository_directory(workspace.repository())
-                    .await?;
                 let preparation = self
                     .prepare_execution_kind(&workspace, kind, caller, merge)
                     .await?;

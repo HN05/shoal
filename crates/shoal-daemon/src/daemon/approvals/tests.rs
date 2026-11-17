@@ -33,7 +33,7 @@ fn resource(mode: LockMode) -> Specification {
 
 fn owners(db: &Connection) -> Result<()> {
     db.execute_batch(
-        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+        "INSERT INTO repositories(id,path,source,last_used,workspaces_dir) VALUES ('repo','/repo','/repo',1,'/shoal/repo');
             BEGIN;
             INSERT INTO workspaces(id,path,branch,state)
                 VALUES ('owner','/work','worker','ready'),
@@ -847,7 +847,7 @@ async fn decisions_bind_settings_and_release_obeys_configured_lifetime() {
         .await
         .unwrap();
     store.run(|db| {
-            db.execute_batch("INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+            db.execute_batch("INSERT INTO repositories(id,path,source,last_used,workspaces_dir) VALUES ('repo','/repo','/repo',1,'/shoal/repo');
                 INSERT INTO spaces(id,kind,repository_id,name)
                     VALUES ('owner','workspace','repo','worker');
                 INSERT INTO workspaces(id,path,branch,state)

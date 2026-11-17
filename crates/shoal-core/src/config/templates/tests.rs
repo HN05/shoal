@@ -103,6 +103,7 @@ fn assert_layers(system: &str, place_text: &str, rules: &str) {
 fn repository() -> crate::model::Repository {
     serde_json::from_value(serde_json::json!({
         "id": "r", "path": "/repo", "source": "/repo", "last_used": 0,
+        "workspaces_dir": "/shoal/repo",
     }))
     .unwrap()
 }

@@ -226,7 +226,6 @@ fn show(ctx: &Context, moved: &Vec<MovedRepository>, queued: Option<&Queued>) ->
             outln!("No repository directories to move");
         }
         for moved in moved {
-            let directory = moved.repository.workspaces_dir.as_deref();
             outln!(
                 "{}",
                 palette.paint(
@@ -234,7 +233,7 @@ fn show(ctx: &Context, moved: &Vec<MovedRepository>, queued: Option<&Queued>) ->
                     format_args!(
                         "Moved {} to {}",
                         repository::name(&moved.repository),
-                        directory.unwrap_or(&moved.repository.path).display()
+                        moved.repository.workspaces_dir.display()
                     )
                 )
             );
@@ -251,13 +250,11 @@ fn plan(moves: &RepositoryMoves, spaces: &Spaces) -> String {
         moves.directory.display()
     );
     for repo in &moves.repositories {
-        if let Some(directory) = &repo.workspaces_dir {
-            text.push_str(&format!(
-                "\n  {}: {}",
-                repository::name(repo),
-                directory.display()
-            ));
-        }
+        text.push_str(&format!(
+            "\n  {}: {}",
+            repository::name(repo),
+            repo.workspaces_dir.display()
+        ));
     }
     if !moves.chats.is_empty() {
         text.push_str("\nMove the files of these chats without a repository:");

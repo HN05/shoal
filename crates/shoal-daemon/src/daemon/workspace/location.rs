@@ -30,7 +30,7 @@ impl Manager {
         let path = match path {
             Some(path) => self.workspace_location(repo, &path).await?,
             None => {
-                let directory = canonical_with_missing_tail(&self.workspaces_dir(repo).await?)?;
+                let directory = canonical_with_missing_tail(&repo.workspaces_dir)?;
                 directory.join(self.free_directory(from).await?)
             }
         };
@@ -40,9 +40,7 @@ impl Manager {
     }
 
     /// Refuse what [`Self::new_workspace_path`] and recording the workspace
-    /// would refuse for a workspace named after `from`, without reserving the
-    /// repository's directory, which holds nothing before it is reserved.
-    /// Without `from`, an explicit path may still reopen the workspace
+    /// would refuse for a workspace named after `from`. Without `from`, an explicit path may still reopen the workspace
     /// already there, so only its location is checked.
     pub(super) async fn check_new_workspace_path(
         &self,
@@ -57,12 +55,10 @@ impl Manager {
         let Some(from) = from else {
             return Ok(());
         };
-        let path = match (explicit, &repo.workspaces_dir) {
-            (Some(path), _) => path,
-            (None, Some(directory)) => {
-                canonical_with_missing_tail(directory)?.join(self.free_directory(from).await?)
-            }
-            (None, None) => return Ok(()),
+        let path = match explicit {
+            Some(path) => path,
+            None => canonical_with_missing_tail(&repo.workspaces_dir)?
+                .join(self.free_directory(from).await?),
         };
         ensure_unused(&path)?;
         self.store
@@ -100,17 +96,16 @@ impl Manager {
                 "workspace path overlaps repository checkout {}",
                 other.path.display()
             );
-            if let Some(directory) = &other.workspaces_dir {
-                ensure!(
-                    !directory.starts_with(&path)
-                        && (other.id == repo.id || !path.starts_with(directory))
-                        && !Contents::ALL.into_iter().any(|contents| {
-                            overlaps(&path, ShoalDir::new(directory, &other.id, contents).root())
-                        })
-                        && !overlaps(&path, &directory.join(crate::config::repo::LOCAL_DIR)),
-                    "workspace path overlaps a reserved repository directory"
-                );
-            }
+            let directory = &other.workspaces_dir;
+            ensure!(
+                !directory.starts_with(&path)
+                    && (other.id == repo.id || !path.starts_with(directory))
+                    && !Contents::ALL.into_iter().any(|contents| {
+                        overlaps(&path, ShoalDir::new(directory, &other.id, contents).root())
+                    })
+                    && !overlaps(&path, &directory.join(crate::config::repo::LOCAL_DIR)),
+                "workspace path overlaps a reserved repository directory"
+            );
             let trees = match git::worktrees(&other.path, git::run).await {
                 Ok(trees) => trees,
                 Err(_) if other.id != repo.id => continue,

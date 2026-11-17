@@ -16,14 +16,14 @@ use crate::{
 impl Manager {
     /// The layout that keeps the temporary directories of the spaces of
     /// `repository`, or for a chat without one of the `root_dir` it started
-    /// in; none in a repository without a directory.
+    /// in; none for such a chat that recorded none.
     pub(crate) fn tmp_layout(
         &self,
         repository: Option<&Repository>,
         root_dir: Option<&Path>,
     ) -> Option<Layout> {
         match repository {
-            Some(repository) => Layout::of(repository),
+            Some(repository) => Some(Layout::of(repository)),
             None => root_dir.map(|root| Layout::outside_repositories(root, &self.root_dir_owner())),
         }
     }
@@ -53,7 +53,7 @@ impl Manager {
         let mut failed = Vec::new();
         for repo in self.repositories().await? {
             if let Err(error) = self
-                .sweep_layout_tmp_dirs(Layout::of(&repo), Some(&repo.id))
+                .sweep_layout_tmp_dirs(Some(Layout::of(&repo)), Some(&repo.id))
                 .await
             {
                 failed.push(format!("{}: {error:#}", crate::repository::name(&repo)));

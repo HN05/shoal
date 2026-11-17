@@ -29,8 +29,6 @@ impl Manager {
         &self,
         workspace: Workspace,
     ) -> Result<BTreeMap<String, OsString>> {
-        self.reserve_repository_directory(workspace.repository())
-            .await?;
         let _guard = self.gates.lock_git(workspace.repository()).await;
         let workspace = self.workspace_by_id(&workspace.id).await?;
         self.verify_worktree(&workspace).await?;
@@ -52,7 +50,7 @@ impl Manager {
                     &repository_name,
                     &ports,
                     &caches,
-                    tmp_dir.as_deref(),
+                    Some(&tmp_dir),
                 );
                 values.extend(env::workspace_environment(
                     &(&workspace).into(),

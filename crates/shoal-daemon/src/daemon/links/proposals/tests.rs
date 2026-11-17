@@ -66,10 +66,7 @@ pub(crate) async fn kept_copy(
         path: file,
         alt: None,
     }];
-    let _files = manager
-        .lock_proposal_files_of(repository, &attachments)
-        .await
-        .unwrap();
+    let _files = manager.gates.lock_proposal_files().await;
     manager
         .keep_attachments(&workspace.id, repository, &mut body, &mut attachments)
         .await
@@ -78,37 +75,16 @@ pub(crate) async fn kept_copy(
 }
 
 #[tokio::test]
-async fn copies_go_to_the_repository_directory_reserved_first_when_missing() {
+async fn copies_go_to_the_repository_directory() {
     let (_root, manager, repo, workspace) = with_workspace().await;
     let (body, copy) = kept_copy(&manager, &workspace, &repo.id, "shot.png").await;
-    let directory = repo.workspaces_dir.clone().unwrap();
+    let directory = repo.workspaces_dir.clone();
     assert!(
         copy.path.starts_with(directory.join(".proposals")),
         "{copy:?}"
     );
     assert_eq!(std::fs::read_to_string(&copy.path).unwrap(), "shot.png");
     assert!(body.contains(&copy.path.display().to_string()), "{body}");
-
-    // A registration from before the repository directory layout reserves
-    // its directory first.
-    let id = repo.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            Ok(db.execute(
-                "UPDATE repositories SET workspaces_dir=NULL WHERE id=?1",
-                [id],
-            )?)
-        })
-        .await
-        .unwrap();
-    let (_, copy) = kept_copy(&manager, &workspace, &repo.id, "other.png").await;
-    let reserved = manager.repository(&repo.id).await.unwrap().workspaces_dir;
-    let reserved = reserved.expect("a reserved directory");
-    assert!(
-        copy.path.starts_with(reserved.join(".proposals")),
-        "{copy:?}"
-    );
     assert!(!manager.paths.state.join("proposals").exists());
 }
 
@@ -116,7 +92,7 @@ async fn copies_go_to_the_repository_directory_reserved_first_when_missing() {
 async fn the_sweep_keeps_only_files_pending_proposals_attach() {
     let (_root, manager, repo, workspace) = with_workspace().await;
     let (_, kept) = kept_copy(&manager, &workspace, &repo.id, "shot.png").await;
-    let files = repo.workspaces_dir.clone().unwrap().join(".proposals");
+    let files = repo.workspaces_dir.clone().join(".proposals");
     std::fs::create_dir_all(files.join("stale/0")).unwrap();
     store_pull_proposal(&manager, &workspace, String::new(), vec![kept.clone()]).await;
 
@@ -148,7 +124,7 @@ async fn a_decided_proposal_takes_its_files_and_a_removed_repository_the_rest() 
     let (_, left) = kept_copy(&manager, &workspace, &repo.id, "left.png").await;
     manager.remove_repository(&repo.id).await.unwrap();
     assert!(!left.path.exists());
-    let files = repo.workspaces_dir.clone().unwrap().join(".proposals");
+    let files = repo.workspaces_dir.clone().join(".proposals");
     assert!(!files.exists());
 }
 

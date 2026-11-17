@@ -356,7 +356,7 @@ fn repository(id: &str, source: &str) -> Repository {
         source: source.into(),
         last_used: 0,
         name: None,
-        workspaces_dir: None,
+        workspaces_dir: "/tmp/shoal/repo".into(),
         contribution: false,
     }
 }

@@ -355,7 +355,7 @@ async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
         .await
         .unwrap();
     let tmp_dir = chat.tmp_dir.clone().unwrap();
-    let directory = repo.workspaces_dir.clone().unwrap();
+    let directory = repo.workspaces_dir.clone();
     assert_eq!(tmp_dir, directory.join(".tmp").join(&chat.id));
     let mode = std::fs::metadata(&tmp_dir).unwrap().permissions().mode();
     assert_eq!(mode & 0o777, 0o700);

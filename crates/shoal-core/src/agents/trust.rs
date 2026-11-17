@@ -155,7 +155,7 @@ fn repository_paths(
 ) -> Vec<std::path::PathBuf> {
     let mut paths = Vec::new();
     for path in std::iter::once(&repository.path)
-        .chain(repository.workspaces_dir.iter())
+        .chain(std::iter::once(&repository.workspaces_dir))
         .chain(workspace_paths.iter())
     {
         let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_owned());
@@ -196,12 +196,8 @@ pub fn repository_trust_paths(
     repository: &Repository,
     workspace: &std::path::Path,
 ) -> Vec<std::path::PathBuf> {
-    let mut paths = vec![repository.path.clone()];
-    paths.extend(repository.workspaces_dir.iter().cloned());
-    let shared = repository
-        .workspaces_dir
-        .as_ref()
-        .is_some_and(|directory| workspace.starts_with(directory));
+    let mut paths = vec![repository.path.clone(), repository.workspaces_dir.clone()];
+    let shared = workspace.starts_with(&repository.workspaces_dir);
     if !shared && !paths.iter().any(|path| path == workspace) {
         paths.push(workspace.to_owned());
     }

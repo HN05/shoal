@@ -8,7 +8,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::model::ByKind;
 use std::path::PathBuf;
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Result, ensure};
 use tokio::sync::OwnedMutexGuard;
 
 use crate::{
@@ -94,12 +94,11 @@ pub(crate) enum FilesHome {
 }
 
 impl FilesHome {
-    /// Where its files are; a repository registered before the repository
-    /// directory layout has none.
-    pub(crate) fn layout(&self) -> Option<Layout> {
+    /// Where its files are.
+    pub(crate) fn layout(&self) -> Layout {
         match self {
             Self::Repository(repo) => Layout::of(repo),
-            Self::Outside(layout) => Some(layout.clone()),
+            Self::Outside(layout) => layout.clone(),
         }
     }
 }
@@ -387,7 +386,7 @@ impl Manager {
         home: &FilesHome,
         files: Vec<AttachedFile>,
     ) -> Result<Vec<AttachedFile>> {
-        let layout = home.layout().context("the repository has no directory")?;
+        let layout = home.layout();
         let paths: Vec<PathBuf> = files.iter().map(|file| file.path.clone()).collect();
         tokio::task::spawn_blocking(move || {
             paths.iter().try_for_each(|path| layout.delete_copy(path))
@@ -497,18 +496,12 @@ impl Manager {
 
     /// Hold the gate of the files attached to the workspace or chat `space`,
     /// with where they are kept, once the workspace is still there and not
-    /// being removed, or the chat still runs. A registration older than the
-    /// repository's directory reserves it first, under the Git gate, which
-    /// is never taken while holding this one.
+    /// being removed, or the chat still runs.
     pub(crate) async fn lock_files(&self, space: &Space) -> Result<(Layout, OwnedMutexGuard<()>)> {
-        if let Some(repository) = &space.repository_id {
-            self.reserve_repository_directory(repository).await?;
-        }
         let (home, guard) = self.lock_files_home(&self.space_home(space).await?).await?;
         // A move, removal or end may have finished while this waited.
         self.ensure_attachable(&space.id).await?;
-        let layout = home.layout().context("the repository has no directory")?;
-        Ok((layout, guard))
+        Ok((home.layout(), guard))
     }
 
     /// Refuse attaching files to the space `space_id` once the

@@ -48,10 +48,11 @@ impl Layout {
         }
     }
 
-    /// The repository's seed; registrations from before the repository
-    /// directory layout have none.
-    pub fn of(repo: &crate::model::Repository) -> Option<Self> {
-        ShoalDir::of(repo, Contents::Seed).map(|dir| Self { dir })
+    /// The repository's seed.
+    pub fn of(repo: &crate::model::Repository) -> Self {
+        Self {
+            dir: ShoalDir::of(repo, Contents::Seed),
+        }
     }
 
     /// Whether `path`, as Git lists worktrees, is this seed's worktree.

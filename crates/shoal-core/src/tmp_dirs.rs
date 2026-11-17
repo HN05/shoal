@@ -42,10 +42,11 @@ impl Layout {
         }
     }
 
-    /// The repository's temporary directories; registrations from before the
-    /// repository directory layout have none.
-    pub fn of(repo: &Repository) -> Option<Self> {
-        ShoalDir::of(repo, Contents::TmpDirs).map(|dir| Self { dir })
+    /// The repository's temporary directories.
+    pub fn of(repo: &Repository) -> Self {
+        Self {
+            dir: ShoalDir::of(repo, Contents::TmpDirs),
+        }
     }
 
     pub fn root(&self) -> &Path {
@@ -130,17 +131,15 @@ impl Layout {
 }
 
 /// The temporary directory of the repository's workspace or chat `id`,
-/// without creating it; `None` without a repository directory.
-pub fn locate(repo: &Repository, id: &SpaceId) -> Option<PathBuf> {
-    Layout::of(repo).map(|layout| layout.locate(id))
+/// without creating it.
+pub fn locate(repo: &Repository, id: &SpaceId) -> PathBuf {
+    Layout::of(repo).locate(id)
 }
 
 /// The temporary directory of the repository's workspace or chat `id`,
-/// created when missing; `None` without a repository directory.
-pub fn directory(repo: &Repository, id: &SpaceId) -> Result<Option<PathBuf>> {
-    Layout::of(repo)
-        .map(|layout| layout.prepare(id))
-        .transpose()
+/// created when missing.
+pub fn directory(repo: &Repository, id: &SpaceId) -> Result<PathBuf> {
+    Layout::of(repo).prepare(id)
 }
 
 #[cfg(test)]
