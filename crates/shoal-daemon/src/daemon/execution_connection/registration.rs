@@ -158,16 +158,14 @@ pub(super) async fn register(
             manager.continue_restart(entry, &plan.id).await;
             source = manager.consume_queue_entry(entry, &space.id).await;
         }
-        // Before the agent runs: what its space's items held by then is
-        // history, which its first message points it to.
-        if agent.new_session
-            && let Err(error) = manager.restart_watches(&space.id).await
-        {
-            log!("{}'s watches not restarted: {error:#}", space.name);
-        }
     }
+    // Released before the restart waits for the space's PR gate, which
+    // completion holds while it waits for queue admission.
     drop(reserved);
     drop(admitted);
+    if kind == ExecutionKind::Command && agent.as_ref().is_some_and(|agent| agent.new_session) {
+        restart_watches(manager, &space).await;
+    }
     let execution = Connected {
         id: plan.id.clone(),
         kind,
@@ -192,6 +190,15 @@ pub(super) async fn register(
         plan,
         git_guard: _git_guard,
     })
+}
+
+/// Restart the watches of `space`, whose agent begins a new session, before
+/// the agent runs: what its items held by then is history, which its first
+/// message points it to.
+async fn restart_watches(manager: &Manager, space: &crate::model::Space) {
+    if let Err(error) = manager.restart_watches(&space.id).await {
+        log!("{}'s watches not restarted: {error:#}", space.name);
+    }
 }
 
 /// Whether the daemon forgets `execution` when its wrapper never received
