@@ -290,6 +290,6 @@ fn offline_repository(root: &Path, name: &str, files: &[(&str, &str)]) -> PathBu
     // Fetches over SSH, as the daemon's background sync of a GitHub
     // origin a test adds, fail here without reaching the network; a test
     // that serves SSH itself sets its own command.
-    git(&repo, &["config", "core.sshCommand", "false"]);
+    support::set_config(&repo, &[("core.sshCommand", "false")]);
     repo
 }

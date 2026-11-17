@@ -133,6 +133,26 @@ pub fn commit(repo: &Path, file: &str) {
     git_with_identity(repo, &["commit", "-m", file]);
 }
 
+/// Set each of `entries`, a name such as `user.name` with its value, in the
+/// config of the repository `repo` created, in one write rather than a
+/// `git config` each, since tests create many repositories. A value must
+/// read as written, without quotes, backslashes or comment characters.
+pub fn set_config(repo: &Path, entries: &[(&str, &str)]) {
+    use std::io::Write;
+    let mut text = String::new();
+    for (name, value) in entries {
+        assert!(
+            !value.contains(['"', '\\', '#', ';', '\n']),
+            "{name} = {value}"
+        );
+        let (section, key) = name.rsplit_once('.').unwrap();
+        text.push_str(&format!("[{section}]\n\t{key} = {value}\n"));
+    }
+    let config = repo.join(".git/config");
+    let mut file = fs::OpenOptions::new().append(true).open(config).unwrap();
+    file.write_all(text.as_bytes()).unwrap();
+}
+
 /// [`repository_with`] the file `tracked`.
 pub fn repository(root: &Path, name: &str) -> PathBuf {
     repository_with(root, name, &[("tracked", "initial\n")])
@@ -146,9 +166,7 @@ pub fn repository_with(root: &Path, name: &str, files: &[(&str, &str)]) -> PathB
     fs::create_dir(&repo).unwrap();
     let repo = fs::canonicalize(repo).unwrap();
     git(&repo, &["init", "-b", "main"]);
-    for (name, value) in AUTHOR {
-        git(&repo, &["config", name, value]);
-    }
+    set_config(&repo, &AUTHOR);
     for (name, contents) in files {
         fs::write(repo.join(name), contents).unwrap();
     }

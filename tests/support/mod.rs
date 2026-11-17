@@ -19,7 +19,7 @@ pub mod zmx;
 #[allow(unused_imports)]
 pub use shoal_core::test_support::{
     git, git_with_identity, install_test_script, install_test_script_with_mode, printed,
-    repository_with,
+    repository_with, set_config,
 };
 
 use shoal_core::test_support::{copy_in_child, isolate};
