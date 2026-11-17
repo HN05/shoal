@@ -7,7 +7,11 @@ use super::*;
 use crate::{
     daemon::{
         events::{EventItem, EventKind},
-        links::wait::{branch_report::BranchReport, tests::register_watch},
+        links::wait::{
+            branch_report::BranchReport,
+            start::{Start, StartRead},
+            tests::register_watch,
+        },
         test_support::{configure, manager, repository},
         workspace_files::Attacher,
     },
@@ -121,6 +125,21 @@ impl Following {
         self.observe(&pr, pull("merged", merge_commit)).await
     }
 
+    /// Start the PR's watch from a read of it as `snapshot`, as `start`
+    /// selects, returning the updates it holds.
+    async fn start(&self, snapshot: Snapshot, start: Start) -> Vec<crate::forge::updates::Update> {
+        let read = StartRead {
+            start: self.manager.poll_start(),
+            reads: vec![(self.pr.clone(), snapshot)],
+        };
+        let id = &self.workspace.id;
+        (self.manager.record_watch_start(id, read, start))
+            .await
+            .unwrap();
+        let urls = [self.pr.clone()];
+        self.manager.pending_activity(id, &urls).await.unwrap()
+    }
+
     async fn follow(&self) {
         let space = LinkSpace::from(self.workspace.clone());
         self.manager.follow_merge_runs(&space).await.unwrap();
@@ -217,6 +236,29 @@ async fn a_merge_links_the_default_branchs_runs_for_its_merge_commit() {
     following.follow().await;
     assert_eq!(following.listings().len(), 2);
     assert_eq!(following.events(EventKind::NoMergeRuns).await, 0);
+}
+
+#[tokio::test]
+async fn a_restart_that_reads_the_merge_follows_it() {
+    let following = following(true, json!([listed_run("running")])).await;
+    let pr = following.pr.clone();
+    following.observe(&pr, pull("open", None)).await;
+    let merged = following.start(pull("merged", Some(MERGED)), Start::Every);
+    let merged = merged.await;
+    assert_eq!(merged[0].kind, UpdateKind::Merged, "{merged:?}");
+    assert!(following.awaits().await);
+    // The watch holds the merge, so PR cleanup counts it seen.
+    let unseen = following.manager.merge_unseen(&following.workspace.id);
+    assert!(!unseen.await.unwrap());
+}
+
+#[tokio::test]
+async fn linking_a_merged_pr_follows_its_merge() {
+    let following = following(true, json!([listed_run("running")])).await;
+    let merged = following.start(pull("merged", Some(MERGED)), Start::Unread);
+    let merged = merged.await;
+    assert_eq!(merged[0].kind, UpdateKind::Merged, "{merged:?}");
+    assert!(following.awaits().await);
 }
 
 #[tokio::test]
