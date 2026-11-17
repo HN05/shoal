@@ -54,3 +54,30 @@ async fn a_checkout_without_an_origin_selects_an_item_by_its_url() {
     assert_eq!(selected.items.len(), 1);
     assert_eq!(selected.items[0].url, url.parse().unwrap());
 }
+
+#[tokio::test]
+async fn a_view_of_nothing_needs_no_forge_behind_a_local_origin() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let bare = root.path().join("origin.git");
+    git(root.path(), &["init", "--bare", bare.to_str().unwrap()]);
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "local".into(), None, None, None)
+        .await
+        .unwrap();
+    git(
+        &checkout,
+        &["remote", "add", "origin", bare.to_str().unwrap()],
+    );
+    let target = ItemContext::space(SpaceSelector::id(&workspace.id)).into();
+
+    let viewed = manager
+        .view_items(&target, &Selection::default(), false, None)
+        .await
+        .unwrap();
+    assert!(viewed.items.is_empty());
+}

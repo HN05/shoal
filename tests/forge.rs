@@ -5200,6 +5200,11 @@ fn runs_of_another_repository_are_read_linked_and_acted_on_by_the_user() {
     let repository = fixture.web.replace("/team/project", "/other/project");
     let runs = fixture.ok(&["ci", "ls", "--repo", &repository]);
     assert_eq!(runs[0]["url"], other, "{runs}");
+    // A workflow's URL of another repository than --repo names starts none.
+    let workflow = format!("{repository}/actions?workflow=deps.yml");
+    let output = fixture.run(&["ci", "run", &workflow, "--repo", &fixture.web]);
+    assert!(!output.status.success(), "{}", printed(&output));
+    assert!(writes(&fixture).is_empty());
     let cancelled = fixture.ok(&["ci", "cancel", &other]);
     assert_eq!(cancelled["url"], other, "{cancelled}");
     assert_eq!(

@@ -47,9 +47,7 @@ pub(in crate::cli::commands) async fn select_item_target(
     item: Option<&ItemInput>,
 ) -> Result<RepoTarget> {
     if repo.is_some() {
-        let target = select_repo_context(ctx, repo).await?;
-        ensure_named_checkout_has(ctx, &target, item).await?;
-        return Ok(target);
+        return select_repo_context(ctx, repo).await;
     }
     let context = match known_item_context(ctx, space, item).await? {
         Some(context) => Some(context),
@@ -60,27 +58,6 @@ pub(in crate::cli::commands) async fn select_item_target(
         context,
         repository: None,
     })
-}
-
-/// Refuse the URL `item` of another repository than the registered one
-/// whose checkout `--repo` selected for `target`, which names it no further.
-async fn ensure_named_checkout_has(
-    ctx: &Context,
-    target: &RepoTarget,
-    item: Option<&ItemInput>,
-) -> Result<()> {
-    let (Some(ItemContext::Checkout(named)), None, Some(ItemInput::Url(item))) =
-        (&target.context, &target.repository, item)
-    else {
-        return Ok(());
-    };
-    let repos = crate::client::repositories::list(&ctx.paths).await?;
-    let own = crate::repository::registered_for_item(&repos, item).await?;
-    ensure!(
-        own.is_some_and(|repo| repo.id == *named),
-        "{item} is not of the repository --repo names; leave out --repo, or name the item by its number"
-    );
-    Ok(())
 }
 
 /// Where a command about the space's items runs without asking: in a chat
@@ -123,8 +100,8 @@ pub(in crate::cli::commands) async fn select_repo_context(
     ctx: &Context,
     repo: Option<String>,
 ) -> Result<RepoTarget> {
-    if let Some(checkout) = registered_checkout(ctx, repo.as_deref()).await? {
-        return Ok(checkout.into());
+    if let Some(target) = registered_target(ctx, repo.as_deref()).await? {
+        return Ok(target);
     }
     // Refuse a bad repository before the picker asks for anything.
     repo.as_deref().map(ForgeRepo::check_named).transpose()?;
@@ -162,9 +139,9 @@ pub(in crate::cli::commands) async fn select_open_context(
     repo: Option<String>,
 ) -> Result<RepoTarget> {
     if space.is_none()
-        && let Some(checkout) = registered_checkout(ctx, repo.as_deref()).await?
+        && let Some(target) = registered_target(ctx, repo.as_deref()).await?
     {
-        return Ok(checkout.into());
+        return Ok(target);
     }
     // Refuse a bad repository before the picker asks for anything.
     repo.as_deref().map(ForgeRepo::check_named).transpose()?;
@@ -205,16 +182,23 @@ async fn in_chat_outside_repositories(ctx: &Context) -> Result<bool> {
 
 /// The checkout of the registered repository `repo` names, where the user's
 /// command, or a chat's without a repository, acts without a workspace; a
-/// workspace process acts only through its own.
-async fn registered_checkout(ctx: &Context, repo: Option<&str>) -> Result<Option<ItemContext>> {
+/// workspace process acts only through its own. It also names the
+/// repository by its `origin`, so an item's, run's or workflow's URL of
+/// another one is refused rather than followed.
+async fn registered_target(ctx: &Context, repo: Option<&str>) -> Result<Option<RepoTarget>> {
     let Some(named) = repo else {
         return Ok(None);
     };
     if env::inherits_scope(&ctx.paths.state) && !in_chat_outside_repositories(ctx).await? {
         return Ok(None);
     }
-    let checkout = registered(ctx, named).await?;
-    Ok(checkout.map(|checkout| ItemContext::Checkout(checkout.id)))
+    let Some(checkout) = registered(ctx, named).await? else {
+        return Ok(None);
+    };
+    Ok(Some(RepoTarget {
+        repository: repository::remote_url_from_path(&checkout.path).await?,
+        context: Some(ItemContext::Checkout(checkout.id)),
+    }))
 }
 
 /// The chat this runs in, which a chat in a workspace's worktree is, else

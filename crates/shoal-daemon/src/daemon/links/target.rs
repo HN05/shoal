@@ -2,7 +2,7 @@
 //! the space or registered checkout it comes from, or another one its
 //! `--repo` or an item's, run's or workflow's URL names, registered or not.
 //! Every caller reads another repository; only the user changes one.
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Result, bail, ensure};
 
 use super::place::{Access, Place};
 use crate::{
@@ -27,16 +27,17 @@ pub(in crate::daemon) const ELSEWHERE: &str = "agents change issues, PRs and CI 
 /// What a request names when nothing gives it a repository.
 const NO_REPOSITORY: &str = "name the repository with --repo, or the item by its URL";
 
-/// Why a request in its own repository reaches no forge.
-const NO_ORIGIN: &str = "forge actions need an origin remote";
+/// The refusal of a URL of another repository than the one `--repo` names.
+const CONFLICTING: &str = "the URL names another repository than --repo; leave out --repo";
 
 /// The repository a request acts in and where the request came from.
 pub(in crate::daemon::links) struct ForgeTarget {
     /// The space or registered checkout the request came from, if any.
     pub origin: Option<Place>,
-    /// None in the request's own repository when its checkout or worktree
-    /// has no `origin`, which leaves it only what it links.
-    forge: Option<ForgeRepo>,
+    /// An error in the request's own repository when its checkout or
+    /// worktree has no `origin` on a forge, which leaves it only what it
+    /// links.
+    forge: Result<ForgeRepo>,
     /// Whether the request acts in the repository of `origin`.
     pub own: bool,
 }
@@ -44,12 +45,12 @@ pub(in crate::daemon::links) struct ForgeTarget {
 impl ForgeTarget {
     /// The forge of the repository the request acts in.
     pub(in crate::daemon::links) fn forge(&self) -> Result<&ForgeRepo> {
-        self.forge.as_ref().context(NO_ORIGIN)
+        (self.forge.as_ref()).map_err(|error| anyhow::anyhow!("{error:#}"))
     }
 
     /// [`Self::forge`], taken.
     pub(in crate::daemon::links) fn into_forge(self) -> Result<ForgeRepo> {
-        self.forge.context(NO_ORIGIN)
+        self.forge
     }
 
     /// The place the request acts in as its own repository.
@@ -74,17 +75,29 @@ impl Manager {
             Some(context) => self.origin(context, access).await?,
             None => None,
         };
-        let own = match &origin {
-            Some(place) => self.origin_forge_if_any(place).await?,
-            None => None,
+        let own_forge = match &origin {
+            Some(place) => self.origin_forge(place.origin_path()).await,
+            None => Err(anyhow::anyhow!(NO_REPOSITORY)),
         };
-        let forge = match (target.repository.as_deref(), named) {
-            (Some(repository), _) => Some(self.target_named(own.as_ref(), repository).await?),
-            (None, Some(named)) => Some(named),
-            (None, None) if origin.is_some() => own.clone(),
-            (None, None) => bail!(NO_REPOSITORY),
+        // The origin's forge is needed only where something else is named
+        // to compare it with, or where the request reaches the forge.
+        let (forge, own) = match (target.repository.as_deref(), named) {
+            (None, None) => {
+                ensure!(origin.is_some(), NO_REPOSITORY);
+                (own_forge, true)
+            }
+            (Some(repository), named) => {
+                let forge = self.target_named(own_forge.as_ref().ok(), repository);
+                let forge = forge.await?;
+                ensure!(named.is_none_or(|named| named == forge), CONFLICTING);
+                let own = own_forge.as_ref().ok() == Some(&forge);
+                (Ok(forge), own)
+            }
+            (None, Some(named)) => {
+                let own = own_forge.as_ref().ok() == Some(&named);
+                (Ok(named), own)
+            }
         };
-        let own = forge.is_none() || own == forge;
         ensure!(own || access == Access::Read || caller.is_none(), ELSEWHERE);
         Ok(ForgeTarget { origin, forge, own })
     }
@@ -166,16 +179,6 @@ impl Manager {
             return Ok(None);
         }
         self.place(context, access).await.map(Some)
-    }
-
-    /// The forge of the place's `origin`, or none for a checkout or
-    /// worktree without one, which has no repository on a forge to act in.
-    async fn origin_forge_if_any(&self, place: &Place) -> Result<Option<ForgeRepo>> {
-        let remote = crate::repository::remote_url_from_path(place.origin_path()).await?;
-        match remote {
-            Some(remote) => Ok(Some(self.forge(&remote).await?)),
-            None => Ok(None),
-        }
     }
 
     /// The repository `named` names: by URL on any forge, or as OWNER/NAME
