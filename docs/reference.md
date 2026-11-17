@@ -3417,7 +3417,9 @@ commits after its starting commit, with their subjects and for a branch the
 `git rebase` that moves them; uncommitted changes, by path, to commit, stash or
 discard; for a [copy](#copies), commits since it was copied and files that
 differ from those it started with, as cleanup compares them, with `shoal start
---copy` for a fresh copy. Nothing refreshes on its own.
+--copy` for a fresh copy. Nothing else refreshes on its own, except that an
+agent the [queue](#agent-queue) admits in a workspace whose branch holds nothing
+of its own starts on that branch fast-forwarded as a refresh would.
 
 A copy is copied again in place, as `--copy` copies: the source must pass the
 same checks, and a removed source is refused. A [checkpoint](#checkpoints-and-restore)
