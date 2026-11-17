@@ -192,6 +192,22 @@ impl Manager {
         }
     }
 
+    /// Refuse `caller` the actions `key` governs in `repository` unless its
+    /// space's permission is `direct`, for an action that cannot wait for a
+    /// decision.
+    pub(crate) async fn refuse_undirected(
+        &self,
+        caller: &Caller,
+        key: PermissionKey,
+        repository: Option<&RepositoryId>,
+    ) -> Result<()> {
+        let permissions = self.space_permissions(&caller.space_id, repository).await?;
+        match permissions.acting(key) {
+            Acting::Direct => Ok(()),
+            Acting::Propose | Acting::Deny => Err(denied(key.as_str(), &permissions, key)),
+        }
+    }
+
     /// Refuse `caller` `action` as a check before taking it, which a
     /// request of its own takes: as [`Self::authorize_action`] does, but an
     /// approval stays for that request to use up.

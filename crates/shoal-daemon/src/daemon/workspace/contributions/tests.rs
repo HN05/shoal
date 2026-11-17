@@ -317,17 +317,19 @@ async fn a_restarted_daemon_keeps_contributions_while_their_holds_resume() {
 }
 
 #[tokio::test]
-async fn a_scoped_caller_resumes_a_hold_only_where_it_may_administer() {
+async fn a_scoped_caller_resumes_a_hold_only_where_it_administers_directly() {
     use crate::daemon::{scope::Caller, test_support::chat};
     use crate::protocol::RepositoryMethod;
     let (root, manager) = manager().await;
     let repo = contribution(&manager, root.path()).await;
     let config = "[modes.chat.permissions]\nadmin = 'deny'\n\
-                  [modes.plan.permissions]\nadmin = 'propose'\n";
+                  [modes.worker.permissions]\nadmin = 'propose'\n\
+                  [modes.plan.permissions]\nadmin = 'direct'\n";
     (manager.write_local_config(&repo.id, Some(config.into())))
         .await
         .unwrap();
-    for (mode, allowed) in [("chat", false), ("plan", true)] {
+    // A resumed hold proves no registration, so it never waits for approval.
+    for (mode, allowed) in [("chat", false), ("worker", false), ("plan", true)] {
         let space = chat(&manager, mode, mode, Some(&repo), None).await;
         let caller = Caller {
             space_id: space.id,

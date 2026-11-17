@@ -164,12 +164,14 @@ impl Scoped for RepositoryMethod {
     ) -> Result<Option<&mut SpaceSelector>> {
         let repository = match self {
             RepositoryMethod::ListRepositories => return Ok(None),
-            // It resumes a registration's hold, which a scoped caller makes
-            // only where it may administer: asking again for the approval
-            // the registration took would leave the contribution unheld.
+            // Nothing binds it to the registration it resumes, so a scoped
+            // caller holds only where it administers without approval; one
+            // that waited for a decision would leave the contribution unheld.
             RepositoryMethod::HoldContribution { repository } => {
                 let key = PermissionKey::Admin;
-                manager.refuse_denied(caller, key, Some(repository)).await?;
+                manager
+                    .refuse_undirected(caller, key, Some(repository))
+                    .await?;
                 return Ok(None);
             }
             // The inbox lists them with the user's notifications.
