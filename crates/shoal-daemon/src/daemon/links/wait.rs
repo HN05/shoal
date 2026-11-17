@@ -7,6 +7,7 @@ pub(crate) use self::{
     activity::{OwnChange, record_own_change},
     items::{followed_items, linked_items, open_prs, watches_open_pr},
     merge_runs::awaits_merge_runs,
+    start::WatchStarts,
     waits::ActiveWaits,
 };
 use crate::daemon::agent_messages::AgentMessage;

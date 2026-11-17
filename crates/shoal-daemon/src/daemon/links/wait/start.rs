@@ -2,6 +2,14 @@
 //! links them and when an agent begins a new session there, so they report
 //! only what changes after that: what the items held before is their
 //! history, which `shoal view` shows.
+use std::{
+    collections::HashMap,
+    sync::{
+        Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
+};
+
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 
@@ -17,6 +25,71 @@ use crate::{
 };
 use shoal_forge::updates::Snapshot;
 
+/// When a poll of item activity began: its time, which the space's own
+/// changes are compared with, and its place among the daemon's reads,
+/// which tells it from a watch's start read made in the same second.
+#[derive(Clone, Copy)]
+pub(crate) struct PollStart {
+    pub(super) at: UnixTime,
+    read: u64,
+}
+
+impl PollStart {
+    /// Its place among the daemon's reads.
+    pub(super) fn read(self) -> u64 {
+        self.read
+    }
+}
+
+/// The daemon's reads of items for watches, numbered in the order they
+/// began, and the read each watch last started from. A read in flight
+/// ends with the daemon, so none of this outlives it.
+#[derive(Default)]
+pub(crate) struct WatchStarts {
+    reads: AtomicU64,
+    started: Mutex<HashMap<(SpaceId, String), u64>>,
+}
+
+impl WatchStarts {
+    /// The number of a read beginning now.
+    fn begin(&self) -> u64 {
+        self.reads.fetch_add(1, Ordering::SeqCst)
+    }
+
+    /// Note that the watches of the space `id` of `urls` started from `read`.
+    fn started(&self, id: &SpaceId, urls: Vec<String>, read: u64) {
+        let mut started = self
+            .started
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        for url in urls {
+            started.insert((id.to_owned(), url), read);
+        }
+    }
+
+    /// Which of `urls` the space `id` started watching from a read that
+    /// began after `read`, so a poll that began at `read` may show them
+    /// before it.
+    pub(super) fn stale<'a>(
+        &self,
+        id: &SpaceId,
+        urls: impl Iterator<Item = &'a String>,
+        read: u64,
+    ) -> Vec<String> {
+        let started = self
+            .started
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        urls.filter(|url| {
+            started
+                .get(&(id.to_owned(), (*url).clone()))
+                .is_some_and(|start| *start > read)
+        })
+        .cloned()
+        .collect()
+    }
+}
+
 /// Which of a space's watches a read starts.
 #[derive(Clone, Copy)]
 enum Start {
@@ -27,6 +100,19 @@ enum Start {
 }
 
 impl Manager {
+    /// The start of a poll of item activity beginning now.
+    pub(super) fn poll_start(&self) -> PollStart {
+        self.poll_start_at(UnixTime::now())
+    }
+
+    /// The start of a poll beginning now as if at `at`.
+    pub(super) fn poll_start_at(&self, at: UnixTime) -> PollStart {
+        PollStart {
+            at,
+            read: self.watch_starts.begin(),
+        }
+    }
+
     /// Start the watches of `items`, which the space `id` just linked, from
     /// a read of each, unless one already read its item, for a caller
     /// holding the space's PR gate. An item the forge does not read in full
@@ -55,33 +141,35 @@ impl Manager {
         if items.is_empty() {
             return Ok(());
         }
-        let read_at = UnixTime::now();
+        let read = self.poll_start();
         let reads = self.complete_reads(items).await;
-        let id = id.to_owned();
+        let owned = id.to_owned();
         let started = self
             .store
-            .write(move |tx| start_followed(tx, &id, reads, read_at, start))
+            .write(move |tx| start_followed(tx, &owned, reads, read.at, start))
             .await?;
-        if started {
+        if started.iter().any(|(_, queued)| *queued) {
             self.signals.item_updates_queued();
         }
+        let urls = started.into_iter().map(|(url, _)| url).collect();
+        self.watch_starts.started(id, urls, read.read());
         Ok(())
     }
 }
 
 /// Start the watches `start` selects of the space `id` from `reads`, made
 /// by lookups that began at `read_at`, of the items it still follows.
-/// Returns whether one queued an update.
+/// Returns the URL of each started watch and whether it queued an update.
 fn start_followed(
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
     reads: Vec<(String, Snapshot)>,
     read_at: UnixTime,
     start: Start,
-) -> Result<bool> {
+) -> Result<Vec<(String, bool)>> {
     // A workspace links its issue while it is set up.
     crate::daemon::links::ensure_accepts_links(tx, id)?;
-    let mut queued = false;
+    let mut started = Vec::new();
     for (url, snapshot) in reads {
         if !follows(tx, id, &url)? {
             continue;
@@ -91,10 +179,10 @@ fn start_followed(
             continue;
         }
         record.start_from(snapshot, &url, read_at);
-        queued |= !record.pending.is_empty();
         save_cursor_record(tx, id, &url, &record)?;
+        started.push((url, !record.pending.is_empty()));
     }
-    Ok(queued)
+    Ok(started)
 }
 
 #[cfg(test)]

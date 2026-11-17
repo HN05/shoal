@@ -9,6 +9,7 @@ use super::{
     branch_report::{BranchReport, branch_report},
     items::{polled_items, watches_open_pr},
     merge_runs::{MergeTarget, follow_merge, merge_run_spaces},
+    start::PollStart,
 };
 use crate::{
     daemon::{
@@ -98,7 +99,7 @@ impl Manager {
         if items.is_empty() {
             return Ok(());
         }
-        let observed_at = UnixTime::now();
+        let start = self.poll_start();
         let report = branch_report(&items);
         let items = self.items_to_look_up(space, items).await?;
         let activity = self.item_activity(items, &Selection::default()).await;
@@ -114,7 +115,7 @@ impl Manager {
             }
             Err(error) => Err(error),
         };
-        self.queue_background_updates(&space.id, observations, observed_at)
+        self.queue_background_updates(&space.id, observations, start)
             .await?;
         looked_up
     }
@@ -164,13 +165,13 @@ impl Manager {
         &self,
         id: &SpaceId,
         observations: Vec<(String, Snapshot)>,
-        observed_at: UnixTime,
+        start: PollStart,
     ) -> Result<()> {
         let all = Selection::default();
         // A background poll checks the branch only beside a linked PR.
         let report = BranchReport::ChangedOnBothSides;
         let updates = self
-            .record_observed(id, observations, &all, report, observed_at)
+            .record_observed(id, observations, &all, report, start)
             .await?;
         if !updates.is_empty() {
             self.signals.item_updates_queued();

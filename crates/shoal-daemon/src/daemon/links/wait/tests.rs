@@ -79,7 +79,7 @@ impl Manager {
     ) -> Result<Vec<Update>> {
         let report = BranchReport::Conflicts;
         let now = UnixTime::now();
-        self.record_observed(id, observations, selection, report, now)
+        self.record_observed(id, observations, selection, report, self.poll_start_at(now))
             .await
     }
 
@@ -362,7 +362,7 @@ async fn background_activity_queues_for_the_agents_hooks() {
         .queue_background_updates(
             &workspace.id,
             vec![(PR.as_str().into(), snapshot("first"))],
-            crate::time::UnixTime::now(),
+            manager.poll_start(),
         )
         .await
         .unwrap();
@@ -435,7 +435,7 @@ async fn a_chats_hooks_receive_the_activity_on_its_items() {
         .queue_background_updates(
             &chat.id,
             vec![(PR.as_str().into(), snapshot("first"))],
-            crate::time::UnixTime::now(),
+            manager.poll_start(),
         )
         .await
         .unwrap();
@@ -500,7 +500,7 @@ async fn a_chat_receives_the_activity_of_the_workspaces_below_it_without_an_agen
         .queue_background_updates(
             &worker.id,
             vec![(WORKER_PR.as_str().into(), snapshot("first"))],
-            crate::time::UnixTime::now(),
+            manager.poll_start(),
         )
         .await
         .unwrap();
@@ -574,7 +574,7 @@ async fn a_chat_without_a_repository_waits_for_the_activity_below_it() {
         .queue_background_updates(
             &below.id,
             vec![(PR.as_str().into(), snapshot("first"))],
-            crate::time::UnixTime::now(),
+            manager.poll_start(),
         )
         .await
         .unwrap();
@@ -621,7 +621,7 @@ async fn chat_above_linked_workspace(manager: &Arc<Manager>, root: &std::path::P
         (ISSUE.as_str().into(), snapshot("on the issue")),
     ];
     manager
-        .queue_background_updates(&below.id, observed, UnixTime::now())
+        .queue_background_updates(&below.id, observed, manager.poll_start())
         .await
         .unwrap();
     chat.id
@@ -782,7 +782,7 @@ async fn hook_delivery_does_not_wait_for_the_pr_gate() {
         .queue_background_updates(
             &workspace.id,
             vec![(PR.as_str().into(), snapshot("first"))],
-            crate::time::UnixTime::now(),
+            manager.poll_start(),
         )
         .await
         .unwrap();
@@ -850,7 +850,7 @@ async fn hook_delivery_waits_only_for_the_workspaces_it_reads() {
         .queue_background_updates(
             &child.id,
             vec![(CHILD_PR.as_str().into(), snapshot("first"))],
-            crate::time::UnixTime::now(),
+            manager.poll_start(),
         )
         .await
         .unwrap();
@@ -939,7 +939,7 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
             .queue_background_updates(
                 &workspace.id,
                 vec![(url.into(), snapshot("first"))],
-                crate::time::UnixTime::now(),
+                manager.poll_start(),
             )
             .await
             .unwrap();
@@ -959,7 +959,8 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
     );
     let observation = vec![(child.branch().unwrap().to_string(), changed)];
     let now = crate::time::UnixTime::now();
-    let queued = manager.queue_background_updates(&child.id, observation, now);
+    let queued =
+        manager.queue_background_updates(&child.id, observation, manager.poll_start_at(now));
     queued.await.unwrap();
     let delivered = manager
         .agent_updates(&SpaceSelector::id(&parent.id))
@@ -1070,7 +1071,7 @@ async fn acknowledging_child_updates_leaves_them_to_a_running_child_wait() {
             .queue_background_updates(
                 &workspace.id,
                 vec![(url.into(), snapshot("first"))],
-                crate::time::UnixTime::now(),
+                manager.poll_start(),
             )
             .await
             .unwrap();
@@ -1511,7 +1512,7 @@ async fn an_idle_agent_wakes_once_for_a_heads_passing_checks() {
             .queue_background_updates(
                 &workspace.id,
                 vec![(PR.as_str().into(), snapshot)],
-                crate::time::UnixTime::now(),
+                manager.poll_start(),
             )
             .await
             .unwrap();
@@ -1577,7 +1578,7 @@ async fn passes_held_past_one_response_are_delivered_in_parts() {
             .queue_background_updates(
                 &workspace.id,
                 vec![(PR.as_str().into(), checks_at("a", &checks))],
-                crate::time::UnixTime::now(),
+                manager.poll_start(),
             )
             .await
             .unwrap();
@@ -1665,7 +1666,7 @@ async fn own_changes_are_not_reported_back_to_the_workspace() {
         vec![(PR.as_str().into(), stale)],
         &all,
         report,
-        UnixTime::from_seconds(0),
+        manager.poll_start_at(UnixTime::from_seconds(0)),
     );
     assert!(before.await.unwrap().is_empty());
     let own = json!({"discussion:1": "theirs", "discussion:2": "mine"});
@@ -1705,7 +1706,7 @@ async fn edits_are_reported_except_the_workspaces_own() {
             observation,
             &all,
             BranchReport::Conflicts,
-            at,
+            manager.poll_start_at(at),
         )
     };
     let now = crate::time::UnixTime::now();
@@ -1770,9 +1771,14 @@ async fn observe_issue(fixture: &Fixture, assignees: &[&str], seconds: u64) -> V
     let at = UnixTime::now() + Duration::from_secs(seconds);
     let id = &fixture.workspaces[0].id;
     let report = BranchReport::Conflicts;
-    (fixture
-        .manager
-        .record_observed(id, vec![(url, snapshot)], &Selection::default(), report, at))
+    let start = fixture.manager.poll_start_at(at);
+    (fixture.manager.record_observed(
+        id,
+        vec![(url, snapshot)],
+        &Selection::default(),
+        report,
+        start,
+    ))
     .await
     .unwrap()
 }
@@ -1882,7 +1888,7 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
         let observation = vec![(CHILD_PR.as_str().into(), based(base))];
         // Each poll starts after the changes before it.
         let later = UnixTime::now() + Duration::from_secs(1);
-        manager.queue_background_updates(&child.id, observation, later)
+        manager.queue_background_updates(&child.id, observation, manager.poll_start_at(later))
     };
     let retarget = |from: &'static str, to: &'static str| {
         let manager = &manager;
@@ -2171,7 +2177,7 @@ async fn messages_queued_during_a_wait_come_with_its_updates() {
         .queue_background_updates(
             &child.id,
             vec![(CHILD_PR.as_str().into(), snapshot("first"))],
-            crate::time::UnixTime::now(),
+            manager.poll_start(),
         )
         .await
         .unwrap();
@@ -3057,7 +3063,7 @@ async fn background_polls_a_finished_run_until_its_finish_is_queued() {
     assert_eq!(urls(&polled().await.unwrap()), [RUN.as_str()]);
     // The next poll queues it for the agent's hooks, which ends the polling.
     manager
-        .queue_background_updates(&id, finished, crate::time::UnixTime::now())
+        .queue_background_updates(&id, finished, manager.poll_start())
         .await
         .unwrap();
     assert!(polled().await.unwrap().is_empty());

@@ -113,6 +113,8 @@ pub struct Manager {
     pub(crate) place_ownership: tokio::sync::Mutex<()>,
     pub gates: gates::Gates,
     pub(crate) waits: crate::daemon::links::wait::ActiveWaits,
+    /// The reads of items for watches, and those watches started from.
+    pub(crate) watch_starts: crate::daemon::links::wait::WatchStarts,
     pub(super) cleanup_health: super::cleanup::CleanupHealth,
     /// The spaces automatic cleanup removed since Shoal's log recorded it.
     pub(crate) cleanup_removals: super::cleanup::Removed,
@@ -186,6 +188,7 @@ impl Manager {
         Ok(Arc::new(Self {
             config_state: config_state::ConfigState::new(config),
             waits: Default::default(),
+            watch_starts: Default::default(),
             cleanup_health: Default::default(),
             cleanup_removals: Default::default(),
             syncs: Default::default(),

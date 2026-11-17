@@ -12,6 +12,7 @@ use super::{
     delivery::receiving,
     framing::own_batch,
     items::activity_ended,
+    start::PollStart,
 };
 use crate::{
     daemon::{links::space::LinkSpace, notifications::NotificationKind, workspace::Manager},
@@ -100,7 +101,7 @@ impl Manager {
             return Ok(pending);
         }
         drop(guard);
-        let observed_at = UnixTime::now();
+        let start = self.poll_start();
         let items = self.items_to_look_up(&space, items).await?;
         let items = self.item_activity(items, selection).await;
         let mut observations = Vec::new();
@@ -111,7 +112,7 @@ impl Manager {
             Ok(items) => {
                 observations.splice(0..0, items);
                 let mut updates = self
-                    .deliver_observed(id, observations, selection, report, observed_at)
+                    .deliver_observed(id, observations, selection, report, start)
                     .await?;
                 self.summarize_failed_checks(&SpaceSelector::id(id), &mut updates)
                     .await;
@@ -120,7 +121,7 @@ impl Manager {
             // A failed item lookup must not hold back the branch's conflicts.
             Err(error) => {
                 let updates = self
-                    .deliver_observed(id, observations, selection, report, observed_at)
+                    .deliver_observed(id, observations, selection, report, start)
                     .await?;
                 if updates.is_empty() {
                     self.notify_rate_limit(&error).await;
@@ -139,10 +140,10 @@ impl Manager {
         observations: Vec<(String, Snapshot)>,
         selection: &Selection,
         report: BranchReport,
-        observed_at: UnixTime,
+        start: PollStart,
     ) -> Result<Vec<Update>> {
         let updates = self
-            .record_observed(id, observations, selection, report, observed_at)
+            .record_observed(id, observations, selection, report, start)
             .await?;
         self.fit_response(own_batch(id, updates), 0).await
     }

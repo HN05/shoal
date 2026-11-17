@@ -83,8 +83,7 @@ fn own_changes_are_not_reported_back() {
 fn a_start_reports_the_condition_of_an_item_never_read_but_not_its_comments() {
     let mut record = WatchRecord::default();
     let earlier = json!({"discussion:1": "one", "discussion:2": "two"});
-    let read_at = UnixTime::from_seconds(10);
-    record.start_from(snapshot(earlier, "closed"), "pr", read_at);
+    record.start_from(snapshot(earlier, "closed"), "pr", UnixTime::EPOCH);
     assert_eq!(
         record
             .pending
@@ -94,15 +93,11 @@ fn a_start_reports_the_condition_of_an_item_never_read_but_not_its_comments() {
         [UpdateKind::Closed]
     );
     record.pending.clear();
-    // A poll that started before the read may show the item before it.
-    let stale = snapshot(json!({"discussion:1": "one"}), "closed");
-    let before = UnixTime::from_seconds(9);
-    assert!(record.observe(stale, "pr", before).is_empty());
     let later = json!({"discussion:1": "one", "discussion:2": "two", "discussion:3": "three"});
-    let updates = record.observe(snapshot(later, "closed"), "pr", UnixTime::MAX);
-    assert_eq!(
-        updates[0].message,
-        "1 new comment; read them with shoal view pr"
+    let updates = record.observe(snapshot(later, "closed"), "pr", UnixTime::EPOCH);
+    assert!(
+        updates[0].message.starts_with("1 new comment;"),
+        "{updates:?}"
     );
 }
 
@@ -141,24 +136,6 @@ fn a_restart_reports_a_condition_its_read_first_shows() {
             .collect::<Vec<_>>(),
         [UpdateKind::Closed]
     );
-}
-
-#[test]
-fn a_poll_that_started_before_the_start_stays_stale_after_a_newer_one() {
-    let mut record = WatchRecord::default();
-    let read = json!({"discussion:1": "one", "discussion:2": "two"});
-    let read_at = UnixTime::from_seconds(10);
-    record.start_from(snapshot(read.clone(), "open"), "pr", read_at);
-    let newer = UnixTime::from_seconds(11);
-    assert!(
-        record
-            .observe(snapshot(read, "open"), "pr", newer)
-            .is_empty()
-    );
-    let stale = snapshot(json!({"discussion:1": "one"}), "open");
-    let older = UnixTime::from_seconds(9);
-    assert!(record.observe(stale, "pr", older).is_empty());
-    assert_eq!(record.snapshot.comments.len(), 2);
 }
 
 #[test]

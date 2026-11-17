@@ -105,7 +105,7 @@ impl Following {
                 observations,
                 &Selection::default(),
                 BranchReport::Conflicts,
-                UnixTime::now(),
+                self.manager.poll_start(),
             )
             .await
             .unwrap()

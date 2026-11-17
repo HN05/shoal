@@ -11,6 +11,7 @@ use super::{
     },
     items::{NO_LINKED_ITEMS, followed_items, links_kind},
     merge_runs::{MergeTarget, follow_reported_merge},
+    start::PollStart,
 };
 use crate::{
     daemon::{links::space::require_ready_space, workspace::Manager},
@@ -25,27 +26,30 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
-    /// Record `observations` from a poll that started at `observed_at`,
-    /// which checked the branch for `report`.
+    /// Record `observations` from a poll that began at `start`, which
+    /// checked the branch for `report`.
     pub(super) async fn record_observed(
         &self,
         id: &SpaceId,
         observations: Vec<(String, Snapshot)>,
         selection: &Selection,
         report: BranchReport,
-        observed_at: UnixTime,
+        start: PollStart,
     ) -> Result<Vec<Update>> {
         let _guard = self.gates.lock_prs([id]).await;
         // Checked before recording, so a change that starts later comes
         // after the poll's read, and one that ended was recorded first.
         let changing = self.assignees_changing(&observations);
         let merges = self.merge_target(id, &observations).await?;
+        let urls = observations.iter().map(|(url, _)| url);
+        let stale = self.watch_starts.stale(id, urls, start.read());
         let poll = Poll {
             selection: selection.clone(),
             report,
-            observed_at,
+            observed_at: start.at,
             changing,
             merges,
+            stale,
         };
         let id = id.to_owned();
         let agents = self.tracked_agents().await;
@@ -125,6 +129,9 @@ struct Poll {
     changing: Vec<String>,
     /// Where the merges the poll saw are followed, when they are.
     merges: Option<MergeTarget>,
+    /// The observed items whose watch started from a read that began after
+    /// the poll, which it may show them before.
+    stale: Vec<String>,
 }
 
 /// Record `observations` from `poll` on the cursor of the space `id` in one
@@ -142,10 +149,8 @@ fn record_observations(
     let followed = recorded_urls(tx, id, poll, agents)?;
     let mut updates = Vec::new();
     for (url, snapshot) in observations {
-        if followed
-            .as_ref()
-            .is_some_and(|followed| !followed.contains(&url))
-        {
+        let unfollowed = (followed.as_ref()).is_some_and(|followed| !followed.contains(&url));
+        if unfollowed || poll.stale.contains(&url) {
             continue;
         }
         let mut record = cursor_record(tx, id, &url)?.unwrap_or_default();

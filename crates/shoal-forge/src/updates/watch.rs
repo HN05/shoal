@@ -27,10 +27,6 @@ pub struct WatchRecord {
     own_change_at: Option<UnixTime>,
     #[serde(default, skip_serializing_if = "HeldPasses::is_empty")]
     held: HeldPasses,
-    /// When the read the watch started from began; observations that
-    /// started before then may show the item before it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    started_at: Option<UnixTime>,
 }
 
 impl WatchRecord {
@@ -41,7 +37,7 @@ impl WatchRecord {
     /// its condition since the watch last read it, such as a failed check,
     /// a conflict or its closing, are reported, and of the updates not yet
     /// acknowledged only those of its condition stay.
-    pub fn start_from(&mut self, mut snapshot: Snapshot, url: &str, read_at: UnixTime) {
+    pub fn start_from(&mut self, mut snapshot: Snapshot, url: &str, _read_at: UnixTime) {
         snapshot.normalize(&self.snapshot, UnixTime::now());
         // The read shows the space's own comments it has, which no later
         // change may be taken for.
@@ -51,7 +47,6 @@ impl WatchRecord {
         condition.retain(|update| of_condition(update.kind));
         (self.pending).extend(one_delivery(self.held.deliver(&snapshot, condition)));
         self.snapshot = snapshot;
-        self.started_at = Some(read_at);
     }
 
     /// Whether the watch has read its item.
@@ -71,13 +66,6 @@ impl WatchRecord {
     ) -> Vec<Update> {
         if !self.pending.is_empty() {
             return self.pending.clone();
-        }
-        // A poll that started before the read the watch started from may
-        // have read the item before it, however late it finishes. One that
-        // started in the same second is taken as after it, so a watch that
-        // follows at once is not held back a whole poll.
-        if self.started_at.is_some_and(|at| observed_at < at) {
-            return Vec::new();
         }
         snapshot.normalize(&self.snapshot, UnixTime::now());
         self.discount_own_changes(&mut snapshot, observed_at);
