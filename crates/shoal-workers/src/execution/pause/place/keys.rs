@@ -1,6 +1,6 @@
 //! The keys an asleep agent's place reads: its terminal without echo, line
-//! editing or signal keys, so typing never garbles the status screen and
-//! Ctrl-C reaches the screen as a key.
+//! editing or signal keys, so typing never garbles the status block and
+//! Ctrl-C reaches the block as a key.
 use std::{
     ffi::CStr,
     fs::File,
@@ -32,7 +32,7 @@ pub(super) struct Keys {
 }
 
 impl Keys {
-    /// Read the keys of the terminal on standard input when the screen shows
+    /// Read the keys of the terminal on standard input when the block shows
     /// on standard error and the wrapper holds it in the foreground, as it
     /// does once its agent stopped; `None` otherwise.
     pub(super) fn open() -> Option<Self> {
@@ -138,7 +138,7 @@ fn stdin_terminal() -> Result<std::path::PathBuf> {
 }
 
 /// Discard input not yet read, which was typed to the agent before it
-/// stopped, so only keys pressed at the screen count.
+/// stopped, so only keys pressed at the block count.
 fn discard_typed(terminal: &File) {
     // SAFETY: tcflush only drops the terminal's queued input.
     unsafe {

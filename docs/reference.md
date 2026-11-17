@@ -594,9 +594,9 @@ until `shoal restore`. `shoal list` shows an asleep agent's space as `asleep`,
 the [inbox](#inbox) lists it, and `shoal status` adds an `Asleep` line with
 why it sleeps, what wakes it, and `shoal attach` and `shoal queue start`, which
 wake it now; `--json` gives `asleep` with `reason` and `wakes_when`. Where an
-asleep agent's wrapper waits in a terminal for its restore, it clears what the
-agent's interface left there and shows the agent asleep, with why and when it
-resumes, ignoring other keys: Enter wakes the agent there, as
+asleep agent's wrapper waits in a terminal for its restore, it keeps what the
+agent last showed and draws a block under it saying what wakes the agent and
+why it sleeps, ignoring other keys: Enter wakes the agent there, as
 `shoal queue start` does, once its processes have stopped, and Ctrl-C stops
 the wait, leaving the agent stopped for `shoal restore`.
 

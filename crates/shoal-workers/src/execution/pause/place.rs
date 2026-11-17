@@ -1,7 +1,7 @@
 //! The place an asleep agent's wrapper waits in for its restore: on a
-//! terminal it holds, a status screen saying why the agent sleeps and when
-//! it resumes, which reads the keys that wake or stop it; elsewhere, lines
-//! on standard error.
+//! terminal it holds, a status block under the agent's last output saying
+//! why the agent sleeps and what wakes it, which reads the keys that wake or
+//! stop it; elsewhere, lines on standard error.
 mod keys;
 mod screen;
 
@@ -14,7 +14,7 @@ use crate::protocol::Protection;
 pub(in super::super) struct Place(Shown);
 
 enum Shown {
-    /// The status screen on a terminal the wrapper holds in the foreground.
+    /// The status block on a terminal the wrapper holds in the foreground.
     Terminal { screen: Screen, keys: Keys },
     /// Lines on standard error, which reads no keys.
     Lines,
@@ -30,7 +30,7 @@ impl Place {
             );
             return Self(Shown::Lines);
         };
-        let screen = Screen::new(protection);
+        let mut screen = Screen::new(protection);
         screen.open();
         Self(Shown::Terminal { screen, keys })
     }

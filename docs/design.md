@@ -309,7 +309,7 @@ background commands ended; configured restore commands receive that prompt throu
 `{prompt}`. Never replay the original task prompt. Keep waiting wrappers tracked; they reattach
 like running commands, so a daemon restart or crash hands the wait to the next
 daemon instead of cancelling the restore. A waiting wrapper's session shows
-the agent asleep, and Enter there starts its queued restore, as the user at
+the agent asleep under what it last showed, and Enter there starts its queued restore, as the user at
 the agent's place asks for it; the wrapper asks over its own connection,
 which only that execution's wrapper holds, so a scope token it inherited
 does not decide it. `attach` to that session starts the restore
