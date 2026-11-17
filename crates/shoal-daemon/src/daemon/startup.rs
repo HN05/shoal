@@ -17,7 +17,9 @@ use tokio::{
 };
 
 use super::{Server, connections, file_access::FileAccess, log, read_request, serve_request};
-use crate::protocol::{self, Body, DaemonMethod, ErrorCode, Method, Operation, Response, timing};
+use crate::protocol::{
+    self, Body, DaemonMethod, ErrorCode, Method, Operation, PRIVACY_PROMPT, Response, timing,
+};
 
 /// A check of a path that has run this long is named in a status answer.
 const SLOW_ACCESS: Duration = Duration::from_secs(5);
@@ -186,9 +188,8 @@ fn waiting(access: &FileAccess) -> Option<String> {
             )
         }
     };
-    Some(format!(
-        "{waiting}; the system may be slow, or a macOS privacy prompt may be waiting for an answer"
-    ))
+    let prompt = PRIVACY_PROMPT.map_or(String::new(), |prompt| format!(", or {prompt}"));
+    Some(format!("{waiting}; the system may be slow{prompt}"))
 }
 
 /// The server once startup has finished, or `None` once it failed.

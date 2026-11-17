@@ -21,7 +21,12 @@ async fn a_check_that_runs_out_stalls_its_directory_once_until_a_recheck_finishe
     let access = FileAccess::default();
 
     let (result, stall) = access.check(Path::new(WORKSPACE), never()).await;
-    assert!(result.is_err());
+    let error = result.unwrap_err().to_string();
+    assert_eq!(
+        error.contains("privacy prompt"),
+        cfg!(target_os = "macos"),
+        "{error}"
+    );
     let stall = stall.expect("the first stall is new");
     assert_eq!(stall.directory, Path::new("/Volumes/SSD/shoal/repo"));
     assert_eq!(stall.path, Path::new(WORKSPACE));

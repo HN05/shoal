@@ -135,4 +135,9 @@ async fn status_names_the_file_access_a_step_waits_on() {
         )),
         "{stalled}"
     );
+    assert_eq!(
+        stalled.contains("privacy prompt"),
+        cfg!(target_os = "macos"),
+        "{stalled}"
+    );
 }

@@ -70,7 +70,7 @@ pub use response::{Body, ErrorCode, RemoteError, Response};
 pub use reviews::{ReviewMethod, ReviewPiece};
 pub use secrets::SecretMethod;
 pub use simulators::SimulatorMethod;
-pub use status::{AccessStall, DaemonStatus};
+pub use status::{AccessStall, DaemonStatus, PRIVACY_PROMPT};
 pub use subscriptions::SubscriptionMethod;
 pub use triggers::TriggerMethod;
 pub use version::VERSION;

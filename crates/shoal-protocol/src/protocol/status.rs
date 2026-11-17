@@ -17,6 +17,14 @@ pub struct DaemonStatus {
     pub cleanup_error: Option<String>,
 }
 
+/// The cause besides a slow system that file access timeouts name: a privacy
+/// prompt, which only macOS holds file access for.
+pub const PRIVACY_PROMPT: Option<&str> = if cfg!(target_os = "macos") {
+    Some("a macOS privacy prompt may be waiting for an answer")
+} else {
+    None
+};
+
 /// A directory whose file access timed out, as under heavy memory pressure or
 /// while macOS waits for an answer to a privacy prompt, until a later check
 /// there finishes.
@@ -35,11 +43,19 @@ pub struct AccessStall {
 impl AccessStall {
     /// What the user reads about the stall.
     pub fn message(&self) -> String {
-        format!(
-            "File access in {} timed out: a check of {} {}. Shoal checks again; if it keeps timing out, a macOS privacy prompt may be waiting for an answer.",
+        let mut message = format!(
+            "File access in {} timed out: a check of {} {}. Shoal checks again",
             self.directory.display(),
             self.path.display(),
             self.reason
-        )
+        );
+        if let Some(prompt) = PRIVACY_PROMPT {
+            message.push_str(&format!("; if it keeps timing out, {prompt}"));
+        }
+        message.push('.');
+        message
     }
 }
+
+#[cfg(test)]
+mod tests;

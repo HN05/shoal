@@ -22,7 +22,7 @@ use futures_util::future::BoxFuture;
 use tokio::time::Instant;
 
 use super::{log, notifications::NotificationKind, workspace::Manager};
-use crate::protocol::AccessStall;
+use crate::protocol::{AccessStall, PRIVACY_PROMPT};
 
 /// A check still running after this long counts as stalled. Git answers a
 /// check of a directory it can read within seconds, even under load.
@@ -283,9 +283,13 @@ impl fmt::Display for TimedOut {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "file access in {} timed out; try again. If it keeps timing out, a macOS privacy prompt may be waiting for an answer",
+            "file access in {} timed out; try again",
             self.0.directory.display()
-        )
+        )?;
+        match PRIVACY_PROMPT {
+            Some(prompt) => write!(f, ". If it keeps timing out, {prompt}"),
+            None => Ok(()),
+        }
     }
 }
 
