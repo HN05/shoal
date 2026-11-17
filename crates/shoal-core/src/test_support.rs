@@ -68,9 +68,30 @@ pub fn isolate<'a>(command: &'a mut Command, root: &Path) -> &'a mut Command {
         .stdin(std::process::Stdio::null())
 }
 
+/// On macOS, the directory of the programs that `/usr/bin`'s developer
+/// tool shims, such as `git` and `python3`, run: a shim looks the developer
+/// directory up on every run, which nearly doubles what a Git command
+/// costs, and tests run Git many times each.
+pub fn developer_tools() -> Option<&'static Path> {
+    static TOOLS: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    let find = || {
+        let output = Command::new("xcode-select").arg("-p").output().ok()?;
+        let developer = String::from_utf8(output.stdout).ok()?;
+        let tools = Path::new(developer.trim()).join("usr/bin");
+        tools.join("git").exists().then_some(tools)
+    };
+    let tools = TOOLS.get_or_init(|| cfg!(target_os = "macos").then(find).flatten());
+    tools.as_deref()
+}
+
+/// The Git tests run: the [`developer_tools`]' own where there are any.
+fn git_program() -> PathBuf {
+    developer_tools().map_or_else(|| "git".into(), |tools| tools.join("git"))
+}
+
 /// Run Git in `repo` in the environment [`isolate`] gives it.
 pub fn git(repo: &Path, args: &[&str]) -> String {
-    let output = isolate(&mut Command::new("git"), repo)
+    let output = isolate(&mut Command::new(git_program()), repo)
         .args(args)
         .output()
         .unwrap();

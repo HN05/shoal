@@ -22,7 +22,7 @@ pub use shoal_core::test_support::{
     repository_with, set_config,
 };
 
-use shoal_core::test_support::{copy_in_child, isolate};
+use shoal_core::test_support::{copy_in_child, developer_tools, isolate};
 use std::{
     ffi::{OsStr, OsString},
     fs,
@@ -77,16 +77,23 @@ pub fn isolated(root: &Path, program: impl AsRef<OsStr>) -> Command {
 
 /// The runner's PATH behind `fixtures/hosts`, whose fake terminal hosts
 /// answer in place of the runner's own, so no test starts a session of the
-/// machine's zmx whether or not it has one. The package's directory is read
-/// at run time, as [`shoal_binary`] is.
+/// machine's zmx whether or not it has one, with the [`developer_tools`]
+/// ahead of `/usr/bin`. The package's directory is read at run time, as
+/// [`shoal_binary`] is.
 pub fn runner_path() -> OsString {
     let hosts = std::env::var_os("CARGO_MANIFEST_DIR")
         .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")), PathBuf::from)
         .join("tests/fixtures/hosts");
-    std::env::join_paths(std::iter::once(hosts).chain(std::env::split_paths(
-        &std::env::var_os("PATH").unwrap_or_default(),
-    )))
-    .unwrap()
+    let runner = std::env::var_os("PATH").unwrap_or_default();
+    let directories = std::env::split_paths(&runner).flat_map(|directory| {
+        let tools = (directory == Path::new("/usr/bin")).then(developer_tools);
+        tools
+            .flatten()
+            .map(Path::to_path_buf)
+            .into_iter()
+            .chain([directory])
+    });
+    std::env::join_paths(std::iter::once(hosts).chain(directories)).unwrap()
 }
 
 pub fn cli(root: &Path) -> Command {
