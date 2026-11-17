@@ -87,12 +87,7 @@ impl Manager {
         let Some(repository) = space.repository_id.clone() else {
             return Ok(None);
         };
-        if !self
-            .present_space_settings(&space)
-            .await?
-            .pr
-            .watch_merge_runs
-        {
+        if !self.space_settings(&space).await?.pr.watch_merge_runs {
             return Ok(None);
         }
         let checkout = self.repository(&repository).await?;

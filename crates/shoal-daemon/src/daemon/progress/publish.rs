@@ -138,7 +138,7 @@ impl Manager {
     /// shows it.
     pub(crate) async fn publish_progress(&self, id: &SpaceId) -> Result<()> {
         let space = self.link_space(&SpaceSelector::id(id)).await?;
-        if !self.space_settings(&space).await?.pr.progress {
+        if !self.acting_settings(&space).await?.pr.progress {
             return Ok(());
         }
         let _gates = self.lock_change_gates(id, &[]).await?;

@@ -244,13 +244,10 @@ impl Manager {
         })
     }
 
-    /// The settings of the space: a workspace's own, or a chat's
-    /// repository's.
-    pub(crate) async fn space_settings(&self, space: &LinkSpace) -> Result<Effective> {
-        match space.to_workspace() {
-            Some(workspace) => self.workspace_settings(&workspace).await,
-            None => self.repository_settings(space.repository_id()).await,
-        }
+    /// The settings of the space in the repository it acts in.
+    pub(crate) async fn acting_settings(&self, space: &LinkSpace) -> Result<Effective> {
+        let config = self.config();
+        (self.space_settings_from(&config, space, Some(space.repository_id()))).await
     }
 
     /// The forge of the space's `origin`.

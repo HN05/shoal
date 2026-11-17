@@ -14,7 +14,6 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use shoal_ids::repository_ids::RepositoryId;
-use shoal_protocol::model::ByKind;
 use shoal_protocol::space_names::SpaceSelector;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -181,15 +180,62 @@ impl Manager {
     pub async fn config_layers_for(&self, target: ConfigTarget) -> Result<ConfigLayers> {
         match target {
             ConfigTarget::Global => Ok(ConfigLayers::default()),
-            ConfigTarget::Space(selector) => match self.space(&selector).await?.by_kind() {
-                ByKind::Workspace(workspace) => self.workspace_layers(&workspace).await,
-                ByKind::Chat(chat) => match chat.repository_id {
-                    Some(id) => self.checkout_layers(id.into()).await,
-                    None => Ok(ConfigLayers::default()),
-                },
-            },
+            ConfigTarget::Space(selector) => {
+                self.space_layers(&self.space(&selector).await?, None).await
+            }
             ConfigTarget::Repository(selector) => self.checkout_layers(selector).await,
         }
+    }
+
+    /// The layers of `space`: a workspace's with the file in its worktree,
+    /// any other space's with the file in the registered checkout of its
+    /// repository, or for a space without one of `repository`, the one an
+    /// action is in, else none.
+    async fn space_layers(
+        &self,
+        space: &Space,
+        repository: Option<&RepositoryId>,
+    ) -> Result<ConfigLayers> {
+        match space.to_workspace() {
+            Some(workspace) => self.workspace_layers(&workspace).await,
+            None => {
+                self.repository_layers_in(space.repository_id.as_ref().or(repository))
+                    .await
+            }
+        }
+    }
+
+    /// The layers of a space outside a worktree in the repository `id`, with
+    /// the file in its registered checkout; none for a space without one.
+    async fn repository_layers_in(&self, id: Option<&RepositoryId>) -> Result<ConfigLayers> {
+        match id {
+            Some(id) => self.checkout_layers(id.into()).await,
+            None => Ok(ConfigLayers::default()),
+        }
+    }
+
+    /// The settings of `space` after every layer of [`Self::space_layers`],
+    /// over the daemon's current global config.
+    pub(crate) async fn space_settings(&self, space: &Space) -> Result<Effective> {
+        self.space_settings_from(&self.config(), space, None).await
+    }
+
+    /// The settings of `space` after every layer of [`Self::space_layers`],
+    /// over a global snapshot the caller also reads, so one operation never
+    /// combines two versions; `repository` is the one an action is in.
+    pub(crate) async fn space_settings_from(
+        &self,
+        config: &Config,
+        space: &Space,
+        repository: Option<&RepositoryId>,
+    ) -> Result<Effective> {
+        config.resolve(&self.space_layers(space, repository).await?)
+    }
+
+    /// The settings of a space outside a worktree in the repository `id`, or
+    /// the global config's alone for a space without one.
+    pub(crate) async fn space_settings_in(&self, id: Option<&RepositoryId>) -> Result<Effective> {
+        self.config().resolve(&self.repository_layers_in(id).await?)
     }
 
     /// The layers of the repository `selector` names, with the file in its

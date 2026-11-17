@@ -60,11 +60,7 @@ impl Manager {
     /// its settings' retention, or the global setting's for a chat without a
     /// repository or when the repository's cannot be read.
     async fn retention(&self, repository: Option<&RepositoryId>) -> Duration {
-        let settings = match repository {
-            Some(id) => self.repository_settings(id).await,
-            None => self.config().resolve(&Default::default()),
-        };
-        let settings = settings.or_else(|error| {
+        let settings = self.space_settings_in(repository).await.or_else(|error| {
             log!("events of removed spaces kept by the global retention: {error:#}");
             self.config().resolve(&Default::default())
         });

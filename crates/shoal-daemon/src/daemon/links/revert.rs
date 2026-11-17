@@ -43,16 +43,13 @@ impl Manager {
         let _gate = self.gates.lock_prs([&id]).await;
         let space = self.link_space(&SpaceSelector::id(&id)).await?;
         self.verify_space(&space).await?;
-        let settings = match space.to_workspace() {
-            Some(workspace) => {
-                ensure!(
-                    workspace.state.accepts_links(),
-                    "workspace cannot accept a PR in its current state"
-                );
-                self.workspace_settings(&workspace).await?
-            }
-            None => self.repository_settings(space.repository_id()).await?,
-        };
+        if let Some(workspace) = space.to_workspace() {
+            ensure!(
+                workspace.state.accepts_links(),
+                "workspace cannot accept a PR in its current state"
+            );
+        }
+        let settings = self.acting_settings(&space).await?;
         if let Some(caller) = caller {
             let permissions = self
                 .caller_permissions(caller, space.repository_id())

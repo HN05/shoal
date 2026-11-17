@@ -20,7 +20,7 @@ impl Manager {
     ) -> Result<()> {
         let space = self.space(selector).await?;
         let (turn, agent) = self.agent_turn(&space, execution).await?;
-        let settings = self.present_space_settings(&space).await?;
+        let settings = self.space_settings(&space).await?;
         ensure!(
             settings.integration(&agent).reports_turn_ends(),
             "agent {agent} has no Shoal hook that ends its turns; ask with shoal questions ask \"<decision>\" --recommend <answer>"

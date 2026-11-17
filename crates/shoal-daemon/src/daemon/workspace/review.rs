@@ -95,7 +95,7 @@ impl Manager {
         let _guard = self.lock_change_gates(&id, &[]).await?;
         let space = self.link_space(&SpaceSelector::id(&id)).await?;
         let head = self.ready_head(&space, caller).await?;
-        let settings = self.space_settings(&space).await?;
+        let settings = self.acting_settings(&space).await?;
         let command = HookKind::PostReady
             .command(&settings)
             .map(|path| space.origin_path().join(path));
@@ -244,7 +244,7 @@ impl Manager {
         let selected = self.selected_marks(&space.id, kind, explicit).await?;
         let draft = match draft {
             Some(draft) => draft,
-            None => self.space_settings(&space).await?.pr.draft_on_unready,
+            None => self.acting_settings(&space).await?.pr.draft_on_unready,
         };
         if draft {
             self.set_draft(&space, &pr_urls(&selected), true)

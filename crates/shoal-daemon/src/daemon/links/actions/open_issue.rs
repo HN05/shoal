@@ -181,7 +181,7 @@ impl Manager {
         // issue's place meanwhile.
         let _gate = self.gates.lock_prs([&space.id]).await;
         let directory = self.issue_directory(&space).await?;
-        let settings = self.space_settings(&space).await?;
+        let settings = self.acting_settings(&space).await?;
         let own = self.origin_forge(&directory).await?;
         let destination = self.issue_destination(own, repository.as_deref()).await?;
         anyhow::ensure!(

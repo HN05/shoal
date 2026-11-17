@@ -135,7 +135,7 @@ impl Manager {
     /// request it. Caller holds the space's PR gate and has verified
     /// ownership and the completion's HEAD.
     async fn record_done(&self, space: &Space, completion: Completion) -> Result<Completion> {
-        let settings = self.present_space_settings(space).await?;
+        let settings = self.space_settings(space).await?;
         let hook = self.done_hook(space, &settings).await?;
         self.verify_space(space).await?;
         let completion = Completion {

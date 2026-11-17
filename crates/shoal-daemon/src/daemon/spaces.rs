@@ -3,22 +3,7 @@
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 
-use super::workspace::Manager;
-use crate::{
-    config::Effective,
-    model::{Space, SpaceKind},
-};
-
-impl Manager {
-    /// The settings of `space`: a workspace's own, or a chat's
-    /// repository's.
-    pub(crate) async fn present_space_settings(&self, space: &Space) -> Result<Effective> {
-        match space.to_workspace() {
-            Some(workspace) => self.workspace_settings(&workspace).await,
-            None => self.space_settings_in(space.repository_id.as_ref()).await,
-        }
-    }
-}
+use crate::model::SpaceKind;
 
 /// The kind of the space `id`, while it exists.
 pub(crate) fn space_kind(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<SpaceKind>> {

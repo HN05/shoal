@@ -276,12 +276,7 @@ impl Manager {
         if let Err(reason) = self.idle_signals(space, &[], &users).await? {
             return Ok(reason);
         }
-        let auto = self
-            .present_space_settings(space)
-            .await?
-            .cleanup
-            .auto
-            .clone();
+        let auto = self.space_settings(space).await?.cleanup.auto.clone();
         Ok(if auto.enabled {
             CleanupReason::Idle {
                 minutes: auto.idle_minutes,

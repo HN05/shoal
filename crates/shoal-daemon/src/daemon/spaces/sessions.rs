@@ -25,7 +25,7 @@ impl Manager {
     pub async fn space_sessions(&self, selector: &SpaceSelector) -> Result<SpaceSessions> {
         let space = self.space(selector).await?;
         let sessions = self.reported_sessions(&space.id).await?;
-        let settings = self.present_space_settings(&space).await?;
+        let settings = self.space_settings(&space).await?;
         let integrations = sessions
             .iter()
             .map(|reported| {

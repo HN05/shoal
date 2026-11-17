@@ -259,7 +259,7 @@ impl Manager {
             let checked = self.check_worktree(&workspace, removal, Stage::Initial, &[]);
             self.check_access(&workspace.path, checked).await?;
         }
-        let grace = self.present_space_settings(space).await?.cleanup.grace();
+        let grace = self.space_settings(space).await?.cleanup.grace();
         let cleanup_at = self.claim_grace(&space.id, grace).await?;
         Ok(crate::time::UnixTime::now() < cleanup_at)
     }

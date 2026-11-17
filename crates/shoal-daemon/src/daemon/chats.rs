@@ -456,18 +456,6 @@ impl Manager {
             .await
     }
 
-    /// The settings of a space of the repository `id`, or the global
-    /// config's alone for a space without one.
-    pub(crate) async fn space_settings_in(
-        &self,
-        id: Option<&RepositoryId>,
-    ) -> Result<crate::config::Effective> {
-        match id {
-            Some(id) => self.repository_settings(id).await,
-            None => self.config().resolve(&Default::default()),
-        }
-    }
-
     /// The registered checkout of `chat`'s repository; none for a chat
     /// without a repository.
     pub(crate) async fn chat_repository(&self, chat: &Chat) -> Result<Option<Repository>> {

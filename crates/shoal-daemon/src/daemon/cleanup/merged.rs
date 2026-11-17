@@ -173,7 +173,7 @@ async fn idle_deadline(
     space: &Space,
     now: UnixTime,
 ) -> Result<Option<UnixTime>> {
-    let settings = manager.present_space_settings(space).await?;
+    let settings = manager.space_settings(space).await?;
     let Some(delay) = settings.cleanup.merged.delay() else {
         return Ok(None);
     };

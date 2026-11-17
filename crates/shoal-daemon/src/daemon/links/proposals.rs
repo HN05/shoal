@@ -353,7 +353,7 @@ impl Manager {
         space: Option<&LinkSpace>,
     ) -> Result<(Effective, PathBuf)> {
         if let Some(space) = space {
-            let settings = self.space_settings(space).await?;
+            let settings = self.acting_settings(space).await?;
             return Ok((settings, space.origin_path().to_owned()));
         }
         let repository = request

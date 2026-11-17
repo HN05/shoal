@@ -105,7 +105,7 @@ impl Manager {
         url: &ItemRef,
         fresh: bool,
     ) -> Vec<String> {
-        let assign = match self.space_settings(space).await {
+        let assign = match self.acting_settings(space).await {
             Ok(settings) => settings.issue.assign,
             Err(error) => return vec![assignees::unassigned(url, &error)],
         };

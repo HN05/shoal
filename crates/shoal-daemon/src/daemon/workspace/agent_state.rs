@@ -426,7 +426,7 @@ impl Manager {
             Some(execution) => self.agent_name(execution).await?,
             None => self.agent_of(&space.id).await.ok()??,
         };
-        let mut tools = self.present_space_settings(&space).await.ok()?.tools;
+        let mut tools = self.space_settings(&space).await.ok()?.tools;
         tools.remove(agent.name())
     }
 

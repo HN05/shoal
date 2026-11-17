@@ -66,7 +66,7 @@ impl Manager {
         space: &LinkSpace,
         issues: &[ItemRef],
     ) -> Vec<String> {
-        match self.space_settings(space).await {
+        match self.acting_settings(space).await {
             Ok(settings) if !settings.issue.assign.agent() => return Vec::new(),
             Ok(_) => {}
             Err(error) => return issues.iter().map(|url| unsettled(url, &error)).collect(),
@@ -180,7 +180,7 @@ impl Manager {
     /// assigned it the issue and no agent of its own ended since.
     async fn agent_works(&self, linker: &Linker) -> Result<bool> {
         let space = self.link_space(&SpaceSelector::id(&linker.id)).await?;
-        if !self.space_settings(&space).await?.issue.assign.agent() {
+        if !self.acting_settings(&space).await?.issue.assign.agent() {
             return Ok(false);
         }
         let id = linker.id.clone();

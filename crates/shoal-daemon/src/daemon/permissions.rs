@@ -181,7 +181,7 @@ impl Manager {
         parent: Option<Permissions>,
         repository: Option<&RepositoryId>,
     ) -> Result<Permissions> {
-        let settings = self.mode_settings(config, space, repository).await?;
+        let settings = (self.space_settings_from(config, space, repository)).await?;
         let (mode, given) = agent.unzip();
         let permissions = permissions::resolve(&settings, mode)
             .with_context(|| format!("the permissions of {}", space.name))?;
@@ -190,24 +190,6 @@ impl Manager {
             None => permissions,
         };
         Ok(permissions.given(&given.unwrap_or_default()))
-    }
-
-    /// The settings `space`'s mode resolves in: a workspace's own, a chat's
-    /// repository's, or for a chat without one those of `repository`, else
-    /// the global config's.
-    async fn mode_settings(
-        &self,
-        config: &Config,
-        space: &Space,
-        repository: Option<&RepositoryId>,
-    ) -> Result<crate::config::Effective> {
-        if let Some(workspace) = space.to_workspace() {
-            return self.workspace_settings_from(config, &workspace).await;
-        }
-        match space.repository_id.as_ref().or(repository) {
-            Some(repository) => self.repository_settings_from(config, repository).await,
-            None => config.resolve(&Default::default()),
-        }
     }
 }
 
