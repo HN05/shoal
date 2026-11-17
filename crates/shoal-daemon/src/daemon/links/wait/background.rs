@@ -7,8 +7,8 @@ use rusqlite::{OptionalExtension, params};
 
 use super::{
     branch_report::{BranchReport, branch_report},
-    items::{opened_open_prs, polled_items, watches_open_pr},
-    merge_runs::{MergeTarget, follow_merge, merge_run_spaces},
+    items::{opened_open_prs, polled_items},
+    merge_runs::{MergeTarget, follow_merge},
     start::PollStart,
 };
 use crate::{
@@ -23,7 +23,6 @@ use crate::{
         },
         updates::{SnapshotState, UpdateKind},
     },
-    model::Chat,
     time::UnixTime,
 };
 use shoal_forge::updates::Snapshot;
@@ -35,8 +34,7 @@ const POLLED_SPACES_AT_ONCE: usize = 4;
 
 impl Manager {
     /// Poll linked items for integrations, with their own baseline, and queue
-    /// the changes on each ready workspace's cursor, or hand them to each
-    /// running chat's inbox.
+    /// the changes on each polled space's cursor.
     pub(crate) async fn poll_linked_item_activity(&self) -> Result<()> {
         let mut polls = stream::iter(self.polled_spaces().await?)
             .map(|space| async move {
@@ -61,26 +59,15 @@ impl Manager {
     }
 
     /// The spaces whose linked items the background poll reads: ready
-    /// workspaces, and the chats of a repository that run or await what
-    /// the poll finds, such as a chat asleep until its PR's activity.
+    /// workspaces and the chats of a repository, whether or not their agents
+    /// run. A chat without a repository records no links to read.
     pub(super) async fn polled_spaces(&self) -> Result<Vec<LinkSpace>> {
         let workspaces = self.list_workspaces().await?.into_iter();
         let ready = workspaces.filter(|w| w.state == crate::state::WorkspaceState::Ready);
         let mut spaces: Vec<LinkSpace> = ready.map(LinkSpace::from).collect();
         let chats = self.chats().await?.into_iter();
-        let chats: Vec<Chat> = chats.filter(|chat| chat.repository_id.is_some()).collect();
-        let stopped: Vec<SpaceId> = (chats.iter())
-            .filter(|chat| !chat.running)
-            .map(|chat| chat.id.clone())
-            .collect();
-        let awaiting = self
-            .store
-            .read(move |db| awaiting_activity(db, stopped))
-            .await?;
-        for chat in chats {
-            if chat.running || awaiting.contains(&chat.id) {
-                spaces.push(LinkSpace::own(chat.into())?);
-            }
+        for chat in chats.filter(|chat| chat.repository_id.is_some()) {
+            spaces.push(LinkSpace::own(chat.into())?);
         }
         Ok(spaces)
     }
@@ -303,23 +290,6 @@ fn saved_observation(
         )
         .optional()?;
     Ok(record.map(|text| serde_json::from_str(&text)).transpose()?)
-}
-
-/// The spaces among `ids` whose activity is still to come: they watch an
-/// open PR, link one as opened whose merge they may follow, or look for,
-/// or follow, the CI runs of a merge.
-fn awaiting_activity(db: &rusqlite::Connection, ids: Vec<SpaceId>) -> Result<Vec<SpaceId>> {
-    let following = merge_run_spaces(db)?;
-    let mut awaiting = Vec::new();
-    for id in ids {
-        if following.contains(&id)
-            || watches_open_pr(db, &id)?
-            || !opened_open_prs(db, &id)?.is_empty()
-        {
-            awaiting.push(id);
-        }
-    }
-    Ok(awaiting)
 }
 
 /// What a background poll saw change that Shoal acts on.

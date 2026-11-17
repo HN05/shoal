@@ -2337,14 +2337,14 @@ Item selectors make the `pr`/`issue` word optional for numbers: a linked
 item with that number decides the kind, otherwise the forge's issue read where
 issues and PRs share one sequence. Where they do not, an unlinked number stays
 ambiguous and needs its kind rather than a guess between two reads.
-Ready workspaces with linked issues or PRs, and the chats that run or, stopped,
-still watch an open PR or a merge's CI runs, so an asleep chat hears what wakes
-it, are polled every 30 seconds; the
+Ready workspaces and the chats of a repository with linked issues or PRs are
+polled every 30 seconds, whether or not their agents run, through one path, so
+an asleep space hears what wakes it; the
 daemon keeps a separate activity snapshot for each item and appends an
 `item_activity` event for each newly observed comment, edit, completed check,
 conflict, closure, merge, reopen, or lookup failure. The first observation
 establishes the baseline, and watch acknowledgements do not affect this stream.
-The same poll queues each change on the workspace's watch cursor, holding
+The same poll queues each change on the space's watch cursor, holding
 passing checks as the watch below describes, and wakes a running watch, so an agent receives activity without watching for it. A
 poll reads spaces, their items, an item's independent parts and the agent queue's issue
 dependencies with bounded concurrency, so one slow forge does not hold back the rest. Polls

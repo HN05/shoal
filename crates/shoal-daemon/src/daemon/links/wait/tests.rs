@@ -3274,7 +3274,7 @@ async fn the_background_poll_reads_spaces_together() {
 }
 
 #[tokio::test]
-async fn a_stopped_chat_is_polled_while_it_watches_an_open_pr() {
+async fn a_stopped_chat_is_polled_as_a_workspace_is() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
@@ -3290,11 +3290,6 @@ async fn a_stopped_chat_is_polled_while_it_watches_an_open_pr() {
         )
         .await
         .unwrap();
-    let polled = || async {
-        let spaces = manager.polled_spaces().await.unwrap();
-        spaces.iter().any(|space| space.id == chat.id)
-    };
-    assert!(polled().await);
     // Its agent stops, as Shoal stops one that sleeps.
     let id = chat.id.clone();
     (manager.store)
@@ -3304,18 +3299,6 @@ async fn a_stopped_chat_is_polled_while_it_watches_an_open_pr() {
         })
         .await
         .unwrap();
-    assert!(!polled().await);
-    register_watch(&manager, &chat.id, PR.as_str()).await;
-    assert!(polled().await);
-    // Once the poll saw the PR merge, its activity is over.
-    let merged = serde_json::from_value::<Snapshot>(json!({"comments": {}, "checks": {},
-        "conflict": null, "state": "merged", "errors": {}}))
-    .unwrap();
-    for snapshot in [snapshot("open"), merged] {
-        manager
-            .record_background_activity(&chat.id, vec![(PR.as_str().into(), snapshot)])
-            .await
-            .unwrap();
-    }
-    assert!(!polled().await);
+    let spaces = manager.polled_spaces().await.unwrap();
+    assert!(spaces.iter().any(|space| space.id == chat.id));
 }

@@ -5216,8 +5216,9 @@ and `xdg-open` elsewhere, without waiting for the browser, and prints each URL,
 also when the opener fails; workspace processes cannot.
 
 `shoal watch` polls the assigned issues and PRs and the linked runs every ~30
-seconds, and the daemon queues what its own polling of a ready workspace's linked
-items observes for the next watch, which returns at once; `watch pr`, `watch
+seconds, and the daemon queues what its own polling of a space's linked items
+observes for the next watch, which returns at once: it polls every ready
+workspace and every chat of a repository, whether or not its agent runs; `watch pr`, `watch
 issue` or `watch ci` filters by kind. A run delivers one `ci_completed` update
 when it finishes, with its final state, `cancelled` for a failed run whose
 jobs only stopped by being cancelled, each failed job's failing step where its

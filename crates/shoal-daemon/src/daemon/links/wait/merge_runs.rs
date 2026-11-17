@@ -341,14 +341,6 @@ fn unseen_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
     Ok(unseen)
 }
 
-/// The spaces with a lookup of a merge's runs that has not ended.
-pub(super) fn merge_run_spaces(db: &rusqlite::Connection) -> Result<Vec<SpaceId>> {
-    Ok(db
-        .prepare("SELECT DISTINCT space_id FROM merge_runs WHERE NOT ended")?
-        .query_map([], |row| row.get(0))?
-        .collect::<rusqlite::Result<_>>()?)
-}
-
 /// Link the `runs` of `lookup` the space `id` has not linked, and end the
 /// lookup at `now` once its window and the runs it linked are over.
 fn record_merge_runs(
