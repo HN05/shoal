@@ -21,7 +21,10 @@ use crate::{
         output::{Palette, Style},
     },
     config::modes::ModeName,
-    model::{Asleep, Chat, HeldBy, QueueEntry, Repository, ReviewMark, Workspace, WorkspaceUsage},
+    model::{
+        Asleep, Chat, HeldBy, PreparationWait, QueueEntry, Repository, ReviewMark, Workspace,
+        WorkspaceUsage,
+    },
     state::{AgentState, QueueKind, QueueState},
 };
 use shoal_protocol::{executions::ServiceLimit, progress::Progress};
@@ -57,14 +60,21 @@ pub(super) fn status_cell(status: ListStatus) -> Cell {
 }
 
 /// The workspace's status, with the places of `entries`, the agents queued
-/// in it, followed by its latest review's, such as `waiting, review 17
-/// finished: 1 blocker`.
+/// in it, and what its preparation waits for besides their blockers,
+/// followed by its latest review's, such as `waiting, review 17 finished:
+/// 1 blocker` or `preparing, waiting for disk space`.
 fn workspace_status_cell(
     workspace: &Workspace,
     status: ListStatus,
     entries: &[&QueueEntry],
 ) -> Cell {
-    let (label, style) = statuses::place_cell(status, entries);
+    let (mut label, style) = statuses::place_cell(status, entries);
+    // The agent's entry names the blockers the preparation waits for.
+    let waits = (workspace.preparation_waits.as_ref())
+        .filter(|waits| !matches!(waits, PreparationWait::Blockers { .. }));
+    if let Some(waits) = waits {
+        label += &format!(", waiting for {waits}");
+    }
     match &workspace.latest_review {
         Some(review) => (
             format!("{label}, review {} {}", review.id, review.status),

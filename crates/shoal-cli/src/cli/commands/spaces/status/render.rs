@@ -57,14 +57,15 @@ fn render_workspace(status: &WorktreeStatus, palette: Palette) {
         let chats: Vec<_> = status.chats.iter().map(|chat| chat.name.as_str()).collect();
         outln!("Chats:         {}", chats.join(", "));
     }
-    outln!(
-        "Setup:         {}",
-        match (workspace.setup_skipped, status.setup_finished) {
-            (true, _) => "skipped",
-            (false, true) => "finished",
-            (false, false) => "in progress",
-        }
-    );
+    let setup = match (workspace.setup_skipped, status.setup_finished) {
+        (true, _) => "skipped".to_owned(),
+        (false, true) => "finished".to_owned(),
+        (false, false) => match &workspace.preparation_waits {
+            Some(waits) => format!("waiting for {waits}"),
+            None => "in progress".to_owned(),
+        },
+    };
+    outln!("Setup:         {setup}");
     if workspace.disposable {
         outln!("Disposable:    yes");
     }

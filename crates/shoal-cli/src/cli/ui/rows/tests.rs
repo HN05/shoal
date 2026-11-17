@@ -110,6 +110,20 @@ fn queue_status_names_the_work_a_launch_waits_for() {
 }
 
 #[test]
+fn a_waiting_preparation_shows_what_its_agent_does_not() {
+    let mut waiting = workspace("repo", "ui", "ui", WorkspaceState::Preparing);
+    let status = ListStatus::of_workspace(&waiting, false);
+    waiting.part.preparation_waits = Some(crate::model::PreparationWait::Disk);
+    let (label, _) = workspace_status_cell(&waiting, status, &[]);
+    assert_eq!(label, "preparing, waiting for disk space");
+    // The agent's entry names the blockers.
+    let blocked_by = vec!["api".into()];
+    waiting.part.preparation_waits = Some(crate::model::PreparationWait::Blockers { blocked_by });
+    let (label, _) = workspace_status_cell(&waiting, status, &[]);
+    assert_eq!(label, "preparing");
+}
+
+#[test]
 fn queue_status_names_a_restore_that_waits_for_an_update() {
     let mut entry = QueueEntry {
         narrowing: Default::default(),
