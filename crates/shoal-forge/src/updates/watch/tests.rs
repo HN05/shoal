@@ -154,3 +154,16 @@ fn a_start_takes_the_spaces_own_comment_it_reads_as_seen() {
         [UpdateKind::Comment]
     );
 }
+
+#[test]
+fn a_start_keeps_the_own_change_its_read_may_predate() {
+    let mut record = WatchRecord::default();
+    record.observe(snapshot(json!({}), "open"), "pr", UnixTime::EPOCH);
+    record.pending.clear();
+    record.adopt_own_change(Vec::new(), Some(ItemState::Closed), &Edited::default());
+    // A read that began before the change shows the item still open.
+    record.start_from(snapshot(json!({}), "open"), "pr", UnixTime::EPOCH);
+    assert!(record.pending.is_empty(), "{:?}", record.pending);
+    let closed = snapshot(json!({}), "closed");
+    assert!(record.observe(closed, "pr", UnixTime::MAX).is_empty());
+}

@@ -143,10 +143,12 @@ impl Manager {
         }
         let read = self.poll_start();
         let reads = self.complete_reads(items).await;
+        // Checked before recording, as a poll's are.
+        let changing = self.assignees_changing(&reads);
         let owned = id.to_owned();
         let started = self
             .store
-            .write(move |tx| start_followed(tx, &owned, reads, read.at, start))
+            .write(move |tx| start_followed(tx, &owned, reads, read.at, start, &changing))
             .await?;
         if started.iter().any(|(_, queued)| *queued) {
             self.signals.item_updates_queued();
@@ -158,14 +160,16 @@ impl Manager {
 }
 
 /// Start the watches `start` selects of the space `id` from `reads`, made
-/// by lookups that began at `read_at`, of the items it still follows.
-/// Returns the URL of each started watch and whether it queued an update.
+/// by lookups that began at `read_at`, of the items it still follows,
+/// those of `changing` while Shoal changes them on its own. Returns the
+/// URL of each started watch and whether it queued an update.
 fn start_followed(
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
     reads: Vec<(String, Snapshot)>,
     read_at: UnixTime,
     start: Start,
+    changing: &[String],
 ) -> Result<Vec<(String, bool)>> {
     // A workspace links its issue while it is set up.
     crate::daemon::links::ensure_accepts_links(tx, id)?;
@@ -177,6 +181,9 @@ fn start_followed(
         let mut record = cursor_record(tx, id, &url)?.unwrap_or_default();
         if matches!(start, Start::Unread) && record.has_read() {
             continue;
+        }
+        if changing.contains(&url) {
+            record.own_change_running(read_at);
         }
         record.start_from(snapshot, &url, read_at);
         save_cursor_record(tx, id, &url, &record)?;

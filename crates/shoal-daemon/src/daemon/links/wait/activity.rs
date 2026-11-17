@@ -60,7 +60,7 @@ impl Manager {
 
     /// The URLs of the `observations` whose assignees Shoal is changing
     /// on its own.
-    fn assignees_changing(&self, observations: &[(String, Snapshot)]) -> Vec<String> {
+    pub(super) fn assignees_changing(&self, observations: &[(String, Snapshot)]) -> Vec<String> {
         (observations.iter())
             .map(|(url, _)| url)
             .filter(|url| self.gates.issue_assignees_changing(url))

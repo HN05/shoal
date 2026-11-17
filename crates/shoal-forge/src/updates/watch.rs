@@ -36,12 +36,11 @@ impl WatchRecord {
     /// details show then is history, which `shoal view` shows; changes to
     /// its condition since the watch last read it, such as a failed check,
     /// a conflict or its closing, are reported, and of the updates not yet
-    /// acknowledged only those of its condition stay.
-    pub fn start_from(&mut self, mut snapshot: Snapshot, url: &str, _read_at: UnixTime) {
+    /// acknowledged only those of its condition stay. The space's own
+    /// changes count as a poll's do.
+    pub fn start_from(&mut self, mut snapshot: Snapshot, url: &str, read_at: UnixTime) {
         snapshot.normalize(&self.snapshot, UnixTime::now());
-        // The read shows the space's own comments it has, which no later
-        // change may be taken for.
-        self.snapshot.adopt_authored(&snapshot, &mut self.authored);
+        self.discount_own_changes(&mut snapshot, read_at);
         self.pending.retain(|update| of_condition(update.kind));
         let mut condition = self.snapshot.changes(&snapshot, url);
         condition.retain(|update| of_condition(update.kind));
