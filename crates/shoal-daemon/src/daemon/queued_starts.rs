@@ -18,8 +18,13 @@ use crate::{
 /// Bounds how long a freed slot can wait when nothing wakes the dispatcher,
 /// such as a stopped agent's forgotten record.
 const SWEEP_INTERVAL: Duration = Duration::from_secs(15);
-/// Lets a burst of state changes settle into one pass.
-const SETTLE: Duration = Duration::from_millis(500);
+/// Lets a burst of state changes settle into one pass. A unit test, which
+/// waits for each pass it starts, lets one settle only briefly.
+const SETTLE: Duration = if cfg!(test) {
+    Duration::from_millis(10)
+} else {
+    Duration::from_millis(500)
+};
 
 pub(super) async fn run(manager: Arc<Manager>) {
     if let Err(error) = manager.refresh_starting_entries().await {
