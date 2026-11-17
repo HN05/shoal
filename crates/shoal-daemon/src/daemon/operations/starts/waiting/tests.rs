@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::super::{Opening, Preparing};
+use crate::protocol::QueuedLaunches;
 use crate::{
     daemon::{
         test_support::{commit, git, global_config, manager, repository},
@@ -125,8 +126,13 @@ async fn a_stopped_waiting_start_waits_for_its_agent_until_prepared_explicitly()
     let refused = manager.admit_explicit_preparation(&prepare).await;
     assert!(refused.is_err(), "{refused:?}");
 
-    let cancelled = manager.cancel_waiting_launches(&ui.id).await.unwrap();
-    assert_eq!(cancelled.len(), 1);
+    // Its stop cancels the agent waiting there and keeps the workspace.
+    let selector = SpaceSelector::id(&ui.id);
+    let stopped = manager
+        .stop_space_manually(&selector, false, QueuedLaunches::Cancel)
+        .await
+        .unwrap();
+    assert_eq!(stopped.cancelled.len(), 1);
     manager.start_waiting_preparations().await.unwrap();
     assert!(!manager.operation_runs_in(&ui.id));
     let stopped = read(&manager, &ui).await;

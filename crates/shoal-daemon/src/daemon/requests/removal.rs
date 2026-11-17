@@ -78,7 +78,7 @@ pub(super) async fn handle(
         RemovalMethod::CheckStop { space } => {
             // A chat has no lifecycle state that refuses a stop.
             if let ByKind::Workspace(workspace) = manager.space(&space).await?.by_kind() {
-                manager.check_lifecycle(&workspace.id).await?
+                manager.check_stop(&workspace).await?
             }
             Body::Ok
         }

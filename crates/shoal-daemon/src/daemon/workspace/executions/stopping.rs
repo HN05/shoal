@@ -284,6 +284,16 @@ impl Manager {
         Ok(())
     }
 
+    /// Refuse a stop of `workspace` while another lifecycle operation holds
+    /// it. One whose preparation waits runs nothing, so its stop only
+    /// cancels the agent waiting there.
+    pub(crate) async fn check_stop(&self, workspace: &Workspace) -> Result<()> {
+        match workspace.preparation_waits {
+            Some(_) => Ok(()),
+            None => self.check_lifecycle(&workspace.id).await,
+        }
+    }
+
     /// Stop as [`Manager::stop_space`] does at the user's request, then
     /// keep the stopped agents as last sessions, which stay down until
     /// something resumes them. With `acknowledge_unproven`, executions whose
@@ -399,6 +409,10 @@ impl Manager {
         {
             return Ok(Vec::new());
         }
+        // Nothing runs where the preparation waits, which goes on waiting.
+        if workspace.preparation_waits.is_some() {
+            return self.cancel_launches(&workspace.id, &stopping.keep).await;
+        }
         let reserved_state = self
             .reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
             .await?;
@@ -430,6 +444,18 @@ impl Manager {
         result
     }
 
+    /// Cancel the launches waiting to open the space `id` where `keep` says
+    /// so, returning them.
+    async fn cancel_launches(&self, id: &SpaceId, keep: &Keep) -> Result<Vec<QueueEntry>> {
+        match keep {
+            Keep::LastSessions {
+                launches: QueuedLaunches::Cancel,
+                ..
+            } => self.cancel_waiting_launches(id).await,
+            Keep::LastSessions { .. } | Keep::Records => Ok(Vec::new()),
+        }
+    }
+
     /// Stop the executions of the space `id` as `stopping` says and keep
     /// what they saved, returning the waiting launches it cancels.
     async fn stop_and_keep(&self, id: &SpaceId, stopping: Stopping<'_>) -> Result<Vec<QueueEntry>> {
@@ -440,13 +466,7 @@ impl Manager {
             keep,
         } = stopping;
         // Before stopping, so an admission cannot start one after.
-        let cancelled = match keep {
-            Keep::LastSessions {
-                launches: QueuedLaunches::Cancel,
-                ..
-            } => self.cancel_waiting_launches(id).await?,
-            Keep::LastSessions { .. } | Keep::Records => Vec::new(),
-        };
+        let cancelled = self.cancel_launches(id, &keep).await?;
         // Before stopping, so a restore admitted meanwhile cannot start
         // after, and again once stopped, for the request of an agent a
         // signal was ending meanwhile.

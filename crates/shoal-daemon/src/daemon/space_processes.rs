@@ -86,13 +86,17 @@ impl Manager {
     /// [`Self::stop_untracked`] for `workspace` under a reserved lifecycle,
     /// so no execution registers between reading the tracked processes and
     /// signalling: its processes would count as untracked. The worktree ties
-    /// processes to the workspace once it is verified to be its.
+    /// processes to the workspace once it is verified to be its. Nothing
+    /// runs in one whose preparation waits.
     pub(crate) async fn stop_workspace_untracked(
         &self,
         workspace: &Workspace,
         selection: Selection,
         requester: Option<Identity>,
     ) -> Result<Vec<StoppedProcess>> {
+        if workspace.preparation_waits.is_some() {
+            return Ok(Vec::new());
+        }
         let reserved = self
             .reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
             .await?;

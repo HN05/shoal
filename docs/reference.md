@@ -2161,10 +2161,10 @@ the agent waits for in turn. A detached start's preparation also waits before
 it creates the worktree while free disk space is below
 `[machine.overload.warning] disk_free_gib`, or unread, with disk protection on,
 and starts once disk space allows. `--wait` returns at once for a preparation
-that waits. Cancelling its agent's entry keeps the workspace, whose preparation
-then waits until `shoal restore` runs it; while it waits for work or disk
-space, `shoal restore` refuses it, and `shoal rm` removes it. The daemon starts
-waiting entries
+that waits. `shoal stop` of such a workspace cancels its agent's entry and keeps
+the workspace, whose preparation then waits until `shoal restore` runs it; while
+it waits for work or disk space, `shoal restore` refuses it, and `shoal rm`
+removes it. The daemon starts waiting entries
 in [rank order](#queue-order) as slots free, passing over an entry whose
 repository is full or that does not fit in memory, and records a
 `queue_started` notification. Once an entry has been held 15 minutes for its
