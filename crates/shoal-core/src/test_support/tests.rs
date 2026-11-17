@@ -106,3 +106,29 @@ fn spawned_helpers_drop_the_runners_identity_but_keep_the_tests() {
     assert_eq!(value(crate::env::SPACE), Some(Some("test-chat".into())));
     assert_eq!(value(crate::env::EXECUTION_ID), Some(None));
 }
+
+#[test]
+fn developer_tools_go_ahead_of_usr_bin() {
+    let tools = super::developer_tools().map(Path::to_path_buf);
+    let path = super::with_developer_tools(std::ffi::OsStr::new("/opt/bin:/usr/bin:/bin"));
+    let expected: Vec<PathBuf> = ["/opt/bin"]
+        .into_iter()
+        .map(PathBuf::from)
+        .chain(tools)
+        .chain(["/usr/bin", "/bin"].map(PathBuf::from))
+        .collect();
+    assert_eq!(std::env::split_paths(&path).collect::<Vec<_>>(), expected);
+}
+
+#[test]
+fn the_code_under_test_runs_the_developer_tools_git() -> Result<()> {
+    if super::developer_tools().is_none() {
+        return Ok(());
+    }
+    let path = std::env::var_os("PATH").context("PATH")?;
+    let git = crate::fsutil::executables::find_executable("git".as_ref(), &path);
+    // The runner's PATH may name another Git ahead of `/usr/bin`; only the
+    // shim's must not be found.
+    assert_ne!(git.as_deref(), Some(Path::new("/usr/bin/git")));
+    Ok(())
+}

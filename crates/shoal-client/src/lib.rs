@@ -50,4 +50,4 @@ pub mod workspaces;
 pub use shoal_forge_types as forge;
 
 #[cfg(test)]
-shoal_core::forget_runner_repository!();
+shoal_core::prepare_test_process!();

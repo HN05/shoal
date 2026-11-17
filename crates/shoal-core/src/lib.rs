@@ -66,4 +66,4 @@ mod helper_tests {
     crate::helper_tests!();
 }
 #[cfg(test)]
-crate::forget_runner_repository!();
+crate::prepare_test_process!();

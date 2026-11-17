@@ -23,9 +23,14 @@ fn own_command_lines_list_a_child_with_its_arguments() {
 
 #[test]
 fn variables_are_those_a_process_started_with() {
+    // One the runner sets and the test binary's startup hook, which changes
+    // `PATH`, leaves as it started.
     let pid = std::process::id();
-    assert_eq!(variable(pid, "PATH"), std::env::var_os("PATH"));
-    assert_eq!(variable(pid, "PAT"), None);
+    assert_eq!(
+        variable(pid, "CARGO_PKG_NAME"),
+        std::env::var_os("CARGO_PKG_NAME")
+    );
+    assert_eq!(variable(pid, "CARGO_PKG_NAM"), None);
 }
 
 #[test]

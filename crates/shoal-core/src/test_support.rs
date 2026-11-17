@@ -1,5 +1,6 @@
 //! Unit-test fixtures; keep their state and repositories under the returned root.
 use std::{
+    ffi::{OsStr, OsString},
     fmt, fs,
     path::{Path, PathBuf},
     process::{Command, Output},
@@ -82,6 +83,35 @@ pub fn developer_tools() -> Option<&'static Path> {
     };
     let tools = TOOLS.get_or_init(|| cfg!(target_os = "macos").then(find).flatten());
     tools.as_deref()
+}
+
+/// `path` with the [`developer_tools`] ahead of `/usr/bin`, so that what it
+/// finds there runs without its shim.
+pub fn with_developer_tools(path: &OsStr) -> OsString {
+    let directories = std::env::split_paths(path).flat_map(|directory| {
+        let tools = (directory == Path::new("/usr/bin")).then(developer_tools);
+        tools
+            .flatten()
+            .map(Path::to_path_buf)
+            .into_iter()
+            .chain([directory])
+    });
+    std::env::join_paths(directories).unwrap()
+}
+
+/// Put the [`developer_tools`] ahead of `/usr/bin` on this process's `PATH`,
+/// so that the code under test, and what it starts, runs Git without the
+/// shim.
+///
+/// # Safety
+/// Call before any other thread exists.
+pub unsafe fn run_developer_tools_directly() {
+    if developer_tools().is_none() {
+        return;
+    }
+    let path = with_developer_tools(&std::env::var_os("PATH").unwrap_or_default());
+    // SAFETY: the caller guarantees no other thread reads the environment.
+    unsafe { std::env::set_var("PATH", path) };
 }
 
 /// The Git tests run: the [`developer_tools`]' own where there are any.
@@ -565,13 +595,14 @@ macro_rules! helper_tests {
     };
 }
 
-/// Forget the repository variables a Git hook or `git rebase --exec` running
-/// this test binary exports, before `main`: the code under test starts Git,
-/// and scripts that run Git, which would otherwise work in that repository
-/// instead of the fixtures'. Each crate whose tests start such processes
-/// expands it at its root.
+/// Prepare this test binary's environment before `main`: forget the
+/// repository variables a Git hook or `git rebase --exec` running it
+/// exports, since the code under test starts Git, and scripts that run Git,
+/// which would otherwise work in that repository instead of the fixtures';
+/// and [`run_developer_tools_directly`]. Each crate whose tests start such
+/// processes expands it at its root.
 #[macro_export]
-macro_rules! forget_runner_repository {
+macro_rules! prepare_test_process {
     () => {
         #[used]
         #[cfg_attr(target_os = "linux", unsafe(link_section = ".init_array"))]
@@ -579,12 +610,15 @@ macro_rules! forget_runner_repository {
             target_vendor = "apple",
             unsafe(link_section = "__DATA,__mod_init_func")
         )]
-        static FORGET_RUNNER_REPOSITORY: extern "C" fn() = {
-            extern "C" fn forget() {
+        static PREPARE_TEST_PROCESS: extern "C" fn() = {
+            extern "C" fn prepare() {
                 // SAFETY: constructors run before `main` starts any thread.
-                unsafe { $crate::git::forget_inherited_repository() };
+                unsafe {
+                    $crate::git::forget_inherited_repository();
+                    $crate::test_support::run_developer_tools_directly();
+                }
             }
-            forget
+            prepare
         };
     };
 }
