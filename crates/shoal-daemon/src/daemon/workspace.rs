@@ -99,7 +99,10 @@ pub(crate) use tree::{
 use crate::refusal::{Reason, Refusal};
 use crate::{
     config::Config,
-    daemon::store::{self, Store},
+    daemon::{
+        spaces::status::Records,
+        store::{self, Store},
+    },
     model::{Execution, Inspection, Repository, Workspace},
     paths::Paths,
 };
@@ -432,9 +435,11 @@ impl Manager {
     pub async fn inspect_workspace(&self, selector: &SpaceSelector) -> Result<Inspection> {
         let workspace = self.workspace(selector).await?;
         let simulators = self.list_simulators(Some(&workspace.id)).await?;
-        let issues = self.issue_registrations(&workspace.id).await?;
-        let pr_cleanup = self.pr_registration(&workspace.id).await?;
-        let completion = self.completion(&workspace.id).await?;
+        let Records {
+            issues,
+            pr_cleanup,
+            completion,
+        } = self.space_records(&workspace.id).await?;
         let mut inspection = self
             .store
             .run(move |db| {

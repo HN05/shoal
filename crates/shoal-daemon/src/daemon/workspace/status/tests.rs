@@ -34,8 +34,7 @@ async fn status_reports_git_checks_that_stall_as_unavailable() {
     let status = manager
         .worktree_status(&SpaceSelector::id(&workspace.id))
         .await
-        .unwrap()
-        .0;
+        .unwrap();
     assert!(status.diff.is_some(), "{:?}", status.diff_error);
     assert!(status.changed_on_both_sides.is_some());
 
@@ -49,8 +48,7 @@ async fn status_reports_git_checks_that_stall_as_unavailable() {
     let status = manager
         .worktree_status(&SpaceSelector::id(&workspace.id))
         .await
-        .unwrap()
-        .0;
+        .unwrap();
     assert!(status.diff.is_none());
     assert!(status.changed_on_both_sides.is_none());
     assert!(status.diff_error.is_some());

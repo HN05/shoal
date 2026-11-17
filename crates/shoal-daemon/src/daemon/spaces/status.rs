@@ -46,7 +46,8 @@ impl Manager {
         };
         let cleanup_reason = self.cleanup_reason(&space).await;
         let cleanup_at = self.cleanup_at(&space.id).await?;
-        let (space, records, origin) = self.space_detail(space).await?;
+        let records = self.space_records(&space.id).await?;
+        let (space, origin) = self.space_detail(space).await?;
         let (prs, issue_states) = self.linked_states(&origin, &records).await;
         let attention = self.attention(&space).await?;
         let jobs = self.linked_job_workspaces(space.id()).await?;
@@ -77,23 +78,20 @@ impl Manager {
         (self.space_permissions(&space.id, space.repository_id.as_ref())).await
     }
 
-    /// What the status of `space` shows for its kind, what it records about
-    /// its links and work, and the directory whose origin names its forge:
-    /// the workspace's worktree or the chat's checkout.
-    async fn space_detail(&self, space: Space) -> Result<(SpaceDetail, Records, PathBuf)> {
+    /// What the status of `space` shows for its kind, and the directory
+    /// whose origin names its forge: the workspace's worktree or the chat's
+    /// checkout.
+    async fn space_detail(&self, space: Space) -> Result<(SpaceDetail, PathBuf)> {
         Ok(match space.by_kind() {
             ByKind::Workspace(workspace) => {
-                let (status, records) = self
-                    .worktree_status(&SpaceSelector::id(&workspace.id))
-                    .await?;
+                let status = (self.worktree_status(&SpaceSelector::id(&workspace.id))).await?;
                 let path = status.workspace.path.clone();
-                (SpaceDetail::Workspace(Box::new(status)), records, path)
+                (SpaceDetail::Workspace(Box::new(status)), path)
             }
             ByKind::Chat(chat) => {
-                let records = self.chat_records(&chat.id, chat.completion.clone()).await?;
                 let checkout = self.chat_checkout_path(&chat).await?;
                 let chat = Box::new(chat);
-                (SpaceDetail::Chat { chat }, records, checkout)
+                (SpaceDetail::Chat { chat }, checkout)
             }
         })
     }
@@ -124,12 +122,12 @@ impl Manager {
         Ok((turn_retry, self.proxy_retry(&executions)))
     }
 
-    /// What the chat `id` records about its links, with its `completion`.
-    async fn chat_records(&self, id: &SpaceId, completion: Option<Completion>) -> Result<Records> {
+    /// What the space `id` records about its links and work.
+    pub(crate) async fn space_records(&self, id: &SpaceId) -> Result<Records> {
         Ok(Records {
             issues: self.issue_registrations(id).await?,
             pr_cleanup: self.pr_registration(id).await?,
-            completion,
+            completion: self.completion(id).await?,
         })
     }
 

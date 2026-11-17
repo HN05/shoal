@@ -136,15 +136,13 @@ async fn failing_passes_notify_once_and_show_where_they_belong() {
     let status = manager
         .worktree_status(&SpaceSelector::id(&failing.id))
         .await
-        .unwrap()
-        .0;
+        .unwrap();
     let error = status.cleanup_error.unwrap();
     assert!(error.ends_with("idle agents: bad config"), "{error}");
     let status = manager
         .worktree_status(&SpaceSelector::id(&other.id))
         .await
-        .unwrap()
-        .0;
+        .unwrap();
     assert_eq!(status.cleanup_error, None);
 
     manager.record_sweep(Ok(())).await;
@@ -152,8 +150,7 @@ async fn failing_passes_notify_once_and_show_where_they_belong() {
     let status = manager
         .worktree_status(&SpaceSelector::id(&failing.id))
         .await
-        .unwrap()
-        .0;
+        .unwrap();
     assert_eq!(status.cleanup_error, None);
 }
 

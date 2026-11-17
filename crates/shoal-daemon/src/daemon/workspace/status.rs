@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 
 use super::Manager;
 use crate::{
-    daemon::{spaces::status::Records, store},
+    daemon::store,
     forge::{
         ForgeRepo,
         items::{link, reference::ItemInput},
@@ -15,21 +15,16 @@ use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// What the status of the workspace `selector` names shows for its
-    /// worktree, and what the workspace records about its links and work.
-    pub(crate) async fn worktree_status(
-        &self,
-        selector: &SpaceSelector,
-    ) -> Result<(WorktreeStatus, Records)> {
+    /// worktree.
+    pub(crate) async fn worktree_status(&self, selector: &SpaceSelector) -> Result<WorktreeStatus> {
         let Inspection {
-            issues,
-            completion,
-            pr_cleanup,
             mut workspace,
             executions,
             places,
             ports,
             resources,
             mut simulators,
+            ..
         } = self.inspect_workspace(selector).await?;
         let diff = self.check_access(&workspace.path, self.diff_summary(&workspace));
         let (diff, diff_error) = match diff.await {
@@ -57,7 +52,7 @@ impl Manager {
             .flatten()
             .map(Box::new);
         let chats = self.chats_in(&workspace.id).await?;
-        let status = WorktreeStatus {
+        Ok(WorktreeStatus {
             workspace,
             executions,
             places,
@@ -74,13 +69,7 @@ impl Manager {
             sync,
             changed_on_both_sides,
             chats,
-        };
-        let records = Records {
-            issues,
-            pr_cleanup,
-            completion,
-        };
-        Ok((status, records))
+        })
     }
 }
 
