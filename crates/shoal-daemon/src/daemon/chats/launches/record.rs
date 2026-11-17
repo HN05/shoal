@@ -21,7 +21,8 @@ use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 impl Manager {
     /// Record the chat `start` describes as `new` for `caller`, attach the
-    /// launch `entry` to it, and link what it starts on, telling its
+    /// launch `entry` to it once it is linked to what it starts on, so the
+    /// queue starts its agent in no chat linked only in part, and tell its
     /// starter what linking warned of. A chat its launch cannot take is
     /// removed again.
     pub(in crate::daemon) async fn record_launch(
@@ -33,13 +34,13 @@ impl Manager {
     ) -> Result<LaunchedChat> {
         let workspace = start.workspace.as_ref();
         let chat = (self.start_new_chat(start.repository.clone(), workspace, new)).await?;
+        let warnings = self.link_launch(&chat.id, start, caller).await;
         if let Some(entry) = entry
             && let Err(error) = self.queue_attach(entry, &SpaceSelector::id(&chat.id)).await
         {
             self.discard_new_chat(&chat.name, &chat.id).await;
             return Err(error);
         }
-        let warnings = self.link_launch(&chat.id, start, caller).await;
         self.tell_start_warnings(&chat, &warnings).await;
         let linked = (self.chat_by_id(&chat.id).await?).context("the new chat was removed")?;
         let chat = Chat {
