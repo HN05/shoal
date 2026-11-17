@@ -111,8 +111,10 @@ fn contents(db: &Connection) -> Result<Contents> {
 fn a_new_database_takes_the_schema_the_migrations_make() -> Result<()> {
     let migrated = migrated()?;
     if std::env::var_os(WRITE_SCHEMA).is_some() {
-        let path =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/daemon/store/schema.sql");
+        // Read at run time: a test binary a workspace keeps from its seed
+        // build was compiled in the seed's checkout.
+        let package = std::env::var_os("CARGO_MANIFEST_DIR").context("no CARGO_MANIFEST_DIR")?;
+        let path = std::path::Path::new(&package).join("src/daemon/store/schema.sql");
         std::fs::write(path, schema_of(&migrated)?)?;
     }
     let mut created = Connection::open_in_memory()?;
