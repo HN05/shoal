@@ -539,6 +539,12 @@ pub(crate) fn deciders(
     spaces_above(db, id, agents)
 }
 
+/// How many spaces lie above the space `id`, of either kind.
+pub(super) fn depth(db: &Connection, id: &SpaceId) -> Result<u32> {
+    let sql = format!("{} SELECT MAX(depth) FROM up", up("true"));
+    Ok(db.query_row(&sql, [id], |row| row.get(0))?)
+}
+
 /// The spaces above the space `id` with an agent, which may decide what it
 /// passes up, nearest first.
 pub(crate) fn spaces_above(

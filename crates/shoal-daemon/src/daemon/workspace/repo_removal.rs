@@ -350,8 +350,8 @@ impl Manager {
                 Ok(())
             })
             .await?;
-        for workspace in workspaces {
-            // Removing a parent took its children.
+        for workspace in self.deepest_first(workspaces).await? {
+            // Another removal took it meanwhile.
             if self.find_workspace(&workspace.id).await?.is_none() {
                 continue;
             }
@@ -379,6 +379,29 @@ impl Manager {
                 Ok(())
             })
             .await
+    }
+
+    /// `workspaces` with each one before the spaces above it, so that each
+    /// goes through its own removal, which takes it while it is being
+    /// prepared, rather than through an ancestor's.
+    async fn deepest_first<'a>(&self, workspaces: &'a [Workspace]) -> Result<Vec<&'a Workspace>> {
+        let ids: Vec<_> = workspaces
+            .iter()
+            .map(|workspace| workspace.id.clone())
+            .collect();
+        let depths = (self.store)
+            .read(move |tx| {
+                ids.iter()
+                    .map(|id| super::tree::depth(tx, id))
+                    .collect::<Result<Vec<_>>>()
+            })
+            .await?;
+        let mut ordered: Vec<_> = depths.into_iter().zip(workspaces).collect();
+        ordered.sort_by_key(|(depth, _)| std::cmp::Reverse(*depth));
+        Ok(ordered
+            .into_iter()
+            .map(|(_, workspace)| workspace)
+            .collect())
     }
 
     /// Refuse a workspace the repository's removal cannot take: one an
