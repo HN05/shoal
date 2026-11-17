@@ -4,7 +4,11 @@
 use std::{future::Future, sync::Arc};
 
 use anyhow::Result;
-use tokio::{net::UnixStream, sync::OwnedMutexGuard, time::Instant};
+use tokio::{
+    net::UnixStream,
+    sync::{OwnedMutexGuard, watch},
+    time::Instant,
+};
 
 use super::{Connected, ExecutionContext};
 use crate::{
@@ -164,7 +168,7 @@ pub(super) async fn register(
     drop(reserved);
     drop(admitted);
     if kind == ExecutionKind::Command && agent.as_ref().is_some_and(|agent| agent.new_session) {
-        restart_watches(manager, &space).await;
+        restart_watches(manager, &space, stop.clone()).await;
     }
     let execution = Connected {
         id: plan.id.clone(),
@@ -194,10 +198,21 @@ pub(super) async fn register(
 
 /// Restart the watches of `space`, whose agent begins a new session, before
 /// the agent runs: what its items held by then is history, which its first
-/// message points it to.
-async fn restart_watches(manager: &Manager, space: &crate::model::Space) {
-    if let Err(error) = manager.restart_watches(&space.id).await {
-        log!("{}'s watches not restarted: {error:#}", space.name);
+/// message points it to. A stop asked for meanwhile, as by a removal that
+/// holds the space's PR gate the restart waits for, ends the wait, so the
+/// connection relays it; the agent it stops needs no watches.
+async fn restart_watches(
+    manager: &Manager,
+    space: &crate::model::Space,
+    mut stop: watch::Receiver<bool>,
+) {
+    tokio::select! {
+        restarted = manager.restart_watches(&space.id) => {
+            if let Err(error) = restarted {
+                log!("{}'s watches not restarted: {error:#}", space.name);
+            }
+        }
+        _ = stop.wait_for(|stop| *stop) => {}
     }
 }
 

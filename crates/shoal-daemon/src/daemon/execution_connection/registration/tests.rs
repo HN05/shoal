@@ -172,3 +172,35 @@ async fn a_chat_runs_its_one_agent_and_no_commands() {
     let second = refusal(register(&manager, context(&chat.id, Some("codex"))).await);
     assert!(second.contains("already runs its agent"), "{second}");
 }
+
+#[tokio::test]
+async fn a_stop_ends_a_new_sessions_wait_for_its_spaces_watches() {
+    let (_root, manager, chat) = chat_fixture().await;
+    // As a removal holds it while it waits for the space's agent to stop.
+    let gate = manager.gates.lock_prs([&chat.id]).await;
+    let mut starting = context(&chat.id, Some("claude"));
+    if let Some(agent) = starting.agent.as_mut() {
+        agent.new_session = true;
+    }
+    let registering = {
+        let manager = manager.clone();
+        tokio::spawn(async move { register(&manager, starting).await.is_ok() })
+    };
+    let id = loop {
+        let space = chat.id.clone();
+        let executions = (manager.store)
+            .run(move |db| crate::daemon::store::executions(db, &space))
+            .await
+            .unwrap();
+        if let Some(execution) = executions.into_iter().next() {
+            break execution.id;
+        }
+        tokio::task::yield_now().await;
+    };
+    let connections = manager.executions.connections().await;
+    let request = crate::daemon::workspace::StopRequest::repair();
+    assert!(connections.stop(&id, &request).await.unwrap());
+    drop(connections);
+    assert!(bounded(registering).await.unwrap());
+    drop(gate);
+}
