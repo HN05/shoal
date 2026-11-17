@@ -38,7 +38,7 @@ mod version;
 mod workspaces;
 mod wrapper;
 
-pub use agents::{AgentMethod, TurnEnd, WakeEnd, WokenTurn};
+pub use agents::{AgentMethod, SubagentChange, TurnEnd, WakeEnd, WokenTurn};
 pub use approvals::ApprovalMethod;
 pub use assignments::{AssignmentMethod, SavedAgent};
 pub use chats::{ChatMethod, ChatRoot, ChatStart};

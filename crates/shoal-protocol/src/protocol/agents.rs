@@ -68,6 +68,20 @@ pub enum AgentMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         made: Option<std::time::SystemTime>,
     },
+    /// A subagent of the caller's agent started or stopped, or its session
+    /// started, as its hooks report it, which the daemon counts among the
+    /// caller's execution's running subagents.
+    ReportSubagent {
+        space: SpaceSelector,
+        change: SubagentChange,
+    },
+    /// A request of a subagent of `execution`'s agent passed its proxy,
+    /// which its wrapper reports, so a subagent whose stop was lost stops
+    /// counting once its requests stop.
+    ReportSubagentRequest {
+        space: SpaceSelector,
+        execution: ExecutionId,
+    },
     /// The wake hook of the space's agent ended for `ended` without
     /// starting the agent's turn, which the daemon logs so that a missed
     /// wake can be traced.
@@ -234,6 +248,19 @@ impl TurnEnd {
     fn is_empty(&self) -> bool {
         *self == Self::default()
     }
+}
+
+/// A change to the subagents an agent runs, as its hooks report it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SubagentChange {
+    /// The subagent its AI tool names `agent_id` started.
+    Started { agent_id: String },
+    /// The subagent its AI tool names `agent_id` stopped.
+    Stopped { agent_id: String },
+    /// Its session started, resumed or cleared, which leaves none of the
+    /// subagents from before running.
+    SessionStarted,
 }
 
 impl AgentMethod {

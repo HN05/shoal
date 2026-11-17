@@ -60,6 +60,7 @@ pub(crate) mod spotlight;
 mod stack;
 mod status;
 mod stopped_work;
+pub(crate) mod subagents;
 mod tree;
 pub(crate) mod turn_retry;
 pub(crate) mod upstream_limits;

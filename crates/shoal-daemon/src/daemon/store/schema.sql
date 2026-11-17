@@ -661,6 +661,20 @@ CREATE TABLE space_wake_timers (
     message TEXT
 );
 
+CREATE TABLE execution_subagents (
+    execution_id TEXT NOT NULL REFERENCES executions(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL,
+    started_at INTEGER NOT NULL,
+    starts INTEGER NOT NULL DEFAULT 0,
+    stops INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (execution_id, agent_id)
+);
+
+CREATE TABLE execution_subagent_requests (
+    execution_id TEXT PRIMARY KEY REFERENCES executions(id) ON DELETE CASCADE,
+    at INTEGER NOT NULL
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);

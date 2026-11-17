@@ -11,7 +11,7 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     config::permissions::PermissionChange,
     model::{AgentSession, AgentStatus, PendingRestart, RunningAgent},
-    protocol::{AgentMethod, ExecutionMethod, TurnEnd, WakeEnd, WokenTurn},
+    protocol::{AgentMethod, ExecutionMethod, SubagentChange, TurnEnd, WakeEnd, WokenTurn},
     sessions::Origin,
     state::{AgentState, TurnFailure},
 };
@@ -63,6 +63,16 @@ pub async fn report_turn_failure(
         made,
     };
     request(daemon, method).await
+}
+
+/// Record `change` to the subagents of `space`'s agent, as its hooks
+/// report it.
+pub async fn report_subagent(
+    daemon: &impl Daemon,
+    space: SpaceSelector,
+    change: SubagentChange,
+) -> Result<()> {
+    request(daemon, AgentMethod::ReportSubagent { space, change }).await
 }
 
 /// Tell the daemon that the wake hook of `space`'s agent ended for `ended`

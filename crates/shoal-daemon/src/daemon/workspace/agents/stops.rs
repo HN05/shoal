@@ -70,8 +70,9 @@ fn discard_handoff(handoff: Option<&Path>) {
 }
 
 /// What still holds when a stop chosen between turns is recorded: the agent
-/// is idle in the turn generation it was chosen in, and for a stop that
-/// frees memory, its prompt cache expired by `cache_expired_at`.
+/// is idle in the turn generation it was chosen in with no subagent
+/// running, and for a stop that frees memory, its prompt cache expired by
+/// `cache_expired_at`.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Between {
     pub turn: i64,
@@ -79,8 +80,16 @@ pub(crate) struct Between {
 }
 
 /// Whether the agent of execution `id` is still `between` turns: a turn
-/// that started since, or a turn end that renewed its cache, keeps it.
+/// that started since, a turn end that renewed its cache, or a subagent
+/// that started, keeps it.
 fn still_between(db: &Connection, id: &ExecutionId, between: Between) -> Result<bool> {
+    Ok(idle_in_turn(db, id, between)?
+        && !crate::daemon::workspace::subagents::runs_one(db, id, UnixTime::now())?)
+}
+
+/// Whether the agent of execution `id` is still idle in the turn
+/// generation `between` names, with a cache that expired as it requires.
+fn idle_in_turn(db: &Connection, id: &ExecutionId, between: Between) -> Result<bool> {
     Ok(db.query_row(
         "SELECT EXISTS (SELECT 1 FROM space_agent_state
              WHERE execution_id=?1 AND state=?2 AND turn=?3

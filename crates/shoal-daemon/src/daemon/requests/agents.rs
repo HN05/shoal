@@ -12,6 +12,7 @@ use super::super::{
 use crate::{
     protocol::{AgentMethod, Body, WokenTurn},
     state::AgentState,
+    time::UnixTime,
 };
 use shoal_protocol::progress::ProgressChange;
 use shoal_protocol::space_names::SpaceSelector;
@@ -115,6 +116,18 @@ pub(super) async fn handle(
                 )
                 .await?,
         ),
+        AgentMethod::ReportSubagent { space, change } => {
+            manager
+                .report_subagent(&space, execution(caller), change, UnixTime::now())
+                .await?;
+            Body::Ok
+        }
+        AgentMethod::ReportSubagentRequest { space, execution } => {
+            manager
+                .report_subagent_request(&space, execution, UnixTime::now())
+                .await?;
+            Body::Ok
+        }
         AgentMethod::ReportWakeEnd { space, ended } => {
             manager.report_wake_end(&space, &ended).await?;
             Body::Ok
@@ -236,6 +249,7 @@ impl Scoped for AgentMethod {
             } => bail!("workspace processes report a failed turn only for their own execution"),
             // Only the agent's wrapper, which runs its proxy, reports it.
             AgentMethod::ReportProxyRetry { .. }
+            | AgentMethod::ReportSubagentRequest { .. }
             | AgentMethod::ReportUpstreamReset { .. }
             | AgentMethod::ReportUpstreamLimit { .. } => {
                 bail!("workspace processes cannot report what a proxy learns")
@@ -247,6 +261,9 @@ impl Scoped for AgentMethod {
             // A report claims the workspace for the reporting agent, which
             // would keep a child's events from reaching its coordinator.
             AgentMethod::SetAgentState { workspace, .. }
+            | AgentMethod::ReportSubagent {
+                space: workspace, ..
+            }
             | AgentMethod::StartWokenTurn { workspace }
             | AgentMethod::ReportTurnFailure { workspace, .. } => Some(
                 manager

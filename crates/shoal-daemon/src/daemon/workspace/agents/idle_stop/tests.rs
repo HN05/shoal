@@ -279,6 +279,73 @@ async fn a_turn_that_starts_between_the_choice_and_the_stop_keeps_the_agent() {
     assert!(manager.agent_overload(&id).await.is_none());
 }
 
+/// Report `change` to the subagents of the agent `execution` runs in
+/// `workspace`.
+async fn subagent(
+    manager: &Manager,
+    workspace: &Workspace,
+    execution: &ExecutionId,
+    change: crate::protocol::SubagentChange,
+) {
+    let space = SpaceSelector::id(&workspace.id);
+    let now = crate::time::UnixTime::now();
+    (manager.report_subagent(&space, Some(execution.clone()), change, now))
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn an_idle_agent_with_a_running_subagent_stops_once_the_subagent_stops() {
+    use crate::protocol::SubagentChange;
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (workspace, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
+    let id = execution.plan.id.clone();
+    let agent_id = "a1".to_owned();
+    let started = SubagentChange::Started {
+        agent_id: agent_id.clone(),
+    };
+    subagent(&manager, &workspace, &id, started).await;
+    cache_expires_in(&manager, &workspace, 0).await;
+    manager.stop_idle_agents().await.unwrap();
+    assert!(!*execution.stop.borrow(), "its subagent keeps the agent");
+
+    subagent(
+        &manager,
+        &workspace,
+        &id,
+        SubagentChange::Stopped { agent_id },
+    )
+    .await;
+    manager.stop_idle_agents().await.unwrap();
+    assert!(*execution.stop.borrow());
+}
+
+#[tokio::test]
+async fn a_subagent_that_starts_between_the_choice_and_the_stop_keeps_the_agent() {
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (workspace, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
+    let id = execution.plan.id.clone();
+    let chosen = chosen_held(&manager, &id).await;
+    let turns = manager.agent_turns().await.unwrap();
+    let started = crate::protocol::SubagentChange::Started {
+        agent_id: "a1".into(),
+    };
+    subagent(&manager, &workspace, &id, started).await;
+    cache_expires_in(&manager, &workspace, 0).await;
+    manager.stop_idle(turns, chosen).await;
+    assert!(!*execution.stop.borrow(), "the agent keeps running");
+}
+
 #[tokio::test]
 async fn a_wake_after_an_idle_stop_leaves_its_update_for_the_restore() {
     let (root, manager) = manager().await;

@@ -152,13 +152,15 @@ struct StoppedTurn {
     workspace: SpaceId,
     state: AgentState,
     execution: Option<Execution>,
+    /// Whether its agent ran a subagent.
+    subagent: bool,
 }
 
 impl StoppedTurn {
-    /// The turn to keep: an idle one counts as working while `scan` finds
-    /// work of the execution outside its process group, short of what other
-    /// executions' `agents` run, as protection counts it, since that work
-    /// may start its next turn.
+    /// The turn to keep: an idle one counts as working while its agent ran
+    /// a subagent, or `scan` finds work of the execution outside its
+    /// process group, short of what other executions' `agents` run, as
+    /// protection counts it, since that work may start its next turn.
     fn kept(&self, scan: Option<(&Scan, &AgentTrees)>) -> AgentState {
         let in_flight = || {
             self.execution
@@ -168,7 +170,7 @@ impl StoppedTurn {
                     Processes::runs_outside_group(execution, scan, agents)
                 })
         };
-        if self.state == AgentState::Idle && in_flight() {
+        if self.state == AgentState::Idle && (self.subagent || in_flight()) {
             AgentState::Working
         } else {
             self.state
@@ -191,6 +193,7 @@ fn reported_by(db: &Connection, id: &ExecutionId) -> Result<Option<StoppedTurn>>
         workspace,
         state,
         execution: crate::daemon::store::find_execution(db, id)?,
+        subagent: super::subagents::runs_one(db, id, UnixTime::now())?,
     }))
 }
 

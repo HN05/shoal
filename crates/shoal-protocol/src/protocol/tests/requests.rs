@@ -111,6 +111,8 @@ const REQUESTS: &[&str] = &[
     r#"{"sleep":{"space":"fix","sleep":"permanent"}}"#,
     r#"{"start_woken_turn":{"workspace":"fix"}}"#,
     r#"{"report_turn_failure":{"workspace":"fix","failure":"rate_limited","turn_end":{"prompt_cache_secs":300}}}"#,
+    r#"{"report_subagent":{"space":"fix","change":{"started":{"agent_id":"a1"}}}}"#,
+    r#"{"report_subagent_request":{"space":"fix","execution":"e1"}}"#,
     r#"{"report_wake_end":{"space":"fix","ended":{"signalled":{"signal":"SIGTERM"}}}}"#,
     r#"{"report_proxy_retry":{"workspace":"fix","execution":"e1","retry":{"failure":"overloaded","attempt":2,"next_at":1700000000}}}"#,
     r#"{"report_upstream_reset":{"workspace":"fix","execution":"e1","resets_at":1700000000}}"#,
