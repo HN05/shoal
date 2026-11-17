@@ -2466,8 +2466,8 @@ once they start, since such a message is meant for all work in progress; a
 workspace without any agent would hold the message until removal. A message
 to a chat goes the way the user's own messages to it go, with its files kept
 among the chat's. Scoped
-processes may read their own workspace's messages and send messages
-only to the agents of the workspaces below their own, which they coordinate.
+processes may read their own space's messages and send messages only to
+the agents of the spaces below their own, which they coordinate.
 
 `shoal questions` opens a question picker on a terminal. A numbered question
 shows its text, workspace, recommendation, reason and numbered choices, then an

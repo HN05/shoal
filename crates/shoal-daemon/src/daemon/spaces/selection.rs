@@ -28,21 +28,22 @@ impl Manager {
     /// Every space: the workspaces in listing order, then the chats in
     /// start order.
     pub(crate) async fn present_spaces(&self) -> Result<Vec<Space>> {
-        self.spaces_within(None).await
-    }
-
-    /// `root` and every space below it, or every space without `root`: the
-    /// workspaces in listing order, then the chats in start order.
-    pub(crate) async fn spaces_within(&self, root: Option<&SpaceId>) -> Result<Vec<Space>> {
-        let workspaces = self.list_workspaces_within(root).await?;
-        let mut chats = self.chats().await?;
-        if let Some(root) = root {
-            let subtree = self.subtree(root).await?;
-            chats.retain(|chat| subtree.contains(&chat.id));
-        }
+        let workspaces = self.list_workspaces().await?;
+        let chats = self.chats().await?;
         Ok((workspaces.into_iter().map(Space::from))
             .chain(chats.into_iter().map(Space::from))
             .collect())
+    }
+
+    /// `root` and every space below it, of either kind, or every space
+    /// without `root`, in the order of [`Self::present_spaces`].
+    pub(crate) async fn spaces_within(&self, root: Option<&SpaceId>) -> Result<Vec<Space>> {
+        let mut spaces = self.present_spaces().await?;
+        if let Some(root) = root {
+            let subtree = self.subtree(root).await?;
+            spaces.retain(|space| subtree.contains(&space.id));
+        }
+        Ok(spaces)
     }
 
     /// The workspace or chat, running or stopped, with the ID `id`, while

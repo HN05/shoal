@@ -5863,8 +5863,8 @@ shoal messages [space]     # New messages, oldest first, shown once
 `shoal messages send` queues a message of at most 8 KiB, without control characters
 other than newlines and tabs, for the agents working in a space, a workspace or
 chat, which receives it once it runs, and is refused while the workspace is being removed; output
-indents a message's later lines under its first. Workspace processes send only
-to the workspaces below their own. `--attach` copies a file of at most 100 MiB into the
+indents a message's later lines under its first. Scoped processes send only
+to the spaces below their own. `--attach` copies a file of at most 100 MiB into the
 repository directory's `.attachments`, which agents can read, and the message
 lists each copy's path as an `Attached file:` line, or in `attachments` with
 `--json`; a message may be its files alone. The copies stay as other
