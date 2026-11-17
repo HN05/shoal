@@ -67,6 +67,9 @@ pub(super) async fn run(manager: Arc<Manager>) {
                     .map(|listener| (address, listener));
             } else {
                 *manager.hub.listener.0.lock().unwrap() = None;
+                // Under the admission lock, so a link admitted meanwhile
+                // either ends here or finds the role gone.
+                let _admission = manager.hub.admissions.lock().await;
                 manager.hub.links.stop_all();
             }
         }

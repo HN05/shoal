@@ -51,7 +51,10 @@ struct Admitted<'a> {
 impl Manager {
     /// Serve the link a member opened over `over` with `opening` in a request
     /// of `protocol`, until it ends, once the member and the hub proved
-    /// their keys.
+    /// their keys. From the member's proof until its welcome or refusal is
+    /// written, admission holds a daemon operation, so an update never exits
+    /// partway; the handshake before it, which waits on the member, holds
+    /// none, and nor does the link it then serves.
     pub(super) async fn accept_member(
         self: &Arc<Self>,
         mut channel: Channel,
@@ -59,34 +62,54 @@ impl Manager {
         opening: Value,
         over: Over,
     ) {
-        match self.admit(&mut channel, protocol, opening, over).await {
-            Ok(Ok(admitted)) => self.serve_member(channel, admitted).await,
+        let proven = match self.handshake(&mut channel, protocol, opening).await {
+            Ok(Ok(proven)) => proven,
             Ok(Err(refusal)) => {
-                log!("hub: refused a link: {}", refusal.message);
-                channel.close_with(&Frame::Refused(refusal)).await;
+                let operation = self.gates.operation_unless_exiting().await;
+                return self.refuse(channel, refusal, operation).await;
             }
-            Err(error) => log!(
-                "hub: a link failed to open: {}",
-                shown(&format!("{error:#}"))
-            ),
+            Err(error) => return log_failed(&error),
+        };
+        let Some(operation) = self.gates.operation_unless_exiting().await else {
+            let refusal = refusal(
+                RefusalReason::Restarting,
+                "the hub's daemon is restarting; connect again once it is back",
+            );
+            return self.refuse(channel, refusal, None).await;
+        };
+        match self.admit(&mut channel, proven, over).await {
+            Ok(Ok(admitted)) => {
+                drop(operation);
+                self.serve_member(channel, admitted).await
+            }
+            Ok(Err(refusal)) => self.refuse(channel, refusal, Some(operation)).await,
+            Err(error) => log_failed(&error),
         }
     }
 
-    /// The member that opened `channel`, or why the hub refuses it. The
-    /// link is sealed once the member proved its key, so every later
-    /// refusal and the welcome go sealed.
-    async fn admit(
+    /// Send `refusal` and close `channel`, holding `operation`, if any,
+    /// until it went.
+    async fn refuse(
+        &self,
+        channel: Channel,
+        refusal: Refusal,
+        operation: Option<OwnedRwLockReadGuard<()>>,
+    ) {
+        log!("hub: refused a link: {}", refusal.message);
+        channel.close_with(&Frame::Refused(refusal)).await;
+        drop(operation);
+    }
+
+    /// The hello on `channel`, with the member's proof of its key, once the
+    /// hub proved its own, or why the hub refuses it first.
+    async fn handshake(
         &self,
         channel: &mut Channel,
         protocol: u32,
         opening: Value,
-        over: Over,
-    ) -> Result<Result<Admitted<'_>, Refusal>> {
+    ) -> Result<Result<Proven, Refusal>> {
         if !self.is_hub() {
-            return Ok(Err(refusal(
-                RefusalReason::NotHub,
-                "this daemon is not the hub; set [machine.hub] enabled there",
-            )));
+            return Ok(Err(not_hub()));
         }
         if protocol != protocol::VERSION {
             return Ok(Err(self.refuse_version(&opening, protocol).await));
@@ -100,10 +123,37 @@ impl Manager {
                 "no proof of the member's key",
             )));
         };
-        // A revocation commits and ends the member's link under the same
-        // lock, so none slips between reading the member and registering
-        // its link.
+        Ok(Ok(Proven {
+            hello,
+            exchange,
+            proof,
+            transcript,
+        }))
+    }
+
+    /// The member that `proven` proved, with its link registered once it
+    /// was welcomed, or why the hub refuses it. The link is sealed once the
+    /// hub knows whose key the proof checks with, so every later refusal
+    /// and the welcome go sealed.
+    async fn admit(
+        &self,
+        channel: &mut Channel,
+        proven: Proven,
+        over: Over,
+    ) -> Result<Result<Admitted<'_>, Refusal>> {
+        let Proven {
+            hello,
+            exchange,
+            proof,
+            transcript,
+        } = proven;
+        // A revocation, and the end of the hub role, ends the member's links
+        // under the same lock, so none slips between reading the member and
+        // registering its link.
         let admission = self.hub.admissions.lock().await;
+        if !self.is_hub() {
+            return Ok(Err(not_hub()));
+        }
         let claimant = match self.claimant(&hello.intent, &proof).await? {
             Ok(claimant) => claimant,
             Err(refusal) => return Ok(Err(refusal)),
@@ -111,8 +161,8 @@ impl Manager {
         channel
             .seal(exchange.keys(&transcript, Signer::Hub)?)
             .await?;
-        let (member, _operation) = match self.take(claimant, &proof, over).await? {
-            Ok(taken) => taken,
+        let member = match self.take(claimant, &proof, over).await? {
+            Ok(member) => member,
             Err(refusal) => return Ok(Err(refusal)),
         };
         let Some(registration) = self.hub.links.register(&member.id, &hello.instance) else {
@@ -216,15 +266,14 @@ impl Manager {
     }
 
     /// The member `claimant` becomes: a new one recorded once a pairing
-    /// code admits it, or a link over the daemon's socket, with the daemon
-    /// operation the record holds until the member is welcomed; a paired
-    /// one unless the hub revoked it. Otherwise why the hub refuses it.
+    /// code admits it, or a link over the daemon's socket; a paired one
+    /// unless the hub revoked it. Otherwise why the hub refuses it.
     async fn take(
         &self,
         claimant: Claimant<'_>,
         proof: &Proof,
         over: Over,
-    ) -> Result<Result<(Member, Option<OwnedRwLockReadGuard<()>>), Refusal>> {
+    ) -> Result<Result<Member, Refusal>> {
         let joining = match claimant {
             Claimant::Paired(recorded) if recorded.revoked => {
                 return Ok(Err(refusal(
@@ -235,7 +284,7 @@ impl Manager {
                     ),
                 )));
             }
-            Claimant::Paired(recorded) => return Ok(Ok((recorded.member, None))),
+            Claimant::Paired(recorded) => return Ok(Ok(recorded.member)),
             Claimant::New(joining) => joining,
         };
         let admitted =
@@ -246,14 +295,7 @@ impl Manager {
                 "the pairing code is unknown, used or expired; run shoal hub pair for a new one",
             )));
         }
-        let Some(operation) = self.gates.operation_unless_exiting().await else {
-            return Ok(Err(refusal(
-                RefusalReason::Restarting,
-                "the hub's daemon is restarting; join again once it is back",
-            )));
-        };
-        let member = self.join_member(joining).await?;
-        Ok(Ok((member, Some(operation))))
+        self.join_member(joining).await.map(Ok)
     }
 
     /// Record the new member `joining` asks for.
@@ -400,6 +442,14 @@ impl Claimant<'_> {
     }
 }
 
+/// A hello whose member proved its key, with what sealing the link takes.
+struct Proven {
+    hello: Hello,
+    exchange: Exchange,
+    proof: Proof,
+    transcript: Transcript,
+}
+
 /// A member's signature and what it must sign.
 struct Proof {
     signed: Vec<u8>,
@@ -416,6 +466,23 @@ impl Proof {
     fn proves_code(&self, code: &str) -> bool {
         (self.code.as_ref()).is_some_and(|proof| pairing::proves_code(code, &self.signed, proof))
     }
+}
+
+/// The refusal of a link to a daemon that does not take the hub role.
+fn not_hub() -> Refusal {
+    refusal(
+        RefusalReason::NotHub,
+        "this daemon is not the hub; set [machine.hub] enabled there",
+    )
+}
+
+/// Log that a link failed to open, with `error` as the hub shows what
+/// another side sent.
+fn log_failed(error: &anyhow::Error) {
+    log!(
+        "hub: a link failed to open: {}",
+        shown(&format!("{error:#}"))
+    );
 }
 
 fn refusal(reason: RefusalReason, message: impl Into<String>) -> Refusal {

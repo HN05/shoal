@@ -33,9 +33,11 @@ impl Machine {
         }
     }
 
-    /// The hub, listening on a port of loopback the system picks.
+    /// The hub, once it listens on a port of loopback the system picks.
     fn hub() -> Self {
-        Self::start("[machine.hub]\nenabled = true\nlisten = \"127.0.0.1:0\"\n")
+        let hub = Self::start("[machine.hub]\nenabled = true\nlisten = \"127.0.0.1:0\"\n");
+        hub.role_once(|role| !role["listener"]["address"].is_null());
+        hub
     }
 
     fn run(&self, args: &[&str]) -> Output {
