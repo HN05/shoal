@@ -429,15 +429,17 @@ impl Manager {
 
     /// Give the copy's worktree, which an earlier creation of `workspace`
     /// left, its `source`'s files again, and configure it, once it verifies
-    /// as the one Git created for it and a checkpoint keeps what it holds,
-    /// refusing what a checkpoint cannot keep.
+    /// as the one Git created for it, still on its recorded branch or
+    /// detached, and a checkpoint keeps what it holds, refusing what a
+    /// checkpoint cannot keep.
     async fn refill_copy_worktree(
         &self,
         workspace: &Workspace,
         source: &Source,
         git_profile: Option<&str>,
     ) -> Result<Configured> {
-        self.verify_worktree(workspace).await?;
+        let branch = workspace.branch().map(BranchName::as_str);
+        self.verify_checkout(workspace, branch).await?;
         let kept = self
             .checkpoint(workspace, CheckpointCause::Refresh, None)
             .await?;

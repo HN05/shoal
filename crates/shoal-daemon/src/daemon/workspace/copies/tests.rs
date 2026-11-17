@@ -201,6 +201,24 @@ async fn a_retry_that_could_not_keep_the_failed_copys_files_is_refused() {
 }
 
 #[tokio::test]
+async fn a_retry_of_a_failed_copy_switched_to_another_branch_is_refused() {
+    let f = Fixture::new().await;
+    let copy = f.failed_pending_copy(None).await;
+    let recorded = git(&copy.path, &["rev-parse", "HEAD"]);
+    git(&copy.path, &["switch", "-q", "-c", "other"]);
+    // A refill would move a branch to the source's new HEAD.
+    git(&f.source.path, &["add", "--all"]);
+    git(&f.source.path, &["commit", "-q", "-m", "later"]);
+    let selector = SpaceSelector::id(&copy.id);
+    let refused = f.manager.create_pending_worktree(&selector).await;
+    assert!(refused.is_err(), "{refused:?}");
+    let branch = copy.branch().unwrap().as_str();
+    assert_eq!(git(&copy.path, &["rev-parse", branch]), recorded);
+    assert_eq!(git(&copy.path, &["rev-parse", "other"]), recorded);
+    assert!(copy.path.join("mine").exists());
+}
+
+#[tokio::test]
 async fn a_retried_copy_of_a_checkpoint_writes_its_files_again() {
     let f = Fixture::new().await;
     let checkpoint = f

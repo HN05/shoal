@@ -163,13 +163,15 @@ impl Manager {
     }
 
     /// Configure the worktree an earlier creation of `workspace` left once
-    /// it verifies as the one Git created for it.
+    /// it verifies as the one Git created for it, still on its recorded
+    /// branch or detached.
     async fn reconfigure_worktree(
         &self,
         workspace: &Workspace,
         git_profile: Option<&str>,
     ) -> Result<Configured> {
-        self.verify_worktree(workspace).await?;
+        let branch = workspace.branch().map(shoal_refs::BranchName::as_str);
+        self.verify_checkout(workspace, branch).await?;
         self.configure_worktree(workspace, None, git_profile).await
     }
 
