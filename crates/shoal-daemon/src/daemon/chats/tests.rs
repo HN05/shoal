@@ -914,3 +914,31 @@ async fn a_chat_s_log_shows_a_removal_that_failed() {
         .collect();
     assert_eq!(removal, [EventKind::RemovalStarted, EventKind::Retained]);
 }
+
+#[tokio::test]
+async fn a_chats_removal_waits_for_its_running_hook() {
+    use crate::daemon::workspace::{GuardMode, ResourcesBusy};
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(repo.id.into(), "talk".into(), "claude".into(), None)
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&chat.id);
+    let hook = (manager.gates.resource_guard(&chat.id, GuardMode::Exclusive)).unwrap();
+    let error = manager
+        .remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .await
+        .unwrap_err();
+    assert!(error.is::<ResourcesBusy>(), "{error:#}");
+    assert!(!manager.space_removals.reserved(&chat.id));
+    drop(hook);
+    manager
+        .remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
+}

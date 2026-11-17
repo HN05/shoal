@@ -10,7 +10,7 @@ use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use std::borrow::Cow;
 
 use super::{
-    Manager, StopRequest,
+    GuardMode, Manager, StopRequest,
     executions::StopPolicy,
     lifecycle::{Removal, Underway},
     reservation::RemovalRules,
@@ -181,6 +181,9 @@ impl Manager {
         // Reserved first, so no agent of it registers and nothing opens
         // below it while the removal goes on.
         let reservation = self.space_removals.reserve(id)?;
+        // A hook of the space, which rechecks the reservation once it holds
+        // the space's resource guard, excludes removal while it runs.
+        drop(self.gates.resource_guard(id, GuardMode::Shared)?);
         // No hold arrives once the space is reserved.
         ensure!(
             !removal.refuses_holds() || !self.user_holds(id).await?,

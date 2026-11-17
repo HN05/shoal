@@ -63,14 +63,14 @@ pub(crate) enum ResourceGuard {
     Hook { _guard: OwnedRwLockWriteGuard<()> },
 }
 
-/// Another resource operation in the workspace holds its resource guard,
+/// Another resource operation in the space holds its resource guard,
 /// such as a hook, so one that needs it fails now and may run once it ends.
 #[derive(Debug)]
 pub(crate) struct ResourcesBusy;
 
 impl std::fmt::Display for ResourcesBusy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("workspace resource operation is in progress; retry when its hook finishes")
+        f.write_str("space resource operation is in progress; retry when its hook finishes")
     }
 }
 
