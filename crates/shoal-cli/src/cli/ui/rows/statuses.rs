@@ -3,9 +3,8 @@
 use std::collections::HashSet;
 
 use super::{Cell, status_cell, waiting_reasons};
-use crate::cli::list_status::ListStatus;
+use crate::cli::list_status::{self, ListStatus};
 use crate::model::{QueueEntry, Workspace};
-use crate::state::{QueueKind, QueueState};
 use shoal_ids::space_ids::SpaceId;
 
 #[derive(Default)]
@@ -19,11 +18,8 @@ pub struct Statuses {
 impl Statuses {
     /// The status lists show for `workspace`.
     pub fn of(&self, workspace: &Workspace) -> ListStatus {
-        ListStatus::of_listed_workspace(
-            workspace,
-            self.stopped.contains(&workspace.id),
-            self.entries(workspace).first().copied(),
-        )
+        let stopped = self.stopped.contains(&workspace.id);
+        ListStatus::of_queued_workspace(workspace, stopped, &self.queued)
     }
 
     /// Every status the row of `workspace` shows: its own, and those of the
@@ -42,17 +38,10 @@ impl Statuses {
         shown
     }
 
-    /// The agents queued to start in `workspace`, in queue order, except the
-    /// restore that brings back its asleep agent, which its own status shows.
+    /// The agents queued to start in `workspace`, as
+    /// [`list_status::queued_in`] finds them.
     pub(super) fn entries(&self, workspace: &Workspace) -> Vec<&QueueEntry> {
-        let asleep = |entry: &QueueEntry| {
-            workspace.asleep.is_some()
-                && entry.kind == QueueKind::Restore
-                && entry.state == QueueState::Queued
-        };
-        (self.queued.iter())
-            .filter(|entry| entry.space() == Some(&workspace.id) && !asleep(entry))
-            .collect()
+        list_status::queued_in(workspace, &self.queued)
     }
 
     /// Sort `workspaces` as lists show them: by status, then number.

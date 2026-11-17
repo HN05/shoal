@@ -1,22 +1,5 @@
-use clap::ValueEnum;
-
 use super::*;
 use crate::model::ReviewMark;
-
-#[test]
-fn value_names_spell_the_labels() {
-    for status in ListStatus::value_variants() {
-        let name = status.to_possible_value().unwrap();
-        assert_eq!(
-            name.get_name(),
-            status
-                .label()
-                .replace(" (", " ")
-                .replace(')', "")
-                .replace(' ', "-")
-        );
-    }
-}
 
 /// A ready workspace whose coordinator's agent does its work and reports
 /// `coordinator`.
@@ -117,40 +100,13 @@ fn only_an_idle_agent_shows_its_sleep() {
 }
 
 #[test]
-fn an_agent_shoal_brings_back_shows_asleep_rather_than_stopped_or_queued() {
-    let mut workspace = coordinated(AgentState::Idle);
-    workspace.asleep = Some(crate::model::Asleep {
-        reason: "critical memory pressure".into(),
-        wakes_when: "an update arrives for it".into(),
-    });
-    // Its stop saved work, which comes back on its own.
-    assert_eq!(
-        ListStatus::of_workspace(&workspace, true),
-        ListStatus::Asleep
-    );
-    let mut restore: QueueEntry = serde_json::from_value(serde_json::json!({
-        "id": "entry", "kind": "restore", "repository_id": "repo", "name": "work",
-        "agent": "claude", "issue_title": null, "state": "queued", "position": 1,
-        "created_at": 0, "space_id": workspace.id,
-    }))
-    .unwrap();
-    let statuses = |restore: &QueueEntry| crate::cli::ui::Statuses {
-        stopped: [workspace.id.clone()].into(),
-        queued: vec![restore.clone()],
-    };
-    assert_eq!(statuses(&restore).shown(&workspace), [ListStatus::Asleep]);
-    restore.state = QueueState::Starting;
-    assert_eq!(statuses(&restore).of(&workspace), ListStatus::Starting);
-}
-
-#[test]
 fn a_blocked_workspace_ranks_below_needs_input_and_above_stopped_work() {
     let mut workspace = coordinated(AgentState::Idle);
-    workspace.progress = Some(shoal_protocol::progress::Progress {
+    workspace.progress = Some(crate::progress::Progress {
         status: None,
         steps: Vec::new(),
         current: None,
-        blockers: vec![shoal_protocol::progress::RecordedBlocker {
+        blockers: vec![crate::progress::RecordedBlocker {
             kind: crate::state::BlockerKind::Issue,
             target: "https://forge.example/o/r/issues/1".into(),
             name: "https://forge.example/o/r/issues/1".into(),
@@ -222,5 +178,12 @@ fn a_working_agent_outranks_its_ready_mark_in_every_space() {
         chat.agent_state = Some(status(state));
         assert_eq!(ListStatus::of_workspace(&workspace, false), shown);
         assert_eq!(ListStatus::of_chat(&chat), shown);
+    }
+}
+
+#[test]
+fn value_names_spell_the_labels() {
+    for status in ListStatus::ALL {
+        assert_eq!(status.as_str(), status.label().replace(' ', "-"));
     }
 }

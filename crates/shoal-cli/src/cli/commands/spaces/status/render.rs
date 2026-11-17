@@ -4,7 +4,7 @@ use super::StatusView;
 use crate::{
     cli::{
         commands::{base, ci, links, progress, resources, split},
-        list_status::ListStatus,
+        list_status::{ListStatus, ListStatusStyle},
         output::{Palette, Style},
         ui,
     },

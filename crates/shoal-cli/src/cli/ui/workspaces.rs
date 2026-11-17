@@ -14,7 +14,7 @@ use crate::{
         args::WorkspaceScope,
         availability::{self, Availability, Fit},
         context::Context,
-        list_status::ListStatus,
+        list_status::{ListStatus, ListStatusStyle},
         output::{Palette, Style},
         recent,
         scoping::Scoping,

@@ -17,7 +17,7 @@ use futures_util::future::join_all;
 
 use crate::{
     cli::{
-        list_status::ListStatus,
+        list_status::{ListStatus, ListStatusStyle},
         output::{Palette, Style},
     },
     config::modes::ModeName,

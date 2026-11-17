@@ -6,7 +6,7 @@ use super::{
     queue_subject, statuses::place_cell, title_limit, usage_cell, workspace_mode_cell,
     workspace_status_cell, workspace_text,
 };
-use crate::cli::list_status::ListStatus;
+use crate::cli::list_status::{ListStatus, ListStatusStyle};
 use crate::cli::output::{Palette, Style};
 use crate::config::modes::ModeName;
 use crate::model::{Chat, QueueEntry, Workspace};

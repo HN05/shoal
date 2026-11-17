@@ -22,6 +22,7 @@ pub mod integrations;
 pub mod item_numbers;
 pub mod launches;
 pub mod links;
+pub mod list_status;
 pub mod log;
 pub mod model;
 pub mod notifications;
