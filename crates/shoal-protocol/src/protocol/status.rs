@@ -15,6 +15,10 @@ pub struct DaemonStatus {
     /// stalled.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cleanup_error: Option<String>,
+    /// The hub role the daemon takes, none when it neither is the hub nor
+    /// joined one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hub: Option<crate::hub::HubRole>,
 }
 
 /// The cause besides a slow system that file access timeouts name: a privacy

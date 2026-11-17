@@ -10,6 +10,7 @@ fn status_names_failing_cleanup() {
         unread_notifications: 0,
         access_stalls: Vec::new(),
         cleanup_error: Some("Automatic cleanup failed 2 consecutive passes".into()),
+        hub: None,
     };
     let message = status_message(&status);
     assert_eq!(

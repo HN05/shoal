@@ -28,6 +28,7 @@ mod file_copies;
 pub(crate) mod forge_hosts;
 pub(crate) mod gate;
 mod git_logins;
+pub(crate) mod hub;
 mod idle_sleep;
 pub(crate) mod idle_wakes;
 pub(crate) mod item_numbers;
@@ -111,6 +112,7 @@ use crate::{
     paths::Paths,
     protocol::{self, Body, ErrorCode, Method, Operation, Reattachment, Request, Response, timing},
 };
+use shoal_protocol::hub::link::Opening;
 
 const SIMULATOR_SWEEP_INTERVAL: Duration = Duration::from_secs(15);
 const ITEM_ACTIVITY_SWEEP_INTERVAL: Duration = Duration::from_secs(30);
@@ -245,6 +247,7 @@ pub async fn run(
     spawn_supervised(&mut background, &manager, "seed builds", seed::run);
     spawn_supervised(&mut background, &manager, "seed spares", seed::run_spares);
     spawn_supervised(&mut background, &manager, "runner", runner::run);
+    spawn_supervised(&mut background, &manager, "hub", hub::run);
     spawn_supervised(
         &mut background,
         &manager,
@@ -529,6 +532,13 @@ async fn serve_request(
                 operation_guard,
             )
             .await;
+        }
+        // A hub member's link, which checks the protocol itself.
+        Method::HubLink(Opening::HubLink(hello)) => {
+            drop(operation_guard);
+            let manager = server.manager.clone();
+            hub::accept_socket_link(manager, stream, request.protocol, hello).await;
+            return Ok(());
         }
         // Service commands end a daemon of any release.
         Method::Exit(exit) => {

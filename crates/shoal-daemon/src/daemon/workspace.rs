@@ -190,6 +190,8 @@ pub struct Manager {
     report_times: Arc<lost_reports::ReportTimes>,
     /// Directories whose file access stalls, shared with startup's status answer.
     pub(crate) file_access: Arc<crate::daemon::file_access::FileAccess>,
+    /// The hub role, or this machine's membership of a hub.
+    pub(crate) hub: crate::daemon::hub::Hub,
 }
 
 impl Manager {
@@ -247,6 +249,7 @@ impl Manager {
             rejected_configs: Default::default(),
             report_times: Default::default(),
             file_access: Default::default(),
+            hub: Default::default(),
         }))
     }
 

@@ -159,6 +159,9 @@ const REQUESTS: &[&str] = &[
     r#"{"list_triggers":{"context":{"checkout":"r1"}}}"#,
     r#"{"pause_trigger":{"context":null,"name":"triage","paused":true}}"#,
     r#"{"run_trigger":{"context":null,"name":"labelled","request":{"headers":[["X-Forgejo-Event","issues"]],"body":"{}"}}}"#,
+    r#""pair_hub""#,
+    r#""hub_members""#,
+    r#"{"revoke_hub_member":{"member":"laptop"}}"#,
     // Issues and PRs.
     r#"{"link_item":{"space":"fix","kind":"issue","item":"1","relation":"related"}}"#,
     r#"{"relink_space":{"space":"fix","links":{"issues":[{"kind":"issue","url":"https://github.com/o/r/issues/1"}],"prs":[],"opened":[],"related":[],"assignees":[{"url":"https://github.com/o/r/issues/1","account":"agent","added":true}]}}}"#,
@@ -332,6 +335,7 @@ fn every_request_has_its_json_above() {
         variants::<ContainerMethod>(),
         variants::<SubscriptionMethod>(),
         variants::<TriggerMethod>(),
+        variants::<HubMethod>(),
     ]
     .concat()
     .into_iter()

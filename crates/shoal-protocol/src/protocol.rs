@@ -13,6 +13,7 @@ mod executions;
 mod files;
 mod frames;
 mod holds;
+mod hub;
 mod items;
 mod launches;
 mod notifications;
@@ -54,6 +55,7 @@ pub use frames::{
     text_pieces, write,
 };
 pub use holds::HoldMethod;
+pub use hub::HubMethod;
 pub use items::{DownloadPiece, ItemContext, ItemMethod, RepoTarget, ViewPiece};
 pub use launches::LaunchMethod;
 pub use notifications::NotificationMethod;

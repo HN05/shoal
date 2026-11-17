@@ -1,10 +1,11 @@
 //! The request envelope and the method each request carries.
 use super::{
     AgentMethod, ApprovalMethod, AssignmentMethod, ChatMethod, CiMethod, ContainerMethod,
-    DaemonMethod, DemoMethod, ExecutionMethod, ExitRequest, FileMethod, HoldMethod, ItemMethod,
-    LaunchMethod, NotificationMethod, OperationMethod, PortMethod, QuestionMethod, QueueMethod,
-    Reattach, RecoveryMethod, RemovalMethod, RepositoryMethod, ResourceMethod, ReviewMethod,
-    SecretMethod, SimulatorMethod, SubscriptionMethod, TriggerMethod, VERSION, WorkspaceMethod,
+    DaemonMethod, DemoMethod, ExecutionMethod, ExitRequest, FileMethod, HoldMethod, HubMethod,
+    ItemMethod, LaunchMethod, NotificationMethod, OperationMethod, PortMethod, QuestionMethod,
+    QueueMethod, Reattach, RecoveryMethod, RemovalMethod, RepositoryMethod, ResourceMethod,
+    ReviewMethod, SecretMethod, SimulatorMethod, SubscriptionMethod, TriggerMethod, VERSION,
+    WorkspaceMethod,
 };
 use serde::{Deserialize, Serialize};
 
@@ -38,6 +39,10 @@ pub enum Method {
     Reattach(Reattachment),
     /// Answered before the protocol check.
     Exit(ExitRequest),
+    /// Long-lived: a hub member's link, checked against the protocol after
+    /// it is read, so the hub can tell a member of another release why it
+    /// refuses it.
+    HubLink(crate::hub::link::Opening),
     Operation(Operation),
 }
 
@@ -81,6 +86,7 @@ pub enum Operation {
     Container(ContainerMethod),
     Subscription(SubscriptionMethod),
     Trigger(TriggerMethod),
+    Hub(HubMethod),
 }
 
 impl Method {
@@ -100,7 +106,7 @@ impl Method {
     /// Daemon administration, which must reach a daemon of any release.
     pub fn controls_daemon(&self) -> bool {
         match self {
-            Self::Reattach(_) => false,
+            Self::Reattach(_) | Self::HubLink(_) => false,
             Self::Exit(_) => true,
             Self::Operation(operation) => operation.controls_daemon(),
         }
@@ -111,6 +117,7 @@ impl Method {
         match self {
             Self::Reattach(_) => Lifetime::Resumed,
             Self::Exit(_) => Lifetime::Reply,
+            Self::HubLink(_) => Lifetime::Open,
             Self::Operation(operation) => operation.lifetime(),
         }
     }
@@ -163,7 +170,8 @@ impl Operation {
             | Self::Resource(_)
             | Self::Simulator(_)
             | Self::Container(_)
-            | Self::Trigger(_) => Lifetime::Reply,
+            | Self::Trigger(_)
+            | Self::Hub(_) => Lifetime::Reply,
         }
     }
 }
@@ -226,6 +234,7 @@ from_domains!(
     Container(ContainerMethod),
     Subscription(SubscriptionMethod),
     Trigger(TriggerMethod),
+    Hub(HubMethod),
 );
 
 /// How long a request keeps its connection.

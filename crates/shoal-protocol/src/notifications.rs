@@ -102,6 +102,9 @@ states!(NotificationKind {
     /// A lease could not be released when the agent or demo that acquired
     /// it ended, and stays held.
     ReleaseFailed => "release_failed",
+    /// The hub refused a machine or device, such as for another version,
+    /// or this machine's link to the hub.
+    HubRefused => "hub_refused",
 });
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

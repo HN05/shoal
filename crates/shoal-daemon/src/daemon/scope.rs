@@ -156,6 +156,7 @@ impl Scoped for Operation {
             Operation::Container(method) => method.scope(manager, caller).await,
             Operation::Subscription(method) => method.scope(manager, caller).await,
             Operation::Trigger(method) => method.scope(manager, caller).await,
+            Operation::Hub(method) => method.scope(manager, caller).await,
         }
     }
 

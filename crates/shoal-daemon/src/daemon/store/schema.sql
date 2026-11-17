@@ -696,6 +696,32 @@ CREATE TABLE waiting_preparations (
     waits TEXT NOT NULL
 );
 
+CREATE TABLE hub_identity (
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+    private_key BLOB NOT NULL
+);
+
+CREATE TABLE hub_members (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK(kind IN ('machine','device')),
+    name TEXT NOT NULL,
+    public_key TEXT NOT NULL UNIQUE,
+    joined_at INTEGER NOT NULL,
+    version TEXT,
+    last_seen INTEGER,
+    revoked_at INTEGER
+);
+
+CREATE TABLE hub_membership (
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+    member_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    hub_key TEXT NOT NULL,
+    url TEXT,
+    joined_at INTEGER NOT NULL,
+    revoked INTEGER NOT NULL DEFAULT 0 CHECK(revoked IN (0,1))
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);

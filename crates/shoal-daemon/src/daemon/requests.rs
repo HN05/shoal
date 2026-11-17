@@ -10,6 +10,7 @@ mod demos;
 mod executions;
 mod files;
 mod holds;
+mod hub;
 mod items;
 mod launches;
 mod notifications;
@@ -93,5 +94,6 @@ pub(super) async fn handle(
             subscriptions::handle(&server.manager, method, caller, scope)
         }
         Operation::Trigger(method) => triggers::handle(&server.manager, method, caller).await,
+        Operation::Hub(method) => hub::handle(&server.manager, method, caller).await,
     }
 }

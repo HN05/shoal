@@ -36,6 +36,10 @@ pub struct Hello {
     pub version: String,
     /// What the hub signs to prove its key.
     pub nonce: Nonce,
+    /// The installation the member runs as, which tells a reconnection of
+    /// it from another one holding a copy of its credential, such as a
+    /// cloned state directory.
+    pub instance: String,
     pub intent: Intent,
 }
 
@@ -43,20 +47,22 @@ pub struct Hello {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Intent {
-    /// Pair as a new member holding `key`: over the listener with a pairing
-    /// code; through the daemon's socket, whose callers act as the user
-    /// already, without one.
-    Join {
-        kind: MemberKind,
-        name: String,
-        key: PublicKey,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        code: Option<String>,
-    },
-    /// Connect as `member`, from the process `instance` names, which tells
-    /// a reconnection of the same daemon from another holding a copy of its
-    /// credential.
-    Connect { member: MemberId, instance: String },
+    /// Pair as a new member.
+    Join(Joining),
+    /// Connect as `member`.
+    Connect { member: MemberId },
+}
+
+/// A new member: its kind and name, and the key it holds. Over the
+/// listener it brings a pairing code; through the daemon's socket, whose
+/// callers act as the user already, none.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Joining {
+    pub kind: MemberKind,
+    pub name: String,
+    pub key: PublicKey,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
 }
 
 /// One message after the hello.

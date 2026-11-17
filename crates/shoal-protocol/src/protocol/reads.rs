@@ -3,9 +3,9 @@
 //! those finish instead, including reads that first finish or record work.
 use super::{
     AgentMethod, ApprovalMethod, ChatMethod, CiMethod, ContainerMethod, DaemonMethod, DemoMethod,
-    ExecutionMethod, FileMethod, HoldMethod, ItemMethod, NotificationMethod, Operation, PortMethod,
-    QuestionMethod, QueueMethod, RecoveryMethod, RemovalMethod, RepositoryMethod, ResourceMethod,
-    SecretMethod, SimulatorMethod, TriggerMethod, WorkspaceMethod,
+    ExecutionMethod, FileMethod, HoldMethod, HubMethod, ItemMethod, NotificationMethod, Operation,
+    PortMethod, QuestionMethod, QueueMethod, RecoveryMethod, RemovalMethod, RepositoryMethod,
+    ResourceMethod, SecretMethod, SimulatorMethod, TriggerMethod, WorkspaceMethod,
 };
 
 impl Operation {
@@ -82,6 +82,7 @@ impl Operation {
                 )
                 | Self::Secret(SecretMethod::SecretCatalog { .. })
                 | Self::Trigger(TriggerMethod::ListTriggers { .. })
+                | Self::Hub(HubMethod::HubMembers)
                 | Self::Container(
                     ContainerMethod::ContainerCatalog { .. }
                         | ContainerMethod::ContainerOverview { .. }

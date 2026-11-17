@@ -70,7 +70,7 @@ pub struct Webhooks {
 
 /// `[machine.hub]`: the hub role this daemon takes, or the command it
 /// reaches the hub it joins through.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Hub {
     /// Take the hub role, which the user's other machines and devices join.

@@ -15,12 +15,15 @@ test-support = ["shoal-core/test-support", "shoal-protocol/test-support"]
 anyhow.workspace = true
 form_urlencoded = "1"
 fs2 = "0.4"
-futures-util.workspace = true
+futures-util = { workspace = true, features = ["sink"] }
 http-body-util = "0.1"
 hyper = { version = "1", features = ["http1", "server"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 libc.workspace = true
+ring = "0.17"
 rusqlite = { workspace = true, features = ["bundled"] }
+# The hub link's TLS, through the provider shoal-proxy uses too.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"
@@ -34,10 +37,12 @@ shoal-schedule = { workspace = true, features = ["rusqlite"] }
 shoal-subprocess.workspace = true
 socket2 = "0.6"
 tempfile.workspace = true
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "handshake", "__rustls-tls"] }
 tokio = { workspace = true, features = ["macros", "net", "io-util", "process", "rt", "rt-multi-thread", "signal", "sync", "time"] }
 toml.workspace = true
 toml_edit.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }
+webpki-roots = "1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 rustix = { version = "1", features = ["fs"] }
