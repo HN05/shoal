@@ -160,7 +160,11 @@ fn stopping_processes_refuses_a_stopped_chat_first() {
 fn stops_and_resumes_the_chats_below(fixture: &Fixture, parent: &Parent) {
     let home = fixture.root.path().to_owned();
     let restored = home.join("chat-restored");
+    // Its agent's start file must not end the wait for `talk`'s below.
+    let started = home.join("chat-started");
+    let _ = fs::remove_file(&started);
     let (mut other, _) = start_test_chat(fixture, "other");
+    wait_until("the chat other started", || started.exists());
     for refused in [parent.name(), "other"] {
         let output = parent.run(fixture, &["stop", &fixture.id(refused)]);
         assert!(!output.status.success(), "{refused}: {}", printed(&output));
