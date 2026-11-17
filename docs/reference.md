@@ -3065,7 +3065,8 @@ checkpoint that kept HEAD only is refused. A start the [agent queue](#agent-queu
 holds creates its copy when it leaves the queue, so it copies the files of that
 moment; `--now` copies them at once, and a checkpoint taken first with `shoal
 checkpoint` keeps the moment for `--checkpoint`. `shoal start` returns before
-the copy is made, by the new workspace's preparation; `shoal restore` retries
+the copy is made, by the new workspace's preparation, which checks the
+source's files as it copies them; `shoal restore` retries
 one that failed, copying the source's files as they are then.
 
 A copy of current files has its source's ignored files instead of the

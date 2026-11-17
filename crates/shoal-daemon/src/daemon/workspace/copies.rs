@@ -3,7 +3,7 @@
 //! starting checkpoint of their own.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -54,6 +54,15 @@ pub(super) struct Source {
     files: SourceFiles,
 }
 
+/// When reading a live source checks that its files can be copied: now,
+/// or at the creation of a pending copy's worktree, which copies them as
+/// they are then.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FilesCheck {
+    Now,
+    AtCreation,
+}
+
 enum SourceFiles {
     /// The live worktree's current files, ignored ones included.
     Worktree(PathBuf),
@@ -94,7 +103,8 @@ impl Manager {
     /// The current files of the live workspace `id`, as a copy starts from
     /// them.
     pub(super) async fn live_copy_source(&self, id: &SpaceId) -> Result<Source> {
-        self.files_source(self.workspace_by_id(id).await?).await
+        let workspace = self.workspace_by_id(id).await?;
+        self.files_source(workspace, FilesCheck::Now).await
     }
 
     /// Whether `source` still has the HEAD, index and unsaved files the copy
@@ -158,8 +168,9 @@ impl Manager {
 
     /// Create a copy of `source` in `repository` where `place` says, below
     /// the space `new` names, and take its starting checkpoint; a pending
-    /// one's worktree waits in its record for its preparation. It runs
-    /// setup like any workspace unless the caller skips it.
+    /// one's worktree waits in its record for its preparation, which checks
+    /// the files it copies then. It runs setup like any workspace unless
+    /// the caller skips it.
     pub(crate) async fn create_copy(
         &self,
         repository: crate::repository::Selector,
@@ -170,7 +181,12 @@ impl Manager {
         self.ensure_parent_repository(&repository, new.parent.as_ref())
             .await?;
         let (repo, git) = self.lock_repository(repository).await?;
-        let source = self.copy_source(source).await?;
+        let check = if new.pending {
+            FilesCheck::AtCreation
+        } else {
+            FilesCheck::Now
+        };
+        let source = self.copy_source(source, check).await?;
         ensure!(
             source.repository_id == repo.id,
             "workspace {} belongs to another repository",
@@ -199,7 +215,7 @@ impl Manager {
         git_profile: Option<&str>,
         git: OwnedMutexGuard<()>,
     ) -> Result<Workspace> {
-        let source = match self.copy_source(copied).await {
+        let source = match self.copy_source(copied, FilesCheck::Now).await {
             Ok(source) => source,
             Err(error) => return self.record_creation(workspace, Err(error)).await,
         };
@@ -233,12 +249,13 @@ impl Manager {
     }
 
     /// The workspace `request` names, live, or removed when it names a
-    /// checkpoint, as a copy starts from it.
-    async fn copy_source(&self, request: &CopySource) -> Result<Source> {
+    /// checkpoint, as a copy starts from it, checking a live worktree's
+    /// files when `check` says.
+    async fn copy_source(&self, request: &CopySource, check: FilesCheck) -> Result<Source> {
         match self.workspace(&request.workspace).await {
             Ok(workspace) => match request.checkpoint {
                 Some(number) => self.live_checkpoint_source(workspace, number).await,
-                None => self.files_source(workspace).await,
+                None => self.files_source(workspace, check).await,
             },
             Err(error) => match request.checkpoint {
                 Some(number) => self.removed_source(&request.workspace, number).await,
@@ -247,32 +264,20 @@ impl Manager {
         }
     }
 
-    /// The current files of `workspace`, which must be ready, verified and
-    /// in no Git operation, and hold nothing a checkpoint cannot keep.
-    async fn files_source(&self, workspace: Workspace) -> Result<Source> {
-        let name = &workspace.name;
+    /// The current files of `workspace`, which must be ready and verified,
+    /// at its HEAD, checked as copyable when `check` says.
+    async fn files_source(&self, workspace: Workspace, check: FilesCheck) -> Result<Source> {
         ensure!(
             workspace.state == WorkspaceState::Ready,
-            "workspace {name} is {}; copy it once it is ready",
+            "workspace {} is {}; copy it once it is ready",
+            workspace.name,
             workspace.state
         );
         let git_dir = self.verified_git_dir(&workspace).await?;
-        let path = &workspace.path;
-        ensure!(
-            !git::status::operation_in_progress_at(path, &git_dir).await?,
-            "a Git operation is under way in {name}; copy it once it is finished or aborted"
-        );
-        ensure!(
-            git::checkpoint::unsaved_bytes(path).await?.is_some(),
-            "{name} has an untracked nested repository or a changed submodule, whose files a copy cannot record"
-        );
-        let shared = git::copy::shared_metadata(path).await?;
-        ensure!(
-            shared.is_empty(),
-            "{name} holds submodules or worktrees whose Git metadata a copy would share: {}",
-            shared.join(", ")
-        );
-        let head = git::resolve_commit(path, "HEAD", git::run_isolated).await?;
+        if check == FilesCheck::Now {
+            ensure_copyable(&workspace, &git_dir).await?;
+        }
+        let head = git::resolve_commit(&workspace.path, "HEAD", git::run_isolated).await?;
         let files = SourceFiles::Worktree(workspace.path.clone());
         Ok(live_source(workspace, head, files))
     }
@@ -606,6 +611,28 @@ async fn rewind_copy(workspace: &Workspace, files: &RestoredFiles) -> Result<()>
         ignored.join(", ")
     );
     git::checkpoint::rewind(path, head, snapshot).await
+}
+
+/// Refuse copying the files of the verified `workspace`, whose admin
+/// directory is `git_dir`, while a Git operation is under way there or it
+/// holds what a checkpoint cannot keep or Git metadata a copy would share.
+async fn ensure_copyable(workspace: &Workspace, git_dir: &Path) -> Result<()> {
+    let (name, path) = (&workspace.name, &workspace.path);
+    ensure!(
+        !git::status::operation_in_progress_at(path, git_dir).await?,
+        "a Git operation is under way in {name}; copy it once it is finished or aborted"
+    );
+    ensure!(
+        git::checkpoint::unsaved_bytes(path).await?.is_some(),
+        "{name} has an untracked nested repository or a changed submodule, whose files a copy cannot record"
+    );
+    let shared = git::copy::shared_metadata(path).await?;
+    ensure!(
+        shared.is_empty(),
+        "{name} holds submodules or worktrees whose Git metadata a copy would share: {}",
+        shared.join(", ")
+    );
+    Ok(())
 }
 
 /// `workspace` as a copy starts from it at `head` with `files`.

@@ -360,6 +360,32 @@ async fn a_source_in_a_git_operation_is_refused() {
 }
 
 #[tokio::test]
+async fn a_pending_copy_refuses_a_source_in_a_git_operation_when_it_copies_it() {
+    let f = Fixture::new().await;
+    let git_dir = git(&f.source.path, &["rev-parse", "--absolute-git-dir"]);
+    fs::write(std::path::Path::new(git_dir.trim()).join("MERGE_HEAD"), "").unwrap();
+    let source = CopySource {
+        workspace: SpaceSelector::id(&f.source.id),
+        checkpoint: None,
+    };
+    let new = NewWorkspace {
+        pending: true,
+        ..Default::default()
+    };
+    let repository = (f.source.repository()).into();
+    let place = CopyPlace::Branch(None);
+    let copy = (f.manager.create_copy(repository, &source, place, new))
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&copy.id);
+    let error = f.manager.create_pending_worktree(&selector).await;
+    let error = error.expect_err("a source in a Git operation must not be copied");
+    assert!(format!("{error:#}").contains("Git operation"), "{error:#}");
+    let copy = f.manager.workspace_by_id(&copy.id).await.unwrap();
+    assert!(copy.pending_worktree && !copy.path.exists());
+}
+
+#[tokio::test]
 async fn a_copy_starts_from_a_checkpoint_of_a_live_or_removed_workspace() {
     let f = Fixture::new().await;
     let checkpoint = f
