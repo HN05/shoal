@@ -334,3 +334,53 @@ async fn the_background_poll_follows_a_merge_while_older_updates_wait() {
     }
     assert!(following.awaits().await);
 }
+
+#[tokio::test]
+async fn pr_cleanup_waits_for_a_poll_to_see_the_merge() {
+    let following = following(true, json!([])).await;
+    let (manager, workspace) = (&following.manager, &following.workspace);
+    let done = manager
+        .mark_space_done(
+            &SpaceSelector::id(&workspace.id),
+            Done::default(),
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    // The PR sweep has already found every watched PR merged at HEAD.
+    let registration = crate::daemon::links::pr::Registration {
+        kind: crate::daemon::links::pr::RegistrationKind::Watch {
+            urls: vec![following.pr.parse().unwrap()],
+            merged_head: Some(done.head),
+        },
+        error: None,
+    };
+    let id = workspace.id.clone();
+    (manager.store)
+        .run(move |db| {
+            db.execute(
+                "UPDATE pr_cleanup SET record=?2 WHERE space_id=?1",
+                params![id, serde_json::to_string(&registration)?],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager.sweep_prs().await.unwrap();
+    assert!(workspace.path.exists());
+
+    // The poll that sees the merge starts its lookup, which keeps the space.
+    for snapshot in [pull("open", None), pull("merged", Some(MERGED))] {
+        (manager)
+            .record_background_activity(&workspace.id, vec![(following.pr.clone(), snapshot)])
+            .await
+            .unwrap();
+    }
+    manager.sweep_prs().await.unwrap();
+    assert!(workspace.path.exists());
+
+    following.end_window().await;
+    following.follow().await;
+    manager.sweep_prs().await.unwrap();
+    assert!(!workspace.path.exists());
+}

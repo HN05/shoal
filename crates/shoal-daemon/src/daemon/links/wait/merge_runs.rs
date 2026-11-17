@@ -10,7 +10,10 @@ use rusqlite::{OptionalExtension, params};
 use shoal_ids::space_ids::SpaceId;
 use shoal_refs::{BranchName, CommitId};
 
-use super::{cursor::cursor_record, items::linked_items};
+use super::{
+    cursor::cursor_record,
+    items::{linked_items, observed_item},
+};
 use crate::{
     daemon::{events, links::space::LinkSpace, log, workspace::Manager},
     forge::{
@@ -151,6 +154,18 @@ impl Manager {
             .with_context(|| format!("could not list the CI runs of {}", lookup.commit))
     }
 
+    /// Whether a PR the space `id` watches may have merged unseen: where
+    /// `[pr] watch_merge_runs` is on, no read of Shoal's own has recorded
+    /// its merge, which starts the lookup of its runs. PR cleanup, which
+    /// reads the forge itself, waits for that read.
+    pub(crate) async fn merge_unseen(&self, id: &SpaceId) -> Result<bool> {
+        if self.configured_merge_target(id).await?.is_none() {
+            return Ok(false);
+        }
+        let id = id.to_owned();
+        self.store.read(move |db| merge_unseen(db, &id)).await
+    }
+
     /// Whether the space `id` looks for the runs of a merge or follows one
     /// it linked that has not finished.
     pub(crate) async fn awaits_merge_runs(&self, id: &SpaceId) -> Result<bool> {
@@ -242,6 +257,22 @@ fn start_lookup(
 pub(crate) fn awaits_merge_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<bool> {
     for lookup in merge_lookups(db, id)? {
         if lookup.looking || any_running(db, id, &lookup.runs)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// Whether neither the background poll's baseline nor the watch cursor of
+/// the space `id` shows a PR it watches merged.
+fn merge_unseen(db: &rusqlite::Connection, id: &SpaceId) -> Result<bool> {
+    let merged = |read: &Snapshot| read.state() == Some(SnapshotState::Merged);
+    for pull in linked_items(db, id, Some(ItemKind::Pr))? {
+        let polled = observed_item(db, id, pull.url())?;
+        let watched = cursor_record(db, id, pull.url())?;
+        if !polled.is_some_and(|read| merged(&read))
+            && !watched.is_some_and(|record| merged(&record.snapshot))
+        {
             return Ok(true);
         }
     }

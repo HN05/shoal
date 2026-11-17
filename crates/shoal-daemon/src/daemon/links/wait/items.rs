@@ -338,7 +338,11 @@ pub(crate) fn open_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<It
 }
 
 /// The item as the workspace's last poll saw it, if one has.
-fn observed_item(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Result<Option<Snapshot>> {
+pub(super) fn observed_item(
+    db: &rusqlite::Connection,
+    id: &SpaceId,
+    url: &str,
+) -> Result<Option<Snapshot>> {
     let record: Option<String> = db
         .query_row(
             "SELECT record FROM space_item_activity WHERE space_id=?1 AND url=?2",

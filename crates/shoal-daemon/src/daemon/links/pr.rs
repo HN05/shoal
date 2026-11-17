@@ -339,8 +339,11 @@ impl Manager {
             {
                 return Ok(false);
             }
+            // A merge only the forge has shown yet has its runs looked up
+            // once the next poll records it, which then keeps the space.
             if self.keep_reason(&workspace.id).await?.is_some()
                 || !self.completion_allows_cleanup(workspace).await?
+                || self.merge_unseen(&workspace.id).await?
             {
                 return Ok(false);
             }
