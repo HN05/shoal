@@ -6,7 +6,7 @@ use anyhow::Result;
 use super::super::{
     answer::Answer,
     queued_starts,
-    scope::{Caller, Scoped, denied},
+    scope::{Caller, Scoped},
     workspace::Manager,
 };
 use crate::protocol::{Body, QueueMethod};
@@ -125,10 +125,11 @@ impl Scoped for QueueMethod {
                 (manager.authorize_beyond_limits(caller, start, repository)).await?;
                 None
             }
-            // A caller holds, claims, fails and attaches the launches it starts
-            // itself, which its scope reaches.
+            // A caller holds, claims, reads, fails and attaches the launches
+            // it starts itself, which its scope reaches.
             QueueMethod::QueueHold { entry }
             | QueueMethod::QueueClaim { entry }
+            | QueueMethod::QueuedPlan { entry }
             | QueueMethod::QueueFail { entry, .. } => {
                 manager.ensure_entry_reached(caller, entry).await?;
                 None
@@ -140,9 +141,6 @@ impl Scoped for QueueMethod {
             QueueMethod::StartedLaunch { entry } => {
                 manager.ensure_started_launch_reached(caller, entry).await?;
                 None
-            }
-            QueueMethod::QueuedPlan { .. } => {
-                return Err(denied());
             }
         })
     }

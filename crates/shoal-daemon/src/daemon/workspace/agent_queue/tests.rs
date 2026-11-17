@@ -1025,7 +1025,7 @@ async fn a_scoped_launch_its_caller_starts_is_left_to_it() {
 }
 
 #[tokio::test]
-async fn a_scoped_caller_holds_and_fails_only_the_launches_it_reaches() {
+async fn a_scoped_caller_holds_reads_and_fails_only_the_launches_it_reaches() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 2);
@@ -1046,6 +1046,9 @@ async fn a_scoped_caller_holds_and_fails_only_the_launches_it_reaches() {
     for (entry, allowed) in [(own.entry.unwrap(), true), (theirs.entry.unwrap(), false)] {
         let methods = [
             crate::protocol::QueueMethod::QueueHold {
+                entry: entry.id.clone(),
+            },
+            crate::protocol::QueueMethod::QueuedPlan {
                 entry: entry.id.clone(),
             },
             crate::protocol::QueueMethod::QueueFail {
