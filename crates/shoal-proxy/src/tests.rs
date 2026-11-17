@@ -845,7 +845,7 @@ async fn the_first_answer_after_a_spent_quota_is_a_recovery() {
 }
 
 #[tokio::test]
-async fn a_subagents_failure_says_it_was_a_subagents() {
+async fn a_subagents_request_and_its_failure_say_they_were_a_subagents() {
     let upstream = FakeUpstream::start(|_| {
         reply(
             429,
@@ -858,13 +858,17 @@ async fn a_subagents_failure_says_it_was_a_subagents() {
         (None, false),
         (Some(("x-codex-parent-thread-id", "t1")), true),
         (Some(("x-openai-subagent", "review")), true),
+        (Some(("x-claude-code-agent-id", "a1")), true),
     ] {
         let mut request = Request::post("/responses");
         if let Some((name, value)) = header {
             request = request.header(name, value);
         }
         send(addr, request, r#"{"stream":true}"#).await;
-        let events = drain(&mut events);
+        let mut events = drain(&mut events);
+        if subagent {
+            assert_eq!(events.remove(0), Event::SubagentRequest, "{header:?}");
+        }
         assert!(
             matches!(events[..], [Event::Failed { subagent: s, .. }] if s == subagent),
             "{header:?}: {events:?}"

@@ -282,9 +282,12 @@ likely working with a shown one, then idle ones, since an idle agent loses no
 turn, and working ones only when no idle one is left, each the lowest priority
 and rank first, so the work the queue would start last gives way first; within
 a space the agent idle longest, or the newest working one. Shown agents still stop once no
-other is left, since a host such as Herdr may count every agent as shown. An idle agent with processes outside its
-process group counts as working, since their completion may start its next
-turn, and so does one without turn reports. Its hook waiting for the next
+other is left, since a host such as Herdr may count every agent as shown. An idle agent with a running subagent, which
+its hooks report, or processes outside its process group counts as working,
+since their completion may start its next turn, and so does one without turn
+reports. A subagent whose stop is lost counts until the agent's session starts
+again or it exits, or, where the agent's proxy has passed its subagents'
+requests in the current session, until none has for an hour, which leaves room for a long tool call. Its hook waiting for the next
 update runs there too, marked so that it does not count. Once the
 wrapper reports the stop, the daemon also stops the agent's identity-verified
 processes outside its process group, such as background shell commands, since

@@ -17,9 +17,12 @@ use tokio::{net::TcpListener, sync::mpsc::UnboundedSender};
 pub use retry::Failure;
 pub use upstream::Upstream;
 
-/// What the proxy tells its owner about the requests it retries.
+/// What the proxy tells its owner about the requests it retries, and those
+/// the agent's subagents send.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
+    /// A subagent of the agent's sent a request, which the proxy forwards.
+    SubagentRequest,
     /// Attempt `attempt` failed, and the proxy tries again after `wait`.
     Retrying {
         failure: Failure,

@@ -233,9 +233,9 @@ newest. Each agent's wrapper reports every 10
 seconds whether a terminal shows the agent, as `shoal status` marks its session
 `attached`; one running in a terminal no host serves always counts as attached.
 An agent is idle when its
-hooks last reported a finished turn and none of its processes run outside its
-process group, such as a background command whose completion would start its
-next turn; an agent without turn reports counts as working. Linux measures usage from `MemAvailable`, including reclaimable
+hooks last reported a finished turn, it runs no [subagent](#agent-state), and
+none of its processes run outside its process group, such as a background
+command whose completion would start its next turn; an agent without turn reports counts as working. Linux measures usage from `MemAvailable`, including reclaimable
 cache; macOS uses native critical pressure. The wrapper terminates the process
 group through its normal grace period. The monitor waits for the cooldown before
 resampling and stopping another agent if pressure persists. It retains workspaces, execution recovery records and resource
@@ -619,7 +619,7 @@ of done spaces that something besides their work and PRs keeps from
 [completion cleanup](#assignment-completion), such as a
 [hold](#holds) or an open [question](#questions), and with
 [`[sleep] idle`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#sleep) enabled any idle heavy agent; a
-[light](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules) one keeps running. Only an agent idle with no processes running
+[light](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules) one keeps running. Only an agent idle with no subagent or processes running
 outside its process group, with a restore command, and whose
 [prompt cache](#agent-state) has expired stops: a resumed agent's first request
 writes most of its cache again, which an expired cache costs anyway. An agent
@@ -5354,6 +5354,17 @@ else `promptCacheTtl` in its user settings, else an hour with
 login, which Shoal assumes is within its usage limits. A turn an API error ends reports `idle` through
 `shoal internal turn-failed --integration <name>`, which also reads the failure
 the integration's hook event names.
+Their `SubagentStart` and `SubagentStop` hooks report each subagent, by the
+`agent_id` the hook event names, through
+`shoal internal subagent --integration <name>`, and a session that starts,
+resumes or clears ends the subagents of the one before. A tracked agent that
+is idle while one of its subagents runs, such as a background agent or a
+workflow's, counts as working wherever Shoal decides whether to stop an idle
+agent, as for [overload protection](#overload-protection) and
+[sleep](#sleep), since stopping it ends the subagent. A subagent whose stop
+never arrives counts until the agent's session starts again or the agent
+exits, or, once the agent's [proxy](#agents) has passed a request of its
+subagents in the current session, until none has passed for an hour; its status still shows `waiting`.
 Neither agent has a hook for an interrupted turn: Claude Code shows `working` until
 it notifies that its prompt is waiting for input, and Codex until its next turn
 ends. Codex has no hook for a permission prompt, so it reports `working`

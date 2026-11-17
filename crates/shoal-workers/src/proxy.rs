@@ -43,10 +43,11 @@ impl Running {
 
     /// Tell the daemon what the proxy learns for the agent that `execution`
     /// runs in `workspace`: the retries it waits to make, its upstream's
-    /// resets and limits, and, when `ends_turns`, each turn a failure it gave
-    /// up on inside a response stream ends, which the daemon may retry. Only an
-    /// agent that reports no failed turn itself takes such a failure for its
-    /// turn's end, since a subagent's request may fail while the turn goes on.
+    /// resets and limits, its subagents' requests, and, when `ends_turns`,
+    /// each turn a failure it gave up on inside a response stream ends,
+    /// which the daemon may retry. Only an agent that reports no failed turn
+    /// itself takes such a failure for its turn's end, since a subagent's
+    /// request may fail while the turn goes on.
     pub(crate) fn report_turns(
         &mut self,
         paths: &CommandPaths,
@@ -158,6 +159,7 @@ pub async fn send_relayed(paths: &CommandPaths, report: &str) -> Result<i32> {
         matches!(
             report,
             AgentMethod::ReportProxyRetry { .. }
+                | AgentMethod::ReportSubagentRequest { .. }
                 | AgentMethod::ReportUpstreamReset { .. }
                 | AgentMethod::ReportUpstreamLimit { .. }
                 | AgentMethod::ReportTurnFailure {
@@ -205,7 +207,7 @@ pub(crate) async fn forget_reports(
     retry && reset && limit
 }
 
-/// Reports a proxied agent's ended turns to the daemon.
+/// Reports what a proxied agent's proxy learns to the daemon.
 pub(super) struct Reporter {
     pub(super) paths: CommandPaths,
     pub(super) workspace: SpaceId,
@@ -229,12 +231,19 @@ pub(super) struct Sent {
     reset: Option<UnixTime>,
     /// The limit the upstream is under, with when it was sent.
     limit: Option<(shoal_protocol::executions::UpstreamLimit, UnixTime)>,
+    /// When a subagent's request was last sent.
+    subagent_request: Option<UnixTime>,
 }
 
 /// How often a limit the proxy keeps meeting is sent again, so the daemon
 /// counts a limit without a named end from when it was last met and learns
 /// again one it lost in a restart.
 const LIMIT_RESENT_AFTER: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// How long after a subagent's request is sent the next one goes: the
+/// daemon counts a subagent whose stop was lost until none has passed for
+/// far longer.
+const SUBAGENT_REQUEST_RESENT_AFTER: std::time::Duration = std::time::Duration::from_secs(60);
 
 impl Reporter {
     pub(super) async fn run(
@@ -271,6 +280,7 @@ impl Reporter {
                 }
                 // An upstream that answers again refuses nothing until.
                 Event::Recovered => self.recovered().await,
+                Event::SubagentRequest => self.subagent_request().await,
             }
         }
     }
@@ -321,6 +331,21 @@ impl Reporter {
             .is_some_and(|(sent, at)| sent == limit && now.duration_since(at) < LIMIT_RESENT_AFTER);
         if !recent && self.limit_sent(Some(limit)).await {
             self.sent.limit = Some((limit, now));
+        }
+    }
+
+    /// Tell the daemon a subagent's request passed, unless one did less
+    /// than [`SUBAGENT_REQUEST_RESENT_AFTER`] before.
+    async fn subagent_request(&mut self) {
+        let now = (self.now)();
+        let recent = (self.sent.subagent_request)
+            .is_some_and(|sent| now.duration_since(sent) < SUBAGENT_REQUEST_RESENT_AFTER);
+        let report = crate::protocol::AgentMethod::ReportSubagentRequest {
+            space: SpaceSelector::id(&self.workspace),
+            execution: self.execution.clone(),
+        };
+        if !recent && self.send(report).await {
+            self.sent.subagent_request = Some(now);
         }
     }
 

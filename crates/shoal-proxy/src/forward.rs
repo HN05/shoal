@@ -112,7 +112,12 @@ impl Forwarder {
             return forbidden();
         }
         match Buffered::read(request).await {
-            Ok(request) => self.forward(&request).await,
+            Ok(request) => {
+                if request.sent_by_subagent() {
+                    self.report(Event::SubagentRequest);
+                }
+                self.forward(&request).await
+            }
             Err(error) => bad_gateway(&error),
         }
     }

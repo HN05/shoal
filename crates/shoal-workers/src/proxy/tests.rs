@@ -348,6 +348,36 @@ async fn a_limit_the_proxy_keeps_meeting_is_sent_again_after_a_while() {
 }
 
 #[tokio::test]
+async fn subagents_requests_are_reported_at_most_once_a_minute() {
+    use shoal_proxy::Event;
+    use std::sync::atomic::{AtomicI64, Ordering};
+    static CLOCK: AtomicI64 = AtomicI64::new(1_700_000_000);
+    let root = tempfile::tempdir().unwrap();
+    let paths =
+        crate::client::connection::CommandPaths::from(crate::paths::Paths::for_test(root.path()));
+    let (_daemon, methods) = daemon_speaking(&paths, crate::protocol::VERSION);
+    let (sender, events) = tokio::sync::mpsc::unbounded_channel();
+    for _ in 0..3 {
+        sender.send(Event::SubagentRequest).unwrap();
+    }
+    drop(sender);
+    let reporter = Reporter {
+        paths: paths.clone(),
+        workspace: "w".into(),
+        execution: "e".into(),
+        ends_turns: false,
+        sent: Default::default(),
+        // Each reading is half a minute after the last.
+        now: || UnixTime::from_seconds(CLOCK.fetch_add(30, Ordering::Relaxed)),
+    };
+    reporter.run(events).await;
+    assert_eq!(
+        *methods.lock().unwrap(),
+        ["report_subagent_request", "report_subagent_request"]
+    );
+}
+
+#[tokio::test]
 async fn a_report_the_daemon_did_not_take_goes_again_with_the_next_event() {
     use shoal_proxy::{Event, Failure};
     let root = tempfile::tempdir().unwrap();
