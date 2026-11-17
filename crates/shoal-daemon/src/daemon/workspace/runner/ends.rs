@@ -435,32 +435,40 @@ impl Manager {
     }
 
     /// The load of each admitted or claimed job: what it is expected to
-    /// use, and how long ago its runner started; one whose runner has not
-    /// started yet has just started, so it keeps warming and holds back the
-    /// next start until it runs.
+    /// use, what its workspace used at the latest usage sample, and how long
+    /// ago its runner started; one whose runner has not started yet has just
+    /// started, so it holds back the next start until it runs.
     pub(crate) async fn job_activities(&self) -> Result<Vec<Activity>> {
-        let jobs: Vec<(RepositoryId, Option<crate::time::UnixTime>, String)> = self
+        type Row = (
+            RepositoryId,
+            Option<SpaceId>,
+            Option<crate::time::UnixTime>,
+            String,
+        );
+        let jobs: Vec<Row> = self
             .store
             .run(|db| {
                 Ok(db
                     .prepare(
-                        "SELECT repository_id,NULL,job FROM agent_queue WHERE kind=?1 AND state=?2
-                             AND id NOT IN (SELECT id FROM ci_jobs)
-                         UNION ALL SELECT repository_id,launched_at,job FROM ci_jobs",
+                        "SELECT repository_id,NULL,NULL,job FROM agent_queue
+                             WHERE kind=?1 AND state=?2 AND id NOT IN (SELECT id FROM ci_jobs)
+                         UNION ALL SELECT repository_id,workspace_id,launched_at,job FROM ci_jobs",
                     )?
                     .query_map(params![QueueKind::Job, QueueState::Starting], |row| {
-                        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
                     })?
                     .collect::<rusqlite::Result<_>>()?)
             })
             .await?;
         let now = crate::time::UnixTime::now();
         let mut activities = Vec::new();
-        for (repository, since, job) in jobs {
+        for (repository, workspace, since, job) in jobs {
             let job: QueuedJob = serde_json::from_str(&job)?;
             activities.push(Activity::Job {
                 age: now.duration_since(since.unwrap_or(now)),
                 cost: self.job_cost(&repository, &job).await?,
+                memory: (workspace.and_then(|id| self.workspace_usage(&id)))
+                    .map(|usage| usage.memory_bytes),
             });
         }
         Ok(activities)

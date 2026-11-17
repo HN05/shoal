@@ -14,10 +14,12 @@ fn running(age: Duration, memory: Option<u64>) -> Activity {
     Activity::Running { age, memory }
 }
 
-fn job(age: Duration, memory: Option<u64>) -> Activity {
+/// A job admitted `age` ago, expected to use `expected` and using `used`.
+fn job(age: Duration, expected: Option<u64>, used: Option<u64>) -> Activity {
     Activity::Job {
         age,
-        cost: JobCost { memory },
+        cost: JobCost { memory: expected },
+        memory: used,
     }
 }
 
@@ -70,9 +72,9 @@ fn slots_count_by_how_far_their_memory_shows() {
             running(MINUTE, Some(GIB)),
             running(WARM_UP, Some(3 * GIB)),
             running(WARM_UP, None),
-            job(MINUTE, Some(GIB)),
-            job(MINUTE, None),
-            job(WARM_UP, Some(GIB)),
+            job(MINUTE, Some(GIB), None),
+            job(MINUTE, None, Some(GIB)),
+            job(WARM_UP, Some(GIB), Some(GIB / 2)),
             Activity::Stopped,
         ]),
         Agents {
@@ -82,8 +84,9 @@ fn slots_count_by_how_far_their_memory_shows() {
             jobs: 3,
             settled_memory: 3 * GIB,
             measured: 1,
-            warming_job_memory: GIB,
-            warming_new_jobs: 1,
+            // 1 GiB, then 3 GiB a starting agent counts at less the 1 GiB
+            // used, then half of 1 GiB.
+            job_reservation: GIB + 2 * GIB + GIB / 2,
             newest: Some(MINUTE),
         }
     );
@@ -132,7 +135,7 @@ fn a_starting_agent_counts_at_the_memory_settled_agents_use() {
     );
     // A job without earlier runs counts as an agent, one with them at what
     // they reached.
-    let jobs = [job(MINUTE, None), job(MINUTE, Some(3 * GIB))];
+    let jobs = [job(MINUTE, None, None), job(MINUTE, Some(3 * GIB), None)];
     assert_eq!(
         room(&jobs),
         Room::Free {
@@ -143,31 +146,57 @@ fn a_starting_agent_counts_at_the_memory_settled_agents_use() {
 }
 
 #[test]
-fn a_job_that_filled_the_cpu_starts_beside_agents_when_memory_allows() {
+fn a_running_job_reserves_what_it_has_yet_to_use_until_it_ends() {
     let settings = Overload::default();
-    // Earlier runs used the whole CPU and 6 GiB; idle and busy agents run.
     let cost = JobCost {
         memory: Some(6 * GIB),
     };
-    let agents = Agents::count([
-        running(WARM_UP, Some(GIB)),
-        running(WARM_UP * 4, Some(5 * GIB)),
-    ]);
+    let agents = |used| Agents::count([job(WARM_UP * 5, Some(6 * GIB), used)]);
+    // Long past its start, a job using 2 GiB of its 6 reserves the other 4,
+    // which holds a job that would fit without them.
     assert_eq!(
-        room(sample(7 * GIB), agents, &settings).fits_job(cost),
-        Ok(())
+        room(sample(9 * GIB), agents(Some(2 * GIB)), &settings).fits_job(cost),
+        Err(Some(HeldBy::Memory {
+            needed: 6 * GIB,
+            left: 5 * GIB,
+        }))
     );
     assert_eq!(
-        room(sample(6 * GIB), agents, &settings).fits_job(cost),
+        room(sample(11 * GIB), agents(Some(2 * GIB)), &settings).fits_job(cost),
+        Ok(())
+    );
+    // Before its first usage sample it reserves the whole of it.
+    assert_eq!(
+        room(sample(12 * GIB), agents(None), &settings).fits_job(cost),
         Err(Some(HeldBy::Memory {
             needed: 6 * GIB,
             left: 6 * GIB,
         }))
     );
-    // Agents start beside a settled job that keeps every core busy.
-    let busy = Agents::count([job(WARM_UP, Some(6 * GIB)), running(WARM_UP, Some(GIB))]);
-    assert_eq!(room(sample(2 * GIB), busy, &settings).fits_agent(), Ok(()));
-    assert!(room(sample(GIB), busy, &settings).fits_agent().is_err());
+    // Using its expected peak or more, it reserves nothing.
+    for used in [6 * GIB, 7 * GIB] {
+        assert_eq!(
+            room(sample(7 * GIB), agents(Some(used)), &settings).fits_job(cost),
+            Ok(())
+        );
+    }
+}
+
+#[test]
+fn a_job_without_runs_reserves_an_agents_start_less_its_use() {
+    let settings = Overload::default();
+    // Settled agents set an agent's start at 4 GiB; the job uses 1 GiB.
+    let agents = Agents::count([
+        running(WARM_UP, Some(4 * GIB)),
+        job(WARM_UP * 5, None, Some(GIB)),
+    ]);
+    assert_eq!(
+        room(sample(20 * GIB), agents, &settings),
+        Room::Free {
+            memory: 17 * GIB,
+            agent: 4 * GIB,
+        }
+    );
 }
 
 #[test]
@@ -199,7 +228,7 @@ fn memory_disk_and_the_stagger_stop_starts_and_critical_readings_block_even_the_
         ..sample(0)
     };
     assert_eq!(room(unread, one, &settings), Room::Held(HeldBy::Reading));
-    let recent = Agents::count([job(Duration::from_secs(1), None)]);
+    let recent = Agents::count([job(Duration::from_secs(1), None, None)]);
     assert_eq!(room(sample(20 * GIB), recent, &settings), Room::Staggered);
     assert_eq!(Room::Staggered.fits_agent(), Err(None));
     // An idle machine starts one whatever memory and disk leave, and stopped

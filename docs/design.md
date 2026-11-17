@@ -1785,9 +1785,14 @@ for that layer. Fixed limits keep dynamic admission's disk rule, since an agent
 started on a nearly full disk is soon stopped by disk protection. Per-agent
 memory profiles remain a proposal. CI jobs go through the same admission and
 order: `machine.max_jobs` limits them apart from agents, and under `dynamic` a
-job counts at the memory its recent runs reached, which a job repeats far
-more closely than an agent, or as an agent before it has run, and takes the
-one staggered start an agent would.
+job is expected to use the memory its recent runs reached, which a job
+repeats far more closely than an agent, or an agent's before it has run, and
+takes the one staggered start an agent would. A job reaches its peak late,
+while it builds and runs tests, so until it ends it reserves what it has yet
+to use, its expected memory less what its workspace uses now: counting it
+only while it is young let each pass admit another job against memory the
+running ones would soon need. No count limits jobs by default, since the
+reservation already admits one only where its whole expected memory fits.
 Automatic restores are typed queue entries ordered with launches, queued when
 the stopped agent's processes are proven stopped. A restore of an agent stopped
 between turns waits for an update instead, holding no slot and holding back

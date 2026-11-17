@@ -1519,8 +1519,8 @@ async fn removing_a_job_whose_execution_is_not_recorded_yet_cancels_its_run() {
 }
 
 #[tokio::test]
-async fn a_job_keeps_warming_until_its_runner_starts() {
-    use crate::daemon::workspace::capacity::{Activity, WARM_UP};
+async fn a_job_counts_as_just_started_until_its_runner_starts() {
+    use crate::daemon::workspace::capacity::{Activity, STAGGER};
     let fixture = fixture(vec![job("h1", 4, 1)], "").await;
     let manager = &fixture.manager;
     let ages = || async {
@@ -1553,7 +1553,7 @@ async fn a_job_keeps_warming_until_its_runner_starts() {
     set("UPDATE ci_jobs SET started_at=0,launched_at=strftime('%s','now')-600 WHERE id=?1")
         .await
         .unwrap();
-    assert!(ages().await[0] >= WARM_UP);
+    assert!(ages().await[0] >= STAGGER);
     set("UPDATE ci_jobs SET launched_at=NULL WHERE id=?1")
         .await
         .unwrap();

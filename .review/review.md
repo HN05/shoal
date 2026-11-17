@@ -537,7 +537,8 @@ instead of the PR delivery guidance below.
   preserving other project settings.
 - `max_heavy_agents` admission is the daemon's: it defaults to `dynamic`, which starts
   one agent at a time, staggered, while memory below its warning threshold, less
-  what recently started agents and jobs are expected to use, and free disk leave
+  what recently started agents are expected to use and running jobs have yet
+  to use, and free disk leave
   room; CPU never holds back a start. Critical or failed memory and disk
   readings start none, and an idle machine starts one. Every caller sees the
   whole queue, each waiting entry with what held it back at the last pass.
@@ -560,8 +561,9 @@ instead of the PR delivery guidance below.
   that contains the others; `--now` never waits.
 - A registered repository's CI jobs wait in the same queue and admission while
   `runner.enabled` is on: `machine.max_jobs` counts only jobs, and under
-  `dynamic` a job counts at its recent runs' peak memory and takes the one
-  staggered start an agent would. A job is claimed only once admitted, runs
+  `dynamic` a job is expected to use its recent runs' peak memory and, until it
+  ends, reserves that less what its workspace uses at the latest sample; it
+  takes the one staggered start an agent would. A job is claimed only once admitted, runs
   the forge's runner (`forgejo-runner one-job --handle`, or a GitHub
   just-in-time runner whose workspace moves to the commit of the job it took
   before that job's first step) at nice 10, whose time CPU readings count as

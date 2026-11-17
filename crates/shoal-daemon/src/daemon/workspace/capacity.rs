@@ -5,8 +5,10 @@
 //! is free, and more work on a busy CPU only runs slower, while memory and
 //! disk do not stretch. An agent first reads files and only later edits and
 //! compiles, so a recent start counts at the memory a settled agent's
-//! workspace uses until it settles itself; a recent job counts at the memory
-//! its earlier runs reached. Fixed limits apply the same free disk space rule.
+//! workspace uses until it settles itself. A job reaches its peak late, while
+//! it builds and runs tests, so until it ends it reserves what its earlier
+//! runs reached beyond what it uses now. Fixed limits apply the same free disk
+//! space rule.
 use std::{path::Path, time::Duration};
 
 use crate::{config::overload::Overload, fsutil, model::HeldBy, process::load};
@@ -29,7 +31,7 @@ pub(crate) struct HostSample {
 }
 
 /// What a CI job is expected to use: the resident memory its earlier runs
-/// reached, `None` before it has run, when it counts as an agent.
+/// reached, `None` before it has run, when it counts as an agent's start.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct JobCost {
     pub memory: Option<u64>,
@@ -59,10 +61,10 @@ pub(crate) struct Agents {
     /// and how many of them it counts.
     pub settled_memory: u64,
     pub measured: u32,
-    /// The memory the jobs running for less than [`WARM_UP`] reached in
-    /// earlier runs, and how many of them have not run before.
-    pub warming_job_memory: u64,
-    pub warming_new_jobs: u32,
+    /// The memory the jobs starting or running have yet to use: what each
+    /// is expected to use beyond what its workspace used at the latest
+    /// sample.
+    pub job_reservation: u64,
     /// Time since the newest agent, job or start began.
     pub newest: Option<Duration>,
 }
@@ -77,8 +79,14 @@ pub(crate) enum Activity {
     Running { age: Duration, memory: Option<u64> },
     /// An agent awaiting reattachment or resume, which runs nothing here.
     Stopped,
-    /// A CI job admitted this long ago, expected to use `cost`.
-    Job { age: Duration, cost: JobCost },
+    /// A CI job admitted this long ago, expected to use `cost`, whose
+    /// workspace used `memory` at the latest usage sample, `None` without
+    /// one.
+    Job {
+        age: Duration,
+        cost: JobCost,
+        memory: Option<u64>,
+    },
 }
 
 /// What measured memory and disk leave for one more start.
@@ -92,8 +100,8 @@ pub(crate) enum Room {
     /// Nothing runs or starts, so one starts whatever memory is in use.
     Idle,
     /// The bytes of memory left below the warning threshold once each
-    /// warming agent and job uses what it is expected to, and what an
-    /// agent's start is expected to use.
+    /// warming agent uses what it is expected to and each job what it has
+    /// yet to use, and what an agent's start is expected to use.
     Free { memory: u64, agent: u64 },
 }
 
@@ -134,44 +142,62 @@ impl Room {
 
 impl Agents {
     pub(crate) fn count(activities: impl IntoIterator<Item = Activity>) -> Self {
+        let activities: Vec<Activity> = activities.into_iter().collect();
         let mut agents = Self::default();
-        for activity in activities {
-            agents.total += 1;
-            let age = match activity {
-                Activity::Starting(age) => {
-                    agents.warming += 1;
-                    age
-                }
-                Activity::Running { age, .. } if age < WARM_UP => {
-                    agents.warming += 1;
-                    age
-                }
-                Activity::Running { age, memory } => {
-                    agents.settled += 1;
-                    if let Some(memory) = memory {
-                        agents.settled_memory = agents.settled_memory.saturating_add(memory);
-                        agents.measured += 1;
-                    }
-                    age
-                }
-                Activity::Job { age, cost } => {
-                    agents.jobs += 1;
-                    if age < WARM_UP {
-                        match cost.memory {
-                            Some(memory) => {
-                                agents.warming_job_memory =
-                                    agents.warming_job_memory.saturating_add(memory)
-                            }
-                            None => agents.warming_new_jobs += 1,
-                        }
-                    }
-                    age
-                }
-                Activity::Stopped => continue,
-            };
-            agents.newest = Some(agents.newest.map_or(age, |newest| newest.min(age)));
+        for activity in &activities {
+            agents.add(*activity);
         }
+        // A new job counts at an agent's start, which the agents set.
+        agents.job_reservation = agents.job_reservation(&activities);
         agents
+    }
+
+    /// Count one used slot.
+    fn add(&mut self, activity: Activity) {
+        self.total += 1;
+        let age = match activity {
+            Activity::Starting(age) => {
+                self.warming += 1;
+                age
+            }
+            Activity::Running { age, .. } if age < WARM_UP => {
+                self.warming += 1;
+                age
+            }
+            Activity::Running { age, memory } => {
+                self.settled += 1;
+                if let Some(memory) = memory {
+                    self.settled_memory = self.settled_memory.saturating_add(memory);
+                    self.measured += 1;
+                }
+                age
+            }
+            Activity::Job { age, .. } => {
+                self.jobs += 1;
+                age
+            }
+            Activity::Stopped => return,
+        };
+        self.newest = Some(self.newest.map_or(age, |newest| newest.min(age)));
+    }
+
+    /// The memory the jobs among `activities` have yet to use: each one's
+    /// expected memory, or an agent's start before it has run, less what its
+    /// workspace used at the latest sample, the whole of it without one. The
+    /// machine's memory reading already holds what a job uses.
+    fn job_reservation(&self, activities: &[Activity]) -> u64 {
+        let agent = self.agent_memory();
+        activities
+            .iter()
+            .filter_map(|activity| match *activity {
+                Activity::Job { cost, memory, .. } => Some(
+                    cost.memory
+                        .unwrap_or(agent)
+                        .saturating_sub(memory.unwrap_or(0)),
+                ),
+                _ => None,
+            })
+            .fold(0, u64::saturating_add)
     }
 
     /// The memory an agent's start counts at: what the settled agents'
@@ -184,12 +210,12 @@ impl Agents {
         }
     }
 
-    /// The memory the warming agents and jobs are expected to use, each
-    /// agent and new job at `agent`.
-    fn warming_memory(&self, agent: u64) -> u64 {
+    /// The memory the warming agents, each at `agent`, and the jobs are
+    /// expected to use beyond what the machine's reading holds.
+    fn reserved_memory(&self, agent: u64) -> u64 {
         agent
-            .saturating_mul(u64::from(self.warming + self.warming_new_jobs))
-            .saturating_add(self.warming_job_memory)
+            .saturating_mul(u64::from(self.warming))
+            .saturating_add(self.job_reservation)
     }
 }
 
@@ -265,8 +291,8 @@ fn sample_disk(
 
 /// What measured memory and disk leave for one more start beside `agents`,
 /// which a start fits when its memory stays below what is left under the
-/// warning threshold once every warming agent and job uses what it is
-/// expected to. Critical or unavailable memory and disk readings leave none;
+/// warning threshold once every warming agent uses what it is expected to
+/// and every job what it has yet to use. Critical or unavailable memory and disk readings leave none;
 /// an idle machine, where nothing runs or starts, always starts one.
 pub(crate) fn room(sample: HostSample, agents: Agents, settings: &Overload) -> Room {
     if blocked(sample, settings) {
@@ -291,7 +317,7 @@ pub(crate) fn room(sample: HostSample, agents: Agents, settings: &Overload) -> R
     };
     let agent = agents.agent_memory();
     Room::Free {
-        memory: free.saturating_sub(agents.warming_memory(agent)),
+        memory: free.saturating_sub(agents.reserved_memory(agent)),
         agent,
     }
 }

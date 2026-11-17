@@ -2075,8 +2075,8 @@ reads files at first and compiles later, so for its first three minutes it
 counts at the memory a settled agent uses: the average resident memory of the
 workspaces of the agents that have run longer, at the latest usage sample, at
 least 1 GiB, or 2 GiB before any has. A start must fit the memory left below
-the warning threshold once every such warming agent and every
-[CI job](#runner) in its first three minutes uses what it is expected to.
+the warning threshold once every such warming agent uses what it is expected
+to and every running [CI job](#runner) what it has yet to use.
 With no agent running, one starts whatever memory and disk read. Critical
 memory, disk below `machine.overload.disk.stop_free_gib`, or a failed memory
 or disk reading starts none, and disk below `[machine.overload.warning]
@@ -3712,10 +3712,12 @@ runner took or a cancel ended, leave it. `machine.max_jobs`
 limits jobs as [`machine.max_heavy_agents`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine) limits agents, counting only jobs. Under
 `dynamic`, agents and jobs start through one admission, one at a time at least
 10 seconds apart, while measured memory and disk leave room below the
-`[machine.overload.warning]` thresholds: a job counts at the most resident
-memory its last five runs reached, by repository, workflow and job name, or
-as a starting agent before it has run, and a job's recent start counts
-against an agent's as an agent's counts against a job's. With
+`[machine.overload.warning]` thresholds: a job is expected to use the most
+resident memory its last five runs reached, by repository, workflow and job
+name, or what a starting agent counts at before it has run, and until it
+ends it reserves what it is expected to use beyond what its workspace used
+at the latest usage sample, all of it before one. A job's recent start
+counts against an agent's as an agent's counts against a job's. With
 `runner.permit`, a job waits until its pool has a free permit and holds one
 while it runs. Until a job is admitted, any other runner may take it. `queue
 start` admits a job regardless of the limits, and `queue cancel` passes it
