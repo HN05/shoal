@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""A scripted forge for tests: `curl` when installed under that name, which
-leaves requests to the loopback server to the real curl, or a Forgejo API
-server with `serve <port-file>`.
+"""A scripted forge for tests: `curl`, which the scripted `curl` of
+`fixtures/curl` runs for every request but those to the loopback server, or
+a Forgejo API server with `serve <port-file>`.
 
 Responses come from $HOME/forge/responses.json, keyed by "METHOD endpoint",
 the endpoint relative to the forge's API root, or the whole URL outside one.
@@ -71,23 +71,9 @@ def endpoint(url):
     return url
 
 
-def real_curl(args):
-    """Run the next curl on PATH, for the scripted Forgejo server."""
-    here = os.path.dirname(os.path.abspath(sys.argv[0]))
-    for directory in os.environ["PATH"].split(os.pathsep):
-        program = os.path.join(directory, "curl")
-        if os.path.abspath(directory) != here and os.access(program, os.X_OK):
-            os.execv(program, [program] + args)
-    sys.exit("no curl on PATH")
-
-
 def curl(args):
     """Answer as curl does with Shoal's arguments: the body and the status
-    on stdout, the head on stderr, the authorization in config on stdin.
-    Requests to the loopback server go to the real curl, so no other
-    request leaves the machine."""
-    if args[-1].startswith("http://127.0.0.1:"):
-        real_curl(args)
+    on stdout, the head on stderr, the authorization in config on stdin."""
     config = sys.stdin.read()
     auth = re.search(r'header = "Authorization: ([^"]*)"', config)
     method, headers, body, write_out = "GET", [], None, ""

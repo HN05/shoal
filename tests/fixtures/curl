@@ -1,0 +1,19 @@
+#!/bin/sh
+# The scripted forge's `curl`: requests to the loopback server go to the
+# next curl on PATH, so no other request leaves the machine, and forge.py,
+# installed beside this script's directory, answers the rest.
+here=${0%/*}
+for url; do :; done
+case $url in
+http://127.0.0.1:*)
+  IFS=:
+  for directory in $PATH; do
+    if [ "$directory" != "$here" ] && [ -x "$directory/curl" ]; then
+      exec "$directory/curl" "$@"
+    fi
+  done
+  echo 'no curl on PATH' >&2
+  exit 1
+  ;;
+esac
+exec python3 "$here/../forge.py" "$@"

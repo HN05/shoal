@@ -12,7 +12,7 @@ pub fn install(root: &Path) {
     fs::create_dir_all(root.join("bin")).unwrap();
     respond(root, &Value::Object(Default::default()));
     support::install_test_script(root.join("forge.py"), include_str!("../fixtures/forge.py"));
-    std::os::unix::fs::symlink(root.join("forge.py"), root.join("bin/curl")).unwrap();
+    support::install_test_script(root.join("bin/curl"), include_str!("../fixtures/curl"));
 }
 
 /// Answer later forge requests in `root` with `responses`, replacing the
