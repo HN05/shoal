@@ -11,6 +11,7 @@ use crate::{
         chats::NewChat, links::issue::AssignerOf, notifications::NotificationKind, scope::Caller,
         workspace::Manager,
     },
+    forge::items::reference::ItemInput,
     model::{Assigner, Chat, Relation, SpaceLinks},
     protocol::ChatStart,
     removal::{InspectionPolicy, UnsavedWork},
@@ -86,7 +87,7 @@ impl Manager {
     }
 
     /// Link the new chat `id` for `caller` to what `start` names: the issue
-    /// it starts on, assigned, and its links as a restore links them, its
+    /// it starts on, assigned, unless its links hold it, and its links as a restore links them, its
     /// PRs as assigned. Returns what that warns of; a start that names
     /// nothing links nothing.
     async fn link_launch(
@@ -96,7 +97,9 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Vec<String> {
         let mut warnings = Vec::new();
-        if let Some(issue) = &start.issue {
+        if let Some(issue) =
+            (start.issue.as_ref()).filter(|issue| !links_issue(&start.links, issue))
+        {
             let selector = SpaceSelector::id(id);
             match (self.set_issue(&selector, issue, None, Assigner::of(caller))).await {
                 Ok(assigned) => warnings.extend(assigned),
@@ -171,6 +174,14 @@ impl Manager {
             crate::daemon::log!("chat {name} kept without its agent: {error:#}");
         }
     }
+}
+
+/// Whether `links` hold the issue `input` names by its URL.
+fn links_issue(links: &SpaceLinks, input: &ItemInput) -> bool {
+    let ItemInput::Url(url) = input else {
+        return false;
+    };
+    links.issues.iter().any(|linked| linked.url == *url)
 }
 
 impl NewChat {

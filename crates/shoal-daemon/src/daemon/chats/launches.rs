@@ -10,8 +10,8 @@ use anyhow::{Context as _, Result, ensure};
 use crate::{
     agents::{NO_AGENT, checked_agent},
     config::{Effective, modes::ModeName},
-    daemon::{chats::NewChat, scope::Caller, workspace::Manager},
-    model::{ChatHome, ChatQueueRequest, QueueAdmission, SpaceKind},
+    daemon::{chats::NewChat, links::issue::OpenIssue, scope::Caller, workspace::Manager},
+    model::{ChatHome, ChatQueueRequest, LinkedItem, QueueAdmission, SpaceKind},
     protocol::ChatStart,
 };
 use shoal_core::chat_handoff::HandedStart;
@@ -139,8 +139,9 @@ impl Manager {
 
     /// `start` with its repository named by ID and the agent, mode and name
     /// it names, else `agent.default`, the chat mode and a name of its own,
-    /// checked under the chat's settings, refused where its parent, else
-    /// `caller`'s own space, takes no such child.
+    /// and the open issue it names among its links with its title, checked
+    /// under the chat's settings, refused where its parent, else `caller`'s
+    /// own space, takes no such child.
     async fn resolve_chat_start(
         &self,
         start: ChatStart,
@@ -160,15 +161,17 @@ impl Manager {
         let mode = (start.mode.clone()).unwrap_or_else(crate::model::chat_mode);
         let in_repository = repository.is_some();
         crate::config::modes::resolve(&settings.modes, &mode, SpaceKind::Chat, in_repository)?;
+        let issue = self.start_issue(&start, repository.as_ref()).await?;
         let name = match start.name.clone() {
             Some(name) => name,
             None => {
-                self.new_chat_name(&start, repository.as_ref(), &mode)
-                    .await?
+                let named = (repository.as_ref(), issue.as_ref());
+                self.new_chat_name(&start, named, &mode).await?
             }
         };
         // A chat in a workspace's worktree is in that workspace's repository.
         let named = repository.filter(|_| start.workspace.is_none());
+        let start = on_issue(start, issue);
         Ok(ChatStart {
             repository: named.map(Into::into),
             agent: Some(agent),
@@ -191,30 +194,49 @@ impl Manager {
         })
     }
 
-    /// The name of the new chat `start` describes, in `mode` and
-    /// `repository`, when it names none: the title of the open issue it
-    /// starts on, as a new workspace takes it, else the name of where it
-    /// runs.
-    async fn new_chat_name(
+    /// The open issue the new chat `start` describes starts on in
+    /// `repository`, if it names one. A start that names the chat needs no
+    /// title from it, so an issue it cannot read is linked without one.
+    async fn start_issue(
         &self,
         start: &ChatStart,
         repository: Option<&RepositoryId>,
+    ) -> Result<Option<OpenIssue>> {
+        let (Some(repository), Some(issue)) = (repository, &start.issue) else {
+            return Ok(None);
+        };
+        let checkout = self.repository(repository.clone()).await?.path;
+        match self.read_open_issue(&checkout, issue).await {
+            Ok(issue) => Ok(Some(issue)),
+            Err(error) if start.name.is_some() => {
+                crate::daemon::log!("chat issue {issue} read without its title: {error:#}");
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// The name of the new chat `start` describes, in `mode` and the
+    /// repository of `named`, when it names none: the title of the open
+    /// issue `named` gives, as a new workspace takes it, else the name of
+    /// where it runs.
+    async fn new_chat_name(
+        &self,
+        start: &ChatStart,
+        named: (Option<&RepositoryId>, Option<&OpenIssue>),
         mode: &ModeName,
     ) -> Result<SpaceName> {
-        let name = match (&start.workspace, repository, &start.issue) {
-            (_, Some(repository), Some(issue)) => {
-                let checkout = self.repository(repository.clone()).await?.path;
-                self.read_open_issue(&checkout, issue).await?.title
-            }
-            (Some(workspace), ..) => {
+        let name = match (&start.workspace, named) {
+            (_, (_, Some(issue))) => issue.title.clone(),
+            (Some(workspace), _) => {
                 let workspace = self.chat_workspace(workspace).await?;
                 ChatHome::Workspace(&workspace).chat_name(mode)
             }
-            (None, Some(repository), None) => {
+            (None, (Some(repository), None)) => {
                 let repository = self.repository(repository.clone()).await?;
                 ChatHome::Checkout(&repository).chat_name(mode)
             }
-            (None, None, _) => {
+            (None, (None, None)) => {
                 let root_dir = self.config().root_dir(&self.paths)?;
                 ChatHome::Root(&root_dir).chat_name(mode)
             }
@@ -268,6 +290,20 @@ fn launch_request(start: &ChatStart, source: LaunchSource) -> Result<ChatQueueRe
         records_when_waiting: true,
         source: Some(source),
     })
+}
+
+/// `start` on the open `issue` it names, when read: named by its URL and
+/// among the issues it links with its title.
+fn on_issue(mut start: ChatStart, issue: Option<OpenIssue>) -> ChatStart {
+    let Some(OpenIssue { url, title, .. }) = issue else {
+        return start;
+    };
+    start.issue = Some(url.clone().into());
+    if !start.links.issues.iter().any(|linked| linked.url == url) {
+        let title = Some(title);
+        start.links.issues.push(LinkedItem { url, title });
+    }
+    start
 }
 
 /// The chat `launched` recorded, whose agent waits as the launch
@@ -359,3 +395,5 @@ async fn run_worker(
 #[cfg(any(test, feature = "test-support"))]
 pub mod fake;
 mod record;
+#[cfg(test)]
+mod tests;
