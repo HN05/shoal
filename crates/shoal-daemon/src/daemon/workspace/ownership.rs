@@ -164,19 +164,25 @@ impl Manager {
     /// Verify that the worktree of `workspace` is the one it recorded,
     /// refusing a workspace whose worktree Git has yet to create.
     pub(crate) async fn verify_worktree(&self, workspace: &Workspace) -> Result<()> {
+        self.verified_git_dir(workspace).await.map(drop)
+    }
+
+    /// The admin directory of the worktree of `workspace` once it verifies
+    /// as [`Self::verify_worktree`] does, as the verification read it.
+    pub(crate) async fn verified_git_dir(&self, workspace: &Workspace) -> Result<PathBuf> {
         let common_dir = (self.common_dir(workspace).await)
             .map_err(|error| Refusal::wrap(Reason::NotReady, error))?;
         self.verify_worktree_against(workspace, &common_dir).await
     }
 
-    /// Verify the worktree of `workspace` as [`Self::verify_worktree`]
-    /// does, as a worktree of the repository whose shared Git directory is
-    /// `common_dir`.
+    /// The admin directory of the worktree of `workspace` once it verifies
+    /// as [`Self::verify_worktree`] does, as a worktree of the repository
+    /// whose shared Git directory is `common_dir`.
     async fn verify_worktree_against(
         &self,
         workspace: &Workspace,
         common_dir: &CommonDir,
-    ) -> Result<()> {
+    ) -> Result<PathBuf> {
         if workspace.unborn() {
             let name = &workspace.name;
             let message =
@@ -204,7 +210,7 @@ impl Manager {
         {
             return Ok(());
         }
-        let verified = self.verify_worktree_against(workspace, common_dir).await;
+        let verified = (self.verify_worktree_against(workspace, common_dir).await).map(drop);
         if workspace.git_dir.is_some() {
             return verified;
         }
@@ -254,14 +260,20 @@ impl Manager {
         off_runtime::run(move || Ok(marked_owner(&git_dir)?.is_none())).await
     }
 
+    /// The admin directory of the worktree of `workspace` once it verifies
+    /// as the one its record and marker name.
     async fn verify_worktree_identity(
         &self,
         workspace: &Workspace,
         common_dir: &CommonDir,
-    ) -> Result<()> {
+    ) -> Result<PathBuf> {
         let actual_git_dir = self.linked_git_dir(workspace, common_dir).await?;
         let workspace = workspace.clone();
-        off_runtime::run(move || verify_git_dir(&workspace, &actual_git_dir)).await
+        off_runtime::run(move || {
+            verify_git_dir(&workspace, &actual_git_dir)?;
+            Ok(actual_git_dir)
+        })
+        .await
     }
 
     /// Verify ownership, then record the worktree's admin directory when
@@ -272,9 +284,9 @@ impl Manager {
         workspace: &Workspace,
         record: bool,
     ) -> Result<VerifiedWorktree> {
-        self.verify_worktree(workspace).await?;
+        let git_dir = self.verified_git_dir(workspace).await?;
         let identity = if record {
-            self.record_worktree_identity(workspace).await
+            self.record_git_dir(workspace, git_dir).await
         } else {
             Ok(false)
         };
@@ -308,7 +320,7 @@ impl Manager {
             }
         }
         self.release_stale_owner(&git_dir, &workspace.id).await?;
-        self.record_worktree_identity(workspace).await?;
+        self.record_git_dir(workspace, git_dir).await?;
         self.verify_worktree(&self.workspace_by_id(&workspace.id).await?)
             .await
     }
@@ -366,6 +378,17 @@ impl Manager {
     /// location, returning whether anything changed.
     pub(crate) async fn record_worktree_identity(&self, workspace: &Workspace) -> Result<bool> {
         let git_dir = git::git_dir(&workspace.path).await?;
+        self.record_git_dir(workspace, git_dir).await
+    }
+
+    /// Mark `git_dir`, the admin directory of the worktree of `workspace`
+    /// as its caller read it, as this workspace's and record its location,
+    /// returning whether anything changed.
+    pub(crate) async fn record_git_dir(
+        &self,
+        workspace: &Workspace,
+        git_dir: PathBuf,
+    ) -> Result<bool> {
         let marked = {
             let (git_dir, id) = (git_dir.clone(), workspace.id.clone());
             off_runtime::run(move || mark_git_dir(&git_dir, &id)).await?

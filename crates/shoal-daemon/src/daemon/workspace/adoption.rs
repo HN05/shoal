@@ -85,7 +85,7 @@ impl Manager {
         // Marked before the record exists, so no record is ever without its
         // proof; a refused insertion leaves a marker naming no workspace,
         // which the next claim of the directory clears.
-        self.record_worktree_identity(&workspace).await?;
+        self.record_git_dir(&workspace, git_dir).await?;
         self.verify_worktree(&workspace).await?;
         // Record the admin directory, base and readiness together: a crash
         // must never leave an adopted directory with pending setup.
@@ -175,7 +175,7 @@ impl Manager {
     async fn record_copy_identity(&self, workspace: &Workspace) -> Result<()> {
         let git_dir = git::git_dir(&workspace.path).await?;
         self.release_stale_owner(&git_dir, &workspace.id).await?;
-        self.record_worktree_identity(workspace).await?;
+        self.record_git_dir(workspace, git_dir).await?;
         Ok(())
     }
 
