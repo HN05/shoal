@@ -265,6 +265,20 @@ impl Manager {
     }
 }
 
+/// Skip the syncs to disk that carry `db`'s commits through a power loss,
+/// which no test outlives: where `TMPDIR`'s disk syncs slowly, they take
+/// seconds of a test that migrates a database.
+pub(crate) fn skip_syncs(db: &rusqlite::Connection) -> rusqlite::Result<()> {
+    db.pragma_update(None, "synchronous", "OFF")
+}
+
+/// The database at `path` as a test's fixture opens it, with [`skip_syncs`].
+pub(crate) fn open_database(path: impl AsRef<Path>) -> rusqlite::Result<rusqlite::Connection> {
+    let db = rusqlite::Connection::open(path)?;
+    skip_syncs(&db)?;
+    Ok(db)
+}
+
 /// The names of the spaces a message's result lists, as tests compare them.
 pub fn names(spaces: &[shoal_protocol::agent_messages::Recipient]) -> Vec<&str> {
     spaces.iter().map(|space| space.name.as_str()).collect()

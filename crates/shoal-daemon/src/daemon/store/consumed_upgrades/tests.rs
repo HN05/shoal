@@ -5,7 +5,7 @@ use crate::daemon::store::migrations::{migrate, migrate_to};
 /// before the one that drops what clears earlier releases' state files.
 fn before_dropping_earlier_state() -> Result<(tempfile::TempDir, Connection)> {
     let state = tempfile::tempdir()?;
-    let mut db = Connection::open(state.path().join("state.db"))?;
+    let mut db = crate::daemon::test_support::open_database(state.path().join("state.db"))?;
     migrate_to(&mut db, 208)?;
     Ok((state, db))
 }

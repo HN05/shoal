@@ -2739,7 +2739,7 @@ async fn approval_records_survive_reopen_and_follow_workspace_ownership() {
 async fn migrates_original_database_without_losing_ownership_records() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("state.db");
-    let mut db = Connection::open(&path).unwrap();
+    let mut db = crate::daemon::test_support::open_database(&path).unwrap();
     db.execute_batch("CREATE TABLE repositories(id TEXT PRIMARY KEY,path TEXT UNIQUE,source TEXT,last_used INTEGER);
             CREATE TABLE workspaces(id TEXT PRIMARY KEY,repository_id TEXT,name TEXT UNIQUE,path TEXT UNIQUE,branch TEXT,state TEXT,error TEXT);
             CREATE TABLE executions(id TEXT PRIMARY KEY,workspace_id TEXT,state TEXT);

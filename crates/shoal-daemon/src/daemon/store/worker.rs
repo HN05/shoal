@@ -122,6 +122,8 @@ fn connect(path: &Path) -> Result<Connection> {
     let db = Connection::open(path).context("open Shoal state database")?;
     db.busy_timeout(Duration::from_secs(5))?;
     db.execute_batch("PRAGMA foreign_keys=ON;")?;
+    #[cfg(test)]
+    crate::daemon::test_support::skip_syncs(&db)?;
     Ok(db)
 }
 
