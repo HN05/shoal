@@ -134,6 +134,14 @@ impl Scoped for ChatMethod {
         manager: &Manager,
         caller: &Caller,
     ) -> Result<Option<&mut SpaceSelector>> {
+        // A chat's start takes the slot only of a launch the caller reaches.
+        if let ChatMethod::LaunchChat {
+            queue_entry: Some(entry),
+            ..
+        } = self
+        {
+            manager.ensure_entry_reached(caller, entry).await?;
+        }
         Ok(match self {
             // A scoped caller starts chats only in its own tree, below its
             // own space unless it names one below it, in a worktree of its

@@ -220,3 +220,38 @@ async fn an_unscoped_client_records_the_chat_of_its_waiting_launch() {
     let queued = entries.iter().find(|queued| queued.id == entry.id).unwrap();
     assert_eq!(queued.space_id.as_ref(), Some(&launched.chat.id));
 }
+
+/// A scoped caller's chat start takes the slot only of a launch its scope
+/// reaches, never of one the user queued.
+#[tokio::test]
+async fn a_scoped_chat_start_cannot_take_a_launch_outside_its_scope() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let start = full_machine(&manager, &repo).await;
+    let users = manager.queue_chat_add(pair_launch(true), None).await;
+    let entry = users.unwrap().entry.unwrap();
+    let starter = chat(&manager, "starter", "chat", Some(&repo), None).await;
+    let caller = Caller {
+        space_id: starter.id.clone(),
+        execution: None,
+        granted: None,
+        read_only: false,
+    };
+    let mut method = ChatMethod::LaunchChat {
+        start: Box::new(start),
+        chat: None,
+        origin: None,
+        queue_entry: Some(entry.id.clone()),
+    };
+
+    let refused = method.scope(&manager, &caller).await.map(drop).unwrap_err();
+
+    assert!(
+        format!("{refused:#}").contains("outside this space's scope"),
+        "{refused:#}"
+    );
+}
