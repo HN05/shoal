@@ -757,7 +757,7 @@ configured command for another agent, plus proven child
   an upgrade leaves running, such as an agent's wrapper, sends, ask only
   where that process would otherwise become unusable and keeping it so is
   easy; odd behaviour of it, such as a report the daemon no longer takes,
-  is accepted.
+  is accepted. Code kept for such a process has an issue to remove it.
   `install` preserves compatible daemons and commands,
   deferring service changes until restart; incompatible daemons restart. Service
   installation refuses state-directory changes until the existing service stops.

@@ -25,7 +25,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   `shoal move` package, is refused, not converted. A process an upgrade
   leaves running, such as an agent's wrapper, runs its version's code, which
   no migration can rewrite: keep it usable where that is easy, and accept
-  what it then does oddly, such as a report the daemon no longer takes.
+  what it then does oddly, such as a report the daemon no longer takes. A
+  change that keeps code for such a process files an issue to remove it,
+  naming the release after which it can go.
 - Treat function abstraction as a correctness requirement and a review gate.
   Every function must stay at one abstraction level: orchestration calls named
   domain operations, and helpers own lower-level implementation details. If a
