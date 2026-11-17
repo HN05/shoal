@@ -429,8 +429,9 @@ impl Manager {
     /// it is preparing, linking the PR, then the post-setup hook of a new
     /// workspace. A preparation that creates the worktree waits first for
     /// what the agent waits for, or, with nothing following it, for disk
-    /// space. A new workspace whose issue cannot be assigned is removed,
-    /// since nothing ran in it yet.
+    /// space; a reopened workspace whose admitted launch the start carries
+    /// out is refreshed first. A new workspace whose issue cannot be
+    /// assigned is removed, since nothing ran in it yet.
     pub(crate) async fn prepare_new(
         self: &Arc<Self>,
         OpenedWorkspace { workspace, reused }: OpenedWorkspace,
@@ -444,6 +445,11 @@ impl Manager {
         // waiting launch frees its slot even once the caller is gone.
         if let Some(entry) = &preparing.queue_entry {
             self.give_start_entry(entry, &workspace).await?;
+        }
+        // The agent an admitted launch starts in an existing workspace starts
+        // on a branch brought up to date.
+        if reused && preparing.queue_entry.is_some() {
+            self.refresh_admitted(&workspace).await;
         }
         let may_wait = preparing.may_wait(&workspace);
         let Preparing {

@@ -1,7 +1,9 @@
 //! Refresh: bring a workspace up to date with what it was made from while it
 //! holds nothing of its own. A branch workspace's branch moves only by
 //! fast-forward, a copy's follows its source's HEAD, and work of its own is
-//! refused, never carried over.
+//! refused, never carried over. The daemon also refreshes the branch of a
+//! workspace whose queued agent it admits, so the agent starts on what the
+//! branch builds on now.
 use anyhow::{Context, Result, bail, ensure};
 use shoal_protocol::model::ByKind;
 
@@ -18,7 +20,7 @@ use shoal_protocol::space_names::SpaceSelector;
 mod own_work;
 mod target;
 
-use own_work::OwnWork;
+use own_work::{HoldsOwnWork, OwnWork};
 use target::{Found, Move, Target};
 
 impl Manager {
@@ -38,6 +40,42 @@ impl Manager {
         if matches!(target, Target::DefaultBranch) {
             self.sync_default_branch(&workspace).await;
         }
+        self.refresh_to(&workspace, target, caller).await
+    }
+
+    /// Bring the branch of `workspace`, whose admitted agent is about to
+    /// start there, up to date with what it builds on while it holds
+    /// nothing of its own, as `shoal refresh` does, with what the checkout
+    /// has of the default branch. A workspace at a commit, a copy, or one
+    /// that holds work of its own stays as it is, and one that cannot be
+    /// refreshed starts its agent as it is.
+    pub(crate) async fn refresh_admitted(&self, workspace: &Workspace) {
+        if workspace.copied_from.is_some() || workspace.branch().is_none() {
+            return;
+        }
+        let refreshed = async {
+            let target = self.refresh_target(workspace, None).await?;
+            self.refresh_to(workspace, target, None).await
+        };
+        if let Err(error) = refreshed.await
+            && !error.is::<HoldsOwnWork>()
+        {
+            log!(
+                "{} starts its agent without a refresh: {error:#}",
+                workspace.name
+            );
+        }
+    }
+
+    /// Bring `workspace` up to date with `target`, refusing one that holds
+    /// work of its own, or in which an execution other than `caller`'s own
+    /// runs.
+    async fn refresh_to(
+        &self,
+        workspace: &Workspace,
+        target: Target,
+        caller: Option<&Caller>,
+    ) -> Result<Refreshed> {
         let (repo, _git) = self.lock_repository(workspace.repository()).await?;
         let reserved = self
             .reserve_lifecycle(&workspace.id, WorkspaceState::Updating)

@@ -1,8 +1,20 @@
 //! Work of a workspace's own, which a refresh would lose, and the refusal
 //! that names it and what deals with it.
-use anyhow::{Result, bail};
+use anyhow::Result;
 
 use crate::{git, model::Workspace};
+
+/// The refusal of a refresh that would lose a workspace's own work.
+#[derive(Debug)]
+pub(super) struct HoldsOwnWork(String);
+
+impl std::fmt::Display for HoldsOwnWork {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for HoldsOwnWork {}
 
 /// The most commit subjects and changed paths a refusal lists.
 const LISTED: usize = 5;
@@ -73,11 +85,12 @@ impl<'a> OwnWork<'a> {
         let fresh = (self.fresh_copy)
             .map(|command| format!("; or make a fresh copy with {command}"))
             .unwrap_or_default();
-        bail!(
+        Err(HoldsOwnWork(format!(
             "workspace {} holds work of its own, which refresh never carries over: {}{fresh}",
             workspace.name,
             held.join("; and ")
-        )
+        ))
+        .into())
     }
 
     /// Whether `workspace` is a copy that holds only the files it was
