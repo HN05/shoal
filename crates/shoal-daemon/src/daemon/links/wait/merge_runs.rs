@@ -399,13 +399,23 @@ fn links(db: &rusqlite::Connection, id: &SpaceId, url: &ItemRef) -> Result<bool>
 /// finish.
 fn any_running(db: &rusqlite::Connection, id: &SpaceId, runs: &[ItemRef]) -> Result<bool> {
     for run in runs {
-        let record = cursor_record(db, id, run.url())?;
-        let finished = record.is_some_and(|record| record.snapshot.run_finished());
-        if !finished && links(db, id, run)? {
+        if !run_finished(db, id, run)? && links(db, id, run)? {
             return Ok(true);
         }
     }
     Ok(false)
+}
+
+/// Whether a read of the space `id` saw the run at `url` finish: its watch
+/// cursor's, or the background poll's own, which no delivery the agent has
+/// not taken holds back.
+fn run_finished(db: &rusqlite::Connection, id: &SpaceId, run: &ItemRef) -> Result<bool> {
+    let watched = cursor_record(db, id, run.url())?;
+    if watched.is_some_and(|record| record.snapshot.run_finished()) {
+        return Ok(true);
+    }
+    let polled = observed_item(db, id, run.url())?;
+    Ok(polled.is_some_and(|read| read.run_finished()))
 }
 
 /// The space `id`'s lookups of its merges' runs.

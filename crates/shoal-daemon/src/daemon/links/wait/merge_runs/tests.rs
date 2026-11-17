@@ -404,3 +404,33 @@ async fn a_merge_seen_while_its_default_branch_is_unknown_is_followed_by_the_nex
     record(pull("merged", Some(MERGED))).await.unwrap();
     assert!(following.awaits().await);
 }
+
+#[tokio::test]
+async fn a_run_the_background_poll_saw_finish_ends_its_wait_while_its_updates_wait() {
+    let following = following(true, json!([listed_run("running")])).await;
+    following.merge(Some(MERGED)).await;
+    following.follow().await;
+    let (run, id) = (run_url(&following), following.workspace.id.clone());
+    let read = |state: &str, errors: Value| -> Snapshot {
+        serde_json::from_value(json!({"comments": {}, "checks": {}, "conflict": null,
+            "state": state, "errors": errors}))
+        .unwrap()
+    };
+    // A failed read waits on the cursor for an agent that does not take it.
+    let failed = following
+        .observe(&run, read("running", json!({"CI run": "unreachable"})))
+        .await;
+    assert_eq!(failed[0].kind, UpdateKind::LookupFailed, "{failed:?}");
+    following.end_window().await;
+    following.follow().await;
+    assert!(following.awaits().await);
+
+    // The background poll's own reads see it finish.
+    for state in ["running", "failed"] {
+        (following.manager)
+            .record_background_activity(&id, vec![(run.clone(), read(state, json!({})))])
+            .await
+            .unwrap();
+    }
+    assert!(!following.awaits().await);
+}
