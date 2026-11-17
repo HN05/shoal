@@ -53,11 +53,7 @@ impl Manager {
 
     /// The workspace or chat, running or stopped, with the ID `id`.
     pub(crate) async fn space_by_id(&self, id: &SpaceId) -> Result<Space> {
-        if let Some(workspace) = self.find_workspace(id).await? {
-            return Ok(Space::from(workspace));
-        }
-        let chat = self.chat_by_id(id).await?;
-        chat.map(Space::from)
+        (self.find_space(id).await?)
             .ok_or_else(|| Refusal::new(Reason::NotFound, format!("no space {id}")).into())
     }
 

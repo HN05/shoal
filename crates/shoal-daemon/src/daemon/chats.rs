@@ -363,25 +363,29 @@ impl Manager {
 
     /// Running and stopped chats in start order, each with its agent.
     pub async fn chats(&self) -> Result<Vec<Chat>> {
-        let recorded = self.recorded_chats().await?;
+        let recorded = self.recorded_chats(None).await?;
         self.with_agents(recorded)
     }
 
     /// The running or stopped chat with the ID `id`, with its agent.
     pub(crate) async fn chat_by_id(&self, id: &SpaceId) -> Result<Option<Chat>> {
-        let recorded = self.recorded_chats().await?;
+        let recorded = self.recorded_chats(Some(id)).await?;
         (recorded.into_iter())
             .find(|(chat, _)| chat.id == *id)
             .map(|(chat, stored)| self.with_agent(chat, stored))
             .transpose()
     }
 
-    /// The running and stopped chats in start order, each with what the
-    /// store records of its agent, read in one transaction.
-    async fn recorded_chats(&self) -> Result<Vec<(Chat, spaces::sessions::StoredAgents)>> {
-        let owner = self.root_dir_owner();
+    /// The running and stopped chats in start order, every one or those
+    /// at or below the space `root`, each with what the store records of
+    /// its agent, read in one transaction.
+    async fn recorded_chats(
+        &self,
+        root: Option<&SpaceId>,
+    ) -> Result<Vec<(Chat, spaces::sessions::StoredAgents)>> {
+        let (root, owner) = (root.cloned(), self.root_dir_owner());
         self.store
-            .read(move |tx| recorded_within(tx, &owner, None))
+            .read(move |tx| recorded_within(tx, &owner, root.as_ref()))
             .await
     }
 
