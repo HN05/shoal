@@ -267,7 +267,9 @@ impl Manager {
             workspace: child,
             reused: false,
         };
-        self.prepare_new(opened, issue, preparing, caller).await
+        let started = self.prepare_new(opened, issue, preparing, caller).await?;
+        self.report_failed_preparation(&started);
+        Ok(started)
     }
 
     /// Create the child `split` describes below `parent`.

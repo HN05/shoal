@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use super::{Opening, Preparing};
+use super::{Opening, Preparing, Split};
 use crate::{
     config::permissions::PermissionsConfig,
     daemon::notifications::NotificationKind,
@@ -147,6 +147,16 @@ async fn reported(failure: Failure) -> (Notification, SpaceNumber) {
     let (root, manager) = manager().await;
     let repository = registered(root.path(), &manager).await;
     let started = start(&manager, &repository, "child", "HEAD").await;
+    reported_for(&manager, started, failure).await
+}
+
+/// The notification the preparation `started` ending with `failure`
+/// records, and the started workspace's number.
+async fn reported_for(
+    manager: &Manager,
+    started: StartedWorkspace,
+    failure: Failure,
+) -> (Notification, SpaceNumber) {
     let worker = fake::take(&started.operation);
     let failed = Report::Ended(Ended::Failed(failure));
     (manager.report_operation(&started.operation, failed, None))
@@ -176,6 +186,48 @@ async fn a_failed_preparation_reaches_the_user_with_what_retries_it() {
     let (notification, number) = reported(Failure::WorktreeFailed { message }).await;
     let message = &notification.message;
     assert!(message.contains("fatal: no space left"), "{message}");
+    assert!(
+        message.contains(&format!("`shoal restore {number}`")),
+        "{message}"
+    );
+}
+
+#[tokio::test]
+async fn a_split_reports_its_failed_preparation_too() {
+    let (root, manager) = manager().await;
+    let repository = registered(root.path(), &manager).await;
+    let parent = manager
+        .create_workspace(
+            &repository.id,
+            "parent".into(),
+            Some("HEAD".into()),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    let split = Split {
+        name: Some("child".into()),
+        copy: None,
+        base: None,
+        options: Default::default(),
+    };
+    let preparing = Preparing {
+        issue: None,
+        pr: None,
+        agent: None,
+        waiting: None,
+        queue_entry: None,
+        env: None,
+    };
+    let selector = SpaceSelector::id(&parent.id);
+    let started = (manager.start_split(&selector, split, preparing, None))
+        .await
+        .unwrap();
+    let message = "setup exited with status 1".to_owned();
+    let (notification, number) =
+        reported_for(&manager, started, Failure::SetupFailed { message }).await;
+    let message = &notification.message;
     assert!(
         message.contains(&format!("`shoal restore {number}`")),
         "{message}"
