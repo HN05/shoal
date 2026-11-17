@@ -181,3 +181,18 @@ async fn a_waiting_start_goes_with_its_record() {
     manager.start_waiting_preparations().await.unwrap();
     assert!(!manager.operation_runs_in(&ui.id));
 }
+
+#[tokio::test]
+async fn a_release_after_its_agent_was_stopped_keeps_the_preparation_waiting() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let api = create(&manager, &repo, "api").await;
+    let blocker = Blocker::Space(api.id.to_string());
+    let ui = *start(&manager, &repo, "ui", vec![blocker]).await.workspace;
+    done(&manager, &api).await;
+    // The stop lands after the pass found the blocker done.
+    manager.cancel_waiting_launches(&ui.id).await.unwrap();
+    manager.release_preparation(&ui.id, None).await;
+    assert!(!manager.operation_runs_in(&ui.id));
+    assert!(read(&manager, &ui).await.preparation_waits.is_some());
+}

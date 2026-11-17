@@ -35,10 +35,11 @@ pub(super) async fn run(manager: Arc<Manager>) {
             if let Err(error) = manager.dispatch_queue().await {
                 log!("agent queue: {error:#}");
             }
-        }
-        // Outside the guard above, as starting an operation takes one itself.
-        if let Err(error) = manager.start_waiting_preparations().await {
-            log!("waiting preparations: {error:#}");
+            // Under the guard, so an update cannot quiesce between a
+            // preparation's release and its operation's start.
+            if let Err(error) = manager.start_waiting_preparations().await {
+                log!("waiting preparations: {error:#}");
+            }
         }
         tokio::select! {
             _ = changed.changed() => {}

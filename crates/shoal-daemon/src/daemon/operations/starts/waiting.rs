@@ -19,6 +19,7 @@ use crate::{
     },
     model::{PreparationWait, Workspace},
     protocol::operations::{Failure, OperationSpec, Preparation},
+    state::{QueueKind, QueueState},
 };
 
 /// A new workspace's preparation as its start leaves it: the `steps` it
@@ -114,9 +115,7 @@ impl Manager {
             None => Ok(()),
             Some(PreparationWait::Stopped) => {
                 let id = workspace.id.clone();
-                (self.store)
-                    .run(move |db| claim_waiting(db, &id).map(drop))
-                    .await
+                (self.store).run(move |db| end_wait(db, &id)).await
             }
             Some(waits) => bail!(
                 "the preparation of {} waits for {waits} and starts once that clears; `shoal rm {}` removes the workspace",
@@ -280,14 +279,28 @@ fn waiting_preparations(db: &mut rusqlite::Connection) -> Result<Vec<Waiting>> {
         .collect()
 }
 
+/// End the wait of the preparation of the workspace `id`, for one that
+/// starts another way.
+fn end_wait(db: &mut rusqlite::Connection, id: &SpaceId) -> Result<()> {
+    db.execute(
+        "DELETE FROM waiting_preparations WHERE workspace_id=?1",
+        [id],
+    )?;
+    Ok(())
+}
+
 /// Take the waiting preparation of the workspace `id` out of its record to
-/// start it, if it still waits.
+/// start it, if it still waits and, where it waits for an agent, the launch
+/// of that agent still waits to open the workspace: a stop that cancelled
+/// the launch since its gate was read keeps it waiting.
 fn claim_waiting(db: &mut rusqlite::Connection, id: &SpaceId) -> Result<Option<Claimed>> {
     let claimed: Option<(String, Option<String>, Option<SpaceId>)> = db
         .query_row(
             "DELETE FROM waiting_preparations WHERE workspace_id=?1
+                AND (NOT for_agent OR EXISTS (SELECT 1 FROM agent_queue
+                    WHERE opens_workspace_id=?1 AND kind=?2 AND state=?3))
              RETURNING steps,env,scope_space_id",
-            [id],
+            params![id, QueueKind::Launch, QueueState::Queued],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .optional()?;
