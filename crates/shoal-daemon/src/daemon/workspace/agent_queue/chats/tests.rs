@@ -172,3 +172,40 @@ async fn a_clients_chat_started_now_runs_past_the_limits() {
     let entry = entries.iter().find(|entry| entry.name == "urgent talk");
     assert_eq!(entry.unwrap().state, QueueState::Starting);
 }
+
+/// A chat launch that fails before it took any chat frees its slot and
+/// tells why, while other chats exist, rather than leaving its entry to
+/// expire.
+#[tokio::test]
+async fn an_unattached_chat_launch_fails_while_other_chats_exist() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    full_machine(&manager, &repo).await;
+    let other = crate::daemon::chats::NewChat {
+        name: "other".into(),
+        agent: "claude".into(),
+        mode: "chat".into(),
+        narrowing: Default::default(),
+        origin: None,
+        parent: None,
+        priority: None,
+    };
+    (manager.start_new_chat(Some((&repo.id).into()), None, other))
+        .await
+        .unwrap();
+    let light = manager.queue_chat_add(chat_launch(Some(&repo), "chat"), None);
+    let entry = light.await.unwrap().entry.unwrap();
+
+    manager
+        .fail_queue_entry(&entry.id, "no place")
+        .await
+        .unwrap();
+
+    let entries = manager.queue_entries().await.unwrap();
+    assert!(entries.iter().all(|queued| queued.id != entry.id));
+    let notifications = manager.notifications(true, 20).await.unwrap();
+    assert!(notifications.iter().any(|notification| {
+        notification.kind == crate::daemon::notifications::NotificationKind::QueueFailed
+            && notification.message.contains("no place")
+    }));
+}

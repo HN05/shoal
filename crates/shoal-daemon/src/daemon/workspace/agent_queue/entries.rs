@@ -508,7 +508,8 @@ impl Manager {
                 let entry: Option<(SpaceName, bool, Option<SpaceId>, bool)> = tx
                     .query_row(
                         "SELECT name, state=?2, COALESCE(space_id,opens_workspace_id),
-                            kind=?3 AND space_id IN (SELECT id FROM spaces WHERE kind=?4)
+                            kind=?3 AND EXISTS (SELECT 1 FROM spaces
+                                WHERE spaces.id=agent_queue.space_id AND spaces.kind=?4)
                             FROM agent_queue WHERE id=?1",
                         params![
                             entry_id,
