@@ -52,6 +52,7 @@ pub struct Machine {
     pub git_profiles: crate::config::git_profiles::Git,
     pub simulators: crate::sim::SimConfig,
     pub webhooks: Webhooks,
+    pub hub: Hub,
     pub containers: Containers,
     /// The options of `[machine]` that take another's value.
     #[serde(skip)]
@@ -65,6 +66,43 @@ pub struct Webhooks {
     /// The address it listens on; none without it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub listen: Option<std::net::SocketAddr>,
+}
+
+/// `[machine.hub]`: the hub role this daemon takes, or the command it
+/// reaches the hub it joins through.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Hub {
+    /// Take the hub role, which the user's other machines and devices join.
+    pub enabled: bool,
+    /// The address the hub's listener binds, which Shoal never encrypts.
+    pub listen: std::net::SocketAddr,
+    /// The URL members reach the listener at, through the proxy or tunnel in
+    /// front of it; defaults to `http://` and the listener's address.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<shoal_protocol::hub::HubUrl>,
+    /// A command whose standard input and output reach the hub's daemon,
+    /// which this machine joins and reaches it through instead of a URL.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub connect: Vec<String>,
+}
+
+impl Default for Hub {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            listen: std::net::SocketAddr::from(([127, 0, 0, 1], 7474)),
+            url: None,
+            connect: Vec::new(),
+        }
+    }
+}
+
+impl Hub {
+    /// The URL the hub advertises for a listener bound to `bound`.
+    pub fn advertised(&self, bound: std::net::SocketAddr) -> shoal_protocol::hub::HubUrl {
+        (self.url.clone()).unwrap_or_else(|| shoal_protocol::hub::HubUrl::of_listener(bound))
+    }
 }
 
 impl Machine {

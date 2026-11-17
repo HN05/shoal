@@ -17,6 +17,7 @@ pub mod env;
 pub mod events;
 pub mod executions;
 pub mod files;
+pub mod hub;
 pub mod integrations;
 pub mod item_numbers;
 pub mod launches;
