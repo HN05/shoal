@@ -500,13 +500,13 @@ impl ImportedSessionFile {
 /// The default remote's default branch, which the importing repository can
 /// fetch, so the bundle leaves out what it has; `None` without one.
 async fn shared_commit(repo: &Path) -> Result<Option<String>> {
-    let Some(remote) = git::default_branch::remote(repo).await? else {
+    let Ok(default) = git::default_branch::locate(repo, DefaultBranchLookup::Cached).await else {
         return Ok(None);
     };
-    let Ok(branch) = git::default_branch::resolve(repo, DefaultBranchLookup::Cached).await else {
+    let Some(remote) = &default.remote else {
         return Ok(None);
     };
-    let reference = git::remote_ref(&remote, branch.as_str());
+    let reference = git::remote_ref(remote, default.name.as_str());
     if !git::ref_exists(repo, &reference, git::isolated_command).await? {
         return Ok(None);
     }

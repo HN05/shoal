@@ -8,7 +8,7 @@ use std::{
 use anyhow::{Context, Result, bail};
 use shoal_refs::{BranchName, CommitId};
 
-use super::run;
+use super::{default_branch::DefaultBranch, run};
 use crate::fsutil::off_runtime;
 
 pub async fn porcelain(repo: &Path) -> Result<String> {
@@ -139,14 +139,14 @@ pub async fn operation_in_progress(repo: &Path) -> Result<bool> {
 /// The default branch's refs that exist, local first: the local branch, its
 /// upstream, and the default remote's remote-tracking branch, which a clone
 /// keeps even without a local branch.
-pub(crate) async fn default_refs(repo: &Path, name: &BranchName) -> Result<Vec<String>> {
-    let local = super::local_ref(name);
+pub(crate) async fn default_refs(repo: &Path, default: &DefaultBranch) -> Result<Vec<String>> {
+    let local = super::local_ref(&default.name);
     let mut candidates = Vec::new();
     if let Some(upstream) = upstream_of(repo, &local).await? {
         candidates.extend([local, upstream]);
     }
-    if let Some(remote) = super::default_branch::remote(repo).await? {
-        candidates.push(super::remote_ref(&remote, name.as_str()));
+    if let Some(remote) = &default.remote {
+        candidates.push(super::remote_ref(remote, default.name.as_str()));
     }
     let mut refs: Vec<String> = Vec::new();
     for reference in candidates {
@@ -223,15 +223,15 @@ pub(crate) async fn retains(
     Ok(false)
 }
 
-/// Whether any of the default branch `name`'s refs retains HEAD.
-pub async fn default_branch_retains_head(repo: &Path, name: &BranchName) -> Result<bool> {
-    let references = default_refs(repo, name).await?;
+/// Whether any of the default branch's refs retains HEAD.
+pub async fn default_branch_retains_head(repo: &Path, default: &DefaultBranch) -> Result<bool> {
+    let references = default_refs(repo, default).await?;
     retains(repo, &references, "HEAD", &head_tree(repo).await?).await
 }
 
 /// Commits of `commit` that neither a remote nor the default branch `default`
 /// keeps; none once the default branch has its changes.
-pub async fn unkept_commits(repo: &Path, commit: &str, default: &BranchName) -> Result<u64> {
+pub async fn unkept_commits(repo: &Path, commit: &str, default: &DefaultBranch) -> Result<u64> {
     let references = default_refs(repo, default).await?;
     let tree = super::revision(repo, &format!("{commit}^{{tree}}"), run).await?;
     if retains(repo, &references, commit, &tree).await? {

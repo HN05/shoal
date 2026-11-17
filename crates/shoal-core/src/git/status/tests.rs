@@ -3,7 +3,10 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use crate::test_support::{commit, git, repository};
+use crate::{
+    git::default_branch::DefaultBranch,
+    test_support::{commit, git, repository},
+};
 
 #[tokio::test]
 async fn unretained_work_finds_files_stashes_and_unpushed_commits() {
@@ -152,7 +155,11 @@ async fn default_refs_list_the_existing_local_upstream_and_remote_branch() {
     let clone = root.path().join("clone");
     let (upstream_path, clone_path) = (upstream.to_str().unwrap(), clone.to_str().unwrap());
     git(root.path(), &["clone", "-q", upstream_path, clone_path]);
-    let refs = async |name: &str| super::default_refs(&clone, &name.into()).await.unwrap();
+    let origin = |name: &str| DefaultBranch {
+        remote: Some("origin".into()),
+        name: name.into(),
+    };
+    let refs = async |name: &str| super::default_refs(&clone, &origin(name)).await.unwrap();
     assert_eq!(
         refs("main").await,
         ["refs/heads/main", "refs/remotes/origin/main"]
@@ -184,11 +191,11 @@ async fn default_refs_list_the_existing_local_upstream_and_remote_branch() {
     // A broken ref fails rather than counting as missing.
     let refs_dir = clone.join(".git/refs");
     fs::write(refs_dir.join("remotes/origin/main"), "broken\n").unwrap();
-    super::default_refs(&clone, &"main".into())
+    super::default_refs(&clone, &origin("main"))
         .await
         .unwrap_err();
     fs::write(refs_dir.join("heads/trunk"), "broken\n").unwrap();
-    super::default_refs(&clone, &"trunk".into())
+    super::default_refs(&clone, &origin("trunk"))
         .await
         .unwrap_err();
 }

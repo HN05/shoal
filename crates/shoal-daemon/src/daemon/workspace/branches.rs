@@ -144,15 +144,15 @@ impl Manager {
     /// default branch. The caller holds the repository's fetch gate.
     pub(crate) async fn fetch_default_remotes(&self, repo: &Repository) -> Result<BranchName> {
         let default =
-            crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?;
+            crate::git::default_branch::locate(&repo.path, DefaultBranchLookup::Discover).await?;
         let mut remotes = Vec::new();
-        let local = git::local_ref(&default);
+        let local = git::local_ref(&default.name);
         if git::ref_exists(&repo.path, &local, git::isolated_command).await?
             && let Some((remote, _)) = upstream(repo, &local).await?
         {
             remotes.push(remote);
         }
-        if let Some(remote) = crate::git::default_branch::remote(&repo.path).await?
+        if let Some(remote) = default.remote
             && !remotes.contains(&remote)
         {
             remotes.push(remote);
@@ -162,7 +162,7 @@ impl Manager {
                 .await
                 .with_context(|| format!("could not fetch {remote}"))?;
         }
-        Ok(default)
+        Ok(default.name)
     }
 
     /// Fast-forward the local default branch to its upstream as
@@ -206,7 +206,7 @@ impl Manager {
     pub(crate) async fn default_branch_has_head(&self, workspace: &Workspace) -> Result<bool> {
         self.fetch_default_branch(workspace.repository()).await?;
         let repo = self.repository(workspace.repository()).await?;
-        let default = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await?;
+        let default = git::default_branch::locate(&repo.path, DefaultBranchLookup::Cached).await?;
         git::status::default_branch_retains_head(&workspace.path, &default).await
     }
 

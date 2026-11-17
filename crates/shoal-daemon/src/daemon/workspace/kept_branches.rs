@@ -12,7 +12,10 @@ use shoal_refs::{BranchName, CommitId};
 use super::Manager;
 use crate::{
     daemon::log,
-    git::{self, default_branch::DefaultBranchLookup},
+    git::{
+        self,
+        default_branch::{DefaultBranch, DefaultBranchLookup},
+    },
     model::{BranchTarget, KeptBranch, Repository, Workspace},
     time::UnixTime,
 };
@@ -114,16 +117,13 @@ impl Manager {
         let _git = self.gates.lock_git(&repo.id).await;
         // An unresolved default branch could be any of them.
         let Ok(default) =
-            git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await
+            git::default_branch::locate(&repo.path, DefaultBranchLookup::Cached).await
         else {
             return Ok(());
         };
         let present = git::present_heads(&repo.path, heads).await?;
         let evidence = Evidence::Advertised(&present);
-        for (record, status) in self
-            .kept_statuses(&repo, Some(default.as_str()), evidence)
-            .await?
-        {
+        for (record, status) in self.kept_statuses(&repo, Some(&default), evidence).await? {
             if status == (Status::Kept { unkept_commits: 0 }) {
                 git::branch::delete_at(&repo.path, &record.branch, &record.head).await?;
                 self.forget_kept_branch(&record).await?;
@@ -152,15 +152,11 @@ impl Manager {
             }
             let repo = self.repository(&repository_id).await?;
             let _git = self.gates.lock_git(&repo.id).await;
-            let default = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)
+            let default = git::default_branch::locate(&repo.path, DefaultBranchLookup::Cached)
                 .await
                 .ok();
             let statuses = self
-                .kept_statuses(
-                    &repo,
-                    default.as_ref().map(BranchName::as_str),
-                    Evidence::TrackingRefs,
-                )
+                .kept_statuses(&repo, default.as_ref(), Evidence::TrackingRefs)
                 .await?;
             for (record, status) in statuses {
                 if let Status::Kept { unkept_commits } = status {
@@ -193,11 +189,11 @@ impl Manager {
             let repo = self.repository(repository_id).await?;
             gates.push(self.gates.lock_git(&repo.id).await);
             // An unresolved default branch could be any of them.
-            let default = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)
+            let default = git::default_branch::locate(&repo.path, DefaultBranchLookup::Cached)
                 .await
                 .context("the default branch is unknown, and could be any kept branch")?;
             let statuses = self
-                .kept_statuses(&repo, Some(default.as_str()), Evidence::TrackingRefs)
+                .kept_statuses(&repo, Some(&default), Evidence::TrackingRefs)
                 .await?;
             for target in targets.iter().filter(|t| &t.repository_id == repository_id) {
                 let (record, status) = statuses
@@ -238,7 +234,7 @@ impl Manager {
     async fn kept_statuses(
         &self,
         repo: &Repository,
-        default: Option<&str>,
+        default: Option<&DefaultBranch>,
         evidence: Evidence<'_>,
     ) -> Result<Vec<(Record, Status)>> {
         let workspaces = self.workspace_branches(&repo.id).await?;
@@ -324,11 +320,13 @@ impl Manager {
 async fn kept_status(
     repo: &Path,
     record: &Record,
-    default: Option<&str>,
+    default: Option<&DefaultBranch>,
     workspaces: &[BranchName],
     evidence: Evidence<'_>,
 ) -> Result<Status> {
-    if default == Some(record.branch.as_str()) || workspaces.contains(&record.branch) {
+    if default.is_some_and(|default| default.name == record.branch)
+        || workspaces.contains(&record.branch)
+    {
         return Ok(Status::Released);
     }
     let branch = record.branch.clone();
@@ -345,11 +343,10 @@ async fn kept_status(
     }
     let unkept_commits = match (default, evidence) {
         (Some(default), Evidence::Advertised(heads)) => {
-            git::status::unkept_commits_by(repo, record.head.as_str(), &default.into(), heads)
-                .await?
+            git::status::unkept_commits_by(repo, record.head.as_str(), &default.name, heads).await?
         }
         (Some(default), Evidence::TrackingRefs) => {
-            git::status::unkept_commits(repo, record.head.as_str(), &default.into()).await?
+            git::status::unkept_commits(repo, record.head.as_str(), default).await?
         }
         (None, _) => git::status::unretained_commits(repo, record.head.as_str(), &[]).await?,
     };

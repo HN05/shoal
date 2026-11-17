@@ -30,16 +30,39 @@ pub async fn remote(repo: &Path) -> Result<Option<String>> {
     Ok(Some(remotes[0].to_owned()))
 }
 
+/// The default branch, with the remote whose HEAD names it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DefaultBranch {
+    /// `None` without remotes, where the local HEAD names the branch.
+    pub remote: Option<String>,
+    pub name: BranchName,
+}
+
+/// The default branch's name, as [`locate`] finds it.
+pub async fn resolve(repo: &Path, lookup: DefaultBranchLookup) -> Result<BranchName> {
+    Ok(locate(repo, lookup).await?.name)
+}
+
 /// Read cached remote HEAD. Branch refresh may discover and cache a missing one;
 /// cleanup only reads local metadata and never contacts a remote.
-pub async fn resolve(repo: &Path, lookup: DefaultBranchLookup) -> Result<BranchName> {
+pub async fn locate(repo: &Path, lookup: DefaultBranchLookup) -> Result<DefaultBranch> {
     let Some(remote) = remote(repo).await? else {
         let head = git::head_branch(repo, true, git::run)
             .await
             .context("local repository has no default branch; select a starting ref with --base")?;
-        return head.context("repository HEAD does not name a local branch");
+        let name = head.context("repository HEAD does not name a local branch")?;
+        return Ok(DefaultBranch { remote: None, name });
     };
-    let remote = remote.as_str();
+    let name = remote_head(repo, &remote, lookup).await?;
+    Ok(DefaultBranch {
+        remote: Some(remote),
+        name,
+    })
+}
+
+/// The branch `remote`'s cached HEAD names, discovered and cached when
+/// `lookup` allows.
+async fn remote_head(repo: &Path, remote: &str, lookup: DefaultBranchLookup) -> Result<BranchName> {
     let head = git::remote_ref(remote, "HEAD");
     let prefix = git::remote_ref(remote, "");
     if let Ok(target) = git::run(repo, &["symbolic-ref", "--quiet", &head]).await

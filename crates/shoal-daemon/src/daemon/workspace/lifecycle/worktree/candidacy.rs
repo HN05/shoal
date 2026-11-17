@@ -13,7 +13,6 @@ use crate::{
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
-use shoal_refs::BranchName;
 use std::{collections::HashMap, path::Path};
 
 /// Why cleanup leaves `workspace` alone whatever else it finds: its worktree
@@ -81,7 +80,7 @@ impl Manager {
         }
         let repo = self.repository(workspace.repository()).await?;
         let default_branch =
-            crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)
+            crate::git::default_branch::locate(&repo.path, DefaultBranchLookup::Cached)
                 .await
                 .ok();
         removal::inspect(
@@ -89,7 +88,7 @@ impl Manager {
             executions.running,
             executions.idle,
             policy,
-            (&repo.path, default_branch.as_ref().map(BranchName::as_str)),
+            (&repo.path, default_branch.as_ref()),
         )
         .await
     }

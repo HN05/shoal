@@ -3,7 +3,12 @@ use anyhow::Result;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_refs::BranchName;
 
-use crate::{fsutil::off_runtime, git, model::Workspace, process};
+use crate::{
+    fsutil::off_runtime,
+    git::{self, default_branch::DefaultBranch},
+    model::Workspace,
+    process,
+};
 pub use shoal_protocol::removal::{
     BranchOutcome, NOTHING, RemovalCheck, RemovalResult, SpaceRemovalCheck, UnsavedWork,
 };
@@ -116,7 +121,7 @@ pub async fn inspect(
     running_commands: usize,
     idle_restores: Vec<IdleRestore>,
     policy: InspectionPolicy,
-    (repo, default_branch): (&Path, Option<&str>),
+    (repo, default_branch): (&Path, Option<&DefaultBranch>),
 ) -> Result<Inspection> {
     let mut inspection = Inspection {
         check: RemovalCheck {
@@ -135,7 +140,7 @@ pub async fn inspect(
             matches_default_branch: false,
             integrated: false,
         },
-        default_branch: default_branch.map(str::to_owned),
+        default_branch: default_branch.map(|default| default.name.to_string()),
         idle_restores,
     };
     if !off_runtime::exists(&inspection.workspace.path).await? {
@@ -157,7 +162,7 @@ pub async fn inspect(
 async fn inspect_git(
     check: &mut RemovalCheck,
     repo: &Path,
-    default_branch: Option<&str>,
+    default_branch: Option<&DefaultBranch>,
 ) -> Result<()> {
     if check.workspace.disposable {
         if !disowned(&check.workspace, repo).await? {
@@ -178,7 +183,7 @@ async fn inspect_git(
     check.head = Some(commit);
     // The default branch may be absent locally (workspaces created from another ref).
     let default_refs = match default_branch {
-        Some(name) => git::status::default_refs(path, &name.into()).await?,
+        Some(default) => git::status::default_refs(path, default).await?,
         None => Vec::new(),
     };
     check.matches_default_branch = git::status::retains(path, &default_refs, "HEAD", &tree).await?;
@@ -187,7 +192,12 @@ async fn inspect_git(
         let kept = kept_refs(&check.workspace, check.branch.is_none(), &default_refs);
         check.unpushed_commits = git::status::unretained_commits(path, "HEAD", &kept).await?;
         check.integrated = check.unpushed_commits > 0
-            && start_branch_retains_head(&check.workspace, default_branch, &tree).await?;
+            && start_branch_retains_head(
+                &check.workspace,
+                default_branch.map(|default| default.name.as_str()),
+                &tree,
+            )
+            .await?;
         check.starting_commits =
             check.unpushed_commits > 0 && only_starting_commits(&check.workspace, &kept).await?;
     }
