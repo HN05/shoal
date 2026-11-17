@@ -14,8 +14,10 @@ use crate::protocol::Protection;
 pub(in super::super) struct Place(Shown);
 
 enum Shown {
-    /// The status block on a terminal the wrapper holds in the foreground.
-    Terminal { screen: Screen, keys: Keys },
+    /// The status block on a terminal the wrapper holds in the foreground,
+    /// boxed since the terminal settings `keys` restores make the variant
+    /// large on macOS.
+    Terminal { screen: Box<Screen>, keys: Keys },
     /// Lines on standard error, which reads no keys.
     Lines,
 }
@@ -30,7 +32,7 @@ impl Place {
             );
             return Self(Shown::Lines);
         };
-        let mut screen = Screen::new(protection);
+        let mut screen = Box::new(Screen::new(protection));
         screen.open();
         Self(Shown::Terminal { screen, keys })
     }
