@@ -305,3 +305,43 @@ async fn a_cancelled_queue_entry_leaves_its_preparation_to_a_restore() {
         .preparation_waits;
     assert_eq!(waits, Some(PreparationWait::Stopped));
 }
+
+#[tokio::test]
+async fn a_stopped_start_without_an_agent_stays_stopped_once_disk_allows() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let low = "[machine.overload.warning]\ndisk_free_gib = 1000000000\n";
+    manager.publish_config(global_config(low));
+    let opening = Opening {
+        start: WorkspaceStart::Name("ui".into()),
+        base: None,
+        new: Default::default(),
+        parent: None,
+    };
+    let preparing = Preparing {
+        issue: None,
+        pr: None,
+        agent: None,
+        waiting: None,
+        queue_entry: None,
+        blockers: Vec::new(),
+        unfollowed: true,
+        env: None,
+    };
+    let started = manager
+        .start_workspace((&repo.id).into(), opening, preparing, None)
+        .await
+        .unwrap();
+    let ui = *started.workspace;
+    let targets = manager.stop_targets(QueuedLaunches::Cancel).await.unwrap();
+    assert!(targets.iter().any(|space| space.id == ui.id), "{targets:?}");
+    let selector = SpaceSelector::id(&ui.id);
+    (manager.stop_space_manually(&selector, false, QueuedLaunches::Cancel))
+        .await
+        .unwrap();
+    manager.publish_config(global_config(""));
+    manager.start_waiting_preparations().await.unwrap();
+    assert!(!manager.operation_runs_in(&ui.id));
+    let waits = read(&manager, &ui).await.part.preparation_waits;
+    assert_eq!(waits, Some(PreparationWait::Stopped));
+}

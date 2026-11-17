@@ -153,6 +153,10 @@ impl Manager {
             for_agent,
             waits,
         } = waiting;
+        // A stopped one waits for an explicit preparation alone.
+        if waits == PreparationWait::Stopped {
+            return Ok(());
+        }
         match self.preparation_gate(&workspace, for_agent).await? {
             Gate::Closed(now) if now == waits => Ok(()),
             Gate::Closed(now) => (self.note_preparation_wait(&workspace, (&waits, &now))).await,
@@ -285,15 +289,20 @@ pub(crate) fn preparation_waits(
         .transpose()?)
 }
 
-/// Record that the waiting preparation of the workspace `id`, if one waits
-/// for an agent, now waits for its stopped agent, as cancelling its launch
-/// leaves it.
-pub(crate) fn note_agent_stopped(db: &rusqlite::Connection, id: &SpaceId) -> Result<()> {
+/// Record that the waiting preparation of the workspace `id`, if one
+/// waits, is stopped, as a stop or cancelling its agent's launch leaves
+/// it, until an explicit preparation runs it.
+pub(crate) fn note_stopped(db: &rusqlite::Connection, id: &SpaceId) -> Result<()> {
     db.execute(
-        "UPDATE waiting_preparations SET waits=?2 WHERE workspace_id=?1 AND for_agent",
-        params![id, serde_json::to_string(&PreparationWait::Stopped)?],
+        "UPDATE waiting_preparations SET waits=?2 WHERE workspace_id=?1",
+        params![id, stopped()?],
     )?;
     Ok(())
+}
+
+/// [`PreparationWait::Stopped`] as its record keeps it.
+fn stopped() -> Result<String> {
+    Ok(serde_json::to_string(&PreparationWait::Stopped)?)
 }
 
 /// Every waiting preparation.
@@ -330,17 +339,17 @@ fn end_wait(db: &mut rusqlite::Connection, id: &SpaceId) -> Result<()> {
 }
 
 /// Take the waiting preparation of the workspace `id` out of its record to
-/// start it, if it still waits and, where it waits for an agent, the launch
-/// of that agent still waits to open the workspace: a stop that cancelled
-/// the launch since its gate was read keeps it waiting.
+/// start it, if it still waits, unstopped, and, where it waits for an
+/// agent, the launch of that agent still waits to open the workspace: a
+/// stop since its gate was read keeps it waiting.
 fn claim_waiting(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<Claimed>> {
     let claimed: Option<(String, Option<String>, Option<SpaceId>)> = db
         .query_row(
-            "DELETE FROM waiting_preparations WHERE workspace_id=?1
+            "DELETE FROM waiting_preparations WHERE workspace_id=?1 AND waits IS NOT ?4
                 AND (NOT for_agent OR EXISTS (SELECT 1 FROM agent_queue
                     WHERE opens_workspace_id=?1 AND kind=?2 AND state=?3))
              RETURNING steps,env,scope_space_id",
-            params![id, QueueKind::Launch, QueueState::Queued],
+            params![id, QueueKind::Launch, QueueState::Queued, stopped()?],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .optional()?;

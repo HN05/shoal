@@ -230,7 +230,7 @@ impl Manager {
                     return Ok(None);
                 }
                 let cancelled = delete_waiting_launches(tx, &id)?;
-                crate::daemon::operations::starts::note_agent_stopped(tx, &id)?;
+                crate::daemon::operations::starts::note_stopped(tx, &id)?;
                 Ok(Some(cancelled))
             })
             .await?;
@@ -338,7 +338,7 @@ fn delete_waiting(db: &rusqlite::Connection, id: &QueueEntryId) -> Result<bool> 
         params![id, QueueState::Queued],
     )?;
     if let (1, Some(workspace)) = (deleted, &opens) {
-        crate::daemon::operations::starts::note_agent_stopped(db, workspace)?;
+        crate::daemon::operations::starts::note_stopped(db, workspace)?;
     }
     Ok(deleted == 1)
 }

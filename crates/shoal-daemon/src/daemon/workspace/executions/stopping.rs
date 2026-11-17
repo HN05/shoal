@@ -10,7 +10,7 @@ use crate::{
         store,
     },
     fsutil::off_runtime,
-    model::{Execution, QueueEntry, Space, StoppedSpace, Workspace},
+    model::{Execution, PreparationWait, QueueEntry, Space, StoppedSpace, Workspace},
     process::identity::{self as process, Identity},
     protocol::{QueuedLaunches, timing},
     state::{ExecutionState, WorkspaceState},
@@ -244,7 +244,8 @@ impl Manager {
     /// The spaces `shoal stop --all` stops: the settled workspaces and the
     /// chats with a running execution or a stopped agent whose restore is
     /// requested or queued, and the workspaces a waiting launch opens when
-    /// the stop cancels `launches`, those whose preparation waits included.
+    /// the stop cancels `launches`, and then too those whose preparation
+    /// waits unstopped, with an agent or none.
     /// The queue gate keeps restores and launches from moving between the
     /// queue and their agents meanwhile, and executions are read before
     /// requests, which an agent a signal stops saves before its execution
@@ -258,12 +259,16 @@ impl Manager {
         if launches == QueuedLaunches::Cancel {
             targets.extend(self.waiting_launch_workspaces().await?);
         }
+        let cancels = launches == QueuedLaunches::Cancel;
         let workspaces = (self.list_workspaces().await?.into_iter()).filter(|workspace| {
             let stoppable = matches!(
                 workspace.state,
                 WorkspaceState::Ready | WorkspaceState::Failed
-            ) || workspace.preparation_waits.is_some();
+            );
+            let waits = (workspace.preparation_waits.as_ref())
+                .is_some_and(|waits| *waits != PreparationWait::Stopped);
             (stoppable || converting.contains(&workspace.id)) && targets.contains(&workspace.id)
+                || cancels && waits
         });
         let chats = (self.chats().await?.into_iter()).filter(|chat| targets.contains(&chat.id));
         Ok((workspaces.map(Space::from))

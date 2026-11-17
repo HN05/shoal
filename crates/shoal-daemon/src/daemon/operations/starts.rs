@@ -7,7 +7,7 @@
 mod failures;
 mod waiting;
 
-pub(crate) use waiting::{note_agent_stopped, preparation_waits};
+pub(crate) use waiting::{note_stopped, preparation_waits};
 
 use crate::daemon::links::issue::{Assigner, AssignerOf};
 use shoal_ids::queue_entry_ids::QueueEntryId;
