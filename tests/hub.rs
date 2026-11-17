@@ -206,7 +206,7 @@ fn the_hub_refuses_another_protocol_and_alerts_the_user() {
         .unwrap_or_else(|| panic!("no hub alert in {notifications}"));
     let message = alert["message"].as_str().unwrap();
     assert!(
-        message.contains("old-laptop") && message.contains("0.1.0"),
+        message.contains("joining") && message.contains("0.1.0"),
         "{message}"
     );
 }

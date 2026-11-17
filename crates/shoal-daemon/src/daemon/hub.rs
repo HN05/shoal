@@ -36,6 +36,8 @@ pub(crate) struct Hub {
     /// As the hub: held while a member is admitted and its link registered,
     /// and while a member is revoked and its link ended.
     admissions: tokio::sync::Mutex<()>,
+    /// As the hub: when it last alerted the user to each refused member.
+    refusal_alerts: accept::RefusalAlerts,
     /// As the hub: where its listener is bound, or why it is not.
     listener: listener::Bound,
     /// As a member: its link to the hub.

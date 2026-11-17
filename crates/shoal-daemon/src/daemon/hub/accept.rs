@@ -3,7 +3,7 @@
 //! takes the member: a new one with a pairing code, or through the daemon's
 //! socket, without one; a paired one by the key it paired with, unless the
 //! hub revoked it or another installation holds its link.
-use std::{sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Result, bail};
 use serde_json::Value;
@@ -15,7 +15,7 @@ use shoal_protocol::{
     },
     protocol,
 };
-use tokio::sync::OwnedRwLockReadGuard;
+use tokio::{sync::OwnedRwLockReadGuard, time::Instant};
 
 use super::{
     identity::{nonce, verify},
@@ -99,7 +99,7 @@ impl Manager {
         // A revocation commits and ends the member's link under the same
         // lock, so none slips between reading the member and registering
         // its link.
-        let _admission = self.hub.admissions.lock().await;
+        let admission = self.hub.admissions.lock().await;
         let claimant = match self.claimant(&hello.intent, &proof).await? {
             Ok(claimant) => claimant,
             Err(refusal) => return Ok(Err(refusal)),
@@ -120,6 +120,9 @@ impl Manager {
                 ),
             )));
         };
+        // Registered: a revocation now ends this link, so writing the
+        // welcome, however long the network takes, holds up no other.
+        drop(admission);
         let welcome = Frame::Welcome {
             member: member.id.clone(),
             name: member.name.clone(),
@@ -262,12 +265,16 @@ impl Manager {
     }
 
     /// The refusal of a member that speaks `protocol`, after recording an
-    /// alert that names it and the upgrade it needs.
+    /// alert that names it, its version and the upgrade it needs. What a
+    /// peer sends here is not yet authenticated, so the alert names only a
+    /// member the hub recorded, holds the version it claims short and
+    /// printable, and comes at most once an hour for each member, or for
+    /// all joiners together.
     async fn refuse_version(&self, opening: &Value, protocol: u32) -> Refusal {
         let ours = env!("CARGO_PKG_VERSION");
-        let theirs = opening["version"].as_str().unwrap_or("of another release");
-        let name = self.opening_name(opening).await;
-        let upgrade = match newer(theirs, ours) {
+        let theirs = claimed_version(opening);
+        let (alerted, name) = self.refused_member(opening).await;
+        let upgrade = match protocol > protocol::VERSION {
             true => "run shoal update on this hub",
             false => "run shoal update on it",
         };
@@ -275,36 +282,34 @@ impl Manager {
             "The hub refused {name}, which runs Shoal {theirs} (protocol {protocol}); this hub runs Shoal {ours} (protocol {}) and takes only that one: {upgrade}",
             protocol::VERSION
         );
-        self.notify(None, NotificationKind::HubRefused, &message)
-            .await;
+        if self.hub.refusal_alerts.due(alerted) {
+            self.notify(None, NotificationKind::HubRefused, &message)
+                .await;
+        }
         refusal(RefusalReason::Version, message)
     }
 
-    /// What names the member that sent `opening`, as far as the hub can read
-    /// a hello of another release.
-    async fn opening_name(&self, opening: &Value) -> String {
-        let intent = &opening["intent"];
-        if let Some(name) = intent["join"]["name"].as_str() {
-            return format!("the joining {}", name);
-        }
-        let Some(id) = intent["connect"]["member"].as_str() else {
-            return "a machine or device".into();
+    /// Who an alert about the refused `opening` is for, and how it names
+    /// them: a member the hub recorded, or any machine or device joining.
+    async fn refused_member(&self, opening: &Value) -> (Option<MemberId>, String) {
+        let joining = (None, "a machine or device joining".to_owned());
+        let Some(id) = opening["intent"]["connect"]["member"].as_str() else {
+            return joining;
         };
         let id = MemberId::from(id.to_owned());
-        let Ok(own) = self
-            .hub_identity()
-            .await
-            .map(|identity| identity.public.clone())
-        else {
-            return format!("member {id}");
+        let Ok(own) = (self.hub_identity().await).map(|identity| identity.public.clone()) else {
+            return joining;
         };
         let found = self.store.read({
             let id = id.clone();
             move |tx| members::find(tx, &id, &own)
         });
         match found.await {
-            Ok(Some(recorded)) => format!("{} {}", recorded.member.kind, recorded.member.name),
-            _ => format!("member {id}"),
+            Ok(Some(recorded)) => {
+                let name = format!("{} {}", recorded.member.kind, recorded.member.name);
+                (Some(id), name)
+            }
+            _ => joining,
         }
     }
 
@@ -340,6 +345,32 @@ impl Manager {
         if let Err(error) = seen.await {
             log!("hub: could not record a member's connection: {error:#}");
         }
+    }
+}
+
+/// How often the hub alerts the user to refusing the same member, or any
+/// joiner, for another protocol.
+const ALERT_EVERY: Duration = Duration::from_secs(60 * 60);
+
+/// When the hub last alerted the user to refusing each member, or any
+/// joiner, for another protocol; a recorded member or none, so it stays as
+/// small as the members are many.
+#[derive(Default)]
+pub(super) struct RefusalAlerts(std::sync::Mutex<HashMap<Option<MemberId>, Instant>>);
+
+impl RefusalAlerts {
+    /// Whether an alert about `member`, none for a joiner, is due, which
+    /// it then is not for [`ALERT_EVERY`].
+    pub(super) fn due(&self, member: Option<MemberId>) -> bool {
+        let now = Instant::now();
+        let mut last = self.0.lock().unwrap();
+        let due = last
+            .get(&member)
+            .is_none_or(|alerted| now.duration_since(*alerted) >= ALERT_EVERY);
+        if due {
+            last.insert(member, now);
+        }
+        due
     }
 }
 
@@ -384,15 +415,16 @@ fn refusal(reason: RefusalReason, message: impl Into<String>) -> Refusal {
     }
 }
 
-/// Whether the release `theirs` is newer than `ours`, comparing their
-/// dotted numbers; a version that is not one counts as older.
-fn newer(theirs: &str, ours: &str) -> bool {
-    let numbers = |version: &str| -> Option<Vec<u64>> {
-        version.split('.').map(|part| part.parse().ok()).collect()
-    };
-    match (numbers(theirs), numbers(ours)) {
-        (Some(theirs), Some(ours)) => theirs > ours,
-        _ => false,
+/// The Shoal version `opening` claims, held to a short run of the
+/// characters a version takes.
+fn claimed_version(opening: &Value) -> String {
+    let claimed = opening["version"].as_str().unwrap_or_default();
+    let version: String = (claimed.chars())
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '+'))
+        .collect();
+    match version.is_empty() {
+        true => "of another release".into(),
+        false => shoal_protocol::validate::shorten(version, 32),
     }
 }
 

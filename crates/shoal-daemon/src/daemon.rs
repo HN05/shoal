@@ -535,7 +535,6 @@ async fn serve_request(
         }
         // A hub member's link, which checks the protocol itself.
         Method::HubLink(Opening::HubLink(hello)) => {
-            drop(operation_guard);
             if request.scope.is_some() {
                 let body = Body::error(
                     ErrorCode::OperationFailed,
@@ -543,6 +542,9 @@ async fn serve_request(
                 );
                 return protocol::write(&mut stream, &Response::new(request.id, body)).await;
             }
+            // A link lasts as long as its member keeps it open, so it holds
+            // no operation, which would hold off every update meanwhile.
+            drop(operation_guard);
             let manager = server.manager.clone();
             hub::accept_socket_link(manager, stream, request.protocol, hello).await;
             return Ok(());

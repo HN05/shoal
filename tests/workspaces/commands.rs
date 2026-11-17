@@ -329,3 +329,23 @@ fn misspelled_built_ins_are_rejected_with_a_suggestion() {
     assert!(output.status.success());
     assert_eq!(output.stdout, b"configured command");
 }
+
+#[test]
+fn a_space_s_process_changes_no_hub_membership_after_clearing_its_token() {
+    let fixture = Fixture::new();
+    fixture.add("work");
+    let output = fixture
+        .command()
+        .args(["run", "--workspace", &fixture.id("work"), "--", "sh", "-c"])
+        .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" hub pair; exit $?"#)
+        .arg(support::shoal_binary())
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "{}", printed(&output));
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        error.contains("user's own terminal"),
+        "{}",
+        printed(&output)
+    );
+}

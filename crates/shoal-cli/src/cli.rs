@@ -32,6 +32,7 @@ use crate::cli::args::{
     coordination::CoordinationCommand,
     create::CreateCommand,
     diagnostics::DiagnosticsCommand,
+    hub::HubCommand,
     integration::IntegrationCommand,
     internal::InternalCommand,
     items::ItemsCommand,
@@ -283,6 +284,25 @@ impl Command {
                     | ConfigCommand::Reset
                     | ConfigCommand::Setup(_),
             })
+        )
+    }
+
+    /// Whether only the user's own terminal runs the command: what changes
+    /// the hub's machines or this machine's membership of the hub, and the
+    /// relay to the daemon's socket, over which a member joins as the user.
+    pub fn belongs_to_user(&self) -> bool {
+        matches!(
+            self,
+            Command::Service(
+                ServiceCommand::Hub {
+                    command: HubCommand::Pair
+                        | HubCommand::Join(_)
+                        | HubCommand::Leave
+                        | HubCommand::Revoke { .. },
+                } | ServiceCommand::Daemon {
+                    command: DaemonCommand::Connect,
+                }
+            )
         )
     }
 
