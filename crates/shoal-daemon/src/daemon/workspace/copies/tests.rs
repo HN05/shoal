@@ -91,10 +91,25 @@ impl Fixture {
         let copy = self.manager.workspace_by_id(&copy.id).await.unwrap();
         assert_eq!(copy.state, WorkspaceState::Failed);
         assert!(copy.pending_worktree && copy.path.exists());
+        // Work done in the failed copy before its retry.
+        fs::write(copy.path.join("mine"), "mine\n").unwrap();
         self.manager.publish_config(global_config(
             "[machine.git_profiles.work]\nuser.email = 'work@example.invalid'\n",
         ));
         copy
+    }
+
+    /// The text of `mine` in the checkpoint a retry of `copy` took before
+    /// it replaced its files.
+    async fn kept_before_retry(&self, copy: &Workspace) -> String {
+        let checkpoints = (self.manager.checkpoints(&SpaceSelector::id(&copy.id), None))
+            .await
+            .unwrap()
+            .unwrap();
+        let kept = (checkpoints.iter())
+            .find(|checkpoint| checkpoint.cause == CheckpointCause::Refresh)
+            .expect("a checkpoint keeps what the retry replaced");
+        git(&copy.path, &["show", &format!("{}:mine", kept.commit)])
     }
 
     async fn unsaved_work(&self, workspace: &Workspace) -> Vec<String> {
@@ -163,6 +178,8 @@ async fn a_retried_copy_takes_its_sources_files_as_they_are_then() {
     );
     let email = git(&copy.path, &["config", "user.email"]);
     assert_eq!(email.trim(), "work@example.invalid");
+    assert!(!copy.path.join("mine").exists());
+    assert_eq!(f.kept_before_retry(&copy).await, "mine\n");
     assert_eq!(copy.part.copied_from.unwrap().head, head.trim());
 }
 
@@ -182,6 +199,7 @@ async fn a_retried_copy_of_a_checkpoint_writes_its_files_again() {
     assert_eq!(git(&copy.path, &["diff", "HEAD"]), kept);
     let email = git(&copy.path, &["config", "user.email"]);
     assert_eq!(email.trim(), "work@example.invalid");
+    assert_eq!(f.kept_before_retry(&copy).await, "mine\n");
     let copied = copy.part.copied_from.unwrap();
     assert_eq!(copied.checkpoint, Some(checkpoint.number));
 }
