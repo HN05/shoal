@@ -810,60 +810,120 @@ fn places_a_chat_took_over_become_the_chats() -> Result<()> {
     Ok(())
 }
 
-/// Upgrade each recorded version whose remainder by `MIGRATION_TESTS` is
-/// `remainder` and check that it reaches the current schema once and stays
-/// there when migrated again.
-fn migrates_recorded_versions_to_the_same_schema(remainder: i64) -> Result<()> {
+/// Upgrade each recorded version of `part` of `MIGRATION_TESTS` and check
+/// that it reaches the current schema once and stays there when migrated
+/// again. Migrations read only the database, so a version whose next
+/// migration leaves exactly the next version's recorded database upgrades
+/// from there as that version does, which its own check covers; only the
+/// others upgrade all the way here.
+fn migrates_recorded_versions_to_the_same_schema(part: i64) -> Result<()> {
     let expected = schema_snapshot(&historical_database(SCHEMA_VERSION)?)?;
     assert_eq!(MIGRATIONS.last().unwrap().0, SCHEMA_VERSION);
-    for version in (0..=SCHEMA_VERSION).filter(|version| version % MIGRATION_TESTS == remainder) {
-        let mut db = historical_database(version)?;
+    let mut versions = (0..=SCHEMA_VERSION)
+        .filter(|version| version * MIGRATION_TESTS / (SCHEMA_VERSION + 1) == part)
+        .peekable();
+    let mut recorded = Some(historical_database(*versions.peek().unwrap())?);
+    for version in versions {
+        let mut db = recorded.take().unwrap();
+        if version < SCHEMA_VERSION {
+            migrate_once(&mut db, version)?;
+            let next = recorded.insert(historical_database(version + 1)?);
+            if contents(&db)? == contents(next)? {
+                continue;
+            }
+        }
         migrate_through_v0_17_0(&mut db)
             .with_context(|| format!("upgrade from version {version}"))?;
-        assert_eq!(schema_snapshot(&db)?, expected, "from version {version}");
-        assert_eq!(
-            db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))?,
-            SCHEMA_VERSION
-        );
-        if version > 0 {
-            assert_eq!(
-                executions(&db, &SpaceId::from("workspace"))?[0].state,
-                ExecutionState::Running
-            );
-            assert_eq!(
-                db.query_row("SELECT path FROM workspaces", [], |r| r.get::<_, String>(0))?,
-                "/work"
-            );
-        }
-        migrate(&mut db)?;
-        assert_eq!(schema_snapshot(&db)?, expected);
+        assert_upgraded(&mut db, version, &expected)?;
     }
     Ok(())
 }
 
-/// Spread the recorded versions over one test per remainder, which run in
-/// parallel; together they upgrade every version.
+/// Apply the migration that follows `version` to `db`, as an upgrade
+/// through v0.17.0 does.
+fn migrate_once(db: &mut Connection, version: i64) -> Result<()> {
+    if version == V0_17_0 {
+        start_v0_17_0(db)?;
+    }
+    migrate_to(db, version + 1).with_context(|| format!("upgrade from version {version}"))
+}
+
+/// Everything in `db` a migration reads: its version, each schema object
+/// with its definition as written, and each table's rows with their row
+/// IDs, in the order the schema and a scan list them.
+fn contents(db: &Connection) -> Result<Vec<Vec<rusqlite::types::Value>>> {
+    let rows = |sql: &str| -> Result<Vec<Vec<rusqlite::types::Value>>> {
+        let mut statement = db.prepare(sql)?;
+        let columns = statement.column_count();
+        let rows = statement.query_map([], |row| (0..columns).map(|i| row.get(i)).collect())?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    };
+    let mut contents = rows("PRAGMA user_version")?;
+    contents.extend(rows(
+        "SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY rowid",
+    )?);
+    let tables: Vec<(String, bool)> = db
+        .prepare(
+            "SELECT name,wr FROM pragma_table_list
+             WHERE schema='main' AND type='table' AND name<>'sqlite_schema' ORDER BY name",
+        )?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    for (table, without_rowid) in tables {
+        let rowid = if without_rowid { "" } else { "rowid," };
+        contents.extend(rows(&format!("SELECT {rowid}* FROM \"{table}\""))?);
+    }
+    Ok(contents)
+}
+
+/// Check that `db`, upgraded from `version`, has the `expected` schema and
+/// the records the recorded version held, and that migrating it again
+/// changes nothing.
+fn assert_upgraded(db: &mut Connection, version: i64, expected: &[String]) -> Result<()> {
+    assert_eq!(schema_snapshot(db)?, expected, "from version {version}");
+    assert_eq!(
+        db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))?,
+        SCHEMA_VERSION
+    );
+    if version > 0 {
+        assert_eq!(
+            executions(db, &SpaceId::from("workspace"))?[0].state,
+            ExecutionState::Running
+        );
+        assert_eq!(
+            db.query_row("SELECT path FROM workspaces", [], |r| r.get::<_, String>(0))?,
+            "/work"
+        );
+    }
+    migrate(db)?;
+    assert_eq!(schema_snapshot(db)?, expected);
+    Ok(())
+}
+
+/// Spread the recorded versions over one test per part, each a run of
+/// consecutive versions, which run in parallel; together they upgrade
+/// every version.
 macro_rules! migration_tests {
-    ($($test:ident: $remainder:literal,)*) => {
-        const MIGRATION_TESTS: i64 = [$($remainder),*].len() as i64;
+    ($($test:ident: $part:literal,)*) => {
+        const MIGRATION_TESTS: i64 = [$($part),*].len() as i64;
         $(
             #[test]
             fn $test() -> Result<()> {
-                migrates_recorded_versions_to_the_same_schema($remainder)
+                migrates_recorded_versions_to_the_same_schema($part)
             }
         )*
     };
 }
 
 migration_tests! {
-    migrates_versions_0_mod_8_to_the_same_schema: 0,
-    migrates_versions_1_mod_8_to_the_same_schema: 1,
-    migrates_versions_2_mod_8_to_the_same_schema: 2,
-    migrates_versions_3_mod_8_to_the_same_schema: 3,
-    migrates_versions_4_mod_8_to_the_same_schema: 4,
-    migrates_versions_5_mod_8_to_the_same_schema: 5,
-    migrates_versions_6_mod_8_to_the_same_schema: 6,
-    migrates_versions_7_mod_8_to_the_same_schema: 7,
+    migrates_versions_in_part_0_of_8_to_the_same_schema: 0,
+    migrates_versions_in_part_1_of_8_to_the_same_schema: 1,
+    migrates_versions_in_part_2_of_8_to_the_same_schema: 2,
+    migrates_versions_in_part_3_of_8_to_the_same_schema: 3,
+    migrates_versions_in_part_4_of_8_to_the_same_schema: 4,
+    migrates_versions_in_part_5_of_8_to_the_same_schema: 5,
+    migrates_versions_in_part_6_of_8_to_the_same_schema: 6,
+    migrates_versions_in_part_7_of_8_to_the_same_schema: 7,
 }
 
 #[test]
