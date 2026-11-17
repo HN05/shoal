@@ -167,9 +167,9 @@ start nothing follows also waits while disk protection holds back new starts.
 The queue's dispatcher starts it once that allows, in the scope of the space
 that started it, and a stopped agent leaves it waiting for an explicit
 preparation. The start that carries out an admitted launch in an existing
-workspace that holds nothing of its own refreshes it as `shoal refresh` does,
-a branch to what it builds on and a copy to its live source's files, so its
-agent starts on current work.
+workspace fast-forwards a branch that holds nothing of its own to what it
+builds on, as `shoal refresh` does, so its agent starts on a current branch;
+a copy is made when its preparation runs, which waited for what it waits for.
 The request answers once the workspace is recorded, so a
 caller gets its number and its agent's entry without waiting for Git or
 setup; until its worktree exists, what reads it refuses the workspace, and

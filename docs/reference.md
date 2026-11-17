@@ -2164,11 +2164,10 @@ and starts once disk space allows. `--wait` returns at once for a preparation
 that waits. `shoal stop` of such a workspace cancels its agent's entry and keeps
 the workspace, whose preparation then waits until `shoal restore` runs it; while
 it waits for work or disk space, `shoal restore` refuses it, and `shoal rm`
-removes it. When the queue admits the agent of an existing workspace that holds
-nothing of its own, the daemon brings it up to date as `shoal refresh` does,
-with what the checkout has of the default branch, before the agent starts: a
-branch fast-forwards to what it builds on, and a copy takes its live source's
-files again and runs its setup again. The daemon starts waiting entries
+removes it. When the queue admits the agent of an existing workspace whose
+branch holds nothing of its own, the daemon fast-forwards the branch to what it
+builds on, as `shoal refresh` does with what the checkout has of the default
+branch, before the agent starts. The daemon starts waiting entries
 in [rank order](#queue-order) as slots free, passing over an entry whose
 repository is full or that does not fit in memory, and records a
 `queue_started` notification. Once an entry has been held 15 minutes for its

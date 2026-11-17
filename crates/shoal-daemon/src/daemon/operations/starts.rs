@@ -447,9 +447,10 @@ impl Manager {
             self.give_start_entry(entry, &workspace).await?;
         }
         // The agent an admitted launch starts in an existing workspace starts
-        // on what it was made from now.
-        let set_up_again =
-            reused && preparing.queue_entry.is_some() && self.refresh_admitted(&workspace).await;
+        // on a branch brought up to date.
+        if reused && preparing.queue_entry.is_some() {
+            self.refresh_admitted(&workspace).await;
+        }
         let may_wait = preparing.may_wait(&workspace);
         let Preparing {
             pr,
@@ -463,7 +464,7 @@ impl Manager {
         let entry = (self.queue_start_agent(opened, agent, (pr.clone(), blockers))).await?;
         let start = PreparationStart {
             steps: Preparation {
-                setup: workspace.state == WorkspaceState::Preparing || set_up_again,
+                setup: workspace.state == WorkspaceState::Preparing,
                 post_setup: !reused,
                 pr,
                 agent: None,
