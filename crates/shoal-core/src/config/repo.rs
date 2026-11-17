@@ -689,6 +689,11 @@ pub struct PrConfig {
     /// of the body of each open draft PR it opened or was assigned.
     #[option(default = false)]
     pub progress: Option<bool>,
+    /// Whether, once a PR a space watches merges into the default branch,
+    /// Shoal links the default branch's CI runs for its merge commit to the
+    /// space and reports how they end.
+    #[option(default = false)]
+    pub watch_merge_runs: Option<bool>,
 }
 
 /// The labels a new issue needs, the labels that say whether an issue's
