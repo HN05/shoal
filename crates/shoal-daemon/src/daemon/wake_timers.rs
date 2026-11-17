@@ -83,11 +83,12 @@ fn fire(tx: &Transaction<'_>, id: &SpaceId, now: UnixTime) -> Result<bool> {
     Ok(queued.is_some())
 }
 
-/// Hold the timer of the space `id` back until `at`, after a firing failed.
-fn postpone(db: &Connection, id: &SpaceId, at: UnixTime) -> Result<()> {
+/// Hold the timer of the space `id` that failed to fire at `now` back
+/// until `later`. A timer set since, which is not yet due, is left alone.
+fn postpone(db: &Connection, id: &SpaceId, now: UnixTime, later: UnixTime) -> Result<()> {
     db.execute(
-        "UPDATE space_wake_timers SET due_at=?2 WHERE space_id=?1",
-        params![id, at],
+        "UPDATE space_wake_timers SET due_at=?3 WHERE space_id=?1 AND due_at<=?2",
+        params![id, now, later],
     )?;
     Ok(())
 }
@@ -133,7 +134,7 @@ impl Manager {
                 log!("wake timer of space {id}: {error:#}");
                 let later = now + RETRY_DELAY;
                 (self.store)
-                    .write(move |tx| postpone(tx, &id, later))
+                    .write(move |tx| postpone(tx, &id, now, later))
                     .await?;
                 Ok(false)
             }

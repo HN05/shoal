@@ -123,3 +123,38 @@ async fn a_chats_timer_without_a_message_says_it_fired() {
     fire_in(&manager, 5).await;
     assert_eq!(messages(&manager, &selector).await, [delivery(None)]);
 }
+
+#[tokio::test]
+async fn a_failed_firing_holds_back_only_the_timer_that_failed() {
+    let (temp, manager) = manager().await;
+    let repo = registered(&manager, &temp).await;
+    let failed = workspace(&manager, &repo, "failed").await;
+    let replaced = workspace(&manager, &repo, "replaced").await;
+    let now = UnixTime::now();
+    let replacement = timer(120, None);
+    for (selector, timer) in [
+        (
+            &failed,
+            WakeTimer {
+                at: now,
+                message: None,
+            },
+        ),
+        (&replaced, replacement.clone()),
+    ] {
+        (manager.sleep(selector, Some(Sleep::Turn), Some(timer)))
+            .await
+            .unwrap();
+    }
+    let later = now + MINUTE;
+    for selector in [&failed, &replaced] {
+        let id = manager.space(selector).await.unwrap().id.clone();
+        (manager.store.write(move |tx| postpone(tx, &id, now, later)))
+            .await
+            .unwrap();
+    }
+    assert_eq!(manager.space(&failed).await.unwrap().wake_at, Some(later));
+    // A timer set after the firing failed keeps its own time.
+    let kept = manager.space(&replaced).await.unwrap().wake_at;
+    assert_eq!(kept, Some(replacement.at));
+}
