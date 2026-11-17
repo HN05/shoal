@@ -201,7 +201,7 @@ response_bodies! {
     Demos(Vec<crate::demos::Running>),
     DemoProgress(crate::demos::Progress),
     Reached(crate::agent_messages::Reached),
-    Chat(crate::model::Chat),
+    LaunchedChat(crate::chats::LaunchedChat),
     RenamedSpace(crate::model::RenamedSpace),
     Launched(crate::launches::Launched),
     Triggers(Vec<crate::triggers::TriggerStatus>),

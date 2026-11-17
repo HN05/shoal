@@ -1152,12 +1152,11 @@ fn chat_rename_relabels_a_herdr_tab_that_still_shows_the_old_name() {
     let repository = fixture.ok(&["repo", "ls"])[0].clone();
     // The chats last while this test's process runs.
     let start = |name: &str, pane: &str, owned: bool| {
-        let response = fixture.request(serde_json::json!({"start_chat":{
-            "repository": repository["id"], "name": name, "agent": "claude",
-            "pid": std::process::id(),
+        let response = fixture.request(serde_json::json!({"launch_chat":{
+            "start": {"repository": repository["id"], "name": name, "agent": "claude"},
             "origin": {"host": "herdr", "place": pane, "owned": owned}
         }}));
-        assert_eq!(response["type"], "chat", "{response}");
+        assert_eq!(response["type"], "launched_chat", "{response}");
     };
     // Shoal opened `talk`'s tab under its name; `mine` runs in a tab the
     // user named.

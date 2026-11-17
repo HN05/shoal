@@ -1,31 +1,32 @@
 //! New chats the daemon starts for a client, as `shoal start` starts one
 //! without a terminal: it resolves what the start leaves out under the
-//! chat's settings and checks where the chat goes, and admits its agent
-//! under the heavy slots. An admitted chat's start worker opens a background
-//! place for it, and the daemon answers once the chat runs its agent; one
-//! whose agent waits is recorded at once, and the answer names its entry.
-use crate::removal::{InspectionPolicy, UnsavedWork};
+//! chat's settings and checks where the chat goes, admits its agent under
+//! the heavy slots, and records the chat linked to what it starts on before
+//! its agent runs. An admitted chat's start worker opens a background place
+//! that runs the recorded chat's agent, and the daemon answers once it
+//! runs; one whose agent waits starts from the queue.
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     agents::{NO_AGENT, checked_agent},
     config::{Effective, modes::ModeName},
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{chats::NewChat, scope::Caller, workspace::Manager},
     model::{ChatHome, ChatQueueRequest, QueueAdmission, SpaceKind},
     protocol::ChatStart,
 };
+use shoal_core::chat_handoff::HandedStart;
 use shoal_core::start_plan::{ChatPlan, ChatPlanStart};
-use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
-use shoal_protocol::chats::{QueuedChat, StartedChat};
+use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_protocol::chats::{LaunchedChat, QueuedChat, StartedChat};
 use shoal_protocol::launches::LaunchSource;
 use shoal_protocol::{scope_tokens::ScopeToken, space_names::SpaceName};
 
 impl Manager {
     /// Start the chat `start` describes, which `source` made, for `caller`
     /// in a background place, with its agent, mode and repository
-    /// resolved, once the agent queue admits its agent; one that waits is
-    /// recorded below where it goes and starts from the queue. The worker acts with `caller`'s scope, so
-    /// a scoped caller's chat goes where its own start would put it.
+    /// resolved, once the agent queue admits its agent: the chat is
+    /// recorded below where it goes and linked first, and one whose agent
+    /// waits starts from the queue. The worker acts with `caller`'s scope.
     pub(crate) async fn launch_chat(
         &self,
         start: ChatStart,
@@ -34,28 +35,84 @@ impl Manager {
     ) -> Result<StartedChat> {
         let start = self.resolve_chat_start(start, caller).await?;
         let admission = (self.queue_chat_add(launch_request(&start, source)?, caller)).await?;
+        let launched = self.record_admitted(&start, &admission, caller).await?;
         if !admission.start {
-            return self.record_queued_chat(start, admission, caller).await;
+            return queued(launched, admission);
         }
         let entry = admission.entry.map(|entry| entry.id);
+        self.start_in_place(start, launched, entry, caller).await
+    }
+
+    /// Run the agent of the chat `launched` recorded for the resolved
+    /// `start` in a background place, its agent taking the slot of the
+    /// admitted `entry`, with `caller`'s scope.
+    async fn start_in_place(
+        &self,
+        start: ChatStart,
+        launched: LaunchedChat,
+        entry: Option<QueueEntryId>,
+        caller: Option<&Caller>,
+    ) -> Result<StartedChat> {
+        let LaunchedChat { chat, warnings } = launched;
         let token = caller.map(|caller| self.operations.issue(caller));
-        let started = run_worker(&self.paths, &start, token.as_ref(), entry.as_ref()).await;
+        let handed = HandedStart {
+            start,
+            chat: Some(chat.id.clone()),
+        };
+        let started = run_worker(&self.paths, &handed, token.as_ref(), entry.as_ref()).await;
         if let Some(token) = &token {
             self.operations.revoke(token);
         }
         if let (Err(error), Some(entry)) = (&started, &entry) {
             self.free_failed_start(entry, error).await;
         }
-        started
+        started.map(|started| warned(started, warnings))
+    }
+
+    /// Record the chat the resolved `start` describes for `caller` below
+    /// where it goes, with the launch `admission` admitted or queued
+    /// attached. A chat that cannot be recorded or attached takes its
+    /// launch out of the queue.
+    async fn record_admitted(
+        &self,
+        start: &ChatStart,
+        admission: &QueueAdmission,
+        caller: Option<&Caller>,
+    ) -> Result<LaunchedChat> {
+        let entry = admission.entry.as_ref().map(|entry| &entry.id);
+        let recorded = async {
+            let parent = self.new_chat_parent(start, caller).await?;
+            let new = NewChat::of(start, parent, None)?;
+            self.record_launch(start, new, entry, caller).await
+        };
+        let recorded = recorded.await;
+        if let (Err(error), Some(entry)) = (&recorded, entry) {
+            self.drop_unrecorded_launch(entry, admission.start, error)
+                .await;
+        }
+        recorded
+    }
+
+    /// Take the launch `entry`, admitted when `started`, out of the queue,
+    /// since its chat could not be recorded with `error`.
+    async fn drop_unrecorded_launch(
+        &self,
+        entry: &QueueEntryId,
+        started: bool,
+        error: &anyhow::Error,
+    ) {
+        if started {
+            return self.free_failed_start(entry, error).await;
+        }
+        self.agent_queue.end_attach_keep(entry);
+        if let Err(removal) = self.queue_remove(entry.as_str(), None).await {
+            crate::daemon::log!("queued chat launch kept: {removal:#}");
+        }
     }
 
     /// Free the slot of the admitted launch `entry`, whose chat failed to
     /// start with `error`, rather than hold it until its grace ends.
-    async fn free_failed_start(
-        &self,
-        entry: &shoal_ids::queue_entry_ids::QueueEntryId,
-        error: &anyhow::Error,
-    ) {
+    async fn free_failed_start(&self, entry: &QueueEntryId, error: &anyhow::Error) {
         if let Err(kept) = self.fail_queue_entry(entry, &format!("{error:#}")).await {
             crate::daemon::log!("chat launch {entry} keeps its slot: {kept:#}");
         }
@@ -113,72 +170,6 @@ impl Manager {
             Some(parent) => Some(parent),
             None => caller.map(|caller| caller.space_id.clone()),
         })
-    }
-
-    /// Record the chat the resolved `start` describes, whose agent's launch
-    /// `admission` queued, below where it goes for `caller`, and attach the
-    /// launch to it, which the queue keeps out of admission until then, so
-    /// that it starts in this chat. A chat that cannot be recorded and
-    /// attached takes its launch out of the queue.
-    async fn record_queued_chat(
-        &self,
-        start: ChatStart,
-        admission: QueueAdmission,
-        caller: Option<&Caller>,
-    ) -> Result<StartedChat> {
-        let entry = (admission.entry).context("the daemon queued the chat without an entry")?;
-        let chat = match self.record_chat_for_queue(&start, &entry.id, caller).await {
-            Ok(chat) => chat,
-            Err(error) => {
-                self.agent_queue.end_attach_keep(&entry.id);
-                if let Err(removal) = self.queue_remove(entry.id.as_str(), None).await {
-                    crate::daemon::log!("queued chat launch kept: {removal:#}");
-                }
-                return Err(error);
-            }
-        };
-        Ok(StartedChat::Queued(Box::new(QueuedChat {
-            chat,
-            entry,
-            waiting: admission.waiting,
-        })))
-    }
-
-    /// Record the chat the resolved `start` describes below where it goes
-    /// for `caller`, and attach the launch `entry` to it, removing the chat
-    /// again when the launch cannot take it.
-    async fn record_chat_for_queue(
-        &self,
-        start: &ChatStart,
-        entry: &shoal_ids::queue_entry_ids::QueueEntryId,
-        caller: Option<&Caller>,
-    ) -> Result<crate::model::Chat> {
-        let new = super::NewChat {
-            name: start.name.clone().context("the start names the chat")?,
-            agent: start.agent.clone().context(NO_AGENT)?,
-            mode: start.mode.clone().unwrap_or_else(crate::model::chat_mode),
-            narrowing: start.narrowing,
-            origin: None,
-            parent: self.new_chat_parent(start, caller).await?,
-            priority: start.priority,
-        };
-        let workspace = start.workspace.as_ref();
-        let chat = (self.start_new_chat(start.repository.clone(), workspace, new)).await?;
-        if let Err(error) = self.attach_chat(entry, &chat.id).await {
-            let selector = shoal_protocol::space_names::SpaceSelector::id(&chat.id);
-            if let Err(removal) = self
-                .remove_selected(
-                    &selector,
-                    UnsavedWork::taking(Vec::new()),
-                    InspectionPolicy::GitOnly,
-                )
-                .await
-            {
-                crate::daemon::log!("chat {} kept without its launch: {removal:#}", chat.id);
-            }
-            return Err(error);
-        }
-        Ok(chat)
     }
 
     /// The name of the new chat `start` describes, in `mode` and
@@ -260,13 +251,46 @@ fn launch_request(start: &ChatStart, source: LaunchSource) -> Result<ChatQueueRe
     })
 }
 
-/// Run the chat start worker for the resolved `start`, detached from
-/// the daemon in the environment of the terminal it names, as the user or,
-/// with `token`, with that scope, its agent taking the slot of the queue
-/// `entry`, and return the chat it reports once it runs its agent.
+/// The chat `launched` recorded, whose agent waits as the launch
+/// `admission` queued.
+fn queued(launched: LaunchedChat, admission: QueueAdmission) -> Result<StartedChat> {
+    let entry = (admission.entry).context("the daemon queued the chat without an entry")?;
+    Ok(StartedChat::Queued(Box::new(QueuedChat {
+        chat: launched.chat,
+        entry,
+        waiting: admission.waiting,
+        warnings: launched.warnings,
+    })))
+}
+
+/// The chat the daemon `started`, with what recording and linking it
+/// `warnings` warned of.
+fn warned(started: StartedChat, warnings: Vec<String>) -> StartedChat {
+    match started {
+        StartedChat::Queued(queued) => StartedChat::Queued(Box::new(QueuedChat {
+            warnings,
+            ..*queued
+        })),
+        StartedChat::Background(chat) => {
+            StartedChat::Background(shoal_protocol::chats::BackgroundChat { warnings, ..chat })
+        }
+        StartedChat::Detached(chat) => {
+            StartedChat::Detached(Box::new(shoal_protocol::chats::DetachedChat {
+                warnings,
+                ..*chat
+            }))
+        }
+    }
+}
+
+/// Run the chat start worker for the resolved start `handed` holds,
+/// detached from the daemon in the environment of the terminal it names,
+/// as the user or, with `token`, with that scope, its agent taking the slot
+/// of the queue `entry`, and return the chat it reports once it runs its
+/// agent.
 async fn run_worker(
     paths: &crate::paths::Paths,
-    start: &ChatStart,
+    handed: &HandedStart,
     token: Option<&ScopeToken>,
     entry: Option<&shoal_ids::queue_entry_ids::QueueEntryId>,
 ) -> Result<StartedChat> {
@@ -276,12 +300,12 @@ async fn run_worker(
 
     #[cfg(any(test, feature = "test-support"))]
     if crate::daemon::fake_workers::faked() {
-        return fake::start(start, token);
+        return fake::start(&handed.start, token);
     }
 
     let argv = internal_command(paths, true, Worker::ChatStart)?;
-    let env =
-        (start.env.clone()).unwrap_or_else(|| crate::terminal::detached_start_environment(None));
+    let env = (handed.start.env.clone())
+        .unwrap_or_else(|| crate::terminal::detached_start_environment(None));
     let mut command = detached_command(&argv);
     command
         .envs(&env)
@@ -302,7 +326,7 @@ async fn run_worker(
         .stdin
         .take()
         .context("the worker has no standard input")?;
-    stdin.write_all(&serde_json::to_vec(start)?).await?;
+    stdin.write_all(&serde_json::to_vec(handed)?).await?;
     drop(stdin);
     let output = child.wait_with_output().await?;
     anyhow::ensure!(
@@ -315,3 +339,4 @@ async fn run_worker(
 
 #[cfg(any(test, feature = "test-support"))]
 pub mod fake;
+mod record;

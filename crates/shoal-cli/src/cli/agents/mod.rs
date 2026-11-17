@@ -24,7 +24,7 @@ use crate::{
     ai::IntegrationKind,
     cli::{context::Context, ui},
     config::{Effective, modes, named_commands::Commands, templates},
-    model::{Chat, ChatHome, Relation, RemovedSpace, Repository, SpaceLinks, Workspace},
+    model::{ChatHome, RemovedSpace, Repository, SpaceLinks, Workspace},
     protocol::ConfigTarget,
     tools::{ensure_program, program_available},
 };
@@ -136,39 +136,6 @@ impl ChatLaunch {
     /// Where the chat runs.
     pub fn home(&self) -> ChatHome<'_> {
         self.repository.home(self.workspace.as_ref())
-    }
-}
-
-/// Link the recorded `chat` to what its launch names, such as the issue it
-/// starts on or what a moved chat carries. A failure is told and leaves the
-/// chat to start without it.
-pub(in crate::cli) async fn link_chat(ctx: &Context, chat: &Chat, links: &SpaceLinks) {
-    let space = SpaceSelector::id(&chat.id);
-    let relinked = crate::client::items::relink(&ctx.paths, space.clone(), links.clone());
-    match relinked.await {
-        Ok(linked) => warn_chat(&linked.warnings),
-        Err(error) => eprintln!("shoal: the chat's issues were not linked: {error:#}"),
-    }
-    for pr in &links.prs {
-        let linked = crate::client::items::link(
-            &ctx.paths,
-            &space,
-            Relation::Assigned,
-            pr.kind(),
-            pr.url.clone().into(),
-            pr.title.clone(),
-        );
-        match linked.await {
-            Ok(linked) => warn_chat(&linked.warnings),
-            Err(error) => eprintln!("shoal: {} was not linked to the chat: {error:#}", pr.url),
-        }
-    }
-}
-
-/// Tell what linking a chat's items warned of.
-fn warn_chat(warnings: &[String]) {
-    for warning in warnings {
-        eprintln!("shoal: {warning}");
     }
 }
 
@@ -462,16 +429,18 @@ pub(in crate::cli) fn fork_args(
         .unwrap_or_default())
 }
 
-/// Start a chat of agent `name` its integration's own way; `None` leaves it
-/// to the configured command run in place of Shoal.
+/// Start a chat of agent `name` its integration's own way, in the chat
+/// `record` has the daemon record; `None` leaves it to the configured
+/// command run in place of Shoal.
 pub(in crate::cli) async fn start_chat(
     ctx: &Context,
     name: &Agent,
     chat: &ChatLaunch,
+    record: impl AsyncFnOnce() -> Result<shoal_protocol::chats::LaunchedChat>,
 ) -> Result<Option<i32>> {
     let integration = agent_integration(&chat.settings, name);
     match integration.detached() {
-        Some(app) => detached::start_chat(ctx, integration, app, name, chat)
+        Some(app) => detached::start_chat(ctx, integration, app, (name, chat), record)
             .await
             .map(Some),
         None => Ok(None),

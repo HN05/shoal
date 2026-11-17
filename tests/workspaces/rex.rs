@@ -328,14 +328,13 @@ fn chat_rename_relabels_a_block_that_still_shows_the_old_name() {
     };
     // The chat lasts while this test's process runs, in the block Shoal
     // opened for it.
-    let response = fixture.request(serde_json::json!({"start_chat":{
-        "repository": repository["id"], "name": "talk", "agent": "claude",
-        "pid": std::process::id(), "origin": {
+    let response = fixture.request(serde_json::json!({"launch_chat":{
+        "start": {"repository": repository["id"], "name": "talk", "agent": "claude"}, "origin": {
             "host": "rex", "group": session, "place": block, "owned": true,
             "data": {"server": rex.socket, "bin_dir": rex.program.parent().unwrap()}
         }
     }}));
-    assert_eq!(response["type"], "chat", "{response}");
+    assert_eq!(response["type"], "launched_chat", "{response}");
 
     label("talk");
     fixture.ok(&["rename", &fixture.id("talk"), "topic"]);

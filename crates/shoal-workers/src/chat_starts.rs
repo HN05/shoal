@@ -1,17 +1,17 @@
 //! The daemon's worker for a new chat a client asked it to start, which has
-//! no terminal: it hands the start the daemon resolved to a background
-//! place, opened where the terminal that asked would have, whose chat
-//! worker starts the chat there, and reports the chat once that place
-//! reports that it runs. An agent that runs its own way, such as Happy's,
-//! which needs no terminal host, starts in a chat worker of this process
-//! instead, which reports the chat itself.
+//! no terminal: it hands the start the daemon resolved, with the chat it
+//! recorded, to a background place, opened where the terminal that asked
+//! would have, whose chat worker runs the chat's agent there, and reports
+//! the chat once that place reports that it runs. An agent that runs its
+//! own way, such as Happy's, which needs no terminal host, starts in a chat
+//! worker of this process instead, which reports the chat itself.
 use std::{path::PathBuf, process::Stdio};
 
 use anyhow::{Context as _, Result};
 
 use crate::{
     agent::Agent,
-    chat_handoff::Handoff,
+    chat_handoff::{HandedStart, Handoff},
     client::connection::CommandPaths,
     config::Effective,
     model::Repository,
@@ -20,17 +20,18 @@ use crate::{
 };
 use shoal_protocol::{chats::BackgroundChat, space_names::SpaceName};
 
-/// Start the chat whose resolved start the daemon writes to standard input,
-/// reporting it on standard output. Its agent takes the slot of the queue
-/// entry the daemon passed down, if any.
+/// Start the chat whose resolved start, with the chat the daemon recorded
+/// for it, the daemon writes to standard input, reporting it on standard
+/// output. Its agent takes the slot of the queue entry the daemon passed
+/// down, if any.
 pub async fn run(paths: &CommandPaths) -> Result<i32> {
-    let start: ChatStart =
+    let handed: HandedStart =
         serde_json::from_reader(std::io::stdin().lock()).context("read the chat's start")?;
-    let chat = NewChat::resolve(paths, &start).await?;
-    // A scoped caller's chat records itself with the caller's scope, which
-    // the place takes through the handoff.
+    let chat = NewChat::resolve(paths, &handed.start).await?;
+    // A scoped caller's chat runs with the caller's scope, which the place
+    // takes through the handoff.
     let handoff = Handoff::create(crate::env::scope_token().as_ref())?;
-    handoff.hand_start(&start)?;
+    handoff.hand_start(&handed)?;
     if chat.runs_its_own_way() {
         return run_worker(paths, &handoff).await;
     }
@@ -40,11 +41,11 @@ pub async fn run(paths: &CommandPaths) -> Result<i32> {
 }
 
 /// Start the chat of an admitted launch whose resolved `start` waited in
-/// the queue, in its chat the daemon recorded meanwhile, as the user would.
-pub(crate) async fn start_queued(paths: &CommandPaths, start: &ChatStart) -> Result<()> {
-    let chat = NewChat::resolve(paths, start).await?;
+/// the queue, in the chat the daemon recorded for it, as the user would.
+pub(crate) async fn start_queued(paths: &CommandPaths, start: ChatStart) -> Result<()> {
+    let chat = NewChat::resolve(paths, &start).await?;
     let handoff = Handoff::create(None)?;
-    handoff.hand_start(start)?;
+    handoff.hand_start(&HandedStart { start, chat: None })?;
     if chat.runs_its_own_way() {
         let code = run_worker(paths, &handoff).await?;
         anyhow::ensure!(code == 0, "the chat's start failed ({code})");
@@ -124,6 +125,7 @@ impl NewChat {
             chat: self.name,
             agent: self.agent,
             place,
+            warnings: Vec::new(),
         })
     }
 }

@@ -37,8 +37,8 @@ const STARTED: &str = "started";
 /// The file holding the started chat's ID, written before the report, so a
 /// starter of a release that reads only the report still takes it.
 const CHAT: &str = "chat";
-/// The file holding the start of a chat the daemon resolved, which the
-/// place's chat worker carries out.
+/// The file holding the start of a chat the daemon resolved, with the chat
+/// it recorded, which the place's chat worker carries out.
 const START: &str = "start";
 /// The file the place holds locked from taking the handoff until it exits.
 const PLACE: &str = "place";
@@ -47,6 +47,16 @@ const PLACE: &str = "place";
 /// machine may take minutes to open a place and start Shoal in it.
 const PICKUP: Duration = Duration::from_secs(10 * 60);
 const POLL: Duration = Duration::from_millis(100);
+
+/// The start of a chat the daemon resolved, which a chat worker carries
+/// out: in `chat`, which the daemon recorded for it, else in the one the
+/// launch its agent takes the slot of recorded.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct HandedStart {
+    pub start: ChatStart,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chat: Option<SpaceId>,
+}
 
 /// The directory the starter hands the place its scope token in and waits
 /// on for the place's report; it goes with the starter.
@@ -77,7 +87,7 @@ impl Handoff {
     }
 
     /// Hand the place `start`, the chat its chat worker starts.
-    pub fn hand_start(&self, start: &ChatStart) -> Result<()> {
+    pub fn hand_start(&self, start: &HandedStart) -> Result<()> {
         let start = serde_json::to_vec(start)?;
         std::fs::write(self.0.path().join(START), start).context("write the chat's handoff")
     }
@@ -169,7 +179,7 @@ pub async fn serve<T>(path: Option<&Path>, start: impl Future<Output = Result<T>
 }
 
 /// The chat start the handoff at `path` hands the place.
-pub fn handed_start(path: &Path) -> Result<ChatStart> {
+pub fn handed_start(path: &Path) -> Result<HandedStart> {
     let start = std::fs::read(path.join(START)).context("read the chat's handoff")?;
     serde_json::from_slice(&start).context("read the chat's start")
 }

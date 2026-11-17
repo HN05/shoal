@@ -71,6 +71,7 @@ impl Manager {
             model: launch.model,
             narrowing: launch.permissions,
             issue,
+            links: Default::default(),
             prompt: launch.prompt,
             args: launch.task,
             priority: launch.priority,

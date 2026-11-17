@@ -2,61 +2,36 @@
 //! parents and scope, and listing them.
 use anyhow::Result;
 
-use shoal_protocol::space_names::SpaceName;
+use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceSelector;
 
 use crate::connection::{Daemon, request};
 use shoal_protocol::{
-    model::{Chat, ChatHome},
-    protocol::ChatMethod,
+    chats::LaunchedChat,
+    protocol::{ChatMethod, ChatStart},
     repository::Selector,
     sessions::Origin,
 };
 
-/// What a new chat is recorded as: its name, its agent, the mode the agent
-/// starts in and the space it goes below.
-#[derive(Clone, Copy)]
-pub struct NewChat<'a> {
-    pub name: &'a SpaceName,
-    pub agent: &'a shoal_protocol::agent::Agent,
-    pub mode: &'a shoal_protocol::config::modes::ModeName,
-    /// The permissions `--permission` gives the agent, whatever the mode's.
-    pub narrowing: shoal_protocol::config::permissions::PermissionsConfig,
-    /// The space it goes below; a scoped caller's daemon puts it below the
-    /// caller's own space without one.
-    pub parent: Option<&'a SpaceSelector>,
-    /// The priority set on it.
-    pub priority: Option<shoal_schedule::priority::Priority>,
-    /// The queued launch whose start records it, if any.
-    pub queue_entry: Option<&'a shoal_ids::queue_entry_ids::QueueEntryId>,
-}
-
-/// Record the `chat` at `home`, running at `origin` in a terminal host when
-/// it runs in one, whose agent the execution wrapper then runs.
-pub async fn start(
+/// The chat whose agent the caller runs itself, at `origin` in a terminal
+/// host when it runs in one: `chat`, which the daemon recorded for this
+/// start, else the one the launch `queue_entry` recorded while it waited,
+/// else a new one `start` describes, which the daemon records with that
+/// launch attached and links to what it starts on.
+pub async fn launch(
     daemon: &impl Daemon,
-    home: ChatHome<'_>,
-    chat: NewChat<'_>,
+    start: ChatStart,
+    chat: Option<&SpaceId>,
     origin: Option<Origin>,
-) -> Result<Chat> {
-    request(
-        daemon,
-        ChatMethod::StartChat {
-            repository: home.repository_id().map(Into::into),
-            workspace: home
-                .workspace()
-                .map(|workspace| SpaceSelector::id(&workspace.id)),
-            name: chat.name.clone(),
-            agent: chat.agent.to_owned(),
-            mode: Some(chat.mode.to_owned()),
-            narrowing: chat.narrowing,
-            origin,
-            parent: chat.parent.cloned(),
-            priority: chat.priority,
-            queue_entry: chat.queue_entry.cloned(),
-        },
-    )
-    .await
+    queue_entry: Option<&QueueEntryId>,
+) -> Result<LaunchedChat> {
+    let method = ChatMethod::LaunchChat {
+        start: Box::new(start),
+        chat: chat.map(SpaceSelector::id),
+        origin,
+        queue_entry: queue_entry.cloned(),
+    };
+    request(daemon, method).await
 }
 
 /// Refuse `parent`, a space a new chat in `repository`, or without one, in
@@ -80,11 +55,4 @@ pub async fn check_parent(
 pub async fn root(daemon: &impl Daemon) -> Result<std::path::PathBuf> {
     let root: shoal_protocol::protocol::ChatRoot = request(daemon, ChatMethod::ChatRoot).await?;
     Ok(root.path)
-}
-
-/// Record `origin` as the place `chat`, recorded before its queued agent
-/// started, runs in.
-pub async fn place(daemon: &impl Daemon, chat: &Chat, origin: Origin) -> Result<()> {
-    let chat = SpaceSelector::id(&chat.id);
-    request(daemon, ChatMethod::PlaceChat { chat, origin }).await
 }

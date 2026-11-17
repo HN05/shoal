@@ -45,6 +45,11 @@ pub struct IssueAssignee {
 }
 
 impl SpaceLinks {
+    /// Whether it links nothing.
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+
     /// The links a copy of the space keeps: its issues, without the PRs and
     /// CI runs of the original's branch, or the original's assignees, which
     /// the copy's own links assign again.

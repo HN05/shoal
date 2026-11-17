@@ -21,6 +21,7 @@ pub(super) fn start(start: &ChatStart, token: Option<&ScopeToken>) -> Result<Sta
             agent: start.agent.clone().context("the start names no agent")?,
             repository: None,
             place: "background".into(),
+            warnings: Vec::new(),
         },
     ))
 }

@@ -25,7 +25,7 @@ use crate::{
     model::{Chat, Repository, Workspace},
     paths::Paths,
 };
-use shoal_protocol::chats::DetachedChat;
+use shoal_protocol::chats::{DetachedChat, LaunchedChat};
 
 /// Start `launch` as a session of `app`, detached from this terminal and
 /// tracked like any other workspace command. The CLI returns once the launch
@@ -295,24 +295,21 @@ fn chat_dir_args(app: &dyn App, settings: &Effective, home: &Path, chat: &Chat) 
 
 /// Start `chat` as a session of `app`, agent `name`, in its checkout or
 /// worktree, detached and tracked as workspace sessions are, as an
-/// execution of the chat, since the user continues it in the app.
+/// execution of the chat `record` has the daemon record, since the user
+/// continues it in the app.
 pub(super) async fn start_chat(
     ctx: &Context,
     integration: &dyn Integration,
     app: &dyn App,
-    name: &Agent,
-    chat: &ChatLaunch,
+    (name, chat): (&Agent, &ChatLaunch),
+    record: impl AsyncFnOnce() -> Result<LaunchedChat>,
 ) -> Result<i32> {
     let ChatLaunch {
         repository,
-        name: chat_name,
         mode,
         narrowing,
-        parent,
-        priority,
         settings,
         model,
-        links,
         ..
     } = chat;
     crate::agents::ensure_available(name, settings)?;
@@ -328,17 +325,10 @@ pub(super) async fn start_chat(
         )
         .await;
     }
-    let new = crate::client::chats::NewChat {
-        priority: *priority,
-        name: chat_name,
-        agent: name,
-        mode,
-        narrowing: *narrowing,
-        parent: parent.as_ref(),
-        queue_entry: None,
-    };
-    let record = crate::client::chats::start(&ctx.paths, home, new, None).await?;
-    super::link_chat(ctx, &record, links).await;
+    let LaunchedChat {
+        chat: record,
+        warnings,
+    } = record().await?;
     let (prompt, args) = chat_input(app, &ctx.paths.home, &record, chat);
     let args = [model_args, args].concat();
     let files = ctx.paths.chat_files(&record);
@@ -365,14 +355,12 @@ pub(super) async fn start_chat(
     let (execution, prepared) =
         launch_session(ctx, &agent, &space, &files, prepared, app.not_inherited()).await?;
     let (launch, delivered) = deliver_first_message(execution, prepared).await?;
-    report_chat(
-        ctx,
-        app,
-        repository.registered(),
-        &record,
-        &launch,
-        delivered,
-    )?;
+    let started = Started {
+        chat: &record,
+        launch: &launch,
+        warnings,
+    };
+    report_chat(ctx, app, repository.registered(), started, delivered)?;
     Ok(0)
 }
 
@@ -409,16 +397,28 @@ fn chat_input(
     }
 }
 
-/// Report the `chat` session `launch` started, with what `delivered` says
-/// of its first message.
+/// A chat session an app started: its chat, the launch that started it and
+/// what recording the chat warned of.
+struct Started<'a> {
+    chat: &'a Chat,
+    launch: &'a DetachedLaunch,
+    warnings: Vec<String>,
+}
+
+/// Report the session `started`, with what `delivered` says of its first
+/// message.
 fn report_chat(
     ctx: &Context,
     app: &dyn App,
     repository: Option<&Repository>,
-    chat: &Chat,
-    launch: &DetachedLaunch,
+    started: Started<'_>,
     delivered: Delivered,
 ) -> Result<()> {
+    let Started {
+        chat,
+        launch,
+        warnings,
+    } = started;
     let log = &launch.log;
     let report = DetachedChat {
         chat: chat.clone(),
@@ -426,6 +426,7 @@ fn report_chat(
         pid: launch.pid,
         log: log.to_owned(),
         delivery: delivered.fields,
+        warnings,
     };
     ctx.emit(
         &format!(

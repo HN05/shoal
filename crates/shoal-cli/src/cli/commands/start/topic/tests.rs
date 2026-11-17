@@ -50,6 +50,7 @@ fn options(narrowing: Narrowing) -> Options {
         session: Some("s1".into()),
         fork: true,
         handoff: None,
+        chat: None,
         parent: Some(SpaceSelector::from("7")),
         narrowing,
     }
@@ -86,6 +87,7 @@ fn a_chat_started_elsewhere_parses_back_to_its_options_with_its_name_and_agent_a
                 place: ChatPlace::Here,
                 name: Some("named".into()),
                 handoff: Some(handoff.to_owned()),
+                chat: None,
                 session: None,
                 fork: false,
                 ..options
@@ -117,6 +119,7 @@ fn a_chat_in_a_workspace_reopens_there() {
         session: None,
         fork: false,
         handoff: None,
+        chat: None,
         parent: None,
         narrowing: Narrowing::Requested(Default::default()),
     };

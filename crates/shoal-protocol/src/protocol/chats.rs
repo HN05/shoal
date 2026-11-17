@@ -7,39 +7,20 @@ use crate::space_names::SpaceSelector;
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChatMethod {
-    /// Record a chat named `name`, whose agent its wrapper then registers
-    /// as an execution of the chat, in the worktree of `workspace` when
-    /// given, which is in `repository`; without either, a chat without a
-    /// repository.
-    StartChat {
+    /// The chat whose agent the caller runs itself, in its terminal, a
+    /// place it opened or an app, at `origin` where a terminal host runs
+    /// it: `chat`, which the daemon recorded for this start, else the one
+    /// the launch `queue_entry` recorded while it waited, else a new one
+    /// `start` describes, recorded with that launch attached and linked to
+    /// what it starts on. Answers with [`crate::chats::LaunchedChat`].
+    LaunchChat {
+        start: Box<ChatStart>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        repository: Option<crate::repository::Selector>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        workspace: Option<SpaceSelector>,
-        name: SpaceName,
-        agent: crate::agent::Agent,
-        /// The mode its agent starts in; `chat` when omitted.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        mode: Option<crate::config::modes::ModeName>,
-        /// The permissions `--permission` gives the agent, whatever the mode's.
-        #[serde(
-            default,
-            skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
-        )]
-        narrowing: crate::config::permissions::PermissionsConfig,
-        /// Where the chat runs in a terminal host.
+        chat: Option<SpaceSelector>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         origin: Option<crate::sessions::Origin>,
-        /// The space the chat goes below, which must be in the repository;
-        /// none puts it at the top.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        parent: Option<SpaceSelector>,
-        /// The priority set on the chat; a scoped caller gives at most its
-        /// own space's.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        priority: Option<shoal_schedule::priority::Priority>,
-        /// The queued launch whose start records the chat, which a scoped
-        /// process may have queued: the chat is then confined as that
+        /// The launch whose slot the chat's agent takes, which a scoped
+        /// process may have queued: a new chat is then confined as that
         /// process's start would be.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         queue_entry: Option<shoal_ids::queue_entry_ids::QueueEntryId>,
@@ -51,16 +32,9 @@ pub enum ChatMethod {
         repository: Option<crate::repository::Selector>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         workspace: Option<SpaceSelector>,
-        /// As [`Self::StartChat`]'s parent.
+        /// As [`ChatStart`]'s parent.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parent: Option<SpaceSelector>,
-    },
-    /// Record `origin` as the place the chat `chat`, recorded before its
-    /// queued agent started, now runs in, unless it has one: a place Shoal
-    /// opened for it becomes the chat's, as for a chat recorded there.
-    PlaceChat {
-        chat: SpaceSelector,
-        origin: crate::sessions::Origin,
     },
     /// `root_dir`, where a chat without a repository runs, prepared as
     /// registering a repository prepares it.
@@ -73,10 +47,10 @@ pub struct ChatRoot {
     pub path: std::path::PathBuf,
 }
 
-/// A new chat for the daemon to start in a background place: where it runs,
-/// below which space, under what name, and what its agent runs with and
-/// starts on. What it leaves out the daemon resolves under the chat's
-/// settings.
+/// A new chat for the daemon to record and start: where it runs, below
+/// which space, under what name, what its agent runs with and starts on,
+/// and what it is linked to. What it leaves out the daemon resolves under
+/// the chat's settings.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ChatStart {
     /// The registered repository in whose checkout it runs; with neither
@@ -111,6 +85,11 @@ pub struct ChatStart {
     /// The issue it starts on, by number or URL, which it is linked to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issue: Option<crate::forge::items::reference::ItemInput>,
+    /// What it is linked to once recorded: the issues and PRs it starts
+    /// on, assigned, and the opened and related items and assignees a
+    /// moved chat brings.
+    #[serde(default, skip_serializing_if = "crate::model::SpaceLinks::is_empty")]
+    pub links: crate::model::SpaceLinks,
     /// Its agent's first message when no issue gives it one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt: Option<String>,

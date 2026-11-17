@@ -19,7 +19,7 @@ use crate::{
         permissions::{PermissionChange, PermissionsConfig},
     },
 };
-use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_ids::{agent_session_ids::AgentSessionId, space_ids::SpaceId};
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use shoal_schedule::priority::Priority;
 
@@ -45,6 +45,8 @@ pub(in crate::cli::commands) struct Options {
     /// The handoff of a starter that waits on this place to start the chat,
     /// with its scope when it is scoped.
     pub handoff: Option<PathBuf>,
+    /// The chat the daemon recorded for this start, whose agent runs here.
+    pub chat: Option<SpaceId>,
     /// The space the chat goes below; the daemon puts a scoped starter's
     /// below its own space without one.
     pub parent: Option<SpaceSelector>,
@@ -105,6 +107,7 @@ impl Options {
             session: None,
             fork: false,
             handoff: args.handoff.take(),
+            chat: None,
             parent: args.parent.take(),
             narrowing: match args.recorded_narrowing.take() {
                 Some(recorded) => Narrowing::Recorded(recorded),
@@ -118,7 +121,8 @@ impl Options {
     /// `start` with these options, as [`Options::taken_from`] takes them
     /// again, except that a background place is written as beside this
     /// terminal, which an agent's start takes for one, and a session and its
-    /// fork as none: only a chat that runs here continues one.
+    /// fork as none: only a chat that runs here continues one, and only one
+    /// that runs here runs in a chat the daemon recorded.
     pub(super) fn into_start(self, start: StartArgs) -> StartArgs {
         let Self {
             agent,
@@ -129,6 +133,7 @@ impl Options {
             session: _,
             fork: _,
             handoff,
+            chat: _,
             parent,
             narrowing,
             priority,
@@ -165,6 +170,7 @@ impl Options {
             place: ChatPlace::Here,
             name: Some(name.clone()),
             handoff: handoff.map(Path::to_owned),
+            chat: None,
             ..self.clone()
         }
     }
@@ -182,6 +188,7 @@ impl Options {
             session,
             fork: _,
             handoff,
+            chat: _,
             parent: _,
             narrowing: _,
             priority: _,

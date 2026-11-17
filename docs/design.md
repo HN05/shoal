@@ -952,9 +952,17 @@ a child of either kind the same way: `shoal start` run inside a space puts the
 new workspace or chat below it, or below a space its scope reaches that
 `--parent` names, in its repository, and a scoped caller creates nothing else,
 while the user's terminal creates top-level spaces.
+The daemon records every new chat, below where it goes and linked to what it
+starts on, before its agent runs anywhere, in one operation whatever runs the
+agent: the caller's terminal, a background place, the queue or an app only
+runs the recorded chat's agent, so a start that names nothing to link sends no
+link request. What linking warns of goes to the agent of the nearest space
+above the chat with one, else to the user's notifications, never only to a
+terminal the agent then takes over.
 A chat an agent starts opens in a background place, since the agent cannot
 hand over its terminal, unless `start --here` runs it in the caller's own, and
-keeps the agent's scope until it records the chat below the agent's space. Every start in a background place waits for the place
+keeps the agent's scope until it runs the chat's agent in the chat's own
+scope. Every start in a background place waits for the place
 to report that the chat is about to run its agent, or why not, since an open
 place proves neither. The place takes the handoff before anything checks its
 scope, which it may still inherit from the starter's processes, and reports

@@ -19,8 +19,9 @@ use crate::{
     },
     config::Effective,
     model::{Chat, ChatHome},
+    protocol::ChatStart,
 };
-use shoal_protocol::chats::BackgroundChat;
+use shoal_protocol::chats::{BackgroundChat, LaunchedChat};
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
@@ -70,7 +71,8 @@ async fn launch(
     options: Options,
 ) -> Result<Started> {
     let launch = Launch::prepare(ctx, repo, settings, topic, options).await?;
-    if let Some(code) = agents::start_chat(ctx, &launch.agent, &launch.chat).await? {
+    let record = async || launch.record(ctx, None).await;
+    if let Some(code) = agents::start_chat(ctx, &launch.agent, &launch.chat, record).await? {
         return Ok(Started::Exited(code));
     }
     let started = match launch.options.place {
@@ -173,6 +175,7 @@ impl Launch {
             chat: self.chat.name,
             agent: self.agent,
             place,
+            warnings: Vec::new(),
         })
     }
 
@@ -185,7 +188,7 @@ impl Launch {
         if self.options.place == ChatPlace::Beside && self.start_beside(ctx).await? {
             return Ok(0);
         }
-        let chat = self.record(ctx).await?;
+        let chat = self.record_here(ctx).await?;
         self.run_here(ctx, &chat, model_args).await
     }
 
@@ -235,50 +238,50 @@ impl Launch {
         self.topic.relaunch.command_line(options)
     }
 
-    /// Record the chat, in its home trusted for its agent, unless its
-    /// queued agent's launch recorded it already, and link it to what its
-    /// topic names.
-    async fn record(&self, ctx: &Context) -> Result<Chat> {
+    /// Have the daemon record the chat, running at `origin` when given, and
+    /// link it to what its topic names, unless it recorded the chat for
+    /// this start already.
+    async fn record(
+        &self,
+        ctx: &Context,
+        origin: Option<crate::sessions::Origin>,
+    ) -> Result<LaunchedChat> {
+        let start = self.chat_start();
+        let (chat, entry) = (self.options.chat.as_ref(), crate::env::queue_entry());
+        crate::client::chats::launch(&ctx.paths, start, chat, origin, entry).await
+    }
+
+    /// The start the daemon records the chat from: where it runs, below
+    /// which space, under what name, what its agent runs with and what it
+    /// is linked to.
+    fn chat_start(&self) -> ChatStart {
+        let launch = &self.chat;
+        let home = launch.home();
+        ChatStart {
+            repository: home.repository_id().map(Into::into),
+            workspace: (home.workspace()).map(|workspace| SpaceSelector::id(&workspace.id)),
+            parent: launch.parent.clone(),
+            name: Some(launch.name.clone()),
+            agent: Some(self.agent.clone()),
+            mode: Some(launch.mode.clone()),
+            narrowing: launch.narrowing,
+            priority: launch.priority,
+            links: launch.links.clone(),
+            ..ChatStart::default()
+        }
+    }
+
+    /// Record the chat at this terminal's place, in its home trusted for
+    /// its agent.
+    async fn record_here(&self, ctx: &Context) -> Result<Chat> {
         let launch = &self.chat;
         let (repository, home) = (launch.repository.registered(), launch.home());
         agents::trust_chat(ctx, &launch.settings, &self.agent, repository, home).await;
-        let chat = match admission::queued_chat(ctx).await? {
-            Some(chat) => {
-                if let Some(origin) = current_origin().await {
-                    crate::client::chats::place(&ctx.paths, &chat, origin).await?;
-                }
-                chat
-            }
-            None => {
-                let chat = self.record_new(ctx, current_origin().await).await?;
-                admission::attach_launch(ctx, &chat).await?;
-                chat
-            }
-        };
+        let chat = self.record(ctx, current_origin().await).await?.chat;
         if crate::env::shown_chat() {
             recent::record_attach(ctx, &SpaceSelector::id(&chat.id)).await;
         }
-        agents::link_chat(ctx, &chat, &launch.links).await;
         Ok(chat)
-    }
-
-    /// Record the chat as running in `place`, or in none.
-    async fn record_new(
-        &self,
-        ctx: &Context,
-        place: Option<crate::sessions::Origin>,
-    ) -> Result<Chat> {
-        let launch = &self.chat;
-        let new = crate::client::chats::NewChat {
-            name: &launch.name,
-            agent: &self.agent,
-            mode: &launch.mode,
-            narrowing: launch.narrowing,
-            parent: launch.parent.as_ref(),
-            priority: launch.priority,
-            queue_entry: crate::env::queue_entry(),
-        };
-        crate::client::chats::start(&ctx.paths, launch.home(), new, place).await
     }
 
     /// Run the recorded `chat`'s agent with `model_args` here under the
@@ -413,6 +416,7 @@ pub(in crate::cli::commands) async fn start_changed(
         session: session.session.clone(),
         fork: true,
         handoff: None,
+        chat: None,
         parent: None,
         narrowing: super::super::Narrowing::Recorded(session.narrowing),
         priority: None,

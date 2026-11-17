@@ -33,6 +33,7 @@ fn options() -> Options {
         session: None,
         fork: false,
         handoff: None,
+        chat: None,
         parent: Some(SpaceSelector::from("7")),
         narrowing: Narrowing::Requested(PermissionsConfig::default()),
         priority: Some(Priority::URGENT),

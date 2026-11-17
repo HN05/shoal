@@ -1,17 +1,18 @@
 //! A chat's agent under the heavy slots: the queue admits it before any
 //! place opens, and a launch that waits leaves its chat to the queue's start,
-//! or, for a start without a terminal, records the chat at once.
+//! or, for a start without a terminal, has the daemon record the chat at
+//! once.
 use anyhow::{Context as _, Result, bail};
 
 use super::{ChatPlace, Launch, Started};
 use crate::client::queue::{self, Hold};
 use crate::{
     cli::context::Context,
-    model::{Chat, ChatQueueRequest, QueueEntry},
+    model::{ChatQueueRequest, QueueEntry},
     start_plan::{ChatPlan, ChatPlanStart},
 };
+use shoal_protocol::chats::LaunchedChat;
 use shoal_protocol::launches::LaunchSource;
-use shoal_protocol::space_names::SpaceSelector;
 
 impl Launch {
     /// Ask the agent queue to admit this chat's agent, unless the launch
@@ -82,81 +83,38 @@ impl Launch {
     /// End the start of this chat, whose agent waits as `entry` behind
     /// `waiting` entries: from the user's terminal, the queue's start
     /// records the chat in a place of its own; a start that records it at
-    /// once does so now, and the queue keeps the launch until it takes the
-    /// chat. A chat that cannot be recorded and attached takes its launch
-    /// out of the queue.
+    /// once has the daemon record and link it now, and the queue keeps the
+    /// launch until it takes the chat. A chat that cannot be recorded takes
+    /// its launch out of the queue.
     async fn wait(&self, ctx: &Context, entry: QueueEntry, waiting: usize) -> Result<Started> {
         if !self.records_when_waiting() {
             let code = crate::cli::commands::queued_agents::report_queued(ctx, &entry, waiting)?;
             return Ok(Started::Exited(code));
         }
-        let chat = match self.record_for_queue(ctx, &entry).await {
-            Ok(chat) => chat,
-            Err(error) => {
-                if let Err(removal) = queue::remove(&ctx.paths, entry.id.to_string()).await {
-                    eprintln!("shoal: the chat's agent stays queued: {removal:#}");
-                }
-                return Err(error);
-            }
-        };
-        crate::cli::agents::link_chat(ctx, &chat, &self.chat.links).await;
+        let launched = self.record_waiting(ctx, &entry).await?;
         let queued = shoal_protocol::chats::QueuedChat {
-            chat,
+            chat: launched.chat,
             entry,
             waiting,
+            warnings: launched.warnings,
         };
         super::detached::report_queued(ctx, &queued)?;
         Ok(Started::Exited(0))
     }
 
-    /// Record the chat, in no place yet, and attach the waiting launch
-    /// `entry` to it, removing the chat again when the launch cannot take
-    /// it.
-    async fn record_for_queue(&self, ctx: &Context, entry: &QueueEntry) -> Result<Chat> {
-        let chat = self.record_new(ctx, None).await?;
-        let attached = queue::attach(&ctx.paths, entry.id.clone(), SpaceSelector::id(&chat.id));
-        if let Err(error) = attached.await {
-            let unsaved = crate::removal::UnsavedWork::taking(Vec::new());
-            let removed =
-                crate::client::removal::remove(&ctx.paths, SpaceSelector::id(&chat.id), unsaved);
-            if let Err(removal) = removed.await {
-                eprintln!(
-                    "shoal: chat {} stays without its agent: {removal:#}",
-                    chat.name
-                );
-            }
-            return Err(error);
+    /// Have the daemon record this chat, linked, with its waiting launch
+    /// `entry` attached, taking the launch out of the queue when it cannot.
+    async fn record_waiting(&self, ctx: &Context, entry: &QueueEntry) -> Result<LaunchedChat> {
+        let start = self.chat_start();
+        let recorded = crate::client::chats::launch(&ctx.paths, start, None, None, Some(&entry.id));
+        let recorded = recorded.await;
+        if recorded.is_err()
+            && let Err(removal) = queue::remove(&ctx.paths, entry.id.to_string()).await
+        {
+            eprintln!("shoal: the chat's agent stays queued: {removal:#}");
         }
-        Ok(chat)
+        recorded
     }
-}
-
-/// The chat recorded for the launch whose slot this process's agent takes,
-/// when the launch waited for it with its chat recorded.
-pub(super) async fn queued_chat(ctx: &Context) -> Result<Option<Chat>> {
-    let Some(entry) = crate::env::queue_entry() else {
-        return Ok(None);
-    };
-    let entries = queue::entries(&ctx.paths).await?;
-    let space = (entries.into_iter())
-        .find(|queued| queued.id == *entry)
-        .and_then(|queued| queued.space_id);
-    let Some(space) = space else {
-        return Ok(None);
-    };
-    let chats = crate::client::spaces::list(&ctx.paths).await?.into_chats();
-    let chat = chats.into_iter().find(|chat| chat.id == space);
-    chat.context("the chat recorded for the queued agent is gone")
-        .map(Some)
-}
-
-/// Record the new `chat` as the one whose agent takes the slot of the
-/// launch this process continues, if any.
-pub(super) async fn attach_launch(ctx: &Context, chat: &Chat) -> Result<()> {
-    if let Some(entry) = crate::env::queue_entry() {
-        queue::attach(&ctx.paths, entry.clone(), SpaceSelector::id(&chat.id)).await?;
-    }
-    Ok(())
 }
 
 /// Free the slot of the launch this process's agent was to take, whose

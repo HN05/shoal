@@ -357,11 +357,10 @@ fn chat_rename_relabels_a_tmux_window_that_still_shows_the_old_name() {
     let repository = fixture.ok(&["repo", "ls"])[0].clone();
     // The chats last while this test's process runs.
     let start = |name: &str, pane: &str| {
-        let response = fixture.request(serde_json::json!({"start_chat":{
-            "repository": repository["id"], "name": name, "agent": "claude",
-            "pid": std::process::id(), "origin": tmux.origin(pane),
+        let response = fixture.request(serde_json::json!({"launch_chat":{
+            "start": {"repository": repository["id"], "name": name, "agent": "claude"}, "origin": tmux.origin(pane),
         }}));
-        assert_eq!(response["type"], "chat", "{response}");
+        assert_eq!(response["type"], "launched_chat", "{response}");
     };
     // Shoal opened `talk`'s window under its name; `notes` runs in the
     // window the user named.

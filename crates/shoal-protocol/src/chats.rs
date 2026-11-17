@@ -18,6 +18,9 @@ pub struct BackgroundChat {
     pub repository: Option<RepositoryId>,
     /// Where it runs and how to reach it, as the host that runs it says.
     pub place: String,
+    /// What recording and linking it warned of, which its starter receives.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
 }
 
 /// A new chat recorded at once whose agent waits in the agent queue.
@@ -27,6 +30,18 @@ pub struct QueuedChat {
     pub entry: crate::model::QueueEntry,
     /// Entries waiting, this one included.
     pub waiting: usize,
+    /// What recording and linking it warned of, which its starter receives.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
+}
+
+/// The chat whose agent a caller runs itself, recorded and linked, with
+/// what that warned of, which its starter receives.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LaunchedChat {
+    pub chat: crate::model::Chat,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
 }
 
 /// A new chat the daemon started for a client: in a background place, or
@@ -49,4 +64,7 @@ pub struct DetachedChat {
     pub log: std::path::PathBuf,
     #[serde(flatten)]
     pub delivery: Delivery,
+    /// What recording and linking it warned of, which its starter receives.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
 }

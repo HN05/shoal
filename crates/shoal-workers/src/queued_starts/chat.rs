@@ -39,7 +39,7 @@ pub(super) async fn start(
             .await
             .map(drop)
         }
-        ChatPlanStart::Resolved(start) => crate::chat_starts::start_queued(paths, &start).await,
+        ChatPlanStart::Resolved(start) => crate::chat_starts::start_queued(paths, *start).await,
     }
 }
 

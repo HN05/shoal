@@ -53,6 +53,8 @@ states!(NotificationKind {
     QueueStarted => "queue_started",
     /// A queued agent could not start.
     QueueFailed => "queue_failed",
+    /// Starting a space warned, as of an item it could not link.
+    StartWarned => "start_warned",
     /// A seed build failed, or a new workspace could not start from it.
     SeedFailed => "seed_failed",
     /// Disk space cleanup emptied a repository's shared caches.
