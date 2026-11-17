@@ -12,8 +12,8 @@ use crate::{
 };
 
 pub(super) async fn capabilities(ctx: &Context, repository: RepositoryArgs) -> Result<i32> {
-    let (context, named) = select_repo_context(ctx, repository.repo).await?;
-    let read = client::capabilities(&ctx.paths, context, named);
+    let target = select_repo_context(ctx, repository.repo).await?;
+    let read = client::capabilities(&ctx.paths, target);
     let capabilities = ctx.progress("Reading capabilities", read).await?;
     ctx.show(&capabilities, render)?;
     Ok(0)

@@ -12,7 +12,7 @@ use super::super::{
 use crate::{
     config::permissions::PermissionKey,
     forge::items::action::Action,
-    protocol::{self, Body, ItemContext, ItemMethod, ViewPiece},
+    protocol::{self, Body, ItemContext, ItemMethod, RepoTarget, ViewPiece},
 };
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::space_names::SpaceSelector;
@@ -51,45 +51,27 @@ pub(super) async fn handle(
             )));
         }
         ItemMethod::ListItems {
-            context,
+            target,
             kind,
             search,
-            repository,
         } => {
-            let listed = manager
-                .list_items(&context, kind, &search, repository.as_deref(), caller)
-                .await;
+            let listed = manager.list_items(&target, kind, &search, caller).await;
             return Ok(Answer::pages(listed, Body::Items));
         }
-        ItemMethod::Labels {
-            context,
-            repository,
-        } => {
-            let labels = manager
-                .labels(&context, repository.as_deref(), caller)
-                .await;
+        ItemMethod::Labels { target } => {
+            let labels = manager.labels(&target, caller).await;
             return Ok(Answer::pages(labels, Body::Labels));
         }
         ItemMethod::Reviewers { context, item } => {
             let reviewers = manager.reviewers(&context, item, caller).await;
             return Ok(Answer::pages(reviewers, Body::Reviewers));
         }
-        ItemMethod::Capabilities {
-            context,
-            repository,
-        } => Body::Capabilities(
-            manager
-                .capabilities(&context, repository.as_deref(), caller)
-                .await?,
-        ),
-        ItemMethod::Reactions {
-            context,
-            repository,
-        } => Body::Reactions(
-            manager
-                .reactions(&context, repository.as_deref(), caller)
-                .await?,
-        ),
+        ItemMethod::Capabilities { target } => {
+            Body::Capabilities(manager.capabilities(&target, caller).await?)
+        }
+        ItemMethod::Reactions { target } => {
+            Body::Reactions(manager.reactions(&target, caller).await?)
+        }
         ItemMethod::ReviewThread {
             context,
             item,
@@ -132,23 +114,18 @@ pub(super) async fn handle(
             return Ok(Answer::pages(viewed, Body::ViewPieces));
         }
         ItemMethod::ForgeApi {
-            context,
+            target,
             request: raw,
-            repository,
         } => {
             let response = manager
-                .forge_api(&context, &raw, repository.as_deref(), caller)
+                .forge_api(&target, &raw, caller)
                 .await
                 .map(|response| protocol::text_pieces(&response.to_string()));
             return Ok(Answer::pages(response, Body::ApiResponse));
         }
-        ItemMethod::ForgeDownload {
-            context,
-            url,
-            repository,
-        } => {
+        ItemMethod::ForgeDownload { target, url } => {
             let download = manager
-                .forge_download(&context, &url, repository.as_deref(), caller)
+                .forge_download(&target, &url, caller)
                 .await
                 .map(protocol::DownloadPiece::split);
             return Ok(Answer::pages(download, Body::Downloaded));
@@ -195,15 +172,10 @@ pub(super) async fn handle(
             item,
         } => Body::MergedPull(manager.merged_pull(&workspace, item).await?),
         ItemMethod::OpenIssue {
-            context,
+            target,
             issue,
-            repository,
             link,
-        } => Body::Opened(
-            manager
-                .open_issue(&context, issue, repository, link, caller)
-                .await?,
-        ),
+        } => Body::Opened(manager.open_issue(&target, issue, link, caller).await?),
         ItemMethod::SelectItems {
             context,
             selection,
@@ -314,11 +286,13 @@ impl Scoped for ItemMethod {
                 Some(change_context_space(manager, caller, context).await?)
             }
             // Reads go out as the agent account wherever they run.
-            ItemMethod::ListItems { context, .. }
-            | ItemMethod::Labels { context, .. }
-            | ItemMethod::Reviewers { context, .. }
-            | ItemMethod::Capabilities { context, .. }
-            | ItemMethod::Reactions { context, .. }
+            ItemMethod::ListItems { target, .. }
+            | ItemMethod::Labels { target }
+            | ItemMethod::Capabilities { target }
+            | ItemMethod::Reactions { target } => {
+                read_context_space(manager, caller, own_context(caller, target)).await?
+            }
+            ItemMethod::Reviewers { context, .. }
             | ItemMethod::ReviewThread { context, .. }
             | ItemMethod::NumberKind { context, .. }
             | ItemMethod::IssueDetails { context, .. }
@@ -328,10 +302,13 @@ impl Scoped for ItemMethod {
             | ItemMethod::ViewItems { context, .. } => {
                 read_context_space(manager, caller, context).await?
             }
-            ItemMethod::OpenIssue { context, .. }
-            | ItemMethod::ForgeApi { context, .. }
-            | ItemMethod::ForgeDownload { context, .. }
-            | ItemMethod::ItemAction {
+            ItemMethod::OpenIssue { target, .. }
+            | ItemMethod::ForgeApi { target, .. }
+            | ItemMethod::ForgeDownload { target, .. } => {
+                let context = own_context(caller, target);
+                Some(change_context_space(manager, caller, context).await?)
+            }
+            ItemMethod::ItemAction {
                 context,
                 action:
                     Action::Edit(_)
@@ -366,6 +343,12 @@ impl Scoped for ItemMethod {
             } => Some(workspace),
         })
     }
+}
+
+/// Where `target` comes from: for a scoped `caller`, its own space unless
+/// `target` names another.
+pub(super) fn own_context<'a>(caller: &Caller, target: &'a mut RepoTarget) -> &'a mut ItemContext {
+    (target.context).get_or_insert_with(|| ItemContext::space(SpaceSelector::id(&caller.space_id)))
 }
 
 /// The space `context` names: a scoped process acts on items from its

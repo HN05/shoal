@@ -154,7 +154,7 @@ async fn pick_open_item(
             &[(ItemKind::Issue, "Issue"), (ItemKind::Pr, "Pull request")],
         )?,
     };
-    let items = client::list_items(&ctx.paths, context, kind, Search::picker(), None).await?;
+    let items = client::list_items(&ctx.paths, context.into(), kind, Search::picker()).await?;
     let number = match kind {
         ItemKind::Issue => ui::pick_item(ctx, "Issue> ", "issues", items)?,
         ItemKind::Pr => ui::pick_item(ctx, "Pull request> ", "pull requests", items)?,

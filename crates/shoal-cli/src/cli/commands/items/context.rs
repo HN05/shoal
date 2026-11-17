@@ -8,7 +8,7 @@ use crate::{
     env,
     forge::{ForgeRepo, items::reference::ItemInput},
     model::Repository,
-    protocol::ItemContext,
+    protocol::{ItemContext, RepoTarget},
     repository::{self, NotRegistered},
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -61,28 +61,38 @@ pub(in crate::cli::commands) async fn select_space_item_context(
     Ok(ItemContext::space(space))
 }
 
-/// The context of a command whose `--repo` names any repository, and the
-/// repository it then names there. The user's command runs in a registered
-/// repository's checkout, without a workspace; any other repository is
-/// reached through the current context, else a repository the user picks.
+/// The repository a command whose `--repo` names any repository acts in.
+/// The user's command runs in a registered repository's checkout, without a
+/// workspace; any other repository is reached from the current context,
+/// else by its URL alone, else from a repository the user picks.
 pub(in crate::cli::commands) async fn select_repo_context(
     ctx: &Context,
     repo: Option<String>,
-) -> Result<(ItemContext, Option<String>)> {
+) -> Result<RepoTarget> {
     if let Some(checkout) = registered_checkout(ctx, repo.as_deref()).await? {
-        return Ok((checkout, None));
+        return Ok(checkout.into());
     }
     // Refuse a bad repository before the picker asks for anything.
     repo.as_deref().map(ForgeRepo::check_named).transpose()?;
-    Ok((current_or_picked_repository(ctx).await?, repo))
+    let context = match current_context(ctx).await? {
+        Some(context) => Some(context),
+        None if named_by_url(repo.as_deref()) => None,
+        None => Some(picked_repository(ctx).await?),
+    };
+    Ok(RepoTarget {
+        context,
+        repository: repo,
+    })
 }
 
-/// The current workspace, chat or registered checkout, else the checkout of
-/// a registered repository the user picks.
-async fn current_or_picked_repository(ctx: &Context) -> Result<ItemContext> {
-    if let Some(context) = current_context(ctx).await? {
-        return Ok(context);
-    }
+/// Whether `repo` names a repository by its URL, which reaches its forge
+/// from anywhere.
+fn named_by_url(repo: Option<&str>) -> bool {
+    repo.is_some_and(ForgeRepo::named_by_url)
+}
+
+/// The checkout of a registered repository the user picks.
+async fn picked_repository(ctx: &Context) -> Result<ItemContext> {
     ensure!(ctx.interactive(), "{NO_REPOSITORY}");
     let repos = crate::client::repositories::list(&ctx.paths).await?;
     let picked = ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await)?;
@@ -96,18 +106,25 @@ pub(in crate::cli::commands) async fn select_open_context(
     ctx: &Context,
     space: Option<SpaceSelector>,
     repo: Option<String>,
-) -> Result<(ItemContext, Option<String>)> {
+) -> Result<RepoTarget> {
     if space.is_none()
         && let Some(checkout) = registered_checkout(ctx, repo.as_deref()).await?
     {
-        return Ok((checkout, None));
+        return Ok(checkout.into());
     }
     // Refuse a bad repository before the picker asks for anything.
     repo.as_deref().map(ForgeRepo::check_named).transpose()?;
-    Ok((
-        select_space_item_context(ctx, space, None, None).await?,
-        repo,
-    ))
+    if space.is_none() && named_by_url(repo.as_deref()) && current_context(ctx).await?.is_none() {
+        return Ok(RepoTarget {
+            context: None,
+            repository: repo,
+        });
+    }
+    let context = select_space_item_context(ctx, space, None, None).await?;
+    Ok(RepoTarget {
+        context: Some(context),
+        repository: repo,
+    })
 }
 
 /// The checkout of the registered repository of the issue, PR or CI run URL

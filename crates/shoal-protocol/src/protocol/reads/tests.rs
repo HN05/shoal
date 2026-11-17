@@ -10,9 +10,8 @@ fn hook_reads_are_cancellable() {
 #[test]
 fn downloads_stop_when_their_client_hangs_up() {
     let download = ItemMethod::ForgeDownload {
-        context: super::super::ItemContext::space("w".into()),
+        target: super::super::ItemContext::space("w".into()).into(),
         url: "https://forge.example/attachments/a1".into(),
-        repository: None,
     };
     assert!(Operation::from(download).reads_only());
 }

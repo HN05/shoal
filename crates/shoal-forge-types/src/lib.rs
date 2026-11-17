@@ -126,10 +126,16 @@ impl ForgeRepo {
         Self::parse_linked(remote, Some(self.kind)).is_ok_and(|remote| remote == *self)
     }
 
+    /// Whether `input`, naming a repository, names it by a remote or web
+    /// URL, which needs no other repository's forge to find its own.
+    pub fn named_by_url(input: &str) -> bool {
+        input.contains(':')
+    }
+
     /// Refuse `input` when it names no repository on any forge, before
     /// [`resolve_named`](Self::resolve_named) asks a host which forge it is.
     pub fn check_named(input: &str) -> Result<()> {
-        let path = if input.contains(':') {
+        let path = if Self::named_by_url(input) {
             let remote =
                 RemoteUrl::parse(input).with_context(|| format!("{input} names no repository"))?;
             Self::location(&remote)?.1

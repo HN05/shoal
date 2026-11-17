@@ -66,7 +66,7 @@ async fn a_scoped_chat_lists_items_as_the_agent_account() {
     };
     for caller in [Some(&agent), None] {
         manager
-            .list_items(&context, ItemKind::Issue, &search, None, caller)
+            .list_items(&context.clone().into(), ItemKind::Issue, &search, caller)
             .await
             .unwrap();
     }

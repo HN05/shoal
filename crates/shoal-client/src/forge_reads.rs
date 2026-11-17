@@ -27,99 +27,60 @@ use crate::{
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     model::{Blocker, MergeWarning, Selected},
-    protocol::{DownloadPiece, ItemContext, ItemMethod},
+    protocol::{DownloadPiece, ItemContext, ItemMethod, RepoTarget},
 };
 
-/// The forge's JSON response to `request` in `context`'s repository, or in
-/// the one `repository` names, reassembled from the pieces the daemon sends
-/// it in.
+/// The forge's JSON response to `request` in the `target` repository,
+/// reassembled from the pieces the daemon sends it in.
 pub async fn forge_api(
     daemon: &impl Daemon,
-    context: ItemContext,
+    target: RepoTarget,
     request: RawRequest,
-    repository: Option<String>,
 ) -> Result<serde_json::Value> {
-    let method = ItemMethod::ForgeApi {
-        context,
-        request,
-        repository,
-    };
+    let method = ItemMethod::ForgeApi { target, request };
     let pieces = pages::<String>(daemon, method).await?;
     serde_json::from_str(&pieces.concat()).context("the daemon sent invalid JSON")
 }
 
-/// The file at `url` on the forge of `context`'s repository, or of the one
-/// `repository` names, reassembled from the pieces the daemon sends it in.
+/// The file at `url` on the forge of the `target` repository, reassembled
+/// from the pieces the daemon sends it in.
 pub async fn forge_download(
     daemon: &impl Daemon,
-    context: ItemContext,
+    target: RepoTarget,
     url: String,
-    repository: Option<String>,
 ) -> Result<Download> {
-    let method = ItemMethod::ForgeDownload {
-        context,
-        url,
-        repository,
-    };
+    let method = ItemMethod::ForgeDownload { target, url };
     let pieces = pages(daemon, method).await?;
     DownloadPiece::join(pieces)
 }
 
-/// What the forge of `context`'s repository, or of the one `repository`
-/// names, supports.
-pub async fn capabilities(
-    daemon: &impl Daemon,
-    context: ItemContext,
-    repository: Option<String>,
-) -> Result<Capabilities> {
-    let method = ItemMethod::Capabilities {
-        context,
-        repository,
-    };
-    request(daemon, method).await
+/// What the forge of the `target` repository supports.
+pub async fn capabilities(daemon: &impl Daemon, target: RepoTarget) -> Result<Capabilities> {
+    request(daemon, ItemMethod::Capabilities { target }).await
 }
 
-/// The reactions the forge of `context`'s repository, or of the one
-/// `repository` names, allows.
-pub async fn reactions(
-    daemon: &impl Daemon,
-    context: ItemContext,
-    repository: Option<String>,
-) -> Result<AllowedReactions> {
-    let method = ItemMethod::Reactions {
-        context,
-        repository,
-    };
-    request(daemon, method).await
+/// The reactions the forge of the `target` repository allows.
+pub async fn reactions(daemon: &impl Daemon, target: RepoTarget) -> Result<AllowedReactions> {
+    request(daemon, ItemMethod::Reactions { target }).await
 }
 
-/// The labels of `context`'s repository, or of the one `repository` names.
-pub async fn labels(
-    daemon: &impl Daemon,
-    context: ItemContext,
-    repository: Option<String>,
-) -> Result<Vec<Label>> {
-    let method = ItemMethod::Labels {
-        context,
-        repository,
-    };
-    pages(daemon, method).await
+/// The labels of the `target` repository.
+pub async fn labels(daemon: &impl Daemon, target: RepoTarget) -> Result<Vec<Label>> {
+    pages(daemon, ItemMethod::Labels { target }).await
 }
 
-/// Issues or PRs of `context`'s repository, or of the one `repository`
-/// names, that `search` matches, newest first.
+/// Issues or PRs of the `target` repository that `search` matches, newest
+/// first.
 pub async fn list_items(
     daemon: &impl Daemon,
-    context: ItemContext,
+    target: RepoTarget,
     kind: ItemKind,
     search: Search,
-    repository: Option<String>,
 ) -> Result<Vec<Item>> {
     let method = ItemMethod::ListItems {
-        context,
+        target,
         kind,
         search,
-        repository,
     };
     pages(daemon, method).await
 }

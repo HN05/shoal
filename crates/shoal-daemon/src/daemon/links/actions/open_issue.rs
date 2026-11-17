@@ -29,7 +29,7 @@ use crate::{
             link::ItemKind,
         },
     },
-    protocol::ItemContext,
+    protocol::{ItemContext, RepoTarget},
 };
 use shoal_forge::{
     RepoRequests,
@@ -49,22 +49,29 @@ const LINK_NEEDS_REPOSITORY: &str =
     "a chat without a repository links no issues; open the issue without --link";
 
 impl Manager {
-    /// Open an issue as the agent account in the repository of `context`, or
-    /// the one `repository` names, and assign it to the space when `link`
-    /// is set.
+    /// Open an issue as the agent account in the `target` repository, and
+    /// assign it to the space when `link` is set.
     pub async fn open_issue(
         &self,
-        context: &ItemContext,
+        target: &RepoTarget,
         issue: NewIssue,
-        repository: Option<String>,
         link: bool,
         caller: Option<&Caller>,
     ) -> Result<OpenOutcome> {
         anyhow::ensure!(!issue.title.trim().is_empty(), "the issue needs a title");
-        if let ItemContext::Checkout(id) = context {
-            anyhow::ensure!(!link, "{LINK_NEEDS_SPACE}");
-            return (self.open_checkout_issue(id, issue, repository, self.user_account())).await;
-        }
+        let repository = target.repository.clone();
+        let context = match &target.context {
+            Some(ItemContext::Checkout(id)) => {
+                anyhow::ensure!(!link, "{LINK_NEEDS_SPACE}");
+                let account = self.user_account();
+                return (self.open_checkout_issue(id, issue, repository, account)).await;
+            }
+            Some(context) => context,
+            None => {
+                anyhow::ensure!(!link, "{LINK_NEEDS_SPACE}");
+                return self.open_outside_issue(issue, repository, caller).await;
+            }
+        };
         match self.issue_space(context, repository.as_deref()).await? {
             Some(space) => (self.open_space_issue(space, issue, repository, link, caller)).await,
             None => {
@@ -107,10 +114,11 @@ impl Manager {
         Ok(space.filter(|space| space.repository_id.is_none()))
     }
 
-    /// Open the issue a chat without a repository opens in the repository
-    /// the URL `repository` names, which is not registered, and so another
-    /// repository under the caller's `issue_other_repositories` permission in
-    /// the global config.
+    /// Open the issue a request from no repository, or a chat without one,
+    /// opens in the repository the URL `repository` names, which is not
+    /// registered, and so another repository under a scoped `caller`'s
+    /// `issue_other_repositories` permission in the global config, as its
+    /// agent account, and as the user's own logins for the user.
     /// A proposal belongs to a registered repository, so a scoped `caller`
     /// that the setting would have propose one is refused.
     async fn open_outside_issue(
@@ -119,8 +127,7 @@ impl Manager {
         repository: Option<String>,
         caller: Option<&Caller>,
     ) -> Result<OpenOutcome> {
-        let named = repository
-            .context("a chat without a repository names where the issue opens; pass --repo")?;
+        let named = repository.context("name the repository the issue opens in with --repo")?;
         let forge = ForgeRepo::resolve(&named, &self.forge_hosts())
             .await
             .with_context(|| format!("{named} is not registered; name it by its URL"))?;
@@ -140,9 +147,12 @@ impl Manager {
                     .cited("issue_other_repositories")
             );
         }
-        let Created { item, unfinished } = (destination.forge)
-            .create_issue(&self.agent_account(), &issue)
-            .await?;
+        let account = match caller {
+            Some(_) => self.agent_account(),
+            None => self.user_account(),
+        };
+        let Created { item, unfinished } =
+            (destination.forge).create_issue(&account, &issue).await?;
         Ok(OpenOutcome::opened(Opened {
             item,
             created: true,

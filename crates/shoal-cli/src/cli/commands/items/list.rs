@@ -25,9 +25,8 @@ pub(super) async fn list(ctx: &Context, kind: ItemKind, args: ListArgs) -> Resul
     };
     // Refuse a bad filter before the picker asks for anything.
     search.check()?;
-    let (context, repository) = select_repo_context(ctx, args.repo).await?;
-    let listed =
-        crate::client::forge_reads::list_items(&ctx.paths, context, kind, search, repository);
+    let target = select_repo_context(ctx, args.repo).await?;
+    let listed = crate::client::forge_reads::list_items(&ctx.paths, target, kind, search);
     let items = ctx.progress("Searching", listed).await?;
     ctx.show(&items, |items| render_list(kind, items))?;
     Ok(0)

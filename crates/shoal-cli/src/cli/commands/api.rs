@@ -28,12 +28,9 @@ pub(super) async fn api(ctx: &Context, args: ApiArgs) -> Result<i32> {
     };
     // Refuse a bad path before the picker asks for anything.
     request.check()?;
-    let (context, repository) = select_repo_context(ctx, args.repo).await?;
+    let target = select_repo_context(ctx, args.repo).await?;
     let response = ctx
-        .progress(
-            "Requesting",
-            client::forge_api(&ctx.paths, context, request, repository),
-        )
+        .progress("Requesting", client::forge_api(&ctx.paths, target, request))
         .await?;
     ctx.show(&ApiResponse(response), |ApiResponse(response)| {
         outln!("{response:#}");

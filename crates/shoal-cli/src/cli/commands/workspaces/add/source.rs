@@ -50,14 +50,15 @@ pub(super) async fn pick_add_source(
         Source::Issue => {
             let context = read_context(ctx, target).await?;
             let search = Search::picker();
-            let issues = client::list_items(&ctx.paths, context, ItemKind::Issue, search, None);
+            let issues = client::list_items(&ctx.paths, context.into(), ItemKind::Issue, search);
             let number = ui::pick_item(ctx, "Issue> ", "issues", issues.await?)?;
             return Ok(Some(ItemInput::Number(number)));
         }
         Source::Pull => {
             let context = read_context(ctx, target).await?;
             let search = Search::picker();
-            let pulls = client::list_items(&ctx.paths, context.clone(), ItemKind::Pr, search, None);
+            let pulls =
+                client::list_items(&ctx.paths, context.clone().into(), ItemKind::Pr, search);
             let number = ui::pick_item(ctx, "Pull request> ", "pull requests", pulls.await?)?;
             let pull = client::pull_request(&ctx.paths, context, ItemInput::Number(number));
             let pull = pull.await?;

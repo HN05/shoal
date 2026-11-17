@@ -103,7 +103,7 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
     ];
     for context in contexts {
         let error = manager
-            .open_issue(&context, issue.clone(), None, false, None)
+            .open_issue(&context.into(), issue.clone(), false, None)
             .await
             .unwrap_err();
         assert!(

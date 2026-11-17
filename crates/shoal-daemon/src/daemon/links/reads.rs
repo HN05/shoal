@@ -7,7 +7,7 @@ use super::place::Access;
 use crate::{
     daemon::{scope::Caller, workspace::Manager},
     forge::ForgeRepo,
-    protocol::ItemContext,
+    protocol::{ItemContext, RepoTarget},
 };
 use shoal_forge::account::Account;
 
@@ -33,15 +33,14 @@ impl Manager {
         self.place_forge(&place).await
     }
 
-    /// The forge of the repository of `context`, or of the one
-    /// `repository` names.
-    pub(in crate::daemon::links) async fn repository_forge(
+    /// The forge of the `target` repository, which `caller` reads.
+    pub(in crate::daemon::links) async fn read_forge(
         &self,
-        context: &ItemContext,
-        repository: Option<&str>,
+        target: &RepoTarget,
+        caller: Option<&Caller>,
     ) -> Result<ForgeRepo> {
-        let own = self.context_forge(context).await?;
-        self.named_forge(own, repository).await
+        let target = self.forge_target(target, None, Access::Read, caller);
+        Ok(target.await?.forge)
     }
 }
 

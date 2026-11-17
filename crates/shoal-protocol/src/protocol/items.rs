@@ -73,13 +73,12 @@ pub enum ItemMethod {
         space: SpaceSelector,
         item: Option<crate::forge::items::reference::ItemInput>,
     },
-    /// Open an issue in the context's repository, or the one `repository`
-    /// names, linking it to the workspace when `link` is set.
+    /// Open an issue in the target repository, linking it to the
+    /// workspace when `link` is set.
     OpenIssue {
         #[serde(flatten)]
-        context: ItemContext,
+        target: RepoTarget,
         issue: crate::forge::items::create::NewIssue,
-        repository: Option<String>,
         link: bool,
     },
     /// What merging the PR `item` names in the context's repository, or the
@@ -103,22 +102,19 @@ pub enum ItemMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         confirmed: Option<crate::model::ConfirmedWarning>,
     },
-    /// Issues or PRs of the context's repository, or the one `repository`
-    /// names, that `search` matches, answered in one or more `items` frames
-    /// and then `ok`.
+    /// Issues or PRs of the target repository that `search` matches,
+    /// answered in one or more `items` frames and then `ok`.
     ListItems {
         #[serde(flatten)]
-        context: ItemContext,
+        target: RepoTarget,
         kind: crate::forge::items::link::ItemKind,
         search: crate::forge::items::list::Search,
-        repository: Option<String>,
     },
-    /// The labels of the context's repository, or of the one `repository`
-    /// names, answered in one or more `labels` frames and then `ok`.
+    /// The labels of the target repository, answered in one or more
+    /// `labels` frames and then `ok`.
     Labels {
         #[serde(flatten)]
-        context: ItemContext,
-        repository: Option<String>,
+        target: RepoTarget,
     },
     /// Who the PR `item` names in the context's repository, or the space's
     /// linked PR, can ask for a review, answered in one or more `reviewers`
@@ -138,38 +134,32 @@ pub enum ItemMethod {
         selection: crate::forge::items::link::Selection,
         comments: bool,
     },
-    /// A request to the forge API of the context's repository, or the one
-    /// `repository` names, answered with the response's JSON text in one or
-    /// more `api_response` frames and then `ok`.
+    /// A request to the forge API of the target repository, answered with
+    /// the response's JSON text in one or more `api_response` frames and
+    /// then `ok`.
     ForgeApi {
         #[serde(flatten)]
-        context: ItemContext,
+        target: RepoTarget,
         request: crate::forge::raw::RawRequest,
-        repository: Option<String>,
     },
-    /// A file on the forge of the context's repository, or of the one
-    /// `repository` names, answered with its content type and bytes in one
-    /// or more `downloaded` frames and then `ok`.
+    /// A file on the forge of the target repository, answered with its
+    /// content type and bytes in one or more `downloaded` frames and then
+    /// `ok`.
     ForgeDownload {
         #[serde(flatten)]
-        context: ItemContext,
+        target: RepoTarget,
         url: String,
-        repository: Option<String>,
     },
-    /// What the forge of the context's repository, or of the one
-    /// `repository` names, supports, asking its server where the forge's
-    /// versions differ.
+    /// What the forge of the target repository supports, asking its server
+    /// where the forge's versions differ.
     Capabilities {
         #[serde(flatten)]
-        context: ItemContext,
-        repository: Option<String>,
+        target: RepoTarget,
     },
-    /// The reactions the forge of the context's repository, or of the one
-    /// `repository` names, allows.
+    /// The reactions the forge of the target repository allows.
     Reactions {
         #[serde(flatten)]
-        context: ItemContext,
-        repository: Option<String>,
+        target: RepoTarget,
     },
     /// The review thread of `comment` on the PR `item` names in the
     /// context's repository, or on the space's linked PR.
@@ -294,6 +284,29 @@ impl ItemContext {
     pub fn space(space: SpaceSelector) -> Self {
         Self::Space {
             space,
+            repository: None,
+        }
+    }
+}
+
+/// The repository a request about issues, PRs or CI runs acts in: the one
+/// `repository` names, as OWNER/NAME on the forge of the context's
+/// repository or by URL on any forge, else the one an item's, run's or
+/// workflow's URL names, else the context's own. A request without a
+/// context comes from nowhere, which a URL makes enough.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RepoTarget {
+    #[serde(flatten)]
+    pub context: Option<ItemContext>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository: Option<String>,
+}
+
+impl From<ItemContext> for RepoTarget {
+    /// The repository of `context`, or the one an item's URL names.
+    fn from(context: ItemContext) -> Self {
+        Self {
+            context: Some(context),
             repository: None,
         }
     }

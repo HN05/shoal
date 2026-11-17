@@ -472,7 +472,7 @@ fn apps_read_forge_items_through_the_daemon() {
     // repository's checkout.
     for context in [workspace(), checkout()] {
         let labels = runtime
-            .block_on(forge_reads::labels(&app, context.clone(), None))
+            .block_on(forge_reads::labels(&app, context.clone().into()))
             .unwrap();
         assert_eq!(
             labels.iter().map(|label| &label.name).collect::<Vec<_>>(),
@@ -537,10 +537,10 @@ fn apps_read_forge_items_through_the_daemon() {
 
     // What the CLI reads before it acts goes through the daemon too.
     runtime
-        .block_on(forge_reads::capabilities(&app, workspace(), None))
+        .block_on(forge_reads::capabilities(&app, workspace().into()))
         .unwrap();
     let reactions = runtime
-        .block_on(forge_reads::reactions(&app, checkout(), None))
+        .block_on(forge_reads::reactions(&app, checkout().into()))
         .unwrap();
     assert_eq!(reactions.names, ["+1", "heart"]);
     let kind = runtime
@@ -589,7 +589,7 @@ fn apps_read_forge_items_through_the_daemon() {
         .to_owned();
     let agent = app.clone().scope(scope.into());
     let labels = runtime
-        .block_on(forge_reads::labels(&agent, workspace(), None))
+        .block_on(forge_reads::labels(&agent, workspace().into()))
         .unwrap();
     assert_eq!(labels.len(), 1);
     let issue = runtime
@@ -605,7 +605,7 @@ fn apps_read_forge_items_through_the_daemon() {
         reads.iter().all(|request| request[2] == "token agenttoken"),
         "{reads:?}"
     );
-    let refused = runtime.block_on(forge_reads::labels(&agent, checkout(), None));
+    let refused = runtime.block_on(forge_reads::labels(&agent, checkout().into()));
     assert!(refused.is_err());
 
     // A scoped view fetches the agent's token once, for the PR and the logs
@@ -3381,11 +3381,19 @@ fn lists_search_another_repository_with_the_same_filters() {
     assert_eq!(listed[0]["url"], url, "{listed}");
     // A workspace process searches it as the agent account.
     assert_eq!(scoped(&fixture, &list)[0]["url"], url);
+    // Named by its URL, it needs no workspace or registered checkout.
+    let tool = fixture.web.replace("team/project", "team/tool");
+    let mut by_url = list;
+    by_url[3] = &tool;
+    let mut outside = fixture.command();
+    outside.current_dir(fixture.root.path());
+    assert_eq!(fixture.ok_from(&mut outside, &by_url)[0]["url"], url);
     assert_eq!(
         fixture.requests(),
         [
             json!([search, null, "token usertoken"]),
             json!([search, null, "token agenttoken"]),
+            json!([search, null, "token usertoken"]),
         ]
     );
 }

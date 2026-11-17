@@ -18,7 +18,7 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     links::{OpenOutcome, Updates},
     model::Relation,
-    protocol::{Body, ItemContext, ItemMethod},
+    protocol::{Body, ItemContext, ItemMethod, RepoTarget},
 };
 
 /// Link the `kind` item `item` names to `space` as `relation`, with the
@@ -127,19 +127,17 @@ pub async fn open_pull(
     request(daemon, method).await
 }
 
-/// Open `issue` in `context`'s repository, or in the one `repository`
-/// names, linking it to the space when `link`.
+/// Open `issue` in the `target` repository, linking it to the space when
+/// `link`.
 pub async fn open_issue(
     daemon: &impl Daemon,
-    context: ItemContext,
+    target: RepoTarget,
     issue: NewIssue,
-    repository: Option<String>,
     link: bool,
 ) -> Result<OpenOutcome> {
     let method = ItemMethod::OpenIssue {
-        context,
+        target,
         issue,
-        repository,
         link,
     };
     request(daemon, method).await

@@ -49,7 +49,7 @@ impl ForgeRepo {
     /// The repository `input` names: a remote or web URL, on any forge, or
     /// an `owner/repository` path on this repository's host.
     pub async fn resolve_named(&self, input: &str, hosts: &impl HostTypes) -> Result<Self> {
-        if input.contains(':') {
+        if Self::named_by_url(input) {
             return Self::resolve(input, hosts).await;
         }
         let path = remote_url::repository_path(input);

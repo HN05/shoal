@@ -57,7 +57,7 @@ async fn labelled(ctx: &Context, repo: &Repository, labels: &config::Issue) -> R
     )?;
     let context = issues::read_context(ctx, repo).await?;
     let search = Search::labelled(label);
-    let issues = client::list_items(&ctx.paths, context, ItemKind::Issue, search, None).await?;
+    let issues = client::list_items(&ctx.paths, context.into(), ItemKind::Issue, search).await?;
     ui::require_argument(ctx, "issue", "issue")?;
     let number = ui::pick_item(ctx, "Issue> ", &format!("issues labelled {label}"), issues)?;
     Ok(ItemInput::Number(number))

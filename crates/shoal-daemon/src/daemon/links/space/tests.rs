@@ -7,7 +7,7 @@ use crate::{
     },
     forge::items::create::NewIssue,
     model::{Chat, Repository},
-    protocol::{ItemContext, ItemMethod},
+    protocol::{ItemContext, ItemMethod, RepoTarget},
     test_support::repository,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -183,12 +183,11 @@ async fn a_change_from_a_checkout_is_made_by_a_chat_without_a_repository_acting_
     let master = chat(&manager, "master", None).await;
     let planning = chat(&manager, "planning", Some(&repos[0])).await;
     let open = || ItemMethod::OpenIssue {
-        context: ItemContext::Checkout(repos[0].id.clone()),
+        target: ItemContext::Checkout(repos[0].id.clone()).into(),
         issue: NewIssue {
             title: "Flaky".into(),
             ..NewIssue::default()
         },
-        repository: None,
         link: false,
     };
     let token = manager.chat_scope(&master.id).await.unwrap();
@@ -196,15 +195,15 @@ async fn a_change_from_a_checkout_is_made_by_a_chat_without_a_repository_acting_
     crate::daemon::scope::authorize(&manager, Some(&token), &mut method)
         .await
         .unwrap();
-    let ItemMethod::OpenIssue { context, .. } = method else {
+    let ItemMethod::OpenIssue { target, .. } = method else {
         unreachable!("the method stays an issue opening");
     };
-    let ItemContext::Space {
+    let Some(ItemContext::Space {
         space: chat,
         repository: Some(repository),
-    } = context
+    }) = target.context
     else {
-        panic!("expected the chat acting in the checkout: {context:?}");
+        panic!("expected the chat acting in the checkout: {target:?}");
     };
     assert_eq!(
         (chat, repository),
@@ -274,9 +273,11 @@ async fn a_chat_without_a_repository_opens_no_issue_elsewhere_unless_allowed_dir
         crate::daemon::test_support::configure(&manager, &config).await;
         let opened = manager
             .open_issue(
-                &ItemContext::space(SpaceSelector::id(&master.id)),
+                &RepoTarget {
+                    context: Some(ItemContext::space(SpaceSelector::id(&master.id))),
+                    repository: Some("https://github.com/other/unregistered".into()),
+                },
                 issue(),
-                Some("https://github.com/other/unregistered".into()),
                 false,
                 Some(&caller),
             )

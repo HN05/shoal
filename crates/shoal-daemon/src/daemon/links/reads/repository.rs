@@ -7,7 +7,7 @@ use crate::{
         capability::Capabilities, conventions::labels::Label,
         items::reaction::allowed::AllowedReactions,
     },
-    protocol::ItemContext,
+    protocol::RepoTarget,
 };
 use shoal_forge::{
     capability::CapabilityRequests, conventions::labels::LabelRequests,
@@ -15,40 +15,30 @@ use shoal_forge::{
 };
 
 impl Manager {
-    /// What the forge of the repository of `context`, or of the one
-    /// `repository` names, supports, asking its server where the forge's
-    /// versions differ.
+    /// What the forge of the `target` repository supports, asking its
+    /// server where the forge's versions differ.
     pub async fn capabilities(
         &self,
-        context: &ItemContext,
-        repository: Option<&str>,
+        target: &RepoTarget,
         caller: Option<&Caller>,
     ) -> Result<Capabilities> {
-        let forge = self.repository_forge(context, repository).await?;
+        let forge = self.read_forge(target, caller).await?;
         forge.server_capabilities(&self.read_account(caller)).await
     }
 
-    /// The reactions the forge of the repository of `context`, or of the
-    /// one `repository` names, allows.
+    /// The reactions the forge of the `target` repository allows.
     pub async fn reactions(
         &self,
-        context: &ItemContext,
-        repository: Option<&str>,
+        target: &RepoTarget,
         caller: Option<&Caller>,
     ) -> Result<AllowedReactions> {
-        let forge = self.repository_forge(context, repository).await?;
+        let forge = self.read_forge(target, caller).await?;
         forge.allowed_reactions(&self.read_account(caller)).await
     }
 
-    /// The labels of the repository of `context`, or of the one
-    /// `repository` names.
-    pub async fn labels(
-        &self,
-        context: &ItemContext,
-        repository: Option<&str>,
-        caller: Option<&Caller>,
-    ) -> Result<Vec<Label>> {
-        let forge = self.repository_forge(context, repository).await?;
+    /// The labels of the `target` repository.
+    pub async fn labels(&self, target: &RepoTarget, caller: Option<&Caller>) -> Result<Vec<Label>> {
+        let forge = self.read_forge(target, caller).await?;
         forge.labels(&self.read_account(caller)).await
     }
 }

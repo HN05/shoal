@@ -12,9 +12,9 @@ use crate::{
 };
 
 pub(super) async fn labels(ctx: &Context, repository: RepositoryArgs) -> Result<i32> {
-    let (context, named) = select_repo_context(ctx, repository.repo).await?;
+    let target = select_repo_context(ctx, repository.repo).await?;
     let labels = ctx
-        .progress("Reading labels", client::labels(&ctx.paths, context, named))
+        .progress("Reading labels", client::labels(&ctx.paths, target))
         .await?;
     ctx.show(&labels, |labels| render(labels))?;
     Ok(0)

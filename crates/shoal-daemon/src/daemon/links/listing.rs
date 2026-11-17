@@ -6,24 +6,22 @@ use anyhow::Result;
 use crate::{
     daemon::{scope::Caller, workspace::Manager},
     forge::items::{item::Item, link::ItemKind, list::Search},
-    protocol::ItemContext,
+    protocol::RepoTarget,
 };
 use shoal_forge::items::list::ListRequests;
 
 impl Manager {
-    /// Issues or PRs that `search` matches in the repository of `context`,
-    /// or the one `repository` names, read as the agent account for a
-    /// scoped `caller` and as the user's own logins for the user. Only
-    /// unscoped callers list from a registered checkout.
+    /// Issues or PRs that `search` matches in the `target` repository, read
+    /// as the agent account for a scoped `caller` and as the user's own
+    /// logins for the user.
     pub async fn list_items(
         &self,
-        context: &ItemContext,
+        target: &RepoTarget,
         kind: ItemKind,
         search: &Search,
-        repository: Option<&str>,
         caller: Option<&Caller>,
     ) -> Result<Vec<Item>> {
-        let forge = self.repository_forge(context, repository).await?;
+        let forge = self.read_forge(target, caller).await?;
         forge.list(&self.read_account(caller), kind, search).await
     }
 }

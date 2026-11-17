@@ -115,7 +115,7 @@ impl Reverting {
     /// Whether the forge of the space's repository reverts PRs.
     async fn forge_reverts(&self, ctx: &Context) -> Result<bool> {
         let context = ItemContext::space(SpaceSelector::id(self.id()));
-        let capabilities = client::capabilities(&ctx.paths, context, None).await?;
+        let capabilities = client::capabilities(&ctx.paths, context.into()).await?;
         Ok(capabilities.supports(Capability::RevertPrs))
     }
 }

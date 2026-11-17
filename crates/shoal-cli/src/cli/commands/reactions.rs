@@ -12,8 +12,8 @@ use crate::{
 };
 
 pub(super) async fn reactions(ctx: &Context, repository: RepositoryArgs) -> Result<i32> {
-    let (context, named) = select_repo_context(ctx, repository.repo).await?;
-    let read = client::reactions(&ctx.paths, context, named);
+    let target = select_repo_context(ctx, repository.repo).await?;
+    let read = client::reactions(&ctx.paths, target);
     let reactions = ctx.progress("Reading reactions", read).await?;
     ctx.show(&reactions, render)?;
     Ok(0)

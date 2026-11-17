@@ -54,7 +54,7 @@ pub use frames::{
     text_pieces, write,
 };
 pub use holds::HoldMethod;
-pub use items::{DownloadPiece, ItemContext, ItemMethod, ViewPiece};
+pub use items::{DownloadPiece, ItemContext, ItemMethod, RepoTarget, ViewPiece};
 pub use launches::LaunchMethod;
 pub use notifications::NotificationMethod;
 pub use operations::OperationMethod;

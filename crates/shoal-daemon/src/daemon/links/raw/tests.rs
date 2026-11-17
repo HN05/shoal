@@ -6,7 +6,7 @@ use crate::{
         test_support::{configure, git, manager, repository},
     },
     forge::raw::{HttpMethod, RawRequest},
-    protocol::ItemContext,
+    protocol::{ItemContext, RepoTarget},
 };
 use shoal_forge::test_support::Server;
 use shoal_protocol::space_names::SpaceSelector;
@@ -34,7 +34,7 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
         &format!("[machine.forges.\"{host}\"]\ntype = \"github\"\nagent_token = \"agent\"\n"),
     )
     .await;
-    let context = ItemContext::space(SpaceSelector::id(&workspace.id));
+    let context = RepoTarget::from(ItemContext::space(SpaceSelector::id(&workspace.id)));
     let caller = Caller {
         space_id: workspace.id.clone(),
         execution: None,
@@ -58,12 +58,12 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
     };
 
     let read = manager
-        .forge_api(&context, &request(HttpMethod::Get), None, Some(&caller))
+        .forge_api(&context, &request(HttpMethod::Get), Some(&caller))
         .await
         .unwrap();
     assert_eq!(read, json!({"ok": true}));
     manager
-        .forge_api(&context, &request(HttpMethod::Patch), None, Some(&caller))
+        .forge_api(&context, &request(HttpMethod::Patch), Some(&caller))
         .await
         .unwrap_err();
     assert_eq!(sent(), ["GET /api/v3/repos/team/repo"]);
@@ -75,7 +75,7 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
     };
     permissions("propose").await.unwrap();
     let held = manager
-        .forge_api(&context, &request(HttpMethod::Patch), None, Some(&caller))
+        .forge_api(&context, &request(HttpMethod::Patch), Some(&caller))
         .await
         .unwrap_err();
     let crate::daemon::approvals::Undecided(proposed) = held.downcast().unwrap();
@@ -84,36 +84,26 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
         .await
         .unwrap();
     manager
-        .forge_api(&context, &request(HttpMethod::Patch), None, Some(&caller))
+        .forge_api(&context, &request(HttpMethod::Patch), Some(&caller))
         .await
         .unwrap();
     assert_eq!(sent()[1], "PATCH /api/v3/repos/team/repo");
 
     permissions("direct").await.unwrap();
     manager
-        .forge_api(&context, &request(HttpMethod::Patch), None, Some(&caller))
+        .forge_api(&context, &request(HttpMethod::Patch), Some(&caller))
         .await
         .unwrap();
     assert_eq!(sent()[2], "PATCH /api/v3/repos/team/repo");
 
     // Another repository is only read, whatever the workspace's allows.
     let read = manager
-        .forge_api(
-            &context,
-            &request(HttpMethod::Get),
-            Some("team/tool"),
-            Some(&caller),
-        )
+        .forge_api(&tool(&context), &request(HttpMethod::Get), Some(&caller))
         .await
         .unwrap();
     assert_eq!(read, json!({"ok": true}));
     manager
-        .forge_api(
-            &context,
-            &request(HttpMethod::Patch),
-            Some("team/tool"),
-            Some(&caller),
-        )
+        .forge_api(&tool(&context), &request(HttpMethod::Patch), Some(&caller))
         .await
         .unwrap_err();
     let sent = sent();
@@ -158,7 +148,7 @@ async fn a_chats_agent_reads_as_its_account_and_writes_only_when_allowed() {
         ),
     )
     .await;
-    let context = ItemContext::space(SpaceSelector::id(&chat.id));
+    let context = RepoTarget::from(ItemContext::space(SpaceSelector::id(&chat.id)));
     let caller = Caller {
         space_id: chat.id.clone(),
         execution: None,
@@ -173,11 +163,11 @@ async fn a_chats_agent_reads_as_its_account_and_writes_only_when_allowed() {
 
     // Its agent reads as the agent account, as a workspace's does.
     manager
-        .forge_api(&context, &request(HttpMethod::Get), None, Some(&caller))
+        .forge_api(&context, &request(HttpMethod::Get), Some(&caller))
         .await
         .unwrap();
     manager
-        .forge_api(&context, &request(HttpMethod::Patch), None, Some(&caller))
+        .forge_api(&context, &request(HttpMethod::Patch), Some(&caller))
         .await
         .unwrap_err();
     manager
@@ -188,21 +178,16 @@ async fn a_chats_agent_reads_as_its_account_and_writes_only_when_allowed() {
         .await
         .unwrap();
     manager
-        .forge_api(&context, &request(HttpMethod::Patch), None, Some(&caller))
+        .forge_api(&context, &request(HttpMethod::Patch), Some(&caller))
         .await
         .unwrap();
     manager
-        .forge_api(
-            &context,
-            &request(HttpMethod::Patch),
-            Some("team/tool"),
-            Some(&caller),
-        )
+        .forge_api(&tool(&context), &request(HttpMethod::Patch), Some(&caller))
         .await
         .unwrap_err();
     // The user's own command in the chat sends with the user's login.
     manager
-        .forge_api(&context, &request(HttpMethod::Get), None, None)
+        .forge_api(&context, &request(HttpMethod::Get), None)
         .await
         .unwrap();
     let sent: Vec<_> = (server.received().into_iter())
@@ -261,9 +246,8 @@ async fn agents_download_from_their_forge_as_their_account() {
 
     let download = manager
         .forge_download(
-            &ItemContext::space(SpaceSelector::id(&workspace.id)),
+            &ItemContext::space(SpaceSelector::id(&workspace.id)).into(),
             url,
-            None,
             Some(&caller),
         )
         .await
@@ -272,9 +256,8 @@ async fn agents_download_from_their_forge_as_their_account() {
     assert_eq!(download.bytes, b"PNG");
     manager
         .forge_download(
-            &ItemContext::space(SpaceSelector::id(&workspace.id)),
+            &ItemContext::space(SpaceSelector::id(&workspace.id)).into(),
             "https://example.com/shot.png",
-            None,
             Some(&caller),
         )
         .await
@@ -283,4 +266,12 @@ async fn agents_download_from_their_forge_as_their_account() {
     assert_eq!(received.len(), 1, "{received:?}");
     assert_eq!(received[0].line, "GET /user-attachments/assets/abc");
     assert_eq!(received[0].header("Authorization"), Some("Bearer agent"));
+}
+
+/// `context` naming the repository `team/tool` on its forge.
+fn tool(context: &RepoTarget) -> RepoTarget {
+    RepoTarget {
+        repository: Some("team/tool".into()),
+        ..context.clone()
+    }
 }
