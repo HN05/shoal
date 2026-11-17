@@ -75,6 +75,31 @@ fn a_chat_agent_runs_a_workspace_agents_hooks_without_what_needs_a_worktree() {
 }
 
 #[test]
+fn claude_codes_own_timer_tools_are_refused_with_shoals_timer() {
+    for space in [AgentSpace::Chat, WORKSPACE.into()] {
+        let settings = settings_of(&Claude.hook_args(space, false).unwrap());
+        let groups = settings["hooks"]["PreToolUse"].as_array().unwrap();
+        let [group] = groups.as_slice() else {
+            panic!("{groups:?}");
+        };
+        let matcher = group["matcher"].as_str().unwrap();
+        for tool in ["ScheduleWakeup", "CronCreate", "CronDelete"] {
+            assert!(matcher.split('|').any(|name| name == tool), "{matcher}");
+        }
+        let command = group["hooks"][0]["command"].as_str().unwrap();
+        let output = std::process::Command::new("sh")
+            .args(["-c", command])
+            .output()
+            .unwrap();
+        let printed: Value = serde_json::from_slice(&output.stdout).unwrap();
+        let decision = &printed["hookSpecificOutput"];
+        assert_eq!(decision["permissionDecision"], "deny", "{printed}");
+        let reason = decision["permissionDecisionReason"].as_str().unwrap();
+        assert!(reason.contains("shoal sleep --for"), "{reason}");
+    }
+}
+
+#[test]
 fn proxied_settings_send_api_requests_to_the_proxy() {
     // The hooks are the same; the wrapper's merge adds the proxy's URL.
     assert_eq!(

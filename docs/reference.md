@@ -629,8 +629,10 @@ started, counts as expired; one that ended a turn has the
 [overload protection](#overload-protection) does, records an `agent_stopped`
 notification, and restores the agent once an update arrives for it, though its
 assignment is done and whatever `[machine.overload.recovery]` says. Timers the agent
-keeps itself, such as Claude Code's `ScheduleWakeup` or `/loop`, end with it,
-which is why `[sleep] idle` is opt-in.
+keeps itself end with it, which is why `[sleep] idle` is opt-in. Claude Code
+agents Shoal launches are refused its timer tools, `ScheduleWakeup`,
+`CronCreate` and `CronDelete`, including in a `/loop`, with a reason naming the
+timer of [`shoal sleep --for`](#idle-wakes), which Shoal keeps.
 
 ### Idle wakes
 

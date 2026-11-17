@@ -119,7 +119,8 @@ impl Integration for Claude {
 
 /// One `--settings` carries every hook; Claude Code merges it with the user's
 /// own settings, and a later `--settings` would replace it. Every agent
-/// reports its turn's state and may run the commands that finish its
+/// reports its turn's state, is refused the timer tools whose timers its
+/// stops would end, and may run the commands that finish its
 /// assignment; a workspace's agent also gets the worktree and subagent hooks
 /// and tells auto mode that its branch is its own. For a proxied agent the
 /// wrapper merges these with any others into the one that names the
@@ -136,7 +137,8 @@ fn settings(space: AgentSpace) -> std::io::Result<Vec<OsString>> {
         .chain(state_hooks(&shoal))
         .chain([hooks::plan(&shoal, IntegrationKind::Claude, plan::TOOLS)])
         .chain(subagents)
-        .chain(wake_hooks(&shoal));
+        .chain(wake_hooks(&shoal))
+        .chain([timers::refused()]);
     let mut settings = json!({
         "hooks": hooks::by_event(groups),
         "permissions": {"allow": lifecycle_rules()},
@@ -303,6 +305,7 @@ const PROMPT_CACHE_1H: &str = "ENABLE_PROMPT_CACHING_1H";
 mod plan;
 mod prompt_cache;
 mod settings;
+mod timers;
 
 #[cfg(test)]
 mod tests;

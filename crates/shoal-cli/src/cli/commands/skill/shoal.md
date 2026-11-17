@@ -265,8 +265,9 @@ or the user wakes it. `--for` or `--until` also sets the space's timer, which
 replaces the one it had: when it is due, the agent receives the text after
 `--` as a message, or that the timer fired, asleep or not, through restores
 and daemon restarts, until `--undo` or `shoal done` cancels it. A loop sets
-its next timer each turn. A coordinator puts a space below to sleep with
-`shoal sleep <space>`. An agent Shoal stopped on its own is asleep; `list` and
+its next timer each turn; Claude Code's own timer tools are refused, since
+Shoal's stops end their timers. A coordinator puts a space below to sleep
+with `shoal sleep <space>`. An agent Shoal stopped on its own is asleep; `list` and
 `status` show it with why and what wakes it. One stopped by `shoal stop`, or
 that quit, stays stopped until `shoal restore`.
 

@@ -335,7 +335,10 @@ between turns, and an update restores it although the assignment is done,
 since Shoal rather than the agent ended it. Load plays no part, so the recovery
 policy does not apply. Stopping any idle agent works the same way and is
 opt-in (`[sleep] idle`), since timers the agent keeps itself end with it, which
-only a done assignment leaves nothing to do. Either stops an agent once its
+only a done assignment leaves nothing to do; Claude Code's timer tools are
+refused by a hook that reads only the tool's name and names `shoal sleep`'s
+timer, so the model, also in a `/loop` the user types, uses the one Shoal
+keeps. Either stops an agent once its
 prompt cache has expired and not before, since a resumed session's first
 request writes most of the cache again, and only a heavy one, as only heavy
 agents stop for load: a light agent uses too little of the machine to be
