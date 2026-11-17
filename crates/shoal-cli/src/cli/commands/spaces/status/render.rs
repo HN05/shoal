@@ -156,7 +156,7 @@ fn render_chat(chat: &Chat, palette: Palette) {
     if chat.running {
         render_agent_state(chat.agent_state);
     }
-    render_sleep(chat.sleep);
+    render_sleep(chat.sleep, chat.wake_at);
     render_asleep(chat.asleep.as_ref(), chat.number);
     split::render(&chat.parent, &chat.children);
     render_holds(&chat.holds);
@@ -304,7 +304,7 @@ fn render_jobs(status: &SpaceStatus, palette: Palette) {
 /// The turn state the workspace's agent reported.
 fn render_agent(status: &WorktreeStatus) {
     render_agent_state(status.workspace.agent_state);
-    render_sleep(status.workspace.sleep);
+    render_sleep(status.workspace.sleep, status.workspace.wake_at);
     render_asleep(status.workspace.asleep.as_ref(), status.workspace.number);
 }
 
@@ -331,16 +331,21 @@ fn render_agent_state(agent_state: Option<AgentStatus>) {
     }
 }
 
-/// How long a space's agent sleeps, while it does.
-fn render_sleep(sleep: Option<crate::state::Sleep>) {
-    let Some(sleep) = sleep else {
+/// How long a space's agent sleeps, and when its timer wakes it, while
+/// either holds.
+fn render_sleep(sleep: Option<crate::state::Sleep>, wake_at: Option<crate::time::UnixTime>) {
+    if sleep.is_none() && wake_at.is_none() {
         return;
-    };
+    }
     let until = match sleep {
-        crate::state::Sleep::Turn => "until the next turn",
-        crate::state::Sleep::Permanent => "permanent",
+        Some(crate::state::Sleep::Turn) => "until the next turn",
+        Some(crate::state::Sleep::Permanent) => "permanent",
+        None => "awake",
     };
-    outln!("Sleep:         {until}");
+    match wake_at {
+        Some(at) => outln!("Sleep:         {until}; timer at {}", at.local_minutes()),
+        None => outln!("Sleep:         {until}"),
+    }
 }
 
 /// Why Shoal put the agent of the space numbered `number` to sleep, what

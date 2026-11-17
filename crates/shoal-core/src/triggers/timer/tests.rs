@@ -161,3 +161,14 @@ fn refuses_what_no_timer_fires_on() {
         assert!(text.parse::<ClockTime>().is_err(), "{text}");
     }
 }
+
+#[test]
+fn a_clock_time_comes_next_within_a_day_on_the_local_clock() {
+    let time: ClockTime = "14:30".parse().unwrap();
+    let from = UnixTime::from_seconds(1_795_000_000);
+    let next = time.next_local(from);
+    assert!(next > from && next.duration_since(from).as_secs() <= 25 * 3600);
+    assert!(next.local_minutes().ends_with(" 14:30"), "{next}");
+    // At that time, the next is the following day's.
+    assert!(time.next_local(next) > next + std::time::Duration::from_secs(22 * 3600));
+}

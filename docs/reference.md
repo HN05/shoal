@@ -637,7 +637,8 @@ which is why `[sleep] idle` is opt-in.
 ```sh
 shoal sleep                 # Asleep from the end of the turn until the next
 shoal sleep --permanent     # Back to sleep after every turn until --undo
-shoal sleep --undo [space]  # Awake; ends either kind of sleep and wakes it
+shoal sleep --for 20m -- "Check whether CI finished"   # Also a timer; or --until 14:30
+shoal sleep --undo [space]  # Awake; ends either kind of sleep, cancels the timer and wakes it
 ```
 
 As a backup to the wakes its updates bring, Shoal wakes an agent that has
@@ -665,6 +666,18 @@ agent: its restore then waits only for its turn in the agent queue. The user or
 a coordinator can run either for a space below. `list` shows a sleeping idle
 agent as `asleep`, and `status` adds a `Sleep` line; `--json` gives `sleep`,
 `turn` or `permanent`.
+
+`--for` with a length such as `20m` or `1h30m`, or `--until` with the next
+time the local clock shows, `HH:MM`, also sets the space's timer, replacing the
+one it had: when it is due, Shoal sends the agent the text after `--` as an
+[agent message](#agent-messages), or says only that the timer fired, which
+reaches an awake agent through its hooks and restores an asleep one. An update
+or message that comes first wakes the agent and leaves the timer set. The timer
+is kept through agent stops, restores and daemon restarts until it fires,
+`shoal sleep --undo` cancels it, or the space is [done](#assignment-completion)
+or removed. There is no recurring form: a loop sets its next timer at the end of
+each turn. The `Sleep` line of `status` names when the timer fires, and
+`--json` gives it as `wake_at`.
 
 ### Apps
 

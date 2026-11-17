@@ -84,11 +84,11 @@ pub enum CoordinationCommand {
         space: Option<SpaceSelector>,
     },
     /// Put a space's agent to sleep from the end of its turn until its next
-    /// turn starts.
+    /// turn starts; --for and --until also set a timer that wakes it.
     ///
     /// Shoal does not wake a sleeping agent for having stayed idle, and
     /// stops it once that costs no prompt cache, saving it to come back on
-    /// its own. Updates, messages and the user still wake it.
+    /// its own. Updates, messages, the user and its timer still wake it.
     Sleep {
         /// Space, a workspace or chat; defaults to the current workspace or
         /// chat, or a picker.
@@ -96,9 +96,16 @@ pub enum CoordinationCommand {
         /// Put the agent back to sleep after every turn until --undo.
         #[arg(long, conflicts_with = "undo")]
         permanent: bool,
-        /// End either kind of sleep and wake the agent if it stopped.
+        /// End either kind of sleep, cancel the timer and wake the agent if
+        /// it stopped.
         #[arg(long)]
         undo: bool,
+        #[command(flatten)]
+        timer: SleepTimerArgs,
+        /// What the agent receives when its timer fires, such as "Check
+        /// whether CI finished"; without it, only that the timer fired.
+        #[arg(last = true, value_name = "MESSAGE", requires = "timer")]
+        message: Vec<String>,
     },
     /// Set a space's priority, which ranks its queued work ahead of
     /// everything else.
@@ -227,6 +234,19 @@ pub enum MessagesCommand {
         #[arg(short = 'r', long = "repo", num_args = 0..=1, value_name = "REPOSITORY")]
         repository: Option<Option<String>>,
     },
+}
+
+// Arguments of `shoal sleep` that set the agent's timer, replacing the one
+// it had; a doc comment would replace the command's help.
+#[derive(Debug, Args)]
+#[group(id = "timer", multiple = false, conflicts_with = "undo")]
+pub struct SleepTimerArgs {
+    /// Wake the agent after this long, such as 20m or 1h30m.
+    #[arg(long = "for", value_name = "DURATION")]
+    pub after: Option<crate::config::span::Span>,
+    /// Wake the agent when the local clock next shows this time, HH:MM.
+    #[arg(long, value_name = "HH:MM")]
+    pub until: Option<shoal_core::triggers::timer::ClockTime>,
 }
 
 // Arguments of `shoal questions ask` and the hidden `shoal ask`.

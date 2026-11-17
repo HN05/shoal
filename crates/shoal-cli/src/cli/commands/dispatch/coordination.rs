@@ -137,13 +137,16 @@ pub(in crate::cli::commands) async fn run(
             space,
             permanent,
             undo,
+            timer,
+            message,
         } => {
             let sleep = match (undo, permanent) {
                 (true, _) => None,
                 (false, true) => Some(crate::state::Sleep::Permanent),
                 (false, false) => Some(crate::state::Sleep::Turn),
             };
-            sleep::run(&ctx, space, sleep).await
+            let timer = sleep::timer(&timer, &message, crate::time::UnixTime::now());
+            sleep::run(&ctx, space, sleep, timer).await
         }
         CoordinationCommand::Priority { priority, space } => {
             priority::run(&ctx, space, priority).await

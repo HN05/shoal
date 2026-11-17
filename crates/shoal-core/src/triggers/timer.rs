@@ -297,6 +297,22 @@ impl Day {
     }
 }
 
+impl ClockTime {
+    /// The first time after `from` that the local clock shows this time,
+    /// as a daily timer fires at it.
+    pub fn next_local(self, from: UnixTime) -> UnixTime {
+        let daily = Timer {
+            schedule: Schedule::At {
+                times: vec![self],
+                days: Day::ALL.to_vec(),
+            },
+            timezone: None,
+            catch_up: Span::from_secs(0),
+        };
+        daily.next(from, None)
+    }
+}
+
 impl FromStr for ClockTime {
     type Err = anyhow::Error;
 
