@@ -1,41 +1,41 @@
-//! The session a new agent starts from a fork of: the one a workspace's
-//! agent reported last, which its hooks keep for `shoal restore`.
+//! The session a new agent starts from a fork of: the one a space's agent
+//! reported last, which its hooks keep for `shoal restore`.
 use anyhow::{Context as _, Result, bail};
 
 use super::super::Manager;
 use crate::{
     execution::recovery,
-    model::{AgentSession, Workspace},
+    model::{AgentSession, Space},
 };
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// The session of the agent in `selector` that a fork starts from: that
-    /// of the agent execution `caller` runs there, else of the workspace's
-    /// only agent.
+    /// of the agent execution `caller` runs there, else of the space's only
+    /// agent.
     pub(crate) async fn agent_session(
         &self,
         selector: &SpaceSelector,
         caller: Option<&ExecutionId>,
     ) -> Result<AgentSession> {
-        let workspace = self.workspace(selector).await?;
-        let (execution, agent) = self.forked_agent(&workspace, caller).await?;
-        let session = recovery::reported_session(&self.paths, &workspace.id, &execution)
-            .with_context(|| {
+        let space = self.space(selector).await?;
+        let (execution, agent) = self.forked_agent(&space, caller).await?;
+        let session =
+            recovery::reported_session(&self.paths, &space.id, &execution).with_context(|| {
                 format!(
                     "{agent} in {} has not reported a session to fork",
-                    workspace.name
+                    space.name
                 )
             })?;
         Ok(AgentSession { agent, session })
     }
 
-    /// The execution and name of the agent in `workspace` that a fork starts
+    /// The execution and name of the agent in `space` that a fork starts
     /// from, refusing to choose between several.
     async fn forked_agent(
         &self,
-        workspace: &Workspace,
+        space: &Space,
         caller: Option<&ExecutionId>,
     ) -> Result<(ExecutionId, crate::agent::Agent)> {
         let mut running: Vec<(ExecutionId, crate::agent::Agent)> = self
@@ -43,7 +43,7 @@ impl Manager {
             .with_agents(|agents| {
                 agents
                     .iter()
-                    .filter(|(_, agent)| agent.workspace_id == workspace.id)
+                    .filter(|(_, agent)| agent.workspace_id == space.id)
                     // Named as `--agent` and recovery records name it.
                     .map(|(id, agent)| (id.clone(), agent.name.normalized()))
                     .collect()
@@ -54,10 +54,10 @@ impl Manager {
         }
         match running.len() {
             1 => Ok(running.swap_remove(0)),
-            0 => bail!("{} has no running agent to fork", workspace.name),
+            0 => bail!("{} has no running agent to fork", space.name),
             _ => bail!(
                 "{} runs several agents; fork one from inside it",
-                workspace.name
+                space.name
             ),
         }
     }

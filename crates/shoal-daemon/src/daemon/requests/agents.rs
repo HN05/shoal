@@ -181,9 +181,9 @@ pub(super) async fn handle(
             manager.record_user_interaction(caller, &space).await;
             Body::Ok
         }
-        AgentMethod::AgentSession { workspace } => Body::AgentSession(
+        AgentMethod::AgentSession { space } => Body::AgentSession(
             manager
-                .agent_session(&workspace, caller.and_then(Caller::execution_id))
+                .agent_session(&space, caller.and_then(Caller::execution_id))
                 .await?,
         ),
         AgentMethod::SendAgentMessage {
@@ -243,9 +243,9 @@ impl Scoped for AgentMethod {
     ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             AgentMethod::GitCredential { .. } => None,
-            AgentMethod::AwaitAgentWake { workspace, .. }
-            | AgentMethod::AgentSession { workspace } => Some(workspace),
-            AgentMethod::AgentMessages { space }
+            AgentMethod::AwaitAgentWake { workspace, .. } => Some(workspace),
+            AgentMethod::AgentSession { space }
+            | AgentMethod::AgentMessages { space }
             | AgentMethod::MarkAgentMessagesDelivered { space, .. }
             | AgentMethod::AgentUpdates { space }
             | AgentMethod::WaitAgentUpdates { space }

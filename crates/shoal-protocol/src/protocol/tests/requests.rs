@@ -213,7 +213,7 @@ const REQUESTS: &[&str] = &[
     r#"{"git_credential":{"host":"git.example.com"}}"#,
     r#"{"agent_updates":{"space":"fix"}}"#,
     r#"{"wait_agent_updates":{"space":"app-chat"}}"#,
-    r#"{"agent_session":{"workspace":"fix"}}"#,
+    r#"{"agent_session":{"space":"app-chat"}}"#,
     // Questions.
     r#"{"ask_question":{"space":"fix","ask":{"question":"Which?","recommendation":"A","choices":["A","B"]}}}"#,
     r#"{"ask_in_chat":{"space":"fix"}}"#,

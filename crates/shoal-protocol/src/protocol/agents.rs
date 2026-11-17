@@ -155,10 +155,10 @@ pub enum AgentMethod {
         space: SpaceSelector,
         execution: ExecutionId,
     },
-    /// The session of the workspace's agent that a fork starts from: the
+    /// The session of the space's agent that a fork starts from: the
     /// caller's own agent there, else its only one.
     AgentSession {
-        workspace: SpaceSelector,
+        space: SpaceSelector,
     },
     /// A message to the agents of a workspace or running chat, answered
     /// with the space it reached.
