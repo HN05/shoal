@@ -168,7 +168,8 @@ impl Manager {
 
     /// Whether something will wake the agent of the space `id` once it
     /// sleeps: an open PR it watches or the CI runs of a merge it follows,
-    /// a blocker, an open question or a request waiting for a decision.
+    /// a blocker, an open question, a request waiting for a decision or
+    /// its timer.
     async fn awaits_wake(&self, id: &SpaceId) -> Result<bool> {
         let space = id.to_owned();
         if self
@@ -178,7 +179,9 @@ impl Manager {
         {
             return Ok(true);
         }
-        Ok(self.space_blocked(id).await? || self.has_open_questions(id).await?)
+        Ok(self.space_blocked(id).await?
+            || self.has_open_questions(id).await?
+            || self.wake_timer_set(id).await?)
     }
 }
 

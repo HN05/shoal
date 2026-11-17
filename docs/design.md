@@ -363,8 +363,8 @@ removed. A loop sets its next timer each turn, so Shoal parses no recurring
 schedule. Queued work that
 needs a slot or memory may also put an idle agent to sleep, lowest rank and
 priority first and never above the entry's priority, but only one something
-will wake (a watched open PR, a blocker, an open question or a pending
-approval), so no sleep strands an agent, and never a light one, which frees
+will wake (a watched open PR, a blocker, an open question, a pending
+approval or a timer), so no sleep strands an agent, and never a light one, which frees
 too little. When a stop costs no cache depends on the schedule: `balanced` and
 `cache` wait for the cache to expire, or for CI the agent waits for that this
 machine's runner is expected to run longer than the cache lives, estimated

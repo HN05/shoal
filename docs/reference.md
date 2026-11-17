@@ -608,8 +608,8 @@ repository's `agent.max_heavy_running` holds it, and for an entry that waits for
 heavy slot one that holds one, which a done space's agent does not, once that costs
 no prompt cache, as
 for [`shoal sleep`](#idle-wakes). Only an agent something will wake sleeps for
-this: one whose space watches an open PR, is blocked, or has an open question
-or a request waiting for a decision. Light agents keep running, in a workspace
+this: one whose space watches an open PR, is blocked, or has an open question,
+a request waiting for a decision or a [timer](#idle-wakes). Light agents keep running, in a workspace
 or a chat, and an agent woken from its sleep works its turn before it can
 sleep again.
 

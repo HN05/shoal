@@ -793,3 +793,44 @@ async fn an_agent_something_will_wake_sleeps_to_make_room_for_queued_work() {
     assert!(!*ranked_higher.stop.borrow(), "a higher priority keeps it");
     assert!(!*nothing_wakes.stop.borrow(), "nothing would wake it");
 }
+
+/// An agent whose turn ended its sleep but left its timer set sleeps to
+/// make room, since the timer will wake it.
+#[tokio::test]
+async fn an_agent_its_timer_will_wake_sleeps_to_make_room() {
+    let (root, manager) = manager().await;
+    manager.publish_config(crate::test_support::global_config(
+        "[machine]\nmax_heavy_agents = 1\n[machine.overload.disk]\nenabled = false",
+    ));
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (workspace, execution) = agent(&manager, &repo.id, "timed", UNFINISHED).await;
+    let selector = SpaceSelector::id(&workspace.id);
+    let at = UnixTime::now() + std::time::Duration::from_secs(20 * 60);
+    let timer = shoal_protocol::sleep::WakeTimer { at, message: None };
+    (manager.sleep(&selector, Some(Sleep::Turn), Some(timer)))
+        .await
+        .unwrap();
+    for state in [AgentState::Working, AgentState::Idle] {
+        (manager.set_agent_state(&selector, state, Some(execution.plan.id.clone()), None))
+            .await
+            .unwrap();
+    }
+    assert_eq!(manager.space(&selector).await.unwrap().sleep, None);
+    cache_expires_in(&manager, &workspace, 0).await;
+    manager
+        .queue_add(crate::daemon::workspace::agent_queue::tests::request(
+            &repo, "later", false,
+        ))
+        .await
+        .unwrap();
+    manager.dispatch_queue().await.unwrap();
+    manager.stop_idle_agents().await.unwrap();
+    assert_eq!(
+        stop_reason(&manager, &execution).await,
+        Some(Protection::making_room().reason)
+    );
+}
