@@ -1,4 +1,9 @@
-use std::{collections::BTreeMap, fs, path::Path, time::Duration};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use anyhow::{Context as _, Result};
 
@@ -34,7 +39,9 @@ async fn git_fixtures_ignore_inherited_git_variables() -> Result<()> {
     .await
     .context("fixture repository creation stalled")??;
     assert!(output.status.success(), "{}", printed(&output));
-    assert_eq!(snapshot(&sentinel)?, before);
+    let after = snapshot(&sentinel)?;
+    let changed = changed_files(&before, &after);
+    assert!(changed.is_empty(), "the sentinel changed: {changed:#?}");
     Ok(())
 }
 
@@ -57,7 +64,7 @@ fn git_fixtures_ignore_inherited_git_variables_child() -> Result<()> {
 }
 
 /// Every file below `dir` with its contents.
-fn snapshot(dir: &Path) -> Result<BTreeMap<std::path::PathBuf, Vec<u8>>> {
+fn snapshot(dir: &Path) -> Result<BTreeMap<PathBuf, Vec<u8>>> {
     let mut files = BTreeMap::new();
     let mut pending = vec![dir.to_path_buf()];
     while let Some(dir) = pending.pop() {
@@ -71,6 +78,19 @@ fn snapshot(dir: &Path) -> Result<BTreeMap<std::path::PathBuf, Vec<u8>>> {
         }
     }
     Ok(files)
+}
+
+/// The paths added, removed or changed between two [`snapshot`]s.
+fn changed_files<'a>(
+    before: &'a BTreeMap<PathBuf, Vec<u8>>,
+    after: &'a BTreeMap<PathBuf, Vec<u8>>,
+) -> Vec<&'a Path> {
+    let paths: std::collections::BTreeSet<_> = before.keys().chain(after.keys()).collect();
+    paths
+        .into_iter()
+        .filter(|path| before.get(*path) != after.get(*path))
+        .map(PathBuf::as_path)
+        .collect()
 }
 
 #[test]

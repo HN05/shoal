@@ -179,15 +179,20 @@ pub fn repository(root: &Path, name: &str) -> PathBuf {
     repository_with(root, name, &[("tracked", "initial\n")])
 }
 
+/// Turns off the maintenance Git starts after commands such as `commit`,
+/// which runs detached and may still write under `.git` once the command
+/// has returned, while a test reads or removes the repository.
+const NO_AUTO_MAINTENANCE: (&str, &str) = ("maintenance.auto", "false");
+
 /// Create the repository `name` in `root`, at its canonical path, on `main`
-/// with the tests' identity, for the commits Shoal makes there too, and an
-/// initial commit of `files`.
+/// with the tests' identity, for the commits Shoal makes there too, without
+/// automatic maintenance, and an initial commit of `files`.
 pub fn repository_with(root: &Path, name: &str, files: &[(&str, &str)]) -> PathBuf {
     let repo = root.join(name);
     fs::create_dir(&repo).unwrap();
     let repo = fs::canonicalize(repo).unwrap();
     git(&repo, &["init", "-b", "main"]);
-    set_config(&repo, &AUTHOR);
+    set_config(&repo, &[AUTHOR[0], AUTHOR[1], NO_AUTO_MAINTENANCE]);
     for (name, contents) in files {
         fs::write(repo.join(name), contents).unwrap();
     }
