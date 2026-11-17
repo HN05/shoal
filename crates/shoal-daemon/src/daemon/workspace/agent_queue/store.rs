@@ -280,7 +280,7 @@ pub(super) fn insert_launch(
     }
     let at_once = matches!(launch.awaits, Awaits::Preparation { at_once: true });
     if let Some(space) = &launch.scope {
-        require_queuing_space(tx, space, removing)
+        (removing.require_taking_work(tx, space))
             .context("the space that queued the launch is being removed")?;
     }
     let request = &launch.request;
@@ -356,20 +356,6 @@ pub(super) fn copy_launch_waiting(
         params![from, id, plan, QueueState::Queued, workspace],
     )?;
     Ok(())
-}
-
-/// Refuse the space `id` a launch's scope names once it is gone, while
-/// `removing` holds it, or while its worktree is not ready.
-fn require_queuing_space(
-    tx: &rusqlite::Transaction<'_>,
-    id: &SpaceId,
-    removing: &crate::daemon::spaces::Removing,
-) -> Result<()> {
-    ensure!(!removing.reserved(id), "a removal holds the space");
-    if crate::daemon::links::space::is_chat(tx, id)? {
-        return Ok(());
-    }
-    crate::daemon::store::require_ready(tx, id)
 }
 
 /// The restore of a stopped agent whose wrapper waits for it.

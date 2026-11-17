@@ -460,16 +460,8 @@ fn record(
 ) -> Result<Recorded> {
     let Asking { ask, files } = asking;
     // A space reserved for removal takes no question its cleanup checks have
-    // not seen. A chat's reservation precedes the removal's next read here,
-    // on the store's one thread, so the removal sees any question before it.
-    match space.kind() {
-        crate::model::SpaceKind::Workspace => crate::daemon::store::require_ready(tx, &space.id)?,
-        crate::model::SpaceKind::Chat => ensure!(
-            !removing.reserved(&space.id),
-            "chat {} is being removed",
-            space.name
-        ),
-    }
+    // not seen.
+    removing.require_taking_work(tx, &space.id)?;
     if let Asker::Chat(turn) = asker
         && !set_chat_mark(tx, turn, false)?
     {

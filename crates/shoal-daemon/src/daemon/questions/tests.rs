@@ -1102,3 +1102,24 @@ fn answer_message(question: &Question) -> i64 {
         ),
     }
 }
+
+#[tokio::test]
+async fn a_removal_reserving_a_ready_workspace_takes_no_new_question() {
+    let (_root, manager, workspace) = fixture().await;
+    let _removal = manager.space_removals.reserve(&workspace.id).unwrap();
+    manager
+        .ask_question(
+            &SpaceSelector::id(&workspace.id),
+            ask("Which database?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
+        .await
+        .unwrap_err();
+    let id = workspace.id.clone();
+    let open = (manager.store)
+        .run(move |db| open_count(db, &id))
+        .await
+        .unwrap();
+    assert_eq!(open, 0);
+}

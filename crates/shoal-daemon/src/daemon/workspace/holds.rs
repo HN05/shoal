@@ -55,7 +55,7 @@ impl Manager {
         let removing = self.space_removals.clone();
         let hold = (self.store)
             .write(move |tx| {
-                ensure_holdable(tx, &id, &removing)?;
+                removing.require_taking_work(tx, &id)?;
                 place(tx, &id, &name, reason.as_deref(), placed_by, authority)
             })
             .await?;
@@ -253,19 +253,6 @@ impl Authority {
     }
 }
 
-/// Refuse a hold on a space a removal has reserved, which has read its holds
-/// already, or on a workspace that is not ready. A reservation precedes the
-/// removal's read on the store's one thread, so that read sees every hold
-/// this lets through.
-fn ensure_holdable(
-    tx: &rusqlite::Transaction<'_>,
-    id: &SpaceId,
-    removing: &crate::daemon::spaces::Removing,
-) -> Result<()> {
-    ensure!(!removing.reserved(id), "the space is being removed");
-    crate::daemon::links::space::require_ready_space(tx, id)
-}
-
 /// Place the hold once `authority` allows it and return it as it stands: a
 /// held name keeps the hold as it was placed.
 fn place(
@@ -315,7 +302,7 @@ fn release(
 }
 
 /// Place, in the transaction that approved it, the hold `request` asks for,
-/// refusing it where [`ensure_holdable`] does: a decision never stands
+/// refusing it where a new hold is refused: a decision never stands
 /// without its hold.
 pub(crate) fn place_approved(
     tx: &rusqlite::Transaction<'_>,
@@ -325,7 +312,7 @@ pub(crate) fn place_approved(
     let Target::Hold(name) = &request.target else {
         return Ok(());
     };
-    ensure_holdable(tx, &request.space_id, removing)?;
+    removing.require_taking_work(tx, &request.space_id)?;
     let reason = Some(request.reason.as_str()).filter(|reason| !reason.is_empty());
     insert(tx, &request.space_id, name, reason, HoldPlacer::Agent)
 }

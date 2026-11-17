@@ -10,6 +10,7 @@ use std::{
 };
 
 use anyhow::{Result, ensure};
+use rusqlite::Connection;
 
 use crate::{daemon::workspace::Manager, model::Space, state::WorkspaceState};
 
@@ -46,6 +47,16 @@ impl Removing {
     /// Whether a removal holds the space `id`.
     pub(crate) fn reserved(&self, id: &SpaceId) -> bool {
         self.lock().contains(id)
+    }
+
+    /// Refuse new work for the space `id`, such as a hold, a question or a
+    /// launch it queues, while a removal holds it, and for a workspace while
+    /// its worktree is not ready. A reservation precedes the removal's next
+    /// read on the store's one thread, so that read sees what this lets
+    /// through.
+    pub(crate) fn require_taking_work(&self, db: &Connection, id: &SpaceId) -> Result<()> {
+        ensure!(!self.reserved(id), "the space is being removed");
+        crate::daemon::links::space::require_ready_space(db, id)
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, HashSet<SpaceId>> {
