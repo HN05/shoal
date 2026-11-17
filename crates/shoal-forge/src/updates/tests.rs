@@ -830,3 +830,20 @@ fn a_saved_snapshot_and_watch_record_give_back_their_items_labels() {
     let unread = serde_json::to_string(&Snapshot::default()).unwrap();
     assert!(saved_labels(&unread).unwrap().is_empty());
 }
+
+#[test]
+fn a_merged_prs_snapshot_keeps_the_merge_commit_the_forge_reports() {
+    let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
+    let pull = |merged: serde_json::Value| {
+        let pull = json!({"number": 7, "title": "Fix", "state": "closed", "merged": true,
+            "merge_commit_sha": merged, "head": {"ref": "topic", "sha": "head"},
+            "base": {"ref": "main"}});
+        let current = forgejo.current(ItemKind::Pr, 7, &pull).unwrap();
+        let saved = serde_json::to_string(&Snapshot::item(&current)).unwrap();
+        serde_json::from_str::<Snapshot>(&saved).unwrap()
+    };
+    let merged = pull(json!("squashed"));
+    assert_eq!(merged.merge_commit(), Some(&"squashed".into()));
+    assert_eq!(merged.base_branch(), Some(&"main".into()));
+    assert_eq!(pull(serde_json::Value::Null).merge_commit(), None);
+}

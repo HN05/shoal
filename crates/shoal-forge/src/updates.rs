@@ -62,6 +62,11 @@ pub struct Snapshot {
     /// for an issue or when the forge does not say.
     #[serde(default, with = "commits", skip_serializing_if = "Option::is_none")]
     pub(crate) base: Option<CommitId>,
+    /// The commit a merged PR's merge left at the tip of its base branch, as
+    /// the forge reports it; `None` for an open PR, an issue, a run, or a
+    /// forge that does not say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) merge_commit: Option<CommitId>,
     pub(crate) conflict: Option<bool>,
     /// The head and base commits the conflict observation covers.
     #[serde(default)]
@@ -399,6 +404,17 @@ impl Snapshot {
         self.head.as_ref()
     }
 
+    /// The commit the PR's merge left at the tip of its base branch, where
+    /// the forge reported one for the merged PR.
+    pub fn merge_commit(&self) -> Option<&CommitId> {
+        self.merge_commit.as_ref()
+    }
+
+    /// The PR's base branch, once a read of its details has been recorded.
+    pub fn base_branch(&self) -> Option<&shoal_refs::BranchName> {
+        (self.details.as_ref()).and_then(|details| details.base.as_ref())
+    }
+
     /// Each check that ran on the head commit, by name. Failures kept from
     /// an earlier head are left out.
     pub fn head_checks(&self) -> impl Iterator<Item = (&str, CheckState)> {
@@ -609,12 +625,13 @@ impl Snapshot {
         }
     }
 
-    /// A snapshot of the issue or PR `current`, before its discussion and
-    /// checks are recorded.
+    /// A snapshot of the issue or PR `current`, with a merged PR's merge
+    /// commit, before its discussion and checks are recorded.
     pub(crate) fn item(current: &Current) -> Self {
         let item = &current.item;
         Self {
             details: Some(ItemDetails::of(current)),
+            merge_commit: current.merge_commit.clone(),
             ..Self::of(item.kind.into(), Some(item.state.into()))
         }
     }
