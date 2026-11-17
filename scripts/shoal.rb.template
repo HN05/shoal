@@ -24,27 +24,6 @@ class Shoal < Formula
     (libexec/"shoal-skills").make_symlink opt_share/"shoal/skills"
   end
 
-  def caveats
-    <<~EOS
-      Start the per-user daemon:
-        shoal daemon install
-
-      Install the agent skills into each tool's existing skill directory:
-        shoal skill install
-
-      Install them for one tool, creating its skill directory:
-        shoal skill install claude
-
-      Later shoal commands keep installed skills current.
-
-      Agents started from a terminal run in zmx 1.0.1 or later by default:
-        brew install neurosnap/tap/zmx
-      Sessions an older zmx started are unreachable after an upgrade, so
-      stop their agents with `shoal stop` before upgrading zmx and resume
-      them after with `shoal restore`.
-    EOS
-  end
-
   test do
     system "codesign", "--verify", "--strict", libexec/"Shoal.app" if OS.mac?
     assert_match "shoal", shell_output("#{bin}/shoal --version")
