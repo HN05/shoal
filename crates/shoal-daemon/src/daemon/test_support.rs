@@ -180,17 +180,11 @@ impl Manager {
     /// they make: a workspace, a chat, else a removed workspace, by its ID,
     /// since a name never selects one. A name no space has selects nothing.
     pub async fn named(&self, name: &str) -> shoal_protocol::space_names::SpaceSelector {
-        let workspaces = self.list_workspaces().await.unwrap();
-        let chats = self.chats().await.unwrap();
+        let spaces = self.present_spaces().await.unwrap();
         let removed = self.removed_workspaces().await.unwrap();
-        let id = (workspaces.into_iter())
-            .find(|workspace| workspace.name == name)
-            .map(|workspace| workspace.id)
-            .or_else(|| {
-                (chats.into_iter())
-                    .find(|chat| chat.name == name)
-                    .map(|chat| chat.id)
-            })
+        let id = (spaces.into_iter())
+            .find(|space| space.name == name)
+            .map(|space| space.id)
             .or_else(|| {
                 (removed.into_iter())
                     .find(|removed| removed.name == name)

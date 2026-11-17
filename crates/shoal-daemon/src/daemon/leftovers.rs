@@ -129,17 +129,15 @@ impl Manager {
 
     /// What ties processes to each workspace and running chat.
     async fn surveyed_spaces(&self) -> Result<Vec<Space>> {
-        let mut spaces = Vec::new();
-        for workspace in self.list_workspaces().await? {
-            let ties = WorktreeTies::when(off_runtime::is_dir(&workspace.path).await?);
-            let workspace = crate::model::Space::from(workspace);
-            spaces.push(self.space_ties(&workspace, ties).await?);
+        let mut surveyed = Vec::new();
+        for space in self.present_spaces().await? {
+            let ties = match space.worktree() {
+                Some(worktree) => WorktreeTies::when(off_runtime::is_dir(&worktree.path).await?),
+                None => WorktreeTies::None,
+            };
+            surveyed.push(self.space_ties(&space, ties).await?);
         }
-        for chat in self.chats().await? {
-            let chat = crate::model::Space::from(chat);
-            spaces.push(self.space_ties(&chat, WorktreeTies::None).await?);
-        }
-        Ok(spaces)
+        Ok(surveyed)
     }
 
     /// Remember that the agent of the workspace or running chat `selector`

@@ -258,16 +258,11 @@ impl Manager {
         &self,
         id: &SpaceId,
     ) -> Result<HashMap<AgentSessionId, SpaceName>> {
-        let workspaces = self.list_workspaces().await?;
-        let chats = self.chats().await?;
-        let spaces = (workspaces
-            .iter()
-            .map(|workspace| (&workspace.id, &workspace.name)))
-        .chain(chats.iter().map(|chat| (&chat.id, &chat.name)));
+        let spaces = self.present_spaces().await?;
         let mut held = HashMap::new();
-        for (space, name) in spaces.filter(|(space, _)| *space != id) {
-            for session in crate::execution::recovery::held_sessions(&self.paths, space) {
-                held.entry(session).or_insert_with(|| name.clone());
+        for space in spaces.iter().filter(|space| space.id != *id) {
+            for session in crate::execution::recovery::held_sessions(&self.paths, &space.id) {
+                held.entry(session).or_insert_with(|| space.name.clone());
             }
         }
         Ok(held)
