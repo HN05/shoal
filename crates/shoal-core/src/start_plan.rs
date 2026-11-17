@@ -97,15 +97,6 @@ impl Creation {
             && self.pull_head.is_none()
             && self.copy.is_none()
     }
-
-    /// Build a new branch on `base`, the branch of a done blocker, unless
-    /// the addition names its own base, opens an existing branch or copies a
-    /// workspace, which starts from that workspace instead.
-    pub fn build_on(&mut self, base: Option<String>) {
-        if self.base.is_none() && self.existing.is_none() && self.copy.is_none() {
-            self.base = base;
-        }
-    }
 }
 
 /// What opening a workspace a [`Creation`] describes starts at, with the

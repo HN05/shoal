@@ -117,22 +117,3 @@ fn plans_queued_before_every_launch_ran_tracked_still_decode() {
         assert_eq!(decode(json).agent, Some("codex".parse().unwrap()));
     }
 }
-
-#[test]
-fn a_done_blocker_s_branch_is_the_base_of_new_branches_but_not_of_copies() {
-    let mut new = super::Creation::default();
-    new.build_on(Some("blocker".into()));
-    assert_eq!(new.base.as_deref(), Some("blocker"));
-    let mut copy = super::Creation {
-        copy: Some(super::CopyCreation {
-            source: crate::protocol::CopySource {
-                workspace: "topic".into(),
-                checkpoint: None,
-            },
-            name: "topic-copy".into(),
-        }),
-        ..Default::default()
-    };
-    copy.build_on(Some("blocker".into()));
-    assert_eq!(copy.base, None);
-}
