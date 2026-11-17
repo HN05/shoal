@@ -63,18 +63,21 @@ impl Manager {
     ) -> Result<OpenOutcome> {
         anyhow::ensure!(!issue.title.trim().is_empty(), "the issue needs a title");
         match context {
-            // A workspace opens it from its worktree.
             ItemContext::Space {
-                space: selector,
-                repository: None,
-            } if (self.space(selector).await?.worktree()).is_some() => {
-                self.open_workspace_issue(selector, issue, repository, link, caller)
-                    .await
-            }
-            ItemContext::Space { .. } => {
-                self.open_chat_issue(context, issue, repository, link, caller)
-                    .await
-            }
+                space: selector, ..
+            } => match self.space(selector).await?.worktree() {
+                // A workspace opens it from its worktree, in its own
+                // repository, which the context may name.
+                Some(_) => {
+                    self.context_space(context).await?;
+                    self.open_workspace_issue(selector, issue, repository, link, caller)
+                        .await
+                }
+                None => {
+                    self.open_chat_issue(context, issue, repository, link, caller)
+                        .await
+                }
+            },
             ItemContext::Checkout(id) => {
                 anyhow::ensure!(!link, "{LINK_NEEDS_SPACE}");
                 (self.open_checkout_issue(id, issue, repository, self.user_account())).await

@@ -93,15 +93,24 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
         title: "Follow-up".into(),
         ..NewIssue::default()
     };
-    let context = ItemContext::space(SpaceSelector::id(&workspace.id));
-    let error = manager
-        .open_issue(&context, issue, None, false, None)
-        .await
-        .unwrap_err();
-    assert!(
-        format!("{error:#}").contains("cannot accept an issue"),
-        "{error:#}"
-    );
+    // Naming its own repository as the one it acts in changes nothing.
+    let contexts = [
+        ItemContext::space(SpaceSelector::id(&workspace.id)),
+        ItemContext::Space {
+            space: SpaceSelector::id(&workspace.id),
+            repository: Some(workspace.repository().clone()),
+        },
+    ];
+    for context in contexts {
+        let error = manager
+            .open_issue(&context, issue.clone(), None, false, None)
+            .await
+            .unwrap_err();
+        assert!(
+            format!("{error:#}").contains("cannot accept an issue"),
+            "{error:#}"
+        );
+    }
     let error = manager
         .open_pull(
             &SpaceSelector::id(&workspace.id),
