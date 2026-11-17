@@ -47,9 +47,12 @@ pub(super) async fn handle(
         manager.gates.admit()?;
     }
     Ok(Answer::Body(match method {
-        OperationMethod::StartOperation { spec, env } => Body::OperationStarted(Started {
-            id: manager.start_operation(spec, env, caller).await?,
-        }),
+        OperationMethod::StartOperation { spec, env } => {
+            manager.admit_explicit_preparation(&spec).await?;
+            Body::OperationStarted(Started {
+                id: manager.start_operation(spec, env, caller).await?,
+            })
+        }
         OperationMethod::FollowOperation { id, after } => {
             let entry = manager.operation(&id, caller).await?;
             let follower = Follower {
@@ -72,6 +75,7 @@ pub(super) async fn handle(
             pr,
             agent,
             waiting,
+            blockers,
             env,
             queue_entry,
         } => {
@@ -97,6 +101,8 @@ pub(super) async fn handle(
                 agent,
                 waiting,
                 queue_entry,
+                blockers,
+                unfollowed: false,
                 env,
             };
             Body::WorkspaceStarted(
@@ -127,6 +133,8 @@ pub(super) async fn handle(
                 agent,
                 waiting: None,
                 queue_entry: None,
+                blockers: Vec::new(),
+                unfollowed: false,
                 env,
             };
             Body::WorkspaceStarted(

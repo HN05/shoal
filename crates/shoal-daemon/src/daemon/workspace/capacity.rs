@@ -363,6 +363,12 @@ pub(crate) fn disk_limit(free: Option<u64>, total: u32, settings: &Overload) -> 
     }
 }
 
+/// Whether `free` disk space holds back new starts: below the warning
+/// threshold, or unread.
+pub(crate) fn disk_low(free: Option<u64>, settings: &Overload) -> bool {
+    disk(free, settings) != Disk::Healthy
+}
+
 /// Free disk space against the overload thresholds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Disk {

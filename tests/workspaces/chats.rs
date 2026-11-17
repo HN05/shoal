@@ -1384,8 +1384,8 @@ fn a_chats_agent_adds_a_workspace_whose_agent_the_daemon_starts() {
     let lines: Vec<_> = started.lines().collect();
     assert_eq!(lines[0], worker["workspace"]["path"], "{started}");
     assert_eq!(lines.last(), Some(&"Take the part"), "{started}");
-    // A blocked agent queues whole, as the chat's, and its workspace opens
-    // once its blockers clear.
+    // A blocked agent's workspace is the chat's at once, its agent queued
+    // there until its blockers clear.
     let error = fs::read_to_string(home.join("later.err")).unwrap();
     let code = fs::read_to_string(home.join("later")).unwrap();
     assert_eq!(code.trim(), "0", "{error}");
@@ -1394,16 +1394,23 @@ fn a_chats_agent_adds_a_workspace_whose_agent_the_daemon_starts() {
         .find(|entry| entry["name"] == "later")
         .unwrap_or_else(|| panic!("{queue}"));
     let chat = &fixture.ok(&["list", "--chats"])[0];
-    assert!(chat["id"].is_string(), "{chat}");
-    assert_eq!(later["queued_by"], chat["id"], "{later} {chat}");
+    let workspace = fixture.ok(&["status", &fixture.id("later")]);
+    assert_eq!(later["opens"], workspace["workspace"]["id"], "{later}");
+    assert_eq!(
+        workspace["workspace"]["parent"]["id"], chat["id"],
+        "{workspace} {chat}"
+    );
     // One that would start at once, ignoring the queue, is refused before
     // its workspace exists.
     let error = fs::read_to_string(home.join("now.err")).unwrap();
     let code = fs::read_to_string(home.join("now")).unwrap();
     assert_eq!(code.trim(), "1", "{error}");
-    for name in ["later", "now"] {
-        assert!(!fixture.run(&["status", &fixture.id(name)]).status.success());
-    }
+    assert!(
+        !fixture
+            .run(&["status", &fixture.id("now")])
+            .status
+            .success()
+    );
     // The chat's own session is not relabelled as the worker's.
     let id = worker["workspace"]["id"].as_str().unwrap();
     let relabelled = zmx_calls(&fixture).into_iter().find(|call| {

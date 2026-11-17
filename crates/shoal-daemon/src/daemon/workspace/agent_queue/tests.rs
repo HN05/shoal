@@ -1857,13 +1857,15 @@ async fn a_start_gives_its_queue_entry_the_workspace_before_its_setup_runs() {
         agent: None,
         waiting: None,
         queue_entry: Some(starting.id.clone()),
+        blockers: Vec::new(),
+        unfollowed: false,
         env: None,
     };
     let started = manager
         .start_workspace((&repo.id).into(), opening, preparing, None)
         .await
         .unwrap();
-    let _worker = crate::daemon::operations::fake::take(&started.operation);
+    let _worker = crate::daemon::operations::fake::take(started.operation.as_deref().unwrap());
     let entries = manager.queue_entries().await.unwrap();
     assert_eq!(entries.len(), 1, "{entries:?}");
     assert_eq!(entries[0].space_id.as_ref(), Some(&started.workspace.id));

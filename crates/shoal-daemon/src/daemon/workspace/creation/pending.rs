@@ -1,15 +1,20 @@
 //! Pending worktrees: how a recorded workspace that has no worktree yet
 //! gets one, which its preparation creates.
 
-use super::{Configured, WorkspaceSource};
+use super::{Configured, WorkspaceSource, stack};
 use crate::{
-    daemon::workspace::Manager, model::Workspace, protocol::CopySource, state::WorkspaceState,
+    daemon::{events::EventCause, workspace::Manager},
+    model::Workspace,
+    protocol::CopySource,
+    state::WorkspaceState,
 };
 use anyhow::{Result, bail, ensure};
 use rusqlite::{OptionalExtension, params};
-use shoal_ids::{checkpoint_numbers::CheckpointNumber, space_ids::SpaceId};
+use shoal_ids::{
+    checkpoint_numbers::CheckpointNumber, repository_ids::RepositoryId, space_ids::SpaceId,
+};
 use shoal_protocol::space_names::SpaceSelector;
-use shoal_refs::CommitId;
+use shoal_refs::{BranchName, CommitId};
 
 /// How the worktree of a recorded workspace that has none yet is created,
 /// as `pending_worktrees` keeps it until it is.
@@ -126,6 +131,43 @@ impl PendingWorktree {
 }
 
 impl Manager {
+    /// Create the pending worktree of the workspace `id` on `base`, the
+    /// branch of the done work its agent waited for, recording the
+    /// workspace that owns it as its base, as a start on `--base` does. One
+    /// that names a base of its own or opens an existing branch keeps it.
+    pub(crate) async fn build_pending_on(&self, id: &SpaceId, base: BranchName) -> Result<()> {
+        let id = id.to_owned();
+        self.store
+            .write(move |tx| {
+                let plan: String = tx.query_row(
+                    "SELECT plan FROM pending_worktrees WHERE workspace_id=?1",
+                    [&id],
+                    |row| row.get(0),
+                )?;
+                let mut pending: PendingWorktree = serde_json::from_str(&plan)?;
+                let PendingSource::New { base: unset @ None } = &mut pending.source else {
+                    return Ok(());
+                };
+                *unset = Some(base.to_string());
+                tx.execute(
+                    "UPDATE pending_worktrees SET plan=?2 WHERE workspace_id=?1",
+                    params![id, serde_json::to_string(&pending)?],
+                )?;
+                let repository: RepositoryId = tx.query_row(
+                    "SELECT repository_id FROM spaces WHERE id=?1",
+                    [&id],
+                    |row| row.get(0),
+                )?;
+                let owner = stack::owner(tx, &repository, &base)?;
+                tx.execute(
+                    "UPDATE workspaces SET base_workspace_id=?2 WHERE id=?1",
+                    params![id, owner],
+                )?;
+                stack::record_base_changed(tx, &id, EventCause::Blocker)
+            })
+            .await
+    }
+
     /// Create the worktree the recorded `workspace` is still to get, as its
     /// preparation does first, and record how creation went as a creation
     /// with its record does. One that fails leaves the workspace failed

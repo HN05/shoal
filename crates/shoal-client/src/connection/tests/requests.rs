@@ -396,7 +396,7 @@ async fn an_existing_branch_reopens_its_workspace_without_its_post_setup_hook() 
     let started: StartedWorkspace = connection::request(&app, open).await.unwrap();
     assert!(started.reused);
     assert_eq!(started.workspace.id, existing.id);
-    let worker = fake::take(&started.operation);
+    let worker = fake::take(started.operation.as_deref().unwrap());
     let OperationSpec::Prepare { steps, .. } = worker.order.spec.clone() else {
         panic!("expected a preparation: {:?}", worker.order);
     };
@@ -439,7 +439,7 @@ async fn a_scoped_start_reopens_only_a_workspace_below_its_own() {
     let started: StartedWorkspace = connection::request(&agent, reopen(&child)).await.unwrap();
     assert!(started.reused);
     assert_eq!(started.workspace.id, child.id);
-    fake::take(&started.operation).exit(1);
+    fake::take(started.operation.as_deref().unwrap()).exit(1);
     let app = daemon.connector();
     let based = start_workspace(
         &daemon,
@@ -461,7 +461,7 @@ async fn a_scoped_start_reopens_only_a_workspace_below_its_own() {
     let started: StartedWorkspace = connection::request(&app, reopen).await.unwrap();
     assert!(started.reused);
     assert_eq!(started.workspace.id, existing.id);
-    let worker = fake::take(&started.operation);
+    let worker = fake::take(started.operation.as_deref().unwrap());
     let OperationSpec::Prepare { steps, .. } = worker.order.spec.clone() else {
         panic!("expected a preparation: {:?}", worker.order);
     };
@@ -522,7 +522,7 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
         .unwrap();
     let below = started.workspace.parent.as_ref().map(|space| &space.id);
     assert_eq!(below, Some(&parent.id));
-    fake::take(&started.operation).exit(1);
+    fake::take(started.operation.as_deref().unwrap()).exit(1);
     let undefined_mode = split(Some(launch("claude", Some("triage"))));
     let error = connection::request::<StartedWorkspace>(&agent, undefined_mode)
         .await
@@ -555,7 +555,7 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
     daemon.manager.reload_config().await.unwrap();
     let in_file_mode = split(Some(launch("fake", Some("triage"))));
     let started: StartedWorkspace = connection::request(&agent, in_file_mode).await.unwrap();
-    let worker = fake::take(&started.operation);
+    let worker = fake::take(started.operation.as_deref().unwrap());
     assert!(
         worker.token.is_some(),
         "the worker acts with the caller's scope"
@@ -585,7 +585,7 @@ async fn a_start_without_an_agent_queues_the_configured_default() {
     )
     .await;
     let started: StartedWorkspace = connection::request(&app, create("api")).await.unwrap();
-    let worker = fake::take(&started.operation);
+    let worker = fake::take(started.operation.as_deref().unwrap());
     let entry = started.entry.expect("the start queued its agent");
     assert_eq!(entry.agent, "probe");
     worker.exit(1);
@@ -670,7 +670,7 @@ async fn a_chats_agent_starts_workspaces_below_its_chat() {
     let started: StartedWorkspace = connection::request(&agent, create).await.unwrap();
     let parent = started.workspace.parent.as_ref().map(|parent| &parent.id);
     assert_eq!(parent, Some(&chat.id));
-    let worker = fake::take(&started.operation);
+    let worker = fake::take(started.operation.as_deref().unwrap());
     assert!(
         worker.token.is_some(),
         "the worker acts with the chat's scope"
@@ -740,7 +740,7 @@ async fn a_launch_a_chat_queued_opens_its_workspace_in_the_chats_scope() {
     let started: StartedWorkspace = connection::request(&app, open(None)).await.unwrap();
     let parent = started.workspace.parent.as_ref().map(|parent| &parent.id);
     assert_eq!(parent, Some(&chat.id));
-    let worker = fake::take(&started.operation);
+    let worker = fake::take(started.operation.as_deref().unwrap());
     assert!(
         worker.token.is_some(),
         "the worker acts in the chat's scope"
@@ -864,7 +864,7 @@ async fn a_scoped_start_takes_the_queue_entry_of_the_launch_it_starts_itself() {
     assert_eq!(entry.space_id.as_ref(), Some(&started.workspace.id));
     let parent = started.workspace.parent.as_ref().map(|parent| &parent.id);
     assert_eq!(parent, Some(&chat.id));
-    fake::take(&started.operation).exit(0);
+    fake::take(started.operation.as_deref().unwrap()).exit(0);
 }
 
 #[tokio::test]

@@ -561,8 +561,10 @@ instead of the PR delivery guidance below.
   entry keeps its slot only while its launch holds it or within the grace
   period, until its agent registers; queued entries create no worktree.
   A launch with blockers queues without a limit and starts only once each
-  is done at its current HEAD, removed or closed, on the branch of the done one
-  that contains the others; `--now` never waits.
+  is done at its current HEAD, removed or closed; a new workspace's start
+  records the workspace at once, and its preparation waits for them too, then
+  creates the worktree on the branch of the done one that contains the others;
+  `--now` never waits.
 - A registered repository's CI jobs wait in the same queue and admission while
   `runner.enabled` is on: `machine.max_jobs` counts only jobs, and under
   `dynamic` a job is expected to use its recent runs' peak memory and, until it

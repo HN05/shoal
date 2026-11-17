@@ -98,10 +98,15 @@ impl Manager {
             agent: None,
             waiting: None,
             queue_entry: None,
+            blockers: Vec::new(),
+            unfollowed: false,
             env,
         };
         let started = self.prepare_new(opened, None, preparing, caller).await?;
-        let (id, operation) = (started.workspace.id.clone(), started.operation.clone());
+        // Its worktree exists, so nothing holds its preparation.
+        let operation =
+            (started.operation.clone()).context("the conversion's preparation waits")?;
+        let id = started.workspace.id.clone();
         self.store
             .run(move |db| super::record::record_preparation(db, &id, &operation))
             .await?;

@@ -306,10 +306,11 @@ fn a_scoped_start_runs_its_agent_here_as_the_childs() {
     fixture.ok(&["stop", &fixture.id("child")]);
 }
 
-/// A scoped caller's blocked agent queues whole: the workspace opens below
-/// the caller once its blockers clear.
+/// A scoped caller's blocked start records its workspace below the caller
+/// at once, with its agent queued there, and creates the worktree on the
+/// blocker's branch once the blocker is done.
 #[test]
-fn a_scoped_start_queues_a_blocked_agent() {
+fn a_scoped_start_records_a_blocked_workspace_at_once() {
     let fixture = Fixture::with_config(Some("[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\n"));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     fixture.add("parent");
@@ -328,6 +329,11 @@ fn a_scoped_start_queues_a_blocked_agent() {
         "--add-blocker",
         &blocker,
     ];
+    let blocker_path = fixture.ok(&["status", &blocker])["workspace"]["path"].clone();
+    let blocker_path = Path::new(blocker_path.as_str().unwrap());
+    fs::write(blocker_path.join("blocked-on"), "work\n").unwrap();
+    git(blocker_path, &["add", "blocked-on"]);
+    git(blocker_path, &["commit", "-q", "-m", "work"]);
     let output = scoped_command(&fixture, "parent", &start);
     assert!(output.status.success(), "{}", printed(&output));
     let queue = fixture.ok(&["queue"]);
@@ -335,19 +341,22 @@ fn a_scoped_start_queues_a_blocked_agent() {
         panic!("{queue}");
     };
     assert_eq!(entry["name"], "child", "{entry}");
-    assert_eq!(entry["blockers"], serde_json::json!(["blocker"]), "{entry}");
-    assert!(parent["id"].is_string(), "{parent}");
-    assert_eq!(entry["queued_by"], parent["id"], "{entry}");
-    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 2);
-    fixture.ok(&["done", &blocker]);
-    wait_until("the child's creation", || {
-        fixture
-            .run(&["status", &fixture.id("child")])
-            .status
-            .success()
-    });
+    assert!(
+        (entry["blockers"].as_array().unwrap().iter()).any(|blocker| blocker == "blocker"),
+        "{entry}"
+    );
     let child = &fixture.ok(&["status", &fixture.id("child")])["workspace"];
     assert_eq!(child["parent"]["id"], parent["id"], "{child}");
+    assert_eq!(child["state"], "preparing", "{child}");
+    assert_eq!(
+        child["preparation_waits"],
+        serde_json::json!({"for": "blockers", "blocked_by": ["blocker"]}),
+        "{child}"
+    );
+    let path = Path::new(child["path"].as_str().unwrap()).to_owned();
+    assert!(!path.exists());
+    fixture.ok(&["done", &blocker]);
+    wait_until("the child's worktree", || path.join("blocked-on").exists());
 }
 
 #[test]

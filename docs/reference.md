@@ -2150,11 +2150,21 @@ does. The user's start without a terminal of an agent Happy runs
 instead sets the workspace up first, then opens the agent in place when the
 limits admit it, otherwise waiting in the queue. `--now` starts that agent
 regardless of the limits, as does `--focus` for a scoped caller, as its
-space's [`limits` permission](#permitted-actions) allows. A detached start that waits for other work queues as a whole as from
-a terminal, starting in the background once the work is complete; a scoped
-caller's opens its workspace below the caller, or the space `--parent` names,
-with the checks the caller's own start would meet, and queue `--json` names
-the caller's space in its `queued_by`. The daemon starts waiting entries
+space's [`limits` permission](#permitted-actions) allows. A start whose agent
+waits for other work, from any caller, returns once the daemon has recorded
+its workspace, `preparing` without a worktree, below the caller or the space
+`--parent` names, with its agent queued there, reporting both as a detached
+start does; `shoal list` and `shoal status` show what it waits for. Once that
+work is complete the daemon creates the worktree on the done blocker's branch,
+or from the default branch when no blocker leaves one, and sets it up, which
+the agent waits for in turn. A detached start's preparation also waits before
+it creates the worktree while free disk space is below
+`[machine.overload.warning] disk_free_gib`, or unread, with disk protection on,
+and starts once disk space allows. `--wait` returns at once for a preparation
+that waits. Cancelling its agent's entry keeps the workspace, whose preparation
+then waits until `shoal restore` runs it; while it waits for work or disk
+space, `shoal restore` refuses it, and `shoal rm` removes it. The daemon starts
+waiting entries
 in [rank order](#queue-order) as slots free, passing over an entry whose
 repository is full or that does not fit in memory, and records a
 `queue_started` notification. Once an entry has been held 15 minutes for its
@@ -5738,8 +5748,9 @@ Causes are `manual`, `idle`, `issue`, `pr` (including a base workspace's merged
 PRs), `completion`, `missing_directory`, `disk_space`, `merged` for
 [merged cleanup](#merged-workspaces), `removed` for a base workspace's removal,
 `parent` for the removal of the space above, `parent_completion` for an
-ancestor's `done` with cleanup, or `start_failed` for a chat that could not
-start, and null when inapplicable; `error` describes
+ancestor's `done` with cleanup, `start_failed` for a chat that could not
+start, or `blocker` for a new workspace that builds on the done work its agent
+waited for, and null when inapplicable; `error` describes
 setup or cleanup failures. Branch changes are observed during daemon sweeps;
 detached HEAD has a null branch, and the recorded workspace branch remains
 unchanged.

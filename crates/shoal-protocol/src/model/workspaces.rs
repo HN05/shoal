@@ -53,6 +53,9 @@ pub struct Worktree {
     /// does before its setup; until then nothing exists at `path`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub pending_worktree: bool,
+    /// What its preparation waits for before it creates the worktree.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preparation_waits: Option<PreparationWait>,
     /// Whether every removal deletes it whatever it holds, keeping no
     /// checkpoint.
     #[serde(default)]
@@ -92,6 +95,31 @@ impl Worktree {
     /// not created one that recorded its identity.
     pub fn unborn(&self) -> bool {
         self.pending_worktree && self.git_dir.is_none()
+    }
+}
+
+/// What a workspace's preparation waits for before it creates the worktree.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "for", rename_all = "snake_case")]
+pub enum PreparationWait {
+    /// The work its agent waits for, by name or URL, on whose done branch
+    /// the worktree is created.
+    Blockers { blocked_by: Vec<String> },
+    /// Free disk space, which is below the warning threshold or unread.
+    Disk,
+    /// Its agent, whose queued start was cancelled; `shoal restore`
+    /// prepares it.
+    Stopped,
+}
+
+/// What it waits for, as in `the preparation waits for api, #12`.
+impl std::fmt::Display for PreparationWait {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Blockers { blocked_by } => f.write_str(&blocked_by.join(", ")),
+            Self::Disk => f.write_str("disk space"),
+            Self::Stopped => f.write_str("its stopped agent"),
+        }
     }
 }
 
@@ -285,6 +313,7 @@ impl Workspace {
                 done: false,
                 setup_skipped: false,
                 pending_worktree: false,
+                preparation_waits: None,
                 disposable: false,
                 base_workspace: None,
                 stacked_workspaces: Vec::new(),

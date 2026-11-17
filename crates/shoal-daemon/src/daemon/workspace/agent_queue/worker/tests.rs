@@ -136,6 +136,8 @@ async fn a_start_reopening_a_workspace_that_gained_an_agent_is_refused() {
         agent: None,
         waiting: None,
         queue_entry: Some(entry),
+        blockers: Vec::new(),
+        unfollowed: false,
         env: None,
     };
     let refused = manager

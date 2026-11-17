@@ -94,8 +94,9 @@ and `start --priority` set a space's priority, at most your own space's. `--add-
 holds an agent until that work is done, where a bare number is an issue, a
 space is selected by its ID and a queued agent by its entry's ID, and an
 issue's agent is also blocked by the issues its forge records as blocking it;
-the agent then starts on the done workspace's branch, and `blockers` lists
-what still blocks it. A Happy agent reports
+the new workspace waits `preparing`, without its worktree, until that work is
+done, then is created on the done workspace's branch, and `blockers` lists
+what still blocks its agent. A Happy agent reports
 its launch (`execution_id`, `pid`, `log`); a `happy-codex` launch fails when
 its first message cannot reach the session, such as without a Happy login.
 

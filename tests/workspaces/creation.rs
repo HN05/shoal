@@ -2180,6 +2180,7 @@ fn an_apps_creation_rejects_a_closed_issue_before_creating_a_workspace() {
             agent: None,
             queue_entry: None,
             waiting: None,
+            blockers: Vec::new(),
         };
         let refused = runtime.block_on(connection::request::<StartedWorkspace>(&app, create));
         assert!(refused.is_err(), "expected a refusal: {refused:?}");
@@ -2212,6 +2213,7 @@ fn an_apps_workspace_on_an_issue_takes_its_title_without_a_name() {
         agent: None,
         queue_entry: None,
         waiting: None,
+        blockers: Vec::new(),
     };
 
     let started = runtime
@@ -2279,10 +2281,11 @@ fn an_apps_agent_keeps_waiting_for_a_failed_setup_until_a_hook_passes_there() {
             pr: None,
             agent: agent.map(|agent| Box::new(agent.into())),
             waiting: None,
+            blockers: Vec::new(),
             queue_entry: None,
         };
         let started: StartedWorkspace = runtime.block_on(request(&app, method)).unwrap();
-        follow(started.operation);
+        follow(started.operation.unwrap());
         started.workspace
     };
     let blockers = || fixture.ok(&["queue"])[0]["blockers"].clone();
@@ -2366,6 +2369,7 @@ fn an_app_follows_the_setup_of_a_workspace_it_creates() {
             agent: None,
             queue_entry: None,
             waiting: None,
+            blockers: Vec::new(),
         };
         runtime
             .block_on(shoal_client::connection::request::<StartedWorkspace>(
@@ -2376,7 +2380,7 @@ fn an_app_follows_the_setup_of_a_workspace_it_creates() {
     let follow = |started: &StartedWorkspace| {
         let go = started.workspace.path.join("go");
         runtime.block_on(async {
-            let mut following = Following::open(&app, started.operation.clone(), 0)
+            let mut following = Following::open(&app, started.operation.clone().unwrap(), 0)
                 .await
                 .unwrap();
             let mut events = Vec::new();

@@ -137,14 +137,9 @@ pub enum Launched {
     /// As the worker of an existing workspace.
     Worker(Box<QueuedWorker>),
     /// In a new or reopened workspace, which the operation it names
-    /// prepares, queuing the agent once it is set up.
+    /// prepares, or will once what it waits for allows, with the agent
+    /// waiting in the queue for the preparation.
     Workspace(Box<StartedWorkspace>),
-    /// Nowhere yet: the whole launch waits in the agent queue for what
-    /// blocks it, behind `waiting` entries in all.
-    Waiting {
-        entry: Box<QueueEntry>,
-        waiting: usize,
-    },
 }
 
 /// The worker of an existing workspace a launch queued.

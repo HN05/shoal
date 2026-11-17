@@ -30,7 +30,7 @@ async fn a_created_workspace_is_prepared_in_an_operation_the_app_follows() {
     let started: StartedWorkspace = connection::request(&app, create).await.unwrap();
     assert_eq!(started.workspace.name, "api");
     assert!(!started.reused);
-    let worker = fake::take(&started.operation);
+    let worker = fake::take(started.operation.as_deref().unwrap());
     let OperationSpec::Prepare { workspace, steps } = worker.order.spec.clone() else {
         panic!("expected a preparation: {:?}", worker.order);
     };
@@ -42,11 +42,11 @@ async fn a_created_workspace_is_prepared_in_an_operation_the_app_follows() {
     let report = Report::Ended(Ended::Failed(failure));
     daemon
         .manager
-        .report_operation(&started.operation, report, None)
+        .report_operation(started.operation.as_deref().unwrap(), report, None)
         .await
         .unwrap();
     worker.exit(0);
-    let Ended::Failed(failure) = follow(&app, &started.operation).await else {
+    let Ended::Failed(failure) = follow(&app, started.operation.as_deref().unwrap()).await else {
         panic!("expected the failure");
     };
     assert_eq!(failure.code(), ErrorCode::SetupFailed);

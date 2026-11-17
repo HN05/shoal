@@ -2413,6 +2413,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
             shoal_protocol::protocol::operations::LaunchRequest::new(Some("reviewer".into())),
         )),
         waiting: None,
+        blockers: Vec::new(),
         env: None,
         queue_entry: None,
     };
@@ -2532,6 +2533,7 @@ fn an_apps_workspace_linking_a_pr_takes_its_title_without_a_name() {
         ),
         agent: None,
         waiting: None,
+        blockers: Vec::new(),
         env: None,
         queue_entry: None,
     };

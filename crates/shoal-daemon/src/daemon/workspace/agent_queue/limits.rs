@@ -489,6 +489,20 @@ impl Manager {
         }
     }
 
+    /// Whether free disk space holds back new starts, as it holds back an
+    /// agent's beside running work: below the warning threshold, or unread,
+    /// with disk protection on.
+    pub(crate) async fn disk_holds_back_starts(&self) -> Result<bool> {
+        let config = self.config();
+        let paths = self.admission_paths().await?;
+        let paths: Vec<&Path> = paths.iter().map(PathBuf::as_path).collect();
+        let overload = &config.machine.overload;
+        Ok(capacity::disk_low(
+            capacity::disk_free(&paths, overload),
+            overload,
+        ))
+    }
+
     /// The limit free disk space sets for `used` slots beside a fixed limit.
     async fn disk_limit(&self, overload: &Overload, used: usize) -> Result<Option<u32>> {
         let paths = self.admission_paths().await?;

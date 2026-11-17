@@ -687,6 +687,15 @@ CREATE TABLE reply_times (
     seconds INTEGER NOT NULL
 );
 
+CREATE TABLE waiting_preparations (
+    workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+    steps TEXT NOT NULL,
+    env TEXT,
+    scope_space_id TEXT,
+    for_agent INTEGER NOT NULL,
+    waits TEXT NOT NULL
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);

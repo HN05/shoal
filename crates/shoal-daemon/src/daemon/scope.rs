@@ -172,6 +172,18 @@ impl Scoped for Operation {
 }
 
 impl Caller {
+    /// A process of the space `space_id` that work the daemon carries out
+    /// later acts for, such as a queued launch, with that space's scope
+    /// and no execution of its own.
+    pub(crate) fn of_space(space_id: SpaceId) -> Self {
+        Self {
+            space_id,
+            execution: None,
+            granted: None,
+            read_only: false,
+        }
+    }
+
     pub fn execution_id(&self) -> Option<&ExecutionId> {
         self.execution.as_ref().map(|execution| &execution.id)
     }

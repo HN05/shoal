@@ -20,12 +20,21 @@ use crate::{
 impl Manager {
     /// Once the preparation of the workspace `started` fails, tell its
     /// coordinator, the agent of the nearest space above it with one, or
-    /// else the user, naming what retries it and what removes it.
+    /// else the user, naming what retries it and what removes it. One that
+    /// waits is told of once it starts.
     pub(super) fn report_failed_preparation(self: &Arc<Self>, started: &StartedWorkspace) {
-        let Some(entry) = self.operations.get(&started.operation) else {
+        if let Some(operation) = &started.operation {
+            self.report_preparation_failure(&started.workspace.id, operation);
+        }
+    }
+
+    /// [`Self::report_failed_preparation`] of the workspace `id`, which
+    /// `operation` prepares.
+    pub(super) fn report_preparation_failure(self: &Arc<Self>, id: &SpaceId, operation: &str) {
+        let Some(entry) = self.operations.get(operation) else {
             return;
         };
-        let (manager, id) = (self.clone(), started.workspace.id.clone());
+        let (manager, id) = (self.clone(), id.clone());
         tokio::spawn(async move {
             if let Some(Ended::Failed(failure)) = ended(&entry).await {
                 manager.tell_preparation_failure(&id, &failure).await;
@@ -35,7 +44,7 @@ impl Manager {
 
     /// Tell the coordinator of the workspace `id`, or else the user, that its
     /// preparation failed with `failure`, unless it is gone.
-    async fn tell_preparation_failure(&self, id: &SpaceId, failure: &Failure) {
+    pub(super) async fn tell_preparation_failure(&self, id: &SpaceId, failure: &Failure) {
         let Ok(workspace) = self.workspace_by_id(id).await else {
             return;
         };

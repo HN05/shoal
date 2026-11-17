@@ -324,6 +324,7 @@ async fn start_add_workspace<'c>(
         agent: None,
         queue_entry,
         waiting,
+        blockers: Vec::new(),
     };
     let env = crate::env::without_secrets();
     let preparing = preparation::create(&ctx.paths, new, env);

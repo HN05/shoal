@@ -1,9 +1,13 @@
 //! Opening a workspace and starting its preparation in one request, as
 //! `shoal start` and `shoal split` do: the checks before anything is created,
 //! the workspace and its issue, then the operation that prepares it, which
-//! creates a new branch's worktree first, and whose failure the start's
+//! creates a new branch's worktree first, unless it waits for the work its
+//! agent waits for or for disk space, and whose failure the start's
 //! coordinator or the user hears of.
 mod failures;
+mod waiting;
+
+pub(crate) use waiting::preparation_waits;
 
 use crate::daemon::links::issue::{Assigner, AssignerOf};
 use shoal_ids::queue_entry_ids::QueueEntryId;
@@ -12,6 +16,7 @@ use shoal_ids::space_ids::SpaceId;
 use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::{Context as _, Result, ensure};
+use waiting::PreparationStart;
 
 use crate::{
     agents::{check_queued_launch, resolve_launch},
@@ -22,7 +27,8 @@ use crate::{
         scope::Caller,
         workspace::{CopyPlace, Manager, NewWorkspace, agent_queue::HasAgent},
     },
-    model::{OpenedWorkspace, Workspace},
+    forge::items::reference::ItemInput,
+    model::{Blocker, OpenedWorkspace, QueueEntry, Workspace},
     protocol::{
         CopySource, CreationOptions,
         operations::{
@@ -78,6 +84,14 @@ pub(crate) struct Preparing<L = QueuedLaunch> {
     /// The starting queue entry of the launch the start carries out, which
     /// the opened workspace takes before its preparation starts.
     pub queue_entry: Option<QueueEntryId>,
+    /// What `agent` waits for besides the preparation, which waits for it
+    /// too before it creates a new worktree, then creates it on the branch
+    /// of the done blocker that holds the others' work.
+    pub blockers: Vec<Blocker>,
+    /// Whether nothing follows the preparation, which then also waits
+    /// before it creates a new worktree while disk protection holds back
+    /// new starts.
+    pub unfollowed: bool,
     pub env: Option<BTreeMap<String, String>>,
 }
 
@@ -95,6 +109,8 @@ impl Preparing<LaunchRequest> {
             agent,
             waiting,
             queue_entry,
+            blockers,
+            unfollowed,
             env,
         } = self;
         let agent = match (agent, &waiting) {
@@ -114,12 +130,21 @@ impl Preparing<LaunchRequest> {
             agent,
             waiting,
             queue_entry,
+            blockers,
+            unfollowed,
             env,
         })
     }
 }
 
 impl Preparing {
+    /// Whether the preparation of `workspace` may wait before it creates
+    /// the new worktree: for what its agent waits for, or, with nothing
+    /// following it, for disk space.
+    fn may_wait(&self, workspace: &Workspace) -> bool {
+        workspace.pending_worktree && (!self.blockers.is_empty() || self.unfollowed)
+    }
+
     /// Queue its agent on the start's `issue` unless it names a task of its
     /// own.
     fn work_on(&mut self, issue: Option<&OpenIssue>) {
@@ -143,6 +168,10 @@ impl Manager {
         preparing: Preparing<LaunchRequest>,
         caller: Option<&Caller>,
     ) -> Result<StartedWorkspace> {
+        ensure!(
+            preparing.blockers.is_empty() || preparing.agent.is_some(),
+            "--add-blocker queues an agent; name one with --agent"
+        );
         let repo = self.repository(repository.clone()).await?;
         let start = &opening.start;
         let mut preparing = (preparing.resolved(async || {
@@ -398,8 +427,10 @@ impl Manager {
     /// entry and queue its agent, which waits for its preparation, then
     /// start preparing it: the worktree it has yet to get, its setup while
     /// it is preparing, linking the PR, then the post-setup hook of a new
-    /// workspace. A new workspace whose issue cannot be assigned is
-    /// removed, since nothing ran in it yet.
+    /// workspace. A preparation that creates the worktree waits first for
+    /// what the agent waits for, or, with nothing following it, for disk
+    /// space. A new workspace whose issue cannot be assigned is removed,
+    /// since nothing ran in it yet.
     pub(crate) async fn prepare_new(
         self: &Arc<Self>,
         OpenedWorkspace { workspace, reused }: OpenedWorkspace,
@@ -414,27 +445,30 @@ impl Manager {
         if let Some(entry) = &preparing.queue_entry {
             self.give_start_entry(entry, &workspace).await?;
         }
-        let entry = match preparing.agent {
-            Some(agent) => Some(Box::new(
-                (self.queue_for_preparation((&workspace, reused), *agent, preparing.pr.clone()))
-                    .await?,
-            )),
-            None => None,
+        let may_wait = preparing.may_wait(&workspace);
+        let Preparing {
+            pr,
+            agent,
+            waiting,
+            blockers,
+            env,
+            ..
+        } = preparing;
+        let opened = (&workspace, reused);
+        let entry = (self.queue_start_agent(opened, agent, (pr.clone(), blockers))).await?;
+        let start = PreparationStart {
+            steps: Preparation {
+                setup: workspace.state == WorkspaceState::Preparing,
+                post_setup: !reused,
+                pr,
+                agent: None,
+                waiting,
+            },
+            env,
+            for_agent: entry.is_some(),
         };
-        let steps = Preparation {
-            setup: workspace.state == WorkspaceState::Preparing,
-            post_setup: !reused,
-            pr: preparing.pr,
-            agent: None,
-            waiting: preparing.waiting,
-        };
-        let spec = OperationSpec::Prepare {
-            workspace: SpaceSelector::id(&workspace.id),
-            steps,
-        };
-        // The record as the start left it, before its preparation changes it.
-        let recorded = self.workspace_by_id(&workspace.id).await?;
-        let operation = self.start_operation(spec, preparing.env, caller).await?;
+        let (recorded, operation) =
+            (self.begin_preparation(&workspace, start, may_wait, caller)).await?;
         Ok(StartedWorkspace {
             operation,
             workspace: Box::new(recorded),
@@ -442,6 +476,45 @@ impl Manager {
             entry,
             warnings,
         })
+    }
+
+    /// Queue `agent`, if any, in the `workspace` a start opened, `reused`
+    /// or new, linking `pr` as it starts once `blockers` are done.
+    async fn queue_start_agent(
+        &self,
+        opened: (&Workspace, bool),
+        agent: Option<Box<QueuedLaunch>>,
+        (pr, blockers): (Option<ItemInput>, Vec<Blocker>),
+    ) -> Result<Option<Box<QueueEntry>>> {
+        let Some(agent) = agent else {
+            return Ok(None);
+        };
+        let queued = self.queue_for_preparation(opened, *agent, (pr, blockers));
+        Ok(Some(Box::new(queued.await?)))
+    }
+
+    /// Start the preparation `start` of `workspace` for `caller`, unless
+    /// it `may_wait` and what it waits for holds it, returning the
+    /// workspace as the start left it, before its preparation changes it,
+    /// and the preparation's operation once it starts.
+    async fn begin_preparation(
+        self: &Arc<Self>,
+        workspace: &Workspace,
+        start: PreparationStart,
+        may_wait: bool,
+        caller: Option<&Caller>,
+    ) -> Result<(Workspace, Option<String>)> {
+        let held = may_wait && self.hold_preparation(workspace, &start, caller).await?;
+        let recorded = self.workspace_by_id(&workspace.id).await?;
+        if held {
+            return Ok((recorded, None));
+        }
+        let spec = OperationSpec::Prepare {
+            workspace: SpaceSelector::id(&workspace.id),
+            steps: start.steps,
+        };
+        let operation = self.start_operation(spec, start.env, caller).await?;
+        Ok((recorded, Some(operation)))
     }
 
     /// Refuse the scoped `caller` the agent `preparing` queues in the

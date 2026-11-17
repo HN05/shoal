@@ -70,6 +70,8 @@ fn bare() -> crate::daemon::operations::starts::Preparing<crate::protocol::opera
         agent: None,
         waiting: None,
         queue_entry: None,
+        blockers: Vec::new(),
+        unfollowed: false,
         env: None,
     }
 }
@@ -102,7 +104,7 @@ async fn a_started_or_split_workspace_records_the_priority_it_is_given() {
         .start_workspace((&repo.id).into(), opening("started"), bare(), None)
         .await
         .unwrap();
-    let _worker = crate::daemon::operations::fake::take(&started.operation);
+    let _worker = crate::daemon::operations::fake::take(started.operation.as_deref().unwrap());
     let parent = manager
         .create_workspace(&repo.id, "parent".into(), Some("HEAD".into()), None, None)
         .await
@@ -117,7 +119,7 @@ async fn a_started_or_split_workspace_records_the_priority_it_is_given() {
         .start_split(&SpaceSelector::id(&parent.id), split, bare(), None)
         .await
         .unwrap();
-    let _split_worker = crate::daemon::operations::fake::take(&split.operation);
+    let _split_worker = crate::daemon::operations::fake::take(split.operation.as_deref().unwrap());
     for workspace in [&started.workspace, &split.workspace] {
         let id = workspace.id.clone();
         let stored = manager.store.read(move |tx| current(tx, &id)).await;
@@ -204,7 +206,7 @@ async fn a_reopened_workspace_keeps_its_priority_unless_one_is_asked_for() {
         )
         .await
         .unwrap();
-    let _worker = crate::daemon::operations::fake::take(&child.operation);
+    let _worker = crate::daemon::operations::fake::take(child.operation.as_deref().unwrap());
     let selector = SpaceSelector::id(&child.workspace.id);
     manager.create_pending_worktree(&selector).await.unwrap();
     let caller = Caller {
@@ -223,7 +225,7 @@ async fn a_reopened_workspace_keeps_its_priority_unless_one_is_asked_for() {
         )
         .await
         .unwrap();
-    let _reopened = crate::daemon::operations::fake::take(&reopened.operation);
+    let _reopened = crate::daemon::operations::fake::take(reopened.operation.as_deref().unwrap());
     assert_eq!(reopened.workspace.id, child.workspace.id);
     let id = child.workspace.id.clone();
     let stored = manager.store.read(move |tx| current(tx, &id)).await;

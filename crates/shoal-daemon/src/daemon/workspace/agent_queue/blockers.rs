@@ -201,6 +201,24 @@ impl Manager {
         Ok(readiness)
     }
 
+    /// The readiness of the launch waiting to open `workspace` by its
+    /// blockers besides the workspace's setup, which the setup's own
+    /// preparation waits for; `None` when no launch waits there.
+    pub(crate) async fn opening_readiness(&self, workspace: &SpaceId) -> Result<Option<Readiness>> {
+        let workspace = workspace.to_owned();
+        let recorded = (self.store)
+            .run(move |db| opening_blockers(db, &workspace))
+            .await?;
+        let Some(recorded) = recorded else {
+            return Ok(None);
+        };
+        let mut progress = Vec::new();
+        for blocker in &recorded {
+            progress.push(self.progress(blocker).await?);
+        }
+        readiness_of(progress).await.map(Some)
+    }
+
     /// Let the launches waiting for the setup of `workspace` go, once a
     /// preparation there got past its post-setup hook, those whose start
     /// asked for it at once.
@@ -404,6 +422,36 @@ fn waiting_blockers(db: &mut Connection) -> Result<Vec<(QueueEntryId, Recorded)>
             ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// The blockers besides its setup of the launch waiting to open
+/// `workspace`, if one does.
+fn opening_blockers(db: &mut Connection, workspace: &SpaceId) -> Result<Option<Vec<Recorded>>> {
+    let launch: Option<(QueueEntryId, RepositoryId)> = db
+        .query_row(
+            "SELECT id,repository_id FROM agent_queue
+             WHERE opens_workspace_id=?1 AND kind=?2 AND state=?3",
+            params![workspace, QueueKind::Launch, QueueState::Queued],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    let Some((entry, repository)) = launch else {
+        return Ok(None);
+    };
+    let recorded = db
+        .prepare(
+            "SELECT kind,target FROM agent_queue_blockers WHERE entry_id=?1 AND kind IS NOT ?2
+             ORDER BY rowid",
+        )?
+        .query_map(params![entry, BlockerKind::Setup], |row| {
+            Ok(Recorded {
+                repository: Some(repository.clone()),
+                kind: row.get(0)?,
+                target: row.get(1)?,
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(Some(recorded))
 }
 
 /// The name of queue entry `id`, while it is queued or starting.

@@ -206,6 +206,9 @@ states!(EventCause {
     ParentCompletion => "parent_completion",
     /// The space could not start, so Shoal forgot it at once.
     StartFailed => "start_failed",
+    /// The work a new workspace's agent waited for is done, and its
+    /// worktree builds on that work's branch.
+    Blocker => "blocker",
 });
 
 /// An event of a space, a workspace or a chat.

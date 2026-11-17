@@ -41,15 +41,16 @@ impl Manager {
     }
 
     /// Queue `launch` in the `workspace` a start opened, linking `pr` as
-    /// it starts. In a new workspace it waits until the preparation gets
-    /// past the post-setup hook, then starts as the queue admits it or, for
-    /// one that starts now, at once regardless of the limits; in a `reused`
-    /// one, which runs no post-setup hook, it queues as in any ready one.
+    /// it starts, once `blockers` are done. In a new workspace it waits
+    /// until the preparation gets past the post-setup hook, then starts as
+    /// the queue admits it or, for one that starts now, at once regardless
+    /// of the limits; in a `reused` one, which runs no post-setup hook, it
+    /// queues as in any ready one.
     pub(crate) async fn queue_for_preparation(
         &self,
         (workspace, reused): (&Workspace, bool),
         mut launch: QueuedLaunch,
-        pr: Option<ItemInput>,
+        (pr, blockers): (Option<ItemInput>, Vec<Blocker>),
     ) -> Result<QueueEntry> {
         let awaits = match reused {
             true => Awaits::FailedSetup,
@@ -57,7 +58,8 @@ impl Manager {
                 at_once: std::mem::take(&mut launch.now),
             },
         };
-        let request = queued_agent_request(workspace, launch, pr)?;
+        let mut request = queued_agent_request(workspace, launch, pr)?;
+        request.blockers = blockers;
         (self.queue_add_awaiting(request, None, awaits).await?.entry)
             .context("the daemon queued the agent without an entry")
     }

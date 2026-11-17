@@ -174,7 +174,8 @@ async fn has_default(settings: &AddSettings<'_>) -> Result<bool> {
 
 /// Send `launch`, which `agent` runs if it names one, and report what the
 /// daemon started: a new workspace once it is recorded, or with `wait` once
-/// its preparation ends.
+/// its preparation ends, unless the preparation waits for other work or
+/// disk space, which leaves nothing to follow yet.
 async fn send(
     ctx: &Context,
     launch: Launch,
@@ -190,9 +191,10 @@ async fn send(
                 None => Ok(0),
             }
         }
-        Launched::Workspace(started) if wait => follow_workspace(ctx, *started, agent).await,
+        Launched::Workspace(started) if wait && started.operation.is_some() => {
+            follow_workspace(ctx, *started, agent).await
+        }
         Launched::Workspace(started) => report_workspace(ctx, *started),
-        Launched::Waiting { entry, waiting } => queued_agents::report_queued(ctx, &entry, waiting),
     }
 }
 

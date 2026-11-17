@@ -1,5 +1,6 @@
-//! Starts queued agents and restores as slots free and keeps starting
-//! entries' slots while their launch runs.
+//! Starts queued agents and restores as slots free, and the waiting
+//! preparations of new workspaces as what they wait for allows, and keeps
+//! starting entries' slots while their launch runs.
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
@@ -34,6 +35,10 @@ pub(super) async fn run(manager: Arc<Manager>) {
             if let Err(error) = manager.dispatch_queue().await {
                 log!("agent queue: {error:#}");
             }
+        }
+        // Outside the guard above, as starting an operation takes one itself.
+        if let Err(error) = manager.start_waiting_preparations().await {
+            log!("waiting preparations: {error:#}");
         }
         tokio::select! {
             _ = changed.changed() => {}

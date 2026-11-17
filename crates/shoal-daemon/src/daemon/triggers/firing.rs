@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
-use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::launches::{Launch, LaunchSource, Launched};
 use shoal_protocol::triggers::{Fired, RunOrigin, RunOutcome, TriggerRun};
 
@@ -218,10 +218,8 @@ impl Manager {
                 .write(move |tx| state::keep_key(tx, &scope, &name, &key, expires))
                 .await?;
         }
-        let (space_id, queue_entry) = launched_columns(&launched);
         Ok(TriggerRun {
-            space_id,
-            queue_entry,
+            space_id: launched_space(&launched),
             ..run(firing, RunOutcome::Started, None)
         })
     }
@@ -272,21 +270,14 @@ fn run(firing: &Firing, outcome: RunOutcome, reason: Option<String>) -> TriggerR
     }
 }
 
-/// The space `launched` started, or whose worker it queued, else the
-/// agent queue entry its new space's launch waits in.
-fn launched_columns(launched: &Launched) -> (Option<SpaceId>, Option<QueueEntryId>) {
+/// The space `launched` started, or whose worker it queued.
+fn launched_space(launched: &Launched) -> Option<SpaceId> {
     use shoal_protocol::chats::StartedChat;
-    let space = match launched {
+    match launched {
         Launched::Chat(StartedChat::Queued(queued)) => Some(queued.chat.id.clone()),
         Launched::Chat(StartedChat::Background(chat)) => chat.id.clone(),
         Launched::Chat(StartedChat::Detached(chat)) => Some(chat.chat.id.clone()),
         Launched::Worker(worker) => Some(worker.workspace.id.clone()),
         Launched::Workspace(started) => Some(started.workspace.id.clone()),
-        Launched::Waiting { entry, .. } => {
-            let space = entry.space_id.clone().or(entry.opens.clone());
-            let entry = space.is_none().then(|| entry.id.clone());
-            return (space, entry);
-        }
-    };
-    (space, None)
+    }
 }

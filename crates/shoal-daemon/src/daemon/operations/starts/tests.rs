@@ -74,6 +74,8 @@ fn without_agent() -> Preparing<LaunchRequest> {
         agent: None,
         waiting: None,
         queue_entry: None,
+        blockers: Vec::new(),
+        unfollowed: false,
         env: None,
     }
 }
@@ -91,7 +93,7 @@ async fn a_start_records_the_workspace_and_leaves_its_worktree_to_its_preparatio
     assert!(workspace.pending_worktree);
     assert_eq!(workspace.state, WorkspaceState::Preparing);
     assert!(!workspace.path.exists());
-    let worker = fake::take(&started.operation);
+    let worker = fake::take(started.operation.as_deref().unwrap());
     let OperationSpec::Prepare { steps, .. } = &worker.order.spec else {
         panic!("expected a preparation: {:?}", worker.order);
     };
@@ -132,7 +134,7 @@ async fn a_copy_start_leaves_its_worktree_to_its_preparation() {
     let workspace = *started.workspace;
     assert!(workspace.pending_worktree);
     assert!(!workspace.path.exists());
-    let _worker = fake::take(&started.operation);
+    let _worker = fake::take(started.operation.as_deref().unwrap());
     let selector = SpaceSelector::id(&workspace.id);
     let created = manager.create_pending_worktree(&selector).await.unwrap();
     assert!(created.path.join("untracked").exists());
@@ -181,7 +183,7 @@ async fn a_start_at_a_prs_head_leaves_its_worktree_to_its_preparation() {
     let workspace = *started.workspace;
     assert!(workspace.pending_worktree);
     assert!(!workspace.path.exists());
-    let _worker = fake::take(&started.operation);
+    let _worker = fake::take(started.operation.as_deref().unwrap());
     let selector = SpaceSelector::id(&workspace.id);
     let created = manager.create_pending_worktree(&selector).await.unwrap();
     assert!(!created.pending_worktree);
@@ -195,7 +197,7 @@ async fn a_failed_worktree_stays_pending_for_a_retried_preparation() {
     let (root, manager) = manager().await;
     let repository = registered(root.path(), &manager).await;
     let started = start(&manager, &repository, "child", "later").await;
-    let _worker = fake::take(&started.operation);
+    let _worker = fake::take(started.operation.as_deref().unwrap());
     let selector = SpaceSelector::id(&started.workspace.id);
     let failed = manager.create_pending_worktree(&selector).await;
     assert!(failed.is_err(), "{failed:?}");
@@ -216,7 +218,7 @@ async fn a_workspace_without_its_worktree_yet_goes_with_its_record() {
     let (root, manager) = manager().await;
     let repository = registered(root.path(), &manager).await;
     let started = start(&manager, &repository, "child", "HEAD").await;
-    let _worker = fake::take(&started.operation);
+    let _worker = fake::take(started.operation.as_deref().unwrap());
     let selector = SpaceSelector::id(&started.workspace.id);
     manager
         .remove_selected(&selector, UnsavedWork::All, InspectionPolicy::GitOnly)
@@ -233,7 +235,7 @@ async fn a_workspace_whose_worktree_failed_goes_with_its_record() {
     let (root, manager) = manager().await;
     let repository = registered(root.path(), &manager).await;
     let started = start(&manager, &repository, "child", "later").await;
-    let _worker = fake::take(&started.operation);
+    let _worker = fake::take(started.operation.as_deref().unwrap());
     let selector = SpaceSelector::id(&started.workspace.id);
     let failed = manager.create_pending_worktree(&selector).await;
     assert!(failed.is_err(), "{failed:?}");
@@ -260,9 +262,9 @@ async fn reported_for(
     started: StartedWorkspace,
     failure: Failure,
 ) -> (Notification, SpaceNumber) {
-    let worker = fake::take(&started.operation);
+    let worker = fake::take(started.operation.as_deref().unwrap());
     let failed = Report::Ended(Ended::Failed(failure));
-    (manager.report_operation(&started.operation, failed, None))
+    (manager.report_operation(started.operation.as_deref().unwrap(), failed, None))
         .await
         .unwrap();
     worker.exit(0);
@@ -353,7 +355,7 @@ async fn a_retry_configures_the_worktree_an_earlier_creation_left() {
         .await
         .unwrap();
     let started = start(&manager, &repository, "child", "HEAD").await;
-    let _worker = fake::take(&started.operation);
+    let _worker = fake::take(started.operation.as_deref().unwrap());
     let selector = SpaceSelector::id(&started.workspace.id);
     // Git creates the worktree, but the profile it names is not defined.
     let failed = manager.create_pending_worktree(&selector).await;
@@ -426,6 +428,8 @@ async fn a_scoped_start_gives_its_agent_only_permissions_the_caller_holds() {
         agent: Some(Box::new(agent)),
         waiting: None,
         queue_entry: None,
+        blockers: Vec::new(),
+        unfollowed: false,
         env: None,
     };
     let refused = manager
@@ -475,6 +479,8 @@ async fn a_scoped_start_reopening_a_workspace_keeps_what_its_agent_was_given() {
         agent: Some(Box::new(agent)),
         waiting: None,
         queue_entry: None,
+        blockers: Vec::new(),
+        unfollowed: false,
         env: None,
     };
     let refused = manager

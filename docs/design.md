@@ -159,7 +159,14 @@ the detached agent the request asks for, with its mode, model, arguments,
 fork, issue and caller's place, as a scoped `start --agent` starts its agent,
 which waits in the queue for the preparation, and starts the operation, which
 creates the worktree, sets it up, links its PR and runs a new workspace's
-post-setup hook. The request answers once the workspace is recorded, so a
+post-setup hook. A preparation that creates a new worktree waits first, in a
+record beside the workspace, for the blockers of the agent's launch, then
+creates it on the branch of the done blocker that holds the others' work, or
+from the default branch when none leaves one, so it never starts behind; a
+start nothing follows also waits while disk protection holds back new starts.
+The queue's dispatcher starts it once that allows, in the scope of the space
+that started it, and a cancelled agent leaves it waiting for an explicit
+preparation. The request answers once the workspace is recorded, so a
 caller gets its number and its agent's entry without waiting for Git or
 setup; until its worktree exists, what reads it refuses the workspace, and
 removal takes only its record and leases. The way the start's caller hears
@@ -185,7 +192,7 @@ worktree the start was made in has; and the branch a PR, a branch link, the
 typed name or earlier work on its issue settles. It then queues the worker of
 the workspace `--in` names, or of the one that has the branch, as
 `QueueAgent` does; opens and prepares a new workspace as `StartWorkspace`
-does, or queues the whole launch while what blocks it holds it; or starts a
+does, its agent and preparation waiting for what blocks it; or starts a
 chat, a launch without a branch or issue included: it resolves the chat's
 agent, mode and name, after its issue's title or where it runs, checks where
 it goes as recording it would, then runs a worker of its own that opens the
@@ -1065,11 +1072,9 @@ scoped callers may queue only for the workspaces their scope reaches but their
 own, and cancel and prioritize the entries their scope reaches: those of such
 spaces, a CI job's through the spaces its run is for, and a new space's launch
 through its parent. A scoped caller's
-launch that a blocker holds queues before its workspace exists, so the
-workspace can start from the done blocker's branch: the entry records the
-caller's space, which the daemon starts it for and whose scope the user's
-process that opens the workspace then acts in, so it opens it only where the
-caller could. The launch keeps that space while it waits and goes with it. A space's
+start that a blocker holds records its workspace below the caller at once, as
+any start does, and its waiting preparation records the caller's space, in
+whose scope it runs once the work is done. A space's
 coordinator is the agent of the nearest space above it that has one, whatever
 its kind, which one operation queues a message for: the events about
 it that notify the user, the child agent's messages, questions and completion
@@ -1949,8 +1954,9 @@ session ends once its agent or workspace shell has run, whatever the exit
 status, and only a failed start replaces it with the user's login shell.
 A queued launch may be blocked by spaces, queued launches and issues, including
 the blockers its issue's forge records, and admission passes it over until they
-clear. A space clears once done at its current HEAD, not merged: the launch
-branches from the done blocker and stacks on it, so blocked agents start before
+clear. A space clears once done at its current HEAD, not merged: a new
+workspace's preparation waits for them too, then branches from the done blocker
+and stacks on it, so blocked agents start before
 review, and the existing restack on merge carries them to the default branch. A
 commit after `done` is new work and blocks them again. One launch builds on one
 branch, so done blockers on separate branches wait until all but one merge. A

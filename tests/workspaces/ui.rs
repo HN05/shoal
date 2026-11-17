@@ -2101,17 +2101,9 @@ fn text_listings_lead_with_the_ids_their_commands_take() {
     install_fake_agents(&fixture, &["claude"]);
     // A background launch needs zmx on the CLI's PATH.
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
-    fixture.ok(&[
-        "start",
-        "--wait",
-        repo,
-        "--branch",
-        "later",
-        "--add-blocker",
-        first,
-        "--agent",
-        "claude",
-    ]);
+    let start = ["start", repo, "--branch", "later", "--add-blocker", first];
+    let started = fixture.run(&[&start[..], &["--agent", "claude"]].concat());
+    assert!(started.status.success(), "{}", printed(&started));
     let queued = fixture.ok(&["queue"]);
     let entry = queued[0]["id"].as_str().unwrap();
     let text = |args: &[&str]| {

@@ -79,7 +79,7 @@ async fn a_launch_opens_a_new_workspace_and_prepares_it() {
         panic!("expected a workspace: {launched:?}");
     };
     assert_eq!(started.workspace.branch().map(|b| b.as_str()), Some("new"));
-    let worker = fake::take(&started.operation);
+    let worker = fake::take(started.operation.as_deref().unwrap());
     // Its agent waits in the queue for the preparation, which queues none.
     let OperationSpec::Prepare { steps, .. } = worker.order.spec.clone() else {
         panic!("expected a preparation: {:?}", worker.order);
@@ -108,7 +108,7 @@ async fn a_launch_that_starts_now_waits_for_none_of_its_blockers() {
     let Launched::Workspace(started) = launched else {
         panic!("expected a workspace: {launched:?}");
     };
-    fake::take(&started.operation).exit(1);
+    fake::take(started.operation.as_deref().unwrap()).exit(1);
 }
 
 #[tokio::test]

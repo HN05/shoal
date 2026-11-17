@@ -70,6 +70,12 @@ pub enum OperationMethod {
         /// waits in the queue for a retried setup should setup fail.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         waiting: Option<Box<QueuedLaunch>>,
+        /// What `agent` waits for besides the preparation. A new
+        /// workspace's preparation waits for it too, then creates the
+        /// worktree on the branch of the done blocker that holds the
+        /// others' work.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        blockers: Vec<crate::model::Blocker>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         env: Option<BTreeMap<String, String>>,
         /// The starting queue entry whose launch opens the workspace. One a
@@ -176,7 +182,10 @@ pub enum WorkspaceStart {
 /// preparation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StartedWorkspace {
-    pub operation: String,
+    /// None while the preparation waits, as the workspace's
+    /// `preparation_waits` says, for the daemon to start it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation: Option<String>,
     pub workspace: Box<Workspace>,
     #[serde(default)]
     pub reused: bool,

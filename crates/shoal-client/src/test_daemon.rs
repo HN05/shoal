@@ -60,6 +60,7 @@ pub(crate) fn start_workspace(daemon: &TestDaemon, start: WorkspaceStart) -> Ope
         pr: None,
         agent: None,
         waiting: None,
+        blockers: Vec::new(),
         env: None,
         queue_entry: None,
     }

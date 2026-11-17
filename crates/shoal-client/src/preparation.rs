@@ -13,7 +13,7 @@ use crate::{
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_protocol::{
-    model::{QueueEntry, Workspace},
+    model::{Blocker, QueueEntry, Workspace},
     protocol::{
         CopySource, CreationOptions, OperationMethod,
         operations::{
@@ -49,6 +49,10 @@ pub struct NewWorkspace {
     /// The agent the caller starts itself once setup succeeds, which waits
     /// in the queue should setup fail.
     pub waiting: Option<Box<QueuedLaunch>>,
+    /// What `agent` waits for besides the preparation, which waits for it
+    /// too before it creates a new worktree, on the branch of the done
+    /// blocker that holds the others' work.
+    pub blockers: Vec<Blocker>,
 }
 
 impl NewWorkspace {
@@ -68,6 +72,7 @@ impl NewWorkspace {
             agent: None,
             queue_entry: None,
             waiting: None,
+            blockers: Vec::new(),
         }
     }
 
@@ -86,6 +91,7 @@ impl NewWorkspace {
             agent,
             queue_entry,
             waiting,
+            blockers,
         } = self;
         OperationMethod::StartWorkspace {
             repository,
@@ -99,6 +105,7 @@ impl NewWorkspace {
             pr,
             agent,
             waiting,
+            blockers,
             env: Some(env),
             queue_entry,
         }
@@ -188,12 +195,23 @@ pub async fn create<'d, D: Daemon>(
     creation: impl Into<Creation>,
     env: BTreeMap<String, String>,
 ) -> Result<Preparing<'d, D>> {
+    let started = start(daemon, creation, env).await?;
+    Preparing::follow(daemon, started).await
+}
+
+/// Create the workspace `creation` describes and start its preparation,
+/// which runs with `env`, without following it, as for one whose
+/// preparation waits for its agent's blockers.
+pub async fn start<D: Daemon>(
+    daemon: &D,
+    creation: impl Into<Creation>,
+    env: BTreeMap<String, String>,
+) -> Result<StartedWorkspace> {
     let method = match creation.into() {
         Creation::Workspace(new) => new.method(env),
         Creation::Split(split) => split.method(env),
     };
-    let started = connection::request(daemon, method).await?;
-    Preparing::follow(daemon, started).await
+    connection::request(daemon, method).await
 }
 
 /// Run `steps` on `workspace` with `env` and follow them.
@@ -209,7 +227,7 @@ pub async fn prepare<'d, D: Daemon>(
     };
     let operation = crate::operations::start(daemon, spec, env).await?;
     let started = StartedWorkspace {
-        operation,
+        operation: Some(operation),
         workspace: Box::new(workspace.clone()),
         reused: true,
         entry: None,
@@ -236,7 +254,8 @@ pub struct Preparing<'d, D> {
 
 impl<'d, D: Daemon> Preparing<'d, D> {
     /// Follow the preparation the daemon `started` for the workspace a
-    /// request opened.
+    /// request opened, refusing one that waits, which has nothing to follow
+    /// yet.
     pub async fn follow(daemon: &'d D, started: StartedWorkspace) -> Result<Self> {
         let StartedWorkspace {
             operation,
@@ -245,6 +264,11 @@ impl<'d, D: Daemon> Preparing<'d, D> {
             entry,
             warnings,
         } = started;
+        let operation = operation.with_context(|| {
+            let waits = workspace.preparation_waits.as_ref();
+            let waits = waits.map_or_else(|| "its turn".to_owned(), ToString::to_string);
+            format!("the preparation of {} waits for {waits}", workspace.name)
+        })?;
         let following = Following::open(daemon, operation.clone(), 0).await?;
         Ok(Self {
             daemon,
