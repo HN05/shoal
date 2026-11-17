@@ -215,3 +215,21 @@ async fn a_stop_after_the_release_leaves_the_launch_to_the_started_preparation()
     assert!(cancelled.is_none());
     assert_eq!(manager.queue_entries().await.unwrap().len(), 1);
 }
+
+#[tokio::test]
+async fn a_restart_keeps_a_waiting_preparation_waiting() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let api = create(&manager, &repo, "api").await;
+    let blocker = Blocker::Space(api.id.to_string());
+    let ui = *start(&manager, &repo, "ui", vec![blocker]).await.workspace;
+    manager
+        .store
+        .quarantine_interrupted_operations()
+        .await
+        .unwrap();
+    let after = read(&manager, &ui).await;
+    assert_eq!(after.state, WorkspaceState::Preparing);
+    assert_eq!(after.error, None);
+    assert!(after.preparation_waits.is_some());
+}

@@ -71,7 +71,8 @@ impl Store {
             )?;
             tx.execute(
                 "UPDATE workspaces SET state=?1, error='daemon stopped during workspace operation; inspect before cleanup'
-                    WHERE state IN (SELECT value FROM json_each(?2))",
+                    WHERE state IN (SELECT value FROM json_each(?2))
+                        AND id NOT IN (SELECT workspace_id FROM waiting_preparations)",
                 rusqlite::params![
                     WorkspaceState::Failed,
                     serde_json::to_string(&WorkspaceState::transient().collect::<Vec<_>>())?,
