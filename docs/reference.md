@@ -4286,10 +4286,11 @@ workspace's completion/PR gate, so it must not call Shoal commands that change
 that workspace's completion or PR registrations. Each `done` runs it again; daemon
 restart does not replay it.
 
-`hooks.post_agent_exit` runs alongside agent-exit notifications, including configured
-agents and disconnects, while the workspace is ready, after acknowledging the
-wrapper's exit. It uses the same daemon hook
-rules and config precedence as `hooks.post_done`, with `SHOAL_AGENT`,
+`hooks.post_agent_exit` runs alongside agent-exit notifications of a space's agent,
+including configured agents and disconnects, after acknowledging the wrapper's
+exit, while the space is a ready workspace or a chat and no removal has it. It
+runs where `hooks.post_done` would, under the same daemon hook rules and config
+precedence, with `SHOAL_AGENT`,
 `SHOAL_AGENT_EXIT_CODE` (empty on disconnect), and `SHOAL_AGENT_EXIT_COMPLETE`
 (`true` when no owned processes remain, otherwise `false`). Failure only records
 `hook_failed`; agent exit does not mark an assignment done. Removal uses its own

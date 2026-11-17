@@ -180,8 +180,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   `hooks.post_done` runs in the daemon after completion persists and before cleanup,
   excluding lifecycle and permit changes; failure notifies without undoing completion
   or blocking cleanup. Explicit completion reruns it; restart does not replay it.
-  `hooks.post_agent_exit` exposes tracked-agent exits while ready under the same
-  daemon hook rules without marking completion; removal uses its own hooks.
+  `hooks.post_agent_exit` exposes a space's tracked-agent exits, a workspace's
+  while ready, where `hooks.post_done` runs and under the same daemon hook rules,
+  without marking completion; removal uses its own hooks.
   `hooks.post_ready` follows the same rules after ready-for-review marks persist;
   failure notifies without removing them, and each explicit mark reruns it.
   Missing-worktree cleanup skips hooks. Optional local repository config is

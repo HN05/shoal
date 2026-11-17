@@ -96,6 +96,44 @@ async fn agent_exit_hook_reports_disconnects_and_skips_removing_workspaces() {
 }
 
 #[tokio::test]
+async fn a_chats_agent_exit_hook_runs_where_it_works_and_skips_a_removal() {
+    use std::fs;
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let exits = root.path().join("exits");
+    let hook = root.path().join("exited");
+    let script = format!(
+        "#!/bin/sh\nprintf '%s|%s|%s|%s\\n' \"$(pwd -P)\" \"$SHOAL_AGENT\" \"$SHOAL_AGENT_EXIT_CODE\" \"$GREETING\" >> '{}'\n",
+        exits.display()
+    );
+    install_test_script(&hook, &script);
+    let config = format!(
+        "hooks.post_agent_exit = '{}'\n[env]\nGREETING = 'hello'\n",
+        hook.display()
+    );
+    (manager.write_local_config(&repo.id, Some(config)))
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(repo.id.into(), "talk".into(), "claude".into(), None)
+        .await
+        .unwrap();
+    let space = Space::from(chat.clone());
+    (manager.post_agent_exit(&space, &"claude".into(), Some(0), true)).await;
+    let workdir = fs::canonicalize(chat.workdir.path()).unwrap();
+    let ran = format!("{}|claude|0|hello\n", workdir.display());
+    assert_eq!(fs::read_to_string(&exits).unwrap(), ran);
+
+    let _removal = manager.space_removals.reserve(&chat.id).unwrap();
+    (manager.post_agent_exit(&space, &"claude".into(), Some(0), true)).await;
+    assert_eq!(fs::read_to_string(&exits).unwrap(), ran);
+}
+
+#[tokio::test]
 async fn agent_exit_wakes_cleanup_for_completed_workspace() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");

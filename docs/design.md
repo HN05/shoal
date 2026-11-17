@@ -2396,8 +2396,8 @@ finished assignment found travels with its completion instead: `done --summary`
 records one line under the alert message rule and ends the completion notice
 with it, and longer findings are files handed back with it. The
 sending workspace may withdraw its message while it is unread; once shown, it
-stays, because deleting it would not unsay it, and a correction does. `hooks.post_agent_exit` exposes tracked-agent exit notifications to user
-integrations while the workspace is ready, using normal configuration precedence
+stays, because deleting it would not unsay it, and a correction does. `hooks.post_agent_exit` exposes a space's tracked-agent exit notifications to user
+integrations while it is a ready workspace or a chat that no removal has, using normal configuration precedence
 and daemon hook rules with the agent name, reported code, and process-completion
 status. Failure notifies without changing the exit result or marking completion;
 removal uses its own hooks. Desktop or push delivery was considered and not adopted.

@@ -364,8 +364,9 @@ impl Manager {
     }
 
     /// What follows the exit of the agent of `space`: a workspace keeps a
-    /// checkpoint of its worktree and runs its exit hook, then cleanup
-    /// looks at the space again.
+    /// checkpoint of its worktree once the agent's processes are proven
+    /// `complete`, the space runs its exit hook, then cleanup looks at it
+    /// again.
     pub(crate) async fn post_agent_exit(
         &self,
         space: &crate::model::Space,
@@ -373,93 +374,69 @@ impl Manager {
         exit_code: Option<i32>,
         complete: bool,
     ) {
-        if let Some(workspace) = space.to_workspace() {
-            self.after_worktree_agent(&workspace, agent, exit_code, complete)
-                .await;
+        // Processes that are not proven stopped may still write; removal or
+        // the next checkpoint keeps what they leave.
+        if complete && space.worktree().is_some() {
+            self.checkpoint_after_agent(&space.id).await;
+        }
+        if let Err(error) = (self.run_agent_exit_hook(space, agent, exit_code, complete)).await {
+            self.notify_space(
+                &space.name,
+                &space.id,
+                NotificationKind::HookFailed,
+                format!("agent exited; {error:#}"),
+            )
+            .await;
         }
         // A completion or forge transition may have happened while the agent
         // was running. Retry cleanup once the exit hook is finished.
         self.signals.wake_cleanup();
     }
 
-    /// Keep a checkpoint of `workspace` once its agent's processes are
-    /// proven `complete`, and run its exit hook, telling the user when it
-    /// fails.
-    async fn after_worktree_agent(
-        &self,
-        workspace: &crate::model::Workspace,
-        agent: &crate::agent::Agent,
-        exit_code: Option<i32>,
-        complete: bool,
-    ) {
-        // Processes that are not proven stopped may still write; removal or
-        // the next checkpoint keeps what they leave.
-        if complete {
-            self.checkpoint_after_agent(&workspace.id).await;
-        }
-        if let Err(error) = self
-            .run_agent_exit_hook(workspace, agent, exit_code, complete)
-            .await
-        {
-            self.notify_space(
-                &workspace.name,
-                &workspace.id,
-                NotificationKind::HookFailed,
-                format!("agent exited; {error:#}"),
-            )
-            .await;
-        }
-    }
-
+    /// Run `hooks.post_agent_exit` where the agent of `space` worked, unless
+    /// a removal has the space, which runs its own hooks.
     async fn run_agent_exit_hook(
         &self,
-        workspace: &crate::model::Workspace,
+        space: &crate::model::Space,
         agent: &crate::agent::Agent,
         exit_code: Option<i32>,
         complete: bool,
     ) -> anyhow::Result<()> {
-        use crate::hooks::{self, Hook, HookKind};
-        if !self.agent_exit_workspace_ready(&workspace.id).await? {
+        use crate::hooks::{Hook, HookKind};
+        if !self.agent_exit_space_ready(&space.id).await? {
             return Ok(());
         }
-        let Some(command) = self
-            .workspace_hook(workspace, HookKind::PostAgentExit)
-            .await?
-        else {
+        let settings = self.present_space_settings(space).await?;
+        let Some(command) = Self::space_hook(space, HookKind::PostAgentExit, &settings) else {
             return Ok(());
         };
-        let _resources = self
-            .gates
-            .resource_guard(&workspace.id, GuardMode::Exclusive)?;
-        // Removal uses its own hooks; recheck after excluding new transitions.
-        if !self.agent_exit_workspace_ready(&workspace.id).await? {
+        let _resources = self.gates.resource_guard(&space.id, GuardMode::Exclusive)?;
+        // Recheck after excluding new transitions.
+        if !self.agent_exit_space_ready(&space.id).await? {
             return Ok(());
         }
-        self.verify_worktree(workspace).await?;
-        let settings = self.workspace_settings(workspace).await?;
-        let repository = workspace.repository();
-        let configured_env = (self.hook_environment(workspace, repository, &settings)).await?;
-        hooks::run_detached(
-            Hook::PostAgentExit {
-                agent,
-                exit_code,
-                complete,
-            },
-            workspace,
-            &command,
-            &self.paths,
-            &configured_env,
-        )
-        .await
+        self.verify_space(space).await?;
+        let hook = Hook::PostAgentExit {
+            agent,
+            exit_code,
+            complete,
+        };
+        (self.run_space_hook(hook, space, &settings, &command)).await
     }
 
-    async fn agent_exit_workspace_ready(&self, id: &SpaceId) -> anyhow::Result<bool> {
+    /// Whether the space `id` is a chat or a ready workspace that no
+    /// removal holds.
+    async fn agent_exit_space_ready(&self, id: &SpaceId) -> anyhow::Result<bool> {
+        if self.space_removals.reserved(id) {
+            return Ok(false);
+        }
         let id = id.to_owned();
         self.store
             .run(move |db| {
                 crate::daemon::store::exists(
                     db,
-                    "SELECT 1 FROM workspaces WHERE id=?1 AND state=?2",
+                    "SELECT 1 FROM spaces LEFT JOIN workspaces USING (id)
+                     WHERE spaces.id=?1 AND (spaces.kind='chat' OR workspaces.state=?2)",
                     rusqlite::params![id, WorkspaceState::Ready],
                 )
             })
