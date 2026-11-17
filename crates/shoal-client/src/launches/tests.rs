@@ -143,14 +143,7 @@ async fn a_launch_refuses_what_it_cannot_start_before_it_creates_anything() {
         let error = crate::launches::launch(&app, launch).await.unwrap_err();
         assert!(format!("{error:#}").contains(refusal), "{error:#}");
     }
-    assert!(
-        daemon
-            .manager
-            .visible_workspaces(None)
-            .await
-            .unwrap()
-            .is_empty()
-    );
+    assert!(daemon.manager.list_workspaces().await.unwrap().is_empty());
 }
 
 /// The resolved starts the daemon ran its chat start worker for, each with

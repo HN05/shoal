@@ -354,8 +354,8 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
 
     // It lists every space and repository.
     let caller = manager.caller(&token).await.unwrap().unwrap();
-    let listed = manager.visible_chats(Some(&caller)).await.unwrap();
-    assert_eq!(listed.len(), 2);
+    let listed = manager.visible_spaces(Some(&caller)).await.unwrap();
+    assert_eq!(listed.len(), 3);
     let visible = manager.visible_repositories(Some(&caller)).await.unwrap();
     assert_eq!(visible.len(), 2);
     let mut workspaces = WorkspaceMethod::ListSpaces;

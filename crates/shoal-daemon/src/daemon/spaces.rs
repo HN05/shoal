@@ -21,6 +21,7 @@ mod export;
 mod find;
 mod hooks;
 mod listing;
+pub(crate) use listing::worktrees_mut;
 mod naming;
 pub(crate) mod priority;
 pub(crate) mod records;

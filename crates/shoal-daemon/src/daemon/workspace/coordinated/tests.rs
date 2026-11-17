@@ -73,8 +73,10 @@ async fn kept(manager: &Manager, workspace: &Workspace) -> Option<CleanupReason>
 /// agent or command of its own, and the agent above it that does its work is
 /// working.
 async fn parent_working(manager: &Manager, workspace: &Workspace) -> bool {
-    let listed = manager.visible_workspaces(None).await.unwrap();
-    let found = listed.iter().find(|w| w.id == workspace.id).unwrap();
+    let listed = manager.listed_spaces(None).await.unwrap();
+    let found = (listed.into_iter())
+        .find_map(|space| space.into_workspace().ok().filter(|w| w.id == workspace.id))
+        .unwrap();
     found.agent_state.is_none()
         && !found.running
         && found.coordinator_state == Some(AgentState::Working)

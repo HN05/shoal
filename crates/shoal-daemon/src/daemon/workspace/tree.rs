@@ -13,7 +13,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::Manager;
 use crate::{
     daemon::notifications::NotificationKind,
-    model::{RefPart, SpaceKind, SpaceRef, Workspace, WorkspaceRef},
+    model::{RefPart, SpaceKind, SpaceRef, Workspace},
     state::WorkspaceState,
 };
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
@@ -122,26 +122,6 @@ impl Manager {
                         up("true")
                     ))?
                     .query_map([id], space_ref)?
-                    .collect::<rusqlite::Result<_>>()?)
-            })
-            .await
-    }
-
-    /// The ID, name and branch of `root` and every workspace below it, or
-    /// of every workspace without `root`, by name.
-    pub async fn workspace_refs_within(&self, root: Option<&SpaceId>) -> Result<Vec<WorkspaceRef>> {
-        let root = root.cloned();
-        self.store
-            .run(move |db| {
-                Ok(db
-                    .prepare(&subtree_query("id,name,branch"))?
-                    .query_map([root], |row| {
-                        Ok(WorkspaceRef {
-                            id: row.get(0)?,
-                            name: row.get(1)?,
-                            branch: row.get(2)?,
-                        })
-                    })?
                     .collect::<rusqlite::Result<_>>()?)
             })
             .await

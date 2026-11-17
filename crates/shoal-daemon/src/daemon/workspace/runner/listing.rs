@@ -6,19 +6,19 @@ use shoal_ids::space_ids::SpaceId;
 
 use super::ends::ClaimedJob;
 use crate::{
-    daemon::workspace::Manager,
-    model::{QueueEntry, QueuedJob, Workspace},
+    daemon::{spaces::worktrees_mut, workspace::Manager},
+    model::{QueueEntry, QueuedJob, Space, Workspace},
     state::{QueueKind, QueueState},
 };
 
 impl Manager {
-    /// Name the job each of `workspaces` that runs one runs.
-    pub(crate) async fn attach_jobs(&self, workspaces: &mut [Workspace]) -> Result<()> {
+    /// Name the job each workspace among `spaces` that runs one runs.
+    pub(crate) async fn attach_jobs(&self, spaces: &mut [Space]) -> Result<()> {
         let claimed = self.linked_claimed_jobs().await?;
-        for workspace in workspaces {
-            workspace.job = claimed
+        for (id, worktree) in worktrees_mut(spaces) {
+            worktree.job = claimed
                 .iter()
-                .find(|job| job.workspace_id == workspace.id)
+                .find(|job| job.workspace_id == *id)
                 .map(|job| Box::new(job.job.clone()));
         }
         Ok(())

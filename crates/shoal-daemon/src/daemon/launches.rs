@@ -40,8 +40,10 @@ impl LaunchReads for ManagerReads<'_> {
     }
 
     async fn workspaces(&self) -> Result<Vec<Workspace>> {
-        let root = self.manager.reach_root(self.caller).await?;
-        self.manager.visible_workspaces(root.as_ref()).await
+        let spaces = self.manager.visible_spaces(self.caller).await?;
+        Ok((spaces.into_iter())
+            .filter_map(|space| space.into_workspace().ok())
+            .collect())
     }
 
     async fn settings(&self, target: ConfigTarget) -> Result<Effective> {

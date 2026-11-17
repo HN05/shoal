@@ -52,7 +52,7 @@ impl Manager {
         let Some(root) = crate::repository::worktree_root(directory).await? else {
             return Ok(None);
         };
-        let workspaces = self.visible_workspaces(None).await?;
+        let workspaces = self.list_workspaces().await?;
         Ok((workspaces.into_iter())
             .find(|workspace| workspace.path == root)
             .map(|workspace| workspace.id))

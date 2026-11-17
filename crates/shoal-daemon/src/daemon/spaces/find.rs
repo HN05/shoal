@@ -12,24 +12,17 @@ use crate::{
 };
 
 impl Manager {
-    /// The spaces that link an issue, PR or CI run, or the workspaces that
-    /// hold a lease on a resource, optionally only among those `within`:
-    /// workspaces in listing order, then chats.
-    pub async fn find_spaces(
-        &self,
-        target: &SpaceTarget,
-        within: Option<Vec<SpaceId>>,
-    ) -> Result<Vec<Space>> {
+    /// The spaces among `among` that link an issue, PR or CI run, or the
+    /// workspaces among them that hold a lease on a resource, in their
+    /// order there.
+    pub async fn find_spaces(&self, target: &SpaceTarget, among: Vec<Space>) -> Result<Vec<Space>> {
+        let within: Vec<SpaceId> = among.iter().map(|space| space.id.clone()).collect();
         let ids = match target {
             SpaceTarget::Item { kind, input } => self.linking_spaces(*kind, input, within).await?,
             SpaceTarget::Resource { name } => self.holding_workspaces(name, within).await?,
         };
-        let workspaces = self.list_workspaces().await?;
-        let workspaces = workspaces.into_iter().map(Space::from);
-        let chats = self.chats().await?.into_iter().map(Space::from);
-        Ok(workspaces
-            .chain(chats)
-            .filter(|space: &Space| ids.contains(&space.id))
+        Ok((among.into_iter())
+            .filter(|space| ids.contains(&space.id))
             .collect())
     }
 
@@ -37,7 +30,7 @@ impl Manager {
         &self,
         kind: LinkKind,
         input: &ItemInput,
-        within: Option<Vec<SpaceId>>,
+        within: Vec<SpaceId>,
     ) -> Result<Vec<SpaceId>> {
         let label = kind.noun();
         let (wanted, number) = match input {
@@ -50,12 +43,8 @@ impl Manager {
         let links = self
             .store
             .run(move |db| {
-                let ids = db
-                    .prepare("SELECT id FROM spaces")?
-                    .query_map([], |row| row.get::<_, SpaceId>(0))?
-                    .collect::<rusqlite::Result<Vec<_>>>()?;
                 let mut links = Vec::new();
-                for id in ids.into_iter().filter(|id| within_ids(&within, id)) {
+                for id in within {
                     // Only an issue or PR can be assigned.
                     if let Some(kind) = kind.item() {
                         for url in linked_items(db, &id, Some(kind))? {
@@ -92,11 +81,7 @@ impl Manager {
         Ok(matches.into_iter().map(|(id, _)| id).collect())
     }
 
-    async fn holding_workspaces(
-        &self,
-        name: &str,
-        within: Option<Vec<SpaceId>>,
-    ) -> Result<Vec<SpaceId>> {
+    async fn holding_workspaces(&self, name: &str, within: Vec<SpaceId>) -> Result<Vec<SpaceId>> {
         let name = name.to_owned();
         let label = name.clone();
         let mut ids = self
@@ -111,15 +96,8 @@ impl Manager {
                     .collect::<rusqlite::Result<Vec<_>>>()?)
             })
             .await?;
-        ids.retain(|id| within_ids(&within, id));
+        ids.retain(|id| within.contains(id));
         ensure!(!ids.is_empty(), "no workspace holds resource {label}");
         Ok(ids)
     }
-}
-
-/// Whether a lookup confined to the spaces `within`, or to none, covers `id`.
-fn within_ids(within: &Option<Vec<SpaceId>>, id: &SpaceId) -> bool {
-    within
-        .as_ref()
-        .is_none_or(|within| within.iter().any(|within| within == id))
 }

@@ -7,7 +7,9 @@ use shoal_ids::space_ids::SpaceId;
 pub use shoal_protocol::executions::Forgotten;
 
 use super::Manager;
+use crate::daemon::scope::Caller;
 use crate::execution::recovery::{self, Saved, SavedExt as _};
+use crate::model::Space;
 use crate::protocol::SavedAgent;
 use shoal_protocol::saved::SavedSummary;
 use shoal_protocol::space_names::SpaceSelector;
@@ -38,46 +40,19 @@ impl Manager {
         Saved::load(&self.paths, &space.id)
     }
 
-    /// What each workspace and chat visible within `owner`'s reach, or every
-    /// one, saved, in brief, for those that saved anything. One whose state
-    /// cannot be read counts as saving nothing, so it costs only its own
-    /// space.
+    /// What each space `caller` sees saved, in brief, for those that saved
+    /// anything. One whose state cannot be read counts as saving nothing, so
+    /// it costs only its own space.
     pub(crate) async fn saved_summaries(
         &self,
-        owner: Option<&SpaceId>,
+        caller: Option<&Caller>,
     ) -> Result<Vec<SavedSummary>> {
-        let workspaces = self.visible_workspaces(owner).await?;
-        let mut spaces: Vec<SpaceId> = workspaces.into_iter().map(|w| w.id).collect();
-        spaces.extend(self.chats_within(owner).await?);
-        let summary = |id: SpaceId| {
-            let saved = Saved::load(&self.paths, &id).ok()?;
-            (!saved.is_empty()).then(|| saved.summary(id))
+        let spaces = self.visible_spaces(caller).await?;
+        let summary = |space: Space| {
+            let saved = Saved::load(&self.paths, &space.id).ok()?;
+            (!saved.is_empty()).then(|| saved.summary(space.id))
         };
         Ok(spaces.into_iter().filter_map(summary).collect())
-    }
-
-    /// The IDs of the chats within `owner`'s reach, or of every one.
-    async fn chats_within(&self, owner: Option<&SpaceId>) -> Result<Vec<SpaceId>> {
-        let reached = match owner {
-            Some(owner) => Some(self.subtree(owner).await?),
-            None => None,
-        };
-        let chats: Vec<SpaceId> = self
-            .store
-            .run(|db| {
-                Ok(db
-                    .prepare("SELECT id FROM spaces WHERE kind='chat'")?
-                    .query_map([], |row| row.get(0))?
-                    .collect::<rusqlite::Result<_>>()?)
-            })
-            .await?;
-        Ok(match reached {
-            Some(reached) => chats
-                .into_iter()
-                .filter(|id| reached.contains(id))
-                .collect(),
-            None => chats,
-        })
     }
 
     /// Keep the space's stopped agents whose execution ended as last

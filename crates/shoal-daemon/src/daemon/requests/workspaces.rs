@@ -193,7 +193,7 @@ pub(super) async fn handle(
                 .convert_to_chat(&workspace, mode.unwrap_or_else(crate::model::chat_mode))
                 .await?,
         ),
-        WorkspaceMethod::ListSpaces => Body::Spaces(manager.visible_spaces(caller).await?),
+        WorkspaceMethod::ListSpaces => Body::Spaces(manager.listed_spaces(caller).await?),
         WorkspaceMethod::UntrackedWorktrees => {
             let listed = manager.untracked_worktrees().await;
             return Ok(Answer::pages(listed, Body::UntrackedWorktrees));

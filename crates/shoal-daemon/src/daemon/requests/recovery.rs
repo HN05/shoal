@@ -37,8 +37,7 @@ pub(super) async fn handle(
             return Ok(Answer::pages(pieces(saved), Body::SavedPieces));
         }
         RecoveryMethod::SavedSummaries => {
-            let root = manager.reach_root(caller).await?;
-            let summaries = manager.saved_summaries(root.as_ref()).await;
+            let summaries = manager.saved_summaries(caller).await;
             return Ok(Answer::pages(summaries, Body::SavedSummaries));
         }
         RecoveryMethod::Reconcile { workspace, options } => Body::Reconciled(

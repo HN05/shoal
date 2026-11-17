@@ -10,14 +10,18 @@ use rusqlite::Connection;
 use shoal_ids::space_ids::SpaceId;
 
 use super::{Manager, TrackedAgents, agent_state, tree};
-use crate::{daemon::store, model::Workspace, state::AgentState};
+use crate::{
+    daemon::{spaces::worktrees_mut, store},
+    model::Space,
+    state::AgentState,
+};
 
 impl Manager {
-    /// Fill in, for each of `workspaces` whose coordinator does its work,
-    /// the turn state that coordinator's agent reports.
-    pub(super) async fn load_coordinator_states(&self, workspaces: &mut [Workspace]) -> Result<()> {
+    /// Fill in, for each workspace among `spaces` whose coordinator does
+    /// its work, the turn state that coordinator's agent reports.
+    pub(crate) async fn load_coordinator_states(&self, spaces: &mut [Space]) -> Result<()> {
         let agents = self.tracked_agents().await;
-        let ids: Vec<SpaceId> = workspaces.iter().map(|w| w.id.clone()).collect();
+        let ids: Vec<SpaceId> = worktrees_mut(spaces).map(|(id, _)| id.clone()).collect();
         let states = self
             .store
             .run(move |db| {
@@ -26,8 +30,8 @@ impl Manager {
                     .collect::<Result<Vec<_>>>()
             })
             .await?;
-        for (workspace, state) in workspaces.iter_mut().zip(states) {
-            workspace.coordinator_state = state;
+        for ((_, worktree), state) in worktrees_mut(spaces).zip(states) {
+            worktree.coordinator_state = state;
         }
         Ok(())
     }

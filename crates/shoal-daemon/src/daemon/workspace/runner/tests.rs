@@ -736,10 +736,9 @@ async fn a_jobs_workspace_names_its_job_and_lists_with_its_branchs_workspace() {
     assert_eq!(claimed.len(), 1);
     LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
 
-    let listed = manager.visible_workspaces(None).await.unwrap();
-    let job = listed
-        .iter()
-        .find(|workspace| workspace.id == claimed[0].workspace_id)
+    let listed = manager.listed_spaces(None).await.unwrap();
+    let job = (listed.into_iter())
+        .find_map(|space| (space.into_workspace().ok()).filter(|w| w.id == claimed[0].workspace_id))
         .unwrap();
     let named = job.job.as_ref().unwrap();
     assert_eq!(named.job.name, "rust");

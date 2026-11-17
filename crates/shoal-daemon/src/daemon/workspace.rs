@@ -319,27 +319,6 @@ impl Manager {
         self.usage.with_workspaces(|usages| usages.get(id, now))
     }
 
-    /// The workspaces a caller lists, with their coordinators' turn
-    /// states. A workspace process sees its
-    /// own subtree with its own workspace first, since scoped commands
-    /// without a target act on the first one; a chat in a workspace's
-    /// worktree also sees that workspace, last.
-    pub async fn visible_workspaces(&self, owner: Option<&SpaceId>) -> Result<Vec<Workspace>> {
-        let mut workspaces = self.list_workspaces_within(owner).await?;
-        if let Some(owner) = owner {
-            if let Some(home) = self.chat_home(owner).await? {
-                workspaces.push(self.workspace(&SpaceSelector::id(&home)).await?);
-            }
-            workspaces.sort_by_key(|w| w.id != *owner);
-        }
-        for workspace in &mut workspaces {
-            workspace.usage = self.workspace_usage(&workspace.id);
-        }
-        self.load_coordinator_states(&mut workspaces).await?;
-        self.attach_jobs(&mut workspaces).await?;
-        Ok(workspaces)
-    }
-
     /// Whether the workspace has any recorded execution, in any state.
     pub(super) async fn workspace_has_executions(&self, id: &SpaceId) -> Result<bool> {
         let id = id.to_owned();

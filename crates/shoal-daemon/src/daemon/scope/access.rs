@@ -14,8 +14,7 @@ use crate::{
         questions::Question, workspace::Manager,
     },
     model::{
-        Chat, ChatQueueRequest, QueueEntry, QueueRequest, Repository, RunningAgent, Space,
-        SpaceTarget,
+        ChatQueueRequest, QueueEntry, QueueRequest, Repository, RunningAgent, Space, SpaceTarget,
     },
     protocol::{ChatStart, operations::WorkspaceStart},
     repository::Selector,
@@ -90,19 +89,14 @@ impl Manager {
         Ok(space.repository_id.as_ref().cloned())
     }
 
-    /// The spaces `target` finds among those `caller` may see: the ones its
-    /// scope reaches and the workspace a chat runs in, or every space for
-    /// an unscoped caller.
+    /// The spaces `target` finds among those `caller` sees.
     pub(in crate::daemon) async fn find_visible_spaces(
         &self,
         target: &SpaceTarget,
         caller: Option<&Caller>,
     ) -> Result<Vec<Space>> {
-        let mut within = self.reached_spaces(caller).await?;
-        if let (Some(within), Some(caller)) = (&mut within, caller) {
-            within.extend(self.chat_home(&caller.space_id).await?);
-        }
-        self.find_spaces(target, within).await
+        let visible = self.visible_spaces(caller).await?;
+        self.find_spaces(target, visible).await
     }
 
     /// `space`, which must be the caller's own; `refusal` says why
@@ -216,32 +210,23 @@ impl Manager {
         Ok(request)
     }
 
-    /// The spaces `caller` sees: the workspaces its scope reaches, then
-    /// the chats it reaches, running or stopped; all of them unscoped.
+    /// The spaces `caller` sees, running or stopped: those its scope
+    /// reaches, its own first, since scoped commands without a target act
+    /// on the first one, and for a chat in a workspace's worktree that
+    /// workspace too, last; every space for an unscoped caller.
     pub(in crate::daemon) async fn visible_spaces(
         &self,
         caller: Option<&Caller>,
     ) -> Result<Vec<Space>> {
         let root = self.reach_root(caller).await?;
-        let workspaces = self.visible_workspaces(root.as_ref()).await?;
-        let chats = self.visible_chats(caller).await?;
-        let workspaces = workspaces.into_iter().map(Space::from);
-        Ok(workspaces
-            .chain(chats.into_iter().map(Space::from))
-            .collect())
-    }
-
-    /// The chats `caller` may see: those its scope reaches, or all of them
-    /// for an unscoped caller.
-    pub(in crate::daemon) async fn visible_chats(
-        &self,
-        caller: Option<&Caller>,
-    ) -> Result<Vec<Chat>> {
-        let mut chats = self.chats().await?;
-        if let Some(reached) = self.reached_spaces(caller).await? {
-            chats.retain(|chat| reached.contains(&chat.id));
+        let mut spaces = self.spaces_within(root.as_ref()).await?;
+        if let Some(root) = &root {
+            if let Some(home) = self.chat_home(root).await? {
+                spaces.push(self.space_by_id(&home).await?);
+            }
+            spaces.sort_by_key(|space| space.id != *root);
         }
-        Ok(chats)
+        Ok(spaces)
     }
 
     /// The `agents` `caller` may restart: those of the spaces its scope

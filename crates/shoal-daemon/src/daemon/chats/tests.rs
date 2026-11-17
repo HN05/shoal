@@ -729,10 +729,13 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
         granted: None,
         read_only: false,
     };
-    manager.executions.issue_scope("chat".into(), caller).await;
-    let listed = manager.visible_workspaces(Some(&chat.id)).await.unwrap();
+    manager
+        .executions
+        .issue_scope("chat".into(), caller.clone())
+        .await;
+    let listed = manager.visible_spaces(Some(&caller)).await.unwrap();
     let names: Vec<_> = listed.into_iter().map(|listed| listed.name).collect();
-    assert_eq!(names, ["worker"]);
+    assert_eq!(names, ["worker-chat", "worker"]);
 
     let status = |space: &str| {
         Operation::from(WorkspaceMethod::SpaceStatus {

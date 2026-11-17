@@ -544,18 +544,24 @@ async fn workspace_processes_list_their_subtree_with_their_own_workspace_first()
         )
         .await
         .unwrap();
-    let names = |workspaces: Vec<Workspace>| {
-        workspaces
+    let names = |spaces: Vec<crate::model::Space>| {
+        spaces
             .into_iter()
-            .map(|workspace| workspace.name)
+            .map(|space| space.name)
             .collect::<Vec<_>>()
     };
     assert_eq!(
-        names(manager.visible_workspaces(None).await.unwrap()),
+        names(manager.visible_spaces(None).await.unwrap()),
         ["child", "parent", "sibling"]
     );
+    let caller = crate::daemon::scope::Caller {
+        space_id: parent.id.clone(),
+        execution: None,
+        granted: None,
+        read_only: false,
+    };
     assert_eq!(
-        names(manager.visible_workspaces(Some(&parent.id)).await.unwrap()),
+        names(manager.visible_spaces(Some(&caller)).await.unwrap()),
         ["parent", "child"]
     );
 }
@@ -783,16 +789,14 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
             name: "lock".into(),
         },
     ];
-    let subtree = manager.subtree(&parent.id).await.unwrap();
     for target in &targets {
-        let found = manager
-            .find_spaces(target, Some(subtree.clone()))
-            .await
-            .unwrap();
+        let subtree = manager.spaces_within(Some(&parent.id)).await.unwrap();
+        let found = manager.find_spaces(target, subtree).await.unwrap();
         let found: Vec<_> = found.iter().map(|space| &space.id).collect();
         assert_eq!(found, [child.id.as_str()], "{target:?}");
         // Unscoped, the chat links the items too, but holds no lease.
-        let everywhere = manager.find_spaces(target, None).await.unwrap();
+        let every = manager.present_spaces().await.unwrap();
+        let everywhere = manager.find_spaces(target, every).await.unwrap();
         let (workspaces, chats): (Vec<_>, Vec<_>) = everywhere
             .iter()
             .partition(|space| space.worktree().is_some());

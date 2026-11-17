@@ -6,9 +6,10 @@ use shoal_ids::space_ids::SpaceId;
 use crate::{
     daemon::{
         chats,
+        scope::Caller,
         workspace::{self, Manager},
     },
-    model::Space,
+    model::{Space, SpacePart, Worktree},
 };
 
 impl Manager {
@@ -34,4 +35,35 @@ impl Manager {
             .chain(chats.into_iter().map(Space::from))
             .collect())
     }
+
+    /// The spaces `caller` sees, as listing them shows them: with what each
+    /// workspace's processes use, the turn state of the coordinator that
+    /// does its work and the job the runner runs there.
+    pub(crate) async fn listed_spaces(&self, caller: Option<&Caller>) -> Result<Vec<Space>> {
+        let mut spaces = self.visible_spaces(caller).await?;
+        self.load_usage(&mut spaces);
+        self.load_coordinator_states(&mut spaces).await?;
+        self.attach_jobs(&mut spaces).await?;
+        Ok(spaces)
+    }
+
+    /// Fill in what the processes of each workspace among `spaces` use,
+    /// from the latest sample.
+    fn load_usage(&self, spaces: &mut [Space]) {
+        for (id, worktree) in worktrees_mut(spaces) {
+            worktree.usage = self.workspace_usage(id);
+        }
+    }
+}
+
+/// The ID and worktree of each workspace among `spaces`.
+pub(crate) fn worktrees_mut(
+    spaces: &mut [Space],
+) -> impl Iterator<Item = (&SpaceId, &mut Worktree)> {
+    spaces
+        .iter_mut()
+        .filter_map(|Space { id, part, .. }| match part {
+            SpacePart::Workspace(worktree) => Some((&*id, worktree)),
+            SpacePart::Chat(_) => None,
+        })
 }

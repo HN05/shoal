@@ -15,7 +15,7 @@ use crate::{
         scope::Caller,
         workspace::Manager,
     },
-    model::{Chat, Relation, Workspace},
+    model::{Relation, Space, Workspace},
 };
 use shoal_forge::updates::Snapshot;
 use shoal_protocol::{
@@ -69,25 +69,14 @@ pub(super) async fn take(
     if topics.has(Topic::Links) {
         found.extend(links(manager, &visible.workspaces).await?);
     }
-    let chats = if topics.has(Topic::Sessions)
-        || topics.has(Topic::Questions)
-        || topics.has(Topic::Approvals)
-    {
-        manager.visible_chats(caller).await?
-    } else {
-        Vec::new()
-    };
     if topics.has(Topic::Sessions) {
-        found.extend(sessions(manager, &visible.workspaces, &chats).await?);
+        found.extend(sessions(manager, &visible.spaces).await?);
     }
-    if topics.has(Topic::Questions) || topics.has(Topic::Approvals) {
-        let chats: HashSet<&str> = chats.iter().map(|chat| chat.id.as_str()).collect();
-        if topics.has(Topic::Questions) {
-            found.extend(questions(manager, &visible, &chats).await?);
-        }
-        if topics.has(Topic::Approvals) {
-            found.extend(approvals(manager, caller, &visible, &chats).await?);
-        }
+    if topics.has(Topic::Questions) {
+        found.extend(questions(manager, &visible).await?);
+    }
+    if topics.has(Topic::Approvals) {
+        found.extend(approvals(manager, caller, &visible).await?);
     }
     if topics.has(Topic::Messages) {
         found.extend(messages(manager, caller, &visible).await?);
@@ -113,50 +102,44 @@ pub(super) async fn take(
     Ok(records)
 }
 
-/// The workspaces a caller may read: every workspace, or those a scoped
-/// caller's scope reaches, loaded only as far as the topics need.
+/// The spaces a caller may read: every space, or those a scoped caller
+/// sees, read only for the topics that need them.
 #[derive(Default)]
 struct Visible {
-    /// Each workspace with its details, for the topics that show them.
+    /// Each space with its details, for the topics that show them.
+    spaces: Vec<Space>,
+    /// Each workspace among them, for the topics whose records are a
+    /// workspace's.
     workspaces: Vec<Workspace>,
-    /// Each workspace's name by ID, for the topics that filter or name
-    /// records by workspace.
-    names: HashMap<SpaceId, SpaceName>,
 }
 
 impl Visible {
     async fn load(manager: &Manager, caller: Option<&Caller>, topics: &Topics) -> Result<Self> {
-        let root = manager.reach_root(caller).await?;
-        let root = root.as_ref();
-        if topics.has(Topic::Workspaces) || topics.has(Topic::Links) || topics.has(Topic::Sessions)
-        {
-            let workspaces = manager.list_workspaces_within(root).await?;
-            let names = workspaces
-                .iter()
-                .map(|workspace| (workspace.id.clone(), workspace.name.clone()))
-                .collect();
-            return Ok(Self { workspaces, names });
+        let reading_spaces = [
+            Topic::Workspaces,
+            Topic::Links,
+            Topic::Sessions,
+            Topic::Questions,
+            Topic::Approvals,
+            Topic::Messages,
+        ];
+        if !reading_spaces.into_iter().any(|topic| topics.has(topic)) {
+            return Ok(Self::default());
         }
-        if topics.has(Topic::Questions)
-            || topics.has(Topic::Approvals)
-            || topics.has(Topic::Messages)
-        {
-            let names = manager
-                .workspace_refs_within(root)
-                .await?
-                .into_iter()
-                .map(|workspace| (workspace.id, workspace.name))
-                .collect();
-            return Ok(Self {
-                workspaces: Vec::new(),
-                names,
-            });
-        }
-        Ok(Self::default())
+        let spaces = manager.visible_spaces(caller).await?;
+        let workspaces = spaces.iter().filter_map(Space::to_workspace).collect();
+        Ok(Self { spaces, workspaces })
     }
 
     fn contains(&self, id: &SpaceId) -> bool {
-        self.names.contains_key(id)
+        self.spaces.iter().any(|space| space.id == *id)
+    }
+
+    /// The name of the workspace `id` among them.
+    fn workspace_name(&self, id: &SpaceId) -> Option<&SpaceName> {
+        (self.workspaces.iter())
+            .find(|workspace| workspace.id == *id)
+            .map(|workspace| &workspace.name)
     }
 }
 
@@ -261,49 +244,36 @@ fn lookup_errors(observed: &Snapshot) -> Vec<LookupError> {
         .collect()
 }
 
-/// The sessions the agents of each of `workspaces` and `chats` reported.
-async fn sessions(
-    manager: &Manager,
-    workspaces: &[Workspace],
-    chats: &[Chat],
-) -> Result<Vec<Record>> {
-    let spaces =
-        (workspaces.iter().map(|workspace| &workspace.id)).chain(chats.iter().map(|chat| &chat.id));
+/// The sessions the agents of each of `spaces` reported.
+async fn sessions(manager: &Manager, spaces: &[Space]) -> Result<Vec<Record>> {
     let mut records = Vec::new();
-    for id in spaces {
+    for space in spaces {
         records.push(Record::Sessions(ReportedSessions {
-            space_id: id.to_owned(),
-            sessions: manager.reported_sessions(id).await?,
+            space_id: space.id.clone(),
+            sessions: manager.reported_sessions(&space.id).await?,
         }));
     }
     Ok(records)
 }
 
-/// The open questions of the visible workspaces and `chats`.
-async fn questions(
-    manager: &Manager,
-    visible: &Visible,
-    chats: &HashSet<&str>,
-) -> Result<Vec<Record>> {
+/// The open questions of the visible spaces.
+async fn questions(manager: &Manager, visible: &Visible) -> Result<Vec<Record>> {
     Ok(manager
         .open_questions()
         .await?
         .into_iter()
-        .filter(|question| {
-            visible.contains(&question.space_id) || chats.contains(question.space_id.as_str())
-        })
+        .filter(|question| visible.contains(&question.space_id))
         .map(Record::Question)
         .collect())
 }
 
 /// Pending approval requests: all of them for the user, including issue
 /// proposals that outlive their space, and for a scoped caller those its
-/// visible workspaces and `chats` made.
+/// visible spaces made.
 async fn approvals(
     manager: &Manager,
     caller: Option<&Caller>,
     visible: &Visible,
-    chats: &HashSet<&str>,
 ) -> Result<Vec<Record>> {
     Ok(manager
         .approval_requests(None)
@@ -311,9 +281,7 @@ async fn approvals(
         .into_iter()
         .filter(|request| {
             request.status == DecisionStatus::Pending
-                && (caller.is_none()
-                    || visible.contains(&request.space_id)
-                    || chats.contains(request.space_id.as_str()))
+                && (caller.is_none() || visible.contains(&request.space_id))
         })
         .map(|request| Record::Approval(Box::new(request)))
         .collect())
@@ -331,7 +299,7 @@ async fn messages(
         .await?
         .into_iter()
         .filter_map(|(workspace_id, message)| {
-            let name = visible.names.get(&workspace_id)?.clone();
+            let name = visible.workspace_name(&workspace_id)?.clone();
             Some(Record::Message(agent_message(message, workspace_id, name)))
         })
         .collect();
