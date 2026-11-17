@@ -3239,7 +3239,9 @@ shoal repo rm my-project -y
 
 Permanently deletes the checkout (including in-place local repositories with
 uncommitted or unpushed work), all its workspaces, their ports, simulators, and
-leases, its seed and shared caches, and its local config, stopping managed commands first. Shoal attempts to
+leases, its seed and shared caches, and its local config, stopping managed commands first. A workspace
+still being prepared goes too, once the creation of its worktree under way ends; one whose setup runs
+refuses the removal until setup ends. Shoal attempts to
 delete workspace branches; a branch whose recorded worktree directory is already
 missing is retained because its contents cannot be inspected.
 Interactive calls identify the resolved repository, source, and checkout path before asking

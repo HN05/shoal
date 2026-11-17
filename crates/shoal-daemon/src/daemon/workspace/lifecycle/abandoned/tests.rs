@@ -59,6 +59,7 @@ async fn a_removal_whose_work_ends_early_fails_its_workspace() {
         inspection: InspectionPolicy::GitOnly,
         release_holds: true,
         taking: None,
+        holds_git: false,
     };
     // Its work ends, as a panic ends it, before it removes or retains it.
     drop(manager.reserve_space(&workspace.id, removal).await.unwrap());

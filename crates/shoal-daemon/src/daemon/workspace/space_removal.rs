@@ -208,15 +208,23 @@ impl Manager {
     /// never started, as when the command creating it was interrupted; it
     /// waits for that creation to end, then takes the repository's Git gate,
     /// under which setup starts, and reads the workspace again, which
-    /// creation has since finished recording.
+    /// creation has since finished recording. A removal that holds the
+    /// gate did both already.
     async fn reserve_worktree(
         &self,
         workspace: &Workspace,
         removal: Removal<'_>,
     ) -> Result<WorktreeReservation> {
         let manual = matches!(removal, Removal::Manual { .. });
+        let holds_git = matches!(
+            removal,
+            Removal::Manual {
+                holds_git: true,
+                ..
+            }
+        );
         let mut workspace = Cow::Borrowed(workspace);
-        let _created = if manual && workspace.state == WorkspaceState::Preparing {
+        let _created = if manual && !holds_git && workspace.state == WorkspaceState::Preparing {
             (self.gates)
                 .wait_for_creation(workspace.repository(), &workspace.id)
                 .await;

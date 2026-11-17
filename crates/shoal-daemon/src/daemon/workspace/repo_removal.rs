@@ -8,11 +8,14 @@ use super::{
     },
 };
 use crate::{
-    daemon::{resources::Scope, store},
+    daemon::{
+        resources::Scope,
+        seed::{SeedPause, SeedStop},
+        store,
+    },
     fsutil::off_runtime,
     git,
     model::{Repository, RepositoryRemoval, Workspace},
-    removal::{InspectionPolicy, UnsavedWork},
     shoal_dirs::{Contents, ShoalDir},
     state::WorkspaceState,
 };
@@ -60,10 +63,11 @@ impl Manager {
             // gate also serializes with workspace creation, branch refresh, and reconciliation.
             let _registry = self.gates.lock_registry().await;
             let repo = self.repository(selector).await?;
-            let _seed = self.stop_seed_build(&repo.id).await;
+            let seed = self.pause_seed_build(&repo.id).await;
             self.stop_repository_reviews(&repo.id).await;
             let _fetch = self.gates.lock_fetch(&repo.id).await;
             let _git = self.gates.lock_git(&repo.id).await;
+            let _seed = self.settle_creations(&repo.id, seed).await?;
             self.remove_locked_repository(repo).await
         };
         self.conversion_handovers.hold(removal).await
@@ -81,10 +85,11 @@ impl Manager {
         let removal = async {
             let _registry = self.gates.lock_registry().await;
             let repo = self.repository(id).await?;
-            let _seed = self.stop_seed_build(&repo.id).await;
+            let seed = self.pause_seed_build(&repo.id).await;
             self.stop_repository_reviews(&repo.id).await;
             let _fetch = self.gates.lock_fetch(&repo.id).await;
             let _git = self.gates.lock_git(&repo.id).await;
+            let _seed = self.settle_creations(&repo.id, seed).await?;
             if !repo.contribution
                 || self.checkout_has_work(&repo).await?
                 || !self.begin_contribution_removal(&repo).await?
@@ -94,6 +99,20 @@ impl Manager {
             self.remove_locked_repository(repo).await.map(Some)
         };
         self.conversion_handovers.hold(removal).await
+    }
+
+    /// Wait for the creations under way in the repository `id`, whose Git
+    /// gate the caller holds, to end, then stop its `paused` seed: a
+    /// creation clones the seed's snapshot before it ends.
+    async fn settle_creations(&self, id: &RepositoryId, paused: SeedPause) -> Result<SeedStop> {
+        for workspace in self.list_workspaces().await? {
+            if workspace.repository() == id && workspace.state == WorkspaceState::Preparing {
+                (self.gates)
+                    .wait_for_creation_holding_git(&workspace.id)
+                    .await;
+            }
+        }
+        Ok(paused.stop().await)
     }
 
     /// Remove the repository; the caller holds its registry and Git gates.
@@ -314,28 +333,7 @@ impl Manager {
         }
         // Establish ownership for every workspace before deleting any of them.
         for workspace in workspaces {
-            ensure!(
-                matches!(
-                    workspace.state,
-                    WorkspaceState::Ready | WorkspaceState::Failed
-                ),
-                "workspace {} is busy",
-                workspace.name
-            );
-            if off_runtime::exists(&workspace.path).await? {
-                self.verify_worktree(workspace).await?;
-            } else {
-                ensure!(
-                    workspace.state == WorkspaceState::Failed,
-                    "workspace {} is missing; reconcile it before repository removal",
-                    workspace.name
-                );
-                ensure!(
-                    self.missing_worktree(workspace).await?.is_none(),
-                    "workspace {} was moved; restore it before repository removal",
-                    workspace.name
-                );
-            }
+            self.check_removable_workspace(workspace).await?;
         }
         let (id, recorded_identity, workspace_paths) = (
             repo.id.clone(),
@@ -357,18 +355,14 @@ impl Manager {
             if self.find_workspace(&workspace.id).await?.is_none() {
                 continue;
             }
-            self.remove_selected(
-                &SpaceSelector::id(&workspace.id),
-                UnsavedWork::All,
-                InspectionPolicy::GitOnly,
-            )
-            .await
-            .with_context(|| {
-                format!(
-                    "remove workspace {}; repository retained for retry",
-                    workspace.name
-                )
-            })?;
+            self.remove_for_repository(&workspace.id)
+                .await
+                .with_context(|| {
+                    format!(
+                        "remove workspace {}; repository retained for retry",
+                        workspace.name
+                    )
+                })?;
         }
         verify_directory(&repo.path, identity, false)?;
         if identity.is_some() {
@@ -385,6 +379,35 @@ impl Manager {
                 Ok(())
             })
             .await
+    }
+
+    /// Refuse a workspace the repository's removal cannot take: one an
+    /// operation holds, other than a preparation whose setup has yet to
+    /// start, which the caller's Git gate keeps from starting, or one whose
+    /// worktree is not verifiably its own. A worktree its preparation has
+    /// yet to create holds nothing to verify.
+    async fn check_removable_workspace(&self, workspace: &Workspace) -> Result<()> {
+        let idle = match workspace.state {
+            WorkspaceState::Ready | WorkspaceState::Failed => true,
+            WorkspaceState::Preparing => !self.workspace_has_executions(&workspace.id).await?,
+            _ => false,
+        };
+        ensure!(idle, "workspace {} is busy", workspace.name);
+        if off_runtime::exists(&workspace.path).await? {
+            self.verify_worktree(workspace).await?;
+        } else if !workspace.unborn() {
+            ensure!(
+                workspace.state == WorkspaceState::Failed,
+                "workspace {} is missing; reconcile it before repository removal",
+                workspace.name
+            );
+            ensure!(
+                self.missing_worktree(workspace).await?.is_none(),
+                "workspace {} was moved; restore it before repository removal",
+                workspace.name
+            );
+        }
+        Ok(())
     }
 
     async fn check_repository_boundaries(

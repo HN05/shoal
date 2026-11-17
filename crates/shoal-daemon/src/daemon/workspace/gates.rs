@@ -309,6 +309,13 @@ impl Gates {
         drop(creation.lock().await);
     }
 
+    /// [`Self::wait_for_creation`] for a caller that holds the repository's
+    /// Git gate, under which no creation of `id` starts. A creation under
+    /// way holds its creation gate and never waits for the Git gate.
+    pub(crate) async fn wait_for_creation_holding_git(&self, id: &SpaceId) {
+        drop(self.lock_creation(id).await);
+    }
+
     /// Hold the repository's fetch gate while a sync fetches its remotes, so
     /// syncs of one repository never overlap and moving or removing its
     /// directory waits for the fetch, while commands that take only the Git

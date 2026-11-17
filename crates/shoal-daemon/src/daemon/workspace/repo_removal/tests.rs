@@ -57,6 +57,34 @@ async fn removal_waits_for_queued_workspace_creation() {
 }
 
 #[tokio::test]
+async fn removal_takes_a_workspace_its_preparation_has_yet_to_create() {
+    let (root, manager) = test_support::manager().await;
+    let checkout = test_support::repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let new = crate::daemon::workspace::NewWorkspace {
+        pending: true,
+        ..Default::default()
+    };
+    let workspace = manager
+        .create_workspace_with(&repo.id, "racing".into(), None, new)
+        .await
+        .unwrap();
+    assert_eq!(workspace.state, WorkspaceState::Preparing);
+
+    let removal = manager.remove_repository(&repo.id).await.unwrap();
+    assert_eq!(removal.workspaces_removed, 1);
+    assert!(manager.list_workspaces().await.unwrap().is_empty());
+    assert!(!repo.path.exists());
+    // The preparation, which waited for the removal, finds nothing to create.
+    let selector = SpaceSelector::id(&workspace.id);
+    assert!(manager.create_pending_worktree(&selector).await.is_err());
+    assert!(!workspace.path.exists());
+}
+
+#[tokio::test]
 async fn removal_refuses_a_checkout_whose_config_sets_bare() -> Result<()> {
     let (root, manager) = test_support::manager().await;
     let checkout = test_support::repository(root.path(), "repo");

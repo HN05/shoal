@@ -425,6 +425,7 @@ async fn unattended_removal_refuses_retention_its_sweep_missed() {
         inspection: InspectionPolicy::GitOnly,
         release_holds: true,
         taking: None,
+        holds_git: false,
     };
     manager
         .remove(&SpaceSelector::id(&workspace.id), removal)
@@ -456,6 +457,7 @@ git --git-dir="$common" worktree add "$SHOAL_WORKSPACE_PATH" "$branch""#;
                 inspection: InspectionPolicy::GitOnly,
                 release_holds: true,
                 taking: None,
+                holds_git: false,
             },
         };
         assert!(
@@ -645,6 +647,7 @@ async fn directory_activity_distinguishes_inspection_from_removal_checks() {
                 inspection: InspectionPolicy::GitOnly,
                 release_holds: true,
                 taking: None,
+                holds_git: false,
             },
             false,
         ),
@@ -654,6 +657,7 @@ async fn directory_activity_distinguishes_inspection_from_removal_checks() {
                 inspection: InspectionPolicy::IncludeDirectoryProcesses,
                 release_holds: true,
                 taking: None,
+                holds_git: false,
             },
             true,
         ),
@@ -718,6 +722,7 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
                 inspection: InspectionPolicy::GitOnly,
                 release_holds: true,
                 taking: None,
+                holds_git: false,
             },
             Removal::Automatic {
                 snapshot: Snapshot {
@@ -953,6 +958,7 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
                 inspection: InspectionPolicy::GitOnly,
                 release_holds: true,
                 taking: None,
+                holds_git: false,
             }
         };
         manager
@@ -1409,6 +1415,7 @@ async fn a_clean_confirmation_naming_children_removes_clean_only() {
         inspection: InspectionPolicy::GitOnly,
         release_holds: true,
         taking: None,
+        holds_git: false,
     };
     let (files, _) = removal_options(&check, manual(&confirmed));
     assert!(matches!(files, FileRemoval::CleanOnly));

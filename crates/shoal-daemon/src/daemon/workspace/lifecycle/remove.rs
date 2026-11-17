@@ -84,6 +84,7 @@ impl Manager {
             inspection,
             release_holds: true,
             taking: None,
+            holds_git: false,
         };
         self.remove_requested(selector, removal).await
     }
@@ -103,8 +104,26 @@ impl Manager {
             inspection,
             release_holds: true,
             taking: Some(taking),
+            holds_git: false,
         };
         self.remove_requested(selector, removal).await
+    }
+
+    /// Remove the workspace `id` and its unsaved work for its repository's
+    /// removal, which holds the repository's Git gate and waited for the
+    /// creations under way to end.
+    pub(in crate::daemon::workspace) async fn remove_for_repository(
+        &self,
+        id: &SpaceId,
+    ) -> Result<RemovalResult> {
+        let removal = Removal::Manual {
+            unsaved: &UnsavedWork::All,
+            inspection: InspectionPolicy::GitOnly,
+            release_holds: true,
+            taking: None,
+            holds_git: true,
+        };
+        Ok(self.remove_space(id, removal).await?.result())
     }
 
     /// Remove the space as [`Self::remove_selected`] does, refusing it
@@ -120,6 +139,7 @@ impl Manager {
             inspection,
             release_holds: false,
             taking: None,
+            holds_git: false,
         };
         self.remove_requested(selector, removal).await
     }

@@ -90,6 +90,10 @@ pub(in crate::daemon::workspace) enum Removal<'a> {
         /// The IDs of the only spaces it may take first, when the caller
         /// narrows what `unsaved` confirms.
         taking: Option<&'a [SpaceId]>,
+        /// The caller holds the repository's Git gate, under which no
+        /// creation or setup starts, and waited for the creations under way
+        /// to end, as a repository's removal does.
+        holds_git: bool,
     },
     /// Idle, merged or disk-space cleanup, or the user's request to clean up;
     /// only safe, unchanged spaces may go.
