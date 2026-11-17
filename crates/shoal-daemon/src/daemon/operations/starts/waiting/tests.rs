@@ -133,11 +133,13 @@ async fn a_stopped_waiting_start_waits_for_its_agent_until_prepared_explicitly()
         .await
         .unwrap();
     assert_eq!(stopped.cancelled.len(), 1);
-    manager.start_waiting_preparations().await.unwrap();
-    assert!(!manager.operation_runs_in(&ui.id));
+    // The stop records that it waits for its agent, so a restore at once
+    // prepares it, which no pass then starts again.
     let stopped = read(&manager, &ui).await;
     assert_eq!(stopped.preparation_waits, Some(PreparationWait::Stopped));
     manager.admit_explicit_preparation(&prepare).await.unwrap();
+    manager.start_waiting_preparations().await.unwrap();
+    assert!(!manager.operation_runs_in(&ui.id));
     assert_eq!(read(&manager, &ui).await.preparation_waits, None);
 }
 
@@ -232,4 +234,15 @@ async fn a_restart_keeps_a_waiting_preparation_waiting() {
     assert_eq!(after.state, WorkspaceState::Preparing);
     assert_eq!(after.error, None);
     assert!(after.preparation_waits.is_some());
+}
+
+#[tokio::test]
+async fn stopping_everything_stops_a_waiting_workspace() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let api = create(&manager, &repo, "api").await;
+    let blocker = Blocker::Space(api.id.to_string());
+    let ui = *start(&manager, &repo, "ui", vec![blocker]).await.workspace;
+    let targets = manager.stop_targets(QueuedLaunches::Cancel).await.unwrap();
+    assert!(targets.iter().any(|space| space.id == ui.id), "{targets:?}");
 }

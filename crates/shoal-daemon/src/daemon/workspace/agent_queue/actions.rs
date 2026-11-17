@@ -19,7 +19,7 @@ use crate::{
         scope::Caller,
         workspace::{Manager, StopRequest},
     },
-    model::{QueueEntry, QueuedJob},
+    model::{PreparationWait, QueueEntry, QueuedJob},
     state::{QueueKind, QueueState},
 };
 
@@ -216,7 +216,8 @@ impl Manager {
     /// [`Self::cancel_waiting_launches`] while the preparation of
     /// `workspace_id` waits, in one transaction with that check, so its
     /// release, which needs the launch it waits for, and this cancellation
-    /// exclude each other; `None` once the preparation no longer waits.
+    /// exclude each other, recording that it now waits for its stopped
+    /// agent; `None` once the preparation no longer waits.
     pub(crate) async fn cancel_launches_while_preparation_waits(
         &self,
         workspace_id: &SpaceId,
@@ -228,7 +229,12 @@ impl Manager {
                 if crate::daemon::operations::starts::preparation_waits(tx, &id)?.is_none() {
                     return Ok(None);
                 }
-                delete_waiting_launches(tx, &id).map(Some)
+                let cancelled = delete_waiting_launches(tx, &id)?;
+                tx.execute(
+                    "UPDATE waiting_preparations SET waits=?2 WHERE workspace_id=?1 AND for_agent",
+                    params![id, serde_json::to_string(&PreparationWait::Stopped)?],
+                )?;
+                Ok(Some(cancelled))
             })
             .await?;
         if cancelled

@@ -244,7 +244,7 @@ impl Manager {
     /// The spaces `shoal stop --all` stops: the settled workspaces and the
     /// chats with a running execution or a stopped agent whose restore is
     /// requested or queued, and the workspaces a waiting launch opens when
-    /// the stop cancels `launches`.
+    /// the stop cancels `launches`, those whose preparation waits included.
     /// The queue gate keeps restores and launches from moving between the
     /// queue and their agents meanwhile, and executions are read before
     /// requests, which an agent a signal stops saves before its execution
@@ -262,7 +262,7 @@ impl Manager {
             let stoppable = matches!(
                 workspace.state,
                 WorkspaceState::Ready | WorkspaceState::Failed
-            );
+            ) || workspace.preparation_waits.is_some();
             (stoppable || converting.contains(&workspace.id)) && targets.contains(&workspace.id)
         });
         let chats = (self.chats().await?.into_iter()).filter(|chat| targets.contains(&chat.id));
