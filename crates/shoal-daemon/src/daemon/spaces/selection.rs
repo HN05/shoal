@@ -25,27 +25,6 @@ impl Manager {
         space.ok_or_else(|| Refusal::new(Reason::NotFound, format!("no space {selector}")).into())
     }
 
-    /// Every space: the workspaces in listing order, then the chats in
-    /// start order.
-    pub(crate) async fn present_spaces(&self) -> Result<Vec<Space>> {
-        let workspaces = self.list_workspaces().await?;
-        let chats = self.chats().await?;
-        Ok((workspaces.into_iter().map(Space::from))
-            .chain(chats.into_iter().map(Space::from))
-            .collect())
-    }
-
-    /// `root` and every space below it, of either kind, or every space
-    /// without `root`, in the order of [`Self::present_spaces`].
-    pub(crate) async fn spaces_within(&self, root: Option<&SpaceId>) -> Result<Vec<Space>> {
-        let mut spaces = self.present_spaces().await?;
-        if let Some(root) = root {
-            let subtree = self.subtree(root).await?;
-            spaces.retain(|space| subtree.contains(&space.id));
-        }
-        Ok(spaces)
-    }
-
     /// The workspace or chat, running or stopped, with the ID `id`, while
     /// it exists.
     pub(crate) async fn find_space(&self, id: &SpaceId) -> Result<Option<Space>> {

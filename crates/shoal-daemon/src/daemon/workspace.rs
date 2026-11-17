@@ -93,7 +93,7 @@ pub use stopped_work::PermissionTargets;
 
 pub(crate) use tree::{
     Source, TrackedAgents, children, deciders, delegated, ensure_parent, parent, receiving_paths,
-    set_parent, spaces_above,
+    set_parent, spaces_above, subtree,
 };
 
 use crate::refusal::{Reason, Refusal};
@@ -298,16 +298,7 @@ impl Manager {
     pub async fn list_workspaces_within(&self, root: Option<&SpaceId>) -> Result<Vec<Workspace>> {
         let root = root.cloned();
         self.store
-            .run(move |db| {
-                let mut workspaces = db
-                    .prepare(&tree::subtree_query(store::WORKSPACE_COLUMNS))?
-                    .query_map([root], store::workspace)?
-                    .collect::<rusqlite::Result<Vec<_>>>()?;
-                for workspace in &mut workspaces {
-                    load_details(db, workspace)?;
-                }
-                Ok(workspaces)
-            })
+            .run(move |db| workspaces_within(db, root.as_ref()))
             .await
     }
 
@@ -513,6 +504,22 @@ impl Manager {
 }
 
 /// Fill in what a workspace record reads from its related tables.
+/// `root` and every workspace below it, or every workspace without `root`,
+/// by name, each with its details.
+pub(crate) fn workspaces_within(
+    db: &rusqlite::Connection,
+    root: Option<&SpaceId>,
+) -> Result<Vec<Workspace>> {
+    let mut workspaces = db
+        .prepare(&tree::subtree_query(store::WORKSPACE_COLUMNS))?
+        .query_map([root], store::workspace)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for workspace in &mut workspaces {
+        load_details(db, workspace)?;
+    }
+    Ok(workspaces)
+}
+
 fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<()> {
     workspace.holds = holds::list(db, &workspace.id)?;
     workspace.review = review::list(db, &workspace.id)?;

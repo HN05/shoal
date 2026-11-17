@@ -407,7 +407,8 @@ pub(super) fn subtree_query(columns: &str) -> String {
     )
 }
 
-fn subtree(db: &Connection, id: &SpaceId) -> Result<Vec<SpaceId>> {
+/// `id` and every space below it, `id` first.
+pub(crate) fn subtree(db: &Connection, id: &SpaceId) -> Result<Vec<SpaceId>> {
     Ok(db
         .prepare(&format!(
             "{} SELECT id FROM down ORDER BY depth, id",

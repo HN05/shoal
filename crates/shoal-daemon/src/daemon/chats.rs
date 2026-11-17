@@ -364,9 +364,7 @@ impl Manager {
     /// Running and stopped chats in start order, each with its agent.
     pub async fn chats(&self) -> Result<Vec<Chat>> {
         let recorded = self.recorded_chats().await?;
-        (recorded.into_iter())
-            .map(|(chat, stored)| self.with_agent(chat, stored))
-            .collect()
+        self.with_agents(recorded)
     }
 
     /// The running or stopped chat with the ID `id`, with its agent.
@@ -383,15 +381,19 @@ impl Manager {
     async fn recorded_chats(&self) -> Result<Vec<(Chat, spaces::sessions::StoredAgents)>> {
         let owner = self.root_dir_owner();
         self.store
-            .read(move |tx| {
-                (recorded(tx, &owner)?.into_iter())
-                    .map(|chat| {
-                        let stored = spaces::sessions::stored_agents(tx, &chat.id)?;
-                        Ok((chat, stored))
-                    })
-                    .collect()
-            })
+            .read(move |tx| recorded_within(tx, &owner, None))
             .await
+    }
+
+    /// The `recorded` chats, each with its agent, of which the store
+    /// records what each comes with.
+    pub(crate) fn with_agents(
+        &self,
+        recorded: Vec<(Chat, spaces::sessions::StoredAgents)>,
+    ) -> Result<Vec<Chat>> {
+        (recorded.into_iter())
+            .map(|(chat, stored)| self.with_agent(chat, stored))
+            .collect()
     }
 
     /// `chat` with its agent, of which the store records `stored`.
@@ -642,11 +644,29 @@ fn ensure_place_free(
     }
 }
 
-/// The running and stopped chats in start order, a chat without a
-/// repository with its temporary directory in the `root_dir` it started in,
-/// marked as `owner`'s, the daemon's state directory, without their agents,
-/// which [`Manager::agent_of`] reads.
-fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
+/// The running and stopped chats in start order, every one or those at or
+/// below the space `root`, each with what the store records of its agent;
+/// `owner` owns the `root_dir` of a chat without a repository.
+pub(crate) fn recorded_within(
+    db: &Connection,
+    owner: &Path,
+    root: Option<&SpaceId>,
+) -> Result<Vec<(Chat, spaces::sessions::StoredAgents)>> {
+    (recorded(db, owner, root)?.into_iter())
+        .map(|chat| {
+            let stored = spaces::sessions::stored_agents(db, &chat.id)?;
+            Ok((chat, stored))
+        })
+        .collect()
+}
+
+/// The running and stopped chats in start order, every one or those at or
+/// below the space `root`, a chat without a repository with its temporary
+/// directory in the `root_dir` it started in, marked as `owner`'s, the
+/// daemon's state directory, without their agents, which
+/// [`Manager::agent_of`] reads.
+fn recorded(db: &Connection, owner: &Path, root: Option<&SpaceId>) -> Result<Vec<Chat>> {
+    let reached = root.map(|root| workspace::subtree(db, root)).transpose()?;
     db.prepare(
         "SELECT chats.id,space.repository_id,space.name,
                     EXISTS (SELECT 1 FROM executions e WHERE e.space_id=chats.id) AS running,
@@ -706,6 +726,7 @@ fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
     })?
     .collect::<rusqlite::Result<Vec<Chat>>>()?
     .into_iter()
+    .filter(|chat| (reached.as_ref()).is_none_or(|reached| reached.contains(&chat.id)))
     .map(|mut chat| {
         chat.links = store::space_links(db, &chat.id)?;
         chat.review = crate::daemon::workspace::review::list(db, &chat.id)?;
