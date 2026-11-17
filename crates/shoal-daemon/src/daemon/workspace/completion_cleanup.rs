@@ -82,7 +82,7 @@ impl Manager {
         let Some(completion) = self.completion(&space.id).await? else {
             return Ok(false);
         };
-        if !completion.cleanup || self.keep_reason(&space.id).await?.is_some() {
+        if !completion.cleanup || self.completion_keeps(&space.id).await? {
             return Ok(false);
         }
         // A pre-existing PR registration keeps its own merge requirements
@@ -102,9 +102,7 @@ impl Manager {
         space: &Space,
         ancestor: &CompletedAncestor,
     ) -> Result<()> {
-        if !self.children(&space.id).await?.is_empty()
-            || self.keep_reason(&space.id).await?.is_some()
-        {
+        if !self.children(&space.id).await?.is_empty() || self.completion_keeps(&space.id).await? {
             return Ok(());
         }
         let removal = self.remove_under_completed(space, ancestor).await;
@@ -113,6 +111,13 @@ impl Manager {
         }
         let cleanup = Cleanup::AncestorCompletion(&ancestor.name);
         self.announce_removal(space, cleanup, &removal).await
+    }
+
+    /// Whether something keeps the completed space `id`: what keeps it from
+    /// every unattended removal, or a watched PR that merged before a poll
+    /// recorded the merge, which starts the lookup of its runs.
+    async fn completion_keeps(&self, id: &SpaceId) -> Result<bool> {
+        Ok(self.keep_reason(id).await?.is_some() || self.merged_unseen(id).await?)
     }
 
     pub(crate) async fn completion_cause(&self, id: &SpaceId) -> Result<EventCause> {

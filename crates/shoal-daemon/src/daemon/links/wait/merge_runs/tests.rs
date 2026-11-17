@@ -20,9 +20,9 @@ use shoal_protocol::{assignments::Done, space_names::SpaceSelector};
 /// The merge commit the forge reports for the merged PR.
 const MERGED: &str = "0123456789abcdef0123456789abcdef01234567";
 
-/// A workspace that watches a PR on a forge listing `runs` for the default
-/// branch's merge commit, in a repository with `[pr] watch_merge_runs` set
-/// to `watch`.
+/// A workspace that watches a PR on a forge that reports it merged and
+/// lists `runs` for the default branch's merge commit, in a repository
+/// with `[pr] watch_merge_runs` set to `watch`.
 struct Following {
     _root: tempfile::TempDir,
     manager: Arc<Manager>,
@@ -42,6 +42,13 @@ async fn following(watch: bool, runs: Value) -> Following {
         if (request.line).starts_with("GET /api/v1/repos/team/repo/actions/runs?") {
             let listed = json!({"workflow_runs": runs});
             return (200, Vec::new(), listed.to_string().into());
+        }
+        // The watched PR has merged on the forge.
+        if request.line == "GET /api/v1/repos/team/repo/pulls/1" {
+            let pull = json!({"number": 1, "title": "Fix", "state": "closed", "merged": true,
+                "merge_commit_sha": MERGED, "head": {"ref": "topic", "sha": "head"},
+                "base": {"ref": "main"}});
+            return (200, Vec::new(), pull.to_string().into());
         }
         (404, Vec::new(), Vec::new())
     });
@@ -433,4 +440,62 @@ async fn a_run_the_background_poll_saw_finish_ends_its_wait_while_its_updates_wa
             .unwrap();
     }
     assert!(!following.awaits().await);
+}
+
+#[tokio::test]
+async fn completion_cleanup_waits_for_a_poll_to_see_a_done_chats_merge() {
+    let following = following(true, json!([])).await;
+    let manager = &following.manager;
+    let repository = following.workspace.repository().clone();
+    let chat = manager
+        .start_chat(repository.into(), "merging".into(), "claude".into(), None)
+        .await
+        .unwrap();
+    register_watch(manager, &chat.id, &following.pr).await;
+    let id = chat.id.clone();
+    (manager.store)
+        .run(move |db| {
+            db.execute("DELETE FROM executions WHERE space_id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager
+        .mark_space_done(
+            &SpaceSelector::id(&chat.id),
+            Done::default(),
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    let present = || async {
+        let chats = manager.chats().await.unwrap();
+        chats.iter().any(|listed| listed.id == chat.id)
+    };
+    manager.sweep_completed().await.unwrap();
+    assert!(present().await, "the PR's merge is unseen");
+
+    // The poll that sees the merge looks up its runs until the window ends.
+    for snapshot in [pull("open", None), pull("merged", Some(MERGED))] {
+        (manager)
+            .record_background_activity(&chat.id, vec![(following.pr.clone(), snapshot)])
+            .await
+            .unwrap();
+    }
+    let space = LinkSpace::own(manager.space_by_id(&chat.id).await.unwrap()).unwrap();
+    let id = chat.id.clone();
+    let started = UnixTime::now() - LOOKUP_WINDOW - Duration::from_secs(60);
+    (manager.store)
+        .run(move |db| {
+            db.execute(
+                "UPDATE merge_runs SET merged_at=?2 WHERE space_id=?1",
+                params![id, started],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager.follow_merge_runs(&space).await.unwrap();
+    manager.sweep_completed().await.unwrap();
+    assert!(!present().await);
 }
