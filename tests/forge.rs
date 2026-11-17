@@ -877,6 +877,32 @@ fn a_chat_opens_issues_and_acts_on_its_linked_items() {
 }
 
 #[test]
+fn a_chat_in_a_workspaces_worktree_acts_as_itself_with_repo() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let (mut agent, chat) = fixture.run_chat("reader", &["--in", &fixture.id("topic")]);
+    fixture.respond(json!({
+        "GET repos/team/project/issues/40": {"body": {"number": 40, "title": "Flaky",
+            "state": "open", "labels": []}},
+        "POST repos/team/project/issues/40/comments": {"body": {}},
+    }));
+    let env = fixture.ok(&["internal", "env", &chat]);
+    let mut command = fixture.command();
+    command.current_dir(fixture.topic());
+    for (name, value) in env.as_object().unwrap() {
+        command.env(name, value.as_str().unwrap());
+    }
+    // As without --repo, the chat changes its repository's items as itself,
+    // never as the workspace it runs in.
+    let comment = [
+        "--json", "issue", "comment", "40", "--body", "Seen", "--repo",
+    ];
+    let output = fixture.output(command.args(comment).arg(&fixture.web));
+    assert!(output.status.success(), "{}", printed(&output));
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
+#[test]
 fn a_chat_marks_its_pr_ready_whatever_its_head_or_itself() {
     let fixture = Fixture::new(Forge::Forgejo, "");
     let (mut agent, _) = fixture.run_chat("planning", &[]);
@@ -1568,6 +1594,12 @@ fn changes_in_another_repository_are_the_users_alone() {
     );
     let refused = String::from_utf8_lossy(&output.stderr);
     assert!(refused.contains("own repository"), "{}", printed(&output));
+    assert!(fixture.requests().is_empty());
+    // A registered repository --repo names keeps out an item of another.
+    let mut outside = fixture.command();
+    outside.current_dir(fixture.root.path());
+    let pinned = fixture.output(outside.args(comment).args(["--repo", "repo"]));
+    assert!(!pinned.status.success(), "{}", printed(&pinned));
     assert!(fixture.requests().is_empty());
     // The user comments from outside any space, with nothing registered
     // there, as the user's own login.

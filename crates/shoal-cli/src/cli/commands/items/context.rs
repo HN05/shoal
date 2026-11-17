@@ -47,7 +47,9 @@ pub(in crate::cli::commands) async fn select_item_target(
     item: Option<&ItemInput>,
 ) -> Result<RepoTarget> {
     if repo.is_some() {
-        return select_repo_context(ctx, repo).await;
+        let target = select_repo_context(ctx, repo).await?;
+        ensure_named_checkout_has(ctx, &target, item).await?;
+        return Ok(target);
     }
     let context = match known_item_context(ctx, space, item).await? {
         Some(context) => Some(context),
@@ -58,6 +60,27 @@ pub(in crate::cli::commands) async fn select_item_target(
         context,
         repository: None,
     })
+}
+
+/// Refuse the URL `item` of another repository than the registered one
+/// whose checkout `--repo` selected for `target`, which names it no further.
+async fn ensure_named_checkout_has(
+    ctx: &Context,
+    target: &RepoTarget,
+    item: Option<&ItemInput>,
+) -> Result<()> {
+    let (Some(ItemContext::Checkout(named)), None, Some(ItemInput::Url(item))) =
+        (&target.context, &target.repository, item)
+    else {
+        return Ok(());
+    };
+    let repos = crate::client::repositories::list(&ctx.paths).await?;
+    let own = crate::repository::registered_for_item(&repos, item).await?;
+    ensure!(
+        own.is_some_and(|repo| repo.id == *named),
+        "{item} is not of the repository --repo names; leave out --repo, or name the item by its number"
+    );
+    Ok(())
 }
 
 /// Where a command about the space's items runs without asking: in a chat
@@ -194,20 +217,21 @@ async fn registered_checkout(ctx: &Context, repo: Option<&str>) -> Result<Option
     Ok(checkout.map(|checkout| ItemContext::Checkout(checkout.id)))
 }
 
-/// The workspace the current directory is in, else the chat this runs in,
-/// else the registered checkout the current directory is in.
+/// The chat this runs in, which a chat in a workspace's worktree is, else
+/// the workspace the current directory is in, else the registered checkout
+/// the current directory is in.
 pub(in crate::cli::commands) async fn current_context(
     ctx: &Context,
 ) -> Result<Option<ItemContext>> {
+    if let Some(chat) = ui::current_chat(&None) {
+        return Ok(Some(ItemContext::space(SpaceSelector::id(&chat))));
+    }
     match ui::select_workspace(ctx, None, ui::Fallback::CurrentDirectoryOnly).await {
         Ok(workspace) => {
             return Ok(Some(ItemContext::space(workspace)));
         }
         Err(error) if error.is::<ui::NoCurrentWorkspace>() => {}
         Err(error) => return Err(error),
-    }
-    if let Some(chat) = ui::current_chat(&None) {
-        return Ok(Some(ItemContext::space(SpaceSelector::id(&chat))));
     }
     let repos = crate::client::repositories::list(&ctx.paths).await?;
     let checkout = super::super::issues::current_checkout(&repos).await?;
