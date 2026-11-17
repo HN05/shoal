@@ -7,7 +7,7 @@ use rusqlite::{OptionalExtension, params};
 
 use super::{
     branch_report::{BranchReport, branch_report},
-    items::{polled_items, watches_open_pr},
+    items::{opened_open_prs, polled_items, watches_open_pr},
     merge_runs::{MergeTarget, follow_merge, merge_run_spaces},
     start::PollStart,
 };
@@ -17,7 +17,10 @@ use crate::{
         workspace::Manager,
     },
     forge::{
-        items::link::{LinkKind, Selection},
+        items::{
+            link::{LinkKind, Selection},
+            reference::ItemRef,
+        },
         updates::{SnapshotState, UpdateKind},
     },
     model::Chat,
@@ -91,17 +94,19 @@ impl Manager {
         polled.and(followed)
     }
 
-    /// Read the activity of the space's polled items, and record and queue
-    /// what changed.
+    /// Read the activity of the space's polled items, and of the opened PRs
+    /// whose merges it follows, and record and queue what changed.
     async fn poll_space_items(&self, space: &LinkSpace) -> Result<()> {
         let id = space.id.to_owned();
         let items = self.store.run(move |db| polled_items(db, &id)).await?;
-        if items.is_empty() {
+        let opened = self.opened_prs_to_follow(&space.id).await?;
+        if items.is_empty() && opened.is_empty() {
             return Ok(());
         }
         let start = self.poll_start();
         let report = branch_report(&items);
         let items = self.items_to_look_up(space, items).await?;
+        let items = [items, opened].concat();
         let activity = self.item_activity(items, &Selection::default()).await;
         let mut observations = Vec::new();
         observations.extend(self.background_branch_observation(space, report).await);
@@ -161,6 +166,8 @@ impl Manager {
 
     /// Queue `observations` on the workspace's cursor, so its agent receives
     /// them without a running watch, and wake the watches that wait for them.
+    /// The cursor drops those of items the space's watch does not follow,
+    /// such as the opened PRs read only for their merges.
     pub(super) async fn queue_background_updates(
         &self,
         id: &SpaceId,
@@ -195,8 +202,8 @@ impl Manager {
 }
 
 /// Record `observations` on the background baseline of the space `id`, one
-/// of each item it polls, journaling what changed and following the
-/// merges they show into `merges`' branch.
+/// of each item it polls, journaling what changed of the items it follows,
+/// and following the merges they show into `merges`' branch.
 fn record_baseline(
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
@@ -205,14 +212,16 @@ fn record_baseline(
 ) -> Result<Seen> {
     require_ready_space(tx, id)?;
     let linked = polled_items(tx, id)?;
+    let opened = opened_open_prs(tx, id)?;
     let mut seen = Seen::default();
     for (url, snapshot) in observations {
-        let Some(item) = linked.iter().find(|linked| linked.url() == url) else {
+        let Some((kind, followed)) = polled_kind(&linked, &opened, &url) else {
             continue;
         };
         let observed = Observed {
             url: &url,
-            kind: item.kind(),
+            kind,
+            followed,
             snapshot,
         };
         record_baseline_item(tx, id, observed, merges, &mut seen)?;
@@ -220,10 +229,26 @@ fn record_baseline(
     Ok(seen)
 }
 
+/// The kind of the polled item at `url`, among the `linked` items the space
+/// follows and the `opened` PRs read only for their merges, and whether the
+/// space follows it.
+fn polled_kind(linked: &[ItemRef], opened: &[ItemRef], url: &str) -> Option<(LinkKind, bool)> {
+    let find = |items: &[ItemRef]| {
+        items
+            .iter()
+            .find(|item| item.url() == url)
+            .map(ItemRef::kind)
+    };
+    (find(linked).map(|kind| (kind, true))).or_else(|| find(opened).map(|kind| (kind, false)))
+}
+
 /// A background read of one linked item.
 struct Observed<'a> {
     url: &'a str,
     kind: LinkKind,
+    /// Whether the space follows the item's activity, which the space's log
+    /// records, rather than only its merge.
+    followed: bool,
     snapshot: Snapshot,
 }
 
@@ -255,7 +280,9 @@ fn record_baseline_item(
         seen.lost_assignee |= previous.assignee_removed(&snapshot);
         for update in previous.changes(&snapshot, url) {
             seen.merged |= update.kind == UpdateKind::Merged;
-            crate::daemon::events::record_item_activity(tx, id, observed.kind, url, &update)?;
+            if observed.followed {
+                crate::daemon::events::record_item_activity(tx, id, observed.kind, url, &update)?;
+            }
         }
     }
     save_observation(tx, id, url, &snapshot)
@@ -279,12 +306,16 @@ fn saved_observation(
 }
 
 /// The spaces among `ids` whose activity is still to come: they watch an
-/// open PR or look for, or follow, the CI runs of a merge.
+/// open PR, link one as opened whose merge they may follow, or look for,
+/// or follow, the CI runs of a merge.
 fn awaiting_activity(db: &rusqlite::Connection, ids: Vec<SpaceId>) -> Result<Vec<SpaceId>> {
     let following = merge_run_spaces(db)?;
     let mut awaiting = Vec::new();
     for id in ids {
-        if following.contains(&id) || watches_open_pr(db, &id)? {
+        if following.contains(&id)
+            || watches_open_pr(db, &id)?
+            || !opened_open_prs(db, &id)?.is_empty()
+        {
             awaiting.push(id);
         }
     }

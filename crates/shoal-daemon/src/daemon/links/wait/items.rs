@@ -16,7 +16,7 @@ use crate::{
         link::{ItemKind, LinkKind, Selection},
         reference::{ItemInput, ItemRef},
     },
-    model::Space,
+    model::{Relation, Space},
     repository,
 };
 use shoal_forge::updates::Snapshot;
@@ -330,6 +330,24 @@ pub(crate) fn watches_open_pr(db: &rusqlite::Connection, id: &SpaceId) -> Result
 pub(crate) fn open_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
     let mut open = Vec::new();
     for url in linked_items(db, id, Some(ItemKind::Pr))? {
+        if observed_item(db, id, url.url())?.is_none_or(|snapshot| !snapshot.concluded()) {
+            open.push(url);
+        }
+    }
+    Ok(open)
+}
+
+/// The PRs the space `id` links as opened, and does not watch, that no
+/// background poll has seen merged or closed. Where `[pr] watch_merge_runs`
+/// is on, the poll reads them only to follow their merges.
+pub(super) fn opened_open_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
+    let watched = linked_items(db, id, Some(ItemKind::Pr))?;
+    let mut open = Vec::new();
+    for item in crate::daemon::store::recorded_items(db, id, Relation::Opened)? {
+        let url = item.url;
+        if url.kind() != LinkKind::Pr || watched.contains(&url) {
+            continue;
+        }
         if observed_item(db, id, url.url())?.is_none_or(|snapshot| !snapshot.concluded()) {
             open.push(url);
         }

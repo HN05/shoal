@@ -438,8 +438,8 @@ item's title, description, labels, assignees, milestone, draft state or base
 branch; a failed CI check with its failing step when the runner records it;
 the passed checks once none on the PR's head is pending; a merge conflict,
 again after a push or base change that leaves it conflicting; closing and
-merging. Where `[pr] watch_merge_runs` is on, an assigned PR's merge into the
-default branch also links the default branch's CI runs for its merge commit as
+merging. Where `[pr] watch_merge_runs` is on, the merge of a PR linked as
+assigned or opened into the default branch also links the default branch's CI runs for its merge commit as
 related, whose ends it reports, and keeps a done space until they finish. It
 leaves out what the space itself did through Shoal and the
 assignees Shoal adds or removes on its own. For Claude

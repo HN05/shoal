@@ -5108,11 +5108,13 @@ finishes, and it stays linked until it is unlinked or the workspace is removed.
 A PR's runs are not linked; the PR's checks cover them, so link one only to
 follow it past the PR's merge. Where
 [`[pr] watch_merge_runs`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#prs)
-is on, Shoal does that itself once it sees an assigned PR merge into the
-default branch, whether or not its agent took the PR's earlier updates: for ten minutes the background poll lists the default branch's
+is on, Shoal does that itself once it sees a PR linked as assigned or opened
+merge into the default branch, whether or not its agent took the PR's earlier
+updates; the background poll reads an opened PR only for this, until it sees
+it merge or close, and reports nothing else of it. For ten minutes the background poll lists the default branch's
 runs for the merge commit the forge reports and links each new one as related,
 so the space hears how it ends as of any linked run. Where the forge reports no
-merge commit, the merge's update says its runs cannot be followed, and a lookup
+merge commit, an assigned PR's merge update says its runs cannot be followed, and a lookup
 that finds no run records that in the space's log. Until the lookup ends and the
 runs it linked finish, the space stays from every unattended removal, with
 `cleanup_reason` `merge_runs`, and its asleep agent counts as one an update

@@ -2359,9 +2359,12 @@ snapshot and reports `lookup_failed`, so an outage never also fails the watch
 or the Stop hook's wait that reports it. A watch of an item named on the
 command line still fails, so a mistyped item does not wait silently.
 Decision: with `[pr] watch_merge_runs` on, a repository has Shoal follow the
-default branch's CI runs for each assigned PR's merge, since an agent that
-slept or finished never heard that its merge broke the default branch, and two
-agents then found and filed the break twice. The first read that records the merge,
+default branch's CI runs for the merge of each PR a space links as assigned
+or opened, since an agent that slept or finished never heard that its merge
+broke the default branch, and two agents then found and filed the break twice.
+The background poll reads an opened PR, which no watch follows, only until it
+sees it merge or close, and neither reports nor logs its other activity, since
+an opened link does not ask for it. The first read that records the merge,
 a watch's or the background poll's own, whose record no delivery the agent has
 not taken holds back, starts a persisted lookup of the merge commit the forge
 reports, never one Shoal guesses; the background poll lists its runs for a fixed ten minutes,

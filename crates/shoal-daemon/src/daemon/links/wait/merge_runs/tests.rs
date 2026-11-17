@@ -572,3 +572,99 @@ async fn a_cursor_that_sees_the_merge_after_its_lookup_ended_starts_none() {
     following.follow().await;
     assert_eq!(following.events(EventKind::NoMergeRuns).await, 1);
 }
+
+/// The fixture of [`following`], whose workspace links its PR as opened
+/// instead of watching it.
+async fn opening(watch: bool, runs: Value) -> Following {
+    let following = following(watch, runs).await;
+    let (id, pr) = (following.workspace.id.clone(), following.pr.clone());
+    (following.manager.store)
+        .run(move |db| {
+            db.execute("DELETE FROM pr_cleanup WHERE space_id=?1", [&id])?;
+            let link = crate::daemon::links::record;
+            link(db, &id, Relation::Opened, LinkKind::Pr, &pr, Some("Fix"))
+        })
+        .await
+        .unwrap();
+    following
+}
+
+impl Following {
+    /// Run the background poll of the workspace once.
+    async fn poll(&self) {
+        let space = LinkSpace::from(self.workspace.clone());
+        (self.manager.poll_space_item_activity(&space))
+            .await
+            .unwrap();
+    }
+
+    /// How many reads of the PR the forge received.
+    fn pr_reads(&self) -> usize {
+        let read = "GET /api/v1/repos/team/repo/pulls/1";
+        let received = self.server.received().into_iter();
+        received.filter(|request| request.line == read).count()
+    }
+}
+
+#[tokio::test]
+async fn the_background_poll_follows_the_merge_of_a_pr_linked_as_opened() {
+    let following = opening(true, json!([listed_run("running")])).await;
+    following.poll().await;
+    assert!(following.awaits().await);
+    following.poll().await;
+    assert_eq!(following.related().await, [run_url(&following)]);
+    // Once seen merged, the PR is read no longer.
+    let reads = following.pr_reads();
+    following.poll().await;
+    assert_eq!(following.pr_reads(), reads);
+}
+
+#[tokio::test]
+async fn the_merge_of_a_pr_linked_as_opened_reports_nothing_of_the_pr() {
+    let following = opening(true, json!([])).await;
+    let (pr, id) = (following.pr.clone(), following.workspace.id.clone());
+    for snapshot in [pull("open", None), pull("merged", Some(MERGED))] {
+        (following.manager)
+            .record_background_activity(&id, vec![(pr.clone(), snapshot)])
+            .await
+            .unwrap();
+    }
+    assert!(following.awaits().await);
+    assert_eq!(following.events(EventKind::ItemActivity).await, 0);
+    following.poll().await;
+    let pending = following.manager.pending_activity(&id, &[pr]).await;
+    assert!(pending.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_pr_linked_as_opened_is_not_read_where_the_option_is_off() {
+    let following = opening(false, json!([listed_run("running")])).await;
+    following.poll().await;
+    assert_eq!(following.pr_reads(), 0);
+    assert!(!following.awaits().await);
+}
+
+#[tokio::test]
+async fn completion_cleanup_waits_for_a_poll_to_see_an_opened_prs_merge() {
+    let following = opening(true, json!([])).await;
+    let (manager, workspace) = (&following.manager, &following.workspace);
+    manager
+        .mark_space_done(
+            &SpaceSelector::id(&workspace.id),
+            Done::default(),
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    manager.sweep_completed().await.unwrap();
+    assert!(workspace.path.exists(), "the PR's merge is unseen");
+
+    following.poll().await;
+    manager.sweep_completed().await.unwrap();
+    assert!(workspace.path.exists(), "the merge's runs are looked up");
+
+    following.end_window().await;
+    following.follow().await;
+    manager.sweep_completed().await.unwrap();
+    assert!(!workspace.path.exists());
+}

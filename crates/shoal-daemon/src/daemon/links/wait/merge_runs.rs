@@ -1,6 +1,6 @@
 //! Following the default branch's CI runs for the merge commits of the PRs
-//! a space watches, where `[pr] watch_merge_runs` is on: the watch that
-//! records such a PR's merge starts a lookup, which each background poll of
+//! a space watches or links as opened, where `[pr] watch_merge_runs` is on:
+//! the read that records such a PR's merge starts a lookup, which each background poll of
 //! the space runs for [`LOOKUP_WINDOW`], linking every run it finds as
 //! related, so the space's watches report how they end.
 use std::time::Duration;
@@ -12,7 +12,7 @@ use shoal_refs::{BranchName, CommitId};
 
 use super::{
     cursor::cursor_record,
-    items::{linked_items, observed_item},
+    items::{linked_items, observed_item, opened_open_prs},
 };
 use crate::{
     daemon::{events, links::space::LinkSpace, workspace::Manager},
@@ -149,38 +149,68 @@ impl Manager {
             .with_context(|| format!("could not list the CI runs of {}", lookup.commit))
     }
 
-    /// Whether a PR the space `id` watches may have merged unseen: where
-    /// `[pr] watch_merge_runs` is on, no read of Shoal's own has seen it
-    /// merge or close, and the read that sees it merge starts the lookup of
-    /// its runs. PR cleanup, which found every watched PR merged on the
-    /// forge, waits for that read.
-    pub(crate) async fn merge_unseen(&self, id: &SpaceId) -> Result<bool> {
-        Ok(!self.unseen_prs(id).await?.is_empty())
+    /// The PRs the space `id` links as opened, and does not watch, whose
+    /// merges the background poll reads them for: those no poll has seen
+    /// merged or closed, where `[pr] watch_merge_runs` is on.
+    pub(super) async fn opened_prs_to_follow(&self, id: &SpaceId) -> Result<Vec<ItemRef>> {
+        let space = id.to_owned();
+        let opened = self
+            .store
+            .read(move |db| opened_open_prs(db, &space))
+            .await?;
+        if opened.is_empty() || self.configured_merge_target(id).await?.is_none() {
+            return Ok(Vec::new());
+        }
+        Ok(opened)
     }
 
-    /// Whether a PR the space `id` watches merged on the forge while no
-    /// read of Shoal's own has seen it, as [`Self::merge_unseen`] says,
-    /// reading those PRs from the forge: merged cleanup, which finds the
-    /// branch merged without them, waits only for one that did merge, so a
-    /// PR left open keeps nothing.
+    /// Whether a PR whose merges the space `id` follows may have merged
+    /// unseen: where `[pr] watch_merge_runs` is on, no read of Shoal's own
+    /// has seen a PR it watches merge or close, or one it links as opened
+    /// merged on the forge unseen, and the read that sees a merge starts
+    /// the lookup of its runs. PR cleanup, which found every watched PR
+    /// merged on the forge, waits for that read.
+    pub(crate) async fn merge_unseen(&self, id: &SpaceId) -> Result<bool> {
+        let unseen = self.unseen_prs(id).await?;
+        Ok(!unseen.watched.is_empty() || self.any_merged(unseen.opened).await?)
+    }
+
+    /// Whether a PR whose merges the space `id` follows merged on the forge
+    /// while no read of Shoal's own has seen it, as [`Self::merge_unseen`]
+    /// says, reading those PRs from the forge: merged cleanup, which finds
+    /// the branch merged without them, waits only for one that did merge,
+    /// so a PR left open keeps nothing.
     pub(crate) async fn merged_unseen(&self, id: &SpaceId) -> Result<bool> {
         let unseen = self.unseen_prs(id).await?;
-        if unseen.is_empty() {
+        self.any_merged([unseen.watched, unseen.opened].concat())
+            .await
+    }
+
+    /// Whether the forge shows one of `prs` merged.
+    async fn any_merged(&self, prs: Vec<ItemRef>) -> Result<bool> {
+        if prs.is_empty() {
             return Ok(false);
         }
-        let reads = self.item_activity(unseen, &Selection::default()).await?;
+        let reads = self.item_activity(prs, &Selection::default()).await?;
         let merged = |read: &Snapshot| read.state() == Some(SnapshotState::Merged);
         Ok(reads.iter().any(|(_, read)| merged(read)))
     }
 
-    /// The PRs the space `id` watches that no read of Shoal's own has seen
-    /// merge or close, where `[pr] watch_merge_runs` is on.
-    async fn unseen_prs(&self, id: &SpaceId) -> Result<Vec<ItemRef>> {
+    /// The PRs whose merges the space `id` follows that no read of Shoal's
+    /// own has seen merge or close, where `[pr] watch_merge_runs` is on.
+    async fn unseen_prs(&self, id: &SpaceId) -> Result<UnseenPrs> {
         if self.configured_merge_target(id).await?.is_none() {
-            return Ok(Vec::new());
+            return Ok(UnseenPrs::default());
         }
         let id = id.to_owned();
-        self.store.read(move |db| unseen_prs(db, &id)).await
+        self.store
+            .read(move |db| {
+                Ok(UnseenPrs {
+                    watched: unseen_prs(db, &id)?,
+                    opened: opened_open_prs(db, &id)?,
+                })
+            })
+            .await
     }
 
     /// Whether the space `id` looks for the runs of a merge or follows one
@@ -212,11 +242,21 @@ pub(super) fn follow_reported_merge(
     Ok(())
 }
 
+/// The PRs whose merges a space follows that no read of Shoal's own has
+/// seen merge or close.
+#[derive(Default)]
+struct UnseenPrs {
+    /// Those it watches.
+    watched: Vec<ItemRef>,
+    /// Those it links as opened, and does not watch.
+    opened: Vec<ItemRef>,
+}
+
 /// How a space follows the merge of a PR.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Following {
-    /// It does not: the space does not watch the PR, or it merged into
-    /// another branch.
+    /// It does not: the space neither watches the PR nor links it as
+    /// opened, or it merged into another branch.
     Not,
     /// It looks up the runs of the merge commit.
     Runs,
@@ -225,7 +265,7 @@ pub(super) enum Following {
 }
 
 /// Follow the merge that `snapshot` shows of the PR at `url`, when the
-/// space `id` watches it and it merged into `target`'s branch: look up the
+/// space `id` watches it or links it as opened and it merged into `target`'s branch: look up the
 /// runs of its merge commit from `now`, unless a lookup already does.
 pub(super) fn follow_merge(
     db: &rusqlite::Connection,
@@ -235,7 +275,7 @@ pub(super) fn follow_merge(
     target: &MergeTarget,
     now: UnixTime,
 ) -> Result<Following> {
-    if snapshot.base_branch() != Some(&target.default_branch) || !watches_pr(db, id, url)? {
+    if snapshot.base_branch() != Some(&target.default_branch) || !follows_pr(db, id, url)? {
         return Ok(Following::Not);
     }
     let Some(commit) = snapshot.merge_commit() else {
@@ -245,10 +285,15 @@ pub(super) fn follow_merge(
     Ok(Following::Runs)
 }
 
-/// Whether the space `id` watches the PR at `url`.
-fn watches_pr(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Result<bool> {
+/// Whether the space `id` watches the PR at `url` or links it as opened.
+fn follows_pr(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Result<bool> {
     let watched = linked_items(db, id, Some(ItemKind::Pr))?;
-    Ok(watched.iter().any(|pull| pull.url() == url))
+    let opened = crate::daemon::store::recorded_items(db, id, Relation::Opened)?;
+    let opened = opened.into_iter().map(|item| item.url);
+    Ok(watched
+        .into_iter()
+        .chain(opened)
+        .any(|pull| pull.url() == url))
 }
 
 /// Look up the runs of `commit` on `branch`, which the PR at `url` merged
