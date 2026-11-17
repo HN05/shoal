@@ -1,7 +1,7 @@
 //! The user's interactions with each space's agent, which keep it awake
 //! while idle: whether the user is engaged with it, having interacted since
 //! its turn before the last ended, and how long they take to come back to it
-//! after a turn.
+//! after a turn, which sets how long it waits for them before it sleeps.
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceSelector;
 use std::{collections::HashMap, time::Duration};
@@ -12,6 +12,21 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::Manager;
 use crate::daemon::{log, scope::Caller};
 use crate::{state::AgentState, time::UnixTime};
+
+/// How long an idle agent waits before it sleeps, at the least, which
+/// lets its hooks settle and a follow-up turn start.
+pub(crate) const FLOOR: Duration = Duration::from_secs(10);
+
+/// How many times the user's reply time an agent they are engaged with
+/// waits for them.
+const MARGIN: u32 = 2;
+
+/// How many of a space's latest reply times make its own average.
+const SPACE_REPLIES: i64 = 10;
+
+/// How many of the latest reply times over every space make the user's
+/// average, which a space without its own takes.
+const USER_REPLIES: i64 = 50;
 
 /// How many reply times the store keeps, the latest.
 const KEPT_REPLIES: i64 = 500;
@@ -43,6 +58,25 @@ impl Engagement {
         let ended = self.turn_ended_at.filter(|ended| at >= *ended)?;
         let first = (self.interacted_at).is_none_or(|interacted| interacted < ended);
         (first && self.engaged()).then(|| at.duration_since(ended))
+    }
+
+    /// When an agent idle since `idle_since` stops waiting for the user:
+    /// after [`FLOOR`] for one they are not engaged with; for one they are,
+    /// after [`MARGIN`] times their `reply` time, between the floor and
+    /// `max_wait`, or `max_wait` without one, counted from their last
+    /// interaction where that came later.
+    pub(crate) fn wait_ends(
+        &self,
+        idle_since: UnixTime,
+        reply: Option<Duration>,
+        max_wait: Duration,
+    ) -> UnixTime {
+        if !self.engaged() {
+            return idle_since + FLOOR;
+        }
+        let from = (self.interacted_at).map_or(idle_since, |at| at.max(idle_since));
+        let max_wait = max_wait.max(FLOOR);
+        from + reply.map_or(max_wait, |reply| (reply * MARGIN).clamp(FLOOR, max_wait))
     }
 }
 
@@ -111,6 +145,27 @@ fn interact(db: &Connection, id: &SpaceId, at: UnixTime) -> Result<()> {
     Ok(())
 }
 
+/// How long the user takes to come back to the agent of the space `id`
+/// after a turn: the average of the space's latest reply times, else of
+/// the user's over every space, each counted at most `cap`; none without
+/// any.
+fn reply_time(db: &Connection, id: &SpaceId, cap: Duration) -> Result<Option<Duration>> {
+    let cap = i64::try_from(cap.as_secs())?;
+    let average = |space: Option<&SpaceId>, count: i64| -> Result<Option<f64>> {
+        Ok(db.query_row(
+            "SELECT AVG(min(seconds,?2)) FROM (SELECT seconds FROM reply_times
+                 WHERE ?1 IS NULL OR space_id=?1 ORDER BY id DESC LIMIT ?3)",
+            params![space, cap, count],
+            |row| row.get(0),
+        )?)
+    };
+    let average = match average(Some(id), SPACE_REPLIES)? {
+        Some(average) => Some(average),
+        None => average(None, USER_REPLIES)?,
+    };
+    Ok(average.map(Duration::from_secs_f64))
+}
+
 /// When the user last interacted with the agent of each space.
 fn interactions(db: &Connection) -> Result<HashMap<SpaceId, UnixTime>> {
     Ok(db
@@ -127,6 +182,33 @@ impl Manager {
     pub(crate) async fn record_interaction(&self, id: &SpaceId, at: UnixTime) -> Result<()> {
         let id = id.to_owned();
         self.store.write(move |tx| interact(tx, &id, at)).await
+    }
+
+    /// When the idle agent of the space `id`, idle since `idle_since`, goes
+    /// to sleep under the space's `[sleep]` settings; none where they keep
+    /// idle agents running.
+    pub(crate) async fn sleeps_at(
+        &self,
+        id: &SpaceId,
+        idle_since: UnixTime,
+    ) -> Result<Option<UnixTime>> {
+        let space = self.space_by_id(id).await?;
+        let sleep = self.present_space_settings(&space).await?.sleep.clone();
+        if !sleep.enabled {
+            return Ok(None);
+        }
+        let max_wait = Duration::from_secs(sleep.max_wait_minutes.saturating_mul(60));
+        let id = id.to_owned();
+        let (engagement, reply) = (self.store)
+            .read(move |db| Ok((get(db, &id)?, reply_time(db, &id, max_wait)?)))
+            .await?;
+        Ok(Some(engagement.wait_ends(idle_since, reply, max_wait)))
+    }
+
+    /// Whether the user is engaged with the agent of the space `id`.
+    pub(crate) async fn engaged(&self, id: &SpaceId) -> Result<bool> {
+        let id = id.to_owned();
+        Ok(self.store.read(move |db| get(db, &id)).await?.engaged())
     }
 
     /// When the user last interacted with the agent of each space.

@@ -585,8 +585,7 @@ notification and tries again only once agents have no work or the config reloads
 An agent Shoal stopped on its own and brings back on its own is asleep: it
 comes back through the [agent queue](#agent-queue) once what it waits for
 arrives. Overload and disk protection, idle stops, a blocked space, a signal
-that ended its session, queued work that needs room and `shoal sleep` put an
-agent to sleep. An agent that `shoal
+that ended its session and queued work that needs room put an agent to sleep. An agent that `shoal
 stop` stopped, or that quit on its own, is stopped instead, and stays down
 until `shoal restore`. `shoal list` shows an asleep agent's space as `asleep`,
 the [inbox](#inbox) lists it, and `shoal status` adds an `Asleep` line with
@@ -598,36 +597,50 @@ why it sleeps, ignoring other keys: Enter wakes the agent there, as
 `shoal queue start` does, once its processes have stopped, and Ctrl-C stops
 the wait, leaving the agent stopped for `shoal restore`.
 
-While an entry in the [agent queue](#agent-queue) waits for a heavy slot or memory,
-Shoal makes room for it: for each such
-entry in queue order, it puts to sleep the lowest-ranked idle agent whose
-priority is no higher than the entry's, of the entry's repository when that
-repository's `agent.max_heavy_running` holds it, and for an entry that waits for a
-heavy slot one that holds one, which a done space's agent does not, once that costs
-no prompt cache, as
-for [`shoal sleep`](#idle-wakes). Only an agent something will wake sleeps for
-this: one whose space watches an open PR, is blocked, or has an open question,
-a request waiting for a decision or a [timer](#idle-wakes). Light agents keep running, in a workspace
-or a chat, and an agent woken from its sleep works its turn before it can
-sleep again.
-
-An idle agent keeps its memory while it waits for its next update. Shoal
-stops the [idle](#agent-state) heavy agents
-of done spaces that something besides their work and PRs keeps from
-[completion cleanup](#assignment-completion), such as a
-[hold](#holds) or an open [question](#questions), and with
-[`[sleep] idle`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#sleep) enabled any idle heavy agent; a
-[light](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules) one keeps running. Only an agent idle with no subagent or processes running
-outside its process group, with a restore command, and whose
-[prompt cache](#agent-state) has expired stops: a resumed agent's first request
-writes most of its cache again, which an expired cache costs anyway. An agent
-idle without having ended a turn, such as one that has not worked since it
-started, counts as expired; one that ended a turn has the
-[cache lifetime](#agents) of its AI tool. The stop saves the agent as
+An [idle](#agent-state) heavy agent, a workspace's or a chat's, sleeps once it
+has waited for you: seconds after its turn ends when you are not engaged with
+it, and when you are, twice the time you usually take to come back to it,
+counted from the later of the turn's end and your last interaction, at least
+those seconds and at most
+[`[sleep] max_wait_minutes`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#sleep),
+which it also waits before you have come back to any agent. You interact with
+an agent by a key it reads in its terminal, which its wrapper finds by the
+terminal's access time, leaving out the keys Shoal types itself; by a prompt you
+submit; and by `shoal attach` to its space, `shoal restore`, `shoal restart`,
+`shoal start --in`, starting its queued restore and Enter on its sleep screen.
+The same commands from an agent, such as a coordinator's, are not yours, nor are
+updates, messages and idle wakes, and whether a terminal shows the agent plays
+no part. You are engaged with an agent once you have interacted with it since
+its turn before the last ended, so a turn whose wait passed without you ends
+it. The time you take to come back is the average, over the space's last turns
+you were engaged with, from a turn's end to your first interaction after it,
+each counted at most the longest wait; a space without one takes your average
+over every space. Neither the [prompt cache](#agent-state) nor the machine's
+schedule plays a part: a restored session reads its history from the cache as
+the running one would. A
+[light](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules)
+agent keeps running, and `[sleep] enabled = false` keeps every idle agent
+running. Only an agent idle with no subagent or processes running outside its
+process group, and with a restore command, sleeps. The stop saves the agent as
 [overload protection](#overload-protection) does, records an `agent_stopped`
 notification, and restores the agent once an update arrives for it, though its
-assignment is done and whatever `[machine.overload.recovery]` says. Timers the agent
-keeps itself end with it, which is why `[sleep] idle` is opt-in. Claude Code
+assignment is done and whatever `[machine.overload.recovery]` says. A restore
+resumes the session from the agent's launch arguments, so what you changed
+inside the session, such as a permission mode switched with Shift-Tab,
+approvals given for the session or a `/model` switch, does not carry over.
+
+While an entry in the [agent queue](#agent-queue) waits for a heavy slot or memory,
+Shoal makes room for it: for each such entry in queue order, it puts to sleep
+the lowest-ranked idle agent whose priority is no higher than the entry's, of
+the entry's repository when that repository's `agent.max_heavy_running` holds
+it, and for an entry that waits for a heavy slot one that holds one, which a
+done space's agent does not. That reaches the agents still waiting for you
+before their wait ends, once they have idled those first seconds, or that
+`[sleep]` keeps running; an agent you are
+engaged with keeps running, as do light agents, in a workspace or a chat, and an
+agent woken from its sleep works its turn before it can sleep again.
+
+Timers the agent keeps itself end with its stop. Claude Code
 agents Shoal launches are refused its timer tools, `ScheduleWakeup`,
 `CronCreate` and `CronDelete`, including in a `/loop`, with a reason naming the
 timer of [`shoal sleep --for`](#idle-wakes), which Shoal keeps.
@@ -651,14 +664,8 @@ is woken again after each further period. A space whose work is
 approvals do not pause the timer.
 
 An agent that waits for something runs `shoal sleep`: from the end of its turn
-it sleeps, gets no idle wakes, and once stopping it costs no prompt cache,
-whether or not other work waits, Shoal stops a heavy one and saves it to come
-back once an update arrives, as an idle stop does; a light one keeps running. Under the `balanced` and `cache`
-[schedules](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine) that is once its cache has expired, or while the
-CI jobs this machine's [runner](#runner) runs or has queued for its space are
-expected, from the longest of each job's recent runs, to outlast the cache;
-Shoal waits for expiry when a job has no recorded run. Under `speed` it is at
-once. A plain `shoal sleep` lasts until its next turn starts, by an update, a
+it sleeps and gets no idle wakes, and Shoal stops a heavy one as it stops any
+[idle agent](#sleep). A plain `shoal sleep` lasts until its next turn starts, by an update, a
 message or the user; a permission prompt in the turn that slept does not end
 it. `--permanent` puts the agent back to sleep after every turn, through
 restarts and restores, until `shoal sleep --undo`, which also wakes an asleep
@@ -1594,8 +1601,8 @@ turns ends normally. A pending retry outlasts a daemon restart;
 `due_at` and `delivered`.
 
 `status` shows when an idle agent's [cache expires](#agent-state) from its
-tool's [`prompt_cache_minutes`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools), which by default keeps
-[`[sleep] idle`](#sleep) from stopping an agent the moment its turn ends.
+tool's [`prompt_cache_minutes`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools), which the `cache`
+[schedule](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine) reads to restore agents with a warm cache first.
 
 A tool's [`proxy`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#agent-tools-on-this-machine) sends its tracked
 agents' API requests through Shoal's retrying proxy to the `upstream` of a
@@ -1855,8 +1862,8 @@ workspace process that cleared its scope token cannot run `shoal start` or
 `shoal rename --request`.
 A chat's agent runs as a tracked agent of the chat, as a workspace's agent
 does: its mode's [weight](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules) decides whether it takes
-a slot of the [agent queue](#agent-queue) and whether load, idle stops and
-`shoal sleep` stop it, and a restore of one stopped between turns waits for an
+a slot of the [agent queue](#agent-queue) and whether load and idle stops
+stop it, and a restore of one stopped between turns waits for an
 update, which `shoal attach` and `shoal queue start` skip. Only its agent
 exiting cleanly differs: it sends no notification. A heavy chat's start
 waits in the queue when no slot is free, as a new workspace's does: from a
@@ -5459,8 +5466,8 @@ failed lookup keeps the blocker and shows why as its `lookup_failed` until a
 lookup succeeds.
 
 Once a blocked space's agent ends a turn, with no work of its own still
-running, Shoal stops it as an [idle stop](#agent-queue) does, whatever its
-prompt cache, keeps its session and queues its restore, which waits until
+running, Shoal stops it as an [idle stop](#sleep) does, without waiting for
+you, keeps its session and queues its restore, which waits until
 nothing blocks the space and lists what blocks it in `shoal queue`; updates
 for the agent wait with it. The restored agent's first message is the one
 naming what cleared. `shoal restore` restores the agent at once, telling it

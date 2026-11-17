@@ -48,7 +48,8 @@ fn removed_settings_are_refused() {
     // Settings the packaged template once wrote name their replacement.
     for (text, replacement) in [
         ("[agents.codex]\ndefault_mode = 'cli'\n", "app.default"),
-        ("[idle_stop]\nenabled = true\n", "[sleep] idle"),
+        ("[idle_stop]\nenabled = true\n", "[sleep] enabled"),
+        ("[sleep]\nidle = true\n", "[sleep] enabled"),
         ("[terminal.happy]\nenabled = false\n", "[agents.happy]"),
         ("[machine]\nmax_agents = 3\n", "machine.max_heavy_agents"),
         ("agent.max_running = 2\n", "agent.max_heavy_running"),

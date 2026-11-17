@@ -218,12 +218,17 @@ instead of the PR delivery guidance below.
   `idle_wake_minutes` gets a message asking it to continue, again each period,
   unless its space is done or `shoal sleep` holds it. An agent Shoal stopped and
   brings back on its own is asleep; one that waits for `shoal restore` is
-  stopped. The sweep puts an idle agent to sleep after `shoal sleep`, and to
-  make room for an entry waiting for a heavy slot or memory (lowest rank first, no
-  higher priority than the entry, only one something will wake, a slot only
-  from an agent that holds one), once the stop costs no prompt cache under the
-  machine's schedule; light agents never sleep for room, nor stop on idle,
-  in a workspace or a chat. `shoal
+  stopped. An idle heavy agent sleeps seconds after its turn ends unless the
+  user is engaged with it, having interacted since its turn before the last
+  ended (a key the agent reads, which its wrapper reports from the terminal's
+  access time without the keys Shoal announced it types, a prompt they submit,
+  or the unscoped caller's attach, restore, restart or `start --in`), and then
+  after twice their average reply time, within `[sleep] max_wait_minutes`;
+  neither the prompt cache nor the schedule plays a part. Making room for an
+  entry waiting for a heavy slot or memory (lowest rank first, no higher
+  priority than the entry, a slot only from an agent that holds one) never
+  takes an agent the user is engaged with; light agents never sleep for room,
+  nor stop on idle, in a workspace or a chat. `shoal
   attach` wakes an asleep or stopped agent at once through its restore, never
   beside a waiting wrapper; a chat's hooks deliver its own queue of its workers'
   events, which the user receives as notifications if the chat is removed first; a workspace's own Shoal comments, thread replies,
@@ -232,8 +237,8 @@ instead of the PR delivery guidance below.
   idle Claude Code's after an interrupted turn or once it has idled with no
   wait for its updates for three minutes, once per idle stretch, the
   agent's interrupt key the CLI types for `shoal stop --interrupt`, and the
-  fixed prompt with which `shoal restore` continues that turn; the daemon never
-  writes to a terminal. Space events are an unscoped, durable lifecycle
+  fixed prompt with which `shoal restore` continues that turn, each reported to
+  the daemon before it types; the daemon never writes to a terminal. Space events are an unscoped, durable lifecycle
   stream with replay gaps, independent of notification read state, recorded
   for chats through the same path and in the same shape as workspaces, keyed
   by space ID, and kept per space: while it

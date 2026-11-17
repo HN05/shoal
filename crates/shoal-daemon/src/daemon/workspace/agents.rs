@@ -36,7 +36,6 @@ mod input;
 mod interrupts;
 mod make_room;
 mod restart;
-mod sleep_cost;
 mod stops;
 pub use restart::RestartWaits;
 pub(crate) use restart::{Renewals, forget_ended_renewals};
@@ -53,17 +52,8 @@ pub(crate) trait ProtectionExt {
 
     fn is_restart(&self) -> bool;
 
-    /// An idle agent of a done workspace whose cleanup is held, which Shoal
-    /// stops to free memory.
-    fn idle_held() -> Self;
-
-    /// An idle agent whose prompt cache expired, which Shoal stops to free
-    /// memory under `[sleep] idle`.
-    fn idle_expired() -> Self;
-
-    /// An idle agent whose space sleeps after `shoal sleep`, which Shoal
-    /// puts to sleep once that costs nothing.
-    fn slept() -> Self;
+    /// An idle agent the user is away from, which Shoal puts to sleep.
+    fn away() -> Self;
 
     /// An idle agent Shoal puts to sleep to make room for queued work.
     fn making_room() -> Self;
@@ -113,16 +103,8 @@ impl ProtectionExt for Protection {
         self.reason == RESTART_REASON
     }
 
-    fn idle_held() -> Self {
-        Self::idle(IDLE_HELD_REASON)
-    }
-
-    fn idle_expired() -> Self {
-        Self::idle(IDLE_EXPIRED_REASON)
-    }
-
-    fn slept() -> Self {
-        Self::idle(SLEPT_REASON)
+    fn away() -> Self {
+        Self::idle(AWAY_REASON)
     }
 
     fn making_room() -> Self {
@@ -144,14 +126,10 @@ impl ProtectionExt for Protection {
     }
 
     fn is_idle(&self) -> bool {
-        [
-            IDLE_HELD_REASON,
-            IDLE_EXPIRED_REASON,
-            SLEPT_REASON,
-            ROOM_REASON,
-            BLOCKED_REASON,
-        ]
-        .contains(&self.reason.as_str())
+        [AWAY_REASON, ROOM_REASON, BLOCKED_REASON]
+            .iter()
+            .chain(EARLIER_IDLE_REASONS)
+            .any(|reason| self.reason == *reason)
     }
 
     fn is_blocked(&self) -> bool {
@@ -170,14 +148,17 @@ impl ProtectionExt for Protection {
 /// The stop reason a restarted agent's wrapper shows and saves.
 const RESTART_REASON: &str = "restarted by shoal restart";
 
-/// The stop reason of an idle agent of a done workspace whose cleanup is held.
-const IDLE_HELD_REASON: &str = "idle in a done workspace whose cleanup is held";
+/// The stop reason of an idle agent the user is away from.
+const AWAY_REASON: &str = "idle while the user is away";
 
-/// The stop reason of an idle agent `[sleep] idle` puts to sleep.
-const IDLE_EXPIRED_REASON: &str = "idle with its prompt cache expired";
-
-/// The stop reason of an idle agent whose space sleeps after `shoal sleep`.
-const SLEPT_REASON: &str = "shoal sleep";
+/// The reasons earlier releases put idle agents to sleep for, which the
+/// wrappers of agents asleep across an upgrade still report; #2936 removes
+/// them.
+const EARLIER_IDLE_REASONS: &[&str] = &[
+    "idle in a done workspace whose cleanup is held",
+    "idle with its prompt cache expired",
+    "shoal sleep",
+];
 
 /// The stop reason of an idle agent put to sleep for queued work.
 const ROOM_REASON: &str = "making room for queued work";
@@ -1124,20 +1105,19 @@ impl Manager {
     /// Stop the agent of `id`, chosen in `turn`, for `protection`: save the
     /// recovery handoff, then record the stop and deliver it. A stop recorded or
     /// delivered meanwhile keeps the agent from this one, and so does a turn
-    /// that started since one chosen idle, or for a stop that frees memory
-    /// with a cache `cache_expired_at` must find expired, a turn end that
-    /// renewed it.
+    /// that started since one chosen idle, or for a stop the user keeps
+    /// the agent from, their interaction with it since it was `interacted`.
     async fn protect(
         &self,
         id: &ExecutionId,
         protection: &Protection,
         chosen: Option<Turn>,
-        cache_expired_at: Option<crate::time::UnixTime>,
+        interacted: Option<stops::Interacted>,
     ) -> Option<StoppedAgent> {
         let turn = chosen.map(|turn| turn.state);
-        let between = chosen.filter(Turn::idle).map(|turn| stops::Between {
+        let between = (chosen.filter(Turn::idle)).map(|turn| stops::Between {
             turn: turn.generation,
-            cache_expired_at,
+            interacted,
         });
         let mut stopped = self.stop_target(id, protection, turn).await?;
         // Nothing presses an idle stop, so it waits for a record that

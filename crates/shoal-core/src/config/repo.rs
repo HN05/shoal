@@ -615,14 +615,16 @@ pub struct RestoreConfig {
     pub archive_max_mb: Option<u64>,
 }
 
-/// When Shoal puts agents to sleep: `idle` puts any agent to sleep once it
-/// is idle and its prompt cache has expired, which is opt-in.
+/// Whether Shoal puts idle agents to sleep, and the longest an idle agent
+/// the user is engaged with waits for them first.
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = SleepSettings)]
 pub struct SleepConfig {
-    #[option(default = false)]
-    pub idle: Option<bool>,
+    #[option(default = true)]
+    pub enabled: Option<bool>,
+    #[option(default = 30)]
+    pub max_wait_minutes: Option<u64>,
 }
 
 /// Who runs local reviews and whether PR reviews post their findings.

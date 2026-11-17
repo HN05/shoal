@@ -1,28 +1,23 @@
-//! Put idle agents to sleep to make room for queued work: while an entry
-//! waits for a slot or memory, an idle agent that something will wake and
-//! whose priority is no higher than the entry's goes to sleep, lowest rank
-//! first, once that costs nothing, and only one that holds a slot for an
-//! entry waiting for one. One that nothing would wake stays
-//! running, as do light agents, a workspace's or a chat's. A woken agent
-//! reports no idle turn until it has worked one, so it finishes that turn
-//! before it can sleep for room again.
+//! Put idle agents to sleep to make room for queued work, before their wait
+//! for the user ends or where `[sleep]` keeps them running: while an entry
+//! waits for a slot or memory, an agent idle for the least wait whose
+//! priority is no higher than the entry's goes to sleep, lowest rank first,
+//! and only one that holds a slot for an entry waiting for one. One the user
+//! is engaged with stays running, as do light agents, a workspace's or a
+//! chat's. A woken agent reports no idle turn until it has worked one, so it
+//! finishes that turn before it can sleep for room again.
 use shoal_ids::{execution_ids::ExecutionId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_schedule::priority::Priority;
 use std::collections::HashMap;
 
 use anyhow::Result;
-use rusqlite::Connection;
 
 use super::{
     Manager, Protection, ProtectionExt,
     idle_stop::{Candidate, Chosen},
-    sleep_cost::Free,
 };
 use crate::{
-    daemon::links::wait::{awaits_merge_runs, watches_open_pr},
-    model::HeldBy,
-    state::QueueState,
-    time::UnixTime,
+    daemon::workspace::engagement::FLOOR, model::HeldBy, state::QueueState, time::UnixTime,
 };
 
 /// A queued entry waiting for room, with its priority and what it needs.
@@ -48,7 +43,6 @@ struct Sleeper<'a> {
     /// Whether it holds a slot, which an agent of a done space does not.
     holds_slot: bool,
     priority: Priority,
-    free: Free,
 }
 
 impl Sleeper<'_> {
@@ -92,7 +86,7 @@ impl Manager {
             let stop = Chosen {
                 protection: Protection::making_room(),
                 turn: sleeper.candidate.turn,
-                cache_expired_at: sleeper.free.cache_expired_at(now),
+                interacted_at: sleeper.candidate.interacted_at,
             };
             room.insert(sleeper.candidate.execution.clone(), stop);
         }
@@ -121,7 +115,7 @@ impl Manager {
 
     /// The `candidates` not already `chosen` that may sleep for room at
     /// `now`, lowest rank first: heavy agents, a workspace's or a chat's,
-    /// which something will wake and for which sleeping costs nothing.
+    /// idle for the least wait, that the user is not engaged with.
     async fn sleepers<'a>(
         &self,
         candidates: &'a [Candidate],
@@ -130,68 +124,37 @@ impl Manager {
     ) -> Result<Vec<Sleeper<'a>>> {
         let mut eligible = Vec::new();
         for candidate in candidates {
-            let (execution, id) = (&candidate.execution, &candidate.workspace_id);
-            if chosen.contains_key(execution) || candidate.light {
+            let settling = candidate.turn.since + FLOOR > now;
+            if chosen.contains_key(&candidate.execution) || candidate.light || settling {
                 continue;
             }
-            if !self.awaits_wake(id).await? {
-                continue;
-            }
-            if let Some(free) = self.sleep_cost(id, &candidate.turn, now).await? {
-                eligible.push((candidate, free));
+            if !self.engaged(&candidate.workspace_id).await? {
+                eligible.push(candidate);
             }
         }
         let ids: Vec<SpaceId> = (eligible.iter())
-            .map(|(candidate, _)| candidate.workspace_id.clone())
+            .map(|candidate| candidate.workspace_id.clone())
             .collect();
         let ranked = self.ranked_spaces(&ids).await?;
         let mut sleepers = Vec::new();
         for (id, priority) in ranked.into_iter().rev() {
             let Some(at) = eligible
                 .iter()
-                .position(|(candidate, _)| candidate.workspace_id == id)
+                .position(|candidate| candidate.workspace_id == id)
             else {
                 continue;
             };
-            let (candidate, free) = eligible.remove(at);
+            let candidate = eligible.remove(at);
             let space = self.space_by_id(&id).await?;
             sleepers.push(Sleeper {
                 candidate,
                 repository: space.repository_id.as_ref().cloned(),
                 holds_slot: !space.done(),
                 priority,
-                free,
             });
         }
         Ok(sleepers)
     }
-
-    /// Whether something will wake the agent of the space `id` once it
-    /// sleeps: an open PR it watches or the CI runs of a merge it follows,
-    /// a blocker, an open question, a request waiting for a decision or
-    /// its timer.
-    async fn awaits_wake(&self, id: &SpaceId) -> Result<bool> {
-        let space = id.to_owned();
-        if self
-            .store
-            .read(move |db| watches_or_asks(db, &space))
-            .await?
-        {
-            return Ok(true);
-        }
-        Ok(self.space_blocked(id).await?
-            || self.has_open_questions(id).await?
-            || self.wake_timer_set(id).await?)
-    }
-}
-
-/// Whether the space `id` watches an open PR or the CI runs of a merge, or
-/// has a request waiting for a decision, its own or one it decides.
-fn watches_or_asks(db: &Connection, id: &SpaceId) -> Result<bool> {
-    if watches_open_pr(db, id)? || awaits_merge_runs(db, id)? {
-        return Ok(true);
-    }
-    Ok(crate::daemon::approvals::pending_count(db, id)? > 0)
 }
 
 #[cfg(test)]

@@ -334,48 +334,65 @@ automatically nor by `shoal restore --all`, only by resuming that workspace.
 Resuming it says the work is not finished, so `shoal restore` withdraws the
 completion, whichever wrapper restores the agent, and a protection stop
 restores it again; Shoal's own restores and restarts keep it.
-An idle agent of a done workspace whose cleanup is held could run until the
-workspace goes, so the cleanup sweep stops it as protection stops an agent
-between turns, and an update restores it although the assignment is done,
-since Shoal rather than the agent ended it. Load plays no part, so the recovery
-policy does not apply. Stopping any idle agent works the same way and is
-opt-in (`[sleep] idle`), since timers the agent keeps itself end with it, which
-only a done assignment leaves nothing to do; Claude Code's timer tools are
-refused by a hook that reads only the tool's name and names `shoal sleep`'s
-timer, so the model, also in a `/loop` the user types, uses the one Shoal
-keeps. Either stops an agent once its
-prompt cache has expired and not before, since a resumed session's first
-request writes most of the cache again, and only a heavy one, as only heavy
-agents stop for load: a light agent uses too little of the machine to be
-worth a restore, so `shoal sleep` only ends its idle wakes.
+An idle heavy agent, a workspace's or a chat's, sleeps once it has waited for
+the user: Shoal stops it as protection stops an agent between turns, and an
+update restores it although its assignment may be done, since Shoal rather than
+the agent ended it. Load plays no part, so the recovery policy does not apply.
+What keeps an idle agent running is the user working with it, not its prompt
+cache: a session's second request misses the cache whichever process sends it,
+and every later one, the first after a resume included, reads the whole
+history, so stopping and restoring an agent costs no cache that keeping it
+would save. The user interacts with an agent by a key it reads in its
+terminal, which its wrapper finds by the terminal's access time (reading a key
+moves it, the agent's output does not), leaving out the keys Shoal types
+itself, which Shoal reports before it types; by a prompt they submit; and by
+`shoal attach`, a restore or restart they start, `shoal start --in` and Enter on
+the sleep screen, which the daemon tells by the unscoped caller. Updates,
+messages, idle wakes and what Shoal or a coordinator starts are not
+interaction, nor is a terminal showing the agent, since a user may attach and
+walk away. The user is engaged with an agent while they interacted since its
+turn before the last ended, so a turn whose wait passes without them ends it,
+and later turns updates start wait only the floor. An agent the user is not
+engaged with sleeps after a floor of seconds, which lets hooks settle and a
+follow-up turn start; one they are engaged with waits twice their reply time,
+from the later of the turn's end and their last interaction, between the floor
+and `[sleep] max_wait_minutes`, which an agent waits without a reply time. The
+reply time is the average, over the space's last turns the user was engaged
+with, from a turn's end to their first interaction after it, the first key
+rather than the prompt so that reading counts, each counted at most the longest
+wait, so that one return after hours does not decide the waits after it; a
+space without one takes the user's average over every space. Timers the agent
+keeps itself would end with its stop, so Claude Code's timer tools are refused
+by a hook that reads only the tool's name and names `shoal sleep`'s timer, and
+the model, also in a `/loop` the user types, uses the one Shoal keeps. A light
+agent uses too little of the machine to be worth a restore, so it never sleeps
+for being idle, and `shoal sleep` only ends its idle wakes. A restore resumes
+the session from its launch arguments, so what the user changed inside it, such
+as its permission mode, approvals for the session or its model, does not carry
+over, and Shoal does not carry it.
 An agent Shoal stopped on its own and brings back on its own is asleep, and one
 that waits for `shoal restore` is stopped, so the user tells an agent that comes
 back from one that needs them. Every stop that queues a restore Shoal starts on its
-own puts the agent to sleep: protection, idle and blocked stops, signal stops,
-`shoal sleep` and making room. `shoal stop`, an agent that quits on its own and
+own puts the agent to sleep: protection, idle and blocked stops, signal stops
+and making room. `shoal stop`, an agent that quits on its own and
 the agent of a removed or converted space are stopped, and a persistent stop
 stops the spaces below first, while a parent may sleep before its children,
 since their reports wake it. The asleep state is the restore's own: the
 restore keeps why the agent sleeps and what wakes it, so lists, status and the
 inbox read it without the recovery records, and `shoal attach`, the user
 asking for the agent, starts that restore at once. `shoal sleep` is the
-agent saying it has nothing to do until something arrives, so Shoal stops it
-once that costs no prompt cache whether or not work waits, and it takes the
-agent's timer, since a timer says the same until a time: one per space, which a
+agent saying it has nothing to do until something arrives, so it ends the
+agent's idle wakes, and it takes the agent's timer, since a timer says the same until a time: one per space, which a
 new one replaces, kept as daemon state through stops, restores and restarts
 until it fires as an agent message, `--undo` cancels it or the space is done or
 removed. A loop sets its next timer each turn, so Shoal parses no recurring
 schedule. Queued work that
-needs a slot or memory may also put an idle agent to sleep, lowest rank and
-priority first and never above the entry's priority, but only one something
-will wake (a watched open PR, a blocker, an open question, a pending
-approval or a timer), so no sleep strands an agent, and never a light one, which frees
-too little. When a stop costs no cache depends on the schedule: `balanced` and
-`cache` wait for the cache to expire, or for CI the agent waits for that this
-machine's runner is expected to run longer than the cache lives, estimated
-from the durations of its jobs' recent runs, since a CI wait Shoal cannot
-estimate may end before the cache would; `speed` spends the cache to start
-other work sooner. A woken agent reports no idle turn until it has worked
+needs a slot or memory may also put an idle agent to sleep before its wait
+ends, or where `[sleep]` keeps idle agents running, lowest rank and priority
+first and never above the entry's priority, but never one the user is engaged
+with, since nothing overrides an engaged user, and never a light one, which
+frees too little. An agent nothing will wake sleeps too, since the user's attach
+or Enter on its sleep screen wakes it. Schedules only order the queue. A woken agent reports no idle turn until it has worked
 one, so it never sleeps again before it acts on what woke it. A space's reported turn state counts the turns its
 agent starts, a count that continues for a restored agent or another
 execution, and a protection stop is recorded by execution with the count it
@@ -2727,13 +2744,11 @@ user's; an interrupted Claude Code turn has no hook and ends with Claude Code's
 idle-prompt notification, while an interrupted Codex turn stays working until
 its next turn ends.
 An idle report that ends a turn also starts the agent's prompt cache lifetime,
-which each request renews, so Shoal knows when an idle agent's next turn would
-write its whole conversation to the cache again. The AI tool's configured
-lifetime wins, then the one the agent's own settings give, which only its hook
-reads from the environment the agent runs with, then 30 minutes. Every agent
-gets a lifetime, since idle stop takes an unknown one for an expired cache and
-would stop the agent as soon as its turn ends; 30 minutes is the least OpenAI
-keeps a GPT-5.6 or later cache, and a guess for other tools.
+which each request renews, so the `cache` schedule knows which restores find
+their cache warm. The AI tool's configured lifetime wins, then the one the
+agent's own settings give, which only its hook reads from the environment the
+agent runs with, then 30 minutes, the least OpenAI keeps a GPT-5.6 or later
+cache, and a guess for other tools.
 
 Progress is where a space's agent is in its work, beside its turn: a status
 line in the agent's own words and the steps of its plan. Agents already keep

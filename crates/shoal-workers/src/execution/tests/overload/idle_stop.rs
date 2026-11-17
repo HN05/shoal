@@ -1,5 +1,5 @@
-//! An idle agent Shoal stops to free memory comes back when an update arrives,
-//! even in a done workspace and whatever the overload recovery policy says.
+//! An idle agent Shoal puts to sleep comes back when an update arrives, even
+//! in a done workspace and whatever the overload recovery policy says.
 use super::*;
 use crate::state::AgentState;
 use shoal_ids::execution_ids::ExecutionId;
@@ -52,13 +52,12 @@ async fn idle_in_held_done_workspace(
     id
 }
 
-/// Run the idle stop as the cleanup sweep does, holding an operation.
+/// Run the idle stop as its loop does, holding an operation, once the
+/// agent's wait for the user has passed.
 async fn sweep(manager: &Manager) {
     let _operation = manager.gates.operation().await;
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
-        .await
-        .unwrap();
+    let later = crate::time::UnixTime::now() + std::time::Duration::from_secs(60);
+    manager.stop_idle_agents(later).await.unwrap();
 }
 
 #[tokio::test]

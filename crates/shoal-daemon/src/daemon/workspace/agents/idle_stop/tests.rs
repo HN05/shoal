@@ -6,7 +6,6 @@ use crate::{
         notifications::NotificationKind,
         test_support::{manager, repository},
         workspace::{ExecutionKind, StartedExecution},
-        workspace_files::Attacher,
     },
     execution::recovery::Record,
     model::Workspace,
@@ -14,28 +13,36 @@ use crate::{
 };
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::repository_ids::RepositoryId;
-use shoal_protocol::assignments::Done;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_schedule::priority::Priority;
+use std::time::Duration;
 
 /// How a test workspace keeps its agent.
 #[derive(Clone, Copy)]
 struct Setup {
     state: AgentState,
-    done: bool,
-    held: bool,
     recover: bool,
     /// The mode its agent runs in.
     mode: &'static str,
 }
 
-const HELD_DONE_IDLE: Setup = Setup {
+const IDLE: Setup = Setup {
     state: AgentState::Idle,
-    done: true,
-    held: true,
     recover: true,
     mode: "worker",
 };
+
+/// A time once the wait of an agent the user is not engaged with has
+/// passed, whose wait is seconds.
+fn later() -> UnixTime {
+    UnixTime::now() + Duration::from_secs(60)
+}
+
+/// When the turn of the agent `execution` runs ended, as its idle report
+/// recorded it.
+async fn turn_end(manager: &Manager, execution: &StartedExecution) -> UnixTime {
+    manager.reported_turns().await.unwrap()[&execution.plan.id].since
+}
 
 /// A workspace named `name` whose agent `setup` describes.
 async fn agent(
@@ -75,30 +82,6 @@ async fn agent(
         )
         .await
         .unwrap();
-    if setup.held {
-        manager
-            .acquire_hold(
-                &SpaceSelector::id(&workspace.id),
-                "app".into(),
-                None,
-                crate::model::HoldPlacer::User,
-            )
-            .await
-            .unwrap();
-    }
-    if setup.done {
-        manager
-            .mark_space_done(
-                &SpaceSelector::id(&workspace.id),
-                Done {
-                    cleanup: true,
-                    ..Done::default()
-                },
-                &Attacher::User,
-            )
-            .await
-            .unwrap();
-    }
     (workspace, execution)
 }
 
@@ -120,27 +103,24 @@ async fn cache_expires_in(manager: &Manager, workspace: &Workspace, offset: i64)
 }
 
 #[tokio::test]
-async fn a_held_done_workspaces_idle_agent_stops_once_its_cache_expires() {
+async fn an_idle_agent_the_user_is_away_from_sleeps_seconds_after_its_turn() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
         .register_repository(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let (workspace, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
-    cache_expires_in(&manager, &workspace, 600).await;
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
-        .await
-        .unwrap();
-    assert!(!*execution.stop.borrow(), "a warm cache keeps the agent");
+    let (workspace, execution) = agent(&manager, &repo.id, "idle", IDLE).await;
+    let ended = turn_end(&manager, &execution).await;
+    manager.stop_idle_agents(ended).await.unwrap();
+    assert!(!*execution.stop.borrow(), "its turn just ended");
 
-    cache_expires_in(&manager, &workspace, 0).await;
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
-        .await
-        .unwrap();
+    manager.stop_idle_agents(later()).await.unwrap();
     assert!(*execution.stop.borrow());
+    assert_eq!(
+        stop_reason(&manager, &execution).await,
+        Some(Protection::away().reason)
+    );
     let path =
         crate::execution::recovery::record_path(&manager.paths, &workspace.id, &execution.plan.id);
     let record = Record::load(&path).unwrap().unwrap();
@@ -167,103 +147,23 @@ async fn other_agents_keep_running() {
             "working",
             Setup {
                 state: AgentState::Working,
-                ..HELD_DONE_IDLE
-            },
-        ),
-        (
-            "unheld",
-            Setup {
-                held: false,
-                ..HELD_DONE_IDLE
-            },
-        ),
-        (
-            "unfinished",
-            Setup {
-                done: false,
-                ..HELD_DONE_IDLE
+                ..IDLE
             },
         ),
         (
             "unrestorable",
             Setup {
                 recover: false,
-                ..HELD_DONE_IDLE
+                ..IDLE
             },
         ),
     ] {
         executions.push((name, agent(&manager, &repo.id, name, setup).await.1));
     }
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
-        .await
-        .unwrap();
+    manager.stop_idle_agents(later()).await.unwrap();
     for (name, execution) in executions {
         assert!(!*execution.stop.borrow(), "{name} keeps running");
     }
-}
-
-#[tokio::test]
-async fn sleep_idle_stops_any_agent_once_its_cache_expires() {
-    let (root, manager) = manager().await;
-    let repo = repository(root.path(), "repo");
-    let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let unfinished = Setup {
-        done: false,
-        held: false,
-        ..HELD_DONE_IDLE
-    };
-    let (workspace, execution) = agent(&manager, &repo.id, "idle", unfinished).await;
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
-        .await
-        .unwrap();
-    assert!(!*execution.stop.borrow(), "[sleep] idle is opt-in");
-
-    manager
-        .write_local_config(&repo.id, Some("[sleep]\nidle = true\n".into()))
-        .await
-        .unwrap();
-    cache_expires_in(&manager, &workspace, 60).await;
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
-        .await
-        .unwrap();
-    assert!(!*execution.stop.borrow(), "a warm cache keeps the agent");
-
-    cache_expires_in(&manager, &workspace, 0).await;
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
-        .await
-        .unwrap();
-    assert!(*execution.stop.borrow());
-    let notifications = manager.notifications(false, 10).await.unwrap();
-    assert!(
-        notifications
-            .iter()
-            .any(|event| event.kind == NotificationKind::AgentStopped),
-        "{notifications:?}"
-    );
-}
-
-#[tokio::test]
-async fn a_cache_renewed_after_the_agent_was_chosen_keeps_it() {
-    let (root, manager) = manager().await;
-    let repo = repository(root.path(), "repo");
-    let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let (workspace, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
-    let chosen = chosen_held(&manager, &execution.plan.id).await;
-    // A turn ended after the sweep chose the agent.
-    cache_expires_in(&manager, &workspace, 600).await;
-    let turns = manager.agent_turns().await.unwrap();
-    manager.stop_idle(turns, chosen).await;
-    assert!(!*execution.stop.borrow());
 }
 
 #[tokio::test]
@@ -274,9 +174,9 @@ async fn a_turn_that_starts_between_the_choice_and_the_stop_keeps_the_agent() {
         .register_repository(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let (workspace, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
+    let (workspace, execution) = agent(&manager, &repo.id, "idle", IDLE).await;
     let id = execution.plan.id.clone();
-    let chosen = chosen_held(&manager, &id).await;
+    let chosen = chosen_away(&manager, &id).await;
     let turns = manager.agent_turns().await.unwrap();
     // A whole turn passes after the turns were read, so they show the agent
     // idle as it was when it was chosen.
@@ -291,9 +191,28 @@ async fn a_turn_that_starts_between_the_choice_and_the_stop_keeps_the_agent() {
             .await
             .unwrap();
     }
-    cache_expires_in(&manager, &workspace, 0).await;
     manager.stop_idle(turns, chosen).await;
     assert!(!*execution.stop.borrow(), "the agent keeps running");
+    assert!(manager.agent_overload(&id).await.is_none());
+}
+
+#[tokio::test]
+async fn an_interaction_between_the_choice_and_the_stop_keeps_the_agent() {
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (workspace, execution) = agent(&manager, &repo.id, "idle", IDLE).await;
+    let id = execution.plan.id.clone();
+    let chosen = chosen_away(&manager, &id).await;
+    let turns = manager.agent_turns().await.unwrap();
+    (manager.record_interaction(&workspace.id, UnixTime::now()))
+        .await
+        .unwrap();
+    manager.stop_idle(turns, chosen).await;
+    assert!(!*execution.stop.borrow(), "the user came back");
     assert!(manager.agent_overload(&id).await.is_none());
 }
 
@@ -321,18 +240,14 @@ async fn an_idle_agent_with_a_running_subagent_stops_once_the_subagent_stops() {
         .register_repository(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let (workspace, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
+    let (workspace, execution) = agent(&manager, &repo.id, "held", IDLE).await;
     let id = execution.plan.id.clone();
     let agent_id = "a1".to_owned();
     let started = SubagentChange::Started {
         agent_id: agent_id.clone(),
     };
     subagent(&manager, &workspace, &id, started).await;
-    cache_expires_in(&manager, &workspace, 0).await;
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
-        .await
-        .unwrap();
+    manager.stop_idle_agents(later()).await.unwrap();
     assert!(!*execution.stop.borrow(), "its subagent keeps the agent");
 
     subagent(
@@ -342,10 +257,7 @@ async fn an_idle_agent_with_a_running_subagent_stops_once_the_subagent_stops() {
         SubagentChange::Stopped { agent_id },
     )
     .await;
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
-        .await
-        .unwrap();
+    manager.stop_idle_agents(later()).await.unwrap();
     assert!(*execution.stop.borrow());
 }
 
@@ -357,15 +269,14 @@ async fn a_subagent_that_starts_between_the_choice_and_the_stop_keeps_the_agent(
         .register_repository(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let (workspace, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
+    let (workspace, execution) = agent(&manager, &repo.id, "held", IDLE).await;
     let id = execution.plan.id.clone();
-    let chosen = chosen_held(&manager, &id).await;
+    let chosen = chosen_away(&manager, &id).await;
     let turns = manager.agent_turns().await.unwrap();
     let started = crate::protocol::SubagentChange::Started {
         agent_id: "a1".into(),
     };
     subagent(&manager, &workspace, &id, started).await;
-    cache_expires_in(&manager, &workspace, 0).await;
     manager.stop_idle(turns, chosen).await;
     assert!(!*execution.stop.borrow(), "the agent keeps running");
 }
@@ -378,12 +289,9 @@ async fn a_wake_after_an_idle_stop_leaves_its_update_for_the_restore() {
         .register_repository(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let (workspace, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
+    let (workspace, execution) = agent(&manager, &repo.id, "held", IDLE).await;
     let id = execution.plan.id.clone();
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
-        .await
-        .unwrap();
+    manager.stop_idle_agents(later()).await.unwrap();
     assert!(*execution.stop.borrow());
     let woken = manager
         .start_woken_turn(&SpaceSelector::id(&workspace.id), Some(id))
@@ -400,11 +308,11 @@ async fn a_wake_after_a_recorded_stop_records_no_turn() {
         .register_repository(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let (workspace, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
+    let (workspace, execution) = agent(&manager, &repo.id, "held", IDLE).await;
     let id = execution.plan.id.clone();
     let before = manager.reported_turns().await.unwrap()[&id];
     // The stop is recorded but has not reached the wrapper yet.
-    let protection = Protection::idle_held();
+    let protection = Protection::away();
     assert!(
         manager
             .record_agent_stop(&id, &protection, None)
@@ -427,9 +335,9 @@ async fn an_idle_stop_after_a_wake_keeps_the_agent() {
         .register_repository(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let (workspace, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
+    let (workspace, execution) = agent(&manager, &repo.id, "held", IDLE).await;
     let id = execution.plan.id.clone();
-    let chosen = chosen_held(&manager, &id).await;
+    let chosen = chosen_away(&manager, &id).await;
     let turns = manager.agent_turns().await.unwrap();
     let woken = manager
         .start_woken_turn(&SpaceSelector::id(&workspace.id), Some(id))
@@ -440,13 +348,13 @@ async fn an_idle_stop_after_a_wake_keeps_the_agent() {
     assert!(!*execution.stop.borrow());
 }
 
-/// The sweep's choice to stop `execution` as idle in a held done workspace,
-/// in the turn it reports now.
-async fn chosen_held(manager: &Manager, execution: &ExecutionId) -> HashMap<ExecutionId, Chosen> {
+/// The sweep's choice to stop `execution` as idle with the user away, in
+/// the turn it reports now.
+async fn chosen_away(manager: &Manager, execution: &ExecutionId) -> HashMap<ExecutionId, Chosen> {
     let stop = Chosen {
-        protection: Protection::idle_held(),
+        protection: Protection::away(),
         turn: manager.reported_turns().await.unwrap()[execution],
-        cache_expired_at: Some(crate::time::UnixTime::now()),
+        interacted_at: None,
     };
     HashMap::from([(execution.to_owned(), stop)])
 }
@@ -462,9 +370,7 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
         .unwrap();
     let working = Setup {
         state: AgentState::Working,
-        done: false,
-        held: false,
-        ..HELD_DONE_IDLE
+        ..IDLE
     };
     let (workspace, execution) = agent(&manager, &repo.id, "blocked", working).await;
     let selector = SpaceSelector::id(&workspace.id);
@@ -475,11 +381,7 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
         reason: "Needs the API".into(),
     };
     manager.set_progress(&selector, change).await.unwrap();
-    cache_expires_in(&manager, &workspace, 600).await;
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
-        .await
-        .unwrap();
+    manager.stop_idle_agents(UnixTime::now()).await.unwrap();
     assert!(
         !*execution.stop.borrow(),
         "a working agent finishes its turn"
@@ -494,14 +396,10 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
         )
         .await
         .unwrap();
-    cache_expires_in(&manager, &workspace, 600).await;
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
-        .await
-        .unwrap();
+    manager.stop_idle_agents(UnixTime::now()).await.unwrap();
     assert!(
         *execution.stop.borrow(),
-        "a warm cache keeps no blocked agent"
+        "a blocked agent sleeps as its turn ends"
     );
     assert!(manager.restore_waits_for_unblock(&workspace.id, &execution.plan.id));
     // A message waits for its restore, which starts its turn however the
@@ -582,8 +480,7 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
 }
 
 /// An idle chat whose agent runs in `mode`, in a repository under `root`
-/// with `[sleep] idle` enabled and a heavy chat mode `pair`, whose prompt
-/// cache has expired, and its agent's execution.
+/// with a heavy chat mode `pair`, and its agent's execution.
 async fn idle_chat(
     manager: &std::sync::Arc<Manager>,
     root: &std::path::Path,
@@ -598,10 +495,7 @@ async fn idle_chat(
         .await
         .unwrap();
     manager
-        .write_local_config(
-            &repo.id,
-            Some("[sleep]\nidle = true\n[modes.pair]\nkind = 'chat'\n".into()),
-        )
+        .write_local_config(&repo.id, Some("[modes.pair]\nkind = 'chat'\n".into()))
         .await
         .unwrap();
     let chat = manager
@@ -637,46 +531,27 @@ async fn idle_chat(
         )
         .await
         .unwrap();
-    let id = chat.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "UPDATE space_agent_state SET prompt_cache_expires_at=unixepoch() WHERE space_id=?1",
-                [id],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
     (chat, execution)
 }
 
-/// `[sleep] idle` stops a heavy chat's idle agent once its prompt cache
-/// expires, as it stops a workspace's.
+/// A heavy chat's idle agent sleeps as a workspace's does.
 #[tokio::test]
-async fn a_heavy_chats_idle_agent_stops_once_its_cache_expires() {
+async fn a_heavy_chats_idle_agent_sleeps() {
     let (root, manager) = manager().await;
     let (_, execution) = idle_chat(&manager, root.path(), "pair").await;
 
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
-        .await
-        .unwrap();
+    manager.stop_idle_agents(later()).await.unwrap();
 
     assert!(*execution.stop.borrow());
 }
 
-/// A light chat's idle agent keeps running with its prompt cache expired.
+/// A light chat's idle agent keeps running.
 #[tokio::test]
-async fn a_light_chats_idle_agent_keeps_running_once_its_cache_expires() {
+async fn a_light_chats_idle_agent_keeps_running() {
     let (root, manager) = manager().await;
     let (_, execution) = idle_chat(&manager, root.path(), "chat").await;
 
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
-        .await
-        .unwrap();
+    manager.stop_idle_agents(later()).await.unwrap();
 
     assert!(!*execution.stop.borrow());
 }
@@ -698,21 +573,11 @@ async fn a_blocked_chats_idle_agent_stops_until_its_space_clears() {
         .await
         .unwrap();
 
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
-        .await
-        .unwrap();
+    manager.stop_idle_agents(UnixTime::now()).await.unwrap();
 
     assert!(*execution.stop.borrow());
     assert!(manager.restore_waits_for_unblock(&chat.id, &execution.plan.id));
 }
-
-/// An agent whose work is not done, in a workspace nothing holds.
-const UNFINISHED: Setup = Setup {
-    done: false,
-    held: false,
-    ..HELD_DONE_IDLE
-};
 
 /// Why Shoal stopped the agent of `execution`, while it waits to restore.
 async fn stop_reason(manager: &Manager, execution: &StartedExecution) -> Option<String> {
@@ -720,36 +585,65 @@ async fn stop_reason(manager: &Manager, execution: &StartedExecution) -> Option<
     protection.map(|protection| protection.reason)
 }
 
+/// Report a turn of the agent `execution` runs in `workspace`, ending now.
+async fn turn(manager: &Manager, workspace: &Workspace, execution: &StartedExecution) {
+    for state in [AgentState::Working, AgentState::Idle] {
+        let id = Some(execution.plan.id.clone());
+        (manager.set_agent_state(&SpaceSelector::id(&workspace.id), state, id, None))
+            .await
+            .unwrap();
+    }
+}
+
+/// An agent the user is engaged with waits for them as long as
+/// `[sleep] max_wait_minutes` allows without a reply time to go by, then
+/// sleeps; a turn after that without them waits only seconds.
 #[tokio::test]
-async fn a_sleeping_agent_sleeps_once_its_cache_expires() {
+async fn an_engaged_user_keeps_the_agent_until_they_stop_replying() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
         .register_repository(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let (workspace, execution) = agent(&manager, &repo.id, "sleeps", UNFINISHED).await;
-    let selector = SpaceSelector::id(&workspace.id);
-    (manager.sleep(&selector, Some(Sleep::Turn), None))
+    let (workspace, execution) = agent(&manager, &repo.id, "engaged", IDLE).await;
+    let earlier = UnixTime::now() - Duration::from_secs(100);
+    (manager.record_interaction(&workspace.id, earlier))
         .await
         .unwrap();
-    cache_expires_in(&manager, &workspace, 600).await;
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
-        .await
-        .unwrap();
-    assert!(!*execution.stop.borrow(), "a warm cache keeps the agent");
-
-    cache_expires_in(&manager, &workspace, 0).await;
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
-        .await
-        .unwrap();
+    turn(&manager, &workspace, &execution).await;
+    manager.stop_idle_agents(later()).await.unwrap();
+    assert!(!*execution.stop.borrow(), "the user is engaged");
+    let after_max_wait = UnixTime::now() + Duration::from_secs(31 * 60);
+    manager.stop_idle_agents(after_max_wait).await.unwrap();
     assert!(*execution.stop.borrow());
-    assert_eq!(
-        stop_reason(&manager, &execution).await,
-        Some(Protection::slept().reason)
-    );
+
+    // A turn an update starts finds the user still away.
+    let (workspace, execution) = agent(&manager, &repo.id, "updated", IDLE).await;
+    (manager.record_interaction(&workspace.id, earlier))
+        .await
+        .unwrap();
+    turn(&manager, &workspace, &execution).await;
+    turn(&manager, &workspace, &execution).await;
+    manager.stop_idle_agents(later()).await.unwrap();
+    assert!(*execution.stop.borrow(), "the user stopped replying");
+}
+
+/// `[sleep] enabled = false` keeps idle agents running.
+#[tokio::test]
+async fn sleep_can_be_disabled() {
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    (manager.write_local_config(&repo.id, Some("[sleep]\nenabled = false\n".into())))
+        .await
+        .unwrap();
+    let (_, execution) = agent(&manager, &repo.id, "idle", IDLE).await;
+    manager.stop_idle_agents(later()).await.unwrap();
+    assert!(!*execution.stop.borrow());
 }
 
 /// An asleep agent's timer keeps its waiting restore from counting as an
@@ -766,18 +660,14 @@ async fn an_asleep_agents_timer_keeps_its_workspace_and_restores_it() {
         .register_repository(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let (workspace, execution) = agent(&manager, &repo.id, "sleeps", UNFINISHED).await;
+    let (workspace, execution) = agent(&manager, &repo.id, "sleeps", IDLE).await;
     let selector = SpaceSelector::id(&workspace.id);
     let at = UnixTime::now() + std::time::Duration::from_secs(20 * 60);
     let timer = shoal_protocol::sleep::WakeTimer { at, message: None };
     (manager.sleep(&selector, Some(Sleep::Turn), Some(timer)))
         .await
         .unwrap();
-    cache_expires_in(&manager, &workspace, 0).await;
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
-        .await
-        .unwrap();
+    manager.stop_idle_agents(later()).await.unwrap();
     assert!(*execution.stop.borrow());
     let agent = crate::agent::Agent::from("claude");
     manager
@@ -795,8 +685,7 @@ async fn an_asleep_agents_timer_keeps_its_workspace_and_restores_it() {
     assert!(due.await.unwrap());
 }
 
-/// A light workspace agent that sleeps only stops its idle wakes: neither
-/// its sleep nor an expired cache under `[sleep] idle` stops it.
+/// A light workspace agent that sleeps only stops its idle wakes.
 #[tokio::test]
 async fn a_light_agent_that_sleeps_keeps_running() {
     let (root, manager) = manager().await;
@@ -805,74 +694,59 @@ async fn a_light_agent_that_sleeps_keeps_running() {
         .register_repository(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let config = "[sleep]\nidle = true\n[modes.triage]\nweight = 'light'\n";
+    let config = "[modes.triage]\nweight = 'light'\n";
     (manager.write_local_config(&repo.id, Some(config.into())))
         .await
         .unwrap();
     let light = Setup {
         mode: "triage",
-        ..UNFINISHED
+        ..IDLE
     };
     let (workspace, execution) = agent(&manager, &repo.id, "sleeps", light).await;
     let selector = SpaceSelector::id(&workspace.id);
     (manager.sleep(&selector, Some(Sleep::Turn), None))
         .await
         .unwrap();
-    cache_expires_in(&manager, &workspace, 0).await;
 
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
-        .await
-        .unwrap();
+    manager.stop_idle_agents(later()).await.unwrap();
 
     assert!(!*execution.stop.borrow());
 }
 
-#[tokio::test]
-async fn under_the_speed_schedule_a_sleeping_agent_sleeps_at_once() {
+/// Whether an idle agent the user is away from, with a warm prompt cache,
+/// sleeps under the machine's `schedule`.
+async fn warm_agent_sleeps(schedule: &str) -> bool {
     let (root, manager) = manager().await;
-    manager.publish_config(crate::test_support::global_config(
-        "[machine]\nschedule = \"speed\"\n",
-    ));
+    let config = format!("[machine]\nschedule = \"{schedule}\"\n");
+    manager.publish_config(crate::test_support::global_config(&config));
     let repo = repository(root.path(), "repo");
     let repo = manager
         .register_repository(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let (workspace, execution) = agent(&manager, &repo.id, "sleeps", UNFINISHED).await;
-    let selector = SpaceSelector::id(&workspace.id);
-    (manager.sleep(&selector, Some(Sleep::Permanent), None))
-        .await
-        .unwrap();
+    let (workspace, execution) = agent(&manager, &repo.id, "warm", IDLE).await;
     cache_expires_in(&manager, &workspace, 600).await;
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
-        .await
-        .unwrap();
-    assert!(*execution.stop.borrow());
-}
-
-/// Ask a question in `workspace`, which wakes its agent once answered.
-async fn ask(manager: &Manager, workspace: &Workspace) {
-    let ask = shoal_protocol::questions::Ask {
-        question: "Which database?".into(),
-        recommendation: "SQLite".into(),
-        reason: None,
-        choices: Vec::new(),
-    };
-    manager
-        .ask_question(
-            &SpaceSelector::id(&workspace.id),
-            ask,
-            Vec::new(),
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
+    manager.stop_idle_agents(later()).await.unwrap();
+    *execution.stop.borrow()
 }
 
 #[tokio::test]
-async fn an_agent_something_will_wake_sleeps_to_make_room_for_queued_work() {
+async fn a_warm_cache_keeps_no_idle_agent_under_the_cache_schedule() {
+    assert!(warm_agent_sleeps("cache").await);
+}
+
+#[tokio::test]
+async fn a_warm_cache_keeps_no_idle_agent_under_the_balanced_schedule() {
+    assert!(warm_agent_sleeps("balanced").await);
+}
+
+#[tokio::test]
+async fn a_warm_cache_keeps_no_idle_agent_under_the_speed_schedule() {
+    assert!(warm_agent_sleeps("speed").await);
+}
+
+#[tokio::test]
+async fn an_agent_the_user_is_away_from_sleeps_to_make_room_for_queued_work() {
     let (root, manager) = manager().await;
     manager.publish_config(crate::test_support::global_config(
         "[machine]\nmax_heavy_agents = 3\n[machine.overload.disk]\nenabled = false",
@@ -882,27 +756,27 @@ async fn an_agent_something_will_wake_sleeps_to_make_room_for_queued_work() {
         .register_repository(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
+    // Sleep is off, so only making room puts agents to sleep.
+    (manager.write_local_config(&repo.id, Some("[sleep]\nenabled = false\n".into())))
+        .await
+        .unwrap();
     let mut agents = Vec::new();
-    for name in ["asks", "urgent", "idle"] {
-        let (workspace, execution) = agent(&manager, &repo.id, name, UNFINISHED).await;
-        cache_expires_in(&manager, &workspace, 0).await;
-        agents.push((workspace, execution));
+    for name in ["away", "urgent", "engaged"] {
+        agents.push(agent(&manager, &repo.id, name, IDLE).await);
     }
-    let [(asks, asking), (urgent, ranked_higher), (_, nothing_wakes)] = &agents[..] else {
+    let [(_, away), (urgent, ranked_higher), (engaged, with_user)] = &agents[..] else {
         unreachable!()
     };
-    ask(&manager, asks).await;
-    ask(&manager, urgent).await;
     manager
         .set_priority(None, &SpaceSelector::id(&urgent.id), Priority::URGENT)
         .await
         .unwrap();
-    // Without queued work, nothing sleeps for room.
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
+    (manager.record_interaction(&engaged.id, UnixTime::now()))
         .await
         .unwrap();
-    assert!(!*asking.stop.borrow());
+    // Without queued work, nothing sleeps for room.
+    manager.stop_idle_agents(later()).await.unwrap();
+    assert!(!*away.stop.borrow());
 
     let launch = manager
         .queue_add(crate::daemon::workspace::agent_queue::tests::request(
@@ -912,58 +786,14 @@ async fn an_agent_something_will_wake_sleeps_to_make_room_for_queued_work() {
         .unwrap();
     assert!(!launch.start);
     manager.dispatch_queue().await.unwrap();
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
-        .await
-        .unwrap();
+    let ended = turn_end(&manager, away).await;
+    manager.stop_idle_agents(ended).await.unwrap();
+    assert!(!*away.stop.borrow(), "its turn just ended");
+    manager.stop_idle_agents(later()).await.unwrap();
     assert_eq!(
-        stop_reason(&manager, asking).await,
+        stop_reason(&manager, away).await,
         Some(Protection::making_room().reason)
     );
     assert!(!*ranked_higher.stop.borrow(), "a higher priority keeps it");
-    assert!(!*nothing_wakes.stop.borrow(), "nothing would wake it");
-}
-
-/// An agent whose turn ended its sleep but left its timer set sleeps to
-/// make room, since the timer will wake it.
-#[tokio::test]
-async fn an_agent_its_timer_will_wake_sleeps_to_make_room() {
-    let (root, manager) = manager().await;
-    manager.publish_config(crate::test_support::global_config(
-        "[machine]\nmax_heavy_agents = 1\n[machine.overload.disk]\nenabled = false",
-    ));
-    let repo = repository(root.path(), "repo");
-    let repo = manager
-        .register_repository(repo.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let (workspace, execution) = agent(&manager, &repo.id, "timed", UNFINISHED).await;
-    let selector = SpaceSelector::id(&workspace.id);
-    let at = UnixTime::now() + std::time::Duration::from_secs(20 * 60);
-    let timer = shoal_protocol::sleep::WakeTimer { at, message: None };
-    (manager.sleep(&selector, Some(Sleep::Turn), Some(timer)))
-        .await
-        .unwrap();
-    for state in [AgentState::Working, AgentState::Idle] {
-        (manager.set_agent_state(&selector, state, Some(execution.plan.id.clone()), None))
-            .await
-            .unwrap();
-    }
-    assert_eq!(manager.space(&selector).await.unwrap().sleep, None);
-    cache_expires_in(&manager, &workspace, 0).await;
-    manager
-        .queue_add(crate::daemon::workspace::agent_queue::tests::request(
-            &repo, "later", false,
-        ))
-        .await
-        .unwrap();
-    manager.dispatch_queue().await.unwrap();
-    manager
-        .stop_idle_agents(crate::time::UnixTime::now())
-        .await
-        .unwrap();
-    assert_eq!(
-        stop_reason(&manager, &execution).await,
-        Some(Protection::making_room().reason)
-    );
+    assert!(!*with_user.stop.borrow(), "the user is engaged with it");
 }

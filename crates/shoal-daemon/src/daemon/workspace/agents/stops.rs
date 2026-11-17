@@ -71,31 +71,52 @@ fn discard_handoff(handoff: Option<&Path>) {
 
 /// What still holds when a stop chosen between turns is recorded: the agent
 /// is idle in the turn generation it was chosen in with no subagent
-/// running, and for a stop that frees memory, its prompt cache expired by
-/// `cache_expired_at`.
+/// running, and for a stop the user keeps the agent from, they have not
+/// interacted with it since.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Between {
     pub turn: i64,
-    pub cache_expired_at: Option<UnixTime>,
+    /// For a stop the user keeps the agent from, when they had last
+    /// interacted with it as the stop was chosen.
+    pub interacted: Option<Interacted>,
 }
 
+/// When the user last interacted with an agent, as a stop read it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Interacted(pub Option<UnixTime>);
+
 /// Whether the agent of execution `id` is still `between` turns: a turn
-/// that started since, a turn end that renewed its cache, or a subagent
-/// that started, keeps it.
+/// that started since, a subagent that started, or the user's interaction
+/// with it where that keeps it, keeps it.
 fn still_between(db: &Connection, id: &ExecutionId, between: Between) -> Result<bool> {
     Ok(idle_in_turn(db, id, between)?
-        && !crate::daemon::workspace::subagents::runs_one(db, id, UnixTime::now())?)
+        && !crate::daemon::workspace::subagents::runs_one(db, id, UnixTime::now())?
+        && match between.interacted {
+            Some(interacted) => interacted_with(db, id)? == interacted,
+            None => true,
+        })
+}
+
+/// When the user last interacted with the agent of execution `id`.
+fn interacted_with(db: &Connection, id: &ExecutionId) -> Result<Interacted> {
+    let interacted = db
+        .query_row(
+            "SELECT e.interacted_at FROM space_engagement e
+             JOIN executions x ON x.space_id=e.space_id WHERE x.id=?1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(Interacted(interacted.flatten()))
 }
 
 /// Whether the agent of execution `id` is still idle in the turn
-/// generation `between` names, with a cache that expired as it requires.
+/// generation `between` names.
 fn idle_in_turn(db: &Connection, id: &ExecutionId, between: Between) -> Result<bool> {
     Ok(db.query_row(
         "SELECT EXISTS (SELECT 1 FROM space_agent_state
-             WHERE execution_id=?1 AND state=?2 AND turn=?3
-                 AND (?4 IS NULL OR prompt_cache_expires_at IS NULL
-                     OR prompt_cache_expires_at<=?4))",
-        params![id, AgentState::Idle, between.turn, between.cache_expired_at],
+             WHERE execution_id=?1 AND state=?2 AND turn=?3)",
+        params![id, AgentState::Idle, between.turn],
         |row| row.get(0),
     )?)
 }

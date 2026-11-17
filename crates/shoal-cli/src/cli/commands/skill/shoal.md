@@ -259,9 +259,11 @@ message once it has stayed idle that long, and again after each further
 period, until its space is done: "You have been idle for 60 minutes. Continue
 your work if any remains; otherwise run `shoal sleep`." An agent that has
 nothing to do until something arrives runs `shoal sleep`: from the end of its
-turn it gets no idle wakes, and once stopping it costs no prompt cache Shoal
-stops it, keeping its session, slot-free until an update, a message, an answer
-or the user wakes it. `--for` or `--until` also sets the space's timer, which
+turn it gets no idle wakes. Shoal stops an idle agent that is not light,
+keeping its session, slot-free until an update, a message, an answer or the user
+wakes it, seconds after its turn ends unless the user is engaged with it, and
+otherwise once it has waited twice as long as the user usually takes to come
+back to it. `--for` or `--until` also sets the space's timer, which
 replaces the one it had: when it is due, the agent receives the text after
 `--` as a message, or that the timer fired, asleep or not, through restores
 and daemon restarts, until `--undo` or `shoal done` cancels it. A loop sets

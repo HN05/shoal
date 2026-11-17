@@ -1,5 +1,5 @@
 use super::*;
-use crate::{daemon::workspace::agents::Turn, state::AgentState};
+use crate::{daemon::workspace::agents::Turn, state::AgentState, time::UnixTime};
 
 fn candidate() -> Candidate {
     Candidate {
@@ -11,8 +11,8 @@ fn candidate() -> Candidate {
             state: AgentState::Idle,
             since: UnixTime::from_seconds(0),
             generation: 1,
-            cache_expires_at: None,
         },
+        interacted_at: None,
     }
 }
 
@@ -22,7 +22,6 @@ fn sleeper(candidate: &Candidate, holds_slot: bool) -> Sleeper<'_> {
         repository: Some("repo".into()),
         holds_slot,
         priority: Priority::NORMAL,
-        free: Free::Expired,
     }
 }
 

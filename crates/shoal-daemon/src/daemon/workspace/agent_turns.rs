@@ -24,24 +24,11 @@ pub(crate) struct Turn {
     pub state: AgentState,
     pub since: UnixTime,
     pub generation: i64,
-    /// When an idle agent's prompt cache expires, for an AI tool whose cache
-    /// lifetime is known.
-    pub cache_expires_at: Option<UnixTime>,
 }
 
 impl Turn {
     pub(crate) fn idle(&self) -> bool {
         self.state == AgentState::Idle
-    }
-
-    /// Whether the agent is idle with no prompt cache left at `now`, so
-    /// restoring it costs no more than its next turn would. An unknown cache
-    /// lifetime counts as expired.
-    pub(crate) fn idle_without_cache(&self, now: UnixTime) -> bool {
-        self.idle()
-            && self
-                .cache_expires_at
-                .is_none_or(|expires_at| expires_at <= now)
     }
 }
 
@@ -64,7 +51,7 @@ fn reported(
 fn last_turns(db: &Connection) -> Result<HashMap<ExecutionId, Turn>> {
     Ok(db
         .prepare(
-            "SELECT execution_id,state,since,prompt_cache_expires_at,turn FROM space_agent_state
+            "SELECT execution_id,state,since,turn FROM space_agent_state
              WHERE execution_id IS NOT NULL",
         )?
         .query_map([], |row| {
@@ -73,8 +60,7 @@ fn last_turns(db: &Connection) -> Result<HashMap<ExecutionId, Turn>> {
                 Turn {
                     state: row.get(1)?,
                     since: row.get(2)?,
-                    cache_expires_at: row.get(3)?,
-                    generation: row.get(4)?,
+                    generation: row.get(3)?,
                 },
             ))
         })?

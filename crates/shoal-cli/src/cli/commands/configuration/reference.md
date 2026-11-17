@@ -575,7 +575,8 @@ values. See [agent secrets](../../../../../../docs/reference.md#agent-secrets).
 
 ```toml
 [sleep]
-idle = false   # Put any idle agent to sleep once its prompt cache expires
+enabled = true          # Put idle agents to sleep once you are away from them
+max_wait_minutes = 30   # The longest an idle agent you are engaged with waits for you
 ```
 
 See [sleep](../../../../../../docs/reference.md#sleep).

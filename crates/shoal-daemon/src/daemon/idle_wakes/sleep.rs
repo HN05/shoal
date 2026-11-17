@@ -1,8 +1,8 @@
 //! The sleep an agent that waits for something takes: Shoal does not wake
-//! it for having stayed idle, and puts it to sleep once that costs nothing,
-//! until its next turn starts, or after every turn until `shoal sleep
-//! --undo`, which also wakes an agent asleep for any reason and cancels
-//! its timer.
+//! it for having stayed idle until its next turn starts, or after every
+//! turn until `shoal sleep --undo`, which also wakes an agent asleep for any
+//! reason and cancels its timer. Its stop is the one every idle agent takes
+//! once the user is away from it.
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 

@@ -271,7 +271,7 @@ fn start_lookup(
 
 /// Whether the space `id` looks for the runs of a merge or follows one it
 /// linked that has not finished.
-pub(crate) fn awaits_merge_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<bool> {
+fn awaits_merge_runs(db: &rusqlite::Connection, id: &SpaceId) -> Result<bool> {
     for lookup in merge_lookups(db, id)? {
         if lookup.looking || any_running(db, id, &lookup.runs)? {
             return Ok(true);

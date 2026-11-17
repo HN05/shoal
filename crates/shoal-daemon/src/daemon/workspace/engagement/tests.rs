@@ -151,3 +151,61 @@ async fn a_prompt_the_user_submits_counts_as_interaction() {
         .unwrap();
     assert!(engagement(&manager, &id).await.interacted_at.is_some());
 }
+
+const MAX_WAIT: Duration = Duration::from_secs(30 * 60);
+
+#[test]
+fn an_agent_the_user_is_not_engaged_with_waits_the_floor() {
+    let away = Engagement {
+        interacted_at: Some(at(50)),
+        turn_ended_at: Some(at(1000)),
+        previous_turn_ended_at: Some(at(100)),
+    };
+    let reply = Some(Duration::from_secs(600));
+    assert_eq!(away.wait_ends(at(1000), reply, MAX_WAIT), at(1000) + FLOOR);
+}
+
+#[test]
+fn an_engaged_user_gets_twice_their_reply_time_from_their_last_interaction() {
+    let engaged = Engagement {
+        interacted_at: Some(at(1100)),
+        turn_ended_at: Some(at(1000)),
+        previous_turn_ended_at: Some(at(500)),
+    };
+    let wait = |reply: Option<u64>| {
+        let reply = reply.map(Duration::from_secs);
+        engaged.wait_ends(at(1000), reply, MAX_WAIT).seconds()
+    };
+    assert_eq!(wait(Some(60)), 1100 + 120);
+    assert_eq!(wait(Some(1)), 1100 + 10, "the floor");
+    assert_eq!(wait(Some(3600)), 1100 + 1800, "the most it waits");
+    assert_eq!(wait(None), 1100 + 1800, "without a reply time");
+}
+
+#[tokio::test]
+async fn a_space_without_reply_times_takes_the_users_capped_average() {
+    let (root, manager) = manager().await;
+    let (id, _) = workspace(&manager, root.path()).await;
+    manager
+        .store
+        .write(|tx| {
+            for seconds in [30, 90] {
+                tx.execute(
+                    "INSERT INTO reply_times(space_id,seconds) VALUES ('other',?1)",
+                    [seconds],
+                )?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let reply = async |space: &SpaceId, cap: u64| {
+        let (space, cap) = (space.to_owned(), Duration::from_secs(cap));
+        (manager.store)
+            .read(move |db| reply_time(db, &space, cap))
+            .await
+            .unwrap()
+    };
+    assert_eq!(reply(&id, 600).await, Some(Duration::from_secs(60)));
+    assert_eq!(reply(&id, 40).await, Some(Duration::from_secs(35)));
+}

@@ -2,12 +2,10 @@
 //! duration of every run, read from its workspace's usage samples and kept
 //! per repository, workflow and job name, the cost a waiting or starting
 //! run of a job counts at in admission: the peak memory of its recent runs,
-//! none before it has run, and how long the jobs a space waits for have
-//! left.
+//! none before it has run.
 use anyhow::Result;
 use rusqlite::{OptionalExtension, params};
-use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
-use std::time::Duration;
+use shoal_ids::repository_ids::RepositoryId;
 
 use super::ends::ClaimedJob;
 use crate::{
@@ -110,64 +108,6 @@ impl Manager {
         Ok(JobCost {
             memory: peak.and_then(|peak| u64::try_from(peak).ok()),
         })
-    }
-
-    /// How long a run of `job` in `repository_id` is expected to take: the
-    /// longest of its recent runs whose duration is known, none before one.
-    async fn job_duration(
-        &self,
-        repository_id: &RepositoryId,
-        job: &QueuedJob,
-    ) -> Result<Option<Duration>> {
-        let repository = repository_id.to_owned();
-        let (workflow, name) = key(job);
-        let seconds: Option<i64> = self
-            .store
-            .run(move |db| {
-                Ok(db.query_row(
-                    "SELECT max(seconds) FROM (SELECT seconds
-                     FROM ci_job_usage WHERE repository_id=?1 AND workflow=?2 AND name=?3
-                        AND seconds IS NOT NULL
-                     ORDER BY ended_at DESC, rowid DESC LIMIT ?4)",
-                    params![repository, workflow, name, RECENT_RUNS],
-                    |row| row.get(0),
-                )?)
-            })
-            .await?;
-        Ok(seconds.and_then(|seconds| Some(Duration::from_secs(u64::try_from(seconds).ok()?))))
-    }
-
-    /// How long the CI jobs this machine's runner runs or has queued for
-    /// the space `id` are expected to go on at `now`, from the recent runs
-    /// of each: the longest a running job has left, or a waiting job takes.
-    /// None when no such job serves the space, or one has no known
-    /// duration, since then Shoal cannot tell.
-    pub(crate) async fn ci_remaining(
-        &self,
-        id: &SpaceId,
-        now: crate::time::UnixTime,
-    ) -> Result<Option<Duration>> {
-        let claimed = (self.claimed_jobs().await?.into_iter())
-            .map(|job| (job.repository_id, job.job, job.launched_at));
-        let waiting = (self
-            .store
-            .read(|tx| super::linked::waiting_jobs(tx))
-            .await?)
-            .into_iter()
-            .map(|(_, repository, job)| (repository, job, None));
-        let mut remaining = None;
-        for (repository, job, launched) in claimed.chain(waiting) {
-            if !job.space_ids.contains(id) {
-                continue;
-            }
-            let Some(duration) = self.job_duration(&repository, &job).await? else {
-                return Ok(None);
-            };
-            let ran = launched.map_or(Duration::ZERO, |launched| now.duration_since(launched));
-            let left = duration.saturating_sub(ran);
-            remaining = Some(remaining.map_or(left, |longest: Duration| longest.max(left)));
-        }
-        Ok(remaining)
     }
 }
 

@@ -86,9 +86,9 @@ pub enum CoordinationCommand {
     /// Put a space's agent to sleep from the end of its turn until its next
     /// turn starts; --for and --until also set a timer that wakes it.
     ///
-    /// Shoal does not wake a sleeping agent for having stayed idle, and
-    /// stops it once that costs no prompt cache, saving it to come back on
-    /// its own. Updates, messages, the user and its timer still wake it.
+    /// Shoal does not wake a sleeping agent for having stayed idle; it stops
+    /// an idle agent once the user is away from it, saving it to come back
+    /// on its own. Updates, messages, the user and its timer still wake it.
     Sleep {
         /// Space, a workspace or chat; defaults to the current workspace or
         /// chat, or a picker.
