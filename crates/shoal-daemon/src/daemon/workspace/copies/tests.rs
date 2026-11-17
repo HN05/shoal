@@ -184,6 +184,23 @@ async fn a_retried_copy_takes_its_sources_files_as_they_are_then() {
 }
 
 #[tokio::test]
+async fn a_retry_that_could_not_keep_the_failed_copys_files_is_refused() {
+    let f = Fixture::new().await;
+    let copy = f.failed_pending_copy(None).await;
+    let nested = copy.path.join("nested");
+    fs::create_dir(&nested).unwrap();
+    git(&nested, &["init", "-q"]);
+    fs::write(nested.join("file"), "nested\n").unwrap();
+    let selector = SpaceSelector::id(&copy.id);
+    let refused = f.manager.create_pending_worktree(&selector).await;
+    assert!(refused.is_err(), "{refused:?}");
+    assert!(nested.join("file").exists());
+    assert!(copy.path.join("mine").exists());
+    let copy = f.manager.workspace_by_id(&copy.id).await.unwrap();
+    assert!(copy.pending_worktree);
+}
+
+#[tokio::test]
 async fn a_retried_copy_of_a_checkpoint_writes_its_files_again() {
     let f = Fixture::new().await;
     let checkpoint = f
