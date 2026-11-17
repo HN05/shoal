@@ -66,6 +66,12 @@ impl CheckState {
         )
     }
 
+    /// The state as a finished check's result, which an unfinished one has
+    /// yet to have.
+    pub fn result(self) -> Option<Self> {
+        self.complete().then_some(self)
+    }
+
     /// Whether the check finished and passed; any other finished state,
     /// such as a cancelled one, may need attention.
     pub fn passed(self) -> bool {

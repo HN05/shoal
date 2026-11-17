@@ -58,6 +58,7 @@ impl Runs for GitLab {
     /// A tag's pipeline ran on no branch, and a branch has one pipeline,
     /// so none names a workflow.
     fn run_item(&self, _repo: &ForgeRepo, value: &Value) -> Result<Run> {
+        let status = status_state(&value["status"])?;
         Ok(Run {
             id: RunId::new(value["id"].as_u64().context("pipeline has no ID")?),
             url: text(&value["web_url"]).context("pipeline has no URL")?,
@@ -65,8 +66,8 @@ impl Runs for GitLab {
             workflow: None,
             commit: text(&value["sha"]).map(CommitId::from),
             pull: None,
-            state: status_state(&value["status"])?.into(),
-            succeeded: value["status"] == "success",
+            state: status.into(),
+            result: status.result(),
             waiting: false,
         })
     }
@@ -105,6 +106,7 @@ impl Runs for GitLab {
                     id: JobId::new(job["id"].as_u64().context("GitLab job has no ID")?),
                     name: text(&job["name"]).context("GitLab job has no name")?,
                     state: job_state(&job["status"])?,
+                    result: status_state(&job["status"])?.result(),
                     url: text(&job["web_url"]),
                 })
             })

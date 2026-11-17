@@ -5302,14 +5302,26 @@ fn forgejo_ci_runs_are_viewed_with_failed_logs_and_listed_by_branch_or_pr() {
     let view = fixture.ok(&["view", "ci", "2765", "--space", &fixture.id("topic")]);
     assert_eq!(view["url"], url, "{view}");
     assert_eq!(
-        (&view["state"], &view["branch"], &view["workflow"]),
-        (&json!("failed"), &json!("topic"), &json!("deps.yml"))
+        (
+            &view["state"],
+            &view["result"],
+            &view["branch"],
+            &view["workflow"]
+        ),
+        (
+            &json!("failed"),
+            &json!("failure"),
+            &json!("topic"),
+            &json!("deps.yml")
+        )
     );
     assert_eq!(
         view["jobs"],
         json!([
-            {"id": 18344, "name": "build", "state": "finished", "url": format!("{url}/jobs/0")},
-            {"id": 18345, "name": "audit", "state": "failed", "url": format!("{url}/jobs/1")}
+            {"id": 18344, "name": "build", "state": "finished", "result": "success",
+                "url": format!("{url}/jobs/0")},
+            {"id": 18345, "name": "audit", "state": "failed", "result": "failure",
+                "url": format!("{url}/jobs/1")}
         ])
     );
     // Only the failed job's log is read.
@@ -5360,7 +5372,8 @@ fn forgejo_ci_runs_are_viewed_with_failed_logs_and_listed_by_branch_or_pr() {
     ]);
     assert_eq!(
         runs,
-        json!([{"url": url, "branch": "topic", "workflow": "deps.yml", "state": "failed"}])
+        json!([{"url": url, "branch": "topic", "workflow": "deps.yml", "state": "failed",
+            "result": "failure"}])
     );
     // A PR's runs are those on its head commit.
     let runs = fixture.ok(&["ci", "ls", "--pr", "#8", "--space", &fixture.id("topic")]);

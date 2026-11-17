@@ -10,7 +10,7 @@ use crate::{
     ForgeRepo,
     backends::Routes,
     capability::{Capability, Unsupported},
-    ci::{CiAction, JobState, id},
+    ci::{CiAction, JobState, check_state::CheckState, id},
     numbers::{PullNumber, RunId, RunNumber},
 };
 
@@ -34,10 +34,9 @@ pub struct Run {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pull: Option<PullNumber>,
     pub state: JobState,
-    /// The forge reports it succeeded, which a finished run that was
-    /// skipped or waits for manual action has not.
-    #[serde(skip)]
-    pub succeeded: bool,
+    /// What the forge reports it finished with, once it finished.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result: Option<CheckState>,
     /// The forge holds the run until a maintainer approves it.
     #[serde(skip)]
     pub waiting: bool,
@@ -52,7 +51,7 @@ impl Run {
 
     /// Whether it finished and succeeded.
     pub fn passed(&self) -> bool {
-        !self.waiting && self.succeeded
+        !self.waiting && self.result == Some(CheckState::Success)
     }
 }
 

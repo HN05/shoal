@@ -4913,9 +4913,10 @@ it but not rerun, since only a new run on the head checks the head.
 
 `shoal view ci` shows a run's state (`waiting` until a runner takes a job,
 `running`, `failed`, `finished`, or `cancelled` when the only jobs that
-stopped short were cancelled),
+stopped short were cancelled) and, once it finished, its result as the forge
+reports a check's, such as `success`, `failure`, `cancelled` or `skipped`,
 branch, workflow and jobs, each in one of those states or `cancelled` when
-it was cancelled, and the log
+it was cancelled and with its result once it finished, and the log
 tails of its failed jobs as `shoal view`
 shows a PR's; `--job` shows only one job's whole log, in any state and up to
 8 MiB, by its name or, as several jobs may share one, the ID the view lists
@@ -4924,11 +4925,11 @@ names a run; a number alone never does. `shoal ci ls` lists the newest runs,
 ten unless `--limit` says up to 100, on the workspace's branch, the one
 `--branch` names or the head commit of the PR `--pr` names, and of one workflow
 file with `--workflow`, which GitLab does not take, reading the jobs of each
-failed run for its state as `view ci` does. Both read any run of the
-repository as the agent account, on every forge but Bitbucket. `--json` returns
-each run's `url`, `state`, `branch` and `workflow`, and for `view` its `jobs`
-with their `id`, `name`, `state` and `url`, the `logs` it read and the `errors`
-of those it could not.
+failed run for its state and result as `view ci` does. Both read any run of
+the repository as the agent account, on every forge but Bitbucket. `--json`
+returns each run's `url`, `state`, `result`, `branch` and `workflow`, and for
+`view` its `jobs` with their `id`, `name`, `state`, `result` and `url`, the
+`logs` it read and the `errors` of those it could not.
 
 Forges hold the runs of PRs from forks and first-time contributors until a
 maintainer approves them, and until then those runs report no checks. `shoal

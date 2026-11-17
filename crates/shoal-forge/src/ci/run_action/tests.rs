@@ -4,6 +4,7 @@ use super::*;
 use crate::CommitId;
 use crate::backends::Runs;
 use shoal_forge_types::ci::JobState;
+use shoal_forge_types::ci::check_state::CheckState;
 use shoal_forge_types::numbers::PullNumber;
 use shoal_forge_types::numbers::RunId;
 use shoal_forge_types::numbers::RunNumber;
@@ -17,7 +18,7 @@ fn run(id: u64) -> Run {
         commit: None,
         pull: None,
         state: JobState::Finished,
-        succeeded: true,
+        result: Some(CheckState::Success),
         waiting: false,
     }
 }
@@ -94,7 +95,7 @@ fn runs_read_their_branch_workflow_commit_and_state_from_the_forge() -> Result<(
             commit: Some("abc".into()),
             pull: None,
             state: JobState::Failed,
-            succeeded: false,
+            result: Some(CheckState::Failure),
             waiting: false,
         }
     );
@@ -127,7 +128,7 @@ fn runs_read_their_branch_workflow_commit_and_state_from_the_forge() -> Result<(
             commit: Some("123".into()),
             pull: None,
             state: JobState::Finished,
-            succeeded: true,
+            result: Some(CheckState::Success),
             waiting: false,
         }
     );

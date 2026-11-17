@@ -62,7 +62,7 @@ impl Runs for Forgejo {
             commit: commit_of(value).map(CommitId::from),
             pull: pull_of(value),
             state: actions::state(&value["status"])?,
-            succeeded: value["status"] == "success",
+            result: actions::result(&value["status"]),
             waiting: value["need_approval"] == true,
         })
     }
@@ -107,6 +107,7 @@ impl Runs for Forgejo {
                     id: JobId::new(job["id"].as_u64().context("Actions job has no ID")?),
                     name: text(&job["name"]).context("Actions job has no name")?,
                     state: actions::job_state(job)?,
+                    result: actions::result(&job["status"]),
                     url: Some(format!("{}/jobs/{index}", run.url)),
                 })
             })

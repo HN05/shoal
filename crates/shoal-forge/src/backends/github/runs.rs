@@ -57,7 +57,7 @@ impl Runs for GitHub {
             commit: text(&value["head_sha"]).map(CommitId::from),
             pull: pull_of(repo, value),
             state: actions::state(value)?,
-            succeeded: value["conclusion"] == "success",
+            result: actions::result(value),
             waiting: value["conclusion"] == "action_required",
         })
     }
@@ -102,6 +102,7 @@ impl Runs for GitHub {
                     id: JobId::new(job["id"].as_u64().context("Actions job has no ID")?),
                     name: text(&job["name"]).context("Actions job has no name")?,
                     state: actions::job_state(job)?,
+                    result: actions::result(job),
                     url: text(&job["html_url"]),
                 })
             })

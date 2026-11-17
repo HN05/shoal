@@ -3,6 +3,7 @@ use serde_json::json;
 use super::*;
 use crate::backends::Runs;
 use shoal_forge_types::{
+    ci::check_state::CheckState,
     items::{link::LinkKind, reference::ItemRef},
     numbers::{JobId, RunId},
 };
@@ -80,7 +81,7 @@ fn the_newest_finished_run_skips_unfinished_and_held_runs() {
         commit: None,
         pull: None,
         state,
-        succeeded: state == JobState::Finished,
+        result: (state == JobState::Finished).then_some(CheckState::Success),
         waiting,
     };
     let runs = vec![
@@ -121,7 +122,7 @@ fn jobs_are_read_with_their_state_and_page() -> Result<()> {
         commit: None,
         pull: None,
         state: JobState::Failed,
-        succeeded: false,
+        result: Some(CheckState::Failure),
         waiting: false,
     };
     let jobs = github.kind().run_jobs(
@@ -141,18 +142,21 @@ fn jobs_are_read_with_their_state_and_page() -> Result<()> {
                 id: JobId::new(34),
                 name: "rust".into(),
                 state: JobState::Failed,
+                result: Some(CheckState::Failure),
                 url: Some("https://github.com/team/repo/actions/runs/12/job/34".into()),
             },
             RunJob {
                 id: JobId::new(35),
                 name: "docs".into(),
                 state: JobState::Running,
+                result: None,
                 url: None,
             },
             RunJob {
                 id: JobId::new(36),
                 name: "lint".into(),
                 state: JobState::Cancelled,
+                result: Some(CheckState::Cancelled),
                 url: None,
             },
         ]
@@ -203,6 +207,18 @@ fn jobs_are_read_with_their_state_and_page() -> Result<()> {
             JobState::Cancelled
         ]
     );
+    assert_eq!(
+        jobs.iter().map(|job| job.result).collect::<Vec<_>>(),
+        [
+            Some(CheckState::Success),
+            Some(CheckState::Failure),
+            None,
+            None,
+            None,
+            Some(CheckState::Cancelled),
+            Some(CheckState::Cancelled)
+        ]
+    );
     Ok(())
 }
 
@@ -216,13 +232,14 @@ fn jobs_are_selected_by_id_or_by_a_name_no_other_job_has() -> Result<()> {
         commit: None,
         pull: None,
         state: JobState::Failed,
-        succeeded: false,
+        result: Some(CheckState::Failure),
         waiting: false,
     };
     let job = |id, name: &str| RunJob {
         id,
         name: name.into(),
         state: JobState::Failed,
+        result: Some(CheckState::Failure),
         url: None,
     };
     let jobs = [

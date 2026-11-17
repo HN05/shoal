@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::ci::{CiCheck, Job, Location, Operation, check};
 use shoal_forge_types::{
     ForgeRepo,
-    ci::{CiAction, JobState, id},
+    ci::{CiAction, JobState, check_state::CheckState, id},
     numbers::{JobId, RunId},
 };
 
@@ -38,6 +38,15 @@ pub(crate) fn state(value: &Value) -> Result<JobState> {
             (None, _) => bail!("GitHub run or job has no status"),
         },
     )
+}
+
+/// The result of a finished check run, workflow run or job from its
+/// conclusion.
+pub(crate) fn result(value: &Value) -> Option<CheckState> {
+    match value["status"].as_str() {
+        Some("completed") => value["conclusion"].as_str().and_then(CheckState::parse),
+        _ => None,
+    }
 }
 
 /// The state of a run's job. A cancelled job was cancelled, while a run's

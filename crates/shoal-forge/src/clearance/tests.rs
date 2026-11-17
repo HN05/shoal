@@ -1,5 +1,9 @@
 use super::*;
-use shoal_forge_types::{ci::JobState, items::link::LinkKind, numbers::RunId};
+use shoal_forge_types::{
+    ci::{JobState, check_state::CheckState},
+    items::link::LinkKind,
+    numbers::RunId,
+};
 
 fn run(id: u64, state: JobState) -> Run {
     Run {
@@ -10,7 +14,7 @@ fn run(id: u64, state: JobState) -> Run {
         commit: Some("0123456789abcdef".into()),
         pull: None,
         state,
-        succeeded: state == JobState::Finished,
+        result: (state == JobState::Finished).then_some(CheckState::Success),
         waiting: false,
     }
 }
@@ -37,7 +41,7 @@ fn a_finished_run_that_did_not_succeed_clears_nothing() {
     // A skipped pipeline, or one waiting for manual action, finished without
     // succeeding.
     let skipped = Run {
-        succeeded: false,
+        result: Some(CheckState::Skipped),
         ..run(12, JobState::Finished)
     };
     assert_eq!(

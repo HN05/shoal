@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use shoal_refs::CommitId;
 
 use crate::{
-    ci::{JobState, checks::CheckLog, run_action::Run},
+    ci::{JobState, check_state::CheckState, checks::CheckLog, run_action::Run},
     numbers::JobId,
 };
 
@@ -16,6 +16,9 @@ pub struct RunJob {
     pub id: JobId,
     pub name: String,
     pub state: JobState,
+    /// What the forge reports it finished with, once it finished.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result: Option<CheckState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
 }
@@ -34,10 +37,11 @@ pub struct RunView {
 }
 
 impl RunView {
-    /// `run` with its `jobs`, in the state they show.
+    /// `run` with its `jobs`, in the state and with the result they show.
     pub fn new(mut run: Run, jobs: Vec<RunJob>) -> Self {
         if run.state == JobState::Failed {
             run.state = stopped_run_state(&jobs);
+            run.result = stopped_run_result(run.state, run.result);
         }
         Self {
             run,
@@ -76,6 +80,18 @@ pub fn stopped_run_state(jobs: &[RunJob]) -> JobState {
     match (failed, cancelled) {
         (false, true) => JobState::Cancelled,
         _ => JobState::Failed,
+    }
+}
+
+/// The result of a run that stopped short in `state`, which the forge
+/// reported as `result`: a cancelled run's is cancelled, and a failed one's
+/// is no cancellation, since a forge reports a run cancelled when a failed
+/// job cancelled the others.
+fn stopped_run_result(state: JobState, result: Option<CheckState>) -> Option<CheckState> {
+    match (state, result) {
+        (JobState::Cancelled, _) => Some(CheckState::Cancelled),
+        (_, Some(CheckState::Cancelled) | None) => Some(CheckState::Failure),
+        (_, result) => result,
     }
 }
 

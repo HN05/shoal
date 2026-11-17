@@ -20,7 +20,7 @@ use crate::{
 use shoal_forge_types::{
     ForgeRepo,
     backends::forgejo::runs_path,
-    ci::{CiAction, JobState, checks::CheckLog},
+    ci::{CiAction, JobState, check_state::CheckState, checks::CheckLog},
     items::link::ItemKind,
     numbers::{JobId, RunId, RunNumber},
 };
@@ -249,6 +249,14 @@ pub(crate) fn state(status: &Value) -> Result<JobState> {
         Some("success" | "skipped") => JobState::Finished,
         status => anyhow::bail!("unknown Forgejo Actions status {status:?}"),
     })
+}
+
+/// The result of a finished run or job from its status.
+pub(crate) fn result(status: &Value) -> Option<CheckState> {
+    status
+        .as_str()
+        .and_then(CheckState::parse)
+        .and_then(CheckState::result)
 }
 
 /// The state of a run's job. A cancelled job was cancelled, while a run's
