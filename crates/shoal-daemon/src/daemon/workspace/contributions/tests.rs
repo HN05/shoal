@@ -303,6 +303,20 @@ async fn a_removed_contribution_names_the_fork_it_leaves() {
 }
 
 #[tokio::test]
+async fn a_restarted_daemon_keeps_contributions_while_their_holds_resume() {
+    let (root, manager) = manager().await;
+    let repo = contribution(&manager, root.path()).await;
+    let started = tokio::time::Instant::now();
+    let holds = &manager.contribution_holds;
+    holds.await_resumes(started + std::time::Duration::from_secs(3600));
+    manager.sweep_contributions().await.unwrap();
+    assert!(registered(&manager, &repo).await);
+    holds.await_resumes(started);
+    manager.sweep_contributions().await.unwrap();
+    assert!(!registered(&manager, &repo).await);
+}
+
+#[tokio::test]
 async fn a_scoped_caller_resumes_a_hold_only_where_it_may_administer() {
     use crate::daemon::{scope::Caller, test_support::chat};
     use crate::protocol::RepositoryMethod;

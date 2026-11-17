@@ -837,7 +837,9 @@ it; when the user's login cannot push there, the user's fork, created or reused,
 becomes the `fork` remote and `remote.pushDefault`, which Git, `pr open` and
 cleanup all honour. It goes through `repo rm`'s path once nothing of it has been
 left for the unattended grace period: no running `contribute`, whose daemon
-connection holds it in memory from its registration until the command ends, no
+connection holds it in memory from its registration until the command ends,
+resuming on a new one after a restart, while every contribution counts as held
+for the first minute the daemon runs, no
 workspace, queued agent, chat, pending
 issue proposal, kept branch or borrowed resource, nothing `shoal restore` could
 use, no files a removed space keeps, and no work in its checkout that the remotes' advertised branches and tags

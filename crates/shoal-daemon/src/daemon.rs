@@ -161,6 +161,8 @@ pub async fn run(
         exit,
         capacity: Arc::new(connections::Capacity::for_descriptors(descriptors)),
     };
+    let resumes_until = tokio::time::Instant::now() + workspace::CONTRIBUTION_RESUME_WINDOW;
+    manager.contribution_holds.await_resumes(resumes_until);
     let mut background = JoinSet::new();
     spawn_supervised(&mut background, &manager, "auto cleanup", cleanup::run);
     spawn_supervised(

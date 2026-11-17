@@ -72,7 +72,9 @@ pub(crate) use agent_queue::Grant;
 pub use agents::RestartWaits;
 pub(crate) use agents::{Pause, Protection};
 pub(crate) use branches::NewWorktreeOptions;
-pub(crate) use contributions::holds::ContributionHold;
+pub(crate) use contributions::holds::{
+    ContributionHold, RESUME_WINDOW as CONTRIBUTION_RESUME_WINDOW,
+};
 pub(crate) use copies::CopyPlace;
 pub(crate) use creation::{NewWorkspace, build_pending_in};
 pub(crate) use daemon_exit::Ending;
