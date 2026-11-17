@@ -232,6 +232,7 @@ async fn a_retried_copy_of_a_checkpoint_writes_its_files_again() {
     let copy = f.manager.create_pending_worktree(&selector).await.unwrap();
     assert!(!copy.pending_worktree);
     assert_eq!(git(&copy.path, &["diff", "HEAD"]), kept);
+    assert!(!copy.path.join("mine").exists());
     let email = git(&copy.path, &["config", "user.email"]);
     assert_eq!(email.trim(), "work@example.invalid");
     assert_eq!(f.kept_before_retry(&copy).await, "mine\n");

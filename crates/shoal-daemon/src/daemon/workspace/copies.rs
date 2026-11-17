@@ -455,8 +455,8 @@ impl Manager {
                 self.configure_clone(workspace, git_profile).await
             }
             SourceFiles::Checkpoint { commit, .. } => {
-                let files = checkpoint_files(&source.head, commit);
-                (self.configure_worktree(workspace, Some(&files), git_profile)).await
+                rewind_copy(workspace, &checkpoint_files(&source.head, commit)).await?;
+                self.configure_worktree(workspace, None, git_profile).await
             }
         }
     }
@@ -582,6 +582,25 @@ fn checkpoint_files(head: &CommitId, commit: &CommitId) -> RestoredFiles {
         head: head.clone(),
         snapshot: commit.clone(),
     }
+}
+
+/// Return the copy `workspace` to the checkpoint `files` it copies, as
+/// returning to a checkpoint does, refusing ignored files it would
+/// overwrite, which no checkpoint keeps.
+async fn rewind_copy(workspace: &Workspace, files: &RestoredFiles) -> Result<()> {
+    let (path, head, snapshot) = (
+        &workspace.path,
+        files.head.as_str(),
+        files.snapshot.as_str(),
+    );
+    let ignored = git::checkpoint::ignored_collisions(path, head, snapshot).await?;
+    ensure!(
+        ignored.is_empty(),
+        "copying the checkpoint into {} again would overwrite ignored files no checkpoint keeps; move them first: {}",
+        workspace.name,
+        ignored.join(", ")
+    );
+    git::checkpoint::rewind(path, head, snapshot).await
 }
 
 /// `workspace` as a copy starts from it at `head` with `files`.
