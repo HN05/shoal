@@ -183,11 +183,9 @@ pub enum Started {
     /// As the worker of an existing workspace.
     Worker,
     /// In a new chat whose agent waits in the queue behind `waiting`
-    /// entries, this one included.
+    /// entries, this one included, or which the queue starts in a
+    /// background place, as its entry says.
     Queued { waiting: usize },
-    /// In a new chat whose agent runs in a background place: where it runs
-    /// and how to reach it, as the host that runs it says.
-    Background { place: String },
     /// In a new chat whose agent an app runs detached.
     Detached(DetachedRun),
 }

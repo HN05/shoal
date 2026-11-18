@@ -24,14 +24,13 @@ use shoal_subprocess as subprocess;
 #[cfg(feature = "test-support")]
 pub mod test_daemon {
     pub use crate::daemon::approvals::ApprovalRequestExt;
-    pub use crate::daemon::chats::launches::fake::started as started_chats;
     pub use crate::daemon::disk::Monitor as DiskMonitor;
     pub use crate::daemon::links::proposals::store_issue_proposal;
     pub use crate::daemon::operations::fake;
     pub use crate::daemon::queued_starts::fake::STARTED as STARTED_QUEUED;
     pub use crate::daemon::scope::Caller;
     pub use crate::daemon::test_daemon::{HANG, TestDaemon};
-    pub use crate::daemon::test_support::{configure, overload};
+    pub use crate::daemon::test_support::{chat_launches, configure, overload};
     pub use crate::daemon::workspace::{Manager, PermissionTargets, StopRequest};
 }
 

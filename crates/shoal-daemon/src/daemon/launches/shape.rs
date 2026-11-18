@@ -21,6 +21,14 @@ pub(super) struct Shape {
     pub repository: bool,
 }
 
+impl Shape {
+    /// Whether `launch` in this shape starts the agent of the existing
+    /// workspace it names rather than a new space.
+    pub(super) fn starts_worker(&self, launch: &Launch) -> bool {
+        self.kind == SpaceKind::Workspace && launch.in_workspace.is_some()
+    }
+}
+
 impl Manager {
     /// The shape of `launch` for `caller`: in the mode it names, else the
     /// [`launches::default_mode`], the kind of space that mode starts in.

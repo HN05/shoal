@@ -41,7 +41,7 @@ pub(super) fn workspace_start(launched: Launched) -> Result<StartedWorkspace> {
     let (operation, reused) = match start {
         Started::Preparing { operation, reused } => (operation, reused),
         Started::Worker => (None, true),
-        Started::Queued { .. } | Started::Background { .. } | Started::Detached(_) => {
+        Started::Queued { .. } | Started::Detached(_) => {
             anyhow::bail!("the daemon started the agent in no workspace")
         }
     };

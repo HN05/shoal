@@ -20,18 +20,11 @@ impl<T> PerDaemon<T> {
     }
 }
 
+#[cfg(test)]
 impl<T: Clone> PerDaemon<T> {
     /// The values of the daemon of `paths`, oldest first.
     pub fn of(&self, paths: &Paths) -> Vec<T> {
         let values = self.0.lock().unwrap();
         values.get(&paths.state).cloned().unwrap_or_default()
-    }
-}
-
-impl<T: PartialEq> PerDaemon<T> {
-    /// Whether the daemon of `paths` has `value`.
-    pub fn contains(&self, paths: &Paths, value: &T) -> bool {
-        let values = self.0.lock().unwrap();
-        (values.get(&paths.state)).is_some_and(|values| values.contains(value))
     }
 }

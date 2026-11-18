@@ -9,10 +9,19 @@ use crate::{
         },
     },
     model::{ChatQueueRequest, Repository},
-    protocol::ChatStart,
     state::QueueState,
 };
-use shoal_protocol::{launches::Started, space_names::SpaceSelector};
+use shoal_ids::queue_entry_ids::QueueEntryId;
+use shoal_protocol::{
+    launches::{Launch, LaunchSource, StartTarget, Started},
+    space_names::SpaceSelector,
+};
+
+/// Whether the daemon started the queued `id` itself, wherever it runs.
+fn started_launch(id: &QueueEntryId) -> bool {
+    let started = crate::daemon::queued_starts::fake::STARTED.lock().unwrap();
+    started.iter().any(|(started, _)| started == id)
+}
 
 /// A machine of one heavy slot with a heavy chat mode `pair` and a light
 /// one `chat`, and the workspace launch `busy` holding the slot. Its
@@ -121,24 +130,29 @@ async fn a_waiting_chat_launch_starts_only_in_its_recorded_chat() {
     assert_eq!(starting.space_id.as_ref(), Some(&chat.id));
 }
 
-/// A client's chat whose heavy agent must wait is recorded at once, and
-/// the answer names the chat and its agent's entry, without running the
-/// chat's start worker.
+/// The launch of the chat `name` of `repo` in the heavy mode `pair`,
+/// started `now` when asked.
+fn heavy_chat(repo: &Repository, name: &str, now: bool) -> Launch {
+    Launch {
+        target: Some(StartTarget::Repository(repo.id.to_string())),
+        mode: Some("pair".into()),
+        name: Some(name.into()),
+        agent: Some("claude".into()),
+        now,
+        ..Launch::default()
+    }
+}
+
+/// A launched chat whose heavy agent must wait is recorded at once, and
+/// the answer names the chat and its agent's entry, which waits there.
 #[tokio::test]
-async fn a_clients_chat_whose_agent_waits_is_recorded_with_its_entry() {
+async fn a_launched_chat_whose_agent_waits_is_recorded_with_its_entry() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     full_machine(&manager, &repo).await;
-    let start = ChatStart {
-        repository: Some((&repo.id).into()),
-        agent: Some("claude".into()),
-        mode: Some("pair".into()),
-        name: Some("queued talk".into()),
-        ..Default::default()
-    };
 
-    let started = manager
-        .launch_chat(start, shoal_protocol::launches::LaunchSource::Manual, None)
+    let launch = heavy_chat(&repo, "queued talk", false);
+    let started = (manager.launch(launch, LaunchSource::Manual, None))
         .await
         .unwrap();
 
@@ -148,47 +162,29 @@ async fn a_clients_chat_whose_agent_waits_is_recorded_with_its_entry() {
     assert_eq!(waiting, 1);
     let queued = started.entry.expect("the answer names its agent's entry");
     assert_eq!(queued.state, QueueState::Queued);
-    let entries = manager.queue_entries().await.unwrap();
-    let entry = entries.iter().find(|entry| entry.id == queued.id);
-    assert_eq!(entry.unwrap().space_id.as_ref(), Some(&started.space.id));
+    assert_eq!(queued.space(), Some(&started.space.id));
     let chats = manager.chats().await.unwrap();
     let chat = chats.iter().find(|chat| chat.id == started.space.id);
     assert_eq!(chat.unwrap().name, "queued talk");
-    let launched = crate::daemon::chats::launches::fake::started(&manager.paths);
-    let names: Vec<_> = (launched.into_iter())
-        .filter_map(|(start, _)| start.name)
-        .collect();
-    assert!(!names.contains(&"queued talk".into()), "{names:?}");
+    assert!(!started_launch(&queued.id));
 }
 
-/// A client's chat asked to start now runs its agent past the full
+/// A launched chat asked to start now has its agent start past the full
 /// machine, still taking a slot.
 #[tokio::test]
-async fn a_clients_chat_started_now_runs_past_the_limits() {
+async fn a_launched_chat_started_now_runs_past_the_limits() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     full_machine(&manager, &repo).await;
-    let start = ChatStart {
-        repository: Some((&repo.id).into()),
-        agent: Some("claude".into()),
-        mode: Some("pair".into()),
-        name: Some("urgent talk".into()),
-        now: true,
-        ..Default::default()
-    };
 
-    let started = manager
-        .launch_chat(start, shoal_protocol::launches::LaunchSource::Manual, None)
+    let launch = heavy_chat(&repo, "urgent talk", true);
+    let started = (manager.launch(launch, LaunchSource::Manual, None))
         .await
         .unwrap();
 
-    assert!(
-        !matches!(started.start, Started::Queued { .. }),
-        "{started:?}"
-    );
-    let entries = manager.queue_entries().await.unwrap();
-    let entry = entries.iter().find(|entry| entry.name == "urgent talk");
-    assert_eq!(entry.unwrap().state, QueueState::Starting);
+    let entry = started.entry.unwrap();
+    assert_eq!(entry.state, QueueState::Starting);
+    assert!(started_launch(&entry.id));
 }
 
 /// A chat launch that fails before it took any chat frees its slot and

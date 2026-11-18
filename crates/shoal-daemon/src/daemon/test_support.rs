@@ -313,3 +313,23 @@ pub fn ended(pid: u32) -> bool {
     }
     true
 }
+
+/// The launches the daemon of `manager` queued in its chats, oldest first,
+/// as their plans hold them, while they wait or start.
+pub async fn chat_launches(manager: &Manager) -> Vec<crate::protocol::operations::QueuedLaunch> {
+    let plans: Vec<String> = (manager.store)
+        .run(|db| {
+            Ok(db
+                .prepare(
+                    "SELECT q.plan FROM agent_queue q JOIN spaces s ON s.id=q.space_id
+                     WHERE q.kind='launch' AND s.kind='chat' ORDER BY q.seq",
+                )?
+                .query_map([], |row| row.get(0))?
+                .collect::<rusqlite::Result<_>>()?)
+        })
+        .await
+        .unwrap();
+    (plans.iter())
+        .map(|plan| crate::start_plan::QueuedStart::of(plan).unwrap().launch)
+        .collect()
+}

@@ -3,8 +3,11 @@ use crate::test_daemon::{Connect as _, code, queued_plan};
 use shoal_daemon::test_daemon::{TestDaemon, fake};
 use shoal_protocol::launches::{Launch, Launched, SpaceChoice, StartTarget, Started};
 use shoal_protocol::model::Workspace;
-use shoal_protocol::protocol::{ChatStart, ErrorCode, WorkspaceMethod, operations::OperationSpec};
-use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+use shoal_protocol::protocol::{
+    ErrorCode, WorkspaceMethod,
+    operations::{OperationSpec, QueuedLaunch},
+};
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn a_launch_in_a_workspace_queues_its_worker_on_the_launchs_task() {
@@ -150,10 +153,9 @@ async fn a_launch_refuses_what_it_cannot_start_before_it_creates_anything() {
     assert!(daemon.manager.list_workspaces().await.unwrap().is_empty());
 }
 
-/// The resolved starts `daemon` ran its chat start worker for, each with
-/// whether the worker acts with the caller's scope.
-fn launched_chats(daemon: &TestDaemon) -> Vec<(ChatStart, bool)> {
-    shoal_daemon::test_daemon::started_chats(&daemon.manager.paths)
+/// The launches `daemon` queued in its chats, oldest first.
+async fn launched_chats(daemon: &TestDaemon) -> Vec<QueuedLaunch> {
+    shoal_daemon::test_daemon::chat_launches(&daemon.manager).await
 }
 
 #[tokio::test]
@@ -170,35 +172,31 @@ async fn an_app_starts_a_chat_whose_agent_and_mode_the_daemon_resolves() {
     };
     let error = crate::launches::launch(&app, start()).await.unwrap_err();
     assert!(format!("{error:#}").contains("agent.default"), "{error:#}");
-    assert!(launched_chats(&daemon).is_empty());
+    assert!(launched_chats(&daemon).await.is_empty());
     shoal_daemon::test_daemon::configure(
         &daemon.manager,
         "[agent]\ndefault = \"probe\"\n[agents.probe]\ncommand = [\"true\"]\n",
     )
     .await;
     let started = (crate::launches::launch(&app, start())).await.unwrap();
-    let [(launched, scoped)] = launched_chats(&daemon).try_into().unwrap();
-    assert!(!scoped);
-    assert_eq!(launched.agent, Some("probe".into()));
+    let [launched] = launched_chats(&daemon).await.try_into().unwrap();
+    assert_eq!(launched.agent, "probe");
     assert_eq!(launched.mode, Some(shoal_protocol::model::chat_mode()));
-    let repository = launched.repository.as_ref().map(|named| named.value());
-    assert_eq!(repository, Some(daemon.repository.id.as_str()));
-    assert_eq!(launched.parent, None);
     assert_eq!(launched.args, ["Read the build"]);
-    // Without a name of its own, a chat in the checkout takes its
-    // repository's and its mode's.
-    let named = format!("{} chat", shoal_core::repository::name(&daemon.repository));
-    assert_eq!(launched.name.as_ref().map(SpaceName::as_str), Some(&*named));
-    // It answers with the chat it recorded, whose agent runs in a
-    // background place.
+    // It answers with the chat it recorded, whose agent the queue starts.
     assert!(
-        matches!(started.start, Started::Background { .. }),
+        matches!(started.start, Started::Queued { .. }),
         "{started:?}"
     );
     let chat = started
         .space
         .into_chat()
         .expect("the launch started a chat");
+    assert_eq!(chat.repository_id.as_ref(), Some(&daemon.repository.id));
+    assert_eq!(chat.parent, None);
+    // Without a name of its own, a chat in the checkout takes its
+    // repository's and its mode's.
+    let named = format!("{} chat", shoal_core::repository::name(&daemon.repository));
     assert_eq!(chat.name.as_str(), named);
     let chats = daemon.manager.chats().await.unwrap();
     assert!(chats.iter().any(|recorded| recorded.id == chat.id));
@@ -212,6 +210,7 @@ async fn a_scoped_app_starts_chats_below_its_own_space() {
     let parent = daemon.workspace("parent").await;
     let other = daemon.workspace("other").await;
     let agent = daemon.scoped(&parent).await;
+    let parent_id = parent.id.clone();
     let start = |parent: Option<SpaceSelector>| Launch {
         target: Some(StartTarget::Repository(daemon.repository.id.to_string())),
         chat: true,
@@ -222,9 +221,8 @@ async fn a_scoped_app_starts_chats_below_its_own_space() {
     let launch = |launch| crate::launches::launch(&agent, launch);
     let outside = start(Some(SpaceSelector::id(&other.id)));
     assert!(launch(outside).await.is_err());
-    launch(start(None)).await.unwrap();
-    // The worker records it with the caller's scope, below the caller.
-    let [(launched, scoped)] = launched_chats(&daemon).try_into().unwrap();
-    assert!(scoped);
-    assert_eq!(launched.parent, None);
+    let launched = launch(start(None)).await.unwrap();
+    // The daemon records it below the caller.
+    let parent = launched.space.parent.as_ref().map(|parent| &parent.id);
+    assert_eq!(parent, Some(&parent_id));
 }

@@ -11,7 +11,7 @@ use crate::{
     config::Effective,
     daemon::{scope::Caller, workspace::Manager},
     launches::{self, LaunchReads},
-    model::{Repository, SpaceKind, Workspace},
+    model::{Repository, Workspace},
     protocol::ConfigTarget,
 };
 
@@ -19,6 +19,7 @@ mod blockers;
 mod chat;
 mod setup;
 mod shape;
+mod space;
 mod worker;
 mod workspace;
 
@@ -78,12 +79,9 @@ impl Manager {
         let shape = self.launch_shape(&launch, caller).await?;
         launches::ensure_fits(&launch, &[], shape.kind, Some(&shape.mode))?;
         self.authorize_setup(&launch, caller).await?;
-        match shape.kind {
-            SpaceKind::Chat => self.launch_in_chat(launch, shape, source, caller).await,
-            SpaceKind::Workspace if launch.in_workspace.is_some() => {
-                self.launch_worker(launch, shape, source, caller).await
-            }
-            SpaceKind::Workspace => self.launch_workspace(launch, shape, source, caller).await,
+        match shape.starts_worker(&launch) {
+            true => self.launch_worker(launch, shape, source, caller).await,
+            false => self.launch_space(launch, shape, source, caller).await,
         }
     }
 

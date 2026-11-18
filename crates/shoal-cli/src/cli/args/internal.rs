@@ -208,12 +208,9 @@ pub enum InternalCommand {
     QueueStart {
         entry: shoal_ids::queue_entry_ids::QueueEntryId,
     },
-    /// Start the chat whose resolved start the daemon writes to standard
-    /// input in a background place; the daemon runs it.
-    #[command(name = workers::CHAT_START)]
-    ChatStart,
     /// Start, in the place this runs in, the chat whose resolved start the
-    /// chat handoff at `handoff` holds; the chat start worker runs it.
+    /// chat handoff at `handoff` holds; the agent queue's start worker runs
+    /// it.
     #[command(name = workers::CHAT)]
     Chat { handoff: PathBuf },
     /// Add the planned workspace inside the place `host` opened for it.

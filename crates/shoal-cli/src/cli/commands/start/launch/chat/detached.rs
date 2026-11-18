@@ -14,6 +14,7 @@ use crate::{
         context::Context,
     },
     model::{QueueEntry, Space},
+    state::QueueState,
 };
 use shoal_protocol::launches::{self, IssueChoice, Launch, Launched, Setup, SpaceChoice};
 use shoal_protocol::space_names::SpaceName;
@@ -85,9 +86,13 @@ pub(in crate::cli::commands) fn report_started(ctx: &Context, launched: Launched
         launches::Started::Queued { waiting } => {
             let entry = (launched.entry.as_ref())
                 .context("the daemon queued the chat's agent without an entry")?;
-            queued(space, entry, *waiting)
+            match entry.state {
+                QueueState::Queued => queued(space, entry, *waiting),
+                QueueState::Starting | QueueState::Failed => {
+                    format!("Starting chat {}, {}", space.number, space.name)
+                }
+            }
         }
-        launches::Started::Background { place } => place.clone(),
         launches::Started::Detached(run) => format!(
             "Started chat {}; its output goes to {}",
             space.name,

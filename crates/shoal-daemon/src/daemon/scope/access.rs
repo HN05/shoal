@@ -14,7 +14,7 @@ use crate::{
         questions::Question, workspace::Manager,
     },
     model::{ChatQueueRequest, QueueEntry, Repository, RunningAgent, Space, SpaceTarget},
-    protocol::{ChatStart, operations::WorkspaceStart},
+    protocol::operations::WorkspaceStart,
     repository::Selector,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -464,23 +464,6 @@ impl Manager {
             (self.authorize_beyond_limits(caller, start, repository)).await?;
         }
         Ok(())
-    }
-
-    /// Let `caller` start the agent of the new chat `start` now, regardless
-    /// of the limits, as its `limits` permission in the chat's repository
-    /// allows.
-    pub(in crate::daemon) async fn authorize_chat_now(
-        &self,
-        caller: &Caller,
-        start: &ChatStart,
-    ) -> Result<()> {
-        let repository = self.new_chat_repository(start).await?;
-        let start = match &start.name {
-            Some(name) => format!("start the agent of new chat {name} now"),
-            None => "start the agent of a new chat now".to_owned(),
-        };
-        self.authorize_beyond_limits(caller, start, repository)
-            .await
     }
 
     /// Question `number` for the caller to answer, which must be one of a

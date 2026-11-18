@@ -3,11 +3,6 @@
 //! builds those processes' command lines for the daemon, which never
 //! depends on this crate.
 
-// Every module sees the shared crate's print macros.
-#[macro_use]
-extern crate shoal_core;
-
-pub mod chat_starts;
 pub mod execution;
 pub mod git_credential;
 pub mod homes;

@@ -15,8 +15,7 @@ use tokio::{
 use super::{MAX_BODY, MAX_DELIVERIES, accept};
 use crate::{
     daemon::{
-        chats::launches::fake,
-        test_support::configure,
+        test_support::{chat_launches, configure},
         triggers::tests::{outcomes, runs, with_triggers},
         workspace::Manager,
     },
@@ -135,10 +134,9 @@ async fn a_signed_delivery_starts_its_run_once() {
         outcomes(&runs),
         [RunOutcome::Started, RunOutcome::Duplicate]
     );
-    let started = fake::started(&manager.paths);
+    let started = chat_launches(&manager).await;
     assert_eq!(started.len(), 1);
-    let start = &started[0].0;
-    assert_eq!(start.issue.as_ref().unwrap().to_string(), "42");
+    let start = &started[0];
     assert!(start.args[0].contains(">Crash</data-"), "{:?}", start.args);
 }
 
@@ -218,7 +216,7 @@ async fn a_delivery_accepted_before_a_pause_never_fires() {
         .unwrap();
 
     assert!(runs(&manager, &repo, "labelled").await.is_empty());
-    assert!(fake::started(&manager.paths).is_empty());
+    assert!(chat_launches(&manager).await.is_empty());
 }
 
 #[tokio::test]
@@ -232,7 +230,7 @@ async fn a_filtered_delivery_is_accepted_like_any_other() {
 
     let runs = runs_once(&manager, &repo, 1).await;
     assert_eq!(outcomes(&runs), [RunOutcome::Started]);
-    assert_eq!(fake::started(&manager.paths).len(), 1);
+    assert_eq!(chat_launches(&manager).await.len(), 1);
 }
 
 #[tokio::test]

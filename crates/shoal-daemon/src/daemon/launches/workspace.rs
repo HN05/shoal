@@ -163,7 +163,7 @@ impl Manager {
             repository: true,
             ..shape
         };
-        self.launch_in_chat(chat, shape, source, caller).await
+        self.launch_new_chat(chat, shape, source, caller).await
     }
 }
 

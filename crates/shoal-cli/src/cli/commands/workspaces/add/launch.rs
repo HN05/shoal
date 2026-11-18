@@ -160,9 +160,7 @@ pub(in crate::cli::commands) async fn open_here(ctx: &Context, mut launch: Launc
         Started::Preparing { .. } | Started::Worker => {
             Box::pin(attach::run(ctx, attach::workspace_start(launched)?)).await
         }
-        Started::Queued { .. } | Started::Background { .. } | Started::Detached(_) => {
-            start::report_started(ctx, launched)
-        }
+        Started::Queued { .. } | Started::Detached(_) => start::report_started(ctx, launched),
     }
 }
 
@@ -322,9 +320,7 @@ async fn send(
         return attached(ctx, launched, attach).await;
     }
     match &launched.start {
-        Started::Queued { .. } | Started::Background { .. } | Started::Detached(_) => {
-            start::report_started(ctx, launched)
-        }
+        Started::Queued { .. } | Started::Detached(_) => start::report_started(ctx, launched),
         Started::Worker => report_worker(ctx, attach::workspace_start(launched)?),
         Started::Preparing {
             operation: Some(_), ..
@@ -341,7 +337,7 @@ async fn attached(
     (attach, settings): (Attach, &Effective),
 ) -> Result<i32> {
     let started = match &launched.start {
-        Started::Queued { .. } | Started::Background { .. } | Started::Detached(_) => {
+        Started::Queued { .. } | Started::Detached(_) => {
             return start::report_started(ctx, launched);
         }
         Started::Worker => attach::workspace_start(launched)?,

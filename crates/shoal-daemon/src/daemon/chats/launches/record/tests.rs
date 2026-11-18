@@ -1,6 +1,6 @@
 use crate::{
     daemon::{
-        chats::launches::fake,
+        chats::NewChat,
         notifications::{Notification, NotificationKind},
         test_support::{git, global_config, manager, repository},
         workspace::Manager,
@@ -8,12 +8,7 @@ use crate::{
     model::{LinkedItem, Repository, SpaceLinks},
     protocol::ChatStart,
 };
-use shoal_protocol::{
-    launches::{LaunchSource, Started},
-    space_names::SpaceSelector,
-};
-
-const ISSUE: &str = "https://github.com/team/repo/issues/316";
+use shoal_protocol::{chats::LaunchedChat, space_names::SpaceSelector};
 
 /// A registered repository whose remote is a forge's, which Shoal never
 /// reaches, and agents and modes that start chats with and without one,
@@ -71,92 +66,19 @@ async fn notified(manager: &Manager, kind: NotificationKind) -> Vec<Notification
         .collect()
 }
 
-/// A client's chat on an issue, which it names by number, is recorded with
-/// the issue linked before its place starts.
-#[tokio::test]
-async fn a_launched_chat_is_recorded_with_its_issue_before_its_place_starts() {
-    let (temp, manager) = manager().await;
-    let repo = machine(&manager, &temp, false).await;
-
-    let on_issue = ChatStart {
-        issue: Some("316".parse().unwrap()),
-        ..start(Some(&repo), "planning", &[])
-    };
-
-    let started = manager.launch_chat(on_issue, LaunchSource::Manual, None);
-    let started = started.await.unwrap();
-
-    let Started::Background { place } = &started.start else {
-        panic!("expected a chat in a background place: {started:?}");
-    };
-    assert_eq!(place, "background");
-    assert!(started.warnings.is_empty(), "{:?}", started.warnings);
-    let chats = manager.chats().await.unwrap();
-    let chat = chats.iter().find(|chat| chat.name == "planning").unwrap();
-    let linked: Vec<_> = chat
-        .links
-        .issues
-        .iter()
-        .map(|issue| issue.url.url())
-        .collect();
-    assert_eq!(linked, [ISSUE]);
-    // The answer names the chat as the daemon recorded it, linked.
-    assert_eq!(started.space.id, chat.id);
-    assert_eq!(started.space.links, chat.links);
-    assert_eq!(started.entry, None);
-}
-
-/// A chat whose agent an app runs detached answers with the chat it
-/// recorded and the app's run.
-#[tokio::test]
-async fn a_launched_chat_an_app_runs_answers_with_its_chat_and_run() {
-    let (temp, manager) = manager().await;
-    let repo = machine(&manager, &temp, false).await;
-    fake::detach(&manager.paths, "app talk".into());
-
-    let started = manager.launch_chat(
-        start(Some(&repo), "app talk", &[]),
-        LaunchSource::Manual,
-        None,
-    );
-    let started = started.await.unwrap();
-
-    let Started::Detached(run) = &started.start else {
-        panic!("expected a chat an app runs: {started:?}");
-    };
-    assert_eq!(run.log, std::path::Path::new("app talk.log"));
-    let chats = manager.chats().await.unwrap();
-    let chat = chats.iter().find(|chat| chat.name == "app talk").unwrap();
-    assert_eq!(started.space.id, chat.id);
-    assert_eq!(started.space.kind(), crate::model::SpaceKind::Chat);
-}
-
-/// A chat without a repository that starts on nothing links nothing and
-/// warns of nothing.
-#[tokio::test]
-async fn a_chat_without_a_repository_links_nothing_and_warns_of_nothing() {
-    let (temp, manager) = manager().await;
-    machine(&manager, &temp, false).await;
-
-    let started = manager.launch_chat(
-        start(None, "orchestrating", &[]),
-        LaunchSource::Manual,
-        None,
-    );
-    let started = started.await.unwrap();
-
-    assert!(started.warnings.is_empty(), "{:?}", started.warnings);
-    assert!(
-        notified(&manager, NotificationKind::StartWarned)
-            .await
-            .is_empty()
-    );
-    let chats = manager.chats().await.unwrap();
-    let chat = chats
-        .iter()
-        .find(|chat| chat.name == "orchestrating")
-        .unwrap();
-    assert!(chat.links.is_empty());
+/// Record the chat `start` describes, below `parent`, as a caller that
+/// runs its agent itself does.
+async fn record(
+    manager: &Manager,
+    start: ChatStart,
+    parent: Option<&SpaceSelector>,
+) -> LaunchedChat {
+    let parent = manager.space_id(parent).await.unwrap();
+    let new = NewChat::of(&start, parent, None).unwrap();
+    manager
+        .record_launch(&start, new, None, None)
+        .await
+        .unwrap()
 }
 
 /// An item the start cannot link warns the starter, here the user, and the
@@ -167,12 +89,7 @@ async fn a_link_that_fails_during_a_start_reaches_the_user() {
     let repo = machine(&manager, &temp, false).await;
     let elsewhere = "https://github.com/other/place/issues/2";
 
-    let started = manager.launch_chat(
-        start(Some(&repo), "linking", &[elsewhere]),
-        LaunchSource::Manual,
-        None,
-    );
-    let started = started.await.unwrap();
+    let started = record(&manager, start(Some(&repo), "linking", &[elsewhere]), None).await;
 
     assert!(
         started
@@ -191,41 +108,6 @@ async fn a_link_that_fails_during_a_start_reaches_the_user() {
     );
 }
 
-/// A chat whose place fails stays with its failed launch, whose failure
-/// its starter, here the user, hears of, as a workspace's would.
-#[tokio::test]
-async fn a_chat_whose_place_fails_stays_with_its_failed_launch() {
-    let (temp, manager) = manager().await;
-    let repo = machine(&manager, &temp, true).await;
-    fake::fail(&manager.paths, "failing".into());
-
-    let started = manager.launch_chat(
-        start(Some(&repo), "failing", &[ISSUE]),
-        LaunchSource::Manual,
-        None,
-    );
-    let error = started.await.unwrap_err();
-
-    assert!(
-        format!("{error:#}").contains("ended before the chat started"),
-        "{error:#}"
-    );
-    let chats = manager.chats().await.unwrap();
-    let chat = chats.iter().find(|chat| chat.name == "failing").unwrap();
-    let entries = manager.queue_entries().await.unwrap();
-    let [failed] = entries.as_slice() else {
-        panic!("{entries:?}");
-    };
-    assert_eq!(failed.space(), Some(&chat.id));
-    assert_eq!(failed.state, crate::state::QueueState::Failed);
-    let told = notified(&manager, NotificationKind::StartFailed).await;
-    assert!(
-        told.iter()
-            .any(|notification| notification.message.contains("failing")),
-        "{told:?}"
-    );
-}
-
 /// What starting a chat below a space whose agent runs warns of reaches
 /// that agent instead of the user.
 #[tokio::test]
@@ -235,14 +117,13 @@ async fn a_link_that_fails_during_a_start_reaches_the_starting_agent() {
     let starter = manager.start_chat((&repo.id).into(), "starter".into(), "claude".into(), None);
     let starter = starter.await.unwrap();
     let elsewhere = "https://github.com/other/place/issues/2";
-    let child = ChatStart {
-        parent: Some(SpaceSelector::id(&starter.id)),
-        ..start(Some(&repo), "linking", &[elsewhere])
-    };
-
-    (manager.launch_chat(child, LaunchSource::Manual, None))
-        .await
-        .unwrap();
+    let parent = SpaceSelector::id(&starter.id);
+    record(
+        &manager,
+        start(Some(&repo), "linking", &[elsewhere]),
+        Some(&parent),
+    )
+    .await;
 
     let starter = SpaceSelector::id(&starter.id);
     let messages = manager.agent_messages(&starter).await.unwrap();
