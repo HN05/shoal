@@ -214,9 +214,15 @@ pub enum Call {
     Revoke { member: String },
     /// Revoke the caller's own credential. Answered with [`Reply::Left`].
     Leave,
-    /// A machine's report of its spaces. Answered with
-    /// [`Reply::Reported`] and the numbers the hub keeps for the machine.
-    Report(Report),
+    /// A machine's report of its spaces, with every number it holds
+    /// without a space, as for a removed space's issue proposals, which no
+    /// other space may take. Answered with [`Reply::Reported`] and the
+    /// numbers the hub keeps for the machine.
+    Report {
+        report: Report,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        reserved: Vec<SpaceNumber>,
+    },
     /// The directory of every machine's spaces. Answered with
     /// [`Reply::Directory`].
     Directory,

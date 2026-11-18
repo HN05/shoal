@@ -20,17 +20,20 @@ mod records;
 pub(super) use records::forget;
 
 impl Manager {
-    /// Record the machine `member`'s `report` of its spaces, alerting the
-    /// user to each space ID it reported that another machine owns, and
-    /// return the numbers the hub keeps for the machine.
+    /// Record the machine `member`'s `report` of its spaces, and the
+    /// numbers it holds without a space, `reserved`, alerting the user to
+    /// each space ID it reported that another machine owns, and return the
+    /// numbers the hub keeps for the machine.
     pub(super) async fn record_report(
         &self,
         member: &MemberId,
         report: Report,
+        reserved: Vec<SpaceNumber>,
     ) -> Result<Numbering> {
         let member = member.clone();
         let (conflicts, numbering) = (self.store)
             .write(move |tx| {
+                numbers::reserve_held(tx, &member, &reserved)?;
                 let conflicts = records::apply(tx, &member, report)?;
                 Ok((conflicts, numbers::kept_for(tx, &member)?))
             })

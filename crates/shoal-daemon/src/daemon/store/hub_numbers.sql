@@ -8,3 +8,12 @@ CREATE TABLE hub_numbers (
     space_id TEXT UNIQUE
 );
 CREATE INDEX hub_numbers_member ON hub_numbers(member_id);
+
+-- The numbers a joined machine holds without a space, as for a removed
+-- space's issue proposals, which it reports with its spaces and the hub
+-- gives no other space.
+CREATE TABLE hub_reserved_numbers (
+    member_id TEXT NOT NULL REFERENCES hub_members(id),
+    number INTEGER NOT NULL,
+    PRIMARY KEY(member_id, number)
+);

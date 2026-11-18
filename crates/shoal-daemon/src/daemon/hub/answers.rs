@@ -80,9 +80,9 @@ impl Manager {
                 self.release_member(&member.id).await?;
                 Reply::Left
             }
-            Call::Report(report) => {
+            Call::Report { report, reserved } => {
                 ensure_machine(member)?;
-                Reply::Reported(self.record_report(&member.id, report).await?)
+                Reply::Reported(self.record_report(&member.id, report, reserved).await?)
             }
             Call::Claim { space } => {
                 ensure_machine(member)?;

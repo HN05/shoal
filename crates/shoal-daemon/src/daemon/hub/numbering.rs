@@ -69,6 +69,12 @@ impl Manager {
             .await
     }
 
+    /// The numbers this machine holds without a space, as for a removed
+    /// space's issue proposals, which no other machine's space may take.
+    pub(super) async fn reserved_numbers(&self) -> Result<Vec<SpaceNumber>> {
+        self.store.read(reserved).await
+    }
+
     /// Give new spaces the smallest number free here again, once this
     /// machine neither takes the hub role nor is a member of a hub.
     pub(super) async fn forget_numbering_unless_joined(&self) -> Result<()> {
@@ -84,17 +90,53 @@ pub(crate) fn next(tx: &Transaction<'_>, id: &SpaceId) -> Result<Option<SpaceNum
     if let Some(kept) = take_kept(tx, id)? {
         return Ok(Some(kept));
     }
-    Ok(tx
-        .query_row(
-            "SELECT COALESCE(
-                (SELECT MIN(spare.value) FROM json_each(hub_numbering.spares) AS spare
-                    WHERE spare.value NOT IN (SELECT number FROM space_numbers)),
-                (SELECT COALESCE(MAX(number), 0) + 1 FROM space_numbers))
-            FROM hub_numbering",
-            [],
-            |row| row.get(0),
-        )
-        .optional()?)
+    if !numbered_by_hub(tx)? {
+        return Ok(None);
+    }
+    match free_spare(tx)? {
+        Some(spare) => Ok(Some(spare)),
+        None => above_highest(tx).map(Some),
+    }
+}
+
+/// Whether this machine numbers its spaces from a hub's sequence.
+fn numbered_by_hub(tx: &Transaction<'_>) -> Result<bool> {
+    Ok(
+        tx.query_row("SELECT EXISTS(SELECT 1 FROM hub_numbering)", [], |row| {
+            row.get(0)
+        })?,
+    )
+}
+
+/// The smallest spare the hub keeps for this machine that no space here
+/// holds.
+fn free_spare(tx: &Transaction<'_>) -> Result<Option<SpaceNumber>> {
+    Ok(tx.query_row(
+        "SELECT MIN(spare.value) FROM hub_numbering, json_each(hub_numbering.spares) AS spare
+            WHERE spare.value NOT IN (SELECT number FROM space_numbers)",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
+/// The number above the highest any space here holds.
+fn above_highest(tx: &Transaction<'_>) -> Result<SpaceNumber> {
+    Ok(tx.query_row(
+        "SELECT COALESCE(MAX(number), 0) + 1 FROM space_numbers",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
+/// See [`Manager::reserved_numbers`].
+fn reserved(tx: &Transaction<'_>) -> Result<Vec<SpaceNumber>> {
+    let mut statement = tx.prepare(
+        "SELECT DISTINCT number FROM space_numbers
+            WHERE number NOT IN (SELECT number FROM spaces WHERE number IS NOT NULL)
+            ORDER BY number",
+    )?;
+    let numbers = statement.query_map([], |row| row.get(0))?;
+    Ok(numbers.collect::<rusqlite::Result<_>>()?)
 }
 
 /// Keep `number` for the imported space `id`.
@@ -132,7 +174,7 @@ fn keep_spares(tx: &Transaction<'_>, numbering: &Numbering) -> Result<()> {
 }
 
 /// Give each space `renumbered` names the number the hub gave it, with
-/// its questions and approval requests, unless a space here holds that
+/// its questions and approval requests, unless this machine holds that
 /// number, and return those it renumbered.
 fn renumber(tx: &Transaction<'_>, renumbered: &[Renumbering]) -> Result<Vec<Renumbered>> {
     let mut done = Vec::new();
@@ -143,8 +185,10 @@ fn renumber(tx: &Transaction<'_>, renumbered: &[Renumbering]) -> Result<Vec<Renu
         if from == *number {
             continue;
         }
+        // The hub gives no number this machine reports it holds, so a space
+        // recorded here since its last report holds this one.
         if held(tx, *number)? {
-            log!("hub: space {space} keeps {from}, since a space here holds {number}");
+            log!("hub: space {space} keeps {from} while a space here holds {number}");
             continue;
         }
         give_number(tx, space, from, *number)?;

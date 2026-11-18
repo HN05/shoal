@@ -166,3 +166,32 @@ async fn an_imported_space_keeps_the_number_the_hub_kept_for_it() -> Result<()> 
     assert_eq!(numbers, [1, 5, 2]);
     Ok(())
 }
+
+#[tokio::test]
+async fn a_machine_reserves_the_numbers_it_holds_without_a_space() -> Result<()> {
+    let (_root, manager) = crate::daemon::test_support::manager().await;
+    let reserved = (manager.store)
+        .write(|tx| {
+            let (gone, here) = (record(tx, "gone")?, record(tx, "here")?);
+            // Issue proposals outlive the space that made them, whose number
+            // they keep.
+            for (key, space, number) in [("of-gone", "gone", gone), ("of-here", "here", here)] {
+                tx.execute(
+                    "INSERT INTO repositories(id,path,source,last_used)
+                        VALUES (?1,?1,?1,1)",
+                    [key],
+                )?;
+                tx.execute(
+                    "INSERT INTO access_requests(id, repository_id, target_key, name, record,
+                            space_number, number)
+                        VALUES (?1, ?1, 'issue', 'issue', json_object('space_id', ?2), ?3, 1)",
+                    params![key, space, number],
+                )?;
+            }
+            spaces::records::remove(tx, &SpaceId::from("gone"))?;
+            reserved(tx)
+        })
+        .await?;
+    assert_eq!(reserved, [SpaceNumber::new(1)]);
+    Ok(())
+}

@@ -756,6 +756,12 @@ CREATE TABLE hub_numbers (
     space_id TEXT UNIQUE
 );
 
+CREATE TABLE hub_reserved_numbers (
+    member_id TEXT NOT NULL REFERENCES hub_members(id),
+    number INTEGER NOT NULL,
+    PRIMARY KEY(member_id, number)
+);
+
 CREATE TABLE hub_numbering (
     id INTEGER PRIMARY KEY CHECK(id = 1),
     spares TEXT NOT NULL

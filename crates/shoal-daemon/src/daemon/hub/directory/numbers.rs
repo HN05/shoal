@@ -1,6 +1,7 @@
 //! The hub's one sequence of space numbers across its machines. A number is
 //! held by the listed space that has it, unless the hub renumbers that
-//! space, and by the spares and new numbers the hub keeps for a machine. A
+//! space, by the spares and new numbers the hub keeps for a machine, and by
+//! those a machine holds without a space. A
 //! space whose number another machine's space or reservation held first
 //! takes the smallest number none holds, which the hub keeps for it until
 //! its machine reports it with that number. A space another machine claims
@@ -25,6 +26,7 @@ pub(super) fn kept_for(tx: &Transaction<'_>, member: &MemberId) -> Result<Number
         reserve(tx, member, None, number)?;
         spares.push(number);
     }
+    spares.sort();
     Ok(Numbering {
         spares,
         renumbered: renumbered(tx, member)?,
@@ -32,16 +34,17 @@ pub(super) fn kept_for(tx: &Transaction<'_>, member: &MemberId) -> Result<Number
 }
 
 /// Settle the number of `member`'s space `id`, which the directory lists
-/// under it now: a spare or new number it took becomes the listing's, and
-/// one another machine's space or reservation held first has the hub keep
-/// a new one for it, unless it keeps one already.
+/// under it now: a spare or new number it took becomes the listing's,
+/// ending any renumbering of it, and one another machine's space or
+/// reservation held first has the hub keep a new one for it, unless it
+/// keeps one already.
 pub(super) fn settle(tx: &Transaction<'_>, member: &MemberId, id: &SpaceId) -> Result<()> {
     let number = listed_number(tx, id)?;
-    tx.execute(
-        "DELETE FROM hub_numbers WHERE number=?1 AND member_id=?2
-            AND (space_id IS NULL OR space_id=?3)",
-        params![number, member, id],
-    )?;
+    if took_kept(tx, member, id, number)? {
+        // As where the machine holds the space's new number without a
+        // space and gives it a spare instead.
+        return release(tx, member, id);
+    }
     if renumbering(tx, id)?.is_some() || !held_elsewhere(tx, member, id, number)? {
         return Ok(());
     }
@@ -70,7 +73,7 @@ pub(super) fn keep_for_claim(
 }
 
 /// Drop the new number the hub keeps for `member`'s space `id`, which
-/// ended there.
+/// ended there or holds another the hub kept for it.
 pub(super) fn release(tx: &Transaction<'_>, member: &MemberId, id: &SpaceId) -> Result<()> {
     tx.execute(
         "DELETE FROM hub_numbers WHERE space_id=?1 AND member_id=?2",
@@ -79,10 +82,73 @@ pub(super) fn release(tx: &Transaction<'_>, member: &MemberId, id: &SpaceId) -> 
     Ok(())
 }
 
+/// Keep `reserved`, every number `member` holds without a space, from
+/// any other space, and replace what the hub kept for `member` among them.
+pub(super) fn reserve_held(
+    tx: &Transaction<'_>,
+    member: &MemberId,
+    reserved: &[SpaceNumber],
+) -> Result<()> {
+    tx.execute(
+        "DELETE FROM hub_reserved_numbers WHERE member_id=?1",
+        [member],
+    )?;
+    for number in reserved {
+        tx.execute(
+            "INSERT INTO hub_reserved_numbers(member_id, number) VALUES (?1,?2)",
+            params![member, number],
+        )?;
+    }
+    replace_reserved(tx, member)
+}
+
+/// Replace what the hub kept for `member` that `member` holds without a
+/// space, as when it numbered a space above its highest with one and
+/// removed it, which kept the number for its issue proposals: a spare goes,
+/// and a space's new number gives way to another.
+fn replace_reserved(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
+    let mut statement = tx.prepare(
+        "SELECT number, space_id FROM hub_numbers WHERE member_id=?1
+            AND number IN (SELECT number FROM hub_reserved_numbers WHERE member_id=?1)",
+    )?;
+    let rows = statement.query_map([member], |row| Ok((row.get(0)?, row.get(1)?)));
+    let reserved: Vec<(SpaceNumber, Option<SpaceId>)> = rows?.collect::<rusqlite::Result<_>>()?;
+    for (number, space) in reserved {
+        tx.execute("DELETE FROM hub_numbers WHERE number=?1", [number])?;
+        if let Some(space) = space {
+            let new = smallest_free(tx)?;
+            reserve(tx, member, Some(&space), new)?;
+        }
+    }
+    Ok(())
+}
+
 /// Drop every number the hub keeps for `member`, as once it revoked it.
 pub(super) fn forget(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
-    tx.execute("DELETE FROM hub_numbers WHERE member_id=?1", [member])?;
+    for forgotten in [
+        "DELETE FROM hub_numbers WHERE member_id=?1",
+        "DELETE FROM hub_reserved_numbers WHERE member_id=?1",
+    ] {
+        tx.execute(forgotten, [member])?;
+    }
     Ok(())
+}
+
+/// Whether `number`, which `member`'s space `id` took, is a spare or the
+/// space's new number the hub kept for `member`, which the listing holds
+/// from now on.
+fn took_kept(
+    tx: &Transaction<'_>,
+    member: &MemberId,
+    id: &SpaceId,
+    number: SpaceNumber,
+) -> Result<bool> {
+    let taken = tx.execute(
+        "DELETE FROM hub_numbers WHERE number=?1 AND member_id=?2
+            AND (space_id IS NULL OR space_id=?3)",
+        params![number, member, id],
+    )?;
+    Ok(taken > 0)
 }
 
 /// The number the directory lists the space `id` with.
@@ -102,8 +168,8 @@ fn of_listed(tx: &Transaction<'_>, id: &SpaceId) -> Result<Option<SpaceNumber>> 
 }
 
 /// Whether `number`, which `member`'s space `id` has, is held by another
-/// machine's listed space that keeps it, or by what the hub keeps for
-/// another machine or another space.
+/// machine's listed space that keeps it, by what the hub keeps for another
+/// machine or another space, or by another machine without a space.
 fn held_elsewhere(
     tx: &Transaction<'_>,
     member: &MemberId,
@@ -116,18 +182,21 @@ fn held_elsewhere(
                     AND space_id NOT IN (SELECT space_id FROM hub_numbers
                         WHERE space_id IS NOT NULL))
             OR EXISTS(SELECT 1 FROM hub_numbers
-                WHERE number=?1 AND (member_id<>?2 OR space_id<>?3))",
+                WHERE number=?1 AND (member_id<>?2 OR space_id<>?3))
+            OR EXISTS(SELECT 1 FROM hub_reserved_numbers WHERE number=?1 AND member_id<>?2)",
         params![number, member, id],
         |row| row.get(0),
     )?)
 }
 
-/// The smallest number no listed space holds and the hub keeps for none.
+/// The smallest number no listed space or machine holds and the hub keeps
+/// for none.
 fn smallest_free(tx: &Transaction<'_>) -> Result<SpaceNumber> {
     Ok(tx.query_row(
         "WITH held(number) AS (
             SELECT json_extract(summary,'$.number') FROM hub_spaces
-            UNION ALL SELECT number FROM hub_numbers)
+            UNION ALL SELECT number FROM hub_numbers
+            UNION ALL SELECT number FROM hub_reserved_numbers)
         SELECT MIN(n) FROM (SELECT 1 AS n UNION ALL SELECT number+1 FROM held)
             WHERE n NOT IN (SELECT number FROM held)",
         [],

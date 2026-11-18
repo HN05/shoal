@@ -1,11 +1,15 @@
 //! A machine's reports of its spaces to the hub: every space once its link
 //! opens, which replaces what the hub had for it, then what changed, once a
-//! burst of changes settles. The hub's own machine reports to its own
-//! directory the same way, for as long as it takes the hub role.
+//! burst of changes settles, each with the numbers the machine holds
+//! without a space. The hub's own machine reports to its own directory the
+//! same way, for as long as it takes the hub role.
 use std::{collections::HashMap, time::Duration};
 
 use anyhow::{Result, anyhow};
-use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
+use shoal_ids::{
+    member_ids::MemberId,
+    space_ids::{SpaceId, SpaceNumber},
+};
 use shoal_protocol::hub::{
     directory::{Report, SpaceSummary},
     link::{Call, Reply},
@@ -43,8 +47,10 @@ impl Manager {
         let mut agents = self.signals.watch_agents();
         let mut origins = summaries::Origins::default();
         let mut sent = comparable(self.space_summaries(&mut origins).await?)?;
+        let mut reserved = self.reserved_numbers().await?;
         let whole = sent.values().map(|(summary, _)| summary.clone()).collect();
-        self.report(&sink, Report::Whole(whole)).await?;
+        self.report(&sink, Report::Whole(whole), reserved.clone())
+            .await?;
         loop {
             tokio::select! {
                 changed = stored.changed() => changed?,
@@ -54,10 +60,16 @@ impl Manager {
             stored.borrow_and_update();
             agents.borrow_and_update();
             let current = comparable(self.space_summaries(&mut origins).await?)?;
-            if let Some(changes) = changes(&sent, &current) {
-                self.report(&sink, changes).await?;
+            let held = self.reserved_numbers().await?;
+            let changes = changes(&sent, &current);
+            if changes.is_some() || held != reserved {
+                let changes = changes.unwrap_or_else(|| Report::Changes {
+                    changed: Vec::new(),
+                    removed: Vec::new(),
+                });
+                self.report(&sink, changes, held.clone()).await?;
             }
-            sent = current;
+            (sent, reserved) = (current, held);
         }
     }
 
@@ -110,12 +122,18 @@ impl Manager {
         }
     }
 
-    /// Send `report` to `sink`, and number this machine's new spaces from
-    /// what the hub answers.
-    async fn report(&self, sink: &Sink<'_>, report: Report) -> Result<()> {
+    /// Send `report` to `sink`, with `reserved`, the numbers this machine
+    /// holds without a space, and number this machine's spaces from what the
+    /// hub answers.
+    async fn report(
+        &self,
+        sink: &Sink<'_>,
+        report: Report,
+        reserved: Vec<SpaceNumber>,
+    ) -> Result<()> {
         let numbering = match sink {
-            Sink::Hub(own) => self.record_report(own, report).await?,
-            Sink::Link(calls) => match calls.call(Call::Report(report)).await? {
+            Sink::Hub(own) => self.record_report(own, report, reserved).await?,
+            Sink::Link(calls) => match calls.call(Call::Report { report, reserved }).await? {
                 Reply::Reported(numbering) => numbering,
                 reply => return Err(anyhow!("the hub answered with an unexpected {reply:?}")),
             },

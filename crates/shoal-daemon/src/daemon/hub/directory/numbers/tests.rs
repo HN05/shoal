@@ -141,3 +141,51 @@ fn a_claimed_space_keeps_its_number_on_the_machine_that_claims_it() {
     let desk = report(&mut db, "desk", vec![space("a", 2)]);
     assert_eq!(desk.renumbered, []);
 }
+
+#[test]
+fn a_space_that_takes_its_machines_spare_ends_its_renumbering() {
+    let mut db = database();
+    report(&mut db, "desk", vec![space("a", 1)]);
+    let laptop = report(&mut db, "laptop", vec![space("b", 1)]);
+    assert_eq!(laptop.renumbered, [renumbering("b", 5)]);
+    // However it came to take its machine's spare, it needs no other.
+    assert_eq!(laptop.spares, numbers(&[6, 7, 8]));
+    let laptop = report(&mut db, "laptop", vec![space("b", 6)]);
+    assert_eq!(
+        (laptop.spares, laptop.renumbered),
+        (numbers(&[5, 7, 8]), vec![])
+    );
+}
+
+#[test]
+fn a_number_a_machine_holds_without_a_space_goes_to_no_other() {
+    let mut db = database();
+    let tx = db.transaction().unwrap();
+    let desk = MemberId::from("desk".to_owned());
+    reserve_held(&tx, &desk, &numbers(&[1, 2])).unwrap();
+    tx.commit().unwrap();
+    assert_eq!(
+        report(&mut db, "desk", Vec::new()).spares,
+        numbers(&[3, 4, 5])
+    );
+    let laptop = report(&mut db, "laptop", vec![space("b", 1)]);
+    assert_eq!(laptop.renumbered, [renumbering("b", 6)]);
+    assert_eq!(laptop.spares, numbers(&[7, 8, 9]));
+}
+
+#[test]
+fn what_the_hub_kept_for_a_machine_that_it_holds_without_a_space_is_replaced() {
+    let mut db = database();
+    report(&mut db, "desk", vec![space("a", 1)]);
+    let laptop = report(&mut db, "laptop", vec![space("b", 1)]);
+    assert_eq!(laptop.renumbered, [renumbering("b", 5)]);
+    assert_eq!(laptop.spares, numbers(&[6, 7, 8]));
+    // The laptop numbered spaces with 5 and 6 before it heard of them, and
+    // removed them, which kept the numbers for their issue proposals.
+    let member = MemberId::from("laptop".to_owned());
+    let tx = db.transaction().unwrap();
+    reserve_held(&tx, &member, &numbers(&[5, 6])).unwrap();
+    let laptop = kept_for(&tx, &member).unwrap();
+    assert_eq!(laptop.renumbered, [renumbering("b", 9)]);
+    assert_eq!(laptop.spares, numbers(&[7, 8, 10]));
+}
