@@ -34,7 +34,7 @@ pub(super) async fn handle(
             Body::LaunchedChat(launched.take(manager, *start, caller).await?)
         }
         ChatMethod::FailChatStart { chat, error } => {
-            manager.fail_chat_place(&chat, &error).await?;
+            manager.fail_unstarted_chat(&chat, &error).await?;
             Body::Ok
         }
         ChatMethod::CheckChatParent {
@@ -145,16 +145,18 @@ impl Scoped for ChatMethod {
                 manager.parent_below(caller, &mut start.parent).await?;
                 start.workspace.as_mut()
             }
-            // A scoped caller ends the start only of a chat below it.
-            ChatMethod::FailChatStart { chat, .. } => Some(
-                manager
-                    .workspace_below(
-                        caller,
-                        chat,
-                        "scoped processes start only chats below their own space",
-                    )
-                    .await?,
-            ),
+            // A scoped caller ends the start only of a chat below it, while
+            // the chat exists.
+            ChatMethod::FailChatStart { chat, .. } => {
+                if let Some(space) = manager.find_space(chat).await? {
+                    anyhow::ensure!(
+                        space.id != caller.space_id,
+                        "scoped processes start only chats below their own space"
+                    );
+                    manager.ensure_reaches(caller, &space).await?;
+                }
+                None
+            }
             // Its check takes the parent as its start would.
             ChatMethod::CheckChatParent {
                 parent, workspace, ..

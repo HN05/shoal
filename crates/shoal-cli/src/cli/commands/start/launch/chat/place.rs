@@ -2,8 +2,7 @@
 //! or in the background, which runs that chat's agent: the starter passes
 //! it the chat with `--chat`, waits for a background place to report that
 //! the agent started, and hands a scoped starter's place a scope issued for
-//! it, as the daemon's chat launch does. A chat whose place fails to start
-//! its agent goes, as one the daemon launches does.
+//! it, as the daemon's chat launch does.
 use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result};
@@ -32,7 +31,6 @@ impl Launch {
         if let Some(scope) = scope {
             scope.revoke(ctx).await;
         }
-        let place = unless_failed(ctx, &chat, place).await;
         Ok(BackgroundChat {
             id: chat.id,
             repository: chat.repository_id,
@@ -73,18 +71,10 @@ impl Launch {
     }
 
     /// Run the recorded `chat`'s agent in a new tab or session beside this
-    /// terminal, as [`Launch::open_beside`] does.
+    /// terminal, in its checkout or worktree, focused or in the background
+    /// as its mode says. A background start waits for its place to report,
+    /// as [`Launch::hand_to_background`] does, since nothing shows it here.
     pub(super) async fn start_beside(&self, ctx: &Context, chat: &Chat) -> Result<()> {
-        let opened = self.open_beside(ctx, chat).await;
-        unless_failed(ctx, chat, opened).await
-    }
-
-    /// Open a new tab or session beside this terminal that runs the
-    /// recorded `chat`'s agent, in its checkout or worktree, focused or in
-    /// the background as its mode says. A background start waits for its
-    /// place to report, as [`Launch::hand_to_background`] does, since
-    /// nothing shows it here.
-    async fn open_beside(&self, ctx: &Context, chat: &Chat) -> Result<()> {
         let launch = &self.chat;
         let waits_for_user = command::waits_for_user(launch, &self.options);
         let placement =
@@ -115,22 +105,6 @@ impl Launch {
         let options = (self.options).in_new_place((&self.agent, &chat.id), &chat.name, handoff);
         self.topic.relaunch.command_line(options)
     }
-}
-
-/// `opened`, how the place of the recorded `chat` opened, once a failure has
-/// had the daemon remove the chat, unless the failure of the launch entry
-/// whose slot its agent takes removes it.
-async fn unless_failed<T>(ctx: &Context, chat: &Chat, opened: Result<T>) -> Result<T> {
-    let Err(error) = &opened else {
-        return opened;
-    };
-    if crate::env::queue_entry().is_none() {
-        let (space, error) = (SpaceSelector::id(&chat.id), format!("{error:#}"));
-        if let Err(kept) = crate::client::chats::fail_start(&ctx.paths, space, error).await {
-            eprintln!("shoal: {} stays without its agent: {kept:#}", chat.name);
-        }
-    }
-    opened
 }
 
 /// The scope a scoped starter hands the place of a chat it recorded: a

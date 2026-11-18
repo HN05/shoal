@@ -143,26 +143,39 @@ impl Manager {
         self.discard_new_chat(name, id).await;
     }
 
-    /// Remove the new chat `chat`, whose place its starter could not open
-    /// with `error`, as [`Self::fail_new_chat`] does; a chat whose agent
-    /// has run is refused, since its removal is the user's.
-    pub(in crate::daemon) async fn fail_chat_place(
+    /// Remove the new chat `id`, whose start failed with `error`, as
+    /// [`Self::fail_new_chat`] does, unless its agent ever started, since a
+    /// start that ran it failed after it and its removal is the user's, or
+    /// the other side of its start removed it already.
+    pub(in crate::daemon) async fn fail_unstarted_chat(
         &self,
-        chat: &SpaceSelector,
+        id: &SpaceId,
         error: &str,
     ) -> Result<()> {
-        let chat = self.space(chat).await?;
-        let id = chat.id.clone();
-        let ran = (self.store).read(move |tx| {
-            crate::daemon::store::exists(tx, "SELECT 1 FROM executions WHERE space_id=?1", [&id])
-        });
-        anyhow::ensure!(
-            !ran.await?,
-            "{} has run its agent, so its start cannot have failed",
-            chat.name
-        );
-        self.fail_new_chat(&chat.name, &chat.id, error).await;
+        let Some(chat) = self.chat_by_id(id).await? else {
+            return Ok(());
+        };
+        if !self.agent_ever_started(id).await? {
+            self.fail_new_chat(&chat.name, id, error).await;
+        }
         Ok(())
+    }
+
+    /// Whether an agent ever started in the space `id`: an execution of it
+    /// is tracked, or its log, which lasts as long as the space, records a
+    /// start, since a completed execution's record goes.
+    async fn agent_ever_started(&self, id: &SpaceId) -> Result<bool> {
+        let id = id.to_owned();
+        (self.store)
+            .read(move |tx| {
+                let tracked = "SELECT 1 FROM executions WHERE space_id=?1";
+                let logged = "SELECT 1 FROM space_events WHERE space_id=?1
+                AND json_extract(record,'$.kind')=?2";
+                let started = crate::daemon::events::EventKind::AgentStarted;
+                Ok(crate::daemon::store::exists(tx, tracked, [&id])?
+                    || crate::daemon::store::exists(tx, logged, rusqlite::params![id, started])?)
+            })
+            .await
     }
 
     /// Remove the new chat `id`, named `name`, which nothing ran in.

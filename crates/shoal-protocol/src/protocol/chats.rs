@@ -23,10 +23,14 @@ pub enum ChatMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         queue_entry: Option<shoal_ids::queue_entry_ids::QueueEntryId>,
     },
-    /// Remove the new chat `chat`, recorded for a start whose place failed
-    /// to open with `error` before its agent ran, telling its starter as
-    /// the daemon tells of a chat its own launch could not start.
-    FailChatStart { chat: SpaceSelector, error: String },
+    /// Remove the new chat `chat`, recorded for a start that failed with
+    /// `error`, telling its starter as the daemon tells of a chat its own
+    /// launch could not start; a chat whose agent ever started stays, and
+    /// one already gone leaves nothing to do.
+    FailChatStart {
+        chat: shoal_ids::space_ids::SpaceId,
+        error: String,
+    },
     /// Refuse a `parent` a new chat in `repository`, or without one, in the
     /// worktree of `workspace` when given, could not go below.
     CheckChatParent {

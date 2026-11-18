@@ -31,7 +31,9 @@ use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn run(ctx: &Context, mut args: StartArgs) -> Result<i32> {
     let handoff = args.handoff.take();
-    crate::chat_handoff::serve(handoff.as_deref(), start(ctx, args)).await
+    let chat = args.chat.clone();
+    let started = async { ending_failed(ctx, chat.as_ref(), start(ctx, args).await).await };
+    crate::chat_handoff::serve(handoff.as_deref(), started).await
 }
 
 /// Start what `args` ask for.
@@ -470,7 +472,7 @@ mod topic;
 
 pub(super) use agent::{chat_agent, check_model};
 pub(super) use home::{start_handed, start_outside_repositories};
-pub(super) use launch::{report_started, start_changed};
+pub(super) use launch::{ending_failed, report_started, start_changed};
 pub(super) use options::{ChatPlace, Narrowing, Options};
 pub(super) use topic::{Relaunch, Topic};
 

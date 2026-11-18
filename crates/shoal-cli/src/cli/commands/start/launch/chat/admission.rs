@@ -12,6 +12,7 @@ use crate::{
     protocol::ChatStart,
     start_plan::{ChatPlan, ChatPlanStart},
 };
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::chats::LaunchedChat;
 use shoal_protocol::launches::LaunchSource;
 
@@ -112,13 +113,33 @@ impl Launch {
     }
 }
 
-/// Free the slot of the launch this process's agent was to take, whose
-/// start failed with `error`, unless the agent took it over already.
-pub(super) async fn fail_launch(ctx: &Context, error: &anyhow::Error) {
-    if let Some(entry) = crate::env::queue_entry() {
+/// `started`, how a start of a chat went, once a failure has ended that
+/// start: it frees the slot of the launch its agent was to take, whose
+/// failure removes the chat recorded for it, and without one has the
+/// daemon remove the recorded `chat`, when given, as it removes a chat its
+/// own launch could not start. The daemon keeps a chat whose agent
+/// started, and one the other side of its start removed is gone already.
+pub(in crate::cli::commands) async fn ending_failed<T>(
+    ctx: &Context,
+    chat: Option<&SpaceId>,
+    started: Result<T>,
+) -> Result<T> {
+    let Err(error) = &started else {
+        return started;
+    };
+    let error = format!("{error:#}");
+    match (crate::env::queue_entry(), chat) {
         // An agent that took the slot over ended the entry; nothing is left.
-        let _ = queue::fail(&ctx.paths, entry.clone(), format!("{error:#}")).await;
+        (Some(entry), _) => drop(queue::fail(&ctx.paths, entry.clone(), error).await),
+        (None, Some(chat)) => {
+            let ended = crate::client::chats::fail_start(&ctx.paths, chat.clone(), error).await;
+            if let Err(kept) = ended {
+                eprintln!("shoal: chat {chat} stays without its agent: {kept:#}");
+            }
+        }
+        (None, None) => {}
     }
+    started
 }
 
 /// Keep the slot of the launch this process's agent takes until the agent

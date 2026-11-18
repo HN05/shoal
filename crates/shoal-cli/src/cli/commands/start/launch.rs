@@ -4,4 +4,4 @@
 mod chat;
 pub(super) mod workspace;
 
-pub(in crate::cli::commands) use chat::{begin, report_started, start_changed};
+pub(in crate::cli::commands) use chat::{begin, ending_failed, report_started, start_changed};

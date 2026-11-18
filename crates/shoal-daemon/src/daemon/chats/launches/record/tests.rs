@@ -241,10 +241,12 @@ async fn a_link_that_fails_during_a_start_reaches_the_starting_agent() {
     );
 }
 
-/// A chat recorded for a start whose place its starter could not open is
-/// removed, its failure told, while one whose agent has run is refused.
+/// A chat recorded for a start that failed before its agent ran is removed,
+/// its failure told, and one removed already leaves nothing to do, while
+/// one whose agent started stays, even once its execution's record went
+/// with its completion.
 #[tokio::test]
-async fn a_starter_removes_only_a_new_chat_whose_agent_never_ran() {
+async fn a_failed_start_removes_only_a_new_chat_whose_agent_never_started() {
     let (temp, manager) = manager().await;
     let repo = machine(&manager, &temp, false).await;
     let new = crate::daemon::chats::NewChat {
@@ -259,12 +261,35 @@ async fn a_starter_removes_only_a_new_chat_whose_agent_never_ran() {
     let repository = Some((&repo.id).into());
     let unopened = manager.start_new_chat(repository, None, new).await.unwrap();
     let ran = crate::daemon::test_support::chat(&manager, "ran", "chat", Some(&repo), None).await;
+    // Its wrapper's registration journals the start, which outlasts the
+    // execution's record.
+    let started = shoal_protocol::events::AgentEvent {
+        name: "claude".into(),
+        execution_id: None,
+        exit_code: None,
+        source: None,
+    };
+    let kind = crate::daemon::events::EventKind::AgentStarted;
+    manager.record_agent(&ran.id, kind, started).await;
+    let ran_id = ran.id.clone();
+    (manager.store)
+        .write(move |tx| Ok(tx.execute("DELETE FROM executions WHERE space_id=?1", [&ran_id])?))
+        .await
+        .unwrap();
 
-    let (unopened, ran) = (SpaceSelector::id(&unopened.id), SpaceSelector::id(&ran.id));
-    manager.fail_chat_place(&unopened, "no tab").await.unwrap();
-    let refused = manager.fail_chat_place(&ran, "no tab").await;
+    manager
+        .fail_unstarted_chat(&unopened.id, "no tab")
+        .await
+        .unwrap();
+    manager
+        .fail_unstarted_chat(&unopened.id, "no tab")
+        .await
+        .unwrap();
+    manager
+        .fail_unstarted_chat(&ran.id, "no tab")
+        .await
+        .unwrap();
 
-    assert!(refused.is_err());
     let chats = manager.chats().await.unwrap();
     let names: Vec<_> = chats.iter().map(|chat| chat.name.as_str()).collect();
     assert_eq!(names, ["ran"]);

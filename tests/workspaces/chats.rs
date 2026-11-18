@@ -2151,6 +2151,36 @@ fn chat_starts_from_the_checkout_without_syncing() {
     assert_eq!(head, local);
 }
 
+/// A chat whose focused tab opens, but whose start there fails before its
+/// agent runs, goes, as the start recorded it before the tab opened.
+#[test]
+fn a_chat_whose_tab_fails_to_start_its_agent_goes() {
+    let fixture = Fixture::with_config(Some("terminal.focus = false\n"));
+    install_fake_herdr(&fixture);
+    install_recording_agent(&fixture, "codex");
+    let repo = fixture.repo.to_str().unwrap();
+    let start = ["start", "--mode", "chat", repo, "--agent", "codex"];
+    let (caller, transcript) = herdr_call(&fixture, &start, "\n");
+    assert!(caller.status.success(), "{} {transcript}", printed(&caller));
+    assert_eq!(
+        fixture.ok(&["list", "--chats"]).as_array().unwrap().len(),
+        1
+    );
+
+    fs::remove_file(fixture.root.path().join("bin/codex")).unwrap();
+    let (output, transcript) = fixture.interactive_command(
+        herdr_worker_command(&fixture)
+            .current_dir(&fixture.repo)
+            .env("HERDR_ENV", "1")
+            .env("HERDR_PANE_ID", "w1:p9"),
+        "",
+    );
+
+    assert!(!output.status.success(), "{transcript}");
+    let chats = fixture.ok(&["list", "--chats"]);
+    assert_eq!(chats, serde_json::json!([]), "{transcript}");
+}
+
 #[test]
 fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
     let fixture = Fixture::with_config(Some("terminal.focus = false\n"));

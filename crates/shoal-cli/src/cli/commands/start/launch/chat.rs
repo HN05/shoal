@@ -2,7 +2,11 @@
 //! detached, in a background place, beside the caller, or here under the
 //! execution wrapper, as an execution of its chat, once the agent queue
 //! admits it.
-use std::{ffi::OsString, path::PathBuf};
+use std::{
+    ffi::OsString,
+    path::PathBuf,
+    sync::{Arc, OnceLock},
+};
 
 use anyhow::{Context as _, Result, ensure};
 
@@ -23,6 +27,7 @@ use crate::{
     model::{Chat, ChatHome},
     protocol::ChatStart,
 };
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::chats::{BackgroundChat, LaunchedChat};
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
@@ -32,6 +37,7 @@ mod command;
 mod detached;
 mod place;
 
+pub(in crate::cli::commands) use admission::ending_failed;
 pub(in crate::cli::commands) use detached::report_started;
 
 /// Start a chat about `repo` and `topic` with the chosen agent. `settings`
@@ -74,28 +80,19 @@ async fn launch(
     options: Options,
 ) -> Result<Started> {
     let launch = Launch::prepare(ctx, repo, settings, topic, options).await?;
-    let record = async || launch.record(ctx, None).await;
-    if let Some(code) = agents::start_chat(ctx, &launch.agent, &launch.chat, record).await? {
-        return Ok(Started::Exited(code));
-    }
-    let started = match launch.options.place {
-        ChatPlace::Detached => launch.start_detached(ctx).await,
-        ChatPlace::Background => launch.start_in_background(ctx).await,
-        ChatPlace::Beside | ChatPlace::Here => launch.start_in_terminal(ctx).await,
-    };
-    if let Err(error) = &started {
-        admission::fail_launch(ctx, error).await;
-    }
-    started
+    let recorded = Arc::clone(&launch.recorded);
+    let started = launch.start(ctx).await;
+    admission::ending_failed(ctx, recorded.get(), started).await
 }
 
 /// A chat ready to start: its agent, what it passes on to the agent, its
-/// topic and the options its start was given.
+/// topic, the options its start was given and, once recorded, the chat.
 struct Launch {
     agent: Agent,
     chat: ChatLaunch,
     topic: Topic,
     options: Options,
+    recorded: Arc<OnceLock<SpaceId>>,
 }
 
 impl Launch {
@@ -118,7 +115,21 @@ impl Launch {
             chat,
             topic,
             options,
+            recorded: Arc::default(),
         })
+    }
+
+    /// Start the chat its agent's own way, or else as its place says.
+    async fn start(self, ctx: &Context) -> Result<Started> {
+        let record = async || self.record(ctx, None).await;
+        if let Some(code) = agents::start_chat(ctx, &self.agent, &self.chat, record).await? {
+            return Ok(Started::Exited(code));
+        }
+        match self.options.place {
+            ChatPlace::Detached => self.start_detached(ctx).await,
+            ChatPlace::Background => self.start_in_background(ctx).await,
+            ChatPlace::Beside | ChatPlace::Here => self.start_in_terminal(ctx).await,
+        }
     }
 
     /// Have the daemon start the chat in a background place, as it does
@@ -177,7 +188,9 @@ impl Launch {
     ) -> Result<LaunchedChat> {
         let start = self.chat_start();
         let (chat, entry) = (self.options.chat.as_ref(), crate::env::queue_entry());
-        crate::client::chats::launch(&ctx.paths, start, chat, origin, entry).await
+        let launched = crate::client::chats::launch(&ctx.paths, start, chat, origin, entry).await?;
+        let _ = self.recorded.set(launched.chat.id.clone());
+        Ok(launched)
     }
 
     /// The start the daemon records the chat from: where it runs, below

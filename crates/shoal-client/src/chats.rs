@@ -33,9 +33,9 @@ pub async fn launch(
     request(daemon, method).await
 }
 
-/// Remove the new chat `chat`, recorded for a start whose place failed to
-/// open with `error` before its agent ran.
-pub async fn fail_start(daemon: &impl Daemon, chat: SpaceSelector, error: String) -> Result<()> {
+/// Remove the new chat `chat`, recorded for a start that failed with
+/// `error`, unless its agent ever started or it is gone already.
+pub async fn fail_start(daemon: &impl Daemon, chat: SpaceId, error: String) -> Result<()> {
     request::<()>(daemon, ChatMethod::FailChatStart { chat, error }).await
 }
 
