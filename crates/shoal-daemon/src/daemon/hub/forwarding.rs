@@ -90,7 +90,7 @@ impl Manager {
             _ => Delivery::Now,
         };
         let name = shoal_protocol::protocol::name_of(Ok(method.clone()));
-        if attaches_files(&method, &name) {
+        if attaches_files(&method) {
             let message = format!(
                 "space {space} runs on machine {}, which cannot read files attached here; send it without them, or from that machine",
                 machine.name
@@ -151,10 +151,19 @@ impl Manager {
     }
 }
 
-/// Whether the request `method`, named `name`, attaches files by their path
-/// on this machine.
-fn attaches_files(method: &serde_json::Value, name: &str) -> bool {
-    (method[name]["attachments"].as_array()).is_some_and(|files| !files.is_empty())
+/// Whether the request `method` attaches files by their path on this
+/// machine, anywhere in it, as a message's do and an issue's or comment's
+/// within its content.
+fn attaches_files(method: &serde_json::Value) -> bool {
+    match method {
+        serde_json::Value::Object(fields) => fields.iter().any(|(key, value)| {
+            let files =
+                key == "attachments" && value.as_array().is_some_and(|files| !files.is_empty());
+            files || attaches_files(value)
+        }),
+        serde_json::Value::Array(items) => items.iter().any(attaches_files),
+        _ => false,
+    }
 }
 
 #[cfg(test)]
