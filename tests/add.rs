@@ -71,6 +71,14 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             ],
             "creation reached",
         ),
+        // A positional repository and --repo cannot both name it.
+        (
+            vec![
+                "start", "--wait", "test", "--repo", "test", "--branch", "new", "--here",
+            ],
+            vec!["list_repositories", "layered_config id:test"],
+            "cannot be combined with --repo",
+        ),
         // A contribution without a terminal registers its repository, then
         // leaves the start to the daemon as a start does.
         (

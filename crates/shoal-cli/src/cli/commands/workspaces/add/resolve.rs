@@ -59,6 +59,10 @@ pub(super) async fn resolve<'a>(ctx: &'a Context, launch: &mut Launch) -> Result
 /// link belongs to, offering to register it, else the current or a picked
 /// one; `launch` then names it by ID.
 async fn start_target(ctx: &Context, launch: &mut Launch) -> Result<AddTarget> {
+    anyhow::ensure!(
+        launch.repository.is_none() || !matches!(launch.target, Some(StartTarget::Repository(_))),
+        "a positional repository cannot be combined with --repo"
+    );
     let named = (launch.repository.clone()).or_else(|| match &launch.target {
         Some(StartTarget::Repository(named)) => Some(named.clone()),
         _ => None,
