@@ -3734,6 +3734,38 @@ fn an_existing_workspaces_start_refuses_its_arguments_before_prompting() {
     }
 }
 
+/// A start on a branch link to a branch its remote lacks is refused before
+/// a picker asks for the agent it names none of.
+#[test]
+fn a_branch_links_start_refuses_a_missing_branch_before_prompting() {
+    let fixture = Fixture::new();
+    fixture.add_github_origin();
+    // The origin is served from a bare clone, which has no branch `missing`.
+    let origin = fixture.root.path().join("origin.git");
+    git(
+        &fixture.repo,
+        &["clone", "--bare", ".", origin.to_str().unwrap()],
+    );
+    let ssh = fixture.root.path().join("bin/origin-ssh");
+    let serve = format!("#!/bin/sh\nexec git-upload-pack '{}'\n", origin.display());
+    install_test_script(&ssh, &serve);
+    git(
+        &fixture.repo,
+        &["config", "core.sshCommand", ssh.to_str().unwrap()],
+    );
+    install_test_script(fixture.root.path().join("bin/codex"), "#!/bin/sh\n");
+    let picked = fixture.root.path().join("picked");
+    install_test_script(
+        fixture.root.path().join("bin/fzf"),
+        "#!/bin/sh\ncat > \"$HOME/picked\"\nexit 130\n",
+    );
+    let link = "https://github.com/team/project/tree/missing";
+    let (output, transcript) = fixture.interactive(&["start", link], "");
+    assert!(!output.status.success(), "{transcript}");
+    assert!(transcript.contains("missing"), "{transcript}");
+    assert!(!picked.exists(), "asked a picker: {transcript}");
+}
+
 /// An existing workspace's start without an agent, run here with `--json`,
 /// reports the workspace it reopens.
 #[test]

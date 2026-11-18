@@ -116,11 +116,7 @@ pub async fn pull_creation(
         shoal_protocol::space_names::SpaceName::derive(&pull.title, "workspace")
     });
     if pull.fork {
-        ensure!(
-            creation.path.is_none() && creation.git_profile.is_none() && creation.base.is_none(),
-            "PR #{} comes from a fork and opens at its head in a workspace Shoal places; --path, --git-profile and --base apply to a branch",
-            pull.number
-        );
+        ensure_fork_opens(&pull, creation)?;
         creation.pull_head = Some(fork_head(repo, &pull).await?);
         creation.pr = Some(pull.url.into());
         return Ok(());
@@ -139,6 +135,17 @@ pub async fn pull_creation(
         creation.existing = Some(git::remote_ref("origin", pull.head.as_str()));
     }
     creation.pr = Some(pull.url.into());
+    Ok(())
+}
+
+/// Refuse what `creation` asks of a branch when it opens `pull`, a PR from
+/// a fork, whose head opens at a commit in a workspace Shoal places.
+pub fn ensure_fork_opens(pull: &PullRequest, creation: &Creation) -> Result<()> {
+    ensure!(
+        creation.path.is_none() && creation.git_profile.is_none() && creation.base.is_none(),
+        "PR #{} comes from a fork and opens at its head in a workspace Shoal places; --path, --git-profile and --base apply to a branch",
+        pull.number
+    );
     Ok(())
 }
 
