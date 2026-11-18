@@ -250,6 +250,23 @@ async fn a_chats_agent_gives_up_its_issue_once_done() {
 }
 
 #[tokio::test]
+async fn a_chat_without_a_repository_settles_nothing() {
+    let fixture = agents(&[], &[], "").await;
+    let manager = &fixture.manager;
+    let chat = crate::daemon::test_support::chat(manager, "setup", "chat", None, None).await;
+    assert!(
+        manager
+            .settle_space_agents(&chat.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let space = manager.space(&SpaceSelector::id(&chat.id)).await.unwrap();
+    let removed = manager.settle_removed_agents(&space, &[]).await.unwrap();
+    assert!(removed.is_empty());
+}
+
+#[tokio::test]
 async fn a_queued_launch_puts_the_agent_account_on_until_cancelled() {
     let fixture = agents(&["fix", "first"], &[], "").await;
     let (manager, workspace) = (&fixture.manager, &fixture.workspaces[0]);

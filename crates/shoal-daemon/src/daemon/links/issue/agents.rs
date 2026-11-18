@@ -11,7 +11,7 @@ use crate::{
     daemon::{links::space::LinkSpace, notifications::NotificationKind, workspace::Manager},
     execution::recovery,
     forge::items::reference::ItemRef,
-    model::Assigner,
+    model::{Assigner, Space},
     state::QueueKind,
 };
 use shoal_forge::items::assignment::AssignmentRequests;
@@ -37,16 +37,9 @@ impl Manager {
     /// assigned, as its agent starts or stops or its work is done or
     /// resumes. Each failure notifies.
     pub(crate) async fn settle_agent_assignees(&self, id: &SpaceId) {
-        let settled = async {
-            let space = self.link_space(&SpaceSelector::id(id)).await?;
-            let owner = id.to_owned();
-            let issues = (self.store)
-                .read(move |tx| settled_here(tx, &owner))
-                .await?;
-            anyhow::Ok((self.settle_issue_agents(&space, &issues).await, space))
-        };
-        let (warnings, space) = match settled.await {
-            Ok(settled) => settled,
+        let (space, warnings) = match self.settle_space_agents(id).await {
+            Ok(Some(settled)) => settled,
+            Ok(None) => return,
             Err(error) => {
                 crate::daemon::log!("agent assignees of {id} not settled: {error:#}");
                 return;
@@ -56,6 +49,38 @@ impl Manager {
             let kind = NotificationKind::UnassignFailed;
             (self.notify_space(&space.name, id, kind, warning)).await;
         }
+    }
+
+    /// Settle the agent account on the issues the space `id` links as
+    /// assigned. Returns the space with why each issue that could not be
+    /// settled was not, or nothing when it links none, as a chat without a
+    /// repository never does.
+    async fn settle_space_agents(&self, id: &SpaceId) -> Result<Option<(LinkSpace, Vec<String>)>> {
+        let owner = id.to_owned();
+        let issues = (self.store)
+            .read(move |tx| settled_here(tx, &owner))
+            .await?;
+        if issues.is_empty() {
+            return Ok(None);
+        }
+        let space = self.link_space(&SpaceSelector::id(id)).await?;
+        let warnings = self.settle_issue_agents(&space, &issues).await;
+        Ok(Some((space, warnings)))
+    }
+
+    /// Settle the agent account on `issues`, which the removed `space`
+    /// linked as assigned. Returns why each one that could not be settled
+    /// was not; a space that linked none settles nothing.
+    pub(crate) async fn settle_removed_agents(
+        &self,
+        space: &Space,
+        issues: &[ItemRef],
+    ) -> Result<Vec<String>> {
+        if issues.is_empty() {
+            return Ok(Vec::new());
+        }
+        let linked = self.own_link_space(space.clone()).await?;
+        Ok(self.settle_issue_agents(&linked, issues).await)
     }
 
     /// Settle the agent account on each of `issues`, which `space` links as
