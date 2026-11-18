@@ -1124,7 +1124,7 @@ async fn branch_removal_uses_the_inspected_default_branch() {
             ],
         );
 
-        let (_, branch) = removal_options(&check, Removal::Deleted);
+        let (_, branch) = removal_options(&check, Removal::Deleted, false);
         assert_eq!(matches!(branch, BranchRemoval::Delete), delete);
     }
 }
@@ -1417,9 +1417,9 @@ async fn a_clean_confirmation_naming_children_removes_clean_only() {
         taking: None,
         for_repository: false,
     };
-    let (files, _) = removal_options(&check, manual(&confirmed));
+    let (files, _) = removal_options(&check, manual(&confirmed), false);
     assert!(matches!(files, FileRemoval::CleanOnly));
-    let (files, _) = removal_options(&check, manual(&UnsavedWork::All));
+    let (files, _) = removal_options(&check, manual(&UnsavedWork::All), false);
     assert!(matches!(files, FileRemoval::Force));
 }
 

@@ -20,6 +20,24 @@ use crate::{
 };
 
 impl Manager {
+    /// Whether another workspace records the branch of `workspace` as the
+    /// branch it builds on, whatever base workspace it links.
+    pub(crate) async fn branch_built_on(&self, workspace: &Workspace) -> Result<bool> {
+        let Some(branch) = workspace.branch() else {
+            return Ok(false);
+        };
+        let (reference, id) = (git::local_ref(branch), workspace.id.clone());
+        self.store
+            .read(move |tx| {
+                store::exists(
+                    tx,
+                    "SELECT 1 FROM workspaces WHERE base_ref=?1 AND id<>?2",
+                    params![reference, id],
+                )
+            })
+            .await
+    }
+
     /// The workspace that owns `branch` in the repository of the workspace
     /// `id`, which a workspace may build on.
     pub(crate) async fn branch_owner(

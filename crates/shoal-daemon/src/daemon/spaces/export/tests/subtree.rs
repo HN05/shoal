@@ -290,6 +290,19 @@ async fn a_selection_leaves_the_other_spaces_below_one_level_up() {
     let picked = (manager.split_workspace(&below, "picked".into(), None, Default::default()))
         .await
         .unwrap();
+    // Its link to the base workspace can go while it still builds on that
+    // workspace's branch.
+    let unlinked = stacked.id.clone();
+    (manager.store)
+        .run(move |db| {
+            db.execute(
+                "UPDATE workspaces SET base_workspace_id=NULL WHERE id=?1",
+                [unlinked],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
     let reason = Some("review it".to_owned());
     let held = (manager.request_hold(&SpaceSelector::id(&child.id), "review".into(), reason))
         .await

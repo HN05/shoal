@@ -548,7 +548,8 @@ impl Manager {
     ) -> Result<WorktreeRemoval> {
         let record = self.save_restore_record(workspace, removal).await?;
         ensure_checkpoint_keeps_files(check, removal, record.as_ref())?;
-        let (files, branch) = removal_options(check, removal);
+        let built_on = self.branch_built_on(workspace).await?;
+        let (files, branch) = removal_options(check, removal, built_on);
         let registration = self.existing_registration(workspace, repo).await?;
         self.remove_worktree(repo, workspace, files, branch, registration)
             .await
@@ -679,8 +680,8 @@ fn ensure_checkpoint_keeps_files(
 
 /// What removal takes with the worktree the final inspection `check` saw.
 /// A branch goes when its commits are all preserved, except the default
-/// branch, which an unresolved default branch could be, and a branch
-/// another workspace that stays builds on; files go by force
+/// branch, which an unresolved default branch could be, and a branch that
+/// another workspace records building on, `built_on`; files go by force
 /// only once `removal` may discard unsaved work, or discards unsaved files a
 /// checkpoint keeps. A workspace at a commit owns no branch to delete,
 /// whichever its worktree is on. A disposable workspace's branch counts as
@@ -689,13 +690,14 @@ fn ensure_checkpoint_keeps_files(
 pub(in crate::daemon::workspace) fn removal_options(
     check: &Inspection,
     removal: Removal<'_>,
+    built_on: bool,
 ) -> (FileRemoval, BranchRemoval) {
     let own_branch = check.workspace.branch().is_some()
         && (!check.workspace.disposable || check.branch.as_ref() == check.workspace.branch());
     let branch = if own_branch
         && !removal.converts()
         && check.branch_preserved()
-        && check.workspace.stacked_workspaces.is_empty()
+        && !built_on
         && check
             .default_branch
             .as_deref()
