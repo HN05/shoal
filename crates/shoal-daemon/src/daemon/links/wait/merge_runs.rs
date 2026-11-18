@@ -54,6 +54,18 @@ pub(super) struct MergeTarget {
     pub default_branch: BranchName,
 }
 
+/// A merge of a space's branch that `shoal merge` pushed to the default
+/// branch's upstream.
+pub(crate) struct PushedMerge {
+    pub space: SpaceId,
+    /// The URL of the remote it was pushed to.
+    pub remote: String,
+    /// The remote's branch that took it.
+    pub branch: BranchName,
+    /// The commit it left there.
+    pub commit: CommitId,
+}
+
 /// What a lookup follows the merge of, whose forge lists its runs.
 enum Merged {
     /// A PR.
@@ -114,6 +126,23 @@ impl Manager {
         let default_branch =
             git::default_branch::resolve(&checkout.path, DefaultBranchLookup::Cached).await?;
         Ok(Some(MergeTarget { default_branch }))
+    }
+
+    /// Look up the runs of the commit a space's `shoal merge` pushed, as
+    /// the read that sees a PR merge does, where `[pr] watch_merge_runs` is
+    /// on.
+    pub(crate) async fn follow_pushed_merge(&self, pushed: PushedMerge) -> Result<()> {
+        if self.configured_merge_target(&pushed.space).await?.is_none() {
+            return Ok(());
+        }
+        let now = UnixTime::now();
+        self.store
+            .write(move |tx| {
+                let merged = Merged::Push(pushed.remote);
+                let (id, commit, branch) = (&pushed.space, &pushed.commit, &pushed.branch);
+                start_lookup(tx, id, &merged, commit, branch, now)
+            })
+            .await
     }
 
     /// Run each lookup of the runs of the space's merges: list the runs of

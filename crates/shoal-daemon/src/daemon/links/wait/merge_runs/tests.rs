@@ -12,11 +12,12 @@ use crate::{
             start::{Start, StartRead},
             tests::register_watch,
         },
-        test_support::{configure, manager, repository},
+        test_support::{commit, configure, git, manager, repository},
+        workspace::RecordChange,
         workspace_files::Attacher,
     },
     forge::items::link::Selection,
-    model::{CleanupReason, Workspace},
+    model::{CleanupReason, MergeOptions, Workspace},
 };
 use shoal_forge::test_support::Server;
 use shoal_protocol::{assignments::Done, space_names::SpaceSelector};
@@ -28,7 +29,7 @@ const MERGED: &str = "0123456789abcdef0123456789abcdef01234567";
 /// lists `runs` for the default branch's merge commit, in a repository
 /// with `[pr] watch_merge_runs` set to `watch`.
 struct Following {
-    _root: tempfile::TempDir,
+    root: tempfile::TempDir,
     manager: Arc<Manager>,
     workspace: Workspace,
     server: Server,
@@ -73,7 +74,7 @@ async fn following(watch: bool, runs: Value) -> Following {
     let pr = format!("http://{host}/team/repo/pulls/1");
     register_watch(&manager, &workspace.id, &pr).await;
     Following {
-        _root: root,
+        root,
         manager,
         workspace,
         server,
@@ -138,6 +139,37 @@ impl Following {
             .unwrap();
         let urls = [self.pr.clone()];
         self.manager.pending_activity(id, &urls).await.unwrap()
+    }
+
+    /// Merge a commit of the workspace's into `main` with `shoal merge`,
+    /// pushing `main` to `origin` with `push`, and record the merge, as a
+    /// merge execution does; return the commit it left on `main`. `origin`
+    /// pushes to a local repository and fetches from the forge.
+    async fn merge_locally(&self, push: bool) -> String {
+        let repo = self.root.path().join("repo");
+        let origin = self.root.path().join("origin.git");
+        let origin = origin.to_str().unwrap();
+        git(&repo, &["clone", "--bare", repo.to_str().unwrap(), origin]);
+        git(&repo, &["remote", "add", "origin", origin]);
+        git(&repo, &["fetch", "origin"]);
+        git(&repo, &["branch", "--set-upstream-to=origin/main", "main"]);
+        std::fs::write(self.workspace.path.join("feature"), "work\n").unwrap();
+        commit(&self.workspace.path, "feature");
+        let selector = SpaceSelector::id(&self.workspace.id);
+        let options = MergeOptions {
+            push,
+            confirmed: None,
+        };
+        let plan = self.manager.prepare_merge(&selector, &options).await;
+        let plan = plan.unwrap();
+        let forge = format!("http://{}/team/repo.git", self.server.host);
+        git(&repo, &["remote", "set-url", "origin", &forge]);
+        git(&repo, &["remote", "set-url", "--push", "origin", origin]);
+        crate::git::repo::finish_merge(plan.clone()).await.unwrap();
+        let change = RecordChange::Merge(Box::new(plan));
+        self.manager.update_merge_records(&change).await;
+        self.manager.follow_pushed_merge_runs(&change).await;
+        git(&repo, &["rev-parse", "main"]).trim().to_owned()
     }
 
     async fn follow(&self) {
@@ -444,7 +476,7 @@ async fn a_merge_seen_while_its_default_branch_is_unknown_is_followed_by_the_nex
     };
     record(pull("open", None)).await.unwrap();
     // Without a remote, the checkout's branch names the default branch.
-    let checkout = following._root.path().join("repo");
+    let checkout = following.root.path().join("repo");
     crate::daemon::test_support::git(&checkout, &["checkout", "-q", "--detach"]);
     assert!(record(pull("merged", Some(MERGED))).await.is_err());
     assert!(!following.awaits().await);
@@ -667,4 +699,49 @@ async fn completion_cleanup_waits_for_a_poll_to_see_an_opened_prs_merge() {
     following.follow().await;
     manager.sweep_completed().await.unwrap();
     assert!(!workspace.path.exists());
+}
+
+#[tokio::test]
+async fn a_pushed_merge_links_the_default_branchs_runs_for_its_commit() {
+    let following = following(true, json!([listed_run("running")])).await;
+    let pushed = following.merge_locally(true).await;
+    assert!(following.awaits().await);
+
+    following.follow().await;
+    let listings = following.listings();
+    assert_eq!(listings.len(), 1, "{listings:?}");
+    assert!(
+        listings[0].contains("ref=refs%2Fheads%2Fmain"),
+        "{listings:?}"
+    );
+    assert!(listings[0].contains(&format!("head_sha={pushed}")));
+    assert_eq!(following.related().await, [run_url(&following)]);
+
+    // It keeps the space after the window until a read sees the run finish.
+    following.end_window().await;
+    following.follow().await;
+    assert!(following.awaits().await);
+    let run = run_url(&following);
+    let finished = serde_json::from_value(json!({"comments": {}, "checks": {},
+        "conflict": null, "state": "failed", "errors": {}}))
+    .unwrap();
+    following.observe(&run, finished).await;
+    following.follow().await;
+    assert!(!following.awaits().await);
+}
+
+#[tokio::test]
+async fn a_merge_that_stays_local_follows_no_runs() {
+    let following = following(true, json!([listed_run("running")])).await;
+    following.merge_locally(false).await;
+    assert!(!following.awaits().await);
+    following.follow().await;
+    assert!(following.listings().is_empty());
+}
+
+#[tokio::test]
+async fn a_pushed_merge_is_not_followed_where_the_option_is_off() {
+    let following = following(false, json!([listed_run("running")])).await;
+    following.merge_locally(true).await;
+    assert!(!following.awaits().await);
 }

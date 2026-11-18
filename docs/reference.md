@@ -3439,7 +3439,11 @@ with `"approval_denied"`.
 
 With [`[merge] push`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#merges), or `--push` for one run, Shoal pushes the default branch to
 its upstream after merging; `--no-push` keeps one merge local. A default branch without an
-upstream is refused before merging, and a failed push keeps the merge.
+upstream is refused before merging, and a failed push keeps the merge. Where
+[`[pr] watch_merge_runs`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#prs)
+is on, the workspace follows the default branch's runs for the commit the push
+took, on the remote it pushed to, as it follows a merged PR's
+[runs](#linked-items-and-cleanup).
 
 A merge that pushes asks first, after Shoal has checked it and before anything
 changes. As [`pr merge`](#issue-and-pr-actions) does, so does a merge whose last
@@ -5244,9 +5248,10 @@ follow it past the PR's merge. Where
 [`[pr] watch_merge_runs`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#prs)
 is on, Shoal does that itself once it sees a PR linked as assigned or opened
 merge into the default branch, whether or not its agent took the PR's earlier
-updates; the background poll reads an opened PR only for this, until it sees
+updates, and once a `shoal merge` of the workspace's branch pushes the default
+branch, for the commit it pushed; the background poll reads an opened PR only for this, until it sees
 it merge or close, and reports nothing else of it. For ten minutes the background poll lists the default branch's
-runs for the merge commit the forge reports and links each new one as related,
+runs for the merge commit the forge reports, or the one pushed, and links each new one as related,
 so the space hears how it ends as of any linked run. Where the forge reports no
 merge commit, an assigned PR's merge update says its runs cannot be followed, and a lookup
 that finds no run records that in the space's log. Until the lookup ends and the

@@ -224,11 +224,13 @@ async fn serve(
     .await;
     readers.abort_all();
     // The Git gate the registration holds keeps the default branch as the
-    // execution left it until the records follow it.
+    // execution left it until the records and the lookup of a pushed merge's
+    // runs follow it.
     if let Some(change) = &execution.records
         && !matches!(result, Ok(Ended::Detached))
     {
         manager.update_merge_records(change).await;
+        manager.follow_pushed_merge_runs(change).await;
     }
     let result = match result {
         Ok(Ended::Detached) => {

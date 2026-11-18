@@ -137,7 +137,8 @@ impl MergePush {
         format!("{}/{}", self.remote, self.branch())
     }
 
-    fn branch(&self) -> &str {
+    /// The remote's branch that receives the default branch.
+    pub fn branch(&self) -> &str {
         self.reference
             .strip_prefix("refs/heads/")
             .unwrap_or(&self.reference)

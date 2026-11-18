@@ -2458,7 +2458,11 @@ since a run that has not started by then is not coming, and links each as
 related, so the linked-run watch reports its end through the paths every update
 takes. The lookup and its unfinished runs keep the space from unattended
 removal, so a done space stays to hear them, however long a run waits for a
-runner.
+runner. A `shoal merge` that pushes the default branch starts the same lookup
+for the commit it left there once its upstream, as Git tracks it, holds that
+commit, listing the runs on the forge of the remote it pushed to, so a
+repository that merges locally hears of a broken default branch through the
+same path; lookups are keyed by their commit, which a PR's or a push's names.
 
 Notifications stay in the terminal: the daemon records what a user would
 otherwise miss (busy resources and who holds them, port conflicts, exits of

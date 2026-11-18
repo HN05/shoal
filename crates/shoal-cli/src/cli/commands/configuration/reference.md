@@ -994,14 +994,15 @@ required_labels = ["area/", "type/"] # Default: []
 undraft_on_ready = true             # `shoal ready` takes a draft PR out of draft
 draft_on_unready = false            # `shoal ready --undo` returns it to draft
 progress = false                    # Show the space's progress in its draft PR bodies
-watch_merge_runs = false            # After a PR merges, watch the default branch's CI runs for its merge commit
+watch_merge_runs = false            # After a PR merges or `shoal merge` pushes, watch the default branch's CI runs for its commit
 ```
 
 `required_labels` works as for issues. `progress = true` with `draft = true`
 shows each agent's progress on its draft PRs until they leave draft.
 `watch_merge_runs = true` links to a space the default branch's runs for the
 merge commit of each PR it watches or links as opened that merges into the
-default branch, and reports how they end.
+default branch, and for the commit each `shoal merge` of its branch pushes,
+and reports how they end.
 See [issue and PR actions](../../../../../../docs/reference.md#issue-and-pr-actions),
 [ready for review](../../../../../../docs/reference.md#ready-for-review) and [progress](../../../../../../docs/reference.md#progress).
 
