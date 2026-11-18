@@ -67,6 +67,11 @@ async fn start_target(ctx: &Context, launch: &mut Launch) -> Result<AddTarget> {
         launch.repository.is_none() || !matches!(launch.target, Some(StartTarget::Repository(_))),
         "a positional repository cannot be combined with --repo"
     );
+    // Only plan mode, which starts in a chat, picks the issue.
+    anyhow::ensure!(
+        !matches!(launch.issue, Some(IssueChoice::Pick)),
+        "--issue needs a number or URL outside plan mode"
+    );
     let links = !matches!(launch.target, None | Some(StartTarget::Repository(_)));
     anyhow::ensure!(
         !links || (launch.branch.is_none() && launch.issue.is_none()),

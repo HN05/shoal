@@ -3759,6 +3759,9 @@ fn an_issue_start_refuses_a_workspace_that_cannot_reopen_before_prompting() {
     assert!(!failed.status.success(), "{}", printed(&failed));
     let args = ["start", repo, "--mode", "worker", "--issue", "37"];
     fixture.assert_refused_before_prompting(&args, "is failed");
+    // Outside plan mode a start names its issue rather than picking one.
+    let bare = ["start", repo, "--mode", "worker", "--issue"];
+    fixture.assert_refused_before_prompting(&bare, "outside plan mode");
 }
 
 /// A copy's start in a repository named by a number, which beside a branch
