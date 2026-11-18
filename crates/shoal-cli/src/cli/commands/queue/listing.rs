@@ -6,18 +6,20 @@ use crate::cli::{
     context::Context,
 };
 
-/// List the entries of `repository`, of every repository without one,
-/// each led by the ID that `shoal queue start` and `cancel` take.
+/// List the entries of `repository`, of every repository without one, as a
+/// table.
 pub(super) async fn list(ctx: &Context, repository: Option<String>) -> Result<i32> {
     let filter = ListFilter::resolve(ctx, repository, Vec::new()).await?;
     let entries = queued_agents::listed(ctx, &filter).await?;
-    let rows = queued_agents::rows(ctx, &entries).await?;
+    let table = queued_agents::table(ctx, &entries).await?;
     ctx.show(&entries, |_| {
-        if rows.is_empty() {
+        if table.rows.is_empty() {
             outln!("No queued agents");
+            return;
         }
-        for (entry, row) in entries.iter().zip(rows) {
-            outln!("{}  {row}", entry.id);
+        outln!("{}", table.header);
+        for row in table.rows {
+            outln!("{row}");
         }
     })?;
     Ok(0)

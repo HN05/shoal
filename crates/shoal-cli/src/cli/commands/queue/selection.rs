@@ -4,7 +4,7 @@ use anyhow::{Context as _, Result, ensure};
 use crate::{
     cli::{commands::queued_agents, context::Context, ui},
     model::QueueEntry,
-    state::{QueueKind, QueueState},
+    state::QueueState,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -42,9 +42,9 @@ pub(super) async fn selected_among(
     Ok(pick_entry(ctx, &waiting, prompt).await?.id.into())
 }
 
-/// The entry `selector` names: an entry by its ID, else a space by its number
-/// or ID, for its queued restore, as the notices of a stopped agent name it.
-/// Anything else is left for the daemon to refuse.
+/// The entry `selector` names: an entry by its ID, else the entry in a space
+/// named by its number or ID, as the queue and the notices of a stopped
+/// agent name it. Anything else is left for the daemon to refuse.
 async fn named(ctx: &Context, selector: String) -> Result<String> {
     let entries = queued_agents::entries(ctx).await?;
     if entries.iter().any(|entry| entry.id == selector) {
@@ -57,10 +57,10 @@ async fn named(ctx: &Context, selector: String) -> Result<String> {
     let Some(space) = spaces.find(&space) else {
         return Ok(selector);
     };
-    let restore = entries.iter().find(|entry| {
-        entry.kind == QueueKind::Restore && entry.space_id.as_ref() == Some(&space.id)
-    });
-    Ok(restore.map_or(selector, |entry| entry.id.to_string()))
+    let entry = entries
+        .iter()
+        .find(|entry| entry.space() == Some(&space.id));
+    Ok(entry.map_or(selector, |entry| entry.id.to_string()))
 }
 
 /// Pick one of `entries`.
@@ -79,7 +79,7 @@ pub(super) async fn pick_entry(
 
 /// `entries` as picker entries: each ID with its listing row.
 async fn labelled(ctx: &Context, entries: &[QueueEntry]) -> Result<ui::Entries> {
-    let rows = queued_agents::rows(ctx, entries).await?;
+    let rows = queued_agents::table(ctx, entries).await?.rows;
     Ok(entries
         .iter()
         .map(|entry| entry.id.to_string())

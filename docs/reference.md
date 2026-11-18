@@ -2369,11 +2369,13 @@ an existing `--branch` keep their own starting point, and `--now` and `--focus` 
 wait for blockers.
 
 `shoal queue` lists the entries of every repository, since positions apply
-machine-wide, or of one with `--repo`, as `queued, position N` or `starting`,
-followed by `blocked by` and what blocks a waiting launch, or `after an update` for a
-restore of an idle agent, then what held a waiting entry back at the last
-admission pass, as `held by` memory with what the entry needs and what is
-left, low disk space, `machine.max_heavy_agents`, `machine.max_jobs`,
+machine-wide, or of one with `--repo`, as a table: each row starts with a
+waiting entry's position and the number of the space it starts in, which
+`queue start` and `cancel` take as they take the entry's ID, then its name,
+its priority and what it waits for:
+`starting` once admitted, else what blocks a waiting launch, `an update` for a
+restore of an idle agent, and what held it back at the last admission pass,
+`memory`, low disk space, `machine.max_heavy_agents`, `machine.max_jobs`,
 `agent.max_heavy_running`, a full `runner.permit` pool, a critical or missing
 reading, or a busy CPU with its percentage and the level a job waits at; the
 stagger between starts is too brief to show. A restore shows its
@@ -2394,8 +2396,7 @@ or `tier_from` with that work's space number or launch name `from` and the
 `dependency` (`blocked`, `parent`, `question`, `stacked`, `lease` or
 `serves`), and
 `base` once a launch starts on a blocker's branch, while `list --json` stays
-a list of workspaces. Each line starts with the entry's ID, which `queue
-start` and `cancel` take. On a terminal, `shoal queue` picks a waiting entry and
+a list of workspaces. On a terminal, `shoal queue` picks a waiting entry and
 then starts it, with or without attaching, or cancels it.
 
 `queue start` starts a waiting entry, by its ID or, for a queued restore, by

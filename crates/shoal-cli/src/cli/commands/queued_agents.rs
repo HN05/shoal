@@ -50,17 +50,15 @@ pub(super) async fn listed(ctx: &Context, filter: &ListFilter) -> Result<Vec<Que
     Ok(entries)
 }
 
-/// Text rows for `entries`; JSON output needs none.
-pub(super) async fn rows(ctx: &Context, entries: &[QueueEntry]) -> Result<Vec<String>> {
+/// `entries` as a text table; JSON output needs none.
+pub(super) async fn table(ctx: &Context, entries: &[QueueEntry]) -> Result<ui::QueueTable> {
     if ctx.json || entries.is_empty() {
-        return Ok(Vec::new());
+        let (header, rows) = (String::new(), Vec::new());
+        return Ok(ui::QueueTable { header, rows });
     }
     let repositories = crate::client::repositories::list(&ctx.paths).await?;
-    Ok(ui::queue_rows(
-        entries,
-        &repositories,
-        Palette::stdout(ctx.json),
-    ))
+    let palette = Palette::stdout(ctx.json);
+    Ok(ui::queue_rows(entries, &repositories, palette))
 }
 
 /// Remove `selector` from the queue when it is a waiting launch's ID; `None`

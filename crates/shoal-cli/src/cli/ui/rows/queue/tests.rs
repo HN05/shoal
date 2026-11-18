@@ -1,23 +1,24 @@
 use super::*;
 use crate::time::UnixTime;
-use shoal_schedule::priority::Priority;
+use shoal_schedule::{priority::Priority, rank::QueueRank, rank::Tier};
 
-#[test]
-fn queue_status_names_the_work_a_launch_waits_for() {
-    let mut entry = QueueEntry {
+/// A launch named `name` waiting at `position` in the space numbered
+/// `number`.
+fn launch(name: &str, position: usize, number: u32) -> QueueEntry {
+    QueueEntry {
         narrowing: Default::default(),
         mode: None,
-        id: "entry".into(),
+        id: format!("{name}-id").into(),
         kind: QueueKind::Launch,
         repository_id: Some("repo".into()),
-        name: "ui".into(),
+        name: name.into(),
         agent: "claude".into(),
         issue_title: None,
-        state: crate::state::QueueState::Queued,
-        position: Some(2),
+        state: QueueState::Queued,
+        position: Some(position),
         created_at: UnixTime::from_seconds(0),
         space_id: None,
-        number: None,
+        number: Some(number.into()),
         execution: None,
         opens: None,
         queued_by: None,
@@ -26,103 +27,58 @@ fn queue_status_names_the_work_a_launch_waits_for() {
         base: None,
         job: None,
         held_by: None,
-        rank: None,
-    };
-    assert_eq!(queue_status_cell(&entry).0, "queued, position 2");
-    entry.blockers = vec!["api".into(), "https://forge.example/o/r/issues/7".into()];
-    assert_eq!(
-        queue_status_cell(&entry).0,
-        "queued, position 2, blocked by api, https://forge.example/o/r/issues/7"
-    );
-    entry.blockers.clear();
-    entry.mode = Some("review".into());
-    let plain = Palette::stdout(true);
-    assert_eq!(
-        queue_rows(std::slice::from_ref(&entry), &[], plain),
-        ["○ ui  review  queued, position 2"]
-    );
-    entry.mode = None;
-    entry.rank = Some(QueueRank {
-        priority: Priority::URGENT,
-        priority_from: Some(InheritedRank {
-            from: "7".into(),
-            dependency: Dependency::Parent,
+        rank: Some(QueueRank {
+            priority: Priority::NORMAL,
+            priority_from: None,
+            tier: Tier::New,
+            tier_from: None,
+            shared_areas: Vec::new(),
         }),
-        tier: Tier::Finishing,
-        tier_from: Some(InheritedRank {
-            from: "12".into(),
-            dependency: Dependency::Blocked,
-        }),
-        shared_areas: Vec::new(),
-    });
-    assert_eq!(
-        queue_status_cell(&entry).0,
-        "queued, position 2, priority urgent (from 7, its parent), finishing (from 12, blocked on this)"
-    );
-    let rank = entry.rank.as_mut().unwrap();
-    rank.shared_areas = vec![
-        SharedArea {
-            area: "area/daemon".into(),
-            spaces: vec!["12".into(), "15".into()],
-        },
-        SharedArea {
-            area: "area/cli".into(),
-            spaces: vec!["3".into()],
-        },
-    ];
-    assert!(
-        queue_status_cell(&entry)
-            .0
-            .ends_with("(from 12, blocked on this), sharing area/daemon: 12, 15; area/cli: 3"),
-    );
-    entry.rank = None;
-    entry.held_by = Some(HeldBy::Memory {
-        needed: 4 << 30,
-        left: 3 << 29,
-        reserved: Vec::new(),
-    });
-    assert_eq!(
-        queue_status_cell(&entry).0,
-        "queued, position 2, held by memory: needs 4.0 GiB, 1.5 GiB left"
-    );
-    entry.held_by = Some(HeldBy::Cpu {
-        busy: 97,
-        level: 95,
-    });
-    assert!(queue_status_cell(&entry).0.ends_with("97% busy, 95% level"));
+    }
 }
 
 #[test]
-fn queue_status_names_a_restore_that_waits_for_an_update() {
-    let mut entry = QueueEntry {
-        narrowing: Default::default(),
-        mode: None,
-        id: "entry".into(),
-        kind: QueueKind::Restore,
-        repository_id: Some("repo".into()),
-        name: "ui".into(),
-        agent: "claude".into(),
-        issue_title: None,
-        state: crate::state::QueueState::Queued,
-        position: Some(1),
-        created_at: UnixTime::from_seconds(0),
-        space_id: Some("ui".into()),
-        number: None,
-        execution: Some("execution".into()),
-        opens: None,
-        queued_by: None,
-        blockers: Vec::new(),
-        waits_for_update: true,
-        base: None,
-        job: None,
-        held_by: None,
-        rank: None,
-    };
+fn the_queue_table_leads_with_each_place_and_space_number() {
+    let mut starting = launch("fix-login", 0, 3);
+    (starting.state, starting.position, starting.rank) = (QueueState::Starting, None, None);
+    let mut urgent = launch("review-api", 1, 14);
+    urgent.rank.as_mut().unwrap().priority = Priority::URGENT;
+    urgent.held_by = Some(HeldBy::Memory {
+        needed: 2 << 30,
+        left: 0,
+        reserved: Vec::new(),
+    });
+    let mut blocked = launch("docs", 12, 9);
+    blocked.blockers = vec!["fix-login".into()];
+    blocked.waits_for_update = true;
+    blocked.held_by = Some(HeldBy::Cpu {
+        busy: 97,
+        level: 95,
+    });
+    let entries = [starting, urgent, blocked];
+    let plain = Palette::stdout(true);
+    let table = queue_rows(&entries, &[], plain);
+    assert_eq!(table.header, " #  ID   NAME        PRIORITY  WAITS FOR");
+    // Each row starts with its place, then its space's number, which `queue
+    // start` takes.
     assert_eq!(
-        queue_status_cell(&entry).0,
-        "queued, position 1, after an update"
+        table.rows,
+        [
+            "     3 ◌ fix-login             starting",
+            " 1  14 ○ review-api  urgent    memory",
+            "12   9 ○ docs        normal    fix-login, an update, CPU: 97% busy, 95% level",
+        ]
     );
-    entry.state = crate::state::QueueState::Starting;
-    entry.position = None;
-    assert!(!queue_status_cell(&entry).0.contains("update"));
+}
+
+#[test]
+fn a_restore_waits_for_an_update_only_while_queued() {
+    let mut entry = launch("ui", 1, 2);
+    entry.kind = QueueKind::Restore;
+    entry.waits_for_update = true;
+    assert_eq!(waits_for_cell(&entry).0, "an update");
+    assert_eq!(waiting_reasons(&entry), ", after an update");
+    entry.state = QueueState::Starting;
+    assert_eq!(waits_for_cell(&entry).0, "starting");
+    assert_eq!(waiting_reasons(&entry), "");
 }

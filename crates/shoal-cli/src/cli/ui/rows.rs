@@ -13,7 +13,7 @@ mod statuses;
 mod tree;
 
 pub use machines::Machines;
-pub use queue::{held_by_label, job_subject, queue_rows};
+pub use queue::{QueueTable, held_by_label, job_subject, queue_rows};
 use queue::{queue_subject, waiting_reasons};
 pub use remote::remote_rows;
 pub use statuses::Statuses;
@@ -35,7 +35,6 @@ use crate::{
     state::{AgentState, QueueKind, QueueState},
 };
 use shoal_protocol::{executions::ServiceLimit, progress::Progress};
-use shoal_schedule::rank::{Dependency, InheritedRank, QueueRank, SharedArea, Tier};
 
 /// `items` joined by `separator` into lines no wider than `width`, where
 /// one item fits; no limit keeps one line.

@@ -2,19 +2,6 @@
 //! it starts.
 use super::*;
 
-fn queue_status_cell(entry: &QueueEntry) -> Cell {
-    let status = ListStatus::of_entry(entry);
-    let label = status.label().to_owned();
-    let mut text = match entry.position {
-        Some(position) => format!("{label}, position {position}"),
-        None => label,
-    };
-    if let Some(rank) = (entry.rank.as_ref()).filter(|_| entry.state == QueueState::Queued) {
-        text += &format!(", {}", rank_label(rank));
-    }
-    (text + &waiting_reasons(entry), Some(status.style()))
-}
-
 /// What a queue entry waits for besides its place, each after a comma:
 /// `, blocked by api`, `, after an update` or `, held by low disk space`.
 pub(super) fn waiting_reasons(entry: &QueueEntry) -> String {
@@ -31,65 +18,41 @@ pub(super) fn waiting_reasons(entry: &QueueEntry) -> String {
     text
 }
 
-/// A waiting entry's rank: its priority and tier, each with the work it
-/// took that from and why, as in `priority urgent (from 7, its parent),
-/// finishing (from 12, blocked on this)`, then the areas it shares, as in
-/// `, sharing area/daemon: 12, 15; area/cli: 3`.
-fn rank_label(rank: &QueueRank) -> String {
-    let tier = match rank.tier {
-        Tier::New => "new",
-        Tier::Started => "started",
-        Tier::Finishing => "finishing",
-    };
-    format!(
-        "priority {}{}, {tier}{}{}",
-        rank.priority,
-        inherited_label(rank.priority_from.as_ref()),
-        inherited_label(rank.tier_from.as_ref()),
-        shared_areas_label(&rank.shared_areas)
+/// What a queue entry waits for, as its row's last status column:
+/// `starting` once admitted, else the work that blocks it, an update and
+/// what held it back at the last admission pass, as in `api, memory`.
+fn waits_for_cell(entry: &QueueEntry) -> Cell {
+    let status = ListStatus::of_entry(entry);
+    if entry.state != QueueState::Queued {
+        return (status.label().into(), Some(status.style()));
+    }
+    let mut waits = entry.blockers.clone();
+    if entry.waits_for_update {
+        waits.push("an update".into());
+    }
+    waits.extend(entry.held_by.as_ref().map(held_by_label));
+    (waits.join(", "), Some(status.style()))
+}
+
+/// A waiting entry's priority; none once it starts.
+fn priority_cell(entry: &QueueEntry) -> Cell {
+    let rank = entry
+        .rank
+        .as_ref()
+        .filter(|_| entry.state == QueueState::Queued);
+    (
+        rank.map(|rank| rank.priority.to_string())
+            .unwrap_or_default(),
+        None,
     )
 }
 
-/// The areas a launch shares, each with the spaces holding it, as in
-/// `, sharing area/daemon: 12, 15; area/cli: 3`; nothing when it shares
-/// none.
-fn shared_areas_label(shared: &[SharedArea]) -> String {
-    if shared.is_empty() {
-        return String::new();
-    }
-    let areas: Vec<String> = (shared.iter())
-        .map(|shared| format!("{}: {}", shared.area, shared.spaces.join(", ")))
-        .collect();
-    format!(", sharing {}", areas.join("; "))
-}
-
-/// The work a rank was taken from and why, as in ` (from 12, blocked on
-/// this)`; nothing for a rank of the entry's own.
-fn inherited_label(inherited: Option<&InheritedRank>) -> String {
-    let Some(inherited) = inherited else {
-        return String::new();
-    };
-    let why = match inherited.dependency {
-        Dependency::Blocked => "blocked on this",
-        Dependency::Parent => "its parent",
-        Dependency::Question => "its child, asking it",
-        Dependency::Stacked => "stacked on this",
-        Dependency::Lease => "waiting for its lease",
-        Dependency::Serves => "which it serves",
-    };
-    format!(" (from {}, {why})", inherited.from)
-}
-
-/// What holds a waiting entry back: `memory: needs 4.0 GiB, 1.2 GiB left`,
-/// a limit's setting, low disk space, a failed reading, `CPU: 97% busy, 95%
-/// level` or its tool's upstream limit.
+/// What holds a waiting entry back: memory, whose detail `queue --json`
+/// gives, a limit's setting, low disk space, a failed reading, `CPU: 97%
+/// busy, 95% level` or its tool's upstream limit.
 pub fn held_by_label(held: &HeldBy) -> String {
     match *held {
-        HeldBy::Memory { needed, left, .. } => format!(
-            "memory: needs {}, {} left",
-            size_label(needed),
-            size_label(left)
-        ),
+        HeldBy::Memory { .. } => "memory".into(),
         HeldBy::MemoryKept => "memory kept for a higher-ranked entry".into(),
         HeldBy::Disk => "low disk space".into(),
         HeldBy::MaxHeavyAgents => "machine.max_heavy_agents".into(),
@@ -134,48 +97,108 @@ pub fn job_subject(queued: &crate::model::QueuedJob) -> String {
     subject
 }
 
-/// One aligned row per agent queue entry: its workspace name, its repository
-/// when the entries span several, its mode, its place, and what it starts.
+/// The agent queue as a table: a header naming its columns, then one row
+/// per entry.
+pub struct QueueTable {
+    pub header: String,
+    pub rows: Vec<String>,
+}
+
+/// The queue's `entries` as a table, each row led by the entry's place in
+/// the queue, the number of its space, which `shoal queue start` and
+/// `cancel` take, and its marker, then its workspace name, its repository
+/// when the entries span several, its mode, its priority, what it waits for
+/// and what it starts.
 pub fn queue_rows(
     entries: &[QueueEntry],
     repositories: &[Repository],
     palette: Palette,
-) -> Vec<String> {
-    let names: Vec<&str> = entries
+) -> QueueTable {
+    let names = named_repository_cells(entries.iter().map(|entry| {
+        let repository = repositories
+            .iter()
+            .find(|repo| entry.repository_id.as_ref() == Some(&repo.id));
+        repository.map(crate::repository::name)
+    }));
+    let cells: Vec<[Cell; 6]> = (entries.iter().zip(names))
+        .map(|(entry, repository)| entry_cells(entry, repository))
+        .collect();
+    let header = header_cells(&cells);
+    let mut lines = aligned([header].into_iter().chain(cells).collect(), palette).into_iter();
+    let header = lines.next().unwrap_or_default();
+    placed(entries, header, lines.collect(), palette)
+}
+
+/// One entry's cells after its place, number and marker.
+fn entry_cells(entry: &QueueEntry, repository: String) -> [Cell; 6] {
+    [
+        (entry.name.to_string(), Some(Style::Heading)),
+        (repository, None),
+        mode_cell(entry.mode.as_ref(), &ModeName::DEFAULT),
+        priority_cell(entry),
+        waits_for_cell(entry),
+        (queue_subject(entry), None),
+    ]
+}
+
+/// The queue table's column titles, each only over a column some row
+/// fills.
+fn header_cells(rows: &[[Cell; 6]]) -> [Cell; 6] {
+    let titles = ["NAME", "REPOSITORY", "MODE", "PRIORITY", "WAITS FOR", ""];
+    let mut column = 0;
+    titles.map(|title| {
+        let filled = rows.iter().any(|row| !row[column].0.is_empty());
+        column += 1;
+        let title = if filled { title } else { "" };
+        (title.into(), Some(Style::Muted))
+    })
+}
+
+/// The aligned `header` and `rows`, each row led by its entry's place in
+/// the queue and its space's number, each right aligned under its title,
+/// and its marker.
+fn placed(
+    entries: &[QueueEntry],
+    header: String,
+    rows: Vec<String>,
+    palette: Palette,
+) -> QueueTable {
+    let places = entries
         .iter()
-        .map(|entry| {
-            repositories
-                .iter()
-                .find(|repo| entry.repository_id.as_ref() == Some(&repo.id))
-                .map_or("unknown repository", crate::repository::name)
+        .map(|entry| entry.position.map(|place| place.to_string()));
+    let (place_title, places) = right_aligned("#", places, palette);
+    let numbers = entries
+        .iter()
+        .map(|entry| entry.number.map(|number| number.to_string()));
+    let (number_title, numbers) = right_aligned("ID", numbers, palette);
+    let rows = (entries.iter().zip(places).zip(numbers).zip(rows))
+        .map(|(((entry, place), number), row)| {
+            let marker = ListStatus::of_entry(entry).marker(palette);
+            format!("{place}  {number} {marker} {row}")
         })
         .collect();
-    let several = names.iter().collect::<HashSet<_>>().len() > 1;
-    let cells: Vec<[Cell; 5]> = entries
+    QueueTable {
+        header: format!("{place_title}  {number_title}   {header}"),
+        rows,
+    }
+}
+
+/// A column of `values` right aligned under `title`: the title as the
+/// header shows it, then each value, empty where there is none.
+fn right_aligned(
+    title: &str,
+    values: impl Iterator<Item = Option<String>>,
+    palette: Palette,
+) -> (String, Vec<String>) {
+    let values: Vec<String> = values.map(Option::unwrap_or_default).collect();
+    let width = values.iter().map(String::len).chain([title.len()]).max();
+    let width = width.unwrap_or_default();
+    let title = palette.paint(Style::Muted, format!("{title:>width$}"));
+    let values = values
         .iter()
-        .zip(names)
-        .map(|(entry, repository)| {
-            [
-                (entry.name.to_string(), Some(Style::Heading)),
-                (
-                    if several {
-                        repository.into()
-                    } else {
-                        String::new()
-                    },
-                    None,
-                ),
-                mode_cell(entry.mode.as_ref(), &ModeName::DEFAULT),
-                queue_status_cell(entry),
-                (queue_subject(entry), None),
-            ]
-        })
+        .map(|value| format!("{value:>width$}"))
         .collect();
-    entries
-        .iter()
-        .zip(aligned(cells, palette))
-        .map(|(entry, row)| format!("{} {row}", ListStatus::of_entry(entry).marker(palette)))
-        .collect()
+    (title, values)
 }
 
 #[cfg(test)]
