@@ -402,3 +402,49 @@ async fn files_one_include_section_names_take_precedence_as_in_git() {
     let remote = crate::git::push_remote(&repo, &"topic".into()).await;
     assert_eq!(remote.unwrap(), expected.trim());
 }
+
+#[test]
+fn a_remote_only_inherited_config_defines_is_not_the_repositorys() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    let global = root.path().join("global.gitconfig");
+    std::fs::write(
+        &global,
+        "[remote \"origin\"]\n\turl = https://example.com/global\n",
+    )
+    .unwrap();
+    run_helper("an_inherited_remote_helper", &repo, |command| {
+        command
+            .env("GIT_CONFIG_GLOBAL", &global)
+            .env("GIT_CONFIG_COUNT", "1")
+            .env("GIT_CONFIG_KEY_0", "remote.fork.url")
+            .env("GIT_CONFIG_VALUE_0", "https://example.com/fork")
+    });
+}
+
+/// Find no URL for remotes only the global config and the environment
+/// define, as `git remote get-url` finds none, then one for a remote the
+/// repository's config also names.
+#[tokio::test]
+#[ignore = "run by a_remote_only_inherited_config_defines_is_not_the_repositorys"]
+async fn an_inherited_remote_helper() {
+    let repo = helper_repository();
+    for remote in ["origin", "fork"] {
+        let url = crate::git::configured_remote_url(&repo, remote)
+            .await
+            .unwrap();
+        assert_eq!(url, None, "{remote}");
+    }
+    git(
+        &repo,
+        &[
+            "config",
+            "remote.origin.fetch",
+            "+refs/heads/*:refs/remotes/origin/*",
+        ],
+    );
+    let url = crate::git::configured_remote_url(&repo, "origin")
+        .await
+        .unwrap();
+    assert_eq!(url.as_deref(), Some("https://example.com/global"));
+}

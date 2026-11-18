@@ -108,7 +108,8 @@ pub async fn configured_remote_url(repo: &Path, remote: &str) -> Result<Option<S
 
 /// The fetch URL of the remote `name` in `repo`'s configuration: its first
 /// `url`, or its name where it has none, as Git takes it, rewritten; `None`
-/// when no section configures the remote.
+/// unless the repository's own config has a section for the remote, as
+/// `git remote get-url` requires, whatever other files define.
 fn fetch_url(repo: &gix::Repository, name: &str) -> Option<String> {
     let config = repo.config_snapshot();
     let file = config.plumbing();
@@ -120,7 +121,11 @@ fn fetch_url(repo: &gix::Repository, name: &str) -> Option<String> {
                 .is_some_and(|sub| sub == name)
         })
         .collect();
-    if sections.is_empty() {
+    let in_repository = |section: &&gix::config::file::SectionRef<'_>| {
+        use gix::config::Source;
+        matches!(section.meta().source, Source::Local | Source::Worktree)
+    };
+    if !sections.iter().any(|section| in_repository(&section)) {
         return None;
     }
     let urls = sections.iter().flat_map(|section| section.values("url"));
