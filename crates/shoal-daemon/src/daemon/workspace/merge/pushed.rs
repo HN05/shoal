@@ -2,7 +2,7 @@
 //! through the lookup that follows a merged PR's.
 use anyhow::Result;
 
-use super::{RecordChange, records::merged_commit, tracking_ref};
+use super::{RecordChange, tracking_ref};
 use crate::{
     daemon::{links::wait::PushedMerge, log, workspace::Manager},
     git,
@@ -30,27 +30,35 @@ impl Manager {
     }
 }
 
-/// The merge `plan` made and pushed: the commit it left the default branch
-/// at, once the push left the branch's upstream, as Git tracks it, holding
-/// that commit.
+/// What the execution of `plan` pushed: the default branch's tip, once it
+/// holds the merged branch and the branch's upstream, as Git tracks it after
+/// the push, holds the tip. A merge an earlier push failed to publish counts,
+/// though this execution merged nothing new, since its push publishes it.
 async fn pushed_merge(plan: &MergePlan) -> Result<Option<PushedMerge>> {
     let Some(push) = &plan.push else {
         return Ok(None);
     };
     let repo = &plan.repo.path;
-    let Some(commit) = merged_commit(plan).await? else {
+    let default = &plan.default_refresh.branch;
+    let Some(tip) = git::status::local_branch_commit(repo, default).await? else {
         return Ok(None);
     };
-    let Some(tracking) = tracking_ref(repo, &plan.default_refresh.branch).await? else {
+    let Some(tracking) = tracking_ref(repo, default).await? else {
         return Ok(None);
     };
-    if !git::is_ancestor(repo, commit.as_str(), &tracking, git::isolated_command).await? {
+    let holds = async |ancestor: &str, descendant: &str| {
+        git::is_ancestor(repo, ancestor, descendant, git::isolated_command).await
+    };
+    if !holds(plan.source.as_str(), tip.as_str()).await? || !holds(tip.as_str(), &tracking).await? {
         return Ok(None);
     }
     Ok(Some(PushedMerge {
         space: plan.workspace.id.clone(),
-        remote: git::remote_url(repo, &push.remote).await?,
+        remote: git::remote_push_url(repo, &push.remote).await?,
         branch: push.branch().into(),
-        commit,
+        commit: tip,
     }))
 }
+
+#[cfg(test)]
+mod tests;

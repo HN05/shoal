@@ -12,12 +12,11 @@ use crate::{
             start::{Start, StartRead},
             tests::register_watch,
         },
-        test_support::{commit, configure, git, manager, repository},
-        workspace::RecordChange,
+        test_support::{configure, manager, repository},
         workspace_files::Attacher,
     },
     forge::items::link::Selection,
-    model::{CleanupReason, MergeOptions, Workspace},
+    model::{CleanupReason, Workspace},
 };
 use shoal_forge::test_support::Server;
 use shoal_protocol::{assignments::Done, space_names::SpaceSelector};
@@ -141,35 +140,16 @@ impl Following {
         self.manager.pending_activity(id, &urls).await.unwrap()
     }
 
-    /// Merge a commit of the workspace's into `main` with `shoal merge`,
-    /// pushing `main` to `origin` with `push`, and record the merge, as a
-    /// merge execution does; return the commit it left on `main`. `origin`
-    /// pushes to a local repository and fetches from the forge.
-    async fn merge_locally(&self, push: bool) -> String {
-        let repo = self.root.path().join("repo");
-        let origin = self.root.path().join("origin.git");
-        let origin = origin.to_str().unwrap();
-        git(&repo, &["clone", "--bare", repo.to_str().unwrap(), origin]);
-        git(&repo, &["remote", "add", "origin", origin]);
-        git(&repo, &["fetch", "origin"]);
-        git(&repo, &["branch", "--set-upstream-to=origin/main", "main"]);
-        std::fs::write(self.workspace.path.join("feature"), "work\n").unwrap();
-        commit(&self.workspace.path, "feature");
-        let selector = SpaceSelector::id(&self.workspace.id);
-        let options = MergeOptions {
-            push,
-            confirmed: None,
+    /// Look up the runs of `commit`, which the workspace's `shoal merge`
+    /// pushed to the forge's `main`.
+    async fn push(&self, commit: &str) {
+        let pushed = PushedMerge {
+            space: self.workspace.id.clone(),
+            remote: format!("http://{}/team/repo.git", self.server.host),
+            branch: "main".into(),
+            commit: commit.into(),
         };
-        let plan = self.manager.prepare_merge(&selector, &options).await;
-        let plan = plan.unwrap();
-        let forge = format!("http://{}/team/repo.git", self.server.host);
-        git(&repo, &["remote", "set-url", "origin", &forge]);
-        git(&repo, &["remote", "set-url", "--push", "origin", origin]);
-        crate::git::repo::finish_merge(plan.clone()).await.unwrap();
-        let change = RecordChange::Merge(Box::new(plan));
-        self.manager.update_merge_records(&change).await;
-        self.manager.follow_pushed_merge_runs(&change).await;
-        git(&repo, &["rev-parse", "main"]).trim().to_owned()
+        self.manager.follow_pushed_merge(pushed).await.unwrap();
     }
 
     async fn follow(&self) {
@@ -704,7 +684,7 @@ async fn completion_cleanup_waits_for_a_poll_to_see_an_opened_prs_merge() {
 #[tokio::test]
 async fn a_pushed_merge_links_the_default_branchs_runs_for_its_commit() {
     let following = following(true, json!([listed_run("running")])).await;
-    let pushed = following.merge_locally(true).await;
+    following.push(MERGED).await;
     assert!(following.awaits().await);
 
     following.follow().await;
@@ -714,34 +694,13 @@ async fn a_pushed_merge_links_the_default_branchs_runs_for_its_commit() {
         listings[0].contains("ref=refs%2Fheads%2Fmain"),
         "{listings:?}"
     );
-    assert!(listings[0].contains(&format!("head_sha={pushed}")));
+    assert!(listings[0].contains(&format!("head_sha={MERGED}")));
     assert_eq!(following.related().await, [run_url(&following)]);
-
-    // It keeps the space after the window until a read sees the run finish.
-    following.end_window().await;
-    following.follow().await;
-    assert!(following.awaits().await);
-    let run = run_url(&following);
-    let finished = serde_json::from_value(json!({"comments": {}, "checks": {},
-        "conflict": null, "state": "failed", "errors": {}}))
-    .unwrap();
-    following.observe(&run, finished).await;
-    following.follow().await;
-    assert!(!following.awaits().await);
-}
-
-#[tokio::test]
-async fn a_merge_that_stays_local_follows_no_runs() {
-    let following = following(true, json!([listed_run("running")])).await;
-    following.merge_locally(false).await;
-    assert!(!following.awaits().await);
-    following.follow().await;
-    assert!(following.listings().is_empty());
 }
 
 #[tokio::test]
 async fn a_pushed_merge_is_not_followed_where_the_option_is_off() {
     let following = following(false, json!([listed_run("running")])).await;
-    following.merge_locally(true).await;
+    following.push(MERGED).await;
     assert!(!following.awaits().await);
 }

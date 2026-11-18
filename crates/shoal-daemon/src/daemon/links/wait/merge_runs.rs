@@ -130,11 +130,15 @@ impl Manager {
 
     /// Look up the runs of the commit a space's `shoal merge` pushed, as
     /// the read that sees a PR merge does, where `[pr] watch_merge_runs` is
-    /// on.
+    /// on. A remote on no forge Shoal reads, such as a local repository,
+    /// starts none, since no poll could ever list its runs or end the
+    /// lookup that keeps the space.
     pub(crate) async fn follow_pushed_merge(&self, pushed: PushedMerge) -> Result<()> {
         if self.configured_merge_target(&pushed.space).await?.is_none() {
             return Ok(());
         }
+        (self.forge(&pushed.remote).await)
+            .with_context(|| format!("{} is on no forge to list CI runs on", pushed.remote))?;
         let now = UnixTime::now();
         self.store
             .write(move |tx| {

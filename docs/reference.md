@@ -3442,7 +3442,7 @@ its upstream after merging; `--no-push` keeps one merge local. A default branch 
 upstream is refused before merging, and a failed push keeps the merge. Where
 [`[pr] watch_merge_runs`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#prs)
 is on, the workspace follows the default branch's runs for the commit the push
-took, on the remote it pushed to, as it follows a merged PR's
+published, on the forge of the URL it pushed to, as it follows a merged PR's
 [runs](#linked-items-and-cleanup).
 
 A merge that pushes asks first, after Shoal has checked it and before anything
