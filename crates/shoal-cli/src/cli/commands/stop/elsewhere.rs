@@ -39,16 +39,17 @@ pub(super) async fn partition(
     Ok((here, elsewhere))
 }
 
-/// What a stop of `here`, this machine's spaces with those below them, and
-/// of `elsewhere` checks before it stops any: each of them and the spaces
-/// below them on connected machines, unless `skip_children`; one on an
-/// offline machine waits for it unchecked.
+/// What a stop of `here`, this machine's spaces with those below them here,
+/// and of `elsewhere` checks before it stops any: each of them and, unless
+/// `skip_children`, the spaces below them across machines, those
+/// elsewhere only on connected machines, since a stop for an offline one
+/// waits for it unchecked.
 pub(super) async fn stop_tree(
     ctx: &Context,
     here: &[Space],
     elsewhere: &[(Listed, HubView)],
     skip_children: bool,
-) -> Vec<(String, SpaceSelector)> {
+) -> Result<Vec<(String, SpaceSelector)>> {
     let mut targets: Vec<(String, SpaceSelector)> = (here.iter())
         .map(|space| (space.name.to_string(), SpaceSelector::id(&space.id)))
         .collect();
@@ -58,29 +59,33 @@ pub(super) async fn stop_tree(
         None => machines::view(ctx).await,
     };
     let Some(view) = view else {
-        return targets;
+        return Ok(targets);
     };
     let mut remote: Vec<Listed> = elsewhere.iter().map(|(listed, _)| listed.clone()).collect();
     if !skip_children {
-        let roots = (here.iter().map(|space| space.id.clone()))
-            .chain(elsewhere.iter().map(|(listed, _)| listed.space.id.clone()));
-        for root in roots.collect::<Vec<_>>() {
-            remote.extend(below(&view, &root));
+        let roots = Stopped {
+            here: here.to_vec(),
+            elsewhere: remote.clone(),
+        };
+        for space in tree_across(ctx, &view, roots).await? {
+            match space {
+                Across::Here(space) => {
+                    targets.push((space.name.to_string(), SpaceSelector::id(&space.id)))
+                }
+                Across::Elsewhere(listed) => remote.push(*listed),
+            }
         }
     }
     let connected = |listed: &Listed| {
         (view.directory.machine(&listed.machine)).is_some_and(|machine| machine.connected)
     };
-    for listed in remote
-        .iter()
-        .filter(|listed| listed.machine != view.machine && connected(listed))
-    {
+    for listed in remote.iter().filter(|listed| connected(listed)) {
         let selector = SpaceSelector::id(&listed.space.id);
         if !targets.iter().any(|(_, known)| known == &selector) {
             targets.push((listed.space.name.to_string(), selector));
         }
     }
-    targets
+    Ok(targets)
 }
 
 /// Stop `spaces`, which other machines run, and the spaces below them
@@ -117,42 +122,53 @@ pub(super) async fn stop_below(ctx: &Context, stopped: &[Space], yes: bool) -> R
     stop_across(ctx, &view, stopped, yes).await
 }
 
-/// The spaces a stop stopped last, here and on other machines.
+/// Spaces a stop starts from, here and on other machines.
 struct Stopped {
     here: Vec<Space>,
     elsewhere: Vec<Listed>,
 }
 
-/// Stop the spaces below `stopped` on other machines and those below them
-/// back here, crossing between machines as often as the tree does, each
-/// once: this machine's below one of its own it stopped already.
-async fn stop_across(ctx: &Context, view: &HubView, mut stopped: Stopped, yes: bool) -> Result<()> {
-    let mut seen: HashSet<SpaceId> = (stopped.here.iter().map(|space| space.id.clone()))
-        .chain(
-            stopped
-                .elsewhere
-                .iter()
-                .map(|listed| listed.space.id.clone()),
-        )
+/// A space below where a stop starts, here or on another machine.
+enum Across {
+    Here(Box<Space>),
+    Elsewhere(Box<Listed>),
+}
+
+/// Stop the spaces below `stopped` across machines, as [`tree_across`]
+/// orders them.
+async fn stop_across(ctx: &Context, view: &HubView, stopped: Stopped, yes: bool) -> Result<()> {
+    for space in tree_across(ctx, view, stopped).await? {
+        match space {
+            Across::Here(space) => drop(super::stop_one(ctx, &space, yes).await?),
+            Across::Elsewhere(listed) => stop_one(ctx, &listed, yes).await?,
+        }
+    }
+    Ok(())
+}
+
+/// The spaces below `roots` on other machines and those below them back
+/// here, crossing between machines as often as the tree does, each once
+/// and after the space above it: this machine's below one of its own are
+/// left to the caller, which resolves them with it.
+async fn tree_across(ctx: &Context, view: &HubView, mut roots: Stopped) -> Result<Vec<Across>> {
+    let mut seen: HashSet<SpaceId> = (roots.here.iter().map(|space| space.id.clone()))
+        .chain(roots.elsewhere.iter().map(|listed| listed.space.id.clone()))
         .collect();
+    let mut found = Vec::new();
     loop {
         let mut elsewhere = Vec::new();
-        let parents = (stopped.here.iter().map(|space| &space.id))
-            .chain(stopped.elsewhere.iter().map(|listed| &listed.space.id));
+        let parents = (roots.here.iter().map(|space| &space.id))
+            .chain(roots.elsewhere.iter().map(|listed| &listed.space.id));
         for parent in parents.collect::<Vec<_>>() {
             for listed in below(view, parent) {
                 if listed.machine != view.machine && seen.insert(listed.space.id.clone()) {
-                    stop_one(ctx, &listed, yes).await?;
                     elsewhere.push(listed);
                 }
             }
         }
         let back_here: Vec<SpaceSelector> = (view.below_elsewhere.iter())
             .filter(|(_, parent)| {
-                elsewhere
-                    .iter()
-                    .chain(&stopped.elsewhere)
-                    .any(|l| &l.space.id == parent)
+                (elsewhere.iter().chain(&roots.elsewhere)).any(|l| &l.space.id == parent)
             })
             .filter(|(space, _)| !seen.contains(space))
             .map(|(space, _)| SpaceSelector::id(space))
@@ -161,15 +177,25 @@ async fn stop_across(ctx: &Context, view: &HubView, mut stopped: Stopped, yes: b
         if !back_here.is_empty() {
             for space in super::resolve(ctx, back_here, true).await? {
                 if seen.insert(space.id.clone()) {
-                    super::stop_one(ctx, &space, yes).await?;
                     here.push(space);
                 }
             }
         }
         if here.is_empty() && elsewhere.is_empty() {
-            return Ok(());
+            return Ok(found);
         }
-        stopped = Stopped { here, elsewhere };
+        found.extend(
+            elsewhere
+                .iter()
+                .cloned()
+                .map(|listed| Across::Elsewhere(Box::new(listed))),
+        );
+        found.extend(
+            here.iter()
+                .cloned()
+                .map(|space| Across::Here(Box::new(space))),
+        );
+        roots = Stopped { here, elsewhere };
     }
 }
 

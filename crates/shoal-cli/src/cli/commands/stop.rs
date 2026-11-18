@@ -54,7 +54,7 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
     if crate::env::inherits_scope(&ctx.paths.state) {
         ensure_below(&selected)?;
     }
-    let tree = elsewhere::stop_tree(ctx, &selected, &elsewhere, skip_children).await;
+    let tree = elsewhere::stop_tree(ctx, &selected, &elsewhere, skip_children).await?;
     if tree.len() > 1 {
         targets::check_targets(ctx, tree).await?;
     }
