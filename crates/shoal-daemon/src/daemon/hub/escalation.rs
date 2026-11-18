@@ -2,8 +2,9 @@
 //! or approval request of a space here whose coordinator runs on a machine
 //! that has been offline for `[machine.hub] escalate_after_minutes` passes
 //! to the next space above with an agent on a connected machine, or to the
-//! user, as a chat whose agent stops passes its undecided requests to the
-//! user.
+//! user. An approval request whose decider elsewhere lost its agent or is
+//! gone goes to the user at once, as a chat whose agent stops here passes
+//! its undecided requests to the user.
 use std::{collections::HashMap, time::Duration};
 
 use anyhow::Result;
@@ -61,25 +62,38 @@ impl Manager {
         let after = Duration::from_secs(settings.escalate_after_minutes * 60);
         // Not in a hub, or cut off from it, a machine cannot tell who is
         // offline.
-        let Ok(Some((_, directory))) = self.hub_directory().await else {
+        let Ok(Some((own, directory))) = self.hub_directory().await else {
             return Ok(());
         };
-        let offline = offline_since(&directory);
-        if offline.is_empty() {
-            return Ok(());
-        }
         let now = UnixTime::now();
+        let deciders = Deciders {
+            own: &own,
+            directory: &directory,
+            now,
+            after,
+        };
+        for request in self.approval_requests(None).await? {
+            let Some(decider) = request.decider.as_ref() else {
+                continue;
+            };
+            // This machine's own rules cover a decider here, which the hub
+            // may not list yet.
+            if request.status != DecisionStatus::Pending
+                || self.find_space(decider).await?.is_some()
+            {
+                continue;
+            }
+            match deciders.unavailable(decider, request.created_at) {
+                Some(Unavailable::Offline) => self.pass_over_offline(&request).await?,
+                Some(Unavailable::Gone) => self.pass_to_user(&request).await?,
+                None => {}
+            }
+        }
+        let offline = offline_since(&directory);
         let waited = |created: UnixTime, decider: &SpaceId| {
             (offline.get(decider))
                 .is_some_and(|since| now.duration_since(created.max(*since)) >= after)
         };
-        for request in self.approval_requests(None).await? {
-            let pending = request.status == DecisionStatus::Pending;
-            if pending && (request.decider.as_ref()).is_some_and(|d| waited(request.created_at, d))
-            {
-                self.pass_over_offline(&request).await?;
-            }
-        }
         self.store.write(forget_closed).await?;
         for question in self.open_questions().await? {
             let Some(coordinator) = self.remote_coordinator(&question.space_id).await else {
@@ -149,6 +163,48 @@ impl Manager {
                 )
             })
             .await
+    }
+}
+
+/// What keeps a request's decider on another machine from deciding it.
+#[derive(Debug, PartialEq, Eq)]
+enum Unavailable {
+    /// Its machine has been offline for too long; the next space above with
+    /// an agent on a connected machine decides it.
+    Offline,
+    /// It no longer has an agent, or is gone, which gives its undecided
+    /// requests to the user, as a chat's agent stopping here does.
+    Gone,
+}
+
+/// The hub's directory as this machine, `own`, sees deciders in it.
+struct Deciders<'a> {
+    own: &'a shoal_ids::member_ids::MemberId,
+    directory: &'a Directory,
+    now: UnixTime,
+    after: Duration,
+}
+
+impl Deciders<'_> {
+    /// What keeps `decider`, a space elsewhere that a request made at
+    /// `created` waits for, from deciding it; none for one that can.
+    fn unavailable(&self, decider: &SpaceId, created: UnixTime) -> Option<Unavailable> {
+        let listed = (self.directory.spaces.iter()).find(|listed| &listed.space.id == decider);
+        let Some(listed) = listed else {
+            return Some(Unavailable::Gone);
+        };
+        if &listed.machine == self.own {
+            return None;
+        }
+        if !listed.space.agent {
+            return Some(Unavailable::Gone);
+        }
+        let machine = self.directory.machine(&listed.machine)?;
+        if machine.connected {
+            return None;
+        }
+        let since = machine.last_seen.unwrap_or(machine.joined_at);
+        (self.now.duration_since(created.max(since)) >= self.after).then_some(Unavailable::Offline)
     }
 }
 

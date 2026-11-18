@@ -554,6 +554,21 @@ impl Manager {
         Ok(())
     }
 
+    /// Give `request`, whose decider on another machine lost its agent or
+    /// is gone, to the user, as a chat whose agent stops here gives its
+    /// undecided requests, and tell the user.
+    pub(crate) async fn pass_to_user(&self, request: &ApprovalRequest) -> Result<()> {
+        let Some(decider) = request.decider.clone() else {
+            return Ok(());
+        };
+        let _gate = self.gates.lock_announcements().await;
+        let routed = self
+            .route_among(request, Some(&decider), Vec::new())
+            .await?;
+        self.announce_approval(&routed).await;
+        Ok(())
+    }
+
     /// Route `request` as [`Self::route_approval`] does, with the deciders
     /// `elsewhere` on the machines above after this machine's own.
     async fn route_among(
