@@ -138,6 +138,12 @@ impl<'a> Removal<'a> {
             Self::Merged { .. } => EventCause::Pr,
             Self::Completed { cause, .. } => cause,
             Self::Deleted => EventCause::MissingDirectory,
+            // A space below one its repository's removal takes goes with
+            // the repository too.
+            Self::Parent {
+                cause: EventCause::Repository,
+                ..
+            } => EventCause::Repository,
             Self::Parent { .. } => EventCause::Parent,
             Self::UnderCompleted { .. } => EventCause::ParentCompletion,
             Self::Converted { .. } => EventCause::Manual,

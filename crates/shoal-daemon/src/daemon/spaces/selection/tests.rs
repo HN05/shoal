@@ -110,6 +110,15 @@ async fn a_removed_space_s_id_names_the_repository_removed_with_it() {
         .create_workspace(&repo.id, "taken".into(), None, None, None)
         .await
         .unwrap();
+    let chat = manager
+        .start_chat_in_workspace(
+            &SpaceSelector::id(&taken.id),
+            "below".into(),
+            "claude".into(),
+            None,
+        )
+        .await
+        .unwrap();
     let removed = SpaceSelector::id(&removed.id);
     (manager.remove_selected(&removed, UnsavedWork::default(), InspectionPolicy::GitOnly))
         .await
@@ -125,5 +134,8 @@ async fn a_removed_space_s_id_names_the_repository_removed_with_it() {
         .unwrap_err()
         .to_string();
     let repository = format!("removed with its repository {}", repo.id);
+    assert!(refused.contains(&repository), "{refused}");
+    // A chat below goes with the repository too.
+    let refused = manager.space_by_id(&chat.id).await.unwrap_err().to_string();
     assert!(refused.contains(&repository), "{refused}");
 }
