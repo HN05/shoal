@@ -296,11 +296,19 @@ pub(super) async fn submit(
 ) -> Result<i32> {
     let env = crate::env::without_secrets();
     let mut request = approvals::decide(&ctx.paths, number, approve, shown, details, env).await?;
-    // An approved push runs in an operation whose end decides the request.
+    // An approved push runs in an operation whose end decides the request,
+    // on the machine of the space that asked.
     if let Some(operation) = request.operation.clone()
         && request.status == DecisionStatus::Pending
     {
-        request = super::operations::follow_started(ctx, operation).await?;
+        let space = SpaceSelector::id(&request.space_id);
+        match super::machines::space_elsewhere(ctx, &space).await? {
+            None => request = super::operations::follow_started(ctx, operation).await?,
+            Some(_) => eprintln!(
+                "The push runs on the machine of space {}; shoal approvals {} shows its outcome",
+                request.space_id, request.number
+            ),
+        }
     }
     for warning in &request.warnings {
         eprintln!("{warning}");

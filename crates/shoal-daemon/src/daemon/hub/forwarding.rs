@@ -89,6 +89,7 @@ impl Manager {
             Forwarding::Queued => Delivery::Queued,
             _ => Delivery::Now,
         };
+        let method = left_caller_machine(method)?;
         let name = shoal_protocol::protocol::name_of(Ok(method.clone()));
         if attaches_files(&method) {
             let message = format!(
@@ -151,6 +152,14 @@ impl Manager {
             chat_modes,
         }))
     }
+}
+
+/// The request `method` without what belongs to this machine, such as an
+/// environment, which the machine it goes to has its own of.
+fn left_caller_machine(method: serde_json::Value) -> Result<serde_json::Value> {
+    let mut operation: shoal_protocol::protocol::Operation = serde_json::from_value(method)?;
+    operation.leave_caller_machine();
+    Ok(serde_json::to_value(operation)?)
 }
 
 /// Whether the request `method` attaches files by their path on this

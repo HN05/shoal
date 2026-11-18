@@ -22,6 +22,15 @@ pub enum Forwarding {
 }
 
 impl Operation {
+    /// Leave out what belongs to the caller's machine before the request
+    /// goes to another: an approval's environment, where the owning
+    /// machine pushes in its daemon's own.
+    pub fn leave_caller_machine(&mut self) {
+        if let Self::Approval(ApprovalMethod::DecideApproval { env, .. }) = self {
+            *env = None;
+        }
+    }
+
     pub fn forwarding(&self) -> Forwarding {
         if self.waits_for_machine() {
             Forwarding::Queued
