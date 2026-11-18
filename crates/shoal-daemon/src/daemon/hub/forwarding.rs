@@ -56,6 +56,11 @@ impl Manager {
             Ok(None) => return None,
             // A space several machines have is refused as such.
             Err(error) if Reason::of(&error).is_some() => return Some(Err(error)),
+            // A follow its client opens again, as after the hub restarted,
+            // waits for the hub to answer.
+            Err(error) if request.forwarding == Forwarding::Streamed => {
+                return Some(Err(Refusal::wrap(Reason::MachineUnreachable, error)));
+            }
             Err(error) => {
                 crate::daemon::log!("hub: could not find the machine of space {space}: {error:#}");
                 return None;

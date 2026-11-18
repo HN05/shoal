@@ -162,12 +162,17 @@ fn a_machine_follows_a_session_on_a_third_machine_as_its_tool_writes_it() {
     });
 }
 
-/// Follow `session` from `follower`, restart the laptop's daemon while
-/// the follow reads, and check that it goes on with only what the
-/// transcript gained since.
-fn follows_on_across_a_restart_of_the_laptop(session: &mut Session, follower: Connector) {
+/// A follow of [`Session`] that read the transcript's first line, which a
+/// test then restarts a daemon below.
+struct Reading {
+    runtime: tokio::runtime::Runtime,
+    follow: SessionFollow<Connector>,
+}
+
+/// Follow `session` from `follower` until it read the transcript so far.
+fn reading(session: &Session, follower: Connector) -> Reading {
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    let mut follow = runtime.block_on(async {
+    let follow = runtime.block_on(async {
         let mut follow = follow_session(follower, selected(session), None)
             .await
             .unwrap();
@@ -175,34 +180,58 @@ fn follows_on_across_a_restart_of_the_laptop(session: &mut Session, follower: Co
         bytes_until(&mut follow, &mut Vec::new(), &first_turn()).await;
         follow
     });
-    session.laptop.restart();
-    let second = second_turn(session);
-    let next = runtime.block_on(follow.next()).unwrap();
-    let Followed::Bytes { offset, bytes, .. } = next else {
-        panic!("expected only what the transcript gained, got {next:?}");
-    };
-    assert_eq!(
-        (offset, bytes.as_slice()),
-        (first_turn().len() as u64, second)
-    );
+    Reading { runtime, follow }
+}
+
+impl Reading {
+    /// Check that the follow goes on with only what `session`'s transcript
+    /// gains from now on.
+    fn goes_on(mut self, session: &Session) {
+        let second = second_turn(session);
+        let next = self.runtime.block_on(self.follow.next()).unwrap();
+        let Followed::Bytes { offset, bytes, .. } = next else {
+            panic!("expected only what the transcript gained, got {next:?}");
+        };
+        assert_eq!(
+            (offset, bytes.as_slice()),
+            (first_turn().len() as u64, second)
+        );
+    }
 }
 
 #[test]
 fn a_follow_goes_on_from_where_it_read_after_a_daemon_restart() {
     let hub = machine(true, "app");
     let mut session = laptop_session(&hub);
-    let follower = app(&session.laptop);
-    follows_on_across_a_restart_of_the_laptop(&mut session, follower);
+    let reading = reading(&session, app(&session.laptop));
+    session.laptop.restart();
+    reading.goes_on(&session);
+}
+
+/// The hub and a laptop with [`Session`], and a desk that follows it
+/// through the hub until it read the transcript so far.
+fn followed_from_the_desk() -> (Base, Session, Base, Reading) {
+    let hub = machine(true, "app");
+    let session = laptop_session(&hub);
+    let desk = machine(false, "app");
+    join(&desk, &hub, "desk");
+    listed(&desk, &session.space, &session.laptop_id);
+    let reading = reading(&session, app(&desk));
+    (hub, session, desk, reading)
 }
 
 #[test]
 fn a_follow_through_the_hub_goes_on_once_the_restarted_machine_rejoins() {
-    let hub = machine(true, "app");
-    let mut session = laptop_session(&hub);
-    let desk = machine(false, "app");
-    join(&desk, &hub, "desk");
-    listed(&desk, &session.space, &session.laptop_id);
-    follows_on_across_a_restart_of_the_laptop(&mut session, app(&desk));
+    let (_hub, mut session, _desk, reading) = followed_from_the_desk();
+    session.laptop.restart();
+    reading.goes_on(&session);
+}
+
+#[test]
+fn a_follow_through_the_hub_goes_on_once_the_hub_is_back() {
+    let (mut hub, session, _desk, reading) = followed_from_the_desk();
+    hub.restart();
+    reading.goes_on(&session);
 }
 
 #[test]
