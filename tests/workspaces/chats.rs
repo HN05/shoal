@@ -1621,6 +1621,60 @@ fn a_workspaces_agent_reads_the_issue_it_adds_or_plans_in_its_workspace() {
     assert!(planned.status.success(), "{}", printed(&planned));
 }
 
+/// A chat's agent plans an issue in a chat below its own: both the chat's
+/// start and the background place that starts the new chat's agent read the
+/// issue.
+#[test]
+fn a_chats_agent_plans_an_issue_in_a_chat_below_it() {
+    let fixture = Fixture::with_config(Some(
+        "[machine.overload.disk]\nenabled = false\n\
+         [agents.claude]\ncommand = ['sh', './chat-agent.sh']\n",
+    ));
+    fixture.add_github_origin();
+    fixture.script_github(&github_issue(12, "Clarify retries", "Retry twice."));
+    let home = fixture.root.path();
+    install_test_script(home.join("bin").join("zmx"), terminal_zmx());
+    fs::write(
+        fixture.repo.join("chat-agent.sh"),
+        format!(
+            "shoal='{}'\n\
+             echo \"$SHOAL_SPACE\" >> \"$HOME/chats-started\"\n\
+             if [ ! -e \"$HOME/plan-started\" ]; then\n\
+             touch \"$HOME/plan-started\"\n\
+             \"$shoal\" start --mode plan --issue 12 --agent claude </dev/null > \"$HOME/plan\" 2>&1\n\
+             echo $? > \"$HOME/plan-status\"\n\
+             fi\n\
+             trap 'exit 0' TERM\n\
+             while :; do sleep 1; done\n",
+            support::shoal_binary()
+        ),
+    )
+    .unwrap();
+    let started = fixture
+        .command()
+        .current_dir(&fixture.repo)
+        .args([
+            "start", "--mode", "chat", "--agent", "claude", "--name", "planning",
+        ])
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    assert!(started.status.success(), "{}", printed(&started));
+    let status = wait_for("the planning chat's start of the plan", || {
+        (fs::read_to_string(home.join("plan-status")).ok()).filter(|status| status.ends_with('\n'))
+    });
+    let output = fs::read_to_string(home.join("plan")).unwrap_or_default();
+    assert_eq!(status.trim(), "0", "{output}");
+    wait_until("the plan's agent", || {
+        fs::read_to_string(home.join("chats-started")).is_ok_and(|ids| ids.lines().count() == 2)
+    });
+    let chats = fixture.ok(&["list", "--chats"]);
+    let plan = (chats.as_array().into_iter().flatten())
+        .find(|chat| chat["name"] == "Clarify retries")
+        .unwrap_or_else(|| panic!("{chats}"));
+    assert_eq!(plan["parent"]["name"], "planning", "{chats}");
+}
+
 /// A background place may still run below its scoped starter's processes,
 /// so it takes the scope token its starter hands it before its own scope is
 /// checked, and reports to the starter whatever stops the chat.
