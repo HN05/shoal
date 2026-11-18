@@ -9,7 +9,10 @@ use shoal_refs::BranchName;
 
 use super::LaunchReads;
 use crate::{
-    forge::{ForgeRepo, PullRequest, items::reference::ItemRef},
+    forge::{
+        ForgeRepo, PullRequest,
+        items::{issue::IssueDetails, reference::ItemRef},
+    },
     git,
     model::{Repository, Workspace},
     protocol::PullHead,
@@ -266,6 +269,24 @@ async fn branches(
 ) -> Result<(Option<(String, BranchName)>, Vec<BranchName>)> {
     let remote = git::remote_branch(&repo.path, name).await?;
     Ok((remote, git::branch::names_in_use(&repo.path).await?))
+}
+
+/// `creation` on the branch `issue` settles in `repo` when nothing else
+/// names one: the branch or workspace earlier work on it left, else a new
+/// branch named after it.
+pub async fn issue_settled(
+    reads: &impl LaunchReads,
+    repo: &Repository,
+    creation: Creation,
+    issue: Option<&IssueDetails>,
+) -> Result<Creation> {
+    match issue {
+        Some(issue) if creation.unsettled() => {
+            let branch = issue_branch(issue.number.get(), &issue.title);
+            issue_creation(reads, repo, creation, (branch, &issue.url)).await
+        }
+        _ => Ok(creation),
+    }
 }
 
 /// `creation` on the branch `name` of an issue at `issue_url`: the local

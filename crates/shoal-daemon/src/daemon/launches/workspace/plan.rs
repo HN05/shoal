@@ -1,17 +1,15 @@
 //! What a launch of a new workspace plans once its target is known: the
-//! agent it starts, the issue it starts on, and the branch that issue
-//! settles, as a start without a terminal to pick them chooses.
+//! agent it starts and the issue it starts on, as a start without a
+//! terminal to pick them chooses.
 use anyhow::{Result, ensure};
 use shoal_protocol::launches::Launch;
 
-use super::{ManagerReads, target::Target};
+use super::target::Target;
 use crate::{
     agent::{Agent, ModelChoice},
     config::Effective,
     daemon::{scope::Caller, workspace::Manager},
     forge::items::{issue::IssueDetails, reference::ItemInput},
-    launches::workspace,
-    model::Repository,
     start_plan::Creation,
 };
 
@@ -77,24 +75,6 @@ impl Manager {
         Ok(Some(
             self.issue_details(&context, issue, false, caller).await?,
         ))
-    }
-}
-
-/// `creation` on the branch `issue` settles in `repo` when nothing else
-/// names one: the branch or workspace earlier work on it left, else a new
-/// branch named after it.
-pub(super) async fn issue_settled(
-    reads: &ManagerReads<'_>,
-    repo: &Repository,
-    creation: Creation,
-    issue: Option<&IssueDetails>,
-) -> Result<Creation> {
-    match issue {
-        Some(issue) if creation.unsettled() => {
-            let branch = workspace::issue_branch(issue.number.get(), &issue.title);
-            workspace::issue_creation(reads, repo, creation, (branch, &issue.url)).await
-        }
-        _ => Ok(creation),
     }
 }
 
