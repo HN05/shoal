@@ -245,8 +245,9 @@ pub enum PrCommand {
     },
     /// Review a PR: a body, comments on lines of its diff and a verdict.
     ///
-    /// Workspace processes can only comment; approving and requesting
-    /// changes use your own login.
+    /// Approving and requesting changes use your own login; a workspace
+    /// process gives them as the host's `review_token`, as its `pr_review`
+    /// permission allows.
     Review {
         #[command(flatten)]
         item: ItemSelector,

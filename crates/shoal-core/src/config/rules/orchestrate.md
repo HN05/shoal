@@ -38,8 +38,8 @@ Approve a request of a space below you with `shoal approvals --approve <S.N>`,
 and a proposed issue or PR with `--title` or `--body` to edit it first, deny
 it with `shoal approvals --deny <S.N>`, with `--reason` or `--duplicate-of`
 for a proposal, or pass it to the user with `shoal approvals --escalate <S.N>`
-when the user should decide it. You cannot approve or request changes on a PR;
-ask the user with `shoal alerts send`.
+when the user should decide it. `shoal pr review --approve` and
+`--request-changes` follow your `pr_review` permission.
 
 Every registered repository counts as your own. Name the one a command acts in
 with `--repo <repository>` or an issue or PR URL: `shoal issue ls`,

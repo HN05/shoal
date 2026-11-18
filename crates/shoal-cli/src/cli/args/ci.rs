@@ -32,7 +32,8 @@ pub enum CiCommand {
         target: Target,
     },
     /// Approve a run that waits for approval, or every waiting run on a PR's
-    /// head, with your own login; workspace processes cannot.
+    /// head, with your own login; a workspace process approves as the agent
+    /// account, as its `ci_approve` permission allows.
     ///
     /// Forges hold the runs of PRs from forks and first-time contributors
     /// until a maintainer approves them.
