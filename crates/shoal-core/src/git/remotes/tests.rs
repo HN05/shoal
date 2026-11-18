@@ -82,6 +82,59 @@ async fn remotes_read_in_a_reftable_repository() {
     remote_reads(reftable_repository).await;
 }
 
+/// Upstream reads of branches in a repository `create` makes.
+async fn upstream_reads(create: Create) {
+    let root = tempfile::tempdir().unwrap();
+    let repo = create(root.path(), "repo");
+    git(
+        &repo,
+        &["remote", "add", "origin", "https://example.com/app"],
+    );
+    git(&repo, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    git(&repo, &["branch", "--track", "tracked", "origin/main"]);
+    git(&repo, &["branch", "--track", "local", "main"]);
+    git(&repo, &["branch", "plain"]);
+    let at = repo.as_path();
+    let upstream = move |name: &str| {
+        let reference = format!("refs/heads/{name}");
+        async move { upstream(at, &reference).await.unwrap() }
+    };
+    let tracked = Upstream {
+        remote: "origin".into(),
+        merge: "refs/heads/main".into(),
+        tracking: "refs/remotes/origin/main".into(),
+    };
+    assert_eq!(upstream("tracked").await, Some(tracked));
+    let local = Upstream {
+        remote: ".".into(),
+        merge: "refs/heads/main".into(),
+        tracking: "refs/heads/main".into(),
+    };
+    assert_eq!(upstream("local").await, Some(local));
+    assert_eq!(upstream("plain").await, Some(Upstream::default()));
+    assert_eq!(upstream("missing").await, None);
+    // A branch no fetch refspec stores has no tracking ref.
+    git(
+        &repo,
+        &[
+            "config",
+            "remote.origin.fetch",
+            "+refs/heads/other:refs/remotes/origin/other",
+        ],
+    );
+    assert_eq!(upstream("tracked").await.unwrap().tracking, "");
+}
+
+#[tokio::test]
+async fn upstreams_read_in_a_repository_with_its_refs_in_files() {
+    upstream_reads(repository).await;
+}
+
+#[tokio::test]
+async fn upstreams_read_in_a_reftable_repository() {
+    upstream_reads(reftable_repository).await;
+}
+
 #[tokio::test]
 async fn a_remote_named_in_a_remotes_file_is_read_as_git_reads_it() {
     let root = tempfile::tempdir().unwrap();

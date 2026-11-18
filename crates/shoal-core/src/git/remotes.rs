@@ -1,4 +1,4 @@
-//! A repository's remotes and their URLs,
+//! A repository's remotes, their URLs and the upstreams of its branches,
 //! read from its configuration in this process where the
 //! [`reader`](super::reader) reads the repository, else by Git.
 use std::path::Path;
@@ -162,6 +162,94 @@ pub async fn push_remote(repo: &Path, branch: &BranchName) -> Result<String> {
         }
     }
     Ok("origin".into())
+}
+
+/// What a local branch's configuration says it tracks.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct Upstream {
+    /// `branch.<name>.remote`: a remote's name, or `.` for a local branch.
+    pub(crate) remote: String,
+    /// `branch.<name>.merge`: the full name of the branch on that remote.
+    pub(crate) merge: String,
+    /// The ref that tracks it here, as the remote's fetch refspecs map it,
+    /// or the local branch itself; empty when none does.
+    pub(crate) tracking: String,
+}
+
+/// The upstream of the local branch `reference`, a full name, as `git
+/// for-each-ref`'s `upstream` fields show it, each empty where it is not
+/// configured; `None` when the branch does not exist.
+pub(crate) async fn upstream(repo: &Path, reference: &str) -> Result<Option<Upstream>> {
+    let owned = reference.to_owned();
+    let in_process = move |repo: &gix::Repository| {
+        if !super::refs::exists_in_process(repo, &owned)? {
+            return Ok(None);
+        }
+        let branch = super::strip_local(&owned).unwrap_or(&owned);
+        Ok(Some(upstream_in_process(&repo.config_snapshot(), branch)))
+    };
+    let git = async |repo: &Path| upstream_from_git(repo, reference).await;
+    reader::read(repo, in_process, git).await
+}
+
+fn upstream_in_process(config: &gix::config::Snapshot<'_>, branch: &str) -> Upstream {
+    let file = config.plumbing();
+    let remote = file.string(format!("branch.{branch}.remote").as_str());
+    let merge = file.strings(format!("branch.{branch}.merge").as_str());
+    let remote = remote.map(|remote| remote.to_string()).unwrap_or_default();
+    let merge = merge.and_then(|merge| merge.first().map(|merge| merge.to_string()));
+    let merge = merge.unwrap_or_default();
+    let tracking = match remote.as_str() {
+        _ if merge.is_empty() => String::new(),
+        "" => String::new(),
+        "." => merge.clone(),
+        remote => {
+            let refspecs = file.strings(format!("remote.{remote}.fetch").as_str());
+            let refspecs = refspecs.unwrap_or_default();
+            let mapped = refspecs
+                .iter()
+                .find_map(|refspec| mapped(&refspec.to_string(), &merge));
+            mapped.unwrap_or_default()
+        }
+    };
+    Upstream {
+        remote,
+        merge,
+        tracking,
+    }
+}
+
+/// Where the fetch refspec `refspec` stores the remote ref `name`, if it
+/// fetches it: its destination, with a `*` standing for what the source's
+/// `*` matched.
+fn mapped(refspec: &str, name: &str) -> Option<String> {
+    let (source, destination) = refspec.trim_start_matches('+').split_once(':')?;
+    if refspec.starts_with('^') || destination.is_empty() {
+        return None;
+    }
+    match source.split_once('*') {
+        None => (source == name).then(|| destination.to_owned()),
+        Some((prefix, suffix)) => {
+            let matched = name.strip_prefix(prefix)?.strip_suffix(suffix)?;
+            Some(destination.replacen('*', matched, 1))
+        }
+    }
+}
+
+/// The [`Upstream`] Git lists for `reference` in `repo`.
+async fn upstream_from_git(repo: &Path, reference: &str) -> Result<Option<Upstream>> {
+    let format =
+        "--format=%(refname)%00%(upstream:remotename)%00%(upstream:remoteref)%00%(upstream)";
+    let listed = run(repo, &["for-each-ref", format, reference]).await?;
+    // The pattern also matches branches nested under the name.
+    Ok(listed.lines().find_map(|line| {
+        let mut fields = line.split('\0');
+        (fields.next()? == reference).then(|| Upstream {
+            remote: fields.next().unwrap_or_default().to_owned(),
+            merge: fields.next().unwrap_or_default().to_owned(),
+            tracking: fields.next().unwrap_or_default().to_owned(),
+        })
+    }))
 }
 
 #[cfg(test)]

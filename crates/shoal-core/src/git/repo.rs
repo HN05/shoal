@@ -12,22 +12,12 @@ use crate::{
 
 /// The `(remote, refs/heads/...)` upstream of a local branch, if configured.
 pub async fn upstream(repo: &Repository, local_ref: &str) -> Result<Option<(String, String)>> {
-    let upstream = git_run(
-        &repo.path,
-        &[
-            "for-each-ref",
-            "--format=%(upstream:remotename)%00%(upstream:remoteref)",
-            local_ref,
-        ],
-    )
-    .await?;
-    let (remote, reference) = upstream
-        .trim_end_matches('\n')
-        .split_once('\0')
-        .context("invalid Git upstream")?;
+    let upstream = git::upstream(&repo.path, local_ref)
+        .await?
+        .with_context(|| format!("{local_ref} does not exist"))?;
     Ok(
-        (!remote.is_empty() && git::strip_local(reference).is_some())
-            .then(|| (remote.to_owned(), reference.to_owned())),
+        (!upstream.remote.is_empty() && git::strip_local(&upstream.merge).is_some())
+            .then_some((upstream.remote, upstream.merge)),
     )
 }
 

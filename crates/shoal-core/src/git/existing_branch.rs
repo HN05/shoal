@@ -55,16 +55,13 @@ pub async fn list(repo: &Path) -> Result<Vec<Branch>> {
     Ok(branches)
 }
 
+/// The ref that tracks the local branch `name`'s upstream here; empty when
+/// it has none or the branch does not exist.
 pub async fn upstream_ref(repo: &Path, name: &BranchName) -> Result<String> {
-    git::run_isolated(
-        repo,
-        &[
-            "for-each-ref",
-            "--format=%(upstream)",
-            &git::local_ref(name),
-        ],
-    )
-    .await
+    let upstream = git::upstream(repo, &git::local_ref(name)).await?;
+    Ok(upstream
+        .map(|upstream| upstream.tracking)
+        .unwrap_or_default())
 }
 
 /// The remote-tracking ref of `default`'s upstream as its remote's fetch

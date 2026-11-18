@@ -169,23 +169,12 @@ pub(crate) async fn default_refs(repo: &Path, default: &DefaultBranch) -> Result
 /// The upstream the existing local branch `reference` tracks, empty when it
 /// tracks none, or `None` when the branch does not exist.
 async fn upstream_of(repo: &Path, reference: &str) -> Result<Option<String>> {
-    let listed = run(
-        repo,
-        &[
-            "for-each-ref",
-            "--format=%(refname)%00%(upstream)",
-            reference,
-        ],
-    )
-    .await?;
-    let upstream = listed.lines().find_map(|line| {
-        let (name, upstream) = line.split_once('\0')?;
-        (name == reference).then(|| upstream.to_owned())
-    });
-    // for-each-ref skips a broken ref with only a warning, where `show-ref`
-    // fails, so `show-ref` confirms a branch the listing left out.
+    let upstream = super::upstream(repo, reference).await?;
+    let upstream = upstream.map(|upstream| upstream.tracking);
+    // A listing skips a broken ref with only a warning, where an existence
+    // check fails, so the check confirms a branch the listing left out.
     if upstream.is_none() && super::ref_exists(repo, reference).await? {
-        bail!("git for-each-ref did not list {reference}");
+        bail!("the upstream of {reference} could not be read");
     }
     Ok(upstream)
 }
