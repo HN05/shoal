@@ -297,7 +297,7 @@ fn chain_from(directory: &Directory, first: SpaceId) -> Vec<SpaceId> {
 
 /// Whether a space in `status` takes children: a workspace only once it is
 /// ready, while it is not being changed or removed.
-fn takes_children(status: ListStatus) -> bool {
+pub(super) fn takes_children(status: ListStatus) -> bool {
     !matches!(
         status,
         ListStatus::Preparing

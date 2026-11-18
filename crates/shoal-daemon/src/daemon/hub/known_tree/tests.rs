@@ -14,6 +14,9 @@ fn a_kept_tree_reads_back_with_its_machines_and_parents() {
             "machine": "laptop", "id": "child", "number": 4, "name": "child",
             "kind": "workspace", "parent": "coordinator", "status": "working",
             "reported_at": 3,
+        }, {
+            "machine": "laptop", "id": "going", "number": 5, "name": "going",
+            "kind": "workspace", "status": "removing", "reported_at": 3,
         }],
     }))
     .unwrap();

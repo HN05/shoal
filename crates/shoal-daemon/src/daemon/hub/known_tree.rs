@@ -40,6 +40,10 @@ struct KnownSpace {
     repository: Option<RepositoryOrigin>,
     parent: Option<SpaceId>,
     machine: MemberId,
+    /// What it was doing where that keeps it from taking children, as while
+    /// it is prepared or removed, else none, so the tree changes only as
+    /// that does.
+    unready: Option<ListStatus>,
 }
 
 impl Known {
@@ -58,6 +62,8 @@ impl Known {
                     repository: listed.space.repository.clone(),
                     parent: listed.space.parent.clone(),
                     machine: listed.machine.clone(),
+                    unready: (!super::tree::takes_children(listed.space.status))
+                        .then_some(listed.space.status),
                 })
                 .collect(),
         }
@@ -99,7 +105,7 @@ fn listed(space: KnownSpace) -> Listed {
             repository: space.repository,
             parent: space.parent,
             mode: None,
-            status: ListStatus::Inactive,
+            status: space.unready.unwrap_or(ListStatus::Inactive),
             agent_state: None,
             agent: false,
             permissions: None,
