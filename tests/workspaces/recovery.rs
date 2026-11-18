@@ -62,36 +62,40 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
     let workspace = fixture.add("restarted");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     install_fake_agent(&path);
-    let spawn = |args: &[&str]| {
-        fixture
-            .command()
-            .args(args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .unwrap()
-    };
-    let mut agent = spawn(&[
-        "start",
-        "--in",
-        &fixture.id("restarted"),
-        "--here",
-        "--agent",
-        "claude",
-    ]);
-    let mut command = spawn(&[
-        "run",
-        "--workspace",
-        &fixture.id("restarted"),
-        "--",
-        "sh",
-        "-c",
-        "touch command-started; while [ ! -f release ]; do sleep 0.1; done; touch command-exited; exit 3",
-    ]);
-    wait_until("executions to start", || {
-        path.join("agent-started").exists() && path.join("command-started").exists()
-    });
+    let workspace_id = fixture.id("restarted");
+    let mut launches = [
+        Launch::spawn(
+            &fixture,
+            "agent",
+            Some("claude"),
+            &[
+                "start",
+                "--in",
+                &workspace_id,
+                "--here",
+                "--agent",
+                "claude",
+            ],
+            path.join("agent-started"),
+        ),
+        Launch::spawn(
+            &fixture,
+            "command",
+            None,
+            &[
+                "run",
+                "--workspace",
+                &workspace_id,
+                "--",
+                "sh",
+                "-c",
+                "touch command-started; while [ ! -f release ]; do sleep 0.1; done; touch command-exited; exit 3",
+            ],
+            path.join("command-started"),
+        ),
+    ];
+    Launch::wait_started(&fixture, &workspace_id, &mut launches);
+    let [agent, command] = &mut launches;
     let state = fixture
         .root
         .path()
@@ -112,7 +116,7 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
         saved
     };
     let running = |fixture: &Fixture| {
-        fixture.ok(&["status", &fixture.id("restarted")])["executions"]
+        fixture.ok(&["status", &workspace_id])["executions"]
             .as_array()
             .unwrap()
             .iter()
@@ -124,26 +128,31 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
     let exited = fixture.raw_request(0, 1, serde_json::json!({"exit": "restart"}));
     assert_eq!(exited["type"], "ok", "{exited}");
     assert!(fixture.daemon.child.wait().unwrap().success());
-    assert!(agent.try_wait().unwrap().is_none());
-    assert!(command.try_wait().unwrap().is_none());
+    assert!(agent.exited().is_none(), "{}", agent.printed());
+    assert!(command.exited().is_none(), "{}", command.printed());
     assert!(saved().is_empty(), "{:?}", saved());
     // A command that exits while the daemon is away reports to the next one.
     fs::write(path.join("release"), "").unwrap();
     wait_until("command to exit", || path.join("command-exited").exists());
     fixture.restart();
-    assert_eq!(command.wait().unwrap().code(), Some(3));
+    assert_eq!(
+        command.wait_exited().code(),
+        Some(3),
+        "{}",
+        command.printed()
+    );
     wait_until("agent to reattach", || running(&fixture) == 1);
     // A crash leaves the agent running too.
     fixture.restart();
-    assert!(agent.try_wait().unwrap().is_none());
+    assert!(agent.exited().is_none(), "{}", agent.printed());
     wait_until("agent to reattach after a crash", || running(&fixture) == 1);
     // Stopping works again and the daemon still knows the agent, which stays
     // down as a last session.
-    fixture.ok(&["stop", &fixture.id("restarted")]);
-    assert!(agent.wait().unwrap().success());
+    fixture.ok(&["stop", &workspace_id]);
+    assert!(agent.wait_exited().success(), "{}", agent.printed());
     assert_eq!(saved(), [".last-session.json"]);
     assert!(
-        fixture.ok(&["status", &fixture.id("restarted")])["executions"]
+        fixture.ok(&["status", &workspace_id])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
