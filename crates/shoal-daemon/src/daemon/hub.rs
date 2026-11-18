@@ -21,6 +21,7 @@ mod listener;
 mod member;
 mod members;
 mod membership;
+pub(crate) mod numbering;
 mod owners;
 mod pairing;
 mod pieces;

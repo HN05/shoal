@@ -62,7 +62,8 @@ impl Manager {
     }
 
     /// Report the hub's own machine's spaces to its directory while this
-    /// daemon takes the hub role, until the daemon stops.
+    /// daemon takes the hub role, until the daemon stops; while it does
+    /// not, number them on its own unless it joined a hub.
     pub(super) async fn report_own_spaces(&self) {
         let mut reloaded = self.config_state.watch();
         loop {
@@ -85,8 +86,13 @@ impl Manager {
                         }
                     }
                 }
-            } else if reloaded.changed().await.is_err() {
-                return;
+            } else {
+                if let Err(error) = self.forget_numbering_unless_joined().await {
+                    log!("hub: could not stop numbering from the hub's sequence: {error:#}");
+                }
+                if reloaded.changed().await.is_err() {
+                    return;
+                }
             }
             reloaded.borrow_and_update();
         }
@@ -104,14 +110,17 @@ impl Manager {
         }
     }
 
+    /// Send `report` to `sink`, and number this machine's new spaces from
+    /// what the hub answers.
     async fn report(&self, sink: &Sink<'_>, report: Report) -> Result<()> {
-        match sink {
-            Sink::Hub(own) => self.record_report(own, report).await.map(drop),
+        let numbering = match sink {
+            Sink::Hub(own) => self.record_report(own, report).await?,
             Sink::Link(calls) => match calls.call(Call::Report(report)).await? {
-                Reply::Reported(_) => Ok(()),
-                reply => Err(anyhow!("the hub answered with an unexpected {reply:?}")),
+                Reply::Reported(numbering) => numbering,
+                reply => return Err(anyhow!("the hub answered with an unexpected {reply:?}")),
             },
-        }
+        };
+        self.take_numbering(numbering).await
     }
 }
 

@@ -16,6 +16,7 @@ use crate::{
         hub::{
             identity::{Identity, KeyPair},
             membership::{self, Joined},
+            numbering,
         },
         workspace::Manager,
     },
@@ -126,7 +127,12 @@ impl Manager {
             return Err(Refusal::new(Reason::NotFound, "this machine joined no hub").into());
         };
         let revoked = joined.revoked || self.through_hub(Call::Leave).await.is_ok();
-        self.store.write(membership::forget).await?;
+        (self.store)
+            .write(|tx| {
+                membership::forget(tx)?;
+                numbering::forget_unless_joined(tx)
+            })
+            .await?;
         self.hub.member.wake.notify_one();
         Ok(Left {
             membership: joined.membership,

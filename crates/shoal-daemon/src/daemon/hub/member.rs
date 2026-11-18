@@ -19,6 +19,7 @@ use tokio::sync::Notify;
 use super::{
     identity::Identity,
     membership::{self, Joined},
+    numbering,
     session::{self, Calls, End},
     shown,
 };
@@ -356,7 +357,10 @@ impl Manager {
     async fn record_revoked(&self, member: &MemberId) -> Result<()> {
         let member = member.clone();
         self.store
-            .write(move |tx| membership::revoked(tx, &member))
+            .write(move |tx| {
+                membership::revoked(tx, &member)?;
+                numbering::forget_unless_joined(tx)
+            })
             .await
     }
 

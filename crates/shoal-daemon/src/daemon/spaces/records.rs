@@ -10,7 +10,7 @@ use shoal_protocol::space_names::SpaceName;
 
 use crate::{
     config::{modes::ModeName, permissions::PermissionsConfig},
-    daemon::store,
+    daemon::{hub::numbering, store},
     model::SpaceKind,
 };
 
@@ -20,8 +20,9 @@ pub(crate) struct NewSpace<'a> {
     pub kind: SpaceKind,
     pub repository_id: Option<&'a RepositoryId>,
     pub name: &'a SpaceName,
-    /// The number it keeps, as a restored space does; 0 takes the smallest
-    /// one free.
+    /// The number it keeps, as a restored space does; 0 takes the next one
+    /// of the hub's sequence on a machine of a hub, and else the smallest
+    /// one free here.
     pub number: SpaceNumber,
     pub mode: Option<&'a ModeName>,
     pub narrowing: &'a PermissionsConfig,
@@ -32,6 +33,12 @@ pub(crate) struct NewSpace<'a> {
 /// Record `space`, whose kind's row is already recorded, and return its
 /// number.
 pub(crate) fn record(tx: &Transaction<'_>, space: &NewSpace<'_>) -> Result<SpaceNumber> {
+    // The trigger that numbers a recorded space gives one recorded with 0
+    // the smallest number free.
+    let number = match space.number.get() {
+        0 => numbering::next(tx)?.unwrap_or_default(),
+        _ => space.number,
+    };
     tx.execute(
         "INSERT INTO spaces(id,kind,repository_id,name,number,mode,narrowing,created_at)
          VALUES (?1,?2,?3,?4,NULLIF(?5,0),?6,?7,?8)",
@@ -40,7 +47,7 @@ pub(crate) fn record(tx: &Transaction<'_>, space: &NewSpace<'_>) -> Result<Space
             space.kind,
             space.repository_id,
             space.name,
-            space.number,
+            number,
             space.mode,
             store::narrowing_column(space.narrowing)?,
             space.created_at,
