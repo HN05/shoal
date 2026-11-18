@@ -5,7 +5,6 @@
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
-use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
 
@@ -24,7 +23,7 @@ use crate::{
     },
     execution::recovery::{self, LastSession, LastSessionExt},
     sessions::Origin,
-    state::{AgentState, WorkspaceState},
+    state::WorkspaceState,
 };
 
 /// How a stop of a converting workspace's agents settles its conversion.
@@ -33,25 +32,6 @@ pub(crate) struct ConversionStop {
     /// Whether the stop keeps them down until `shoal restore`, which keeps the
     /// chat a conversion makes of the workspace stopped too.
     pub holds: bool,
-}
-
-/// How often the pending conversions are looked at besides when an agent's
-/// state changes, for a workspace whose setup finished meanwhile.
-const RECHECK: Duration = Duration::from_secs(5);
-
-/// Restart the agents of converted spaces in their new places as their
-/// turns end, one after another.
-pub(crate) async fn run(manager: Arc<Manager>) {
-    let mut agents = manager.signals.watch_agents();
-    loop {
-        if let Err(error) = manager.relocate_finished_turns().await {
-            log!("conversions: {error:#}");
-        }
-        tokio::select! {
-            _ = agents.changed() => {}
-            () = tokio::time::sleep(RECHECK) => {}
-        }
-    }
 }
 
 impl Manager {
@@ -82,7 +62,7 @@ impl Manager {
         let Some(pending) = pending else {
             return Ok(());
         };
-        if !self.turn_ended(id, &pending).await? {
+        if !self.ready_to_relocate(id, &pending).await? {
             return Ok(());
         }
         // Read again once the turn ended, with the reports that change it,
@@ -119,13 +99,7 @@ impl Manager {
     /// turn, or its process its run, and the new place is ready to take it:
     /// a new workspace once it is ready, after its setup or the repair of a
     /// setup that failed.
-    async fn turn_ended(&self, id: &SpaceId, pending: &Pending) -> Result<bool> {
-        let space = id.to_owned();
-        let state = self
-            .store
-            .run(move |db| crate::daemon::workspace::agent_state::current(db, &space))
-            .await?;
-        let idle = state.is_some_and(|status| status.state == AgentState::Idle);
+    async fn ready_to_relocate(&self, id: &SpaceId, pending: &Pending) -> Result<bool> {
         match pending {
             Pending::Workspace {
                 preparation,
@@ -139,12 +113,10 @@ impl Manager {
                 {
                     return Ok(false);
                 }
-                let running = self.running_agents().await?;
-                Ok(idle || !running.iter().any(|agent| agent.space_id == *id))
+                self.turn_ended(id, |agent| agent.space_id == *id).await
             }
             Pending::Chat { chat, .. } => {
-                let running = self.running_agents().await?;
-                Ok(idle || !running.iter().any(|agent| agent.ran_as(&chat.execution)))
+                (self.turn_ended(id, |agent| agent.ran_as(&chat.execution))).await
             }
         }
     }

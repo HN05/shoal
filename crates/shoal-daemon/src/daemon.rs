@@ -79,6 +79,7 @@ pub(crate) mod test_daemon;
 pub(crate) mod test_support;
 mod tmp_dirs;
 pub(crate) mod triggers;
+mod turn_ends;
 mod untracked;
 pub(crate) mod wake_timers;
 mod warnings;
@@ -226,7 +227,7 @@ pub async fn run(
         "lost hook reports",
         workspace::lost_reports::run,
     );
-    spawn_supervised(&mut background, &manager, "conversions", conversions::run);
+    spawn_supervised(&mut background, &manager, "turn ends", turn_ends::run);
     spawn_supervised(
         &mut background,
         &manager,
