@@ -178,6 +178,7 @@ const REQUESTS: &[&str] = &[
     r#"{"merged_pull":{"space":"fix","item":null}}"#,
     r#"{"open_issue":{"space":{"space":"fix"},"issue":{"title":"Bug","body":"","labels":[],"assignees":[],"milestone":null,"attachments":[]},"link":false}}"#,
     r#"{"merge_warning":{"space":{"space":"fix"},"item":"7"}}"#,
+    r#"{"merge_path":{"space":"fix"}}"#,
     r#"{"item_action":{"space":{"space":"fix"},"kind":"pr","item":"7","action":{"action":"merge","method":"squash","delete_branch":false},"confirmed":{"warning":{"subject":"PR #7","target":"main","files":["version"]}}}}"#,
     r#"{"list_items":{"repository":"https://forge.example/team/tool","kind":"issue","search":{"state":"open","labels":[],"author":null,"text":"crash","matching":"both","limit":30}}}"#,
     r#"{"labels":{"space":{"space":"fix"},"repository":"team/tool"}}"#,

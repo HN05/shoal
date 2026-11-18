@@ -88,6 +88,9 @@ pub enum ItemMethod {
         target: RepoTarget,
         item: Option<crate::forge::items::reference::ItemInput>,
     },
+    /// How `shoal merge` merges the space's work, from the open PRs it
+    /// links as assigned or opened.
+    MergePath { space: SpaceSelector },
     /// Change an issue or PR of the target repository: the one `item`
     /// names, or the workspace's linked one of `kind`.
     ItemAction {

@@ -286,6 +286,7 @@ response_bodies! {
     Conflicts(ConflictCheck),
     MergeWarning(Option<crate::model::MergeWarning>),
     MergePreview(crate::model::MergePreview),
+    MergePath(crate::model::MergePath),
     Hook(Option<std::path::PathBuf>),
     LayeredConfig(super::RepositoryLayers),
     SyncedRepository(SyncedRepository),

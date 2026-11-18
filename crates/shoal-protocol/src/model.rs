@@ -33,7 +33,7 @@ pub use links::{
     Assigner, IssueAssignee, LinkedItem, Relation, Selected, SelectedItem, SpaceLinks,
 };
 pub use merges::{
-    MergeConfirmation, MergeOptions, MergePlan, MergePreview, MergePush, MergedBranch,
+    MergeConfirmation, MergeOptions, MergePath, MergePlan, MergePreview, MergePush, MergedBranch,
     PulledBranch, UnmergePlan, Unmerged,
 };
 pub use ports::{PortCatalog, PortOverview, PortRequest, PortReservation, PortSuggestion};

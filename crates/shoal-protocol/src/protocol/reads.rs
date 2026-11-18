@@ -50,6 +50,7 @@ impl Operation {
                         | ItemMethod::IssueDetails { .. }
                         | ItemMethod::IssueBlockers { .. }
                         | ItemMethod::PullRequest { .. }
+                        | ItemMethod::MergePath { .. }
                         | ItemMethod::ViewItems { .. }
                         | ItemMethod::ForgeDownload { .. }
                 )

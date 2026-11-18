@@ -154,6 +154,7 @@ pub(super) async fn handle(
             (manager.require_pull_review(&target, item.clone(), None, None, caller)).await?;
             Body::MergeWarning(manager.merge_warning(&target, item).await?)
         }
+        ItemMethod::MergePath { space } => Body::MergePath(manager.merge_path(&space).await?),
         ItemMethod::OpenPull {
             workspace,
             options,
@@ -349,7 +350,8 @@ impl Scoped for ItemMethod {
             }
             | ItemMethod::MergedPull {
                 space: workspace, ..
-            } => Some(workspace),
+            }
+            | ItemMethod::MergePath { space: workspace } => Some(workspace),
         })
     }
 }

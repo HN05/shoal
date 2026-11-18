@@ -143,6 +143,7 @@ impl Operation {
                         | ItemMethod::SelectItems { .. }
                         | ItemMethod::OpenIssue { .. }
                         | ItemMethod::MergeWarning { .. }
+                        | ItemMethod::MergePath { .. }
                         | ItemMethod::NumberKind { .. }
                 )
                 | Self::Ci(

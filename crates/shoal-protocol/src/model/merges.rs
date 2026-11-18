@@ -1,10 +1,23 @@
-//! Local merges and unmerges of workspace branches into the default branch.
+//! How a space's work merges, and local merges and unmerges of workspace
+//! branches into the default branch.
 use super::{MergeWarning, Repository, Workspace};
 use serde::{Deserialize, Serialize};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_refs::{BranchName, CommitId};
 use std::path::PathBuf;
+
+/// How `shoal merge` merges a space's work: through its one open PR on the
+/// forge, or for a workspace without one, by merging its branch into the
+/// default branch.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "path", rename_all = "snake_case")]
+pub enum MergePath {
+    Pr {
+        pr: crate::forge::items::reference::ItemRef,
+    },
+    Local,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PulledBranch {
