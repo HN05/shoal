@@ -101,3 +101,22 @@ async fn a_checkout_git_cannot_remove_takes_only_its_own_registration() {
     assert!(!own.exists());
     assert!(stopped.exists());
 }
+
+#[tokio::test]
+async fn a_checkout_with_a_relative_link_git_cannot_remove_takes_its_registration() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = crate::test_support::repository(root.path(), "repo");
+    git(&repo, &["config", "worktree.useRelativePaths", "true"]).await;
+    let commit = git(&repo, &["rev-parse", "HEAD"]).await;
+    let checkout = root.path().join("reviews").join("1");
+    std::fs::create_dir_all(checkout.parent().unwrap()).unwrap();
+    add(&repo, &checkout, commit.trim()).await.unwrap();
+    let link = std::fs::read_to_string(checkout.join(".git")).unwrap();
+    assert!(link.starts_with("gitdir: .."), "{link}");
+    git(&repo, &["worktree", "lock", checkout.to_str().unwrap()]).await;
+
+    remove(&checkout).await.unwrap();
+    assert!(!checkout.exists());
+    let listed = git(&repo, &["worktree", "list", "--porcelain"]).await;
+    assert!(!listed.contains("reviews/1"), "{listed}");
+}

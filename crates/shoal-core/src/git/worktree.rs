@@ -323,7 +323,8 @@ fn linked_admin_dir(path: &Path) -> Result<Option<PathBuf>> {
 /// The admin directory the `.git` link of the linked worktree at `path`
 /// names, when that directory records `path` as its worktree; read before
 /// a removal that can delete the link, so that only this worktree's admin
-/// directory goes with it.
+/// directory goes with it. Resolved, since a relative link names it
+/// through the worktree's directory, which the removal deletes.
 pub(crate) async fn own_admin_dir(path: &Path) -> Result<Option<PathBuf>> {
     let linked = {
         let path = path.to_owned();
@@ -333,6 +334,7 @@ pub(crate) async fn own_admin_dir(path: &Path) -> Result<Option<PathBuf>> {
     let Ok(Some(admin_dir)) = linked else {
         return Ok(None);
     };
+    let admin_dir = resolved(&admin_dir).await;
     Ok(registered_at(&admin_dir, path).await?.then_some(admin_dir))
 }
 
@@ -370,6 +372,11 @@ pub(crate) async fn delete_with_admin_dir(path: &Path, admin_dir: Option<PathBuf
     if !registered_at(&admin_dir, path).await? {
         return Ok(());
     }
+    delete_admin_dir(admin_dir).await
+}
+
+/// Delete the admin directory `admin_dir`, unless it is gone.
+async fn delete_admin_dir(admin_dir: PathBuf) -> Result<()> {
     off_runtime::run(move || match std::fs::remove_dir_all(&admin_dir) {
         Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
             Err(error).with_context(|| format!("remove {}", admin_dir.display()))
