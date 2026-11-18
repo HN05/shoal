@@ -1,7 +1,7 @@
-//! Stopping a space another joined machine runs: each stop goes through
-//! the daemon to that machine, for the space and, unless skipped, the
-//! spaces below it the hub lists, wherever they run; the hub holds a stop
-//! while its machine is offline.
+//! Stopping spaces other joined machines run: each stop goes through the
+//! daemon to that machine, for a space elsewhere and, unless skipped, the
+//! spaces below it the hub lists, wherever they run, and for those below a
+//! space here; the hub holds a stop while its machine is offline.
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
@@ -15,6 +15,7 @@ use shoal_protocol::{
 use crate::{
     cli::{commands::machines, context::Context, output::Style},
     client::output::agents::SpaceStopped,
+    model::Space,
     protocol::{QueuedLaunches, UntrackedProcesses},
 };
 
@@ -40,6 +41,21 @@ pub(super) async fn stop(
         stop_one(ctx, &space, yes).await?;
     }
     Ok(Some(0))
+}
+
+/// Stop the spaces below each of `stopped`, spaces of this machine, that
+/// other machines run, as the hub lists them.
+pub(super) async fn stop_below(ctx: &Context, stopped: &[Space], yes: bool) -> Result<()> {
+    let Some(view) = machines::view(ctx).await else {
+        return Ok(());
+    };
+    for space in stopped {
+        let elsewhere = below(&view, &space.id).into_iter();
+        for listed in elsewhere.filter(|listed| listed.machine != view.machine) {
+            stop_one(ctx, &listed, yes).await?;
+        }
+    }
+    Ok(())
 }
 
 /// Stop `space` on its machine, reporting it, or that the hub holds the

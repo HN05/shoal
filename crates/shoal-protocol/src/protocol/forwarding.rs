@@ -58,7 +58,6 @@ impl Operation {
                 AgentMethod::SetProgress { .. }
                     | AgentMethod::Progress { .. }
                     | AgentMethod::Sleep { .. }
-                    | AgentMethod::InterruptTurn { .. }
             ) | Self::Question(
                 QuestionMethod::ListQuestions { .. }
                     | QuestionMethod::ShowQuestion { .. }

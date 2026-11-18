@@ -48,13 +48,17 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
     if crate::env::inherits_scope(&ctx.paths.state) {
         ensure_below(&selected)?;
     }
-    match selected.as_slice() {
-        [space] => stop_one(ctx, space, yes).await,
+    let code = match selected.as_slice() {
+        [space] => stop_one(ctx, space, yes).await?,
         spaces => {
             check_each(ctx, spaces).await?;
-            stop_each(ctx, spaces, "", yes).await
+            stop_each(ctx, spaces, "", yes).await?
         }
+    };
+    if !skip_children {
+        elsewhere::stop_below(ctx, &selected, yes).await?;
     }
+    Ok(code)
 }
 
 /// Stop `space`, reporting it alone.
