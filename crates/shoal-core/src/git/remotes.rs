@@ -200,6 +200,17 @@ fn rewrites(config: &gix::config::File) -> Vec<(String, Vec<String>)> {
     rewrites
 }
 
+/// The URL a push to the remote `remote` goes to: its first
+/// `remote.<name>.pushurl`, else its URL, with Git's `pushInsteadOf` and
+/// `insteadOf` rewrites applied.
+pub async fn remote_push_url(repo: &Path, remote: &str) -> Result<String> {
+    let mut command = super::command(repo);
+    command.args(["remote", "get-url", "--push", remote]);
+    let url = super::output_unless(command, NO_SUCH_REMOTE).await?;
+    let url = url.with_context(|| format!("No such remote '{remote}'"))?;
+    Ok(url.trim().to_owned())
+}
+
 /// The remote a push of `branch` goes to: `branch.<name>.pushRemote`, else
 /// `remote.pushDefault`, else `origin`.
 pub async fn push_remote(repo: &Path, branch: &BranchName) -> Result<String> {

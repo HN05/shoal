@@ -190,3 +190,30 @@ async fn a_push_rewrite_places_no_base_among_fetch_rewrites() {
     ];
     rewritten_as_git_rewrites(&sections).await;
 }
+
+#[tokio::test]
+async fn a_push_url_is_the_pushurl_or_the_url_as_git_rewrites_it_for_pushes() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    assert!(remote_push_url(&repo, "origin").await.is_err());
+    git(
+        &repo,
+        &["remote", "add", "origin", "https://fetch.test/a/b"],
+    );
+    git(
+        &repo,
+        &[
+            "config",
+            "url.https://push.test/.pushInsteadOf",
+            "https://fetch.test/",
+        ],
+    );
+    let pushed = remote_push_url(&repo, "origin").await.unwrap();
+    assert_eq!(pushed, "https://push.test/a/b");
+    git(
+        &repo,
+        &["config", "remote.origin.pushurl", "https://other.test/c/d"],
+    );
+    let pushed = remote_push_url(&repo, "origin").await.unwrap();
+    assert_eq!(pushed, "https://other.test/c/d");
+}

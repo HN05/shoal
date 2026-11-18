@@ -75,13 +75,19 @@ impl Manager {
         }
     }
 
-    /// Record the merge `plan` made, as [`merged_commit`] finds it: a
-    /// failed, rolled back or empty merge records nothing. Records the
+    /// Record the merge `plan` made, as the default branch's first-parent
+    /// history shows it, so a commit made after it is not taken for part of
+    /// it: a failed, rolled back or empty merge records nothing. Records the
     /// upstream now has go, since they can no longer be undone.
     pub(crate) async fn record_merge(&self, plan: &MergePlan) -> Result<()> {
+        let repo = &plan.repo.path;
         let default = &plan.default_refresh.branch;
         let previous = &plan.default_refresh.commit;
-        let Some(result) = merged_commit(plan).await? else {
+        let Some(tip) = git::status::local_branch_commit(repo, default).await? else {
+            return Ok(());
+        };
+        let merged = merge_result(repo, tip.as_str(), previous, &plan.source).await?;
+        let Some(result) = merged else {
             return Ok(());
         };
         let merge = LocalMerge {
@@ -182,24 +188,6 @@ impl Manager {
         }
         self.store.run(move |db| delete(db, &ids)).await
     }
-}
-
-/// The commit the merge `plan` left the default branch at, as its
-/// first-parent history shows it, so a commit made after it is not taken
-/// for it; none for a failed, rolled back or empty merge.
-pub(super) async fn merged_commit(plan: &MergePlan) -> Result<Option<CommitId>> {
-    let repo = &plan.repo.path;
-    let default = &plan.default_refresh.branch;
-    let Some(tip) = git::status::local_branch_commit(repo, default).await? else {
-        return Ok(None);
-    };
-    merge_result(
-        repo,
-        tip.as_str(),
-        &plan.default_refresh.commit,
-        &plan.source,
-    )
-    .await
 }
 
 /// Each commit a replay recreated, and the merge's result, mapped to the
