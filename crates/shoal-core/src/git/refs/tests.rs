@@ -1,7 +1,9 @@
 use std::path::{Path, PathBuf};
 
 use super::{Listed, list};
-use crate::git::{has_commit, ref_exists, resolve_commit, revision, run, verify_revision};
+use crate::git::{
+    has_commit, ref_exists, resolve_commit, resolve_named_commit, revision, run, verify_revision,
+};
 use crate::test_support::{git, reftable_repository, repository};
 
 /// The ways a test repository keeps its refs: in files, which gix reads,
@@ -71,6 +73,34 @@ async fn ref_reads(create: Create) {
             .await
             .is_err()
     );
+
+    // One peel reads in process as Git reads it.
+    let peeled_tree = verify_revision(&repo, "refs/tags/v1^{tree}", run)
+        .await
+        .unwrap();
+    assert_eq!(peeled_tree.trim(), tree);
+    let peeled = revision(&repo, &format!("{head}^{{commit}}"), run)
+        .await
+        .unwrap();
+    assert_eq!(peeled.trim(), head);
+    assert!(
+        verify_revision(&repo, &format!("{tree}^{{commit}}"), run)
+            .await
+            .is_err()
+    );
+
+    let named = |rev: &str| {
+        let rev = rev.to_owned();
+        let repo = repo.clone();
+        async move { resolve_named_commit(&repo, &rev, run).await.unwrap() }
+    };
+    let commit = |name: &str| (head.as_str().into(), name.to_owned());
+    assert_eq!(named("HEAD").await, commit("refs/heads/main"));
+    assert_eq!(named("refs/tags/v1").await, commit("refs/tags/v1"));
+    assert_eq!(named(&head).await, commit(""));
+    git(&repo, &["switch", "-q", "--detach"]);
+    assert_eq!(named("HEAD").await, commit("HEAD"));
+    git(&repo, &["switch", "-q", "main"]);
 
     let names = |listed: Vec<Listed>| listed.into_iter().map(|r| r.name).collect::<Vec<_>>();
     let topic = list(&repo, &["refs/heads/topic"]).await.unwrap();

@@ -565,6 +565,23 @@ pub async fn resolve_named_commit(
     // Without `--verify`, which takes one revision, Git would print an
     // option-like argument back instead of resolving it.
     ensure!(!rev.starts_with('-'), "{rev} is not a revision");
+    if refs::names_ref_or_object(rev) {
+        let owned = rev.to_owned();
+        let in_process = move |repo: &gix::Repository| {
+            refs::named_commit(repo, &owned)?.with_context(|| format!("{owned} names no commit"))
+        };
+        let git = async |repo: &Path| resolve_named_commit_by_git(repo, rev, run).await;
+        return reader::read(repo, in_process, git).await;
+    }
+    resolve_named_commit_by_git(repo, rev, run).await
+}
+
+/// The commit and ref name Git reads for `rev` in `repo`.
+async fn resolve_named_commit_by_git(
+    repo: &Path,
+    rev: &str,
+    run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
+) -> Result<(CommitId, String)> {
     let peeled = format!("{rev}^{{commit}}");
     let output = run(repo, &["rev-parse", &peeled, "--symbolic-full-name", rev]).await?;
     // One revision prints its commit and at most its name; a range prints

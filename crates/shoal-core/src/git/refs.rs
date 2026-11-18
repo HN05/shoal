@@ -142,29 +142,62 @@ pub(crate) async fn symbolic_target(repo: &Path, reference: &str) -> Result<Opti
     reader::read(repo, in_process, git).await
 }
 
-/// Whether gix reads `rev` as Git does: `HEAD`, a full ref name or a full
-/// object ID, with no revision syntax to interpret.
-pub(crate) fn names_ref_or_object(rev: &str) -> bool {
+/// The peels gix applies as Git does, with the kind each peels to.
+const PEELS: [(&str, gix::object::Kind); 2] = [
+    ("^{commit}", gix::object::Kind::Commit),
+    ("^{tree}", gix::object::Kind::Tree),
+];
+
+/// `rev` as gix reads it as Git does: `HEAD`, a full ref name or a full
+/// object ID, which it names, then at most one `^{commit}` or `^{tree}`
+/// that peels it; `None` for any other revision syntax.
+fn simple(rev: &str) -> Option<(&str, Option<gix::object::Kind>)> {
+    let peeled = PEELS
+        .iter()
+        .find_map(|(suffix, kind)| Some((rev.strip_suffix(suffix)?, Some(*kind))));
+    let (name, peel) = peeled.unwrap_or((rev, None));
     let is_object_id =
-        matches!(rev.len(), 40 | 64) && rev.bytes().all(|byte| byte.is_ascii_hexdigit());
-    rev == "HEAD"
-        || is_object_id
-        || (rev.starts_with("refs/") && gix::validate::reference::name(rev.into()).is_ok())
+        matches!(name.len(), 40 | 64) && name.bytes().all(|byte| byte.is_ascii_hexdigit());
+    let is_ref = name.starts_with("refs/") && gix::validate::reference::name(name.into()).is_ok();
+    (name == "HEAD" || is_object_id || is_ref).then_some((name, peel))
 }
 
-/// The object `rev`, which [`names_ref_or_object`], names in `repo`,
-/// without peeling it, as `git rev-parse` gives it: a full object ID as it
-/// is, whether or not the repository has it. `None` when `rev` names no ref
-/// or HEAD names no commit yet.
+/// Whether gix reads `rev` as Git does: `HEAD`, a full ref name or a full
+/// object ID, peeled at most once to a commit or tree, with no other
+/// revision syntax to interpret.
+pub(crate) fn names_ref_or_object(rev: &str) -> bool {
+    simple(rev).is_some()
+}
+
+/// The object `rev`, which [`names_ref_or_object`], names in `repo`, as
+/// `git rev-parse` gives it: unpeeled unless it asks for a peel, and a full
+/// object ID as it is, whether or not the repository has it. `None` when
+/// it names no ref or no object of the kind it peels to, or HEAD names no
+/// commit yet.
 pub(crate) fn named_object(repo: &gix::Repository, rev: &str) -> Result<Option<gix::ObjectId>> {
-    if rev == "HEAD" {
+    let (name, peel) = simple(rev).with_context(|| format!("{rev} is no ref or object"))?;
+    let Some(object) = unpeeled(repo, name)? else {
+        return Ok(None);
+    };
+    let Some(kind) = peel else {
+        return Ok(Some(object));
+    };
+    let Some(object) = repo.try_find_object(object)? else {
+        return Ok(None);
+    };
+    Ok(object.peel_to_kind(kind).ok().map(|object| object.id))
+}
+
+/// The object HEAD, the full ref name or the object ID `name` names.
+fn unpeeled(repo: &gix::Repository, name: &str) -> Result<Option<gix::ObjectId>> {
+    if name == "HEAD" {
         return Ok(repo.head()?.id().map(|id| id.detach()));
     }
-    if !rev.starts_with("refs/") {
-        return Ok(Some(gix::ObjectId::from_hex(rev.as_bytes())?));
+    if !name.starts_with("refs/") {
+        return Ok(Some(gix::ObjectId::from_hex(name.as_bytes())?));
     }
-    match repo.try_find_reference(rev)? {
-        Some(mut found) if found.name().as_bstr() == rev => {
+    match repo.try_find_reference(name)? {
+        Some(mut found) if found.name().as_bstr() == name => {
             Ok(Some(found.follow_to_object()?.detach()))
         }
         _ => Ok(None),
@@ -182,6 +215,27 @@ pub(crate) fn peeled_commit(repo: &gix::Repository, rev: &str) -> Result<Option<
         .peel_to_commit()
         .ok()
         .map(|commit| commit.id.to_string().into()))
+}
+
+/// The commit `rev`, which [`names_ref_or_object`], peels to and the full
+/// name of the ref it names, as `git rev-parse --symbolic-full-name` gives
+/// it: `HEAD` for a detached HEAD, empty for an object ID; `None` when `rev`
+/// peels to no commit.
+pub(crate) fn named_commit(
+    repo: &gix::Repository,
+    rev: &str,
+) -> Result<Option<(CommitId, String)>> {
+    let Some(commit) = peeled_commit(repo, rev)? else {
+        return Ok(None);
+    };
+    let name = match simple(rev) {
+        Some(("HEAD", None)) => repo
+            .head_name()?
+            .map_or_else(|| "HEAD".to_owned(), |name| name.as_bstr().to_string()),
+        Some((name, None)) if name.starts_with("refs/") => name.to_owned(),
+        _ => String::new(),
+    };
+    Ok(Some((commit, name)))
 }
 
 #[cfg(test)]

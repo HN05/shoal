@@ -269,19 +269,9 @@ pub async fn unkept_commits_by(
 pub async fn merged_into(repo: &Path, rev: &str, target: &str) -> Result<bool> {
     pub(crate) static ANSWERS: LazyLock<Mutex<HashMap<(String, String), bool>>> =
         LazyLock::new(Mutex::default);
-    let commits = run(
-        repo,
-        &[
-            "rev-parse",
-            &format!("{rev}^{{commit}}"),
-            &format!("{target}^{{commit}}"),
-        ],
-    )
-    .await?;
-    let mut commits = commits.lines().map(str::to_owned);
     let key = (
-        commits.next().context("revision has no commit")?,
-        commits.next().context("target has no commit")?,
+        super::resolve_commit(repo, rev, run).await?.to_string(),
+        super::resolve_commit(repo, target, run).await?.to_string(),
     );
     let answers = || ANSWERS.lock().unwrap_or_else(PoisonError::into_inner);
     if let Some(&merged) = answers().get(&key) {
