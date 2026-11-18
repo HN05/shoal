@@ -343,7 +343,7 @@ impl Manager {
             !git::status::operation_in_progress_at(path, &git_dir).await?,
             "a Git operation is under way in the workspace; finish or abort it first"
         );
-        let branch = current_branch(path).await?;
+        let branch = git::checked_out_branch(path).await?;
         ensure!(
             checkpoint.branch == branch,
             "checkpoint {} is on {}; the workspace is on {}",
@@ -499,12 +499,6 @@ impl Manager {
         }
         Ok(deleted)
     }
-}
-
-/// The branch checked out; `None` for a detached HEAD.
-async fn current_branch(path: &std::path::Path) -> Result<Option<BranchName>> {
-    let branch = git::current_branch(path).await?.trim().to_owned();
-    Ok((!branch.is_empty()).then(|| branch.into()))
 }
 
 /// Whether checkpoints `kept` and `next` of a workspace of the repository

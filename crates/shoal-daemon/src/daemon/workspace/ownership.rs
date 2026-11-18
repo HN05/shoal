@@ -137,7 +137,7 @@ impl Manager {
             );
             return Ok(());
         };
-        let actual = git::head_branch(&workspace.path, false, git::run_isolated).await?;
+        let actual = git::head_branch(&workspace.path).await?;
         ensure!(
             actual.as_ref().map(BranchName::as_str) == Some(expected_branch),
             "workspace {} is no longer on its recorded branch",
@@ -301,7 +301,7 @@ impl Manager {
         let git_dir = self.linked_git_dir(workspace, &common_dir).await?;
         match workspace.branch() {
             Some(recorded) => {
-                let branch = git::head_branch(&workspace.path, true, git::run)
+                let branch = git::head_branch(&workspace.path)
                     .await
                     .context("worktree HEAD must be on the recorded branch")?;
                 ensure!(

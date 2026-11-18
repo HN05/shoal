@@ -5,41 +5,37 @@ use crate::test_support::{git, reftable_repository, repository};
 /// and in a reftable, which Git reads for it.
 type Create = fn(&Path, &str) -> PathBuf;
 
-#[tokio::test]
-async fn push_remote_prefers_the_branch_then_the_default_then_origin() {
+/// HEAD reads on a branch, detached and on a branch without commits, in a
+/// repository `create` makes.
+async fn head_reads(create: Create) {
     let root = tempfile::tempdir().unwrap();
-    let repo = repository(root.path(), "repo");
-    assert_eq!(push_remote(&repo, &"topic".into()).await.unwrap(), "origin");
-    git(&repo, &["config", "remote.pushDefault", "fork"]);
-    assert_eq!(push_remote(&repo, &"topic".into()).await.unwrap(), "fork");
-    git(&repo, &["config", "branch.topic.pushRemote", "mine"]);
-    assert_eq!(push_remote(&repo, &"topic".into()).await.unwrap(), "mine");
-    assert_eq!(push_remote(&repo, &"other".into()).await.unwrap(), "fork");
+    let repo = create(root.path(), "repo");
+    git(&repo, &["switch", "-q", "-c", "feature/x"]);
+    let commit: CommitId = git(&repo, &["rev-parse", "HEAD"]).trim().into();
+    let tree = git(&repo, &["rev-parse", "HEAD^{tree}"]).trim().to_owned();
+    let on_branch = (commit.clone(), Some(BranchName::from("feature/x")));
+    assert_eq!(head_and_branch(&repo).await.unwrap(), on_branch);
+    assert_eq!(super::super::head_branch(&repo).await.unwrap(), on_branch.1);
+    let state = head_state(&repo).await.unwrap();
+    assert_eq!((state.commit, state.tree), (commit.clone(), tree));
+    git(&repo, &["switch", "-q", "--detach"]);
+    assert_eq!(head_and_branch(&repo).await.unwrap(), (commit, None));
+    assert_eq!(checked_out_branch(&repo).await.unwrap(), None);
+    assert!(super::super::head_branch(&repo).await.is_err());
+    git(&repo, &["switch", "-q", "--orphan", "fresh"]);
+    let head = head(&repo).await.unwrap();
+    assert_eq!(head.branch(), Some("fresh".into()));
+    assert!(head.commit().is_err());
 }
 
 #[tokio::test]
-async fn head_and_branch_names_no_branch_when_detached() {
-    let root = tempfile::tempdir().unwrap();
-    let repo = repository(root.path(), "repo");
-    git(&repo, &["checkout", "-q", "-b", "feature/x"]);
-    let commit = revision(&repo, "HEAD", run)
-        .await
-        .unwrap()
-        .trim()
-        .to_owned();
-    let on_branch = head_and_branch(&repo).await.unwrap();
-    assert_eq!(on_branch, (commit.clone().into(), Some("feature/x".into())));
-    git(&repo, &["checkout", "-q", "--detach"]);
-    assert_eq!(head_and_branch(&repo).await.unwrap(), (commit.into(), None));
+async fn head_reads_in_a_repository_with_its_refs_in_files() {
+    head_reads(repository).await;
 }
 
-#[test]
-fn head_and_branch_without_a_name_for_head_is_unknown() {
-    assert!(parse_head_and_branch("abc\n").is_err());
-    assert_eq!(
-        parse_head_and_branch("abc\nHEAD\n").unwrap(),
-        ("abc".into(), None)
-    );
+#[tokio::test]
+async fn head_reads_in_a_reftable_repository() {
+    head_reads(reftable_repository).await;
 }
 
 /// [`checkout_dirs`] of a main checkout and a linked worktree in a
@@ -114,6 +110,18 @@ async fn a_moved_worktree_is_found_where_it_now_is() {
     assert_eq!(dirs.root, std::fs::canonicalize(&moved).unwrap());
     let common = std::fs::canonicalize(repo.join(".git")).unwrap();
     assert_eq!(dirs.git_dir, common.join("worktrees/linked"));
+}
+
+#[tokio::test]
+async fn push_remote_prefers_the_branch_then_the_default_then_origin() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    assert_eq!(push_remote(&repo, &"topic".into()).await.unwrap(), "origin");
+    git(&repo, &["config", "remote.pushDefault", "fork"]);
+    assert_eq!(push_remote(&repo, &"topic".into()).await.unwrap(), "fork");
+    git(&repo, &["config", "branch.topic.pushRemote", "mine"]);
+    assert_eq!(push_remote(&repo, &"topic".into()).await.unwrap(), "mine");
+    assert_eq!(push_remote(&repo, &"other".into()).await.unwrap(), "fork");
 }
 
 #[tokio::test]

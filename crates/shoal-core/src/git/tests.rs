@@ -81,7 +81,7 @@ async fn repair_reconnects_a_moved_checkout_and_worktree() -> Result<()> {
     );
     assert!(trees.iter().all(|tree| !tree.prunable));
     assert_eq!(
-        head_branch(&new.join("feature"), false, run).await?,
+        head_branch(&new.join("feature")).await?,
         Some("feature".into())
     );
     Ok(())
@@ -112,11 +112,7 @@ async fn value_queries_distinguish_branches_tags_and_detached_head() {
             .is_err()
     );
     assert_eq!(
-        head_branch(&repo, true, run).await.unwrap(),
-        Some("feature/nested".into())
-    );
-    assert_eq!(
-        head_branch(&repo, false, run_isolated).await.unwrap(),
+        head_branch(&repo).await.unwrap(),
         Some("feature/nested".into())
     );
     assert_eq!(
@@ -134,7 +130,7 @@ async fn value_queries_distinguish_branches_tags_and_detached_head() {
             .is_none()
     );
     git(&repo, &["checkout", "--detach"]);
-    assert!(head_branch(&repo, true, run).await.is_err());
+    assert!(head_branch(&repo).await.is_err());
     assert!(
         checkout_of(&repo, &"feature/nested".into(), run)
             .await
@@ -142,12 +138,9 @@ async fn value_queries_distinguish_branches_tags_and_detached_head() {
             .is_none()
     );
     git(&repo, &["symbolic-ref", "HEAD", "refs/heads/unborn"]);
-    assert_eq!(
-        head_branch(&repo, true, run).await.unwrap(),
-        Some("unborn".into())
-    );
+    assert_eq!(head_branch(&repo).await.unwrap(), Some("unborn".into()));
     git(&repo, &["symbolic-ref", "HEAD", "refs/tags/v1"]);
-    assert_eq!(head_branch(&repo, true, run).await.unwrap(), None);
+    assert_eq!(head_branch(&repo).await.unwrap(), None);
 }
 
 #[tokio::test]

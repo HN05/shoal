@@ -96,7 +96,7 @@ impl Manager {
         );
         self.verify_worktree(workspace).await?;
         let recorded = workspace.require_branch("renaming a branch")?;
-        let actual = git::head_branch(&workspace.path, true, git::run_isolated).await?;
+        let actual = git::head_branch(&workspace.path).await?;
         ensure!(
             actual.as_ref() == Some(recorded),
             "worktree is not on its recorded branch"
@@ -240,7 +240,7 @@ impl Manager {
             return Ok(false);
         };
         let recorded = workspace.require_branch("renaming a branch")?;
-        let actual = git::head_branch(&workspace.path, true, git::run_isolated)
+        let actual = git::head_branch(&workspace.path)
             .await?
             .filter(|actual| actual == recorded || *actual == intent.branch);
         let Some(actual) = actual else {

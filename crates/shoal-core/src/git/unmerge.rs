@@ -203,9 +203,7 @@ pub(crate) async fn checkout_at(
     branch: &BranchName,
     commit: &CommitId,
 ) -> Result<bool> {
-    let head = git::head_branch(checkout, true, git_run)
-        .await
-        .unwrap_or_default();
+    let head = git::head_branch(checkout).await.unwrap_or_default();
     Ok(head.as_ref() == Some(branch) && tip_commit(checkout, "HEAD").await? == *commit)
 }
 

@@ -33,11 +33,65 @@ pub async fn symbolic_revision(
     run(repo, &["rev-parse", "--symbolic-full-name", rev]).await
 }
 
-/// HEAD's commit and the branch it is on, `None` when detached, read with
-/// one Git process instead of two.
+/// What HEAD names in a worktree.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct Head {
+    /// The full name of the ref HEAD points to; `None` when detached.
+    pub(crate) reference: Option<String>,
+    /// HEAD's commit; `None` while its branch has none yet.
+    pub(crate) commit: Option<CommitId>,
+}
+
+impl Head {
+    /// The local branch HEAD is on; `None` when detached or on a ref
+    /// outside `refs/heads/`.
+    pub(crate) fn branch(&self) -> Option<BranchName> {
+        let reference = self.reference.as_deref()?;
+        super::strip_local(reference).map(BranchName::from)
+    }
+
+    /// HEAD's commit, which a branch without commits lacks.
+    pub(crate) fn commit(self) -> Result<CommitId> {
+        self.commit.context("HEAD names no commit yet")
+    }
+}
+
+/// HEAD of the worktree Git finds from `repo`, its ref and commit read
+/// together.
+pub(crate) async fn head(repo: &Path) -> Result<Head> {
+    reader::read(repo, head_in_process, head_from_git).await
+}
+
+/// The [`Head`] gix reads for `repo`.
+fn head_in_process(repo: &gix::Repository) -> Result<Head> {
+    let head = repo.head()?;
+    Ok(Head {
+        reference: head.referent_name().map(|name| name.as_bstr().to_string()),
+        commit: head.id().map(|id| id.to_string().into()),
+    })
+}
+
+/// The [`Head`] Git reads for `repo`.
+async fn head_from_git(repo: &Path) -> Result<Head> {
+    let mut reference = super::command(repo);
+    reference.args(["symbolic-ref", "--quiet", "HEAD"]);
+    let mut commit = super::command(repo);
+    commit.args(["rev-parse", "--verify", "--quiet", "HEAD"]);
+    // Both exit 1 for what HEAD lacks: a ref when detached, a commit when
+    // its branch has none.
+    let reference = super::output_unless(reference, 1).await?;
+    let commit = super::output_unless(commit, 1).await?;
+    Ok(Head {
+        reference: reference.map(|name| name.trim_end().to_owned()),
+        commit: commit.map(|commit| commit.trim().into()),
+    })
+}
+
+/// HEAD's commit and the branch it is on, `None` when detached.
 pub async fn head_and_branch(repo: &Path) -> Result<(CommitId, Option<BranchName>)> {
-    let output = run(repo, &["rev-parse", "HEAD", "--symbolic-full-name", "HEAD"]).await?;
-    parse_head_and_branch(&output)
+    let head = head(repo).await?;
+    let branch = head.branch();
+    Ok((head.commit()?, branch))
 }
 
 /// The commit HEAD names, its tree, and the branch it is on.
@@ -49,9 +103,20 @@ pub(crate) struct HeadState {
     pub(crate) branch: Option<BranchName>,
 }
 
-/// HEAD's commit and tree come from one Git run, its branch from another:
-/// `rev-parse --symbolic-full-name HEAD` fails once a branch is named `HEAD`.
 pub(crate) async fn head_state(repo: &Path) -> Result<HeadState> {
+    let in_process = |repo: &gix::Repository| {
+        let head = head_in_process(repo)?;
+        Ok(HeadState {
+            tree: repo.head_tree_id()?.to_string(),
+            branch: head.branch(),
+            commit: head.commit()?,
+        })
+    };
+    reader::read(repo, in_process, head_state_from_git).await
+}
+
+/// The [`HeadState`] Git reads for `repo`.
+async fn head_state_from_git(repo: &Path) -> Result<HeadState> {
     let output = run(repo, &["rev-parse", "HEAD^{tree}", "HEAD"]).await?;
     let mut lines = output.lines();
     let tree = lines.next().context("git rev-parse printed no tree")?;
@@ -59,33 +124,13 @@ pub(crate) async fn head_state(repo: &Path) -> Result<HeadState> {
     Ok(HeadState {
         commit: commit.into(),
         tree: tree.to_owned(),
-        branch: checked_out_branch(repo).await?,
+        branch: head_from_git(repo).await?.branch(),
     })
 }
 
-/// Git prints `HEAD` as the name of a detached HEAD, and nothing when it
-/// could not read the name, which leaves the branch unknown rather than
-/// detached.
-fn parse_head_and_branch(output: &str) -> Result<(CommitId, Option<BranchName>)> {
-    let mut lines = output.lines();
-    let commit = lines.next().context("git rev-parse printed no commit")?;
-    let name = lines
-        .next()
-        .context("git rev-parse printed no name for HEAD")?;
-    let branch = name.strip_prefix("refs/heads/");
-    Ok((commit.into(), branch.map(BranchName::from)))
-}
-
-/// Detached HEAD returns an empty branch name.
-pub async fn current_branch(repo: &Path) -> Result<String> {
-    run(repo, &["branch", "--show-current"]).await
-}
-
 /// The branch the worktree at `repo` is on; `None` when detached.
-pub(crate) async fn checked_out_branch(repo: &Path) -> Result<Option<BranchName>> {
-    let branch = current_branch(repo).await?;
-    let branch = branch.trim_end_matches('\n');
-    Ok((!branch.is_empty()).then(|| branch.into()))
+pub async fn checked_out_branch(repo: &Path) -> Result<Option<BranchName>> {
+    Ok(head(repo).await?.branch())
 }
 
 /// The canonical root of the working tree Git finds from `repo`.

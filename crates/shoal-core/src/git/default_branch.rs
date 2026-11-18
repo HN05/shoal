@@ -55,7 +55,7 @@ pub async fn locate_among(
     lookup: DefaultBranchLookup,
 ) -> Result<DefaultBranch> {
     let Some(remote) = default_remote(remotes)? else {
-        let head = git::head_branch(repo, true, git::run)
+        let head = git::head_branch(repo)
             .await
             .context("local repository has no default branch; select a starting ref with --base")?;
         let name = head.context("repository HEAD does not name a local branch")?;

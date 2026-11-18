@@ -17,11 +17,10 @@ pub(crate) mod predicates;
 pub use predicates::{has_commit, is_ancestor, ref_exists};
 pub(crate) mod queries;
 pub(crate) use queries::{
-    HeadState, RemoteUrls, checked_out_branch, head_state, is_bare_with_work_tree, metadata_path,
-    remote_urls,
+    HeadState, RemoteUrls, head_state, is_bare_with_work_tree, metadata_path, remote_urls,
 };
 pub use queries::{
-    checkout_dirs, common_dir, configured_remote_url, current_branch, git_dir, head_and_branch,
+    checked_out_branch, checkout_dirs, common_dir, configured_remote_url, git_dir, head_and_branch,
     latest_subject, log_stat, push_remote, remote_names, remote_url, remotes, revision,
     symbolic_revision, verify_revision, worktree_root,
 };
@@ -61,6 +60,19 @@ pub(crate) fn bounded(command: Command) -> subprocess::Run {
 /// The stdout of [`bounded`] `command`, which must succeed.
 async fn output(command: Command) -> Result<String> {
     bounded(command).output().await
+}
+
+/// The stdout of [`bounded`] `command`, or `None` when it exits `absent`,
+/// the status with which a Git query says it has no such value.
+async fn output_unless(command: Command, absent: i32) -> Result<Option<String>> {
+    let description = format!("{:?}", command.as_std().get_args().collect::<Vec<_>>());
+    let output = bounded(command).capture().await;
+    if let Ok(output) = &output
+        && output.status.code() == Some(absent)
+    {
+        return Ok(None);
+    }
+    subprocess::checked_output(&format!("git {description}"), output).map(Some)
 }
 
 pub const LOCAL_REFS: &str = "refs/heads/";
@@ -500,21 +512,12 @@ fn clone_command(source: &str, destination: &Path, fork: Option<&str>) -> Comman
     command
 }
 
-/// The local branch named by HEAD. Detached HEAD remains a Git error; a
-/// symbolic HEAD outside the local namespace returns `None`. Pass `run` or
-/// `run_isolated` (or the caller's runner) to keep invocation policy explicit.
-pub async fn head_branch(
-    repo: &Path,
-    quiet: bool,
-    run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
-) -> Result<Option<BranchName>> {
-    let args: &[&str] = if quiet {
-        &["symbolic-ref", "--quiet", "HEAD"]
-    } else {
-        &["symbolic-ref", "HEAD"]
-    };
-    let head = run(repo, args).await?;
-    Ok(strip_local(head.trim_end_matches('\n')).map(BranchName::from))
+/// The local branch named by HEAD. Detached HEAD is an error; a symbolic
+/// HEAD outside the local namespace returns `None`.
+pub async fn head_branch(repo: &Path) -> Result<Option<BranchName>> {
+    let head = queries::head(repo).await?;
+    ensure!(head.reference.is_some(), "HEAD is detached");
+    Ok(head.branch())
 }
 
 /// Resolve and peel a revision to a commit, using the caller's Git runner.

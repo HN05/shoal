@@ -128,13 +128,8 @@ pub async fn snapshot(worktree: &Path, message: &str, files: bool) -> Result<Sna
 
 /// The branch checked out, `None` when detached, and the commit HEAD names.
 async fn head_state(worktree: &Path) -> Result<(Option<BranchName>, CommitId)> {
-    let branch = run_isolated(worktree, &["branch", "--show-current"]).await?;
-    let branch = branch.trim();
-    let head = run_isolated(worktree, &["rev-parse", "--verify", "HEAD^{commit}"]).await?;
-    Ok((
-        (!branch.is_empty()).then(|| branch.into()),
-        head.trim().into(),
-    ))
+    let head = super::queries::head(worktree).await?;
+    Ok((head.branch(), head.commit()?))
 }
 
 async fn snapshot_commit(

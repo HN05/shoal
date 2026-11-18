@@ -52,10 +52,7 @@ pub async fn remove_worktree(repo: &Path, path: &Path) -> Result<()> {
 }
 
 pub async fn head(worktree: &Path) -> Result<CommitId> {
-    Ok(run(worktree, &["rev-parse", "--verify", "HEAD"])
-        .await?
-        .trim()
-        .into())
+    super::queries::head(worktree).await?.commit()
 }
 
 /// Tracked files whose content differs between two commits.

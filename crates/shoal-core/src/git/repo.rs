@@ -63,9 +63,7 @@ pub fn allocate_branch(name: &str, taken: &[BranchName]) -> BranchName {
 /// moves it.
 pub async fn clean_branch(path: &Path, branch: &BranchName) -> Result<()> {
     // A detached HEAD has no symbolic ref; that is the same refusal.
-    let head = git::head_branch(path, true, git_run)
-        .await
-        .unwrap_or_default();
+    let head = git::head_branch(path).await.unwrap_or_default();
     ensure!(
         head.as_ref() == Some(branch),
         "checkout at {} is not on {branch}",
@@ -236,7 +234,7 @@ pub async fn rollback_merge(plan: &MergePlan) -> Result<()> {
     };
     let branch = &plan.default_refresh.branch;
     ensure!(
-        git::head_branch(checkout, true, git_run).await?.as_ref() == Some(branch),
+        git::head_branch(checkout).await?.as_ref() == Some(branch),
         "default checkout changed branches during the merge; recover it manually"
     );
     let head = git_run(checkout, &["rev-parse", "HEAD"]).await?;
