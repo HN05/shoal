@@ -13,7 +13,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     hub::{
         link::Call,
-        routing::{Expired, Told},
+        routing::{Expired, Told, ToldAbout},
     },
     notifications::NotificationKind,
     space_names::SpaceName,
@@ -48,8 +48,10 @@ impl Manager {
             .collect();
         let told = Told {
             above,
-            space: event.space.clone(),
-            name: event.name.clone(),
+            about: Some(ToldAbout {
+                space: event.space.clone(),
+                name: event.name.clone(),
+            }),
             kind: event.kind,
             message: event.message,
             files,
@@ -57,9 +59,21 @@ impl Manager {
         self.send_told(told).await
     }
 
+    /// Message the agent of the space `id`, which another machine runs.
+    pub(crate) async fn message_elsewhere(&self, id: &SpaceId, message: String) -> Result<()> {
+        let told = Told {
+            above: id.clone(),
+            about: None,
+            kind: None,
+            message,
+            files: Vec::new(),
+        };
+        self.send_told(told).await
+    }
+
     /// Send `told` through the hub: this daemon's own routing on the hub,
     /// else this machine's link, or its outbox while the link is down.
-    async fn send_told(&self, told: Told) -> Result<()> {
+    pub(super) async fn send_told(&self, told: Told) -> Result<()> {
         if self.is_hub() {
             return (self.route_told(&self.own_member().await?, told).await).map(drop);
         }
@@ -114,28 +128,30 @@ impl Manager {
             .run(move |db| crate::daemon::workspace::receiver_from(db, &above, &agents))
             .await?;
         let message = with_files(&told);
-        match receiver {
-            Some(Receiver::Here(coordinator)) => {
-                let about = About {
-                    name: told.name,
-                    id: Some(told.space),
+        match (receiver, told.about) {
+            (Some(Receiver::Here(coordinator)), about) => {
+                let about = about.map(|about| About {
+                    name: about.name,
+                    id: Some(about.space),
                     kind: told.kind,
-                };
-                (self.queue_space_message(&coordinator, Some(about), message, Vec::new())).await
+                });
+                (self.queue_space_message(&coordinator, about, message, Vec::new())).await
             }
-            Some(Receiver::Elsewhere(next)) => {
-                self.send_told(Told {
+            (Some(Receiver::Elsewhere(next)), about) => {
+                let told = Told {
                     above: next,
+                    about,
                     ..told
-                })
-                .await
+                };
+                self.send_told(told).await
             }
-            None => {
+            (None, Some(about)) => {
                 if let Some(kind) = told.kind {
-                    (self.notify_space(&told.name, &told.space, kind, message)).await;
+                    (self.notify_user_of_space(&about.name, &about.space, kind, message)).await;
                 }
                 Ok(())
             }
+            (None, None) => anyhow::bail!("space {} has no agent to tell", told.above),
         }
     }
 

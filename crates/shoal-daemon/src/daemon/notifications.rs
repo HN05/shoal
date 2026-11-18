@@ -366,6 +366,23 @@ impl Manager {
         Ok(Some(id))
     }
 
+    /// Record an event about the space `id`, which has `name`, for the user
+    /// whatever space above it has an agent, as when its coordinator's
+    /// machine stays offline.
+    pub(crate) async fn notify_user_of_space(
+        &self,
+        name: &SpaceName,
+        id: &SpaceId,
+        kind: NotificationKind,
+        message: String,
+    ) {
+        let about = About::space(name, id);
+        let recorded = self.record_user_notification(about, kind, message, "[]".into());
+        if let Err(error) = recorded.await {
+            log!("notification not recorded: {error:#}");
+        }
+    }
+
     /// Record an event for the user with the files whose record IDs the JSON
     /// array `files` lists, wake watchers when it is new, and return its ID.
     async fn record_user_notification(

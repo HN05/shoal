@@ -16,6 +16,7 @@ use shoal_protocol::{
     hub::routing::{Answered, Forwarded, Vouched, VouchedSpace},
     protocol::{self, Forwarding, Method, Request},
     scope_tokens::ScopeToken,
+    space_names::SpaceSelector,
 };
 use tokio::io::{AsyncBufReadExt as _, BufReader};
 
@@ -114,6 +115,26 @@ impl Manager {
     /// while a request its process forwarded runs here.
     pub(crate) fn vouched_space(&self, id: &SpaceId) -> Option<VouchedSpace> {
         self.hub.vouches.space(id)
+    }
+
+    /// Whether `selector` names `caller`'s own space where another machine
+    /// vouches for it, which this machine has none of.
+    pub(crate) fn names_vouched_own(&self, caller: &Caller, selector: &SpaceSelector) -> bool {
+        selector.given_id() == Some(&caller.space_id)
+            && self.vouched_space(&caller.space_id).is_some()
+    }
+
+    /// The ID and name of the space `selector` names: one here, or the
+    /// space another machine vouches for while its process's forwarded
+    /// request runs here, by its ID.
+    pub(crate) async fn acting_space(&self, selector: &SpaceSelector) -> Result<(SpaceId, String)> {
+        if let Some(id) = selector.given_id()
+            && self.vouched_space(id).is_some()
+        {
+            return Ok((id.clone(), id.to_string()));
+        }
+        let space = self.space(selector).await?;
+        Ok((space.id, space.name.to_string()))
     }
 
     /// The caller a forwarded request's `token` stands for: none for the

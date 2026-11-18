@@ -604,17 +604,21 @@ pub(crate) enum Source {
 }
 
 /// The spaces that decide the requests of the space `id`, nearest first:
-/// those above it with an agent. A space without an agent of its own has
-/// none, since its coordinator or the user acts there.
+/// those above it with an agent, then `elsewhere`, those on the machines
+/// above. A space without an agent of its own has none, since its
+/// coordinator or the user acts there.
 pub(crate) fn deciders(
     db: &Connection,
     id: &SpaceId,
     agents: &TrackedAgents,
+    elsewhere: Vec<SpaceId>,
 ) -> Result<Vec<SpaceId>> {
     if !has_running_agent(db, id, agents)? {
         return Ok(Vec::new());
     }
-    spaces_above(db, id, agents)
+    let mut deciders = spaces_above(db, id, agents)?;
+    deciders.extend(elsewhere);
+    Ok(deciders)
 }
 
 /// The length of the longest chain of spaces whose removals take the

@@ -39,11 +39,18 @@ impl Manager {
             .await;
     }
 
-    /// Queue `message` for the agent of the space `id`; false when it cannot
-    /// be, which only logs.
+    /// Queue `message` for the agent of the space `id`, here or on another
+    /// joined machine; false when it cannot be, which only logs.
     pub(crate) async fn tell_space(&self, id: &SpaceId, message: String) -> bool {
-        let queued = self.queue_space_message(id, None, message, Vec::new());
-        match queued.await {
+        let here = self.find_space(id).await.is_ok_and(|space| space.is_some());
+        let queued = match here || !self.runs_elsewhere(id).await {
+            true => {
+                self.queue_space_message(id, None, message, Vec::new())
+                    .await
+            }
+            false => self.message_elsewhere(id, message).await,
+        };
+        match queued {
             Ok(()) => true,
             Err(error) => {
                 log!("approval message not queued: {error:#}");

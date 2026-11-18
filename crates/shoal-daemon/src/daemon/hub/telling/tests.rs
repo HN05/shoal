@@ -5,7 +5,7 @@ use super::*;
 
 fn told(files: &[&str]) -> Told {
     serde_json::from_value(json!({
-        "above": "coordinator", "space": "child", "name": "child",
+        "above": "coordinator", "about": {"space": "child", "name": "child"},
         "message": "child: done", "files": files,
     }))
     .unwrap()

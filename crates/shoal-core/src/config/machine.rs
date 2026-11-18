@@ -85,6 +85,10 @@ pub struct Hub {
     /// which this machine joins and reaches it through instead of a URL.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub connect: Vec<String>,
+    /// How long a question or approval request waits for a coordinator
+    /// whose machine is offline before it passes to the next space above
+    /// that is online, or to the user.
+    pub escalate_after_minutes: u64,
 }
 
 impl Default for Hub {
@@ -94,6 +98,7 @@ impl Default for Hub {
             listen: std::net::SocketAddr::from(([127, 0, 0, 1], 7474)),
             url: None,
             connect: Vec::new(),
+            escalate_after_minutes: 30,
         }
     }
 }

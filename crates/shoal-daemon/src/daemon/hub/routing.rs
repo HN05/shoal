@@ -60,7 +60,10 @@ impl Manager {
         let held = Held {
             sender: from.clone(),
             sender_space: None,
-            summary: format!("an event of space {} for the space above it", told.name),
+            summary: match &told.about {
+                Some(about) => format!("an event of space {} for the space above it", about.name),
+                None => format!("a message for space {}", told.above),
+            },
             call: Call::Tell { told },
         };
         self.send_or_hold(&machine, held, true).await

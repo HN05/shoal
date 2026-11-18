@@ -810,6 +810,13 @@ CREATE TABLE hub_outbox (
     queued_at INTEGER NOT NULL
 );
 
+CREATE TABLE hub_escalated_questions (
+    space_id TEXT NOT NULL,
+    number INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY(space_id, number, created_at)
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);

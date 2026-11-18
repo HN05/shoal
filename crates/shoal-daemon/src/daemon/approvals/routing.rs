@@ -492,19 +492,18 @@ impl Manager {
         number: ItemNumber,
         shown: Option<ApprovalRequest>,
     ) -> Result<ApprovalRequest> {
-        let space = self.space(space).await?;
+        let (decider, name) = self.acting_space(space).await?;
         let request = self.show_approval(number).await?;
         crate::refusal::ensure_unchanged(
             shown.is_none_or(|shown| request.is_same(&shown)),
             format_args!("approval request {number}"),
         )?;
         ensure!(
-            request.decider.as_ref() == Some(&space.id),
-            "approval request {number} is not {}'s to decide",
-            space.name
+            request.decider.as_ref() == Some(&decider),
+            "approval request {number} is not {name}'s to decide"
         );
         let _gate = self.gates.lock_announcements().await;
-        let routed = self.route_approval(&request, Some(&space.id)).await?;
+        let routed = self.route_approval(&request, Some(&decider)).await?;
         self.announce_approval(&routed).await;
         // A decider that could not be told gave the request to the user. Its
         // key, unlike its number, never names another request.
@@ -529,11 +528,39 @@ impl Manager {
     }
 
     /// Route `request` to the space above its workspace, or to the one above
-    /// `above` when that space passes it on.
+    /// `above` when that space passes it on, on this machine or the
+    /// machines above it.
     async fn route_approval(
         &self,
         request: &ApprovalRequest,
         above: Option<&SpaceId>,
+    ) -> Result<ApprovalRequest> {
+        let start = above.unwrap_or(&request.space_id);
+        let elsewhere = self.deciders_elsewhere(start, false).await;
+        self.route_among(request, above, elsewhere).await
+    }
+
+    /// Pass `request`, which waited too long for its decider on an offline
+    /// machine, to the next space above with an agent on a connected
+    /// machine, or to the user, and tell whoever decides it now.
+    pub(crate) async fn pass_over_offline(&self, request: &ApprovalRequest) -> Result<()> {
+        let Some(decider) = request.decider.clone() else {
+            return Ok(());
+        };
+        let _gate = self.gates.lock_announcements().await;
+        let elsewhere = self.deciders_elsewhere(&decider, true).await;
+        let routed = self.route_among(request, Some(&decider), elsewhere).await?;
+        self.announce_approval(&routed).await;
+        Ok(())
+    }
+
+    /// Route `request` as [`Self::route_approval`] does, with the deciders
+    /// `elsewhere` on the machines above after this machine's own.
+    async fn route_among(
+        &self,
+        request: &ApprovalRequest,
+        above: Option<&SpaceId>,
+        elsewhere: Vec<SpaceId>,
     ) -> Result<ApprovalRequest> {
         let agents = self.tracked_agents().await;
         let (key, workspace) = (request.key.clone(), request.space_id.clone());
@@ -543,8 +570,12 @@ impl Manager {
                 // Passed up, it goes on above its decider, whatever became
                 // of the requester's agent since it was routed.
                 let candidates = match &above {
-                    Some(above) => crate::daemon::workspace::spaces_above(tx, above, &agents)?,
-                    None => crate::daemon::workspace::deciders(tx, &workspace, &agents)?,
+                    Some(above) => {
+                        let mut here = crate::daemon::workspace::spaces_above(tx, above, &agents)?;
+                        here.extend(elsewhere);
+                        here
+                    }
+                    None => crate::daemon::workspace::deciders(tx, &workspace, &agents, elsewhere)?,
                 };
                 let routed = route(tx, &key, &candidates, above.as_ref())?;
                 Ok(routed)

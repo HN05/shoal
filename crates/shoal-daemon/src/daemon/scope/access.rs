@@ -105,7 +105,9 @@ impl Manager {
         space: &'a mut SpaceSelector,
         refusal: &str,
     ) -> Result<&'a mut SpaceSelector> {
-        ensure!(self.space(space).await?.id == caller.space_id, "{refusal}");
+        if !self.names_vouched_own(caller, space) {
+            ensure!(self.space(space).await?.id == caller.space_id, "{refusal}");
+        }
         Ok(space)
     }
 

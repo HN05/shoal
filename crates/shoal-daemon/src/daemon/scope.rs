@@ -81,13 +81,18 @@ pub(crate) async fn authorize(
 }
 
 /// Refuse a `target` outside `caller`'s scope, except the workspace a chat
-/// runs in for a request that only `reads` it, and name it by ID.
+/// runs in for a request that only `reads` it, and name it by ID. A
+/// caller's own space on another machine, which vouches for it, is its
+/// own.
 pub(in crate::daemon) async fn confine_target(
     manager: &Manager,
     caller: &Caller,
     target: &mut SpaceSelector,
     reads: bool,
 ) -> Result<()> {
+    if manager.names_vouched_own(caller, target) {
+        return Ok(());
+    }
     let space = manager.space(target).await?;
     let id = space.id.to_owned();
     if !manager.reaches(caller, &id).await? {

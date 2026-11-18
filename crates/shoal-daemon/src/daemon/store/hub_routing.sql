@@ -21,3 +21,12 @@ CREATE TABLE hub_outbox (
     call TEXT NOT NULL,
     queued_at INTEGER NOT NULL
 );
+
+-- The questions whose coordinator's machine stayed offline too long, which
+-- went on to the next space above that is online, or to the user, once.
+CREATE TABLE hub_escalated_questions (
+    space_id TEXT NOT NULL,
+    number INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY(space_id, number, created_at)
+);

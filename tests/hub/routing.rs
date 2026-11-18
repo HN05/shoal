@@ -6,7 +6,12 @@ use serde_json::{Value, json};
 use super::{
     directory::{join, listed, machine, reach, workspace},
     numbers::reroute,
-    support::{daemon_client, fixture::Base, printed, shoal_binary, wait::wait_for},
+    support::{
+        daemon_client,
+        fixture::{Base, home},
+        printed, shoal_binary,
+        wait::wait_for,
+    },
 };
 
 /// What `machine`'s daemon answers the request `method` with, as the user.
@@ -202,4 +207,53 @@ fn the_hub_holds_a_message_for_an_offline_machine_and_refuses_what_cannot_wait()
     assert!(error.contains("machine laptop is offline"), "{error}");
     reroute(&laptop, None);
     message_with(&laptop, &there, "while away");
+}
+
+#[test]
+fn a_question_for_an_offline_coordinator_goes_on_to_the_user() {
+    let hub = machine(true, "app");
+    let desk = machine(false, "app");
+    let config = "[machine.hub]\nescalate_after_minutes = 0\n";
+    let laptop = Base::start(home(), config, "app", &[]);
+    let desk_id = join(&desk, &hub, "desk");
+    let laptop_id = join(&laptop, &hub, "laptop");
+    reach(&desk, &laptop);
+    let coordinator = workspace(&desk, "coordinator");
+    let repo = desk.repo.to_str().unwrap().to_owned();
+    desk.ok(&[
+        "start",
+        "--wait",
+        &repo,
+        "--branch",
+        "child",
+        "--parent",
+        &coordinator,
+    ]);
+    let child = desk.id("child");
+    let moved = desk.ok(&["move", "ssh", "laptop", &child, "--shoal", shoal_binary()]);
+    assert_eq!(moved["failed"], json!([]), "{moved}");
+    working(&desk, &coordinator);
+    wait_for("the coordinator's agent at the hub", || {
+        (listed(&hub, &coordinator, &desk_id)["agent"] == true).then_some(())
+    });
+    listed(&hub, &child, &laptop_id);
+    working(&laptop, &child);
+    reroute(&desk, Some("false"));
+    wait_for("the hub to see the desk go", || {
+        let members = hub.ok(&["hub", "ls"])["members"].clone();
+        let desk = (members.as_array().unwrap().iter()).find(|member| member["name"] == "desk");
+        (desk?["connected"] == false).then_some(())
+    });
+    let ask = json!({"question": "Which database?", "recommendation": "SQLite"});
+    let asked = request(
+        &laptop,
+        json!({"ask_question": {"space": child, "ask": ask}}),
+    );
+    assert_ne!(asked["type"], "error", "{asked}");
+    wait_for("the question to reach the user", || {
+        let alerts = laptop.ok(&["alerts"]);
+        (alerts.as_array().unwrap().iter())
+            .find(|alert| alert["kind"] == "question_asked" && alert["space_id"] == child.as_str())
+            .cloned()
+    });
 }

@@ -86,13 +86,15 @@ pub struct Queued {
 /// what its coordinator receives, which the machine of `above` delivers to
 /// the nearest space from `above` up with an agent, passing it on to the
 /// next machine where the tree goes on there, or to the user at the top.
+/// Without `about`, it is a message for `above` itself, such as an approval
+/// request routed to it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Told {
     /// The space whose coordinator receives it, or the nearest above it.
     pub above: SpaceId,
-    /// The space it is about, below `above`.
-    pub space: SpaceId,
-    pub name: SpaceName,
+    /// The space below `above` it is about.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub about: Option<ToldAbout>,
     /// The notification the event is for the user, if no space above takes
     /// it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -102,6 +104,13 @@ pub struct Told {
     /// there.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<String>,
+}
+
+/// The space an event is about.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToldAbout {
+    pub space: SpaceId,
+    pub name: SpaceName,
 }
 
 /// What the hub tells a machine whose queued request or event it dropped

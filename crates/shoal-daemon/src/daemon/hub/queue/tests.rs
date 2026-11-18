@@ -21,7 +21,7 @@ fn database() -> Connection {
 
 fn held(summary: &str) -> Held {
     let told = json!({
-        "above": "coordinator", "space": "child", "name": "child", "message": summary,
+        "above": "coordinator", "message": summary,
     });
     Held {
         sender: MemberId::from("desk".to_owned()),

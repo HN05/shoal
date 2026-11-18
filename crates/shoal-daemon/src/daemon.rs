@@ -586,6 +586,8 @@ async fn serve_request(
         Accepted::Answered => return Ok(()),
     };
     let reads_only = operation.reads_only();
+    // Its scope narrowed what it names to IDs, which every machine reads.
+    let routing = absent::Routing::of(&server, &operation, scope)?;
     let answer = requests::operation(&server, operation, caller.as_ref(), scope);
     let answer = log::when_slow(&name, answer);
     let Some(answer) = unless_abandoned(&mut stream, &name, reads_only, answer).await else {

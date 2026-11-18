@@ -18,6 +18,7 @@ pub(crate) use telling::Event;
 mod accept;
 pub(crate) mod answers;
 mod directory;
+mod escalation;
 mod forwarding;
 mod identity;
 mod links;
@@ -70,6 +71,7 @@ pub(crate) async fn run(manager: Arc<Manager>) {
         listener::run(manager.clone()),
         manager.report_own_spaces(),
         manager.expire_held(),
+        manager.escalate_waiting(),
         member::run(manager.clone()),
     );
 }
