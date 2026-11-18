@@ -137,7 +137,7 @@ pub(super) async fn handle(
             space,
             unsaved,
             checkpoint,
-        } => Body::EndedSpace(manager.end_moved_space(&space, unsaved, checkpoint).await?),
+        } => Body::RemovalResult(manager.end_moved_space(&space, unsaved, checkpoint).await?),
         RemovalMethod::ImportSpace(import) => {
             Body::RestoredSpace(manager.import_space(*import).await?)
         }

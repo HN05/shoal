@@ -13,11 +13,37 @@ use crate::{
     daemon::events::EventCause,
     git,
     model::{
-        CheckpointCause, KeptChat, KeptWorkspace, RemovedKind, RemovedSpace, Space, Workspace,
+        Checkpoint, CheckpointCause, KeptChat, KeptWorkspace, RemovedKind, RemovedSpace, Space,
+        Workspace, Worktree,
     },
     time::UnixTime,
 };
 use shoal_protocol::space_names::SpaceSelector;
+
+/// What a removal record keeps of a workspace's place: `checkpoint` and
+/// what `worktree` builds on.
+fn kept_workspace(worktree: &Worktree, checkpoint: Checkpoint) -> RemovedKind {
+    RemovedKind::Workspace(Box::new(KeptWorkspace {
+        checkpoint,
+        base_ref: worktree.base_ref.clone(),
+        base_commit: worktree.base_commit.clone(),
+        head: worktree.head.clone(),
+        setup_skipped: worktree.setup_skipped,
+    }))
+}
+
+/// What a removal record keeps of the chat `space`: how and where its agent
+/// ran.
+fn kept_chat(space: &Space) -> RemovedKind {
+    RemovedKind::Chat {
+        chat: Box::new(KeptChat {
+            mode: (space.mode.clone()).unwrap_or_else(crate::model::chat_mode),
+            narrowing: space.narrowing,
+            workspace: space.workdir.workspace().cloned(),
+            root_dir: space.workdir.root_dir().map(Into::into),
+        }),
+    }
+}
 
 /// SQL true when the space of a removal record is gone: no space has its ID.
 const GONE: &str = "space_id NOT IN (SELECT id FROM spaces)";
@@ -60,13 +86,7 @@ impl Manager {
             session_files,
             cause,
             removed_at: UnixTime::now(),
-            kind: RemovedKind::Workspace(Box::new(KeptWorkspace {
-                checkpoint,
-                base_ref: workspace.base_ref.clone(),
-                base_commit: workspace.base_commit.clone(),
-                head: workspace.head.clone(),
-                setup_skipped: workspace.setup_skipped,
-            })),
+            kind: kept_workspace(&workspace.part, checkpoint),
         };
         let record = removed.clone();
         self.store.run(move |db| self::record(db, &record)).await?;
@@ -83,45 +103,51 @@ impl Manager {
         cause: EventCause,
     ) -> Result<RemovedSpace> {
         // As for a workspace, its links and parent are final now.
-        let removed = self.chat_removal_record(id, cause).await?;
+        let removed = self.present_removal_record(id, None, cause).await?;
         let record = removed.clone();
         self.store.run(move |db| self::record(db, &record)).await?;
         Ok(removed)
     }
 
-    /// What a removal of the chat `id` for `cause` would record of it now,
-    /// without recording it.
-    pub(crate) async fn chat_removal_record(
+    /// What a removal of the space `id` for `cause` would record of it now,
+    /// without recording it: its stopped agents and last sessions, and a
+    /// workspace at `checkpoint`, which the caller took, until that expires,
+    /// or how and where a chat's agent ran, until the retention its files
+    /// have.
+    pub(crate) async fn present_removal_record(
         &self,
         id: &SpaceId,
+        checkpoint: Option<Checkpoint>,
         cause: EventCause,
     ) -> Result<RemovedSpace> {
-        let chat = (self.chat_by_id(id).await?).context("the chat was removed meanwhile")?;
-        let expires_at = (self.removed_files_expiry(&Space::from(chat.clone()))).await;
-        let (agents, last_sessions) = self.saved_agents(&chat.id, None)?;
-        let session_files = (self.unplaced_sessions(&Space::from(chat.clone()))).await;
-        let removed = RemovedSpace {
-            space_id: chat.id,
-            repository_id: chat.repository_id,
-            name: chat.name,
-            parent: chat.parent,
-            links: chat.links,
+        let space = (self.find_space(id).await?).context("the space was removed meanwhile")?;
+        let (agents, last_sessions) = self.saved_agents(&space.id, None)?;
+        let session_files = self.unplaced_sessions(&space).await;
+        let (kind, expires_at) = match (space.worktree(), checkpoint) {
+            (Some(worktree), Some(checkpoint)) => {
+                let expires_at = checkpoint.expires_at;
+                (kept_workspace(worktree, checkpoint), expires_at)
+            }
+            (Some(_), None) => anyhow::bail!("a workspace's record keeps a checkpoint"),
+            (None, _) => {
+                let expires_at = self.removed_files_expiry(&space).await;
+                (kept_chat(&space), expires_at)
+            }
+        };
+        Ok(RemovedSpace {
+            space_id: space.id,
+            repository_id: space.repository_id,
+            name: space.name,
+            parent: space.parent,
+            links: space.links,
             agents,
             last_sessions,
             session_files,
             cause,
             removed_at: UnixTime::now(),
             expires_at,
-            kind: RemovedKind::Chat {
-                chat: Box::new(KeptChat {
-                    mode: (chat.mode).unwrap_or_else(crate::model::chat_mode),
-                    narrowing: chat.narrowing,
-                    workspace: chat.workdir.workspace().cloned(),
-                    root_dir: chat.workdir.root_dir().map(Into::into),
-                }),
-            },
-        };
-        Ok(removed)
+            kind,
+        })
     }
 
     /// The stopped agents and last sessions the space `id` saved, which its

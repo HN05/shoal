@@ -45,13 +45,13 @@ pub async fn export_moving(
 
 /// End `space`, which another Shoal imported, deleting only the `unsaved`
 /// work the caller saw: a workspace only while it still has what its
-/// exported `checkpoint` keeps. Returns a workspace's removal.
+/// exported `checkpoint` keeps. Returns its removal.
 pub async fn end_moved(
     daemon: &impl Daemon,
     space: SpaceSelector,
     unsaved: UnsavedWork,
     checkpoint: Option<CheckpointNumber>,
-) -> Result<Option<RemovalResult>> {
+) -> Result<RemovalResult> {
     let method = RemovalMethod::EndMovedSpace {
         space,
         unsaved,

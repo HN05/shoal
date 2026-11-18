@@ -1,22 +1,35 @@
-//! Copies of spaces that keep running: a workspace at a checkpoint with its
-//! agents and the sessions they reported, or a chat with its agents, which
+//! Copies of spaces that keep running: a space with its agents and the
+//! sessions they reported, a workspace at a checkpoint, which
 //! `shoal move import` opens as a new space whose agents start from forks.
-use crate::transfer::ManifestExt;
-use anyhow::{Result, ensure};
+use anyhow::Result;
 
 use super::Prepared;
 use crate::{
     daemon::{events::EventCause, workspace::Manager},
     execution::recovery::{self, Copied, Record, StoppedAgent},
-    model::{Chat, Execution, Space, Workspace},
+    model::{Execution, Space},
     time::UnixTime,
-    transfer::Manifest,
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
+    /// Write a copy of the space `selector` names for another Shoal to the
+    /// new file `file`, leaving the space running here: a workspace at its
+    /// checkpoint `checkpoint`, or at a new one.
+    pub async fn copy_space(
+        &self,
+        selector: &SpaceSelector,
+        checkpoint: Option<CheckpointNumber>,
+        file: std::path::PathBuf,
+    ) -> Result<crate::transfer::ExportedSpace> {
+        crate::daemon::access::ensure_writable(crate::transfer::directory(&file)).await?;
+        let space = self.running_space(selector).await?;
+        let copied = self.prepare_copy(space, checkpoint).await?;
+        self.write_prepared(copied, file).await
+    }
+
     /// The workspace or running chat `selector` names, refusing a removed
     /// space, which runs nothing to keep.
     pub(super) async fn running_space(&self, selector: &SpaceSelector) -> Result<Space> {
@@ -39,43 +52,31 @@ impl Manager {
         }
     }
 
-    /// A copy of `workspace` at its checkpoint `number`, or at a new one,
-    /// with its agents, which start from forks of the sessions they
-    /// reported. An earlier checkpoint marks those sessions as newer than
-    /// its files.
-    pub(super) async fn copy_workspace(
+    /// A copy of `space`, as its removal would record it now, with its
+    /// agents, which start from forks of the sessions they reported: a
+    /// workspace at its checkpoint `number`, or at a new one. An earlier
+    /// checkpoint marks those sessions as newer than its files.
+    async fn prepare_copy(
         &self,
-        workspace: Workspace,
+        space: Space,
         number: Option<CheckpointNumber>,
     ) -> Result<Prepared> {
-        let checkpoint = match number {
-            Some(number) => self.numbered_checkpoint(&workspace, number).await?,
-            None => {
-                self.take_checkpoint(&SpaceSelector::id(&workspace.id), None)
-                    .await?
-            }
-        };
-        ensure!(
-            !checkpoint.files_omitted,
-            "checkpoint {} of {} could not keep the uncommitted files, so a copy of it would lose them",
-            checkpoint.number,
-            workspace.name
-        );
-        let agents = self.copied_agents(&workspace.id).await?;
-        let copied = super::packaged_record(&self.paths, &workspace, checkpoint, agents);
-        let repo = self.repository(workspace.repository()).await?;
-        let mut manifest = Manifest::of(Some(&repo), copied).await?;
-        manifest.copy = Some(Copied {
+        let checkpoint = self.copy_checkpoint(&space, number).await?;
+        let mut copied = self
+            .present_removal_record(&space.id, checkpoint, EventCause::Manual)
+            .await?;
+        copied.agents = self.copied_agents(&space.id).await?;
+        // Its sessions' files are the original's, which the package carries
+        // from where they are.
+        copied.session_files = Vec::new();
+        let repo = self.repository_of(copied.repository_id.as_ref()).await?;
+        let settings = self.space_settings(&space).await;
+        let mut prepared = Prepared::of(self, repo, copied, settings).await?;
+        prepared.manifest.copy = Some(Copied {
             earlier_files: number.is_some(),
             held_elsewhere: false,
         });
-        Ok(Prepared {
-            settings: Some(self.workspace_settings(&workspace).await),
-            repo: Some(repo),
-            manifest,
-            removal: None,
-            kept_sessions: Vec::new(),
-        })
+        Ok(prepared)
     }
 
     /// The agents of the space `id` a copy starts again, each with the
@@ -99,29 +100,6 @@ impl Manager {
             });
         }
         Ok(agents)
-    }
-
-    /// A copy of `chat`, as its removal would record it now, with its agents
-    /// as a workspace's copy has them, which start from forks of their
-    /// sessions.
-    pub(super) async fn copy_chat(&self, chat: Chat) -> Result<Prepared> {
-        let mut record = (self.chat_removal_record(&chat.id, EventCause::Manual)).await?;
-        record.agents = self.copied_agents(&chat.id).await?;
-        ensure!(
-            record.has_session(),
-            "the agent of chat {} reported no session to fork",
-            chat.name
-        );
-        let repo = self.chat_repository(&chat).await?;
-        let mut manifest = Manifest::of(repo.as_ref(), record).await?;
-        manifest.copy = Some(Copied::default());
-        Ok(Prepared {
-            repo,
-            manifest,
-            removal: None,
-            settings: None,
-            kept_sessions: Vec::new(),
-        })
     }
 }
 

@@ -76,7 +76,7 @@ async fn a_moving_workspace_stays_until_its_import_ends_it() {
         .end_moved_space(&selector, UnsavedWork::default(), Some(checkpoint))
         .await
         .unwrap();
-    assert!(ended.is_some());
+    assert!(ended.removed);
     assert!(!workspace.path.exists());
     let removed = exporting.removed_workspaces().await.unwrap();
     assert_eq!(removed[0].space_id, workspace.id);
@@ -102,7 +102,7 @@ async fn files_written_before_the_export_end_with_the_workspace_the_caller_saw_c
         .end_moved_space(&selector, UnsavedWork::default(), Some(checkpoint))
         .await
         .unwrap();
-    assert!(ended.is_some());
+    assert!(ended.removed);
     assert!(!workspace.path.exists());
 }
 
@@ -146,7 +146,23 @@ async fn a_moving_chat_stops_its_agent_and_stays_until_its_end() {
         .end_moved_space(&selector, UnsavedWork::default(), None)
         .await
         .unwrap();
-    assert!(ended.is_none());
+    assert!(ended.removed);
+    assert!(manager.chats().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_chat_without_a_session_moves_with_a_warning() {
+    let (root, manager, pid) = super::chat("talk").await;
+    let chat = manager.chats().await.unwrap().remove(0);
+    let selector = SpaceSelector::id(&chat.id);
+
+    let (exported, _) = export_moving(&manager, &selector, root.path()).await;
+    let warned = (exported.warnings.iter()).any(|warning| warning.contains("talk"));
+    assert!(warned, "{:?}", exported.warnings);
+    assert_eq!(identity::capture(pid).unwrap(), None);
+    (manager.end_moved_space(&selector, UnsavedWork::default(), None))
+        .await
+        .unwrap();
     assert!(manager.chats().await.unwrap().is_empty());
 }
 

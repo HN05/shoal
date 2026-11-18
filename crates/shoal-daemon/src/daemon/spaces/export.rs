@@ -1,56 +1,81 @@
 //! Packages of spaces for `shoal move`: the daemon removes a space here,
-//! stopping a chat's agent first, copies one that keeps running, or stops
-//! one's agents for a move that ends it once imported, and writes what
-//! continues it on another machine.
-use crate::execution::recovery::LastSessionExt;
+//! copies one that keeps running, or stops one's agents for a move that
+//! ends it once imported, and writes what continues it on another machine.
+//! Each runs one path for a space of either kind; what a workspace's
+//! worktree adds is its worktree step.
 use crate::transfer::ManifestExt;
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
+use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::model::ByKind;
 
 use crate::{
     config::Effective,
-    daemon::{events::EventCause, workspace::Manager},
-    execution::recovery::{LastSession, StoppedAgent},
-    model::{
-        Chat, Checkpoint, KeptWorkspace, RemovedKind, RemovedSpace, Repository, Space, Workspace,
-    },
-    paths::Paths,
+    daemon::workspace::Manager,
+    model::{RemovedSpace, Repository, Space},
     removal::{InspectionPolicy, RemovalResult, UnsavedWork},
-    time::UnixTime,
     transfer::{ExportedSpace, Manifest, SessionSource},
 };
-use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::transcripts::Environments;
 
 mod carried;
 mod copy;
 mod moving;
+mod worktree;
 
 /// A space prepared for its package, ended here or copied: its repository,
 /// none for a chat without one, the package without its session files, the
-/// removal that ended a workspace, the settings describing its agents when
-/// they are not the repository's, and the session files an import kept for
-/// it.
+/// removal that ended it, the settings describing its agents, the session
+/// files an import kept for it, and what the package leaves out.
 struct Prepared {
     repo: Option<Repository>,
     manifest: Manifest,
     removal: Option<RemovalResult>,
-    settings: Option<Result<Effective>>,
+    settings: Result<Effective>,
     kept_sessions: Vec<SessionSource>,
+    warnings: Vec<String>,
+}
+
+impl Prepared {
+    /// The package of the space `record` records, of `repo` or of none,
+    /// whose agents `settings` describes, with the session files an import
+    /// kept for it.
+    async fn of(
+        manager: &Manager,
+        repo: Option<Repository>,
+        record: RemovedSpace,
+        settings: Result<Effective>,
+    ) -> Result<Self> {
+        let warnings = no_session(&record).into_iter().collect();
+        let kept_sessions = manager.kept_session_sources(&record).await;
+        Ok(Self {
+            manifest: Manifest::of(repo.as_ref(), record).await?,
+            repo,
+            removal: None,
+            settings,
+            kept_sessions,
+            warnings,
+        })
+    }
+}
+
+/// How an export ended its space: the removal, the settings describing its
+/// agents, read before it, and the chats that went with it.
+struct Ended {
+    removal: Option<RemovalResult>,
+    settings: Result<Effective>,
+    carried: Vec<SpaceId>,
 }
 
 impl Manager {
     /// Write a space for another Shoal to the new file `file`, removing it
-    /// here first with the spaces below it that `unsaved` confirms, a
-    /// running chat once its agent stopped. A selector that names neither
-    /// exports the removal record of the workspace or chat with that ID,
-    /// which stays. The daemon writes the file, so closing
-    /// the caller's terminal with the space cannot cut the export short; it
-    /// checks that it can before ending anything, since its file access can
-    /// differ from the caller's. Writing it that fails names the restore
-    /// that opens the space here again.
+    /// here first with the chats that go with it, of those `unsaved`
+    /// confirms. A selector that names no space exports the removal record
+    /// of the space with that ID, which stays. The daemon writes the file,
+    /// so closing the caller's terminal with the space cannot cut the
+    /// export short; it checks that it can before ending anything, since
+    /// its file access can differ from the caller's. Writing it that fails
+    /// names the restore that opens the space here again.
     pub async fn export_space(
         &self,
         selector: &SpaceSelector,
@@ -59,40 +84,89 @@ impl Manager {
         file: std::path::PathBuf,
     ) -> Result<ExportedSpace> {
         crate::daemon::access::ensure_writable(crate::transfer::directory(&file)).await?;
-        let ended = match self.space(selector).await.map(Space::by_kind) {
-            Ok(ByKind::Chat(chat)) => self.end_chat_for_export(chat, &unsaved).await?,
-            _ => {
-                self.remove_for_export(selector, unsaved, inspection)
-                    .await?
-            }
+        let prepared = match self.space(selector).await {
+            Ok(space) => self.end_for_export(space, unsaved, inspection).await?,
+            Err(_) => self.prepare_kept_record(selector).await?,
         };
-        let id = ended.manifest.space.record.space_id.clone();
-        (self.write_prepared(ended, file).await)
+        let id = prepared.manifest.space.record.space_id.clone();
+        (self.write_prepared(prepared, file).await)
             .with_context(|| format!("shoal restore {id} opens it here again"))
     }
 
-    /// Write a copy of the space `selector` names for another Shoal to the
-    /// new file `file`, leaving the space running here: a workspace at its
-    /// checkpoint `checkpoint`, or at a new one, or a chat with its session.
-    pub async fn copy_space(
+    /// End `space` for its export through the removal path, stopping its
+    /// agents, so their sessions' files stop changing and only writing them
+    /// is left, and prepare the package of the record its removal keeps. A
+    /// space below it that does not go with it refuses the export.
+    async fn end_for_export(
         &self,
-        selector: &SpaceSelector,
-        checkpoint: Option<CheckpointNumber>,
-        file: std::path::PathBuf,
-    ) -> Result<ExportedSpace> {
-        crate::daemon::access::ensure_writable(crate::transfer::directory(&file)).await?;
-        let copied = match self.running_space(selector).await?.by_kind() {
-            ByKind::Workspace(workspace) => self.copy_workspace(workspace, checkpoint).await?,
-            ByKind::Chat(chat) => {
-                ensure!(
-                    checkpoint.is_none(),
-                    "chat {} has no checkpoints; export a copy of it without --checkpoint",
-                    chat.name
-                );
-                self.copy_chat(chat).await?
-            }
+        space: Space,
+        unsaved: UnsavedWork,
+        inspection: InspectionPolicy,
+    ) -> Result<Prepared> {
+        worktree::ensure_packable(&space)?;
+        self.ensure_only_carried_below(&space.id, &space.name)
+            .await?;
+        // Its own config may describe its agents, and goes with it.
+        let settings = self.space_settings(&space).await;
+        let carried = self.chats_carried_by(&space.id).await?;
+        let removal = (self.remove_packaged(&space, &carried, unsaved, inspection)).await?;
+        let removed = self.removal_record(&space.id).await?;
+        let ended = Ended {
+            removal: Some(removal),
+            settings,
+            carried,
         };
-        self.write_prepared(copied, file).await
+        self.prepare_removed(removed, ended).await
+    }
+
+    /// Prepare the package of the removal record of the space `selector`
+    /// names by ID, which stays.
+    async fn prepare_kept_record(&self, selector: &SpaceSelector) -> Result<Prepared> {
+        let removed = (self.removed_spaces().await?.into_iter())
+            .find(|removed| selector.given_id() == Some(&removed.space_id))
+            .with_context(|| format!("no space or restorable space {selector}"))?;
+        let ended = Ended {
+            removal: None,
+            settings: self.space_settings_in(removed.repository_id.as_ref()).await,
+            carried: Vec::new(),
+        };
+        self.prepare_removed(removed, ended).await
+    }
+
+    /// Prepare the package of the space `removed` records, as `ended` ended
+    /// it here, with the chats that went with it.
+    async fn prepare_removed(&self, removed: RemovedSpace, ended: Ended) -> Result<Prepared> {
+        worktree::ensure_files_kept(&removed)?;
+        let repo = self.repository_of(removed.repository_id.as_ref()).await?;
+        let mut prepared = Prepared::of(self, repo, removed, ended.settings).await?;
+        prepared.manifest.chats = self.carried_records(&ended.carried).await?;
+        prepared.removal = ended.removal;
+        Ok(prepared)
+    }
+
+    /// Remove `space` for its package through the removal path, deleting
+    /// the `unsaved` work the caller confirmed and taking only the chats
+    /// `carried` with it among the spaces below that it confirms: a space
+    /// that joins it meanwhile retains it.
+    async fn remove_packaged(
+        &self,
+        space: &Space,
+        carried: &[SpaceId],
+        unsaved: UnsavedWork,
+        inspection: InspectionPolicy,
+    ) -> Result<RemovalResult> {
+        let confirmed = |id: &&SpaceId| unsaved.children().is_none_or(|ids| ids.contains(id));
+        let taking: Vec<SpaceId> = carried.iter().filter(confirmed).cloned().collect();
+        let selector = SpaceSelector::id(&space.id);
+        (self.remove_selected_taking(&selector, unsaved, inspection, &taking)).await
+    }
+
+    /// The repository `id`, none for a space without one.
+    async fn repository_of(&self, id: Option<&RepositoryId>) -> Result<Option<Repository>> {
+        match id {
+            Some(id) => self.repository(id).await.map(Some),
+            None => Ok(None),
+        }
     }
 
     /// Write the package of `prepared` to the new file `file`.
@@ -101,23 +175,21 @@ impl Manager {
         prepared: Prepared,
         file: std::path::PathBuf,
     ) -> Result<ExportedSpace> {
-        let repo = prepared.repo.as_ref();
-        let settings = match prepared.settings {
-            Some(settings) => settings,
-            None => self.space_settings_in(repo.map(|repo| &repo.id)).await,
-        };
-        let (manifest, warnings) = self
-            .write_package(
-                repo,
-                prepared.manifest,
-                settings,
-                prepared.kept_sessions,
-                file,
-            )
+        let Prepared {
+            repo,
+            manifest,
+            removal,
+            settings,
+            kept_sessions,
+            mut warnings,
+        } = prepared;
+        let (manifest, left_out) = self
+            .write_package(repo.as_ref(), manifest, settings, kept_sessions, file)
             .await?;
+        warnings.extend(left_out);
         Ok(ExportedSpace {
             manifest,
-            removal: prepared.removal,
+            removal,
             warnings,
         })
     }
@@ -140,188 +212,6 @@ impl Manager {
         let (manifest, left_out) = crate::transfer::export(repo, manifest, sessions, file).await?;
         warnings.extend(left_out);
         Ok((manifest, warnings))
-    }
-
-    /// Remove the workspace `selector` names for its export, or take the
-    /// removal record of the workspace or chat with that ID when none
-    /// exists, which stays.
-    async fn remove_for_export(
-        &self,
-        selector: &SpaceSelector,
-        unsaved: UnsavedWork,
-        inspection: InspectionPolicy,
-    ) -> Result<Prepared> {
-        let ended = match self.workspace(selector).await {
-            Ok(workspace) => {
-                Some((self.end_workspace_for_export(&workspace, unsaved, inspection)).await?)
-            }
-            Err(_) => None,
-        };
-        let removed = self
-            .removed_spaces()
-            .await?
-            .into_iter()
-            .find(|removed| match &ended {
-                Some(ended) => removed.space_id == ended.id,
-                None => selector.given_id() == Some(&removed.space_id),
-            })
-            .with_context(|| format!("no space or restorable space {selector}"))?;
-        match removed.kind {
-            RemovedKind::Workspace(_) => self.prepare_removed_workspace(removed, ended).await,
-            RemovedKind::Chat { .. } => self.prepare_removed_chat(removed, &[]).await,
-        }
-    }
-
-    /// Remove `workspace` for its export with the spaces below it that
-    /// `unsaved` confirms, naming the chats that go with it.
-    async fn end_workspace_for_export(
-        &self,
-        workspace: &Workspace,
-        unsaved: UnsavedWork,
-        inspection: InspectionPolicy,
-    ) -> Result<EndedWorkspace> {
-        ensure_exportable(workspace)?;
-        // Its own config may describe its agents, and goes with it.
-        let settings = self.workspace_settings(workspace).await;
-        let carried = self.chats_carried_by(&workspace.id).await?;
-        let removal = (self.remove_exported(workspace, unsaved, inspection)).await?;
-        Ok(EndedWorkspace {
-            id: workspace.id.clone(),
-            removal,
-            settings,
-            carried,
-        })
-    }
-
-    /// Prepare the package of the workspace `removed` records, which the
-    /// export `ended` when it did, refusing one whose removal could not keep
-    /// its uncommitted files.
-    async fn prepare_removed_workspace(
-        &self,
-        removed: RemovedSpace,
-        ended: Option<EndedWorkspace>,
-    ) -> Result<Prepared> {
-        ensure!(
-            !removed.kept_workspace()?.checkpoint.files_omitted,
-            "the removal could not keep the uncommitted files; shoal restore {} opens the workspace here again",
-            removed.space_id
-        );
-        let (removal, settings, carried) = match ended {
-            Some(ended) => (Some(ended.removal), Some(ended.settings), ended.carried),
-            None => (None, None, Vec::new()),
-        };
-        let repo = self.repository(removed.repository()?).await?;
-        let kept_sessions = self.kept_session_sources(&removed).await;
-        let mut manifest = Manifest::of(Some(&repo), removed).await?;
-        manifest.chats = self.carried_records(&carried).await?;
-        Ok(Prepared {
-            kept_sessions,
-            manifest,
-            repo: Some(repo),
-            removal,
-            settings,
-        })
-    }
-
-    /// Prepare the package of the chat `removed` records, whose record
-    /// stays, with the chats `carried` that went with it.
-    async fn prepare_removed_chat(
-        &self,
-        removed: RemovedSpace,
-        carried: &[SpaceId],
-    ) -> Result<Prepared> {
-        let repo = self.movable_removed_chat(&removed).await?;
-        let kept_sessions = self.kept_session_sources(&removed).await;
-        let mut manifest = Manifest::of(repo.as_ref(), removed).await?;
-        manifest.chats = self.carried_records(carried).await?;
-        Ok(Prepared {
-            manifest,
-            repo,
-            removal: None,
-            settings: None,
-            kept_sessions,
-        })
-    }
-
-    /// The repository of the chat `removed` records, which moves to another
-    /// machine, none for a chat without one, refusing what
-    /// [`Self::ensure_movable_chat`] refuses of a live chat that its removal left:
-    /// one whose agent reported no session to continue.
-    async fn movable_removed_chat(&self, removed: &RemovedSpace) -> Result<Option<Repository>> {
-        removed
-            .chat()
-            .context("the removal record is not a chat's")?;
-        ensure!(
-            removed.has_session(),
-            "the agent of chat {} reported no session to continue elsewhere; shoal restore {} opens it here again",
-            removed.name,
-            removed.space_id
-        );
-        match &removed.repository_id {
-            Some(repository) => self.repository(repository).await.map(Some),
-            None => Ok(None),
-        }
-    }
-
-    /// Remove `workspace` for its export through the removal path, taking
-    /// the spaces below it that `unsaved` confirms.
-    async fn remove_exported(
-        &self,
-        workspace: &Workspace,
-        unsaved: UnsavedWork,
-        inspection: InspectionPolicy,
-    ) -> Result<RemovalResult> {
-        let taking = self.exported_with(workspace, &unsaved).await?;
-        let selector = SpaceSelector::id(&workspace.id);
-        (self.remove_selected_taking(&selector, unsaved, inspection, &taking)).await
-    }
-
-    /// The IDs of the spaces the export of `workspace` removes first, of
-    /// those `unsaved` confirms. The removal takes only these, so a space
-    /// that joins it meanwhile retains the workspace.
-    async fn exported_with(
-        &self,
-        workspace: &Workspace,
-        unsaved: &UnsavedWork,
-    ) -> Result<Vec<SpaceId>> {
-        let confirmed = |id: &SpaceId| unsaved.children().is_none_or(|ids| ids.contains(id));
-        Ok((self.spaces_taken_with(&workspace.id).await?)
-            .into_iter()
-            .map(|space| space.id)
-            .filter(confirmed)
-            .collect())
-    }
-
-    /// Remove `chat` for its export, with the chats that go with it, of
-    /// those `unsaved` confirms, once its agent has reported the session the
-    /// package continues, stopping the running agents, so their sessions'
-    /// files stop changing and only writing them is left, and prepare the
-    /// package of the record its removal keeps. A chat that joins it
-    /// meanwhile keeps it here.
-    async fn end_chat_for_export(&self, chat: Chat, unsaved: &UnsavedWork) -> Result<Prepared> {
-        self.ensure_movable_chat(&chat).await?;
-        let carried = self.chats_carried_by(&chat.id).await?;
-        let taking = self.chat_taking(&chat.id, unsaved).await?;
-        (self.remove_selected(
-            &SpaceSelector::id(&chat.id),
-            UnsavedWork::taking(taking),
-            InspectionPolicy::GitOnly,
-        ))
-        .await?;
-        let removed = self.removal_record(&chat.id).await?;
-        self.prepare_removed_chat(removed, &carried).await
-    }
-
-    /// Refuse to move `chat` to another machine while its agent reported no
-    /// session to continue, or a space below it that does not go with it
-    /// stays.
-    async fn ensure_movable_chat(&self, chat: &Chat) -> Result<()> {
-        ensure!(
-            !self.reported_sessions(&chat.id).await?.is_empty(),
-            "the agent of chat {} reported no session to continue elsewhere, so the chat keeps running",
-            chat.name
-        );
-        self.ensure_only_carried_below(&chat.id, &chat.name).await
     }
 
     /// The files of the sessions the agents of the package `manifest`, of
@@ -376,56 +266,16 @@ impl Manager {
     }
 }
 
-/// A workspace the export removed: its ID, its removal, the settings
-/// describing its agents and the chats that went with it.
-struct EndedWorkspace {
-    id: SpaceId,
-    removal: RemovalResult,
-    settings: Result<Effective>,
-    carried: Vec<SpaceId>,
-}
-
-/// Refuse to export `workspace` when disposable: the package is built from
-/// its removal record, which a disposable workspace's removal does not keep.
-fn ensure_exportable(workspace: &Workspace) -> Result<()> {
-    ensure!(
-        !workspace.disposable,
-        "workspace {} is disposable, so its removal keeps nothing to export",
-        workspace.name
-    );
-    Ok(())
-}
-
-/// The record a package of `workspace`, which keeps running, holds: its
-/// `checkpoint` and `agents` with the last sessions it keeps, as its
-/// removal would record them.
-fn packaged_record(
-    paths: &Paths,
-    workspace: &Workspace,
-    checkpoint: Checkpoint,
-    agents: Vec<StoppedAgent>,
-) -> RemovedSpace {
-    RemovedSpace {
-        space_id: workspace.id.clone(),
-        repository_id: workspace.repository_id.clone(),
-        name: workspace.name.clone(),
-        expires_at: checkpoint.expires_at,
-        parent: workspace.parent.clone(),
-        links: workspace.links.clone(),
-        agents,
-        // An unreadable last session is not worth refusing the export for.
-        last_sessions: LastSession::all(paths, &workspace.id).unwrap_or_default(),
-        session_files: Vec::new(),
-        cause: EventCause::Manual,
-        removed_at: UnixTime::now(),
-        kind: RemovedKind::Workspace(Box::new(KeptWorkspace {
-            checkpoint,
-            base_ref: workspace.base_ref.clone(),
-            base_commit: workspace.base_commit.clone(),
-            head: workspace.head.clone(),
-            setup_skipped: workspace.setup_skipped,
-        })),
-    }
+/// The warning for a package of the space `record` records whose agent
+/// saved no session to continue, which starts as a new one where it is
+/// imported.
+fn no_session(record: &RemovedSpace) -> Option<String> {
+    record.saved_no_session().then(|| {
+        format!(
+            "{} saved no session of its agent, which starts as a new one where it is imported",
+            record.name
+        )
+    })
 }
 
 #[cfg(test)]

@@ -170,6 +170,16 @@ impl RemovedSpace {
             || self.last_sessions.iter().any(|last| last.session.is_some())
     }
 
+    /// Whether it ran an agent that saved no session to continue, which
+    /// starts as a new one: a chat always ran one. An agent moved from
+    /// another machine reported its session there.
+    pub fn saved_no_session(&self) -> bool {
+        let ran = !self.agents.is_empty() || !self.last_sessions.is_empty();
+        let moved = self.agents.iter().any(|agent| agent.record.moved)
+            || self.last_sessions.iter().any(|last| last.moved);
+        !self.has_session() && !moved && (ran || self.chat().is_some())
+    }
+
     /// Whether it is a copy of another space, whose agents start from forks
     /// of the original's sessions.
     pub fn is_copy(&self) -> bool {

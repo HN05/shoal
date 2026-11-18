@@ -114,7 +114,8 @@ async fn a_chat_ends_into_a_package_that_continues_its_session() {
     let file = root.path().join("plan-cache.shoal");
 
     let exported = export(&manager, "plan-cache", &file).await.unwrap();
-    assert!(exported.removal.is_none());
+    assert!(exported.removal.is_some_and(|removal| removal.removed));
+    assert!(exported.warnings.is_empty(), "{:?}", exported.warnings);
     assert!(manager.chats().await.unwrap().is_empty());
     assert_eq!(identity::capture(pid).unwrap(), None);
     let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
@@ -130,16 +131,26 @@ async fn a_chat_ends_into_a_package_that_continues_its_session() {
     );
 }
 
+/// Whether `exported` warns that the space `name` saved no session.
+fn warns_of(exported: &ExportedSpace, name: &str) -> bool {
+    exported
+        .warnings
+        .iter()
+        .any(|warning| warning.contains(name))
+}
+
 #[tokio::test]
-async fn a_chat_without_a_session_keeps_running() {
+async fn a_chat_without_a_session_ends_into_a_package_with_a_warning() {
     let (root, manager, pid) = chat("talk").await;
     let file = root.path().join("talk.shoal");
 
-    assert!(export(&manager, "talk", &file).await.is_err());
-    let chat = manager.chats().await.unwrap().remove(0);
-    assert!(identity::capture(pid).unwrap().is_some());
-    assert!(!file.exists());
-    stop(&manager, &chat).await;
+    let exported = export(&manager, "talk", &file).await.unwrap();
+    assert!(warns_of(&exported, "talk"), "{:?}", exported.warnings);
+    assert!(manager.chats().await.unwrap().is_empty());
+    assert_eq!(identity::capture(pid).unwrap(), None);
+    let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
+    let sessions = import.manifest.sessions.as_ref().unwrap();
+    assert_eq!(sessions.reported().count(), 0);
 }
 
 #[tokio::test]
@@ -211,6 +222,40 @@ async fn a_disposable_workspace_is_refused_before_its_removal() {
     .await;
     assert!(refused.is_err());
     assert!(workspace.path.exists());
+}
+
+#[tokio::test]
+async fn a_workspace_with_a_space_below_that_stays_is_not_exported() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&workspace.id);
+    let split = (manager.split_workspace(&selector, "child".into(), None, Default::default()))
+        .await
+        .unwrap();
+    let file = temp.path().join("topic.shoal");
+
+    let refused = manager
+        .export_space(
+            &selector,
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+            file.clone(),
+        )
+        .await;
+    assert!(refused.is_err());
+    assert!(!file.exists());
+    for kept in [&workspace, &split] {
+        assert!(manager.find_workspace(&kept.id).await.unwrap().is_some());
+        assert!(kept.path.exists());
+    }
 }
 
 #[tokio::test]
@@ -401,17 +446,17 @@ async fn a_chat_copy_keeps_the_chat_running() {
 }
 
 #[tokio::test]
-async fn a_chat_without_a_session_has_none_to_fork() {
-    let (root, manager, _pid) = chat("talk").await;
+async fn a_chat_without_a_session_is_copied_with_a_warning() {
+    let (root, manager, pid) = chat("talk").await;
     let file = root.path().join("talk.shoal");
 
-    assert!(
-        manager
-            .copy_space(&manager.named("talk").await, None, file.clone())
-            .await
-            .is_err()
-    );
-    assert!(!file.exists());
+    let exported = manager
+        .copy_space(&manager.named("talk").await, None, file.clone())
+        .await
+        .unwrap();
+    assert!(warns_of(&exported, "talk"), "{:?}", exported.warnings);
+    assert!(file.exists());
+    assert!(identity::capture(pid).unwrap().is_some());
     let chat = manager.chats().await.unwrap().remove(0);
     stop(&manager, &chat).await;
 }
@@ -489,14 +534,13 @@ async fn a_removed_chat_exports_from_its_record_which_stays() {
 }
 
 #[tokio::test]
-async fn a_removed_chat_without_a_session_is_not_exported() {
+async fn a_removed_chat_without_a_session_exports_with_a_warning() {
     let (root, manager, chat) = removed_chat("talk", "chat", None).await;
     let file = root.path().join("talk.shoal");
 
-    let refused = export_removed(&manager, &chat.id, &file).await.unwrap_err();
-    let restore = format!("shoal restore {}", chat.id);
-    assert!(format!("{refused:#}").contains(&restore), "{refused:#}");
-    assert!(!file.exists());
+    let exported = export_removed(&manager, &chat.id, &file).await.unwrap();
+    assert!(warns_of(&exported, "talk"), "{:?}", exported.warnings);
+    assert!(file.exists());
     assert_eq!(manager.removed_spaces().await.unwrap().len(), 1);
 }
 
@@ -522,7 +566,7 @@ async fn a_chat_without_a_repository_moves_and_copies_for_root_dir() {
         )
         .await
         .unwrap();
-    assert!(exported.removal.is_none());
+    assert!(exported.removal.is_some());
     assert!(manager.chats().await.unwrap().is_empty());
     for file in [&copy, &moved] {
         let import = Import::read(&mut &fs::read(file).unwrap()[..]).unwrap();

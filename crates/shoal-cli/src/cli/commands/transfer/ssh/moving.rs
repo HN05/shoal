@@ -137,7 +137,7 @@ async fn end_moved(
             crate::client::transfer::end_moved(&ctx.paths, space, unsaved, None).await?
         }
     };
-    export::warn_removal(removal.as_ref());
+    export::warn_removal(Some(&removal));
     Ok(())
 }
 

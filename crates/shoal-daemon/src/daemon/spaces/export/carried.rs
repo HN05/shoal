@@ -8,7 +8,6 @@ use crate::{
         workspace::{Manager, StopRequest},
     },
     model::RemovedSpace,
-    removal::UnsavedWork,
     transfer::{CarriedChat, CarriedChatExt},
 };
 use shoal_ids::space_ids::SpaceId;
@@ -41,19 +40,6 @@ impl Manager {
         Ok(())
     }
 
-    /// The IDs of the spaces below the chat `id` that its end for a move
-    /// takes: those `unsaved` confirms, else the chats that go with it.
-    pub(super) async fn chat_taking(
-        &self,
-        id: &SpaceId,
-        unsaved: &UnsavedWork,
-    ) -> Result<Vec<SpaceId>> {
-        match unsaved.children() {
-            Some(confirmed) => Ok(confirmed.to_vec()),
-            None => self.chats_carried_by(id).await,
-        }
-    }
-
     /// What a package holds of the chats `ids` that went with its space,
     /// from the removal records their removal saved.
     pub(super) async fn carried_records(&self, ids: &[SpaceId]) -> Result<Vec<CarriedChat>> {
@@ -64,11 +50,11 @@ impl Manager {
         Ok(carried)
     }
 
-    /// The record the removal of the chat `id` saved.
+    /// The record the removal of the space `id` saved.
     pub(super) async fn removal_record(&self, id: &SpaceId) -> Result<RemovedSpace> {
         (self.removed_spaces().await?.into_iter())
             .find(|removed| &removed.space_id == id)
-            .with_context(|| format!("the removal of chat {id} kept no record"))
+            .with_context(|| format!("the removal of {id} kept no record"))
     }
 
     /// Stop the agents of the chats `ids`, saving their sessions, and say
@@ -86,7 +72,7 @@ impl Manager {
     /// what its removal would record of it.
     pub(super) async fn stopped_record(&self, id: &SpaceId) -> Result<RemovedSpace> {
         (self.stop_space(&SpaceSelector::id(id), StopRequest::moving())).await?;
-        self.chat_removal_record(id, EventCause::Manual).await
+        (self.present_removal_record(id, None, EventCause::Manual)).await
     }
 
     /// What a package holds of the chat `record` records.
