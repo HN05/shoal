@@ -333,3 +333,29 @@ async fn a_selection_leaves_the_other_spaces_below_one_level_up() {
     test_support::git(&repo.path, &["rev-parse", "--verify", "refs/heads/worker"]);
     assert_eq!(decider().await, Some(top.id.clone()));
 }
+
+#[tokio::test]
+async fn a_selection_moves_nothing_while_a_removal_holds_the_space_above() {
+    let (source, manager, repo, _origin) = exporter().await;
+    let top = test_support::chat(&manager, "top", "chat", Some(&repo), None).await;
+    let worker = test_support::working_below(&manager, &repo, "worker", &top.id, "worker").await;
+    let below = SpaceSelector::id(&worker.id);
+    let child = (manager.split_workspace(&below, "child".into(), None, Default::default()))
+        .await
+        .unwrap();
+    let _removing = manager.space_removals.reserve(&top.id).unwrap();
+
+    let refused = manager
+        .export_space(
+            &below,
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+            source.path().join("worker.shoal"),
+            &Carrying::Selected(Vec::new()),
+        )
+        .await;
+
+    assert!(refused.is_err());
+    assert!(manager.find_space(&worker.id).await.unwrap().is_some());
+    assert_eq!(placed(&manager, &child.id).await.1, Some(worker.id));
+}
