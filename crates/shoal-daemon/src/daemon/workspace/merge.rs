@@ -52,7 +52,8 @@ impl Manager {
         push: bool,
         caller: Option<&Caller>,
     ) -> Result<MergePreview> {
-        let merge = self.validate_merge(selector, push, caller).await?;
+        let merge = self.validate_merge(selector, push, caller).await;
+        let merge = self.queue_unreviewed(merge).await?;
         let default_commit = local_commit(&merge.repo, &merge.default).await?;
         self.merge_preview(
             &merge.workspace,
@@ -67,7 +68,10 @@ impl Manager {
 
     /// Validate and refresh `caller`'s merge, which runs as `options` say
     /// while it holds the repository Git gate. The gate must stay held until
-    /// the tracked execution completes.
+    /// the tracked execution completes; a review gate's [`Unreviewed`]
+    /// refusal is left for the caller to queue once it releases the gate.
+    ///
+    /// [`Unreviewed`]: crate::daemon::reviews::gate::Unreviewed
     pub async fn prepare_merge(
         &self,
         selector: &SpaceSelector,
@@ -123,7 +127,7 @@ impl Manager {
     }
 
     /// The checks `caller`'s merge makes before it changes anything, its
-    /// review gate last. A merge that pushes needs an upstream for the
+    /// review gate last, which queues no review. A merge that pushes needs an upstream for the
     /// default branch.
     async fn validate_merge(
         &self,
@@ -159,7 +163,7 @@ impl Manager {
             true => Some(push_target(&repo, &default).await?),
             false => None,
         };
-        self.require_review(&workspace, Gate::Merge, &source, caller)
+        self.check_review(&workspace, Gate::Merge, &source, caller)
             .await?;
         Ok(MergeSource {
             workspace,

@@ -2093,6 +2093,8 @@ async fn a_merge_without_a_review_is_refused_before_its_approval() {
     let refused = merge_as_agent(&f, &workspace).await.unwrap_err();
     let refused = format!("{refused:#}");
     assert!(refused.contains(head.trim()), "{refused}");
+    // The review it misses is queued once the merge lets go of the Git gate.
+    assert!(refused.contains("queued"), "{refused}");
     assert!(
         f.manager
             .approval_requests(Some(&f.manager.named("worker").await))

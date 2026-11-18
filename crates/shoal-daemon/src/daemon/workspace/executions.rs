@@ -555,7 +555,16 @@ impl Manager {
                         &merge.unwrap_or_default(),
                         caller,
                     )
-                    .await?;
+                    .await;
+                let merge = match merge {
+                    Ok(merge) => merge,
+                    // Queueing the review a gate missed takes the registry
+                    // gate, which comes before the Git gate.
+                    Err(error) => {
+                        drop(guard);
+                        return self.queue_unreviewed(Err(error)).await;
+                    }
+                };
                 if let Some(caller) = caller {
                     self.authorize_scoped_merge(&merge, caller).await?;
                 }

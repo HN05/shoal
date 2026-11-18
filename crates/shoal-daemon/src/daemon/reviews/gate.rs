@@ -2,6 +2,7 @@
 //! `require_for_merge` holding the caller, it opens a new PR, marks work
 //! ready or merges only once a finished review covers the commit it acts on
 //! and every finding is resolved.
+use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 use std::fmt::Write as _;
 
@@ -27,10 +28,41 @@ pub(crate) enum Gate {
     Merge,
 }
 
+/// A gate's refusal for want of any review of the commit, with none queued
+/// or running, before a review is queued for it: queueing takes the
+/// registry gate, so a caller that holds a repository's Git gate releases
+/// it first, then queues as [`Manager::queue_unreviewed`] does.
+#[derive(Debug)]
+pub(crate) struct Unreviewed {
+    refusal: String,
+    workspace: SpaceId,
+}
+
+impl std::fmt::Display for Unreviewed {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.refusal)
+    }
+}
+
+impl std::error::Error for Unreviewed {}
+
 impl Manager {
     /// Refuse `caller`, where the workspace's setting for `gate` holds it,
-    /// as [`Self::require_reviewed`] does.
+    /// as [`Self::check_reviewed`] does, queueing the review it misses.
     pub(crate) async fn require_review(
+        &self,
+        workspace: &Workspace,
+        gate: Gate,
+        head: &CommitId,
+        caller: Option<&Caller>,
+    ) -> Result<()> {
+        let checked = self.check_review(workspace, gate, head, caller).await;
+        self.queue_unreviewed(checked).await
+    }
+
+    /// Refuse `caller`, where the workspace's setting for `gate` holds it,
+    /// as [`Self::check_reviewed`] does.
+    pub(crate) async fn check_review(
         &self,
         workspace: &Workspace,
         gate: Gate,
@@ -41,14 +73,14 @@ impl Manager {
         if !gate.holds(&settings, caller) {
             return Ok(());
         }
-        self.require_reviewed(workspace, gate, head).await
+        self.check_reviewed(workspace, gate, head).await
     }
 
     /// Refuse unless a finished review of the workspace covers `head`, the
     /// commit a command acts on, with every finding resolved, saying what is
-    /// missing; without a review of it and with none queued or running,
-    /// queue one.
-    pub(crate) async fn require_reviewed(
+    /// missing: as [`Unreviewed`] without a review of it and with none
+    /// queued or running.
+    pub(crate) async fn check_reviewed(
         &self,
         workspace: &Workspace,
         gate: Gate,
@@ -73,18 +105,35 @@ impl Manager {
                 head.short()
             ),
         };
-        let next = match active {
-            Some((id, state)) => pending(id, state),
-            None if reviewed.is_none() => self.queue_gate_review(workspace).await,
-            None => String::new(),
-        };
-        bail!("{missing}{next}")
+        match active {
+            Some((id, state)) => bail!("{missing}{}", pending(id, state)),
+            None if reviewed.is_none() => Err(Unreviewed {
+                refusal: missing,
+                workspace: workspace.id.clone(),
+            }
+            .into()),
+            None => bail!(missing),
+        }
     }
 
-    /// Queue a review of the workspace for a gate that found none, saying
-    /// how it went.
-    async fn queue_gate_review(&self, workspace: &Workspace) -> String {
-        let selector = SpaceSelector::id(&workspace.id);
+    /// `checked`, with a review of the workspace queued for an
+    /// [`Unreviewed`] refusal, which then says how that went.
+    pub(crate) async fn queue_unreviewed<T>(&self, checked: Result<T>) -> Result<T> {
+        let error = match checked {
+            Ok(checked) => return Ok(checked),
+            Err(error) => error,
+        };
+        let Some(unreviewed) = error.downcast_ref::<Unreviewed>() else {
+            return Err(error);
+        };
+        let queued = self.queue_gate_review(&unreviewed.workspace).await;
+        bail!("{unreviewed}{queued}")
+    }
+
+    /// Queue a review of the workspace `id` for a gate that found none,
+    /// saying how it went.
+    async fn queue_gate_review(&self, id: &SpaceId) -> String {
+        let selector = SpaceSelector::id(id);
         let queued =
             self.queue_review(&selector, ReviewTarget::Workspace, None, Default::default());
         match queued.await {

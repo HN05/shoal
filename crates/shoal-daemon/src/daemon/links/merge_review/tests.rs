@@ -187,3 +187,44 @@ async fn a_pr_whose_branch_no_workspace_owns_is_refused() {
     let refused = refused.to_string();
     assert!(refused.contains("elsewhere"), "{refused}");
 }
+
+#[tokio::test]
+async fn the_owners_own_config_decides_whom_its_pr_merge_holds() {
+    let f = Fixture::new("off", "topic").await;
+    assert_eq!(f.gate(None, None).await.unwrap(), None);
+    let config = "[review]\nrequire_for_merge = 'all'\n";
+    std::fs::write(f.workspace.path.join(".shoal.toml"), config).unwrap();
+    f.gate(None, None).await.unwrap_err();
+}
+
+#[tokio::test]
+async fn a_review_of_another_head_is_left_to_shoal_review_run() {
+    let f = Fixture::new("agents", "topic").await;
+    let other = CommitId::from("b".repeat(40));
+    let refused = f.gate(Some(other), Some(&f.agent())).await.unwrap_err();
+    let refused = refused.to_string();
+    assert!(refused.contains("shoal review run"), "{refused}");
+}
+
+#[tokio::test]
+async fn a_caller_outside_the_owners_tree_queues_no_review_there() {
+    let f = Fixture::new("agents", "topic").await;
+    let repository = f.workspace.repository().clone();
+    let sibling =
+        f.manager
+            .create_workspace(&repository, "other".into(), Some("main".into()), None, None);
+    let sibling = sibling.await.unwrap();
+    let caller = Caller::of_space(sibling.id.clone());
+    let mut merge = merge(None);
+    let context = ItemContext::space(SpaceSelector::id(&sibling.id)).into();
+    let gated = f.manager.gate_pull_merge(
+        &context,
+        Some("1".parse().unwrap()),
+        &mut merge,
+        Some(&caller),
+    );
+    let refused = gated.await.unwrap_err().to_string();
+    assert!(refused.contains("shoal review run"), "{refused}");
+    let selector = SpaceSelector::id(&f.workspace.id);
+    assert!(f.manager.latest_review(&selector).await.is_err());
+}
