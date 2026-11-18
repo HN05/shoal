@@ -47,6 +47,8 @@ impl Manager {
         let machine = match self.machine_of(space).await {
             Ok(Some(machine)) => machine,
             Ok(None) => return None,
+            // A space several machines have is refused as such.
+            Err(error) if Reason::of(&error).is_some() => return Some(Err(error)),
             Err(error) => {
                 crate::daemon::log!("hub: could not find the machine of space {space}: {error:#}");
                 return None;
@@ -62,9 +64,20 @@ impl Manager {
             return Ok(None);
         };
         let directory = &view.directory;
-        let listed = (directory.spaces.iter())
-            .find(|listed| selector.selects(&listed.space.id, listed.space.number));
-        Ok(listed.and_then(|listed| directory.machine(&listed.machine).cloned()))
+        let mut listed = (directory.spaces.iter())
+            .filter(|listed| selector.selects(&listed.space.id, listed.space.number));
+        let listed = match (listed.next(), listed.next()) {
+            (Some(listed), None) => listed,
+            (None, _) => return Ok(None),
+            // As while the hub renumbers one of them.
+            (Some(_), Some(_)) => {
+                let message = format!(
+                    "several other machines have a space {selector}; name it by the ID shoal list --json shows"
+                );
+                return Err(Refusal::new(Reason::NotFound, message).into());
+            }
+        };
+        Ok(directory.machine(&listed.machine).cloned())
     }
 
     /// Forward `request` for the space `space` to `machine`, unless it
