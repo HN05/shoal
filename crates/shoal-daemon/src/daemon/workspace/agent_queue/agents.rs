@@ -61,7 +61,7 @@ impl Manager {
         };
         let mut request = queued_agent_request(workspace, launch, pr)?;
         request.blockers = blockers;
-        (self.queue_add_awaiting(request, None, awaits).await?.entry)
+        (self.queue_add_awaiting(request, awaits).await?.entry)
             .context("the daemon queued the agent without an entry")
     }
 }

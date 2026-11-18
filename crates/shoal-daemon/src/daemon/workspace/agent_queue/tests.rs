@@ -46,31 +46,46 @@ pub(super) fn limit_globally(manager: &Manager, limit: u32) {
     )));
 }
 
-pub(crate) fn request(repository: &Repository, name: &str, now: bool) -> QueueRequest {
+/// The launch of an agent in a new workspace of `repository` named `name`.
+pub(crate) async fn request(
+    manager: &Manager,
+    repository: &Repository,
+    name: &str,
+    now: bool,
+) -> QueueRequest {
+    launch_in(&create(manager, repository, name).await, now)
+}
+
+/// The launch of an agent in `workspace`, which the daemon starts.
+pub(crate) fn launch_in(workspace: &Workspace, now: bool) -> QueueRequest {
     QueueRequest {
         source: None,
         issue_labels: Vec::new(),
-        priority: None,
         narrowing: Default::default(),
         mode: None,
-        repository: (&repository.id).into(),
-        name: name.into(),
+        repository: workspace.repository().into(),
+        name: workspace.name.clone(),
         agent: "claude".into(),
         issue_title: None,
         plan: "{}".into(),
         env: BTreeMap::from([("HERDR_ENV".into(), "1".into())]),
         now,
-        workspace: None,
+        workspace: SpaceSelector::id(&workspace.id),
         starts_in_caller: false,
         blockers: Vec::new(),
     }
 }
 
+/// Queue the launch of an agent in a new workspace of `repository` named
+/// `name`.
 pub(super) async fn add(manager: &Manager, repository: &Repository, name: &str) -> QueueAdmission {
-    manager
-        .queue_add(request(repository, name, false))
-        .await
-        .unwrap()
+    let request = request(manager, repository, name, false).await;
+    manager.queue_add(request).await.unwrap()
+}
+
+/// Whether `admission` admitted its launch, which the daemon starts.
+pub(super) fn admitted(admission: &QueueAdmission) -> bool {
+    (admission.entry.as_ref()).is_some_and(|entry| entry.state == QueueState::Starting)
 }
 
 /// A new workspace of `repository` whose preparation has yet to set it up.
@@ -94,46 +109,15 @@ pub(super) fn started(id: &QueueEntryId) -> bool {
 }
 
 #[tokio::test]
-async fn launches_without_a_limit_start_untracked() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("[machine]\nmax_heavy_agents = 'none'"));
-    let admission = add(&manager, &repo, "first").await;
-    assert!(admission.start && admission.entry.is_none());
-    assert!(manager.queue_entries().await.unwrap().is_empty());
-}
-
-#[tokio::test]
-async fn launches_of_one_branch_queue_once_whatever_their_names() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    limit_globally(&manager, 1);
-    let on = |branch: &str, name: &str| QueueRequest {
-        plan: serde_json::json!({"creation": {"branch": branch}}).to_string(),
-        ..request(&repo, name, false)
-    };
-    // Names repeat, so two branches with one name both queue.
-    manager.queue_add(on("first", "Fix login")).await.unwrap();
-    manager.queue_add(on("second", "Fix login")).await.unwrap();
-    // A branch already queued is refused under any name.
-    let error = manager.queue_add(on("first", "Other")).await.unwrap_err();
-    assert!(
-        error.to_string().contains("already in the agent queue"),
-        "{error:#}"
-    );
-}
-
-#[tokio::test]
 async fn a_full_machine_queues_until_a_start_ends() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 1);
 
-    let first = add(&manager, &repo, "first").await;
-    let first = first.entry.filter(|_| first.start).unwrap();
+    let first = add(&manager, &repo, "first").await.entry.unwrap();
     assert_eq!(first.state, QueueState::Starting);
     let second = add(&manager, &repo, "second").await;
-    assert!(!second.start);
+    assert!(!admitted(&second));
     assert_eq!(second.waiting, 1);
     let second = second.entry.unwrap();
     assert_eq!(
@@ -141,11 +125,9 @@ async fn a_full_machine_queues_until_a_start_ends() {
         (QueueState::Queued, Some(1))
     );
     // Starting now takes a slot beyond the limit without passing the queue.
-    let now = manager
-        .queue_add(request(&repo, "urgent", true))
-        .await
-        .unwrap();
-    assert!(now.start);
+    let urgent = request(&manager, &repo, "urgent", true).await;
+    let now = manager.queue_add(urgent).await.unwrap();
+    assert!(admitted(&now));
 
     manager
         .fail_queue_entry(&first.id, "setup failed")
@@ -183,13 +165,12 @@ async fn repository_limits_hold_back_only_their_own_entries() {
         .await
         .unwrap();
 
-    assert!(add(&manager, &limited, "one").await.start);
-    let waiting = add(&manager, &limited, "two").await;
-    assert!(!waiting.start);
-    assert!(add(&manager, &other, "three").await.start);
-    assert!(add(&manager, &other, "four").await.start);
+    assert!(admitted(&add(&manager, &limited, "one").await));
+    assert!(!admitted(&add(&manager, &limited, "two").await));
+    assert!(admitted(&add(&manager, &other, "three").await));
+    assert!(admitted(&add(&manager, &other, "four").await));
     // The machine is full now, so other repositories wait too.
-    assert!(!add(&manager, &other, "five").await.start);
+    assert!(!admitted(&add(&manager, &other, "five").await));
     let positions: Vec<_> = manager
         .queue_entries()
         .await
@@ -205,12 +186,10 @@ async fn completed_workspaces_and_registered_agents_release_starting_slots() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 1);
-    let first = add(&manager, &repo, "first").await.entry.unwrap();
+    let workspace = create(&manager, &repo, "first").await;
+    let first = manager.queue_add(launch_in(&workspace, false)).await;
+    let first = first.unwrap().entry.unwrap();
     let second = add(&manager, &repo, "second").await.entry.unwrap();
-    let workspace = manager
-        .create_workspace(&repo.id, "first".into(), None, None, None)
-        .await
-        .unwrap();
     manager
         .queue_attach(&first.id, &SpaceSelector::id(&workspace.id))
         .await
@@ -394,7 +373,7 @@ async fn each_agent_execution_uses_its_own_slot() {
             .len(),
         2
     );
-    assert!(!add(&manager, &repo, "waiting").await.start);
+    assert!(!admitted(&add(&manager, &repo, "waiting").await));
 }
 
 #[tokio::test]
@@ -436,7 +415,7 @@ async fn a_ci_jobs_runner_awaiting_reattachment_holds_no_agent_slot() {
             .unwrap()
             .is_empty()
     );
-    assert!(add(&manager, &repo, "agent").await.start);
+    assert!(admitted(&add(&manager, &repo, "agent").await));
 }
 
 #[tokio::test]
@@ -448,10 +427,10 @@ async fn dynamic_admission_staggers_starts() {
         "[machine.overload.memory]\nenabled = false\n[machine.overload.disk]\nenabled = false",
     ));
     // An idle machine starts the first agent whatever its CPU reads.
-    assert!(add(&manager, &repo, "first").await.start);
+    assert!(admitted(&add(&manager, &repo, "first").await));
     // The next waits for the stagger even with room.
     let second = add(&manager, &repo, "second").await;
-    assert!(!second.start);
+    assert!(!admitted(&second));
     assert_eq!(second.waiting, 1);
 }
 
@@ -465,15 +444,10 @@ async fn low_disk_holds_fixed_limits() {
         "[machine]\nmax_heavy_agents = 3\n[machine.overload.warning]\ndisk_free_gib = 1048576",
     ));
     add(&manager, &repo, "first").await;
-    assert!(!add(&manager, &repo, "second").await.start);
+    assert!(!admitted(&add(&manager, &repo, "second").await));
     // Starting now still starts at once.
-    assert!(
-        manager
-            .queue_add(request(&repo, "urgent", true))
-            .await
-            .unwrap()
-            .start
-    );
+    let urgent = request(&manager, &repo, "urgent", true).await;
+    assert!(admitted(&manager.queue_add(urgent).await.unwrap()));
 }
 
 /// An agent connected in `workspace`, which protection may stop, and the
@@ -668,7 +642,7 @@ async fn stopped_agents_restore_in_queue_order_before_later_launches() {
     );
     let agents = stopped_agents(&manager, &[&first, &second]).await;
     let launch = add(&manager, &repo, "later").await;
-    assert!(!launch.start);
+    assert!(!admitted(&launch));
     let launch = launch.entry.unwrap();
     let restoring = [
         await_restore(&manager, &agents[0].0).await,
@@ -932,13 +906,7 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
         .await
         .unwrap();
     // Without a limit the daemon still starts it rather than the caller.
-    let admission = manager
-        .queue_add(QueueRequest {
-            workspace: Some(SpaceSelector::id(&child.id)),
-            ..request(&repo, "child", false)
-        })
-        .await
-        .unwrap();
+    let admission = manager.queue_add(launch_in(&child, false)).await.unwrap();
     let entry = admission.entry.unwrap();
     assert!(!admission.start);
     assert_eq!(entry.opens.as_ref(), Some(&child.id));
@@ -962,13 +930,11 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
         .await
         .unwrap();
 
-    manager
-        .queue_add(QueueRequest {
-            workspace: Some(SpaceSelector::id(&child.id)),
-            ..request(&other, "foreign", false)
-        })
-        .await
-        .unwrap_err();
+    let foreign = QueueRequest {
+        repository: (&other.id).into(),
+        ..launch_in(&child, false)
+    };
+    manager.queue_add(foreign).await.unwrap_err();
 }
 
 #[tokio::test]
@@ -979,9 +945,8 @@ async fn a_launch_in_an_existing_workspace_its_caller_starts_is_left_to_it() {
     let workspace = create(&manager, &repo, "here").await;
     let admission = manager
         .queue_add(QueueRequest {
-            workspace: Some(SpaceSelector::id(&workspace.id)),
             starts_in_caller: true,
-            ..request(&repo, "here", false)
+            ..launch_in(&workspace, false)
         })
         .await
         .unwrap();
@@ -990,38 +955,6 @@ async fn a_launch_in_an_existing_workspace_its_caller_starts_is_left_to_it() {
     assert!(admission.start);
     assert_eq!(entry.opens.as_ref(), Some(&workspace.id));
     assert!(!started(&entry.id));
-}
-
-#[tokio::test]
-async fn a_scoped_launch_its_caller_starts_is_left_to_it() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    limit_globally(&manager, 2);
-    let parent = create(&manager, &repo, "parent").await;
-    let caller = crate::daemon::scope::Caller {
-        space_id: parent.id.clone(),
-        execution: None,
-        granted: None,
-        read_only: false,
-    };
-    let starts = |starts_in_caller: bool, name: &str| QueueRequest {
-        starts_in_caller,
-        ..request(&repo, name, false)
-    };
-    let admission = (manager.queue_add_as(starts(true, "here"), Some(&caller)))
-        .await
-        .unwrap();
-    // The entry opens the new space in the caller's scope as the caller
-    // starts it.
-    let entry = admission.entry.unwrap();
-    assert!(admission.start);
-    assert_eq!(entry.queued_by.as_ref(), Some(&parent.id));
-    assert!(!started(&entry.id));
-    let admission = (manager.queue_add_as(starts(false, "detached"), Some(&caller)))
-        .await
-        .unwrap();
-    assert!(!admission.start);
-    assert!(started(&admission.entry.unwrap().id));
 }
 
 #[tokio::test]
@@ -1036,11 +969,16 @@ async fn a_scoped_caller_holds_reads_and_fails_only_the_launches_it_reaches() {
         granted: None,
         read_only: false,
     };
-    let own = QueueRequest {
-        starts_in_caller: true,
-        ..request(&repo, "own", false)
-    };
-    let own = manager.queue_add_as(own, Some(&caller)).await.unwrap();
+    let child = manager
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "own".into(),
+            None,
+            Default::default(),
+        )
+        .await
+        .unwrap();
+    let own = manager.queue_add(launch_in(&child, false)).await.unwrap();
     let theirs = add(&manager, &repo, "theirs").await;
     manager.executions.issue_scope("scope".into(), caller).await;
     for (entry, allowed) in [(own.entry.unwrap(), true), (theirs.entry.unwrap(), false)] {
@@ -1073,44 +1011,12 @@ async fn a_launch_in_an_existing_workspace_started_now_starts_beyond_the_limit()
         .create_workspace(&repo.id, "child".into(), None, None, None)
         .await
         .unwrap();
-    assert!(add(&manager, &repo, "busy").await.start);
-    let admission = manager
-        .queue_add(QueueRequest {
-            workspace: Some(SpaceSelector::id(&child.id)),
-            ..request(&repo, "child", true)
-        })
-        .await
-        .unwrap();
+    assert!(admitted(&add(&manager, &repo, "busy").await));
+    let admission = manager.queue_add(launch_in(&child, true)).await.unwrap();
     let entry = admission.entry.unwrap();
     assert!(!admission.start);
     assert_eq!(entry.state, QueueState::Starting);
     assert!(started(&entry.id));
-}
-
-#[tokio::test]
-async fn a_waiting_launch_attached_to_an_existing_workspace_opens_it() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    let other = register(&manager, &temp, "other").await;
-    limit_globally(&manager, 1);
-    let set_up = create(&manager, &repo, "set-up").await;
-    let foreign = create(&manager, &other, "foreign").await;
-    assert!(add(&manager, &repo, "busy").await.start);
-    let entry = add(&manager, &repo, "set-up").await.entry.unwrap();
-    assert_eq!(entry.state, QueueState::Queued);
-    // Only a workspace of the launch's repository takes it.
-    manager
-        .queue_attach(&entry.id, &SpaceSelector::id(&foreign.id))
-        .await
-        .unwrap_err();
-    manager
-        .queue_attach(&entry.id, &SpaceSelector::id(&set_up.id))
-        .await
-        .unwrap();
-    let entries = manager.queue_entries().await.unwrap();
-    let waiting = entries.iter().find(|queued| queued.id == entry.id).unwrap();
-    assert_eq!(waiting.opens.as_ref(), Some(&set_up.id));
-    assert!(manager.has_queued_launch(&set_up.id).await.unwrap());
 }
 
 #[tokio::test]
@@ -1167,66 +1073,6 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
 }
 
 #[tokio::test]
-async fn a_launch_a_space_queued_keeps_it_and_goes_with_it() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
-    let parent = create("parent").await.unwrap();
-    let blocker = create("blocker").await.unwrap();
-    let caller = crate::daemon::scope::Caller {
-        space_id: parent.id.clone(),
-        execution: None,
-        granted: None,
-        read_only: false,
-    };
-    let waiting = QueueRequest {
-        blockers: vec![crate::model::Blocker::Space(blocker.id.to_string())],
-        ..request(&repo, "later", false)
-    };
-    let admission = manager.queue_add_as(waiting, Some(&caller)).await.unwrap();
-    let entry = admission.entry.unwrap();
-    assert_eq!(entry.queued_by.as_ref(), Some(&parent.id));
-    assert!(manager.has_queued_launch(&parent.id).await.unwrap());
-    // The space that queued it reaches it, as the user does; others do not.
-    let reached = manager.reachable_queue(Some(&caller)).await.unwrap();
-    assert!(reached.iter().any(|reached| reached.id == entry.id));
-    let sibling = crate::daemon::scope::Caller {
-        space_id: blocker.id.clone(),
-        execution: None,
-        granted: None,
-        read_only: false,
-    };
-    let reached = manager.reachable_queue(Some(&sibling)).await.unwrap();
-    assert!(reached.iter().all(|reached| reached.id != entry.id));
-    // Converting the space to a chat, which swaps its kind's row, keeps
-    // the launch; removing the space removes it.
-    let parent_id = parent.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            let tx = db.transaction()?;
-            tx.execute("INSERT INTO chats(id) VALUES (?1)", [&parent_id])?;
-            tx.execute("UPDATE spaces SET kind='chat' WHERE id=?1", [&parent_id])?;
-            tx.execute("DELETE FROM workspaces WHERE id=?1", [&parent_id])?;
-            tx.commit()?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    assert_eq!(manager.queue_entries().await.unwrap().len(), 1);
-    let parent_id = parent.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute("DELETE FROM spaces WHERE id=?1", [&parent_id])?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    assert!(manager.queue_entries().await.unwrap().is_empty());
-}
-
-#[tokio::test]
 async fn a_workspace_reserved_for_removal_refuses_queued_launches() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
@@ -1241,51 +1087,9 @@ async fn a_workspace_reserved_for_removal_refuses_queued_launches() {
         .await
         .unwrap();
     manager
-        .queue_add(QueueRequest {
-            workspace: Some(SpaceSelector::id(&child.id)),
-            ..request(&repo, "child", false)
-        })
+        .queue_add(launch_in(&child, false))
         .await
         .unwrap_err();
-    assert!(manager.queue_entries().await.unwrap().is_empty());
-}
-
-#[tokio::test]
-async fn a_space_a_removal_holds_refuses_the_launches_it_queues() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    let workspace = manager
-        .create_workspace(&repo.id, "parent".into(), None, None, None)
-        .await
-        .unwrap();
-    let chat = crate::daemon::test_support::chat(&manager, "talk", "chat", Some(&repo), None).await;
-    let queued_by = |space_id: &shoal_ids::space_ids::SpaceId| crate::daemon::scope::Caller {
-        space_id: space_id.clone(),
-        execution: None,
-        granted: None,
-        read_only: false,
-    };
-    let launch = |name: &str| QueueRequest {
-        blockers: vec![crate::model::Blocker::Space(workspace.id.to_string())],
-        ..request(&repo, name, false)
-    };
-    // Removal reserves the space before its final checks; the queue
-    // insertion then refuses the launch in the same transaction.
-    manager
-        .reserve_lifecycle(&workspace.id, crate::state::WorkspaceState::Removing)
-        .await
-        .unwrap();
-    let caller = queued_by(&workspace.id);
-    let refused = manager
-        .queue_add_as(launch("below-workspace"), Some(&caller))
-        .await;
-    assert!(refused.is_err());
-    let _reservation = manager.space_removals.reserve(&chat.id).unwrap();
-    let caller = queued_by(&chat.id);
-    let refused = manager
-        .queue_add_as(launch("below-chat"), Some(&caller))
-        .await;
-    assert!(refused.is_err());
     assert!(manager.queue_entries().await.unwrap().is_empty());
 }
 
@@ -1299,10 +1103,7 @@ async fn an_expired_launch_in_an_existing_workspace_reports_its_failure() {
         .await
         .unwrap();
     let entry = manager
-        .queue_add(QueueRequest {
-            workspace: Some(SpaceSelector::id(&child.id)),
-            ..request(&repo, "child", false)
-        })
+        .queue_add(launch_in(&child, false))
         .await
         .unwrap()
         .entry
@@ -1353,7 +1154,7 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
     manager.queue_agent_restore(&execution).await.unwrap();
     // Until its processes are proven stopped the agent keeps its slot.
     let held = add(&manager, &repo, "held").await;
-    assert!(!held.start);
+    assert!(!admitted(&held));
     manager
         .queue_remove(&manager.queued("held").await, None)
         .await
@@ -1362,7 +1163,7 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
     // Healthy readings do not restore it, and its slot is free for a launch.
     publish_recovery(&manager);
     let launch = add(&manager, &repo, "later").await;
-    assert!(launch.start);
+    assert!(admitted(&launch));
     manager.dispatch_queue().await.unwrap();
     assert!(manager.overload_recovery.published().is_some());
     let entries = manager.queue_entries().await.unwrap();
@@ -1504,15 +1305,12 @@ async fn the_agent_that_takes_a_launchs_entry_learns_what_made_the_launch() {
     let source = LaunchSource::Trigger {
         name: "nightly".into(),
     };
+    let workspace = create(&manager, &repo, "launch").await;
     let launch = QueueRequest {
         source: Some(source.clone()),
-        ..request(&repo, "launch", false)
+        ..launch_in(&workspace, false)
     };
     let entry = manager.queue_add(launch).await.unwrap().entry.unwrap();
-    let workspace = manager
-        .create_workspace(&repo.id, "launch".into(), None, None, None)
-        .await
-        .unwrap();
     manager
         .queue_attach(&entry.id, &SpaceSelector::id(&workspace.id))
         .await
@@ -1530,11 +1328,9 @@ async fn the_agent_that_takes_a_launchs_entry_learns_what_made_the_launch() {
 async fn a_source_this_build_cannot_read_leaves_the_entry_consumed() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    let entry = add(&manager, &repo, "launch").await.entry.unwrap();
-    let workspace = manager
-        .create_workspace(&repo.id, "launch".into(), None, None, None)
-        .await
-        .unwrap();
+    let workspace = create(&manager, &repo, "launch").await;
+    let entry = manager.queue_add(launch_in(&workspace, false)).await;
+    let entry = entry.unwrap().entry.unwrap();
     manager
         .queue_attach(&entry.id, &SpaceSelector::id(&workspace.id))
         .await
@@ -1564,11 +1360,9 @@ async fn a_oneshot_run_starts_beside_the_agents_without_a_slot() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 1);
-    let first = add(&manager, &repo, "first").await.entry.unwrap();
-    let workspace = manager
-        .create_workspace(&repo.id, "first".into(), None, None, None)
-        .await
-        .unwrap();
+    let workspace = create(&manager, &repo, "first").await;
+    let first = manager.queue_add(launch_in(&workspace, false)).await;
+    let first = first.unwrap().entry.unwrap();
     let launch = add(&manager, &repo, "launch").await.entry.unwrap();
     let mut review =
         (manager.agent_queue).request_oneshot(&repo.id, serving(&workspace.id), false, || {});
@@ -1671,10 +1465,7 @@ async fn launch_waiting_for_setup() -> (tempfile::TempDir, Arc<Manager>, Workspa
         )
         .await
         .unwrap();
-    let launch = |now| QueueRequest {
-        workspace: Some(SpaceSelector::id(&child.id)),
-        ..request(&repo, "child", now)
-    };
+    let launch = |now| launch_in(&child, now);
     // One that would start now needs the workspace ready.
     manager.queue_add(launch(true)).await.unwrap_err();
     let admission = manager.queue_add(launch(false)).await.unwrap();
@@ -1793,13 +1584,11 @@ async fn a_launch_left_waiting_for_setup_frees_the_slot_of_the_start_that_failed
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 1);
-    // The start that creates `child` holds the only slot.
-    let starting = add(&manager, &repo, "child").await.entry.unwrap();
+    // The start in `child` holds the only slot.
+    let child = create(&manager, &repo, "child").await;
+    let starting = manager.queue_add(launch_in(&child, false)).await;
+    let starting = starting.unwrap().entry.unwrap();
     assert_eq!(starting.state, QueueState::Starting);
-    let child = manager
-        .create_workspace(&repo.id, "child".into(), None, None, None)
-        .await
-        .unwrap();
     manager
         .queue_attach(&starting.id, &SpaceSelector::id(&child.id))
         .await
@@ -1814,10 +1603,7 @@ async fn a_launch_left_waiting_for_setup_frees_the_slot_of_the_start_that_failed
         .unwrap();
     // Its agent, left waiting for the setup, takes its place.
     let waiting = manager
-        .queue_add(QueueRequest {
-            workspace: Some(SpaceSelector::id(&child.id)),
-            ..request(&repo, "child", false)
-        })
+        .queue_add(launch_in(&child, false))
         .await
         .unwrap()
         .entry
@@ -1825,21 +1611,23 @@ async fn a_launch_left_waiting_for_setup_frees_the_slot_of_the_start_that_failed
     let entries = manager.queue_entries().await.unwrap();
     let ids: Vec<_> = entries.iter().map(|entry| &entry.id).collect();
     assert_eq!(ids, [&waiting.id]);
-    assert!(add(&manager, &repo, "other").await.start);
+    assert!(admitted(&add(&manager, &repo, "other").await));
 }
 
 #[tokio::test]
-async fn a_start_gives_its_queue_entry_the_workspace_before_its_setup_runs() {
+async fn a_start_gives_its_queue_entry_the_workspace_it_reopens() {
     use crate::daemon::operations::starts::{Opening, Preparing};
     use crate::protocol::operations::WorkspaceStart;
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 1);
-    let starting = add(&manager, &repo, "child").await.entry.unwrap();
+    let child = create(&manager, &repo, "child").await;
+    let starting = manager.queue_add(launch_in(&child, false)).await;
+    let starting = starting.unwrap().entry.unwrap();
     // No caller attaches the entry: the start alone gives it the workspace.
     let opening = Opening {
-        start: WorkspaceStart::Name("child".into()),
-        base: Some("HEAD".into()),
+        start: WorkspaceStart::Workspace(SpaceSelector::id(&child.id)),
+        base: None,
         new: Default::default(),
         parent: None,
     };
@@ -1857,10 +1645,10 @@ async fn a_start_gives_its_queue_entry_the_workspace_before_its_setup_runs() {
         .start_workspace((&repo.id).into(), opening, preparing, None)
         .await
         .unwrap();
-    let _worker = crate::daemon::operations::fake::take(started.operation.as_deref().unwrap());
+    let _worker = (started.operation.as_deref()).map(crate::daemon::operations::fake::take);
     let entries = manager.queue_entries().await.unwrap();
     assert_eq!(entries.len(), 1, "{entries:?}");
-    assert_eq!(entries[0].space_id.as_ref(), Some(&started.workspace.id));
+    assert_eq!(entries[0].space_id.as_ref(), Some(&child.id));
 }
 
 #[tokio::test]
@@ -1879,10 +1667,7 @@ async fn a_launch_waits_for_a_setup_the_daemon_never_started() {
         .await
         .unwrap();
     let entry = manager
-        .queue_add(QueueRequest {
-            workspace: Some(SpaceSelector::id(&child.id)),
-            ..request(&repo, "child", false)
-        })
+        .queue_add(launch_in(&child, false))
         .await
         .unwrap()
         .entry
@@ -1956,7 +1741,7 @@ async fn a_chats_restore_waits_for_a_slot_by_its_modes_weight() {
         "[machine]\nmax_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n\
          [modes.solo]\nkind = 'chat'\nrepository = false\n",
     ));
-    assert!(add(&manager, &repo, "busy").await.start);
+    assert!(admitted(&add(&manager, &repo, "busy").await));
     let chat = crate::daemon::test_support::chat(&manager, "master", "chat", None, None).await;
 
     let heavy = queue_saved_restore(&manager, &chat.id, "solo").await;
@@ -1996,7 +1781,7 @@ async fn a_heavy_chats_agent_holds_a_slot() {
     slots.sort();
     assert_eq!(slots, [None, Some(repo.id.clone())]);
     assert!(
-        !add(&manager, &repo, "held").await.start,
+        !admitted(&add(&manager, &repo, "held").await),
         "the machine is full"
     );
 }
@@ -2045,13 +1830,13 @@ async fn a_tools_upstream_limit_holds_its_queued_agents_while_others_start() {
     limit_globally(&manager, 3);
     let (selector, until) = limit_claude(&manager, &repo).await;
     let claude = add(&manager, &repo, "claude").await;
-    assert!(!claude.start);
+    assert!(!admitted(&claude));
     let claude = claude.entry.unwrap();
     let codex = QueueRequest {
         agent: "codex".into(),
-        ..request(&repo, "codex", false)
+        ..request(&manager, &repo, "codex", false).await
     };
-    assert!(manager.queue_add(codex).await.unwrap().start);
+    assert!(admitted(&manager.queue_add(codex).await.unwrap()));
     let entries = manager.queue_entries().await.unwrap();
     let waiting = entries.iter().find(|entry| entry.id == claude.id).unwrap();
     assert_eq!(

@@ -68,16 +68,17 @@ pub(super) struct Launch {
     pub repository: Option<RepositoryId>,
     pub request: LaunchRequest,
     pub state: QueueState,
-    /// The existing workspace the launch opens.
+    /// The workspace a workspace's launch starts its agent in; none for a
+    /// chat's.
     pub opens: Option<SpaceId>,
-    /// The space whose scoped process queued the launch of a new
-    /// workspace, in whose scope the launch opens it.
+    /// The space whose scoped process queued a chat's launch, in whose
+    /// scope the launch records the chat.
     pub scope: Option<SpaceId>,
-    /// What a launch in an existing workspace waits for there.
+    /// What a launch in a workspace waits for there.
     pub awaits: Awaits,
 }
 
-/// What a launch in an existing workspace waits for before it may start.
+/// What a launch in a workspace waits for before it may start.
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) enum Awaits {
     /// A retried setup, when the workspace's setup failed or never started.
@@ -118,7 +119,7 @@ impl From<QueueRequest> for LaunchRequest {
             env: request.env,
             now: request.now,
             blockers: request.blockers,
-            priority: request.priority,
+            priority: None,
             source: request.source,
         }
     }
@@ -204,13 +205,6 @@ fn setup_failed(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Result<b
     )
 }
 
-/// Whether the launch `plan` opens an existing branch, whose workspace it
-/// reopens should the branch have one by then.
-pub(super) fn opens_existing_branch(plan: &str) -> bool {
-    serde_json::from_str::<serde_json::Value>(plan)
-        .is_ok_and(|plan| plan["creation"]["existing"].is_string())
-}
-
 /// The parents the launches of new spaces name with `--parent`, by entry.
 pub(super) fn planned_parents(
     db: &rusqlite::Connection,
@@ -233,24 +227,13 @@ pub(super) fn planned_parents(
     Ok(parents)
 }
 
-/// The branch the launch `plan` creates or opens, if it names one.
-fn planned_branch(plan: &str) -> Option<String> {
-    let plan: serde_json::Value = serde_json::from_str(plan).ok()?;
-    let creation = &plan["creation"];
-    let branch = creation["branch"]
-        .as_str()
-        .or(creation["existing"].as_str())?;
-    Some(branch.to_owned())
-}
-
 /// Record `launch` unless its repository already queues a launch in the
-/// same workspace, or of the same branch, or is being removed; names repeat,
-/// so they tell no two launches apart. A launch in an existing workspace
-/// needs it ready in the same transaction, or failed in its setup for one
-/// that waits its turn, which then waits for a preparation there to get
-/// past its post-setup hook and takes the place of the start whose setup
-/// failed, and one a space queued needs that space present and not being
-/// removed: removal reserves the space before its final checks, so the
+/// same workspace, or is being removed; names repeat, so they tell no two
+/// launches apart. A launch in a workspace needs it ready in the same
+/// transaction, or failed in its setup for one that waits its turn, which
+/// then waits for a preparation there to get past its post-setup hook and
+/// takes the place of the start whose setup failed, and one a space queued
+/// needs that space present and not being removed: removal reserves the space before its final checks, so the
 /// launch either precedes them, which keeps the space, or is refused here.
 pub(super) fn insert_launch(
     tx: &rusqlite::Transaction<'_>,
@@ -287,18 +270,9 @@ pub(super) fn insert_launch(
     ensure!(
         !crate::daemon::store::exists(
             tx,
-            "SELECT 1 FROM agent_queue WHERE repository_id=?1 AND kind=?2 AND CASE
-                WHEN ?3 IS NOT NULL THEN opens_workspace_id IS ?3
-                WHEN ?4 IS NOT NULL AND opens_workspace_id IS NULL AND json_valid(plan)
-                    THEN coalesce(json_extract(plan,'$.creation.branch'),
-                        json_extract(plan,'$.creation.existing')) IS ?4
-                ELSE 0 END",
-            params![
-                launch.repository,
-                QueueKind::Launch,
-                launch.opens,
-                planned_branch(&request.plan)
-            ],
+            "SELECT 1 FROM agent_queue WHERE repository_id=?1 AND kind=?2
+                AND opens_workspace_id=?3",
+            params![launch.repository, QueueKind::Launch, launch.opens],
         )?,
         "{} is already in the agent queue",
         request.name

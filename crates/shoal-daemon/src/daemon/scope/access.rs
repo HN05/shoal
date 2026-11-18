@@ -338,9 +338,8 @@ impl Manager {
     }
 
     /// Refuse the queue entry `id` that `caller`'s `start` names unless it
-    /// is the launch of what `start` opens: one the caller queued of a new
-    /// space, or the one launch of the existing workspace `start` reopens,
-    /// whoever queued it, which the caller could cancel and queue again.
+    /// is the one launch of the existing workspace `start` reopens, whoever
+    /// queued it, which the caller could cancel and queue again.
     pub(in crate::daemon) async fn ensure_own_launch(
         &self,
         caller: &Caller,
@@ -354,7 +353,7 @@ impl Manager {
             WorkspaceStart::Workspace(workspace) => {
                 entry.opens.as_ref() == Some(&self.space(workspace).await?.id)
             }
-            _ => entry.opens.is_none() && entry.queued_by.as_ref() == Some(&caller.space_id),
+            _ => false,
         };
         ensure!(own, "queue entry {id} is another launch's");
         Ok(())

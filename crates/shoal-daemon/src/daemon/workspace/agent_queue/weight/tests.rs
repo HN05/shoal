@@ -5,14 +5,13 @@ use rusqlite::params;
 use crate::{
     daemon::{
         test_support::{global_config, manager},
-        workspace::agent_queue::tests::{add, create, register, request},
+        workspace::agent_queue::tests::{add, admitted, create, launch_in, register},
     },
     execution::recovery::record_path,
     model::QueueRequest,
     state::{ExecutionState, QueueState},
 };
 use shoal_ids::execution_ids::ExecutionId;
-use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn a_light_agent_holds_no_slot_and_starts_beside_full_limits() {
@@ -46,19 +45,13 @@ async fn a_light_agent_holds_no_slot_and_starts_beside_full_limits() {
             .len(),
         1
     );
-    let triage = |name| QueueRequest {
-        mode: Some("triage".into()),
-        ..request(&repo, name, false)
-    };
-    assert!(!add(&manager, &repo, "heavy").await.start);
-    // A light launch of a new workspace starts at once.
-    assert!(manager.queue_add(triage("new")).await.unwrap().start);
-    // One in an existing workspace is admitted past the waiting heavy one.
+    assert!(!admitted(&add(&manager, &repo, "heavy").await));
+    // A light launch is admitted past the waiting heavy one.
     let free = create(&manager, &repo, "free").await;
     let admission = manager
         .queue_add(QueueRequest {
-            workspace: Some(SpaceSelector::id(&free.id)),
-            ..triage("existing")
+            mode: Some("triage".into()),
+            ..launch_in(&free, false)
         })
         .await
         .unwrap();

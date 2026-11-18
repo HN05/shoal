@@ -16,8 +16,7 @@ use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 
 impl Manager {
     /// Admit the launch of the new chat `request` describes for `caller`, or
-    /// queue it, as a new workspace's launch is: one that no limit applies
-    /// to starts untracked, and one admitted here starts in the caller,
+    /// queue it: one that no limit applies to starts untracked, and one admitted here starts in the caller,
     /// which records the chat and attaches the launch to it. One that waits
     /// starts from the queue, which runs its plan, and when its caller
     /// records the chat at once, only once the chat is attached.

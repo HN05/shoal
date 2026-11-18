@@ -25,7 +25,7 @@ use crate::{
         links::issue::OpenIssue,
         log,
         scope::Caller,
-        workspace::{CopyPlace, Manager, NewWorkspace, agent_queue::HasAgent},
+        workspace::{CopyPlace, Manager, NewWorkspace},
     },
     forge::items::reference::ItemInput,
     model::{Blocker, OpenedWorkspace, QueueEntry, Workspace},
@@ -446,7 +446,7 @@ impl Manager {
         // The entry is the workspace's before its setup can fail, so a
         // waiting launch frees its slot even once the caller is gone.
         if let Some(entry) = &preparing.queue_entry {
-            self.give_start_entry(entry, &workspace).await?;
+            self.give_start_entry(entry, &workspace).await;
         }
         // The agent an admitted launch starts in an existing workspace starts
         // on a branch brought up to date.
@@ -567,24 +567,16 @@ impl Manager {
         assigned
     }
 
-    /// Give the start's queue `entry` the `workspace` it opened, refusing
-    /// the start when the workspace has an agent of its own the entry's
-    /// launch did not wait for. Any other failure, such as an entry that no
-    /// longer starts, leaves the start to go on without it.
-    async fn give_start_entry(&self, entry: &QueueEntryId, workspace: &Workspace) -> Result<()> {
-        match self
-            .queue_attach(entry, &SpaceSelector::id(&workspace.id))
-            .await
-        {
-            Err(error) if error.is::<HasAgent>() => Err(error),
-            Err(error) => {
-                log!(
-                    "queue entry {entry} not given {}: {error:#}",
-                    workspace.name
-                );
-                Ok(())
-            }
-            Ok(()) => Ok(()),
+    /// Give the start's queue `entry` the `workspace` it opened. A failure,
+    /// such as an entry that no longer starts, leaves the start to go on
+    /// without it.
+    async fn give_start_entry(&self, entry: &QueueEntryId, workspace: &Workspace) {
+        let attached = (self.queue_attach(entry, &SpaceSelector::id(&workspace.id))).await;
+        if let Err(error) = attached {
+            log!(
+                "queue entry {entry} not given {}: {error:#}",
+                workspace.name
+            );
         }
     }
 

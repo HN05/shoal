@@ -3,8 +3,8 @@ use crate::{
     daemon::{
         test_support::manager,
         workspace::agent_queue::tests::{
-            add, await_restore, bounded, create, limit_globally, register, request, started,
-            stopped_agents,
+            add, await_restore, bounded, create, launch_in, limit_globally, register, request,
+            started, stopped_agents,
         },
     },
     model::{Blocker, QueueRequest},
@@ -44,15 +44,12 @@ async fn a_stop_cancels_the_launches_waiting_to_open_its_workspace() {
         .await
         .unwrap();
     let launch = manager
-        .queue_add(QueueRequest {
-            workspace: Some(SpaceSelector::id(&child.id)),
-            ..request(&repo, "child", false)
-        })
+        .queue_add(launch_in(&child, false))
         .await
         .unwrap()
         .entry
         .unwrap();
-    add(&manager, &repo, "later").await;
+    let later = add(&manager, &repo, "later").await.entry.unwrap();
     assert_eq!(waiting(&manager).await, ["child", "later"]);
 
     // `shoal stop --all` stops the workspace; `shoal daemon stop` leaves it.
@@ -65,9 +62,11 @@ async fn a_stop_cancels_the_launches_waiting_to_open_its_workspace() {
             .map(|space| space.id.clone())
             .collect::<Vec<_>>()
     };
-    assert_eq!(
-        targets(QueuedLaunches::Cancel).await,
-        std::slice::from_ref(&child.id)
+    let cancelling = targets(QueuedLaunches::Cancel).await;
+    assert_eq!(cancelling.len(), 2, "{cancelling:?}");
+    assert!(
+        cancelling.contains(&child.id)
+            && later.opens.is_some_and(|later| cancelling.contains(&later))
     );
     assert!(targets(QueuedLaunches::Keep).await.is_empty());
 
@@ -87,7 +86,7 @@ async fn a_stop_cancels_the_launches_waiting_to_open_its_workspace() {
         .map(|entry| entry.id)
         .collect();
     assert_eq!(cancelled, [launch.id]);
-    // A launch of a new workspace stays queued.
+    // The launch in another workspace stays queued.
     assert_eq!(waiting(&manager).await, ["later"]);
 }
 
@@ -102,7 +101,7 @@ async fn entries_start_now_past_the_limits_unless_they_wait_for_work() {
     let dependent = manager
         .queue_add(QueueRequest {
             blockers: vec![Blocker::Space(a)],
-            ..request(&repo, "dependent", false)
+            ..request(&manager, &repo, "dependent", false).await
         })
         .await
         .unwrap();
@@ -308,13 +307,7 @@ async fn workspace_processes_see_the_whole_queue_and_act_only_below_theirs() {
             )
             .await
             .unwrap();
-        manager
-            .queue_add(QueueRequest {
-                workspace: Some(SpaceSelector::id(&child.id)),
-                ..request(&repo, name, false)
-            })
-            .await
-            .unwrap();
+        manager.queue_add(launch_in(&child, false)).await.unwrap();
         children.push(child);
     }
     add(&manager, &repo, "other").await;

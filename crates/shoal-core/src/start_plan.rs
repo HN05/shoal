@@ -191,7 +191,6 @@ pub fn queued_agent_request(
     let mut plan = AddPlan::agent_in(workspace, launch)?;
     plan.creation.pr = pr;
     Ok(QueueRequest {
-        priority: None,
         repository: workspace.repository().into(),
         name: workspace.name.clone(),
         agent,
@@ -202,7 +201,7 @@ pub fn queued_agent_request(
         plan: serde_json::to_string(&plan)?,
         env,
         now,
-        workspace: Some(SpaceSelector::id(&workspace.id)),
+        workspace: SpaceSelector::id(&workspace.id),
         starts_in_caller: here,
         blockers: Vec::new(),
         source,

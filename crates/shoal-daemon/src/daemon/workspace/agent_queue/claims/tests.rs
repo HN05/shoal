@@ -1,11 +1,10 @@
-use super::super::tests::{add, limit_globally, preparing, register, request, started};
+use super::super::tests::{add, launch_in, limit_globally, preparing, register, started};
 use crate::{
     daemon::{test_support::manager, workspace::Manager},
     model::{QueueEntry, QueueRequest, Repository},
     protocol::operations::QueuedLaunch,
     state::QueueState,
 };
-use shoal_protocol::space_names::SpaceSelector;
 
 /// The agent of a new workspace of `repository` that its caller runs
 /// here, asked to start `now` or not, queued on a machine whose one slot
@@ -84,9 +83,8 @@ async fn a_queued_worker_run_here_waits_for_its_callers_claim() {
         .await
         .unwrap();
     let here = QueueRequest {
-        workspace: Some(SpaceSelector::id(&workspace.id)),
         starts_in_caller: true,
-        ..request(&repo, "worker", false)
+        ..launch_in(&workspace, false)
     };
     let entry = manager.queue_add(here).await.unwrap().entry.unwrap();
     assert_eq!(entry.state, QueueState::Queued);

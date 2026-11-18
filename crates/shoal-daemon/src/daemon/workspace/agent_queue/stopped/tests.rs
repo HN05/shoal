@@ -6,8 +6,8 @@ use crate::{
         workspace::agent_queue::{
             Grant,
             tests::{
-                add, await_restore, bounded, connected_agent, create, limit_globally, queue,
-                register, started, stopped_agents,
+                add, admitted, await_restore, bounded, connected_agent, create, limit_globally,
+                queue, register, started, stopped_agents,
             },
         },
         workspace_files::Attacher,
@@ -129,7 +129,7 @@ async fn a_restore_started_now_starts_beyond_the_limit() {
     limit_globally(&manager, 1);
     let workspace = create(&manager, &repo, "work").await;
     // A launch takes the only slot before the agent stops.
-    assert!(add(&manager, &repo, "busy").await.start);
+    assert!(admitted(&add(&manager, &repo, "busy").await));
     stop(&manager, &workspace.id, "agent", STOPPED);
     let now = manager
         .start_stopped_restore(

@@ -687,32 +687,24 @@ async fn a_scoped_start_takes_no_queue_entry_of_another_launch() {
         )
         .await
         .unwrap();
-    // The child's start holds a slot it has yet to open a workspace for,
-    // which the parent's scope reaches.
+    // The child's agent holds a slot, which the parent's scope reaches.
     let request = shoal_protocol::model::QueueRequest {
         source: None,
         issue_labels: Vec::new(),
-        priority: None,
         narrowing: Default::default(),
         mode: None,
         repository: daemon.repository.id.clone().into(),
-        name: "api".into(),
+        name: "child".into(),
         agent: "claude".into(),
         issue_title: None,
         plan: "{}".into(),
         env: Default::default(),
         now: false,
-        workspace: None,
+        workspace: SpaceSelector::id(&child.id),
         starts_in_caller: true,
         blockers: Vec::new(),
     };
-    let caller = shoal_daemon::test_daemon::Caller {
-        space_id: child.id.clone(),
-        execution: None,
-        granted: None,
-        read_only: false,
-    };
-    let theirs = (daemon.manager.queue_add_as(request, Some(&caller)))
+    let theirs = (daemon.manager.queue_add(request))
         .await
         .unwrap()
         .entry

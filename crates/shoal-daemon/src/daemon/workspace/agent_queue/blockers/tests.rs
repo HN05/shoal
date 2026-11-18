@@ -2,7 +2,7 @@ use super::*;
 use crate::{
     daemon::{
         test_support::{commit, global_config, manager},
-        workspace::agent_queue::tests::{create, register, request, started},
+        workspace::agent_queue::tests::{admitted, create, launch_in, register, request, started},
         workspace_files::Attacher,
     },
     model::{QueueEntry, QueueRequest, Repository},
@@ -23,11 +23,11 @@ async fn add_blocked(
     let admission = manager
         .queue_add(QueueRequest {
             blockers,
-            ..request(repository, name, false)
+            ..request(manager, repository, name, false).await
         })
         .await
         .unwrap();
-    assert!(!admission.start, "{name} waits for its blockers");
+    assert!(!admitted(&admission), "{name} waits for its blockers");
     admission.entry.unwrap()
 }
 
@@ -147,8 +147,9 @@ async fn a_launch_blocker_follows_the_workspace_it_opens_until_removal() {
     manager.publish_config(global_config(
         "[machine]\nmax_heavy_agents = 1\n[machine.overload.disk]\nenabled = false",
     ));
+    let opened = create(&manager, &repo, "first").await;
     let first = manager
-        .queue_add(request(&repo, "first", false))
+        .queue_add(launch_in(&opened, false))
         .await
         .unwrap()
         .entry
@@ -162,7 +163,6 @@ async fn a_launch_blocker_follows_the_workspace_it_opens_until_removal() {
     .await;
     assert_eq!(second.blockers, ["first"]);
 
-    let opened = create(&manager, &repo, "first").await;
     manager
         .queue_attach(&first.id, &SpaceSelector::id(&opened.id))
         .await
@@ -280,18 +280,18 @@ async fn done_blockers_build_on_the_one_that_contains_the_others() {
             .await
             .unwrap();
     }
-    // Done blockers start the launch in the caller, on the top one.
+    // Done blockers admit the launch at once, on the top one.
     let stacked = manager
         .queue_add(QueueRequest {
             blockers: vec![
                 space(&manager, "lower").await,
                 space(&manager, "upper").await,
             ],
-            ..request(&repo, "stacked", false)
+            ..request(&manager, &repo, "stacked", false).await
         })
         .await
         .unwrap();
-    assert!(stacked.start);
+    assert!(admitted(&stacked));
     assert_eq!(
         stacked.entry.unwrap().base.as_deref(),
         Some(upper.branch().map(BranchName::as_str).unwrap())
@@ -313,14 +313,16 @@ async fn blockers_name_existing_work_other_than_the_launch() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     manager.publish_config(global_config("[machine]\nmax_heavy_agents = 'none'"));
-    for blocker in [
+    let blockers = [
         space(&manager, "missing").await,
         space(&manager, "self").await,
-    ] {
+    ];
+    let own = create(&manager, &repo, "self").await;
+    for blocker in blockers {
         manager
             .queue_add(QueueRequest {
                 blockers: vec![blocker],
-                ..request(&repo, "self", false)
+                ..launch_in(&own, false)
             })
             .await
             .unwrap_err();
@@ -341,7 +343,7 @@ async fn blockers_name_existing_work_other_than_the_launch() {
     manager
         .queue_add(QueueRequest {
             blockers: vec![space(&manager, "present").await],
-            ..request(&repo, "now", true)
+            ..request(&manager, &repo, "now", true).await
         })
         .await
         .unwrap_err();

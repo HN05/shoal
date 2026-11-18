@@ -76,18 +76,16 @@ impl Manager {
         }
     }
 
-    /// The priority the launch `request` ranks with while queued: the one
-    /// `caller` gives it, else the highest the labels of its issue map to
-    /// under `[priority.labels]` of its `repository`.
+    /// The priority the launch `request` ranks with while queued, until
+    /// its workspace's issue is read: the highest the labels of that issue
+    /// map to under `[priority.labels]` of its `repository`.
     pub(crate) async fn launch_priority(
         &self,
-        caller: Option<&Caller>,
         request: &QueueRequest,
         repository: &RepositoryId,
     ) -> Result<Option<Priority>> {
-        let given = self.given_priority(caller, request.priority).await?;
-        if given.is_some() || request.issue_labels.is_empty() {
-            return Ok(given);
+        if request.issue_labels.is_empty() {
+            return Ok(None);
         }
         let settings = self.repository_settings(repository).await?;
         let labels = request.issue_labels.iter().map(String::as_str);

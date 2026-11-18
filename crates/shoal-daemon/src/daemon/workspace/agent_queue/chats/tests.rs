@@ -5,7 +5,7 @@ use crate::{
         test_support::{global_config, manager},
         workspace::{
             Manager,
-            agent_queue::tests::{add, register, started},
+            agent_queue::tests::{add, admitted, register, started},
         },
     },
     model::{ChatQueueRequest, Repository},
@@ -24,7 +24,7 @@ async fn full_machine(manager: &Manager, repo: &Repository) {
          [modes.pair]\nkind = 'chat'\n[modes.solo]\nkind = 'chat'\nrepository = false\n\
          [agents.claude]\ncommand = ['sh']\n",
     ));
-    assert!(add(manager, repo, "busy").await.start);
+    assert!(admitted(&add(manager, repo, "busy").await));
 }
 
 /// The launch of a chat's agent in `mode`, of `repository` or of none.

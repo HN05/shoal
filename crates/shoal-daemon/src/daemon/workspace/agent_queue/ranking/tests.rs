@@ -5,11 +5,10 @@ use rusqlite::params;
 use super::*;
 use crate::{
     daemon::{
-        scope::Caller,
         test_support::{global_config, manager},
         workspace::agent_queue::{
             Serving, last_seq,
-            tests::{add, create, limit_globally, register, request},
+            tests::{add, create, launch_in, limit_globally, register, request},
         },
     },
     model::{Blocker, QueueRequest},
@@ -49,13 +48,7 @@ async fn a_launch_in_a_child_ranks_with_its_ready_parent_ahead_of_earlier_launch
         .await
         .unwrap();
     add(&manager, &repo, "earlier").await;
-    manager
-        .queue_add(QueueRequest {
-            workspace: Some(SpaceSelector::id(&child.id)),
-            ..request(&repo, "child", false)
-        })
-        .await
-        .unwrap();
+    manager.queue_add(launch_in(&child, false)).await.unwrap();
 
     let waiting: Vec<_> = (manager.queue_entries().await.unwrap().into_iter())
         .filter(|entry| entry.state == QueueState::Queued)
@@ -143,7 +136,7 @@ async fn waits_come_from_blockers_questions_stacks_and_leases() {
     let blocked = manager
         .queue_add(QueueRequest {
             blockers: vec![Blocker::Issue(issue.parse().unwrap())],
-            ..request(&repo, "blocked", false)
+            ..request(&manager, &repo, "blocked", false).await
         })
         .await
         .unwrap()
@@ -175,7 +168,11 @@ async fn waits_come_from_blockers_questions_stacks_and_leases() {
         edge(space(&stacked), space(&base), Dependency::Stacked),
         edge(space(&stacked), space(&asking), Dependency::Parent),
         edge(space(&asking), space(&stacked), Dependency::Question),
-        edge(Node::Entry(blocked.id), space(&holder), Dependency::Blocked),
+        edge(
+            Node::Space(blocked.opens.unwrap()),
+            space(&holder),
+            Dependency::Blocked,
+        ),
         edge(space(&base), space(&holder), Dependency::Lease),
     ]);
     assert_eq!(edges, expected);
@@ -295,39 +292,23 @@ async fn the_last_sequence_number_holds_after_the_newest_entry_leaves() {
 }
 
 #[tokio::test]
-async fn a_space_and_a_queued_launch_rank_with_the_priority_set_on_them() {
+async fn queued_launches_rank_with_the_priority_set_on_their_spaces() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 1);
     add(&manager, &repo, "running").await;
-    let workspace = create(&manager, &repo, "worker").await;
-    let selector = SpaceSelector::id(&workspace.id);
-    manager
-        .set_priority(None, &selector, Priority::LOW)
-        .await
-        .unwrap();
+    let prioritized = async |name, priority| {
+        let workspace = create(&manager, &repo, name).await;
+        let selector = SpaceSelector::id(&workspace.id);
+        (manager.set_priority(None, &selector, priority).await).unwrap();
+        workspace
+    };
+    let worker = prioritized("worker", Priority::LOW).await;
     add(&manager, &repo, "earlier").await;
-    let urgent = |name| QueueRequest {
-        priority: Some(Priority::URGENT),
-        ..request(&repo, name, false)
-    };
-    manager.queue_add(urgent("launch")).await.unwrap();
-    manager
-        .queue_add(QueueRequest {
-            workspace: Some(selector.clone()),
-            ..request(&repo, "worker", false)
-        })
-        .await
-        .unwrap();
-    // A space's agent gives at most its own space's priority.
-    let caller = Caller {
-        space_id: workspace.id.clone(),
-        execution: None,
-        granted: None,
-        read_only: false,
-    };
-    let refused = manager.queue_add_as(urgent("child"), Some(&caller)).await;
-    assert!(refused.is_err());
+    let urgent = prioritized("launch", Priority::URGENT).await;
+    for workspace in [&urgent, &worker] {
+        (manager.queue_add(launch_in(workspace, false)).await).unwrap();
+    }
 
     let waiting: Vec<_> = (manager.queue_entries().await.unwrap().into_iter())
         .filter(|entry| entry.state == QueueState::Queued)
@@ -376,15 +357,11 @@ async fn queue_labelled(
         })
         .await
         .unwrap();
-    let selector = SpaceSelector::id(&workspace.id);
     manager
-        .queue_add(QueueRequest {
-            workspace: Some(selector.clone()),
-            ..request(repo, name, false)
-        })
+        .queue_add(launch_in(&workspace, false))
         .await
         .unwrap();
-    selector
+    SpaceSelector::id(&workspace.id)
 }
 
 /// The waiting entries' names and priorities, in queue order.
@@ -451,10 +428,7 @@ async fn a_space_with_several_issues_takes_the_highest_any_of_their_labels_maps_
         .await
         .unwrap();
     manager
-        .queue_add(QueueRequest {
-            workspace: Some(SpaceSelector::id(&workspace.id)),
-            ..request(&repo, "several", false)
-        })
+        .queue_add(launch_in(&workspace, false))
         .await
         .unwrap();
 
@@ -490,22 +464,24 @@ async fn a_repository_whose_config_does_not_resolve_maps_no_labels_and_holds_up_
 }
 
 #[tokio::test]
-async fn a_launch_given_no_priority_ranks_with_the_highest_its_issues_labels_map_to() {
+async fn a_launch_in_a_space_without_a_priority_ranks_with_the_highest_its_issues_labels_map_to() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     manager.publish_config(global_config(LABELS));
     add(&manager, &repo, "running").await;
-    let labelled = |name, priority| QueueRequest {
-        priority,
+    let labelled = async |name| QueueRequest {
         issue_labels: vec!["later".into(), "urgent".into()],
-        ..request(&repo, name, false)
+        ..request(&manager, &repo, name, false).await
     };
-    manager
-        .queue_add(labelled("given", Some(Priority::LOW)))
-        .await
+    let given = labelled("given").await;
+    (manager
+        .set_priority(None, &given.workspace, Priority::LOW)
+        .await)
         .unwrap();
+    manager.queue_add(given).await.unwrap();
     add(&manager, &repo, "unlabelled").await;
-    manager.queue_add(labelled("labelled", None)).await.unwrap();
+    let labelled = labelled("labelled").await;
+    manager.queue_add(labelled).await.unwrap();
 
     assert_eq!(
         waiting_priorities(&manager).await,
@@ -597,18 +573,16 @@ async fn assign_labelled(
         .unwrap();
 }
 
-/// Queue the agent of a new workspace `name` whose issue has `labels`.
+/// Queue a launch of a new workspace `name` whose issue has `labels`.
 async fn queue_in_areas(
     manager: &Manager,
     repo: &crate::model::Repository,
     name: &str,
     labels: &[&str],
 ) {
-    let workspace = create(manager, repo, name).await;
     let request = QueueRequest {
         issue_labels: labels.iter().map(|label| label.to_string()).collect(),
-        workspace: Some(SpaceSelector::id(&workspace.id)),
-        ..request(repo, name, false)
+        ..request(manager, repo, name, false).await
     };
     manager.queue_add(request).await.unwrap();
 }

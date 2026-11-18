@@ -12,7 +12,7 @@ use rusqlite::{OptionalExtension, params};
 use super::{
     blockers,
     dispatch::Start,
-    store::{self, Awaits, ENTRY_COLUMNS, Launch, entry, insert_launch, opens_existing_branch},
+    store::{self, Awaits, ENTRY_COLUMNS, Launch, LaunchRequest, entry, insert_launch},
 };
 use crate::{
     daemon::{notifications::NotificationKind, scope::Caller, workspace::Manager},
@@ -28,34 +28,18 @@ use shoal_protocol::{
 use shoal_schedule::{rank::QueueRank, scheduler::Ranked};
 
 impl Manager {
-    /// Admit `request` to a free slot or queue it. A launch that no limit
-    /// applies to and that nothing blocks starts untracked; one
-    /// admitted here starts in the caller, except one the daemon starts,
-    /// which a launch in an existing workspace is unless its caller starts
-    /// it. A launch in an existing workspace is admitted only while the
-    /// workspace has no agent of its own.
+    /// Admit `request` to a free slot or queue it, while its workspace has
+    /// no agent of its own. The daemon starts an admitted launch unless its
+    /// caller starts it.
     pub async fn queue_add(&self, request: QueueRequest) -> Result<QueueAdmission> {
-        self.queue_add_as(request, None).await
+        (self.queue_add_awaiting(request, Awaits::FailedSetup)).await
     }
 
-    /// [`Self::queue_add`] for `caller`. A scoped caller's launch of a new
-    /// workspace opens it in the caller's scope, and the daemon starts it,
-    /// as it starts a launch in an existing workspace, unless its caller
-    /// starts it.
-    pub async fn queue_add_as(
-        &self,
-        request: QueueRequest,
-        caller: Option<&Caller>,
-    ) -> Result<QueueAdmission> {
-        (self.queue_add_awaiting(request, caller, Awaits::FailedSetup)).await
-    }
-
-    /// [`Self::queue_add_as`] for a launch that `awaits` what it says in
-    /// the workspace it opens.
+    /// [`Self::queue_add`] for a launch that `awaits` what it says in its
+    /// workspace.
     pub(super) async fn queue_add_awaiting(
         &self,
-        mut request: QueueRequest,
-        caller: Option<&Caller>,
+        request: QueueRequest,
         awaits: Awaits,
     ) -> Result<QueueAdmission> {
         ensure!(
@@ -63,38 +47,13 @@ impl Manager {
             "a launch that starts now cannot be blocked"
         );
         let repository = self.repository(&request.repository).await?;
-        request.priority = (self.launch_priority(caller, &request, &repository.id)).await?;
-        let target = match &request.workspace {
-            Some(workspace) => Some(self.launch_target(workspace, &repository.id).await?),
-            None => None,
-        };
-        let scope = match target {
-            Some(_) => None,
-            None => caller.map(|caller| caller.space_id.clone()),
-        };
-        let _gate = self.agent_queue.lock_admission().await;
-        if let Some(workspace) = &target {
-            self.ensure_takes_worker(workspace).await?;
-        }
-        let target = target.map(|workspace| workspace.id);
-        // Whether any limit applies does not depend on the slots in use.
-        let limits = self
-            .agent_limits(vec![repository.id.clone()], &[], &[])
+        let priority = self.launch_priority(&request, &repository.id).await?;
+        let workspace = self
+            .launch_target(&request.workspace, &repository.id)
             .await?;
+        let _gate = self.agent_queue.lock_admission().await;
+        self.ensure_takes_worker(&workspace).await?;
         let caller_starts = request.starts_in_caller;
-        let detached = (target.is_some() || scope.is_some()) && !caller_starts;
-        // A launch in an existing workspace keeps its entry, which holds the
-        // workspace's one agent until it registers, as does one on an
-        // existing branch, which may reopen the branch's workspace.
-        let opens_new =
-            target.is_none() && scope.is_none() && !opens_existing_branch(&request.plan);
-        if opens_new && request.blockers.is_empty() && !limits.apply_to(Some(&repository.id)) {
-            return Ok(QueueAdmission {
-                start: true,
-                entry: None,
-                waiting: 0,
-            });
-        }
         let id = QueueEntryId::generate();
         let state = if request.now {
             QueueState::Starting
@@ -109,10 +68,13 @@ impl Manager {
         let launch = Launch {
             id: id.clone(),
             repository: Some(repository.id),
-            request: request.into(),
+            request: LaunchRequest {
+                priority,
+                ..request.into()
+            },
             state,
-            opens: target.clone(),
-            scope,
+            opens: Some(workspace.id.clone()),
+            scope: None,
             awaits,
         };
         let now = launch.request.now;
@@ -121,9 +83,7 @@ impl Manager {
             .write(move |tx| insert_launch(tx, &launch, &removing))
             .await?;
         // Its queued agent works the workspace's issues.
-        if let Some(workspace) = &target {
-            self.agent_settles.request(workspace);
-        }
+        self.agent_settles.request(&workspace.id);
         let admitted = now || self.admit_waiting(Some(&id)).await?;
         // Kept before the gate opens, so no pass starts it in the background
         // before its caller holds it.
@@ -131,8 +91,8 @@ impl Manager {
             self.agent_queue.keep_for_attach(&id);
         }
         // Read the response before a detached worker can take the entry.
-        let admission = self.admission_of(&id, admitted && !detached).await?;
-        if detached && admitted {
+        let admission = self.admission_of(&id, admitted && caller_starts).await?;
+        if admitted && !caller_starts {
             self.start_launches(vec![start], None).await?;
         }
         Ok(admission)
@@ -366,73 +326,34 @@ impl Manager {
         Ok(())
     }
 
-    /// Record `workspace` as the one a starting entry opened, or the
-    /// existing one a waiting launch opens once admitted, which the daemon
-    /// then starts as it starts any launch in an existing workspace. A
-    /// launch that did not name the workspace when it was admitted, such as
-    /// one on a branch that gained a workspace while it waited, takes it only
-    /// while the workspace has no agent of its own.
+    /// Record `workspace` as the one the starting entry `id` started its
+    /// agent in, which must be the one the launch names.
     async fn attach_workspace(&self, id: &QueueEntryId, workspace: Workspace) -> Result<()> {
-        let opens = Self::ensure_holds_agents(&workspace).is_ok();
-        let _gate = self.agent_queue.lock_admission().await;
-        if !self.entry_opens(id, &workspace.id).await? {
-            self.ensure_takes_worker(&workspace).await?;
-        }
         let id = id.to_owned();
         let attached = self
             .store
             .write(move |tx| {
                 let started = tx.execute(
                     "UPDATE agent_queue SET space_id=?2
-                     WHERE id=?1 AND state=?3 AND (opens_workspace_id IS NULL OR opens_workspace_id=?2)
+                     WHERE id=?1 AND state=?3 AND opens_workspace_id=?2
                      AND (space_id IS NULL OR space_id=?2)",
                     params![id, workspace.id, QueueState::Starting],
                 )?;
                 if started == 1 {
                     blockers::replace_launch(tx, &id, &workspace.id)?;
                 }
-                let waiting = match opens && started == 0 {
-                    true => tx.execute(
-                        "UPDATE agent_queue SET opens_workspace_id=?2
-                         WHERE id=?1 AND state=?3 AND kind=?4 AND repository_id=?5
-                         AND space_id IS NULL AND opens_workspace_id IS NULL",
-                        params![
-                            id,
-                            workspace.id,
-                            QueueState::Queued,
-                            QueueKind::Launch,
-                            workspace.repository_id
-                        ],
-                    )?,
-                    false => 0,
-                };
-                Ok(started + waiting)
+                Ok(started)
             })
             .await?;
         ensure!(
             attached == 1,
-            "queue entry no longer starts or waits, or starts its agent in another workspace"
+            "queue entry no longer starts, or starts its agent in another workspace"
         );
         Ok(())
     }
 
-    /// Whether the entry `id` was admitted to open `workspace`, which its
-    /// admission checked for the workspace's one agent.
-    async fn entry_opens(&self, id: &QueueEntryId, workspace: &SpaceId) -> Result<bool> {
-        let (id, workspace) = (id.to_owned(), workspace.to_owned());
-        self.store
-            .read(move |db| {
-                crate::daemon::store::exists(
-                    db,
-                    "SELECT 1 FROM agent_queue WHERE id=?1 AND opens_workspace_id=?2",
-                    params![id, workspace],
-                )
-            })
-            .await
-    }
-
-    /// Whether an agent launch in the space, or one its scoped process
-    /// queued that has not opened its workspace, waits in the queue or
+    /// Whether an agent launch in the space, or one of a chat its scoped
+    /// process queued that has not recorded the chat, waits in the queue or
     /// starts.
     pub(crate) async fn has_queued_launch(&self, space_id: &SpaceId) -> Result<bool> {
         let space_id = space_id.to_owned();
@@ -448,28 +369,13 @@ impl Manager {
             .await
     }
 
-    /// The caller as which the launch of the starting entry `id` opens its
-    /// workspace: the space whose scoped process queued it, or none for a
-    /// launch of the user's.
-    pub(in crate::daemon) async fn queued_scope(
-        &self,
-        id: &QueueEntryId,
-    ) -> Result<Option<Caller>> {
-        self.launch_scope(id, QueueState::Starting).await
-    }
-
     /// The caller as which the launch `id`, waiting or starting, records the
-    /// chat it starts in, as [`Self::queued_scope`] says.
+    /// chat it starts in: the space whose scoped process queued it, or none
+    /// for a launch of the user's.
     pub(in crate::daemon) async fn chat_launch_scope(
         &self,
         id: &QueueEntryId,
     ) -> Result<Option<Caller>> {
-        self.launch_scope(id, QueueState::Queued).await
-    }
-
-    /// [`Self::queued_scope`] of the launch `id` that is starting or in
-    /// `state`.
-    async fn launch_scope(&self, id: &QueueEntryId, state: QueueState) -> Result<Option<Caller>> {
         let id = id.to_owned();
         let scope: Option<Option<SpaceId>> = self
             .store
@@ -477,7 +383,7 @@ impl Manager {
                 Ok(db
                     .query_row(
                         "SELECT scope_space_id FROM agent_queue WHERE id=?1 AND state IN (?2,?3)",
-                        params![id, QueueState::Starting, state],
+                        params![id, QueueState::Starting, QueueState::Queued],
                         |row| row.get(0),
                     )
                     .optional()?)

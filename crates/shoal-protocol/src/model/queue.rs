@@ -221,9 +221,8 @@ impl std::str::FromStr for Blocker {
     }
 }
 
-/// An agent launch `shoal start` asks the daemon to admit or queue. The plan
-/// is JSON in the format of the binary's `start_plan::AddPlan`, which the
-/// daemon also writes for the launches it queues itself and the
+/// An agent launch in a recorded workspace to admit or queue. The plan is
+/// JSON in the format of the binary's `start_plan::AddPlan`, which the
 /// `queue-start` worker reads back.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueRequest {
@@ -248,23 +247,17 @@ pub struct QueueRequest {
     /// Start at once regardless of the limits; the agent still takes a slot.
     /// A scoped caller does as its `limits` permission allows.
     pub now: bool,
-    /// The existing workspace the launch opens, such as a child workspace for
-    /// its parent's agent. The daemon then starts the entry itself, outside
-    /// the caller's processes, whether or not a limit applies, unless
-    /// `starts_in_caller`.
-    #[serde(default)]
-    pub workspace: Option<SpaceSelector>,
-    /// The caller starts the launch in `workspace` itself once admitted, as
-    /// it starts a new workspace's, rather than the daemon.
+    /// The recorded workspace the launch starts its agent in. The daemon
+    /// starts the entry itself, outside the caller's processes, whether or
+    /// not a limit applies, unless `starts_in_caller`.
+    pub workspace: SpaceSelector,
+    /// The caller starts the launch in `workspace` itself once admitted,
+    /// rather than the daemon.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub starts_in_caller: bool,
     /// What blocks the launch; it always queues while any remains.
     #[serde(default)]
     pub blockers: Vec<Blocker>,
-    /// The priority of the space the launch creates, which ranks it until
-    /// that space exists.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub priority: Option<Priority>,
     /// The labels of the issue the launch works on, whose
     /// `[priority.labels]` priority ranks it when it is given none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

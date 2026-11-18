@@ -1,64 +1,43 @@
 use rusqlite::params;
 
-use super::super::tests::{add, limit_globally, preparing, register, request};
+use super::super::tests::{add, admitted, create, launch_in, limit_globally, preparing, register};
 use crate::{
     daemon::{notifications::NotificationKind, test_support::manager, workspace::Manager},
     model::{QueueEntry, QueueRequest, Repository, Workspace},
-    protocol::operations::{OperationSpec, Preparation},
-    start_plan::{AddPlan, Creation, ResolvedAddAgent},
+    protocol::operations::{OperationSpec, Preparation, QueuedLaunch},
+    start_plan::AddPlan,
     state::{QueueState, WorkspaceState},
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The plan of a start that creates `branch` in `repository`.
-fn creating(repository: &Repository, branch: &str) -> String {
-    let plan = AddPlan {
-        repository: (&repository.id).into(),
-        creation: Creation {
-            branch: Some(branch.into()),
-            ..Default::default()
-        },
-        place_name: None,
-        issue: None,
-        agent: ResolvedAddAgent {
-            agent: Some("claude".parse().unwrap()),
-            model: Default::default(),
-        },
-        args: Vec::new(),
+/// The plan of a start of an agent told to fix the login in `workspace`.
+fn opening(workspace: &Workspace) -> String {
+    let launch = QueuedLaunch {
         prompt: Some("Fix the login".into()),
-        mode: None,
-        narrowing: Default::default(),
-        fork: None,
-        queue_entry: None,
-        chat: None,
-        parent: None,
-        workspace: None,
-        handoff: None,
+        ..QueuedLaunch::new("claude".parse().unwrap())
     };
-    serde_json::to_string(&plan).unwrap()
+    serde_json::to_string(&AddPlan::agent_in(workspace, launch).unwrap()).unwrap()
 }
 
-/// A start of `plan` in `repository`, admitted to the only slot, whose new
-/// `child` workspace took its entry and then failed its setup.
+/// A start of the `plan` of a new `child` workspace of `repository`,
+/// admitted to the only slot, which took its entry and then failed its
+/// setup.
 async fn failed_start(
     manager: &Manager,
     repository: &Repository,
-    plan: String,
+    plan: fn(&Workspace) -> String,
 ) -> (Workspace, QueueEntry) {
     limit_globally(manager, 1);
+    let child = create(manager, repository, "child").await;
     let starting = (manager.queue_add(QueueRequest {
-        plan,
-        ..request(repository, "child", false)
+        plan: plan(&child),
+        ..launch_in(&child, false)
     }))
     .await
     .unwrap()
     .entry
     .unwrap();
     assert_eq!(starting.state, QueueState::Starting);
-    let child = manager
-        .create_workspace(&repository.id, "child".into(), None, None, None)
-        .await
-        .unwrap();
     manager
         .queue_attach(&starting.id, &SpaceSelector::id(&child.id))
         .await
@@ -97,7 +76,7 @@ async fn plan(manager: &Manager, entry: &QueueEntry) -> AddPlan {
 async fn a_start_whose_setup_failed_waits_for_a_retried_setup_without_its_slot() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    let (child, starting) = failed_start(&manager, &repo, creating(&repo, "child")).await;
+    let (child, starting) = failed_start(&manager, &repo, opening).await;
     // The CLI that started it still holds the old entry.
     manager.hold_queue_entry(&starting.id).await.unwrap();
     manager.dispatch_queue().await.unwrap();
@@ -113,14 +92,14 @@ async fn a_start_whose_setup_failed_waits_for_a_retried_setup_without_its_slot()
     let plan = plan(&manager, waiting).await;
     assert!(plan.opens(&child));
     assert_eq!(plan.prompt.as_deref(), Some("Fix the login"));
-    assert!(add(&manager, &repo, "other").await.start);
+    assert!(admitted(&add(&manager, &repo, "other").await));
 }
 
 #[tokio::test]
 async fn a_start_whose_setup_failed_keeps_its_entry_while_its_preparation_runs() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    let (child, starting) = failed_start(&manager, &repo, creating(&repo, "child")).await;
+    let (child, starting) = failed_start(&manager, &repo, opening).await;
     let spec = OperationSpec::Prepare {
         workspace: SpaceSelector::id(&child.id),
         steps: Preparation::default(),
@@ -138,7 +117,7 @@ async fn a_start_whose_setup_failed_keeps_its_entry_while_its_preparation_runs()
 async fn a_failed_start_that_cannot_open_its_workspace_ends_and_says_so() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    let (child, _) = failed_start(&manager, &repo, "{}".into()).await;
+    let (child, _) = failed_start(&manager, &repo, |_| "{}".into()).await;
     manager.dispatch_queue().await.unwrap();
     assert!(manager.queue_entries().await.unwrap().is_empty());
     let failed: Vec<_> = (manager.notifications(false, 50).await.unwrap().into_iter())

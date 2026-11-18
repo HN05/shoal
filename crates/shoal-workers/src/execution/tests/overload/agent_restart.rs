@@ -102,22 +102,26 @@ async fn a_restart_resumes_only_in_a_ready_recorded_workspace() {
     serving.abort();
 }
 
-/// A launch in the fixture's repository, which waits for a slot.
-fn waiting_launch(workspace: &crate::model::Workspace) -> QueueRequest {
+/// A launch in a new workspace of the fixture's repository, which waits for
+/// a slot.
+async fn waiting_launch(manager: &Manager, workspace: &crate::model::Workspace) -> QueueRequest {
+    let repository = workspace.repository().clone();
+    let waiting = (manager.create_workspace(repository, "waiting".into(), None, None, None))
+        .await
+        .unwrap();
     QueueRequest {
         source: None,
         issue_labels: Vec::new(),
-        priority: None,
         narrowing: Default::default(),
-        repository: (workspace.repository()).into(),
-        name: "waiting".into(),
+        repository: (waiting.repository()).into(),
+        name: waiting.name.clone(),
         agent: "claude".into(),
         mode: None,
         issue_title: None,
         plan: "{}".into(),
         env: Default::default(),
         now: false,
-        workspace: None,
+        workspace: SpaceSelector::id(&waiting.id),
         starts_in_caller: false,
         blockers: Vec::new(),
     }
@@ -147,7 +151,8 @@ async fn restart_starts_the_agent_in_a_new_wrapper_in_the_slot_it_kept() {
     manager.publish_config(crate::test_support::global_config(
         "[machine]\nmax_heavy_agents = 1\n[machine.overload.disk]\nenabled = false",
     ));
-    let waiting = manager.queue_add(waiting_launch(&workspace)).await.unwrap();
+    let waiting = waiting_launch(&manager, &workspace).await;
+    let waiting = manager.queue_add(waiting).await.unwrap();
     let waiting = waiting.entry.unwrap();
     assert_eq!(waiting.state, QueueState::Queued);
     fs::remove_file(workspace.path.join("resume.sh")).unwrap();

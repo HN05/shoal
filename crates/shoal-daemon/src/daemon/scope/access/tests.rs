@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use rusqlite::params;
 use serde_json::json;
 
@@ -8,7 +6,7 @@ use crate::daemon::{
     test_support::{chat, manager, repository, workspace_below},
     workspace::Manager,
 };
-use crate::model::{Blocker, QueueRequest, Repository};
+use crate::model::{Blocker, QueueRequest, Repository, Workspace};
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 
 fn caller(space: &SpaceId) -> Caller {
@@ -20,35 +18,12 @@ fn caller(space: &SpaceId) -> Caller {
     }
 }
 
-/// Queue the launch `name` of a new space, whose plan names `parent`,
-/// until the space `blocker` is done.
-async fn launch(
-    manager: &Manager,
-    repository: &Repository,
-    name: &str,
-    parent: Option<&SpaceId>,
-    blocker: &SpaceId,
-) {
-    let plan = match parent {
-        Some(parent) => json!({ "parent": parent }),
-        None => json!({}),
-    };
+/// Queue the launch of an agent in `workspace` until the space `blocker`
+/// is done.
+async fn launch(manager: &Manager, workspace: &Workspace, blocker: &SpaceId) {
     let request = QueueRequest {
-        source: None,
-        issue_labels: Vec::new(),
-        priority: None,
-        narrowing: Default::default(),
-        mode: None,
-        repository: (&repository.id).into(),
-        name: name.into(),
-        agent: "claude".into(),
-        issue_title: None,
-        plan: plan.to_string(),
-        env: BTreeMap::new(),
-        now: false,
-        workspace: None,
-        starts_in_caller: false,
         blockers: vec![Blocker::Space(blocker.to_string())],
+        ..crate::daemon::workspace::agent_queue::tests::launch_in(workspace, false)
     };
     manager.queue_add(request).await.unwrap();
 }
@@ -88,10 +63,10 @@ async fn reached(manager: &Manager, caller: &Caller) -> Vec<String> {
     names
 }
 
-/// A scope reaches the entries without a space of their own through the
-/// spaces they are for: a CI job through its run's spaces, a launch of a
-/// new space through the parent it names. A master session reaches every
-/// entry, the user's top-level launches and default-branch jobs among them.
+/// A scope reaches a launch through its workspace and a CI job, which has
+/// no space of its own, through its run's spaces. A master session reaches
+/// every entry, those of top-level workspaces and default-branch jobs among
+/// them.
 #[tokio::test]
 async fn a_scope_reaches_jobs_and_launches_through_their_spaces() {
     let (temp, manager) = manager().await;
@@ -104,8 +79,12 @@ async fn a_scope_reaches_jobs_and_launches_through_their_spaces() {
         .unwrap();
     let child = workspace_below(&manager, &repo, "child", &worker.id, None).await;
     let master = chat(&manager, "master", "orchestrate", None, None).await;
-    launch(&manager, &repo, "top", None, &worker.id).await;
-    launch(&manager, &repo, "below", Some(&child.id), &worker.id).await;
+    let top = (manager.create_workspace(&repo.id, "top".into(), None, None, None))
+        .await
+        .unwrap();
+    let below = workspace_below(&manager, &repo, "below", &child.id, None).await;
+    launch(&manager, &top, &worker.id).await;
+    launch(&manager, &below, &worker.id).await;
     job(&manager, &repo, "ci-child", &[&child.id]).await;
     job(&manager, &repo, "ci-main", &[]).await;
     assert_eq!(

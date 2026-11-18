@@ -258,8 +258,7 @@ async fn a_queued_launch_puts_the_agent_account_on_until_cancelled() {
     let blocker = crate::model::Blocker::Space(fixture.workspaces[1].id.to_string());
     let request = crate::model::QueueRequest {
         blockers: vec![blocker],
-        workspace: Some(SpaceSelector::id(&workspace.id)),
-        ..crate::daemon::workspace::agent_queue::tests::request(&fixture.repository, "fix", false)
+        ..crate::daemon::workspace::agent_queue::tests::launch_in(workspace, false)
     };
     let admission = manager.queue_add(request).await.unwrap();
     let entry = admission.entry.unwrap();

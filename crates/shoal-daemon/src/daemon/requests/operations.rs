@@ -15,11 +15,7 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::{Manager, NewWorkspace},
 };
-use crate::protocol::{
-    Body, ErrorCode, OperationMethod, Response,
-    operations::{Started, WorkspaceStart},
-};
-use shoal_ids::queue_entry_ids::QueueEntryId;
+use crate::protocol::{Body, ErrorCode, OperationMethod, Response, operations::Started};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Whether `method` starts a workspace or an operation, whose worker an
@@ -65,11 +61,11 @@ pub(super) async fn handle(
         }
         OperationMethod::StartWorkspace {
             repository,
-            mut start,
+            start,
             base,
             path,
             git_profile,
-            mut parent,
+            parent,
             options,
             issue,
             pr,
@@ -79,11 +75,6 @@ pub(super) async fn handle(
             env,
             queue_entry,
         } => {
-            let queued = match caller {
-                Some(_) => None,
-                None => queued_start(manager, queue_entry.clone(), &mut parent, &mut start).await?,
-            };
-            let caller = caller.or(queued.as_ref());
             let opening = Opening {
                 start,
                 base,
@@ -217,27 +208,6 @@ impl Scoped for OperationMethod {
             }
         })
     }
-}
-
-/// The scope the user's process opens a workspace in for the launch of
-/// queue entry `entry`: that of the space whose scoped process queued it,
-/// to which the start is confined, or the user's own for any other.
-async fn queued_start(
-    manager: &Manager,
-    entry: Option<QueueEntryId>,
-    parent: &mut Option<SpaceSelector>,
-    start: &mut WorkspaceStart,
-) -> Result<Option<Caller>> {
-    let Some(entry) = entry else {
-        return Ok(None);
-    };
-    let Some(queued) = manager.queued_scope(&entry).await? else {
-        return Ok(None);
-    };
-    manager
-        .confine_workspace_start(&queued, parent, start)
-        .await?;
-    Ok(Some(queued))
 }
 
 /// Who follows an operation: the scope token it sent, which must stay
