@@ -212,8 +212,12 @@ removal, with where a removal failed or stopped, oldest first; a removed
 space is selected by its ID. Outside a space, `status` shows the daemon and
 `log` every space's entries with the daemon's. On a machine joined to a hub,
 `list`, `inbox` and `status` also show the other machines' spaces your scope
-reaches, each with its `machine`, as that machine last reported them; acting
-on one happens on its machine.
+reaches, each with its `machine`. Commands that act on a space work on one
+elsewhere through the hub, under your scope, except those that need its files
+or processes, such as `diff`, `conflicts`, leases and demos, which name its
+machine. While that machine is offline, a message, answer, approval decision
+or stop prints that it is queued and goes through once it connects; other
+commands fail, naming the machine.
 Notifications report agent exits, alerts, questions, busy resources, pending
 approvals and cleanup Shoal did on its own; reading them marks them read, and
 scoped callers read them as their `notifications` permission allows.

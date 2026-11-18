@@ -789,15 +789,17 @@ upgrade to run. A refused machine keeps working on its own.
 Each machine keeps its spaces and reports a summary of each to the hub as it
 changes, all of them again whenever its link opens: its number and name, its
 kind, its repository by origin, the space above it, which may run on another
-machine, its mode, what lists show it doing, its progress, and its open
-questions and approval requests. `shoal list`, `shoal inbox` and
+machine, its mode, what lists show it doing, whether it has an agent, its
+progress, and its open questions and approval requests. `shoal list`, `shoal inbox` and
 `shoal status <space>` on any machine of the hub show the other machines'
 spaces as their machines last reported them, and once they do, every row names
 its machine; a space a scoped caller's scope reaches, through the spaces above
 it on any machine, is one it sees. A machine the hub has not heard from since
 keeps its spaces listed, with when the hub last saw it. `shoal status` of
-another machine's space, by its ID or a number no space here has, shows that
-summary; the rest of its status stays on its machine. The `--repo` filter
+another machine's space, by its ID or a number no space here has, shows the
+status its machine answers, naming the machine, which keeps the space's
+sessions and transcripts; while that machine is offline, it shows what the
+machine last reported. The `--repo` filter
 matches another machine's spaces by their repository's origin. A hub that
 cannot be reached leaves the other machines out with a warning.
 
@@ -825,6 +827,42 @@ space there. `shoal restore` of a space another machine runs is refused, naming
 `shoal move` and a copy; while the hub cannot be asked, the restore goes on,
 and a duplicate shows as a conflict once both machines report it. A revoked
 machine's spaces leave the hub's lists.
+
+A command for a space another machine of the hub owns works from any of
+them: the daemon that takes it forwards it through the hub to the space's
+machine, which decides it as it decides its own callers'. Your terminal's
+commands go as yours; a space's processes' go with that space's scope and
+permissions, which its machine vouches for, so an agent acts on the spaces
+below its own on every machine and is refused the rest, and a device's go as
+yours. This covers `status`, `log`, `questions`, `approvals`, `messages send`,
+`stop`, `stop --interrupt`, `restart`, `resume`, `rename`, `done`, `rm`,
+`priority`, `progress`, `sleep`, holds, and the issue, PR and CI commands that
+act on a space. Commands that need the space's files or
+processes, such as `diff`, `conflicts`, `setup`, leases, demos,
+`stop --leftovers` and `--processes`, `files` and an agent's hooks, run only
+on its machine and are refused elsewhere, naming it.
+
+While a space's machine is offline, a message, an answer, an approval
+decision or a stop for it waits at the hub, and the command says so, naming
+the machine, when the hub last saw it and when the request expires; the hub
+delivers what waits, in order, once the machine connects. A request still
+waiting after seven days is dropped, and the space whose process sent it, or
+else you, hears of it in a `hub_expired` alert. Any other command for an
+offline machine's space fails at once, naming the machine and when the hub
+last saw it.
+
+The tree of spaces may span machines: a space that moves to another machine
+without the space above it stays below it there. What a space passes up the
+tree, its agent's messages, questions, approval requests, completion, ready
+marks and exits, reaches the nearest space above with an agent wherever it
+runs, and that
+space decides the space's approval requests, answers its questions and
+messages it from its own machine. A machine whose link to the hub is down
+keeps what its spaces pass up and sends it once the link opens. A question or
+approval request that waited
+[`[machine.hub] escalate_after_minutes`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
+for a coordinator whose machine is offline passes to the next space above
+with an agent on a connected machine, or to you.
 
 ## Workspaces
 

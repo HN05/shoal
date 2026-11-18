@@ -153,8 +153,30 @@ reports the numbers it holds without a space, those of a removed space's
 issue proposals, with its spaces, and the hub gives them no other space. An import's
 claim of a space's ID also keeps its number for the claiming machine while
 the hub still lists the space, so `shoal move ssh` keeps it; an exported
-package imported after its source is gone takes a new one. Browser
-sessions and routing requests between machines are later steps.
+package imported after its source is gone takes a new one. A request for
+a space another machine owns goes from the caller's daemon through the hub
+to that machine, which decides it as its own caller's: no command is
+special on the hub. Each machine vouches for its own callers, so its
+unscoped callers' requests and a device's go as the user's and a space's
+process's with that space's ID, the reach of its scope and its effective
+permissions, which the owning machine checks through the operation every
+scope check takes, under single-user trust as scope is cooperative; the
+owning machine answers it on its own socket under a token standing for that
+caller, and never forwards a forwarded request again. A request that needs
+the space's files or processes stays on its machine and is refused
+elsewhere, naming it. The space tree may span machines, as when a space
+moves without its parent: what a space passes up reaches the nearest space
+above with an agent wherever it runs, through the first space above that
+runs elsewhere, whose machine goes on from there, and approval requests
+take deciders on the machines above after the local ones. The hub holds
+what can wait for an offline machine, messages, answers, decisions, stops
+and events, in order until it connects, for seven days, after which the
+sender hears it expired; anything else fails at once, naming the machine
+and when the hub last saw it, and a machine whose link is down keeps what
+its spaces pass up until it opens. A question or approval request that
+waits `[machine.hub] escalate_after_minutes` for a coordinator whose
+machine is offline passes to the next space above with an agent on a
+connected machine, or to the user. Browser sessions are a later step.
 The minimum Rust version follows current stable so the code can use its newest
 features; the manifest and CI toolchain advance together, with locked dependencies.
 The daemon raises its open file limit at startup and accepts every connection,

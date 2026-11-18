@@ -281,6 +281,7 @@ enabled = true                           # This daemon takes the hub role
 listen = "127.0.0.1:7474"                # The default
 url = "https://shoal.example.ts.net"     # Default: http:// and the listen address
 connect = ["ssh", "desk", "shoal", "daemon", "connect"]   # Overrides a joined machine's route
+escalate_after_minutes = 30              # The default
 ```
 
 With `enabled`, the daemon is the [hub](../../../../../../docs/reference.md#hub)
@@ -297,6 +298,11 @@ it exits, in place of the URL it paired at or the command it joined through.
 The command ends in `shoal daemon connect` on the hub, with an absolute path to
 `shoal` when it is not on the `PATH` there, such as over `ssh` or
 `docker exec`.
+
+`escalate_after_minutes` is how long a question or approval request of a space
+on this machine waits for a coordinator whose machine is offline before it
+passes to the next space above with an agent on a connected machine, or to
+you.
 
 ### Container runtime
 
