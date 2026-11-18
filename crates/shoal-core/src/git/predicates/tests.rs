@@ -4,11 +4,11 @@ use crate::{git, test_support};
 #[tokio::test]
 async fn predicates_distinguish_answers_errors_and_spawn_failure() {
     let root = tempfile::tempdir().unwrap();
-    for ancestry in [true, false] {
+    for negative in [1, 2] {
         for (script, expected) in [
             ("exit 0", Some(true)),
-            ("exit 1", ancestry.then_some(false)),
-            ("exit 2", (!ancestry).then_some(false)),
+            ("exit 1", (negative == 1).then_some(false)),
+            ("exit 2", (negative == 2).then_some(false)),
             ("echo broken >&2; exit 128", None),
             ("echo unknown option exists >&2; exit 129", None),
             ("kill -TERM $$", None),
@@ -26,11 +26,7 @@ async fn predicates_distinguish_answers_errors_and_spawn_failure() {
                     command
                 }
             };
-            let result = if ancestry {
-                is_ancestor(root.path(), "parent", "child", command).await
-            } else {
-                ref_exists(root.path(), "refs/heads/topic", command).await
-            };
+            let result = predicate(command(root.path()), negative, None).await;
             match expected {
                 Some(expected) => assert_eq!(result.unwrap(), expected),
                 None => {
@@ -71,28 +67,16 @@ async fn real_git_checks_history_and_exact_refs() {
                 .await
                 .is_err()
         );
-        assert!(ref_exists(&repo, "refs/heads/main", command).await.unwrap());
-        assert!(
-            !ref_exists(&repo, "refs/heads/missing", command)
-                .await
-                .unwrap()
-        );
-        assert!(!ref_exists(&repo, "main", command).await.unwrap());
-        assert!(
-            ref_exists(root.path(), "refs/heads/main", command)
-                .await
-                .is_err()
-        );
         assert!(
             is_ancestor(root.path(), "HEAD", "HEAD", command)
                 .await
                 .is_err()
         );
-        std::fs::write(repo.join(".git/refs/heads/broken"), "broken\n").unwrap();
-        assert!(
-            ref_exists(&repo, "refs/heads/broken", command)
-                .await
-                .is_err()
-        );
     }
+    assert!(ref_exists(&repo, "refs/heads/main").await.unwrap());
+    assert!(!ref_exists(&repo, "refs/heads/missing").await.unwrap());
+    assert!(!ref_exists(&repo, "main").await.unwrap());
+    assert!(ref_exists(root.path(), "refs/heads/main").await.is_err());
+    std::fs::write(repo.join(".git/refs/heads/broken"), "broken\n").unwrap();
+    assert!(ref_exists(&repo, "refs/heads/broken").await.is_err());
 }

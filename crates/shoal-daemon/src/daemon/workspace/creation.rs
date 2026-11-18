@@ -726,7 +726,7 @@ pub(super) async fn existing_base(
         crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await
     {
         let default = git::local_ref(&name);
-        if name != *branch && git::ref_exists(&repo.path, &default, git::isolated_command).await? {
+        if name != *branch && git::ref_exists(&repo.path, &default).await? {
             return Ok(default);
         }
     }

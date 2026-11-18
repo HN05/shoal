@@ -26,6 +26,7 @@ pub use queries::{
 };
 pub mod checkpoint;
 mod reader;
+pub(crate) mod refs;
 pub mod repo;
 pub mod revert;
 pub mod seed;
@@ -41,7 +42,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Result, bail, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use shoal_refs::{BranchName, CommitId};
 use tokio::process::Command;
 
@@ -136,7 +137,7 @@ async fn remote_branch_name<'a>(repo: &Path, base: &'a str) -> Result<Option<&'a
     if qualified.is_none() {
         for prefix in [LOCAL_REFS, "refs/tags/"] {
             let shadow = format!("{prefix}{base}");
-            if ref_exists(repo, &shadow, isolated_command).await? {
+            if ref_exists(repo, &shadow).await? {
                 return Ok(None);
             }
         }
@@ -520,9 +521,27 @@ pub async fn head_branch(repo: &Path) -> Result<Option<BranchName>> {
     Ok(head.branch())
 }
 
-/// Resolve and peel a revision to a commit, using the caller's Git runner.
-/// Plain ref/object queries must not use this: `^{commit}` changes their meaning.
+/// Resolve and peel a revision to a commit, using the caller's Git runner
+/// for a revision Git must interpret. Plain ref/object queries must not use
+/// this: `^{commit}` changes their meaning.
 pub async fn resolve_commit(
+    repo: &Path,
+    rev: &str,
+    run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
+) -> Result<CommitId> {
+    if !refs::names_ref_or_object(rev) {
+        return resolve_commit_by_git(repo, rev, run).await;
+    }
+    let owned = rev.to_owned();
+    let in_process = move |repo: &gix::Repository| {
+        refs::peeled_commit(repo, &owned)?.with_context(|| format!("{owned} names no commit"))
+    };
+    let git = async |repo: &Path| resolve_commit_by_git(repo, rev, run).await;
+    reader::read(repo, in_process, git).await
+}
+
+/// The commit Git peels `rev` to in `repo`.
+async fn resolve_commit_by_git(
     repo: &Path,
     rev: &str,
     run: impl AsyncFn(&Path, &[&str]) -> Result<String>,

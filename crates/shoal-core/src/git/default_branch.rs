@@ -73,8 +73,8 @@ pub async fn locate_among(
 async fn remote_head(repo: &Path, remote: &str, lookup: DefaultBranchLookup) -> Result<BranchName> {
     let head = git::remote_ref(remote, "HEAD");
     let prefix = git::remote_ref(remote, "");
-    if let Ok(target) = git::run(repo, &["symbolic-ref", "--quiet", &head]).await
-        && let Some(branch) = target.trim_end_matches('\n').strip_prefix(&prefix)
+    if let Some(target) = git::refs::symbolic_target(repo, &head).await?
+        && let Some(branch) = target.strip_prefix(&prefix)
     {
         return Ok(branch.into());
     }

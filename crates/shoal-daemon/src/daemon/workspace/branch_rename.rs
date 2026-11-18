@@ -51,12 +51,7 @@ impl Manager {
         }
         let (old_name, new_name) = (current.clone(), BranchName::from(branch));
         ensure!(
-            !git::ref_exists(
-                &repo.path,
-                &git::local_ref(&new_name),
-                git::isolated_command
-            )
-            .await?,
+            !git::ref_exists(&repo.path, &git::local_ref(&new_name)).await?,
             Refusal::new(
                 Reason::NameTaken,
                 format!("local branch already exists: {branch}")

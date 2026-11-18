@@ -507,7 +507,7 @@ async fn shared_commit(repo: &Path) -> Result<Option<String>> {
         return Ok(None);
     };
     let reference = git::remote_ref(remote, default.name.as_str());
-    if !git::ref_exists(repo, &reference, git::isolated_command).await? {
+    if !git::ref_exists(repo, &reference).await? {
         return Ok(None);
     }
     let commit = git::revision(repo, &format!("{reference}^{{commit}}"), git::run).await?;

@@ -147,7 +147,7 @@ impl Manager {
             crate::git::default_branch::locate(&repo.path, DefaultBranchLookup::Discover).await?;
         let mut remotes = Vec::new();
         let local = git::local_ref(&default.name);
-        if git::ref_exists(&repo.path, &local, git::isolated_command).await?
+        if git::ref_exists(&repo.path, &local).await?
             && let Some((remote, _)) = upstream(repo, &local).await?
         {
             remotes.push(remote);
@@ -494,7 +494,7 @@ impl Manager {
         let local = git::strip_local(selector).unwrap_or(selector);
         let local_ref = git::local_ref(&local.into());
         let branch = if git::strip_remote(selector).is_none()
-            && git::ref_exists(&repo.path, &local_ref, git::isolated_command).await?
+            && git::ref_exists(&repo.path, &local_ref).await?
         {
             Branch {
                 name: local.into(),
@@ -533,8 +533,7 @@ impl Manager {
         git::check_branch_name(name.as_str())?;
         if let Some(remote) = &branch.remote {
             let local = name.clone();
-            let local_exists =
-                git::ref_exists(&repo.path, &git::local_ref(&local), git::isolated_command).await?;
+            let local_exists = git::ref_exists(&repo.path, &git::local_ref(&local)).await?;
             if local_exists {
                 let upstream = git::existing_branch::upstream_ref(&repo.path, &local).await?;
                 ensure!(
@@ -555,7 +554,7 @@ impl Manager {
             let name = branch.name.clone();
             let tracking = fetch::materialize_branch(&repo.path, remote, &name).await?;
             let local = git::local_ref(&name);
-            if git::ref_exists(&repo.path, &local, git::isolated_command).await? {
+            if git::ref_exists(&repo.path, &local).await? {
                 self.refresh_branch(repo, &branch.name, UpstreamPolicy::Required)
                     .await?;
             } else {

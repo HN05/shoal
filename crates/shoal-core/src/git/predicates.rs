@@ -4,7 +4,10 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use tokio::process::Command;
 
-use super::version::{self, Release};
+use super::{
+    reader, refs,
+    version::{self, Release},
+};
 use crate::subprocess;
 
 /// The first Git whose `show-ref` takes `--exists`.
@@ -24,22 +27,38 @@ pub async fn is_ancestor(
 }
 
 /// Whether an exact ref exists, without resolving its target object. Callers
-/// pass full ref names, not revision expressions. Unlike `--verify --quiet`,
-/// `--exists` distinguishes a missing ref (2) from a broken ref (1).
-pub async fn ref_exists(
-    repo: &Path,
-    reference: &str,
-    command: impl FnOnce(&Path) -> Command,
-) -> Result<bool> {
-    let mut command = command(repo);
-    command.args(["show-ref", "--exists", "--", reference]);
-    predicate(command, 2, Some(SHOW_REF_EXISTS))
+/// pass full ref names, not revision expressions.
+pub async fn ref_exists(repo: &Path, reference: &str) -> Result<bool> {
+    let owned = reference.to_owned();
+    let in_process = move |repo: &gix::Repository| refs::exists_in_process(repo, &owned);
+    let git = async |repo: &Path| {
+        // Unlike `--verify --quiet`, `--exists` tells a missing ref (2)
+        // from a broken one (1).
+        let mut command = super::command(repo);
+        command.args(["show-ref", "--exists", "--", reference]);
+        predicate(command, 2, Some(SHOW_REF_EXISTS)).await
+    };
+    reader::read(repo, in_process, git)
         .await
         .context("check reference existence")
 }
 
 /// Whether the repository has the commit `rev` names.
 pub async fn has_commit(repo: &Path, rev: &str) -> Result<bool> {
+    if refs::names_ref_or_object(rev) {
+        let owned = rev.to_owned();
+        let in_process =
+            move |repo: &gix::Repository| Ok(refs::peeled_commit(repo, &owned)?.is_some());
+        return reader::read(repo, in_process, async |repo| {
+            has_commit_by_git(repo, rev).await
+        })
+        .await;
+    }
+    has_commit_by_git(repo, rev).await
+}
+
+/// Whether Git finds the commit `rev` names in `repo`.
+async fn has_commit_by_git(repo: &Path, rev: &str) -> Result<bool> {
     let mut command = super::isolated_command(repo);
     command.args([
         "rev-parse",

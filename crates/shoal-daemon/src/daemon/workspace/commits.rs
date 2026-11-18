@@ -510,11 +510,9 @@ async fn surviving_ref(repo: &Repository, reference: Option<&str>) -> Result<Opt
     let Some(reference) = reference else {
         return Ok(None);
     };
-    Ok(
-        git::ref_exists(&repo.path, reference, git::isolated_command)
-            .await?
-            .then(|| reference.to_owned()),
-    )
+    Ok(git::ref_exists(&repo.path, reference)
+        .await?
+        .then(|| reference.to_owned()))
 }
 
 /// Fetch `commit` into `repo` unless it has it: with the ref `reference`

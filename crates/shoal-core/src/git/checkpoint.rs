@@ -327,7 +327,7 @@ pub async fn save(repo: &Path, reference: &str, commit: &CommitId) -> Result<()>
 /// another commit by then. A missing ref counts as deleted.
 pub async fn delete_at(repo: &Path, reference: &str, commit: &CommitId) -> Result<bool> {
     let deleted = run_isolated(repo, &["update-ref", "-d", reference, commit.as_str()]).await;
-    if deleted.is_ok() || !super::ref_exists(repo, reference, super::isolated_command).await? {
+    if deleted.is_ok() || !super::ref_exists(repo, reference).await? {
         return Ok(true);
     }
     let current = super::verify_revision(repo, reference, run_isolated).await?;

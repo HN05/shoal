@@ -82,12 +82,10 @@ pub async fn tracking_ref(path: &Path, default: &BranchName) -> Result<Option<St
     if tracking.is_empty() {
         return Ok(None);
     }
-    Ok(
-        match git::ref_exists(path, tracking, git::isolated_command).await? {
-            true => Some(tracking.to_owned()),
-            false => None,
-        },
-    )
+    Ok(match git::ref_exists(path, tracking).await? {
+        true => Some(tracking.to_owned()),
+        false => None,
+    })
 }
 
 pub async fn track(repo: &Path, branch: &BranchName, tracking: &str) -> Result<String> {

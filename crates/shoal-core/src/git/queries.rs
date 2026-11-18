@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use shoal_refs::{BranchName, CommitId};
 
-use super::{reader, run};
+use super::{reader, refs, run};
 use crate::fsutil::off_runtime;
 
 /// Read an object or revision without peeling it to a commit.
@@ -13,7 +13,7 @@ pub async fn revision(
     rev: &str,
     run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
 ) -> Result<String> {
-    run(repo, &["rev-parse", rev]).await
+    named_object(repo, rev, async |repo| run(repo, &["rev-parse", rev]).await).await
 }
 
 /// Require one revision, without changing its object type.
@@ -22,7 +22,29 @@ pub async fn verify_revision(
     rev: &str,
     run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
 ) -> Result<String> {
-    run(repo, &["rev-parse", "--verify", rev]).await
+    let git = async |repo: &Path| run(repo, &["rev-parse", "--verify", rev]).await;
+    named_object(repo, rev, git).await
+}
+
+/// The object `rev` names, as `git rev-parse` prints it, read in process
+/// for a ref or object, else by `git`.
+async fn named_object(
+    repo: &Path,
+    rev: &str,
+    git: impl AsyncFnOnce(&Path) -> Result<String>,
+) -> Result<String> {
+    if !refs::names_ref_or_object(rev) {
+        return git(repo).await;
+    }
+    let owned = rev.to_owned();
+    let in_process = move |repo: &gix::Repository| {
+        let object = refs::named_object(repo, &owned)?;
+        Ok(format!(
+            "{}\n",
+            object.with_context(|| format!("{owned} names nothing"))?
+        ))
+    };
+    reader::read(repo, in_process, git).await
 }
 
 pub async fn symbolic_revision(

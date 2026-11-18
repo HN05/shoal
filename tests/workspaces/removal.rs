@@ -1179,16 +1179,6 @@ fn daemon_git_predicate_failures_preserve_branches_and_workspaces() {
     for (failure, args) in [
         ("--is-ancestor", vec!["merge", &fixture.id("worker")]),
         (
-            "show-ref",
-            vec![
-                "start",
-                "--wait",
-                fixture.repo.to_str().unwrap(),
-                "--branch",
-                "main",
-            ],
-        ),
-        (
             "--is-ancestor",
             vec!["rm", "--wait", &fixture.id("worker"), "--yes"],
         ),

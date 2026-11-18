@@ -139,13 +139,9 @@ async fn with_topic(root: &Path) -> (std::path::PathBuf, std::path::PathBuf) {
 }
 
 async fn has_branch(repo: &Path, name: &str) -> bool {
-    crate::git::ref_exists(
-        repo,
-        &crate::git::local_ref(&name.into()),
-        crate::git::command,
-    )
-    .await
-    .unwrap()
+    crate::git::ref_exists(repo, &crate::git::local_ref(&name.into()))
+        .await
+        .unwrap()
 }
 
 /// Remove a worktree that was switched from `topic` to `moved` with

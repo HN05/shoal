@@ -22,7 +22,7 @@ pub async fn porcelain(repo: &Path) -> Result<String> {
 pub async fn unretained_work(repo: &Path, kept: &[super::RemoteHead]) -> Result<bool> {
     if !porcelain(repo).await?.is_empty()
         || operation_in_progress(repo).await?
-        || super::ref_exists(repo, "refs/stash", super::command).await?
+        || super::ref_exists(repo, "refs/stash").await?
     {
         return Ok(true);
     }
@@ -94,7 +94,7 @@ pub async fn unretained_commits(repo: &Path, rev: &str, retained: &[&str]) -> Re
 /// The full ref of a local branch, when it exists.
 pub(crate) async fn local_branch(repo: &Path, name: &BranchName) -> Result<Option<String>> {
     let reference = super::local_ref(name);
-    Ok(super::ref_exists(repo, &reference, super::command)
+    Ok(super::ref_exists(repo, &reference)
         .await?
         .then_some(reference))
 }
@@ -103,7 +103,7 @@ pub(crate) async fn local_branch(repo: &Path, name: &BranchName) -> Result<Optio
 /// A broken ref or failed lookup stays an error.
 pub async fn local_branch_commit(repo: &Path, name: &BranchName) -> Result<Option<CommitId>> {
     let reference = super::local_ref(name);
-    if !super::ref_exists(repo, &reference, super::isolated_command).await? {
+    if !super::ref_exists(repo, &reference).await? {
         return Ok(None);
     }
     super::resolve_commit(repo, &reference, super::run_isolated)
@@ -184,7 +184,7 @@ async fn upstream_of(repo: &Path, reference: &str) -> Result<Option<String>> {
     });
     // for-each-ref skips a broken ref with only a warning, where `show-ref`
     // fails, so `show-ref` confirms a branch the listing left out.
-    if upstream.is_none() && super::ref_exists(repo, reference, super::command).await? {
+    if upstream.is_none() && super::ref_exists(repo, reference).await? {
         bail!("git for-each-ref did not list {reference}");
     }
     Ok(upstream)
@@ -204,7 +204,7 @@ async fn existing_refs(repo: &Path, references: &[String]) -> Result<Vec<String>
         // A pattern also matches the refs below it, so only exact names
         // count; `show-ref` confirms a ref the listing left out, as above.
         if listed.lines().any(|name| name == reference)
-            || super::ref_exists(repo, reference, super::command).await?
+            || super::ref_exists(repo, reference).await?
         {
             existing.push(reference.clone());
         }

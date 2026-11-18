@@ -340,7 +340,7 @@ pub async fn issue_creation(
         .find(|workspace| workspace.repository() == &repo.id && workspace.branch() == Some(&local))
     {
         ensure_reopens(&workspace)?;
-    } else if git::ref_exists(&repo.path, &git::local_ref(&local), git::isolated_command).await? {
+    } else if git::ref_exists(&repo.path, &git::local_ref(&local)).await? {
         git::existing_branch::ensure_not_checked_out(&repo.path, &local).await?;
     } else {
         creation.branch = Some(name);

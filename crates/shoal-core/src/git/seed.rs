@@ -13,11 +13,7 @@ use super::{run, run_isolated, run_without_submodules};
 
 /// The commit a local branch points at.
 pub async fn branch_commit(repo: &Path, branch: &BranchName) -> Result<CommitId> {
-    let reference = format!("{}^{{commit}}", super::local_ref(branch));
-    Ok(run(repo, &["rev-parse", "--verify", "--quiet", &reference])
-        .await?
-        .trim()
-        .into())
+    super::resolve_commit(repo, &super::local_ref(branch), run).await
 }
 
 pub async fn add_worktree(repo: &Path, path: &Path, commit: &str, reason: &str) -> Result<()> {

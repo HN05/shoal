@@ -28,7 +28,7 @@ async fn cleans_up_fetch_resolution_and_operation_failures() {
         let error = error.to_string();
         match failure {
             "fetch" => assert!(error.contains("couldn't find remote ref"), "{error}"),
-            "resolve" => assert!(error.contains("expected commit type"), "{error}"),
+            "resolve" => assert!(error.contains("names no commit"), "{error}"),
             _ => assert_eq!(error, "operation failed"),
         }
         assert!(!reference.is_empty());

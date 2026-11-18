@@ -125,7 +125,7 @@ impl Manager {
             bail!("workspace {} already uses branch {branch}", workspace.name);
         }
         let local = git::local_ref(branch);
-        if !git::ref_exists(&repo.path, &local, git::isolated_command).await? {
+        if !git::ref_exists(&repo.path, &local).await? {
             git::branch::create(&repo.path, branch, head).await?;
             return Ok(true);
         }
@@ -153,7 +153,7 @@ impl Manager {
         let repo = self.repository(removed.repository()?).await?;
         let kept = removed.kept_workspace()?;
         if let Some(reference) = &kept.base_ref
-            && git::ref_exists(&repo.path, reference, git::isolated_command).await?
+            && git::ref_exists(&repo.path, reference).await?
         {
             return Ok(Some(reference.clone()));
         }

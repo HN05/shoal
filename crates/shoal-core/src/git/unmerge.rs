@@ -459,7 +459,7 @@ fn rebase_command(worktree: &Path, onto: &str, upstream: &str) -> tokio::process
 /// so its commits stay on a branch; whether it did.
 async fn recreate_branch(plan: &UnmergePlan) -> Result<bool> {
     let reference = git::local_ref(&plan.branch);
-    if git::ref_exists(&plan.repo.path, &reference, git::isolated_command).await? {
+    if git::ref_exists(&plan.repo.path, &reference).await? {
         return Ok(false);
     }
     git::branch::create(&plan.repo.path, &plan.branch, plan.source.as_str()).await?;
