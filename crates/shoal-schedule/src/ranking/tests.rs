@@ -634,10 +634,17 @@ fn spaces_order_as_their_agents_would_start_with_what_waits_on_them() {
     );
 }
 
-/// Queue a launch of a new workspace `id` in `repo` whose issue has
+/// Queue the agent of the new workspace `id` in `repo`, whose issue has
 /// `areas`.
 fn launch_in_areas(snapshot: &mut Snapshot, id: &str, repo: &str, areas: &[&str]) {
-    entry(snapshot, id, launch(None));
+    let created = snapshot.entries.len() as i64;
+    space(snapshot, id, Tier::New, created);
+    launch_in_space(snapshot, id, repo, areas);
+}
+
+/// Queue the agent of the workspace `id` in `repo`, whose issue has `areas`.
+fn launch_in_space(snapshot: &mut Snapshot, id: &str, repo: &str, areas: &[&str]) {
+    entry(snapshot, id, launch(Some(id)));
     let entry = snapshot.entries.last_mut().unwrap();
     entry.repository = Some(repo.into());
     entry.areas = areas.iter().map(|area| area.to_string()).collect();
@@ -690,17 +697,26 @@ fn priority_and_tier_go_before_shared_areas() {
 }
 
 #[test]
-fn shared_areas_order_only_launches_of_new_workspaces() {
+fn shared_areas_order_only_launches_of_new_workspaces_by_the_others_areas() {
     let mut snapshot = snapshot();
     for (id, created) in [("daemon", 1), ("into", 2)] {
-        space(&mut snapshot, id, Tier::New, created);
+        space(&mut snapshot, id, Tier::Started, created);
     }
     occupy(&mut snapshot, "repo", "area/daemon", &["daemon", "into"]);
-    entry(&mut snapshot, "into", launch(Some("into")));
-    let into = snapshot.entries.last_mut().unwrap();
-    into.repository = Some("repo".into());
-    into.areas = vec!["area/daemon".into()];
-    launch_in_areas(&mut snapshot, "free", "repo", &[]);
-    assert_eq!(order(&snapshot), ["into", "free"]);
+    // A workspace an agent worked in has its branch already.
+    launch_in_space(&mut snapshot, "into", "repo", &["area/daemon"]);
+    // A new workspace's own issue is no other work's.
+    launch_in_areas(&mut snapshot, "new", "repo", &["area/daemon"]);
+    occupy(&mut snapshot, "repo", "area/daemon", &["new"]);
+    launch_in_areas(&mut snapshot, "alone", "repo", &["area/cli"]);
+    occupy(&mut snapshot, "repo", "area/cli", &["alone"]);
     assert!(rank_of(&snapshot, "into").shared_areas.is_empty());
+    assert_eq!(
+        rank_of(&snapshot, "new").shared_areas,
+        [SharedArea {
+            area: "area/daemon".into(),
+            spaces: vec!["#daemon".into(), "#into".into()],
+        }]
+    );
+    assert!(rank_of(&snapshot, "alone").shared_areas.is_empty());
 }

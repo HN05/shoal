@@ -341,27 +341,35 @@ fn place<K>(entry: &Entry, lead: K, standing: &Standing, snapshot: &Snapshot) ->
     }
 }
 
-/// The areas `entry`, when it launches a new workspace, shares with the
-/// workspaces of its repository, each with what explanations call them.
+/// The areas `entry`, when it launches a new workspace's agent, shares with
+/// the other workspaces of its repository, each with what explanations call
+/// them.
 fn shared_areas(entry: &Entry, snapshot: &Snapshot) -> Vec<SharedArea> {
-    let Work::Launch { space: None } = entry.work else {
+    let Work::Launch { space: Some(space) } = &entry.work else {
         return Vec::new();
     };
     let occupied = (entry.repository.as_ref()).and_then(|id| snapshot.occupied.get(id));
-    let Some(occupied) = occupied else {
+    let Some(occupied) = occupied.filter(|_| is_new(space, snapshot)) else {
         return Vec::new();
     };
     (entry.areas.iter())
         .filter_map(|area| {
-            let holders = occupied.get(area)?;
-            Some(SharedArea {
+            let others = (occupied.get(area)?.iter()).filter(|holder| *holder != space);
+            let spaces: Vec<_> = others
+                .map(|id| label(&Node::Space(id.clone()), snapshot))
+                .collect();
+            (!spaces.is_empty()).then(|| SharedArea {
                 area: area.clone(),
-                spaces: (holders.iter())
-                    .map(|id| label(&Node::Space(id.clone()), snapshot))
-                    .collect(),
+                spaces,
             })
         })
         .collect()
+}
+
+/// Whether `space` is new: no agent has worked in it and nothing of it
+/// finishes, so its work has yet to begin.
+fn is_new(space: &SpaceId, snapshot: &Snapshot) -> bool {
+    (snapshot.spaces.get(space)).is_some_and(|space| space.tier == Tier::New)
 }
 
 /// Give each overdue entry the highest lead any entry of its priority has,

@@ -597,15 +597,17 @@ async fn assign_labelled(
         .unwrap();
 }
 
-/// Queue a launch of a new workspace `name` whose issue has `labels`.
+/// Queue the agent of a new workspace `name` whose issue has `labels`.
 async fn queue_in_areas(
     manager: &Manager,
     repo: &crate::model::Repository,
     name: &str,
     labels: &[&str],
 ) {
+    let workspace = create(manager, repo, name).await;
     let request = QueueRequest {
         issue_labels: labels.iter().map(|label| label.to_string()).collect(),
+        workspace: Some(SpaceSelector::id(&workspace.id)),
         ..request(repo, name, false)
     };
     manager.queue_add(request).await.unwrap();

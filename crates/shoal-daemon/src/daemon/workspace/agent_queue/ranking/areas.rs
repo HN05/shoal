@@ -1,7 +1,6 @@
 //! The areas ranking reads: those each workspace occupies, from the labels
 //! of its assigned issues and PRs, and those of the issue each waiting
-//! launch of a new workspace starts on, under its repository's
-//! `[issue] area_prefix`.
+//! launch starts on, under its repository's `[issue] area_prefix`.
 use anyhow::Result;
 use rusqlite::{Connection, params};
 
@@ -17,7 +16,7 @@ use shoal_schedule::snapshot::{Snapshot, Work};
 pub(super) struct Labels {
     /// Every workspace's, from its assigned issues and PRs.
     pub workspaces: Vec<Labelled<SpaceId>>,
-    /// Each waiting launch's, from its issue, while it has no workspace.
+    /// Each waiting launch's, from its issue.
     pub launches: Vec<Labelled<QueueEntryId>>,
 }
 
@@ -31,7 +30,7 @@ impl Labels {
 }
 
 /// The labels of every workspace, in the order of their numbers, and of
-/// each waiting launch that has none yet.
+/// each waiting launch.
 pub(super) fn labels(db: &Connection) -> Result<Labels> {
     Ok(Labels {
         workspaces: workspaces(db)?,
@@ -59,13 +58,13 @@ fn workspaces(db: &Connection) -> Result<Vec<Labelled<SpaceId>>> {
         .collect()
 }
 
-/// The waiting launches without a workspace, with the labels of their
-/// issues, as they were queued with them.
+/// The waiting launches with the labels of their issues, as they were
+/// queued with them.
 fn launches(db: &Connection) -> Result<Vec<Labelled<QueueEntryId>>> {
     let rows = db
         .prepare(
             "SELECT id,repository_id,issue_labels FROM agent_queue
-             WHERE kind=?1 AND state=?2 AND space_id IS NULL AND opens_workspace_id IS NULL
+             WHERE kind=?1 AND state=?2
                 AND repository_id IS NOT NULL AND issue_labels IS NOT NULL",
         )?
         .query_map(params![QueueKind::Launch, QueueState::Queued], |row| {
@@ -83,8 +82,7 @@ fn launches(db: &Connection) -> Result<Vec<Labelled<QueueEntryId>>> {
 
 /// Give `snapshot` the areas of `labels` under each repository's area
 /// prefix in `settings`: those its workspaces occupy, and each waiting
-/// launch of a new workspace its own. A repository without settings or a
-/// prefix has none.
+/// launch its own. A repository without settings or a prefix has none.
 pub(super) fn place(snapshot: &mut Snapshot, labels: Labels, settings: &Settings) {
     for workspace in &labels.workspaces {
         for area in areas(workspace, settings) {
@@ -94,9 +92,8 @@ pub(super) fn place(snapshot: &mut Snapshot, labels: Labels, settings: &Settings
         }
     }
     for launch in &labels.launches {
-        let entry = (snapshot.entries.iter_mut()).find(|entry| {
-            entry.id == launch.id && matches!(entry.work, Work::Launch { space: None })
-        });
+        let entry = (snapshot.entries.iter_mut())
+            .find(|entry| entry.id == launch.id && matches!(entry.work, Work::Launch { .. }));
         if let Some(entry) = entry {
             entry.areas = areas(launch, settings);
         }

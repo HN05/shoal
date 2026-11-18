@@ -48,7 +48,8 @@ pub struct Entry {
     pub prompt_cache_until: Option<UnixTime>,
     /// The repository it starts in, if any.
     pub repository: Option<RepositoryId>,
-    /// The areas of the issue a launch of a new workspace starts on.
+    /// The areas of the issue a launch starts on, which order it while its
+    /// workspace is new.
     pub areas: Vec<String>,
 }
 
