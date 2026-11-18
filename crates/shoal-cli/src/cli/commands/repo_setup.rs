@@ -73,7 +73,8 @@ async fn launch(
     options: Options,
     settings: &crate::config::Effective,
 ) -> Result<i32> {
-    let start = launch_options(options.here, ctx.on_terminal());
+    let leaves = workspaces::leaves_caller(ctx, options.here);
+    let start = launch_options(options.here, ctx.on_terminal(), leaves);
     let launch = setup_launch(repo, (agent, prompt), options)?;
     let mode = ModeChoice::Named(modes::ModeName::SETUP);
     workspaces::launch_workspace(ctx, launch, mode, (&start, settings)).await
@@ -81,11 +82,12 @@ async fn launch(
 
 /// How the setup agent's start runs, `here` or not: the user waits for it,
 /// so from a call `on_terminal` it takes a focused place whatever the
-/// `focus` setting says.
-fn launch_options(here: bool, on_terminal: bool) -> workspaces::AddOptions {
+/// `focus` setting says, unless the start `leaves` the caller, with
+/// nothing to focus.
+fn launch_options(here: bool, on_terminal: bool, leaves: bool) -> workspaces::AddOptions {
     workspaces::AddOptions {
         here,
-        focus: on_terminal,
+        focus: on_terminal && !leaves,
         ..Default::default()
     }
 }

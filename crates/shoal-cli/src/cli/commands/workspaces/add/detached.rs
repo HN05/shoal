@@ -12,7 +12,7 @@ use crate::{
 
 /// Whether a start not run `here` leaves this process: for a scoped
 /// caller, or for one without a terminal.
-pub(super) fn leaves_caller(ctx: &Context, here: bool) -> bool {
+pub(in crate::cli::commands) fn leaves_caller(ctx: &Context, here: bool) -> bool {
     !here && (crate::env::is_scoped() || !ctx.on_terminal())
 }
 
