@@ -136,3 +136,27 @@ async fn refs_read_in_a_repository_with_its_refs_in_files() {
 async fn refs_read_in_a_reftable_repository() {
     ref_reads(reftable_repository).await;
 }
+
+#[tokio::test]
+async fn a_tree_a_partial_clone_lacks_is_fetched_as_git_fetches_it() {
+    let root = tempfile::tempdir().unwrap();
+    let source = repository(root.path(), "source");
+    git(&source, &["config", "uploadpack.allowFilter", "true"]);
+    let tree = git(&source, &["rev-parse", "HEAD^{tree}"]);
+    let url = format!("file://{}", source.display());
+    let clone = [
+        "clone",
+        "-q",
+        "--no-checkout",
+        "--filter=tree:0",
+        &url,
+        "clone",
+    ];
+    git(root.path(), &clone);
+    let clone = root.path().join("clone");
+    // Git marks the clone partial with a promisor remote alone.
+    let read = verify_revision(&clone, "refs/heads/main^{tree}", run)
+        .await
+        .unwrap();
+    assert_eq!(read, tree);
+}

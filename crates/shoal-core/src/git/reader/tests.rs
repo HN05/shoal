@@ -49,6 +49,20 @@ async fn a_partial_clone_reads_through_git() {
 }
 
 #[tokio::test]
+async fn a_promisor_remote_without_the_extension_reads_through_git() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    git(
+        &repo,
+        &["config", "remote.origin.url", "https://example.com/app"],
+    );
+    git(&repo, &["config", "remote.origin.promisor", "false"]);
+    assert_eq!(reader(&repo).await, "gix");
+    git(&repo, &["config", "remote.origin.promisor", "true"]);
+    assert_eq!(reader(&repo).await, "git");
+}
+
+#[tokio::test]
 async fn a_directory_outside_any_repository_reads_through_git() {
     let outside = tempfile::tempdir().unwrap();
     assert_eq!(reader(outside.path()).await, "git");

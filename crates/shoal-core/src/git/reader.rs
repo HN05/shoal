@@ -100,7 +100,26 @@ fn readable(repo: &gix::Repository) -> bool {
                         }))
             })
         });
-    format <= READABLE_FORMAT && readable_extensions && !names_remotes_in_files(repo)
+    format <= READABLE_FORMAT
+        && readable_extensions
+        && !has_promisor_remote(&config)
+        && !names_remotes_in_files(repo)
+}
+
+/// Whether a remote of `config` promises objects the repository lacks,
+/// which makes it a partial clone without the extension: Git fetches such
+/// an object when a read needs it, gix does not.
+fn has_promisor_remote(config: &gix::config::Snapshot<'_>) -> bool {
+    let file = config.plumbing();
+    let remotes = file.sections_by_name("remote").into_iter().flatten();
+    let mut names =
+        remotes.filter_map(|section| section.header().subsection_name().map(ToOwned::to_owned));
+    names.any(|name| {
+        let key = format!("remote.{name}.promisor");
+        // A value that is no boolean leaves the read to Git, which refuses it.
+        file.boolean(key.as_str())
+            .map_or(true, |promisor| promisor == Some(true))
+    })
 }
 
 /// Whether `repo` names remotes in files of its `remotes/` or `branches/`
