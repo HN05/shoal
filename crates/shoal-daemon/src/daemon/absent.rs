@@ -6,7 +6,7 @@
 //! forwarded again.
 use anyhow::Result;
 use shoal_protocol::{
-    protocol::{self, Body, Forwarding, Operation, Response},
+    protocol::{self, Body, ErrorCode, Forwarding, Operation, Response},
     scope_tokens::ScopeToken,
 };
 use tokio::net::UnixStream;
@@ -78,6 +78,7 @@ pub(super) async fn answer(
         Some(caller) => caller,
         None => scoped_caller(server, routing.scope).await?,
     };
+    let scope = routing.scope;
     let unanswered = Unanswered {
         method: routing.method,
         forwarding: routing.forwarding,
@@ -94,7 +95,11 @@ pub(super) async fn answer(
             // It goes on, so it holds no operation, which would hold off a
             // restart meanwhile, but while it writes.
             drop(operation);
-            let streamed = Streamed { server, request_id };
+            let streamed = Streamed {
+                server,
+                request_id,
+                scope,
+            };
             streamed.relay(stream, incoming).await
         }
     }
@@ -130,22 +135,36 @@ async fn relay(
     Ok(())
 }
 
+/// How often a streamed answer checks that its caller's scope still holds.
+const SCOPE_CHECK: std::time::Duration = std::time::Duration::from_secs(1);
+
 /// A request whose answer another machine streams.
 struct Streamed<'a> {
     server: &'a Server,
     request_id: u64,
+    /// The scope token it came with.
+    scope: Option<&'a ScopeToken>,
 }
 
 impl Streamed<'_> {
     /// Write the frames another machine's daemon answers with as they come
-    /// on `incoming`, until it ends, the client hangs up or a restart
-    /// closes it.
+    /// on `incoming`, until it ends, the client hangs up, the request's
+    /// scope token stops acting for a caller, or a restart closes it.
     async fn relay(&self, stream: UnixStream, mut incoming: Incoming) -> Result<()> {
         let (mut reader, mut writer) = stream.into_split();
         let mut frames = Frames::default();
+        let mut scope_check = tokio::time::interval(SCOPE_CHECK);
         loop {
             let bytes = tokio::select! {
                 bytes = incoming.next() => bytes,
+                _ = scope_check.tick() => {
+                    if self.server.manager.still_scoped(self.scope).await? {
+                        continue;
+                    }
+                    let body = Body::error(ErrorCode::ScopeDenied, "expired or unknown workspace scope");
+                    let refusal = vec![body_frame(self.request_id, body)?];
+                    return self.write(&mut writer, refusal).await.map(drop);
+                }
                 () = answer::hangup(&mut reader) => return Ok(()),
             };
             let bytes = match bytes {

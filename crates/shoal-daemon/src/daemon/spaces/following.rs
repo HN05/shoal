@@ -15,7 +15,8 @@ use std::{
 use anyhow::{Context as _, Result};
 use shoal_ids::{agent_session_ids::AgentSessionId, space_ids::SpaceId};
 use shoal_protocol::{
-    protocol::{self, Body, MAX_FRAME, Response},
+    protocol::{self, Body, ErrorCode, MAX_FRAME, Response},
+    scope_tokens::ScopeToken,
     space_names::SpaceSelector,
     transcripts::{self, Environments, FollowedSession, SessionBytes, Store},
 };
@@ -96,12 +97,13 @@ impl Manager {
     }
 
     /// Send `following`'s session, then its files' bytes as they grow,
-    /// until the client hangs up or a daemon restart closes the follow.
+    /// until the client hangs up, the scope token it came with, `scope`,
+    /// stops acting for a caller, or a daemon restart closes the follow.
     pub(crate) async fn follow_session(
         self: Arc<Self>,
         stream: UnixStream,
         id: u64,
-        mut following: Following,
+        (mut following, scope): (Following, Option<ScopeToken>),
         startup: OperationGuard,
     ) -> Result<()> {
         let (mut reader, mut writer) = stream.into_split();
@@ -114,6 +116,11 @@ impl Manager {
             let Some(operation) = self.gates.try_operation() else {
                 return Ok(());
             };
+            if !self.still_scoped(scope.as_ref()).await? {
+                let body =
+                    Body::error(ErrorCode::ScopeDenied, "expired or unknown workspace scope");
+                return send(&mut writer, id, body).await;
+            }
             if let Some(next) = self.next_following(&following).await? {
                 following = next;
                 let session = Body::FollowedSession(following.session.clone());

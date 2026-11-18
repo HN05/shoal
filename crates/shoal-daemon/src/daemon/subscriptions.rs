@@ -75,7 +75,7 @@ impl Subscriber {
             tokio::time::sleep(SETTLE).await;
             stored.borrow_and_update();
             agents.borrow_and_update();
-            if !self.still_scoped().await? {
+            if !manager.still_scoped(self.scope.as_ref()).await? {
                 let body =
                     Body::error(ErrorCode::ScopeDenied, "expired or unknown workspace scope");
                 return self.refuse(&mut writer, id, body).await;
@@ -107,14 +107,6 @@ impl Subscriber {
             return Ok(());
         };
         answer::write_frames(writer, Response::new(id, body)).await
-    }
-
-    /// Whether the scope token still names a caller.
-    async fn still_scoped(&self) -> Result<bool> {
-        match &self.scope {
-            Some(token) => Ok(self.manager.caller(token).await?.is_some()),
-            None => Ok(true),
-        }
     }
 }
 

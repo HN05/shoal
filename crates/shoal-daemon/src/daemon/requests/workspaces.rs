@@ -14,12 +14,13 @@ use crate::config::permissions::PermissionKey;
 use crate::protocol::{
     self, Body, ConfigTarget, ErrorCode, RepositoryLayers, Response, WorkspaceMethod,
 };
-use shoal_protocol::{events::EventCursor, space_names::SpaceSelector};
+use shoal_protocol::{events::EventCursor, scope_tokens::ScopeToken, space_names::SpaceSelector};
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
     method: WorkspaceMethod,
     caller: Option<&Caller>,
+    scope: Option<&ScopeToken>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
         WorkspaceMethod::WatchSpaceEvents { after, follow } => {
@@ -257,12 +258,13 @@ pub(super) async fn handle(
         } => {
             // Chosen first, so a space another machine has is followed there.
             let following = manager.session_to_follow(&space, session, from).await?;
+            let scope = scope.cloned();
             // Following an agent is the user's interaction with it, as
             // attaching is.
             manager.record_user_interaction(caller, &space).await;
             let manager = manager.clone();
             return Ok(Answer::connection(move |stream, request_id, guard| {
-                manager.follow_session(stream, request_id, following, guard)
+                manager.follow_session(stream, request_id, (following, scope), guard)
             }));
         }
         WorkspaceMethod::CopySpace {

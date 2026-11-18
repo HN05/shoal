@@ -11,6 +11,20 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::scope_tokens::ScopeToken;
 
 impl Manager {
+    /// Whether the scope token a long-lived request came with, if any,
+    /// still acts for a caller, as one another machine vouches for does
+    /// while its request runs here; one that no longer does ends the
+    /// request.
+    pub(crate) async fn still_scoped(&self, token: Option<&ScopeToken>) -> Result<bool> {
+        let Some(token) = token else {
+            return Ok(true);
+        };
+        if self.vouched_caller(token).is_some() {
+            return Ok(true);
+        }
+        Ok(self.caller(token).await?.is_some())
+    }
+
     /// The caller `token` acts for: a connected execution, an operation, a
     /// grant's command, or the space that issued it.
     pub(crate) async fn caller(&self, token: &ScopeToken) -> Result<Option<Caller>> {

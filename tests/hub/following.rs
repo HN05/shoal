@@ -188,6 +188,31 @@ fn a_follow_goes_on_from_where_it_read_after_a_daemon_restart() {
 }
 
 #[test]
+fn a_follow_ends_once_its_scope_token_is_revoked() {
+    let hub = machine(true, "app");
+    let session = laptop_session(&hub);
+    let issued = session
+        .laptop
+        .request(serde_json::json!({"issue_scope": {"space": session.space}}));
+    let token = issued["data"].as_str().unwrap().to_owned();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let scoped = app(&session.laptop).scope(token.clone().into());
+    let mut follow = runtime.block_on(async {
+        let mut follow = follow_session(scoped, selected(&session), None)
+            .await
+            .unwrap();
+        followed_session(&mut follow).await;
+        bytes_until(&mut follow, &mut Vec::new(), &first_turn()).await;
+        follow
+    });
+    let revoke = serde_json::json!({"revoke_scope": {"space": session.space, "token": token}});
+    let revoked = session.laptop.request(revoke);
+    assert_ne!(revoked["type"], "error", "{revoked}");
+    let error = runtime.block_on(follow.next()).unwrap_err().to_string();
+    assert!(error.contains("scope"), "{error}");
+}
+
+#[test]
 fn following_a_session_on_an_offline_machine_fails_at_once_naming_it() {
     let hub = machine(true, "app");
     let session = laptop_session(&hub);

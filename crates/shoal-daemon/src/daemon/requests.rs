@@ -59,7 +59,9 @@ pub(super) async fn handle(
         Operation::Repository(method) => {
             repositories::handle(&server.manager, method, caller).await
         }
-        Operation::Workspace(method) => workspaces::handle(&server.manager, method, caller).await,
+        Operation::Workspace(method) => {
+            workspaces::handle(&server.manager, method, caller, scope).await
+        }
         Operation::Removal(method) => removal::handle(&server.manager, method, caller).await,
         Operation::Recovery(method) => recovery::handle(&server.manager, method, caller).await,
         Operation::Execution(method) => executions::handle(&server.manager, method, caller).await,
