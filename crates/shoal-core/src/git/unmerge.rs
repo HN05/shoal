@@ -389,6 +389,8 @@ async fn add_replay_worktree(repo: &Path, tip: &CommitId) -> Result<PathBuf> {
     ensure_replay_directory(&directory).await?;
     let worktree = directory.join("replay");
     let path = worktree.to_string_lossy();
+    // `--force` replaces the registration of a replay worktree whose
+    // directory is gone, and no other worktree's.
     git_run(
         repo,
         &[
@@ -396,6 +398,7 @@ async fn add_replay_worktree(repo: &Path, tip: &CommitId) -> Result<PathBuf> {
             "add",
             "--quiet",
             "--detach",
+            "--force",
             &path,
             tip.as_str(),
         ],
@@ -413,15 +416,7 @@ async fn remove_replay_worktree(repo: &Path) -> Result<()> {
         return Ok(());
     }
     ensure_replay_directory(&directory).await?;
-    let worktree = directory.join("replay");
-    if off_runtime::exists(&worktree).await? {
-        let removed = worktree.clone();
-        off_runtime::run(move || Ok(std::fs::remove_dir_all(&removed)?))
-            .await
-            .with_context(|| format!("remove {}", worktree.display()))?;
-    }
-    git_run(repo, &["worktree", "prune"]).await?;
-    Ok(())
+    git::detached::remove(&directory.join("replay")).await
 }
 
 /// Refuse a replay directory Shoal did not create.

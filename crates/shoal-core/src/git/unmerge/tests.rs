@@ -161,3 +161,51 @@ async fn a_checkout_moved_by_a_commit_or_a_switch_is_not_at_its_planned_tip() {
     git(&repo, &["switch", "-q", "-c", "other", tip.as_str()]);
     assert!(!super::checkout_at(&repo, &main, &tip).await.unwrap());
 }
+
+#[tokio::test]
+async fn removing_a_replay_keeps_another_worktree_s_admin_directory() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    let workspace = root.path().join("workspace");
+    git(
+        &repo,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "--detach",
+            workspace.to_str().unwrap(),
+        ],
+    );
+    let stopped = crate::git::worktree::own_admin_dir(&workspace)
+        .await
+        .unwrap()
+        .unwrap();
+    // A workspace removal stopped after Git deleted the `.git` link.
+    fs::remove_file(workspace.join(".git")).unwrap();
+    let worktree = super::add_replay_worktree(&repo, &rev(&repo, "main").as_str().into())
+        .await
+        .unwrap();
+
+    super::remove_replay_worktree(&repo).await.unwrap();
+    assert!(!worktree.exists());
+    assert!(stopped.exists());
+}
+
+#[tokio::test]
+async fn a_replay_replaces_the_registration_of_one_whose_directory_is_gone() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    let tip: CommitId = rev(&repo, "main").as_str().into();
+    let worktree = super::add_replay_worktree(&repo, &tip).await.unwrap();
+    fs::remove_dir_all(&worktree).unwrap();
+
+    let replaced = super::add_replay_worktree(&repo, &tip).await.unwrap();
+    assert_eq!(git(&replaced, &["rev-parse", "HEAD"]).trim(), tip.as_str());
+    assert_eq!(
+        git(&repo, &["worktree", "list", "--porcelain"])
+            .matches("worktree ")
+            .count(),
+        2
+    );
+}

@@ -47,13 +47,15 @@ async fn worktree_add(repo: &Path, path: &Path, rev: &str, options: &[&str]) -> 
 }
 
 /// Remove the detached checkout at `path`, whatever it holds, and forget it
-/// in its repository. A checkout whose repository is gone is deleted.
+/// in its repository, leaving every other worktree's registration as it
+/// is. A checkout whose repository is gone is deleted.
 pub async fn remove(path: &Path) -> Result<()> {
     if !path.exists() {
         return Ok(());
     }
     set_writable(path, true).with_context(|| format!("make {} writable", path.display()))?;
     if let Ok(common) = super::common_dir(path).await {
+        let admin_dir = super::worktree::own_admin_dir(path).await?;
         let mut command = super::isolated_command(&common);
         command
             .args(["worktree", "remove", "--force", "--"])
@@ -61,10 +63,7 @@ pub async fn remove(path: &Path) -> Result<()> {
         if super::output(command).await.is_ok() {
             return Ok(());
         }
-        std::fs::remove_dir_all(path).with_context(|| format!("remove {}", path.display()))?;
-        return super::run_isolated(&common, &["worktree", "prune"])
-            .await
-            .map(drop);
+        return super::worktree::delete_with_admin_dir(path, admin_dir).await;
     }
     std::fs::remove_dir_all(path).with_context(|| format!("remove {}", path.display()))
 }

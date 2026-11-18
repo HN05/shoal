@@ -117,14 +117,8 @@ async fn read_marker(admin_dir: &Path) -> Result<Option<Marker>> {
 /// `admin_dir` names it as its worktree, as Git records in its `gitdir`
 /// file, relative to it when `worktree.useRelativePaths` is set.
 async fn ensure_registered_at(admin_dir: &Path, path: &Path) -> Result<()> {
-    let gitdir = admin_dir.join("gitdir");
-    let text = off_runtime::run(move || {
-        std::fs::read_to_string(&gitdir).with_context(|| format!("read {}", gitdir.display()))
-    })
-    .await?;
-    let named = admin_dir.join(text.trim_end_matches('\n'));
     anyhow::ensure!(
-        super::resolved(&named).await == super::resolved(&path.join(".git")).await,
+        super::registered_at(admin_dir, path).await?,
         "{} is no longer the worktree of {}",
         path.display(),
         admin_dir.display()

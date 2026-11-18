@@ -320,6 +320,57 @@ fn linked_admin_dir(path: &Path) -> Result<Option<PathBuf>> {
         .map(Some)
 }
 
+/// The admin directory the `.git` link of the linked worktree at `path`
+/// names, when that directory records `path` as its worktree; read before
+/// a removal that can delete the link, so that only this worktree's admin
+/// directory goes with it.
+pub(crate) async fn own_admin_dir(path: &Path) -> Result<Option<PathBuf>> {
+    let linked = {
+        let path = path.to_owned();
+        off_runtime::run(move || linked_admin_dir(&path)).await
+    };
+    // No link, or one that cannot be read, names no admin directory.
+    let Ok(Some(admin_dir)) = linked else {
+        return Ok(None);
+    };
+    Ok(registered_at(&admin_dir, path).await?.then_some(admin_dir))
+}
+
+/// Whether the admin directory `admin_dir` records the directory at `path`
+/// as its worktree in its `gitdir` file, relative to it when
+/// `worktree.useRelativePaths` is set.
+async fn registered_at(admin_dir: &Path, path: &Path) -> Result<bool> {
+    let gitdir = admin_dir.join("gitdir");
+    let text = off_runtime::run(move || {
+        crate::fsutil::read_optional(&gitdir).with_context(|| format!("read {}", gitdir.display()))
+    })
+    .await?;
+    let Some(text) = text else {
+        return Ok(false);
+    };
+    let named = admin_dir.join(text.trim_end_matches('\n'));
+    Ok(resolved(&named).await == resolved(&path.join(".git")).await)
+}
+
+/// Delete the directory of the linked worktree at `path`, whatever it
+/// holds, then its admin directory `admin_dir`, which [`own_admin_dir`]
+/// read. Unlike `git worktree prune`, this takes no other worktree's admin
+/// directory, such as that of a workspace whose removal stopped after Git
+/// deleted its link, which the next removal reads to put the link back.
+pub(crate) async fn delete_with_admin_dir(path: &Path, admin_dir: Option<PathBuf>) -> Result<()> {
+    delete_disowned(path).await?;
+    let Some(admin_dir) = admin_dir else {
+        return Ok(());
+    };
+    off_runtime::run(move || match std::fs::remove_dir_all(&admin_dir) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+            Err(error).with_context(|| format!("remove {}", admin_dir.display()))
+        }
+        _ => Ok(()),
+    })
+    .await
+}
+
 /// Delete the directory of the worktree at `path` that Git disowned,
 /// whatever it holds, keeping its `.git` link until nothing else is left.
 pub async fn delete_disowned(path: &Path) -> Result<()> {

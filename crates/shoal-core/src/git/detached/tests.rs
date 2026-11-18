@@ -65,3 +65,39 @@ fn remove_writable(checkout: &Path) {
     set_writable(checkout, true).unwrap();
     std::fs::remove_dir_all(checkout).unwrap();
 }
+
+/// What a workspace removal stopped after Git deleted the `.git` link
+/// leaves: the worktree's directory and its admin directory, which the next
+/// removal reads.
+async fn stopped_removal(repo: &Path, path: &Path) -> std::path::PathBuf {
+    let commit = git(repo, &["rev-parse", "HEAD"]).await;
+    add_workspace(repo, path, commit.trim()).await.unwrap();
+    let admin_dir = crate::git::worktree::own_admin_dir(path)
+        .await
+        .unwrap()
+        .unwrap();
+    std::fs::remove_file(path.join(".git")).unwrap();
+    admin_dir
+}
+
+#[tokio::test]
+async fn a_checkout_git_cannot_remove_takes_only_its_own_registration() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = crate::test_support::repository(root.path(), "repo");
+    let commit = git(&repo, &["rev-parse", "HEAD"]).await;
+    let stopped = stopped_removal(&repo, &root.path().join("workspace")).await;
+    let checkout = root.path().join("reviews").join("1");
+    std::fs::create_dir_all(checkout.parent().unwrap()).unwrap();
+    add(&repo, &checkout, commit.trim()).await.unwrap();
+    let own = crate::git::worktree::own_admin_dir(&checkout)
+        .await
+        .unwrap()
+        .unwrap();
+    // A locked checkout, which `worktree remove --force` refuses.
+    git(&repo, &["worktree", "lock", checkout.to_str().unwrap()]).await;
+
+    remove(&checkout).await.unwrap();
+    assert!(!checkout.exists());
+    assert!(!own.exists());
+    assert!(stopped.exists());
+}
