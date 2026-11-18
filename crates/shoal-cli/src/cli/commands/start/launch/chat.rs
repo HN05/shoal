@@ -117,14 +117,27 @@ impl Launch {
 
     /// Start the chat its agent's own way, or else as its place says.
     async fn start(self, ctx: &Context) -> Result<Started> {
-        let record = async || self.record(ctx, None).await;
-        if let Some(code) = agents::start_chat(ctx, &self.agent, &self.chat, record).await? {
-            return Ok(Started::Exited(code));
+        if agents::runs_its_own_way(&self.agent, &self.chat.settings) {
+            return self.start_its_own_way(ctx).await;
         }
         match self.options.place {
             ChatPlace::Detached => self.start_detached(ctx).await,
             ChatPlace::Beside | ChatPlace::Here => self.start_in_terminal(ctx).await,
         }
+    }
+
+    /// Start the chat in its agent's app once the agent queue admits its
+    /// agent, as one in a terminal starts, so a start that fails fails its
+    /// entry, which its chat keeps.
+    async fn start_its_own_way(self, ctx: &Context) -> Result<Started> {
+        if let Some(waits) = self.admit(ctx).await? {
+            return Ok(waits);
+        }
+        let record = async || self.record(ctx, None).await;
+        let started = agents::start_chat(ctx, &self.agent, &self.chat, record).await?;
+        started
+            .map(Started::Exited)
+            .context("the chat's agent no longer runs its own way")
     }
 
     /// Have the daemon start the chat in a background place, as it does

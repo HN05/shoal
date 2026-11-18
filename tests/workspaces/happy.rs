@@ -1049,3 +1049,41 @@ fn a_start_without_a_terminal_admits_a_happy_agent_before_it_opens_here() {
     );
     fixture.ok(&["stop", &fixture.id("happy")]);
 }
+
+/// A Happy chat whose session Happy cannot prepare, as without a login,
+/// fails its start through the agent queue, as any chat's start does: the
+/// chat stays with its failed launch for `shoal restore`.
+#[test]
+fn a_happy_chat_whose_start_fails_keeps_its_failed_launch() {
+    let fixture = Fixture::with_config(Some(HAPPY_ENABLED));
+    let record = install_fake_happy(&fixture);
+    let _server = FakeHappyServer::start(&fixture);
+    let repo = fixture.repo.to_str().unwrap();
+
+    let output = fixture
+        .command()
+        .args([
+            "--json",
+            "start",
+            "--mode",
+            "chat",
+            repo,
+            "--agent",
+            "happy-codex",
+        ])
+        .env("HAPPY_RECORD", &record)
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success(), "{}", printed(&output));
+    let chats = fixture.ok(&["list", "--chats"]);
+    let [chat] = chats.as_array().unwrap().as_slice() else {
+        panic!("{chats}");
+    };
+    let queue = fixture.ok(&["queue"]);
+    let failed: Vec<_> = (queue.as_array().unwrap().iter())
+        .filter(|entry| entry["state"] == "failed")
+        .map(|entry| entry["space_id"].clone())
+        .collect();
+    assert_eq!(failed, [chat["id"].clone()], "{queue}");
+}
