@@ -522,8 +522,9 @@ repository receive each `false-positive` finding's title, path and reason and
 skip that claim while the reason holds; the next review checks each `fixed`
 finding. When the repository requires a review, `pr open` of a new PR,
 `ready`, `merge` and `pr merge` are refused until a finished review covers the commit they
-act on with every finding resolved, and the refusal starts one when none
-exists.
+act on with every finding resolved. Without one, the refusal starts a review
+of the workspace's HEAD where that is the commit, and otherwise names
+`shoal review run <pr-url>`.
 
 ## Ready marks
 

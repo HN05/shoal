@@ -1353,10 +1353,11 @@ which a refused merge never makes. Each gate holds agents and the commands they 
 and your own commands too with `"all"`. A gate passes once a finished review covers HEAD exactly and every
 one of its findings is resolved, whatever the verdict. Otherwise the command is
 refused, naming what is missing and listing the unresolved findings; without a
-review of HEAD and with none queued or running, it queues one, whose findings
-arrive as a message. A gate's review is a
-workspace review, never posted; `shoal review run <pr-url>` reviews a PR in the
-workspace that owns its branch. A workspace process runs, cancels and answers the reviews of
+review of the commit and with none queued or running, it queues a review of the
+workspace's HEAD, whose findings arrive as a message, where that is the commit and
+the caller's scope reaches the workspace. A `pr merge` refused otherwise names
+`shoal review run <pr-url>`, which reviews the PR in the workspace that owns its
+branch. A gate's review is a workspace review, never posted. A workspace process runs, cancels and answers the reviews of
 its own workspace and those below it. Removing a workspace cancels its review and
 deletes its reviews. Every command takes `--json`.
 
