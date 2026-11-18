@@ -259,3 +259,46 @@ async fn a_directory_condition_both_checkouts_match_alike_reads_in_process() {
     git(&repo, &["config", &key, "/dev/null"]);
     assert_eq!(reader(&linked).await, "git");
 }
+
+/// A repository whose config includes `remote.pushDefault = fork` on a
+/// condition on its remote's URL, which `url` in its config, after the
+/// condition, sets: as a section of its own, or through a later include.
+fn remote_conditioned(root: &Path, url: &str) -> std::path::PathBuf {
+    let repo = repository(root, "repo");
+    let included = root.join("included.gitconfig");
+    std::fs::write(&included, "[remote]\n\tpushDefault = fork\n").unwrap();
+    let config = repo.join(".git/config");
+    let mut text = std::fs::read_to_string(&config).unwrap();
+    let condition = "hasconfig:remote.*.url:https://example.com/**";
+    text.push_str(&format!(
+        "[includeIf \"{condition}\"]\n\tpath = {}\n",
+        included.display()
+    ));
+    text.push_str(url);
+    std::fs::write(&config, text).unwrap();
+    repo
+}
+
+#[tokio::test]
+async fn a_condition_on_a_later_remote_url_includes_as_git_includes() {
+    let root = tempfile::tempdir().unwrap();
+    let section = "[remote \"origin\"]\n\turl = https://example.com/app\n";
+    let repo = remote_conditioned(root.path(), section);
+    let remote = crate::git::push_remote(&repo, &"topic".into()).await;
+    assert_eq!(remote.unwrap(), "fork");
+}
+
+#[tokio::test]
+async fn a_condition_on_a_remote_url_a_later_include_sets_includes_as_git_includes() {
+    let root = tempfile::tempdir().unwrap();
+    let urls = root.path().join("urls.gitconfig");
+    std::fs::write(
+        &urls,
+        "[remote \"origin\"]\n\turl = https://example.com/app\n",
+    )
+    .unwrap();
+    let include = format!("[include]\n\tpath = {}\n", urls.display());
+    let repo = remote_conditioned(root.path(), &include);
+    let remote = crate::git::push_remote(&repo, &"topic".into()).await;
+    assert_eq!(remote.unwrap(), "fork");
+}
