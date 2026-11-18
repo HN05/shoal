@@ -248,6 +248,21 @@ impl Manager {
         self.record_creation(workspace, started).await
     }
 
+    /// The repository of the workspace `request` names, live, or removed
+    /// when it names a checkpoint, as [`Self::copy_source`] reads it.
+    pub(crate) async fn copied_repository(&self, request: &CopySource) -> Result<RepositoryId> {
+        match self.workspace(&request.workspace).await {
+            Ok(workspace) => Ok(workspace.repository().clone()),
+            Err(error) => match request.checkpoint {
+                Some(_) => {
+                    let removed = self.removed_space(&request.workspace).await?;
+                    Ok(removed.repository()?.clone())
+                }
+                None => Err(error),
+            },
+        }
+    }
+
     /// The workspace `request` names, live, or removed when it names a
     /// checkpoint, as a copy starts from it, checking a live worktree's
     /// files when `check` says.

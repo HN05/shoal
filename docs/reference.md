@@ -2955,7 +2955,8 @@ own branch and worktree. The parent is the space `--space` names, else the
 current one, a workspace or a chat: in a chat, the workspace below it that
 contains the current directory, else the chat, so a chat in a workspace's
 worktree splits below itself. A workspace parent must be ready, and a chat
-without a repository splits none. `--base` works as for
+without a repository splits only a `--copy`, in the copied workspace's
+repository. `--base` works as for
 `shoal start`; naming the parent's branch also [stacks](#stacked-workspaces) the
 child on it. Children can be split from children. A space's processes may split
 from their own space, act on every space below it and `shoal rm` one, or

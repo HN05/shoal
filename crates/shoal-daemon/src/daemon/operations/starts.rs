@@ -281,7 +281,7 @@ impl Manager {
         preparing: Preparing<LaunchRequest>,
         caller: Option<&Caller>,
     ) -> Result<StartedWorkspace> {
-        let (parent, repo) = self.split_parent(parent).await?;
+        let (parent, repo) = self.split_parent(parent, split.copy.as_ref()).await?;
         let mut preparing = (preparing
             .resolved(async || self.space_settings_with_templates(&parent).await))
         .await?;

@@ -14,6 +14,7 @@ use super::Manager;
 use crate::{
     daemon::notifications::NotificationKind,
     model::{RefPart, Repository, Space, SpaceKind, SpaceRef, Workspace},
+    protocol::CopySource,
     state::WorkspaceState,
 };
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
@@ -35,7 +36,7 @@ impl Manager {
         base: Option<String>,
         options: crate::protocol::CreationOptions,
     ) -> Result<Workspace> {
-        let (parent, repo) = self.split_parent(parent).await?;
+        let (parent, repo) = self.split_parent(parent, None).await?;
         let (repo, git) = self.lock_repository(&repo.id).await?;
         crate::git::check_branch_name(&name)?;
         let branch = self.available_branch(&repo, &name).await?;
@@ -57,19 +58,23 @@ impl Manager {
     }
 
     /// The space `selector` names, a workspace or a chat, as the parent of
-    /// a workspace split from it, with the repository the child goes in,
-    /// its own: a chat without a repository names none.
+    /// a workspace split from it, with the repository the child goes in:
+    /// the parent's own, or for a chat without one that of the workspace
+    /// `copy` copies; a branch split from such a chat names none.
     pub(crate) async fn split_parent(
         &self,
         selector: &SpaceSelector,
+        copy: Option<&CopySource>,
     ) -> Result<(Space, Repository)> {
         let parent = self.space(selector).await?;
-        let Some(repository) = parent.repository_id.clone() else {
-            bail!(
+        let repository = match (&parent.repository_id, copy) {
+            (Some(own), _) => own.clone(),
+            (None, Some(copy)) => self.copied_repository(copy).await?,
+            (None, None) => bail!(
                 "{} belongs to no repository to split a workspace in; split from a space \
-                 of the child's repository",
+                 of the child's repository, or copy a workspace with --copy",
                 parent.label()
-            );
+            ),
         };
         let repository = self.repository(repository).await?;
         Ok((parent, repository))

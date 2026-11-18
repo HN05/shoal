@@ -361,6 +361,46 @@ async fn a_chat_splits_a_child_workspace_below_itself() {
 }
 
 #[tokio::test]
+async fn a_chat_without_a_repository_splits_a_copy_in_the_copied_repository() {
+    let (root, manager) = manager().await;
+    let repository = registered(root.path(), &manager).await;
+    let copied = (manager.create_workspace(&repository.id, "copied".into(), None, None, None))
+        .await
+        .unwrap();
+    let new = crate::daemon::chats::NewChat {
+        priority: None,
+        name: "master".into(),
+        agent: "claude".into(),
+        mode: "chat".into(),
+        narrowing: Default::default(),
+        origin: None,
+        parent: None,
+    };
+    let chat = manager.start_new_chat(None, None, new).await.unwrap();
+    let selector = SpaceSelector::id(&chat.id);
+    let split = |copy| Split {
+        name: Some("child".into()),
+        copy,
+        base: None,
+        options: Default::default(),
+    };
+    // A branch split names no repository for the child.
+    let refused = manager.start_split(&selector, split(None), without_agent(), None);
+    assert!(refused.await.is_err());
+    let copy = CopySource {
+        workspace: SpaceSelector::id(&copied.id),
+        checkpoint: None,
+    };
+    let started = (manager.start_split(&selector, split(Some(copy)), without_agent(), None))
+        .await
+        .unwrap();
+    let _worker = fake::take(started.operation.as_deref().unwrap());
+    assert_eq!(started.workspace.repository(), &repository.id);
+    let parent = started.workspace.parent.as_ref().map(|parent| &parent.id);
+    assert_eq!(parent, Some(&chat.id));
+}
+
+#[tokio::test]
 async fn a_failed_post_setup_hook_is_retried_by_setup() {
     let message = "hook exited with status 3".to_owned();
     let (notification, number) = reported(Failure::HookFailed { message }).await;
