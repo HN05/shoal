@@ -807,8 +807,9 @@ first, as after that or when a machine joins with spaces of its own, takes
 the smallest number free on the hub, its questions and approval requests
 follow it as `S.N`, and its machine tells you and the space's agent the old
 and new numbers in a `space_renumbered` alert; the space that held the
-number first keeps it. A space `shoal move` moves between the hub's machines
-keeps its number.
+number first keeps it. A space `shoal move ssh` moves between the hub's
+machines keeps its number; one `shoal move export` wrote, imported after its
+source is gone, takes a new one.
 
 The hub lists a space ID under one machine, the first that reported it. A
 second machine reporting it, as after copying a state directory, is left out

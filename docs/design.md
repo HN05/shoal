@@ -151,8 +151,9 @@ its questions and approval requests, and its machine tells the user and the
 space's agent; the space that held the number first keeps it. A machine
 reports the numbers it holds without a space, those of a removed space's
 issue proposals, with its spaces, and the hub gives them no other space. An import's
-claim of a space's ID also keeps its number for the claiming machine, so a
-move between the hub's machines keeps it. Browser
+claim of a space's ID also keeps its number for the claiming machine while
+the hub still lists the space, so `shoal move ssh` keeps it; an exported
+package imported after its source is gone takes a new one. Browser
 sessions and routing requests between machines are later steps.
 The minimum Rust version follows current stable so the code can use its newest
 features; the manifest and CI toolchain advance together, with locked dependencies.
