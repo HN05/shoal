@@ -54,20 +54,9 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
     if crate::env::inherits_scope(&ctx.paths.state) {
         ensure_below(&selected)?;
     }
-    if selected.len() + elsewhere.len() > 1 {
-        // A stop for an offline machine waits for it, unchecked.
-        let elsewhere = (elsewhere.iter()).filter(|(remote, view)| {
-            (view.directory.machine(&remote.machine)).is_some_and(|machine| machine.connected)
-        });
-        let targets = (selected.iter())
-            .map(|space| (space.name.to_string(), SpaceSelector::id(&space.id)))
-            .chain(elsewhere.map(|(remote, _)| {
-                (
-                    remote.space.name.to_string(),
-                    SpaceSelector::id(&remote.space.id),
-                )
-            }));
-        targets::check_targets(ctx, targets.collect()).await?;
+    let tree = elsewhere::stop_tree(ctx, &selected, &elsewhere, skip_children).await;
+    if tree.len() > 1 {
+        targets::check_targets(ctx, tree).await?;
     }
     elsewhere::stop(ctx, elsewhere, skip_children, yes).await?;
     let code = match selected.as_slice() {

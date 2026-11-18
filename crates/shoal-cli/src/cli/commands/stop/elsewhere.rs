@@ -39,6 +39,50 @@ pub(super) async fn partition(
     Ok((here, elsewhere))
 }
 
+/// What a stop of `here`, this machine's spaces with those below them, and
+/// of `elsewhere` checks before it stops any: each of them and the spaces
+/// below them on connected machines, unless `skip_children`; one on an
+/// offline machine waits for it unchecked.
+pub(super) async fn stop_tree(
+    ctx: &Context,
+    here: &[Space],
+    elsewhere: &[(Listed, HubView)],
+    skip_children: bool,
+) -> Vec<(String, SpaceSelector)> {
+    let mut targets: Vec<(String, SpaceSelector)> = (here.iter())
+        .map(|space| (space.name.to_string(), SpaceSelector::id(&space.id)))
+        .collect();
+    let view = match elsewhere.first() {
+        Some((_, view)) => Some(view.clone()),
+        None if skip_children => None,
+        None => machines::view(ctx).await,
+    };
+    let Some(view) = view else {
+        return targets;
+    };
+    let mut remote: Vec<Listed> = elsewhere.iter().map(|(listed, _)| listed.clone()).collect();
+    if !skip_children {
+        let roots = (here.iter().map(|space| space.id.clone()))
+            .chain(elsewhere.iter().map(|(listed, _)| listed.space.id.clone()));
+        for root in roots.collect::<Vec<_>>() {
+            remote.extend(below(&view, &root));
+        }
+    }
+    let connected = |listed: &Listed| {
+        (view.directory.machine(&listed.machine)).is_some_and(|machine| machine.connected)
+    };
+    for listed in remote
+        .iter()
+        .filter(|listed| listed.machine != view.machine && connected(listed))
+    {
+        let selector = SpaceSelector::id(&listed.space.id);
+        if !targets.iter().any(|(_, known)| known == &selector) {
+            targets.push((listed.space.name.to_string(), selector));
+        }
+    }
+    targets
+}
+
 /// Stop `spaces`, which other machines run, and the spaces below them
 /// unless `skip_children`.
 pub(super) async fn stop(
