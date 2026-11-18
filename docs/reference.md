@@ -4340,8 +4340,9 @@ has that workspace ready, such as one that moved there before, otherwise in
 the repository's checkout with a warning, or in `root_dir` without a
 repository. The spaces a file carries open again after its space the same way,
 parents first, each below its parent and each workspace set up before the
-spaces below it; one that cannot open is a warning, and its record stays for
-`shoal restore <id>`. Without `--restore`, the agents of every imported space
+spaces below it; one that cannot open fails the import, which goes on with the
+rest and names each failure, so `shoal move ssh` keeps the spaces here, and its
+record, where the import made one, stays for `shoal restore <id>`. Without `--restore`, the agents of every imported space
 stay stopped and the report names the `shoal restore` that restores them.
 An import is refused, before it records anything, when a space with the ID of
 the package's space, or of a space it carries, is already here, or a carried

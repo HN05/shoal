@@ -87,22 +87,39 @@ fn destination(
 
 /// Open each space `package` carries again, after the package's own space
 /// `opened` opened, with the session files among those it carries that
-/// their agents keep, queueing their agents' restores when `restore`; a
-/// space that cannot open is a warning, since the package's space opened,
-/// and its record stays for `shoal restore`.
-pub(super) async fn open(ctx: &Context, package: &Package, opened: &SpaceId, restore: bool) {
+/// their agents keep, queueing their agents' restores when `restore`; the
+/// failure of each space that did not open, whose record, when the import
+/// made one, stays for `shoal restore`.
+pub(super) async fn open(
+    ctx: &Context,
+    package: &Package,
+    opened: &SpaceId,
+    restore: bool,
+) -> Vec<anyhow::Error> {
     let mut copies = BTreeMap::new();
     if package.copy {
         copies.insert(package.space.record.space_id.clone(), opened.clone());
     }
+    let mut failed = Vec::new();
     for import in &package.carried {
         if let Err(error) = open_one(ctx, import, package, &mut copies, restore).await {
-            eprintln!(
-                "warning: cannot open {} again: {error:#}",
-                import.space.name
-            );
+            failed.push(error.context(format!("cannot open {} again", import.space.name)));
         }
     }
+    failed
+}
+
+/// Refuse an import whose carried spaces `failed` to open, so a move keeps
+/// what did not arrive.
+pub(super) fn ensure_opened(failed: Vec<anyhow::Error>) -> Result<()> {
+    if failed.is_empty() {
+        return Ok(());
+    }
+    let failures: Vec<String> = failed.iter().map(|error| format!("{error:#}")).collect();
+    anyhow::bail!(
+        "the space opened, but not every space it carries:\n  {}",
+        failures.join("\n  ")
+    )
 }
 
 /// Open `import` again as [`open`] does, below the `copies` of the spaces

@@ -1594,6 +1594,34 @@ fn exporting_a_parent_takes_its_children_which_import_opens_below_it() {
 }
 
 #[test]
+fn an_import_whose_carried_space_fails_to_open_fails() {
+    let fixture = Fixture::new();
+    // Once the test arms it, the post-setup hook fails in the child.
+    let armed = fixture.root.path().join("fail-post-setup");
+    install_test_script(
+        fixture.repo.join("post-setup.sh"),
+        format!(
+            "#!/bin/sh\nif [ -e '{}' ]; then case \"$PWD\" in */child) exit 3;; esac; fi\n",
+            armed.display()
+        ),
+    );
+    commit_resource_config(&fixture.repo, "hooks.post_setup = 'post-setup.sh'\n");
+    fixture.add("parent");
+    fixture.ok(&["split", "child", "--workspace", &fixture.id("parent")]);
+    let file = fixture.root.path().join("parent.shoal");
+    let file = file.to_str().unwrap();
+    fixture.ok(&["move", "export", &fixture.id("parent"), "-o", file, "--yes"]);
+    fs::write(&armed, "").unwrap();
+
+    let repo = fixture.repo.to_str().unwrap();
+    let imported = fixture.run(&["move", "import", file, "--repo", repo]);
+
+    assert!(!imported.status.success(), "{}", printed(&imported));
+    let stderr = String::from_utf8_lossy(&imported.stderr);
+    assert!(stderr.contains("child"), "{}", printed(&imported));
+}
+
+#[test]
 fn a_batch_writes_a_file_per_tree_unless_children_stay() {
     let fixture = Fixture::new();
     let split = |parent: &str, name: &str| {

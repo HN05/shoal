@@ -69,8 +69,10 @@ pub(super) async fn import(
         let restored = package.open(ctx).await?;
         let opened = restored_id(&restored).clone();
         let reopened = reopen::finish_reopen(ctx, restored, "Imported", options.restore).await;
-        carried::open(ctx, &package, &opened, options.restore).await;
-        return reopened;
+        let failed = carried::open(ctx, &package, &opened, options.restore).await;
+        let code = reopened?;
+        carried::ensure_opened(failed)?;
+        return Ok(code);
     }
     let files = import_files(files)?;
     import_each(ctx, &files, &options).await.report(ctx)
@@ -232,7 +234,9 @@ async fn import_each(ctx: &Context, files: &[PathBuf], options: &ImportOptions) 
             }
         };
         if let Some(opened) = import_one(ctx, file, &package, options, &mut report).await {
-            carried::open(ctx, &package, &opened, options.restore).await;
+            for error in carried::open(ctx, &package, &opened, options.restore).await {
+                report.failed(ctx, file, &error);
+            }
         }
     }
     report
