@@ -13,6 +13,7 @@ use shoal_protocol::hub::{
     link::{Call, Reply},
     routing::{Delivery, Expired, Forwarded, Told, Vouched},
 };
+use tokio::sync::OwnedRwLockReadGuard;
 
 use super::queue::Held;
 use crate::{
@@ -125,18 +126,23 @@ impl Manager {
         }
     }
 
-    /// The answer a machine's daemon gives its link to the hub's `call`.
-    pub(super) async fn answer_from_hub(self: Arc<Self>, call: Call) -> (Reply, ()) {
-        let Some(_operation) = self.gates.operation_unless_exiting().await else {
+    /// The answer a machine's daemon gives its link to the hub's `call`,
+    /// with the daemon operation it holds until the reply is written, so
+    /// an update never exits between a change and the reply that reports
+    /// it.
+    pub(super) async fn answer_from_hub(
+        self: Arc<Self>,
+        call: Call,
+    ) -> (Reply, Option<OwnedRwLockReadGuard<()>>) {
+        let Some(operation) = self.gates.operation_unless_exiting().await else {
             let message = "this machine's daemon is restarting; try again once it is back";
-            return (
-                Reply::Failed {
-                    message: message.into(),
-                },
-                (),
-            );
+            let reply = Reply::Failed {
+                message: message.into(),
+            };
+            return (reply, None);
         };
-        (super::session::reply(self.answer_hub_call(call).await), ())
+        let reply = super::session::reply(self.answer_hub_call(call).await);
+        (reply, Some(operation))
     }
 }
 
