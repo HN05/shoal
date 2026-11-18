@@ -406,6 +406,23 @@ pub(crate) fn set_parent(db: &Connection, space: &SpaceId, parent: Option<&Space
     Ok(())
 }
 
+/// Record `parent` above the new space `space` of `repository_id`, once
+/// [`ensure_parent`] finds that it takes it: a parent this machine has not
+/// runs on another joined machine, as a restore found, whose own machine
+/// decides what it takes.
+pub(crate) fn place_below(
+    db: &Connection,
+    repository_id: Option<&RepositoryId>,
+    space: &SpaceId,
+    parent: &SpaceId,
+) -> Result<()> {
+    let here = crate::daemon::store::exists(db, "SELECT 1 FROM spaces WHERE id=?1", [parent])?;
+    if here {
+        ensure_parent(db, repository_id, space, parent)?;
+    }
+    set_parent(db, space, Some(parent))
+}
+
 /// The ID of the space directly above the space `id`.
 pub(crate) fn parent_id(db: &Connection, id: &SpaceId) -> Result<Option<SpaceId>> {
     Ok(db

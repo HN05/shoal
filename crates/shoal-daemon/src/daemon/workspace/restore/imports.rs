@@ -226,9 +226,10 @@ impl Manager {
         let retention = settings.cleanup.restore.retention();
         let expires_at = UnixTime::now() + retention;
         // The space it was below where it was exported stays its parent only
-        // where that space is here too.
+        // where that space is here too, or runs on another joined machine.
         let parent = match removed.parent {
             Some(parent) if self.find_space(&parent.id).await?.is_some() => Some(parent),
+            Some(parent) if self.runs_elsewhere(&parent.id).await => Some(parent),
             _ => None,
         };
         let mut removed = RemovedSpace {

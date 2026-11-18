@@ -593,8 +593,7 @@ fn insert(
     // so the chat's start names it.
     if let Some((parent, removing)) = &parent {
         ensure!(!removing.reserved(parent), "{parent} is being removed");
-        workspace::ensure_parent(tx, chat.repository_id.as_ref(), &chat.id, parent)?;
-        workspace::set_parent(tx, &chat.id, Some(parent))?;
+        workspace::place_below(tx, chat.repository_id.as_ref(), &chat.id, parent)?;
     }
     tx.execute(
         "INSERT INTO chats(id,workspace_id,root_dir) VALUES (?1,?2,?3)",

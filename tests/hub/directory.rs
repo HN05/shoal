@@ -82,7 +82,7 @@ fn copied(machine: &Base) -> tempfile::TempDir {
 /// Give `machine`'s repository an origin that `other` registers a clone
 /// of, which a move matches, and an `ssh` that runs its commands in
 /// `other`'s home and state, as on another machine.
-fn reach(machine: &Base, other: &Base) {
+pub(super) fn reach(machine: &Base, other: &Base) {
     let root = machine.root.path();
     git(root, &["init", "-q", "--bare", "-b", "main", "origin.git"]);
     let origin = format!(

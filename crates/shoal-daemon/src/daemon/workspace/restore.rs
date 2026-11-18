@@ -294,7 +294,8 @@ impl Manager {
     }
 
     /// The space the restore of `removed` opens it below: its recorded
-    /// parent while that exists and takes it, as a start places a child;
+    /// parent while that exists and takes it, as a start places a child,
+    /// or runs on another joined machine;
     /// otherwise none, with a warning in `warnings` naming the parent, or
     /// for a scoped `caller`, which restores only below it, a refusal.
     pub(super) async fn restored_parent(
@@ -306,6 +307,10 @@ impl Manager {
         let Some(parent) = removed.parent.clone() else {
             return Ok(None);
         };
+        // Its own machine decides what a space elsewhere takes.
+        if self.find_space(&parent.id).await?.is_none() && self.runs_elsewhere(&parent.id).await {
+            return Ok(Some(parent.id));
+        }
         let (repository, space) = (removed.repository_id.clone(), removed.space_id.clone());
         let id = parent.id.clone();
         let taken = (self.store)

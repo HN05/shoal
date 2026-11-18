@@ -394,8 +394,7 @@ impl Manager {
                         !removing.reserved(parent),
                         "the space the workspace would go below is being removed"
                     );
-                    tree::ensure_parent(tx, record.repository_id.as_ref(), &record.id, parent)?;
-                    tree::set_parent(tx, &record.id, Some(parent))?;
+                    tree::place_below(tx, record.repository_id.as_ref(), &record.id, parent)?;
                 }
                 let (branch, start_commit, made_for) = store::head_columns(&record.head)?;
                 tx.execute(

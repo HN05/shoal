@@ -1,10 +1,11 @@
 //! The tree of spaces across joined machines: a space's parent may run on
-//! another machine, which the hub's directory lists with its own parent.
+//! another machine, which the hub's directory lists with its own parent,
+//! as when a space moves to another machine without its parent.
 use std::collections::HashMap;
 
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::hub::directory::Directory;
+use shoal_protocol::{hub::directory::Directory, space_names::SpaceSelector};
 
 use crate::daemon::{log, workspace::Manager};
 
@@ -19,6 +20,19 @@ impl Manager {
             Err(error) => {
                 log!("hub: could not read the spaces above {id}: {error:#}");
                 Vec::new()
+            }
+        }
+    }
+
+    /// Whether the hub lists the space `id` on another machine, which a
+    /// space here may then have as its parent; not while the hub cannot be
+    /// asked.
+    pub(crate) async fn runs_elsewhere(&self, id: &SpaceId) -> bool {
+        match self.machine_of(&SpaceSelector::id(id)).await {
+            Ok(machine) => machine.is_some(),
+            Err(error) => {
+                log!("hub: could not ask which machine has space {id}: {error:#}");
+                false
             }
         }
     }
