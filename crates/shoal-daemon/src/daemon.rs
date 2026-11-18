@@ -42,6 +42,8 @@ pub(crate) mod oneshot;
 pub(crate) mod operations;
 mod overload;
 mod ownership;
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) mod per_daemon;
 mod permissions;
 pub mod ports;
 pub(crate) mod progress;

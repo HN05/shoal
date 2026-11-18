@@ -1,11 +1,18 @@
 //! The `shoal restore` tests drive: it records each workspace whose last
-//! session a relocation continued.
+//! session a relocation continued, for the daemon that continued it.
 use shoal_ids::space_ids::SpaceId;
-use std::sync::Mutex;
 
-/// The workspaces whose last session a relocation continued.
-pub(crate) static RESUMED: Mutex<Vec<SpaceId>> = Mutex::new(Vec::new());
+use crate::{daemon::per_daemon::PerDaemon, paths::Paths};
 
-pub(super) fn restore(id: &SpaceId) {
-    RESUMED.lock().unwrap().push(id.clone());
+static RESUMED: PerDaemon<SpaceId> = PerDaemon::new();
+
+pub(super) fn restore(paths: &Paths, id: &SpaceId) {
+    RESUMED.push(paths, id.clone());
+}
+
+/// The workspaces whose last session a relocation of the daemon of `paths`
+/// continued.
+#[cfg(test)]
+pub(crate) fn resumed(paths: &Paths) -> Vec<SpaceId> {
+    RESUMED.of(paths)
 }

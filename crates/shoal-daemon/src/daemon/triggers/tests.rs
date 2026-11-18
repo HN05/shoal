@@ -9,7 +9,7 @@ use shoal_protocol::triggers::{Fired, RunOrigin, RunOutcome, TriggerRun};
 use crate::{
     daemon::{
         approvals::Undecided,
-        chats::launches::fake::STARTED,
+        chats::launches::fake,
         scope::Caller,
         test_support::{chat, configure, manager, repository},
         triggers::firing::Firing,
@@ -113,12 +113,10 @@ pub(super) fn outcomes(runs: &[TriggerRun]) -> Vec<RunOutcome> {
     runs.iter().map(|run| run.outcome).collect()
 }
 
-/// The tasks of the chats the triggers started, oldest first.
-fn started_tasks() -> Vec<Vec<String>> {
-    let started = STARTED.lock().unwrap();
-    started
-        .iter()
-        .map(|(start, _)| start.args.clone())
+/// The tasks of the chats the triggers of `manager` started, oldest first.
+fn started_tasks(manager: &Manager) -> Vec<Vec<String>> {
+    (fake::started(&manager.paths).into_iter())
+        .map(|(start, _)| start.args)
         .collect()
 }
 
@@ -142,7 +140,7 @@ async fn a_due_time_fires_once_through_the_launch() {
     let chats = manager.chats().await.unwrap();
     let started: Vec<_> = chats.iter().map(|chat| Some(chat.id.clone())).collect();
     assert_eq!(started, [runs[0].space_id.clone()]);
-    let tasks = started_tasks();
+    let tasks = started_tasks(&manager);
     assert_eq!(tasks.len(), 1);
     assert!(!tasks[0][0].contains("{{"), "{:?}", tasks[0]);
     // The next hour counts from this firing.
@@ -164,7 +162,7 @@ async fn every_keeps_counting_across_a_restart_and_catches_up_once() {
     let runs = runs(&manager, &repo, "check").await;
     assert_eq!(outcomes(&runs), [RunOutcome::Skipped, RunOutcome::Started]);
     assert_eq!(runs[0].at, fired + HOUR);
-    assert_eq!(started_tasks().len(), 1);
+    assert_eq!(started_tasks(&manager).len(), 1);
 }
 
 #[tokio::test]
@@ -179,7 +177,7 @@ async fn a_time_beyond_catch_up_is_skipped() {
 
     let runs = runs(&manager, &repo, "check").await;
     assert_eq!(outcomes(&runs), [RunOutcome::Skipped]);
-    assert!(started_tasks().is_empty());
+    assert!(started_tasks(&manager).is_empty());
 }
 
 #[tokio::test]
@@ -252,7 +250,7 @@ async fn overlap_skip_drops_a_firing_while_the_last_agent_runs() {
     let run = run.unwrap();
     assert_eq!(run.outcome, RunOutcome::Skipped);
     assert_eq!(run.origin, RunOrigin::Manual);
-    assert!(started_tasks().is_empty());
+    assert!(started_tasks(&manager).is_empty());
 }
 
 #[tokio::test]
@@ -267,7 +265,7 @@ async fn overlap_queue_launches_once_the_last_agent_stops() {
     let second = fire(&manager, &repo, "check").await;
     assert_eq!(second.unwrap().outcome, RunOutcome::Skipped);
     manager.trigger_pass(UnixTime::now()).await;
-    assert!(started_tasks().is_empty());
+    assert!(started_tasks(&manager).is_empty());
 
     let id = last.id.clone();
     manager
@@ -294,7 +292,7 @@ async fn overlap_queue_launches_once_the_last_agent_stops() {
             RunOutcome::Skipped
         ]
     );
-    assert_eq!(started_tasks(), [vec!["Check".to_owned()]]);
+    assert_eq!(started_tasks(&manager), [vec!["Check".to_owned()]]);
 }
 
 #[tokio::test]
@@ -336,7 +334,7 @@ async fn overlap_outlasts_a_history_longer_than_it_keeps() {
     let run = fire(&manager, &repo, "check").await;
 
     assert_eq!(run.unwrap().outcome, RunOutcome::Skipped);
-    assert!(started_tasks().is_empty());
+    assert!(started_tasks(&manager).is_empty());
 }
 
 #[tokio::test]
@@ -360,12 +358,12 @@ async fn a_paused_trigger_holds_its_queued_run() {
         .unwrap();
 
     manager.trigger_pass(UnixTime::now()).await;
-    assert!(started_tasks().is_empty());
+    assert!(started_tasks(&manager).is_empty());
     (manager.pause_trigger(context(&repo), "check", false, None))
         .await
         .unwrap();
     manager.trigger_pass(UnixTime::now()).await;
-    assert_eq!(started_tasks().len(), 1);
+    assert_eq!(started_tasks(&manager).len(), 1);
 }
 
 #[tokio::test]
@@ -376,7 +374,7 @@ async fn overlap_parallel_launches_at_once() {
 
     let run = fire(&manager, &repo, "check").await;
     assert_eq!(run.unwrap().outcome, RunOutcome::Started);
-    assert_eq!(started_tasks().len(), 1);
+    assert_eq!(started_tasks(&manager).len(), 1);
 }
 
 #[tokio::test]
@@ -390,7 +388,7 @@ async fn a_key_drops_a_repeat_within_its_window() {
 
     assert_eq!(first.unwrap().outcome, RunOutcome::Started);
     assert_eq!(second.unwrap().outcome, RunOutcome::Duplicate);
-    assert_eq!(started_tasks().len(), 1);
+    assert_eq!(started_tasks(&manager).len(), 1);
 }
 
 #[tokio::test]
@@ -416,7 +414,7 @@ async fn a_missing_value_fails_the_firing_with_its_path() {
     let run = run.unwrap();
     assert_eq!(run.outcome, RunOutcome::Failed);
     assert!(run.reason.unwrap().contains("payload.issue"));
-    assert!(started_tasks().is_empty());
+    assert!(started_tasks(&manager).is_empty());
 }
 
 #[tokio::test]

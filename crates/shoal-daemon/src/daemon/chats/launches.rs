@@ -341,7 +341,7 @@ async fn run_worker(
 
     #[cfg(any(test, feature = "test-support"))]
     if crate::daemon::fake_workers::faked() {
-        return fake::start(handed, token);
+        return fake::start(paths, handed, token);
     }
 
     let argv = internal_command(paths, true, Worker::ChatStart)?;

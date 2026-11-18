@@ -1,6 +1,6 @@
 use crate::{
     daemon::{
-        chats::launches::fake::{DETACHED, FAILING},
+        chats::launches::fake,
         notifications::{Notification, NotificationKind},
         test_support::{git, global_config, manager, repository},
         workspace::Manager,
@@ -112,7 +112,7 @@ async fn a_launched_chat_is_recorded_with_its_issue_before_its_place_starts() {
 async fn a_launched_chat_an_app_runs_answers_with_its_chat_and_run() {
     let (temp, manager) = manager().await;
     let repo = machine(&manager, &temp, false).await;
-    DETACHED.lock().unwrap().push("app talk".into());
+    fake::detach(&manager.paths, "app talk".into());
 
     let started = manager.launch_chat(
         start(Some(&repo), "app talk", &[]),
@@ -194,7 +194,7 @@ async fn a_link_that_fails_during_a_start_reaches_the_user() {
 /// Start a chat named `name` in `repo` whose place fails, and check that
 /// the daemon removed it and told the user why.
 async fn check_failed_place_removes_the_chat(manager: &Manager, repo: &Repository, name: &str) {
-    FAILING.lock().unwrap().push(name.into());
+    fake::fail(&manager.paths, name.into());
 
     let started = manager.launch_chat(
         start(Some(repo), name, &[ISSUE]),

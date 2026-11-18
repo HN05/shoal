@@ -26,11 +26,8 @@ async fn a_chat_launch_carries_its_prompt_to_the_chat_start() {
         .await
         .unwrap();
 
-    let started = crate::daemon::chats::launches::fake::STARTED
-        .lock()
-        .unwrap();
-    let start = started
-        .iter()
+    let started = crate::daemon::chats::launches::fake::started(&manager.paths);
+    let start = (started.iter())
         .map(|(start, _)| start)
         .find(|start| start.name == Some("prompted talk".into()))
         .expect("the daemon ran the chat's start worker");

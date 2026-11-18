@@ -1,4 +1,4 @@
-use super::fake::RESUMED;
+use super::fake::resumed;
 
 /// Notified once a relocation pass has listed the pending conversions.
 pub(crate) static LISTED: tokio::sync::Notify = tokio::sync::Notify::const_new();
@@ -71,10 +71,7 @@ async fn the_agent_restarts_in_the_worktree_once_its_turn_ends() {
     manager.relocate_finished_turns().await.unwrap();
 
     process.wait().unwrap();
-    assert_eq!(
-        *RESUMED.lock().unwrap(),
-        std::slice::from_ref(&workspace.id)
-    );
+    assert_eq!(resumed(&manager.paths), std::slice::from_ref(&workspace.id));
     let sessions = LastSession::all(&manager.paths, &workspace.id).unwrap();
     let [last] = sessions.as_slice() else {
         panic!("one last session to continue: {sessions:?}");
@@ -116,7 +113,7 @@ async fn a_working_agent_finishes_its_turn_where_it_runs() {
 
     manager.relocate_finished_turns().await.unwrap();
 
-    assert!(RESUMED.lock().unwrap().is_empty());
+    assert!(resumed(&manager.paths).is_empty());
     assert!(manager.caller(&token).await.unwrap().is_some());
     let sessions = LastSession::all(&manager.paths, &workspace.id).unwrap();
     assert!(sessions.is_empty(), "{sessions:?}");
@@ -141,7 +138,7 @@ async fn an_agent_waits_where_it_runs_while_the_workspaces_setup_failed() {
 
     manager.relocate_finished_turns().await.unwrap();
 
-    assert!(RESUMED.lock().unwrap().is_empty());
+    assert!(resumed(&manager.paths).is_empty());
     assert!(manager.caller(&token).await.unwrap().is_some());
 }
 
@@ -161,7 +158,7 @@ async fn a_stop_of_the_workspace_keeps_the_converting_agents_session() {
         .unwrap();
 
     process.wait().unwrap();
-    assert!(RESUMED.lock().unwrap().is_empty());
+    assert!(resumed(&manager.paths).is_empty());
     let sessions = LastSession::all(&manager.paths, &workspace.id).unwrap();
     let [last] = sessions.as_slice() else {
         panic!("one last session to continue: {sessions:?}");
@@ -213,7 +210,7 @@ async fn the_relocation_restarts_no_agent_a_stop_handed_over() {
 
     manager.relocate_finished_turns().await.unwrap();
 
-    assert!(RESUMED.lock().unwrap().is_empty());
+    assert!(resumed(&manager.paths).is_empty());
 }
 
 #[tokio::test]
@@ -503,7 +500,7 @@ async fn the_agent_waits_for_its_workspaces_post_setup_hook() {
 
     manager.relocate_finished_turns().await.unwrap();
 
-    assert!(RESUMED.lock().unwrap().is_empty());
+    assert!(resumed(&manager.paths).is_empty());
     assert!(manager.caller(&token).await.unwrap().is_some());
     assert!(manager.converting(&workspace.id).await.unwrap());
 }
@@ -535,7 +532,7 @@ async fn a_failed_post_setup_hook_stops_the_agent_for_shoal_resume() {
 
     // Stopped with its session kept for shoal restore, not restarted.
     process.wait().unwrap();
-    assert!(RESUMED.lock().unwrap().is_empty());
+    assert!(resumed(&manager.paths).is_empty());
     assert!(manager.caller(&token).await.unwrap().is_none());
     assert!(!manager.converting(&workspace.id).await.unwrap());
     let sessions = LastSession::all(&manager.paths, &workspace.id).unwrap();
@@ -569,7 +566,7 @@ async fn a_failed_hook_outlasts_its_operations_record() {
     manager.relocate_finished_turns().await.unwrap();
 
     process.wait().unwrap();
-    assert!(RESUMED.lock().unwrap().is_empty());
+    assert!(resumed(&manager.paths).is_empty());
     assert!(!manager.converting(&workspace.id).await.unwrap());
 }
 

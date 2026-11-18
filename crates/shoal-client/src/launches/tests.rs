@@ -150,13 +150,10 @@ async fn a_launch_refuses_what_it_cannot_start_before_it_creates_anything() {
     assert!(daemon.manager.list_workspaces().await.unwrap().is_empty());
 }
 
-/// The resolved starts the daemon ran its chat start worker for, each with
+/// The resolved starts `daemon` ran its chat start worker for, each with
 /// whether the worker acts with the caller's scope.
-fn launched_chats() -> Vec<(ChatStart, bool)> {
-    shoal_daemon::test_daemon::STARTED_CHATS
-        .lock()
-        .unwrap()
-        .clone()
+fn launched_chats(daemon: &TestDaemon) -> Vec<(ChatStart, bool)> {
+    shoal_daemon::test_daemon::started_chats(&daemon.manager.paths)
 }
 
 #[tokio::test]
@@ -173,14 +170,14 @@ async fn an_app_starts_a_chat_whose_agent_and_mode_the_daemon_resolves() {
     };
     let error = crate::launches::launch(&app, start()).await.unwrap_err();
     assert!(format!("{error:#}").contains("agent.default"), "{error:#}");
-    assert!(launched_chats().is_empty());
+    assert!(launched_chats(&daemon).is_empty());
     shoal_daemon::test_daemon::configure(
         &daemon.manager,
         "[agent]\ndefault = \"probe\"\n[agents.probe]\ncommand = [\"true\"]\n",
     )
     .await;
     let started = (crate::launches::launch(&app, start())).await.unwrap();
-    let [(launched, scoped)] = launched_chats().try_into().unwrap();
+    let [(launched, scoped)] = launched_chats(&daemon).try_into().unwrap();
     assert!(!scoped);
     assert_eq!(launched.agent, Some("probe".into()));
     assert_eq!(launched.mode, Some(shoal_protocol::model::chat_mode()));
@@ -227,7 +224,7 @@ async fn a_scoped_app_starts_chats_below_its_own_space() {
     assert!(launch(outside).await.is_err());
     launch(start(None)).await.unwrap();
     // The worker records it with the caller's scope, below the caller.
-    let [(launched, scoped)] = launched_chats().try_into().unwrap();
+    let [(launched, scoped)] = launched_chats(&daemon).try_into().unwrap();
     assert!(scoped);
     assert_eq!(launched.parent, None);
 }

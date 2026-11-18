@@ -452,7 +452,7 @@ async fn restore_workspace(
 
     #[cfg(any(test, feature = "test-support"))]
     if crate::daemon::fake_workers::faked() {
-        fake::restore(id);
+        fake::restore(paths, id);
         return Ok(());
     }
 
