@@ -81,15 +81,19 @@ impl Manager {
                 Reply::Left
             }
             Call::Report(report) => {
-                anyhow::ensure!(
-                    member.kind == MemberKind::Machine,
-                    "only a machine reports spaces to the hub"
-                );
+                ensure_machine(member)?;
                 self.record_report(&member.id, report).await?;
                 Reply::Reported
             }
+            Call::Claim { space } => {
+                ensure_machine(member)?;
+                self.record_space_claim(&member.id, &space).await?;
+                Reply::Claimed
+            }
             Call::Directory => Reply::Directory(self.local_directory().await?),
-            Call::Owner { space } => Reply::Owner(self.local_space_owner(&space).await?),
+            Call::Owner { space } => {
+                Reply::Owner(self.local_space_owner(&space, &member.id).await?)
+            }
         })
     }
 
@@ -198,6 +202,16 @@ impl Manager {
             reply => Err(unexpected(reply)),
         }
     }
+}
+
+/// Refuse a call only a machine makes, such as a report of its spaces,
+/// from a device.
+fn ensure_machine(member: &Member) -> Result<()> {
+    anyhow::ensure!(
+        member.kind == MemberKind::Machine,
+        "only a machine reports and claims spaces at the hub"
+    );
+    Ok(())
 }
 
 /// The overview a [`Call::Members`] reply carries.

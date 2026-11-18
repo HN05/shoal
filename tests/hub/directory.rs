@@ -1,13 +1,13 @@
 //! The hub's directory of every joined machine's spaces: what `shoal list`
-//! and `shoal status` show of the other machines, and one owner per space
-//! ID.
+//! and `shoal status` show of the other machines, one owner per space ID,
+//! and restores of a space another machine runs.
 use std::{fs, path::Path};
 
 use serde_json::Value;
 
 use super::support::{
     fixture::{Base, home},
-    shoal_binary,
+    git, install_test_script, shoal_binary,
     wait::wait_for,
 };
 
@@ -79,6 +79,36 @@ fn copied(machine: &Base) -> tempfile::TempDir {
     copy
 }
 
+/// Give `machine`'s repository an origin that `other` registers a clone
+/// of, which a move matches, and an `ssh` that runs its commands in
+/// `other`'s home and state, as on another machine.
+fn reach(machine: &Base, other: &Base) {
+    let root = machine.root.path();
+    git(root, &["init", "-q", "--bare", "-b", "main", "origin.git"]);
+    let origin = format!(
+        "file://{}",
+        fs::canonicalize(root.join("origin.git")).unwrap().display()
+    );
+    git(&machine.repo, &["remote", "add", "origin", &origin]);
+    git(&machine.repo, &["push", "-q", "-u", "origin", "HEAD:main"]);
+    git(&machine.repo, &["remote", "set-head", "origin", "main"]);
+    let there = other.root.path();
+    git(there, &["clone", "-q", &origin, "clone"]);
+    other.ok(&["repo", "add", there.join("clone").to_str().unwrap()]);
+    let there = there.display();
+    install_test_script(
+        root.join("bin/ssh"),
+        format!(
+            "#!/bin/sh\n\
+             [ \"$1\" = -- ] && shift\n\
+             shift\n\
+             cd '{there}' || exit 255\n\
+             export HOME='{there}' SHOAL_STATE_DIR='{there}/state' ZMX_DIR='{there}/zmx'\n\
+             exec sh -c \"$*\"\n"
+        ),
+    );
+}
+
 #[test]
 fn joined_machines_list_each_others_spaces_and_keep_an_offline_ones() {
     let hub = machine(true, "app");
@@ -136,4 +166,40 @@ fn a_second_machine_with_a_spaces_id_is_a_conflict_the_hub_lists_once() {
         .collect();
     assert_eq!(copies.len(), 1, "{listed}");
     assert_eq!(copies[0]["machine"], laptop_id.as_str());
+}
+
+#[test]
+fn a_restore_of_a_space_another_machine_runs_is_refused() {
+    let hub = machine(true, "app");
+    let laptop = machine(false, "app");
+    let laptop_id = join(&laptop, &hub, "laptop");
+    let work = workspace(&laptop, "work");
+    laptop.ok(&["rm", "--wait", &work, "--yes"]);
+    let desk = start(copied(&laptop), false, "desk-app");
+    join(&desk, &hub, "desk");
+    laptop.ok(&["restore", &work]);
+    listed(&hub, &work, &laptop_id);
+    let refused = desk.run(&["restore", &work]);
+    assert!(!refused.status.success());
+    let error = String::from_utf8_lossy(&refused.stderr);
+    assert!(error.contains("runs on machine laptop"), "{error}");
+}
+
+#[test]
+fn a_move_between_joined_machines_hands_the_space_over() {
+    let hub = machine(true, "app");
+    let laptop = machine(false, "app");
+    let desk = machine(false, "desk-app");
+    let laptop_id = join(&laptop, &hub, "laptop");
+    let desk_id = join(&desk, &hub, "desk");
+    reach(&laptop, &desk);
+    let work = workspace(&laptop, "work");
+    listed(&hub, &work, &laptop_id);
+    let moved = laptop.ok(&["move", "ssh", "desk", &work, "--shoal", shoal_binary()]);
+    assert_eq!(moved["failed"], serde_json::json!([]), "{moved}");
+    listed(&hub, &work, &desk_id);
+    let alerts = hub.ok(&["alerts"]);
+    let conflict =
+        (alerts.as_array().unwrap().iter()).find(|alert| alert["kind"] == "space_conflict");
+    assert!(conflict.is_none(), "{alerts}");
 }

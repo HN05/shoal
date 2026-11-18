@@ -102,3 +102,44 @@ fn a_forgotten_machine_hands_its_ids_to_their_copies() {
     tx.commit().unwrap();
     assert_eq!(listed(&mut db), [("a".into(), "laptop".into())]);
 }
+
+#[test]
+fn a_claimed_space_changes_hands_without_a_conflict() {
+    let mut db = database();
+    report(&mut db, "desk", Report::Whole(vec![space("a", "moving")]));
+    let tx = db.transaction().unwrap();
+    claim(
+        &tx,
+        &MemberId::from("laptop".to_owned()),
+        &"a".to_owned().into(),
+    )
+    .unwrap();
+    tx.commit().unwrap();
+    let conflicts = report(&mut db, "laptop", Report::Whole(vec![space("a", "moving")]));
+    assert!(conflicts.is_empty());
+    assert_eq!(listed(&mut db), [("a".into(), "laptop".into())]);
+    // The machine it moved from reports it until its space ends there.
+    let conflicts = report(&mut db, "desk", Report::Whole(vec![space("a", "moving")]));
+    assert!(conflicts.is_empty());
+    report(&mut db, "desk", Report::Whole(Vec::new()));
+    let tx = db.transaction().unwrap();
+    assert!(read(&tx).unwrap().1.is_empty());
+}
+#[test]
+fn a_machine_that_claims_a_space_sees_no_other_owner() {
+    let mut db = database();
+    report(&mut db, "desk", Report::Whole(vec![space("a", "moving")]));
+    let (desk, laptop) = (
+        MemberId::from("desk".to_owned()),
+        MemberId::from("laptop".to_owned()),
+    );
+    let id = SpaceId::from("a".to_owned());
+    let tx = db.transaction().unwrap();
+    assert_eq!(
+        owner_seen_by(&tx, &id, &laptop).unwrap(),
+        Some(desk.clone())
+    );
+    claim(&tx, &laptop, &id).unwrap();
+    assert_eq!(owner_seen_by(&tx, &id, &laptop).unwrap(), None);
+    assert_eq!(owner_seen_by(&tx, &id, &desk).unwrap(), Some(desk));
+}

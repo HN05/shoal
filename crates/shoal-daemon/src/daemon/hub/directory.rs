@@ -34,6 +34,15 @@ impl Manager {
         Ok(())
     }
 
+    /// Record that the machine `member` claims the space `id`, which it
+    /// imports as another machine moves it there.
+    pub(super) async fn record_space_claim(&self, member: &MemberId, id: &SpaceId) -> Result<()> {
+        let (member, id) = (member.clone(), id.clone());
+        self.store
+            .write(move |tx| records::claim(tx, &member, &id))
+            .await
+    }
+
     /// The directory this daemon keeps as the hub: its machines, with
     /// whether each is connected and when it was last seen, and their
     /// spaces.
@@ -50,14 +59,17 @@ impl Manager {
         })
     }
 
-    /// The machine that owns the space `id` in this hub's directory.
-    pub(super) async fn local_space_owner(&self, id: &SpaceId) -> Result<Option<Member>> {
-        let space = id.clone();
-        let Some(owner) = self
-            .store
-            .read(move |tx| records::owner(tx, &space))
-            .await?
-        else {
+    /// The machine that owns the space `id` in this hub's directory, as
+    /// `asker` sees it: none while `asker` claims the space, which it opens
+    /// as another machine moves it there.
+    pub(super) async fn local_space_owner(
+        &self,
+        id: &SpaceId,
+        asker: &MemberId,
+    ) -> Result<Option<Member>> {
+        let (space, asker) = (id.clone(), asker.clone());
+        let owner = (self.store).read(move |tx| records::owner_seen_by(tx, &space, &asker));
+        let Some(owner) = owner.await? else {
             return Ok(None);
         };
         let members = self.local_hub_overview().await?.members;

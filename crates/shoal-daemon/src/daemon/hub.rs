@@ -21,6 +21,7 @@ mod listener;
 mod member;
 mod members;
 mod membership;
+mod owners;
 mod pairing;
 mod reports;
 mod sealing;

@@ -23,13 +23,16 @@ impl Manager {
     /// bundle or else on the default branch, and its agents' session files,
     /// and restore it under its ID, below its parent where that is here, a
     /// copy under an ID of its own. A failed restore leaves the record for
-    /// `shoal restore`.
+    /// `shoal restore`. It claims the space at the hub, so it takes the ID
+    /// over from the machine it moves from.
     pub async fn import_space(&self, import: SpaceImport) -> Result<RestoredSpace> {
         let (removed, warnings) = (self.record_package(import))
             .await
             .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
         let id = removed.space_id;
-        let mut restored = (self.restore_space(&SpaceSelector::id(&id), None))
+        // The machine it moves from keeps it until this import is done.
+        self.claim_space(&id).await;
+        let mut restored = (self.reopen_space(&SpaceSelector::id(&id), None))
             .await
             .with_context(|| {
                 format!("the imported space is recorded as removed; shoal restore {id} retries")

@@ -206,9 +206,13 @@ pub enum Call {
     /// The directory of every machine's spaces. Answered with
     /// [`Reply::Directory`].
     Directory,
-    /// The machine that owns the space `space`, if any. Answered with
-    /// [`Reply::Owner`].
+    /// The machine that owns the space `space`, if any, and none while the
+    /// caller claims it. Answered with [`Reply::Owner`].
     Owner { space: SpaceId },
+    /// A machine's claim of the space `space`, which it imports as another
+    /// machine moves it here: its report of the space takes the ID over.
+    /// Answered with [`Reply::Claimed`].
+    Claim { space: SpaceId },
 }
 
 /// The answer to a [`Call`].
@@ -222,6 +226,7 @@ pub enum Reply {
     Reported,
     Directory(Directory),
     Owner(Option<super::Member>),
+    Claimed,
     Failed { message: String },
 }
 

@@ -40,6 +40,7 @@ pub(super) fn apply(
 /// Forget every space of `member`, as once the hub revoked it; another
 /// machine's copy takes the place of each it owned.
 pub(in crate::daemon::hub) fn forget(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
+    tx.execute("DELETE FROM hub_space_claims WHERE member_id=?1", [member])?;
     for space in held(tx, member)? {
         release(tx, member, &space)?;
     }
@@ -91,7 +92,8 @@ fn held(tx: &Transaction<'_>, member: &MemberId) -> Result<Vec<SpaceId>> {
 }
 
 /// Record `member`'s `space`: as the owner's when no other machine owns
-/// its ID, else as a copy, with the conflict a new copy raises.
+/// its ID or `member` claimed it, else as a copy, with the conflict a new
+/// copy raises.
 fn record(
     tx: &Transaction<'_>,
     member: &MemberId,
@@ -100,6 +102,11 @@ fn record(
 ) -> Result<Option<Conflict>> {
     let summary = serde_json::to_string(space).context("write a space summary")?;
     match owner(tx, &space.id)? {
+        Some(owner) if &owner != member && take_claim(tx, &space.id, member)? => {
+            hand_over(tx, &space.id, now)?;
+            own(tx, member, &space.id, &summary, now)?;
+            Ok(None)
+        }
         Some(owner) if &owner != member => {
             let new = !has_copy(tx, &space.id, member)?;
             tx.execute(
@@ -117,16 +124,81 @@ fn record(
             }))
         }
         _ => {
-            tx.execute(
-                "INSERT INTO hub_spaces(space_id, member_id, summary, reported_at)
-                 VALUES (?1,?2,?3,?4)
-                 ON CONFLICT(space_id) DO UPDATE
-                    SET summary=excluded.summary, reported_at=excluded.reported_at",
-                params![space.id, member, summary, now],
-            )?;
+            own(tx, member, &space.id, &summary, now)?;
             Ok(None)
         }
     }
+}
+
+/// Record `member` as the owner of the space `id`, with its `summary`.
+fn own(
+    tx: &Transaction<'_>,
+    member: &MemberId,
+    id: &SpaceId,
+    summary: &str,
+    now: UnixTime,
+) -> Result<()> {
+    tx.execute(
+        "INSERT INTO hub_spaces(space_id, member_id, summary, reported_at)
+         VALUES (?1,?2,?3,?4)
+         ON CONFLICT(space_id) DO UPDATE SET member_id=excluded.member_id,
+            summary=excluded.summary, reported_at=excluded.reported_at",
+        params![id, member, summary, now],
+    )?;
+    Ok(())
+}
+
+/// Record that `member` claims the space `id`, which it imports.
+pub(super) fn claim(tx: &Transaction<'_>, member: &MemberId, id: &SpaceId) -> Result<()> {
+    tx.execute(
+        "INSERT INTO hub_space_claims(space_id, member_id) VALUES (?1,?2)
+         ON CONFLICT(space_id) DO UPDATE SET member_id=excluded.member_id",
+        params![id, member],
+    )?;
+    Ok(())
+}
+
+/// The machine that owns the space `id`, as `asker` sees it: none while
+/// `asker` claims it.
+pub(super) fn owner_seen_by(
+    tx: &Transaction<'_>,
+    id: &SpaceId,
+    asker: &MemberId,
+) -> Result<Option<MemberId>> {
+    match claimed_by(tx, id, asker)? {
+        true => Ok(None),
+        false => owner(tx, id),
+    }
+}
+
+/// Whether `member` claims the space `id`.
+fn claimed_by(tx: &Transaction<'_>, id: &SpaceId, member: &MemberId) -> Result<bool> {
+    Ok(tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM hub_space_claims WHERE space_id=?1 AND member_id=?2)",
+        params![id, member],
+        |row| row.get(0),
+    )?)
+}
+
+/// Whether `member` claimed the space `id`, a claim this spends.
+fn take_claim(tx: &Transaction<'_>, id: &SpaceId, member: &MemberId) -> Result<bool> {
+    let taken = tx.execute(
+        "DELETE FROM hub_space_claims WHERE space_id=?1 AND member_id=?2",
+        params![id, member],
+    )?;
+    Ok(taken > 0)
+}
+
+/// Keep the owner's space `id` as a copy, as the machine that claimed it
+/// takes the ID over; the copy goes once its space ends there.
+fn hand_over(tx: &Transaction<'_>, id: &SpaceId, now: UnixTime) -> Result<()> {
+    tx.execute(
+        "INSERT INTO hub_space_copies(space_id, member_id, summary, since)
+         SELECT space_id, member_id, summary, ?2 FROM hub_spaces WHERE space_id=?1
+         ON CONFLICT(space_id, member_id) DO UPDATE SET summary=excluded.summary",
+        params![id, now],
+    )?;
+    Ok(())
 }
 
 /// Whether `member` reported a copy of the space `id` before.

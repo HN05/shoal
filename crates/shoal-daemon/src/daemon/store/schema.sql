@@ -745,6 +745,11 @@ CREATE TABLE hub_space_copies (
     PRIMARY KEY(space_id, member_id)
 );
 
+CREATE TABLE hub_space_claims (
+    space_id TEXT PRIMARY KEY,
+    member_id TEXT NOT NULL REFERENCES hub_members(id)
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);

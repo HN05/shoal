@@ -19,12 +19,26 @@ use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
+    /// Open the removed space `selector` names again, as
+    /// [`Self::reopen_space`] does, unless the hub lists it on another
+    /// machine.
+    pub async fn restore_space(
+        &self,
+        selector: &SpaceSelector,
+        caller: Option<&Caller>,
+    ) -> Result<RestoredSpace> {
+        if let Some(id) = selector.given_id() {
+            self.refuse_live_elsewhere(id).await?;
+        }
+        self.reopen_space(selector, caller).await
+    }
+
     /// Open the removed space `selector` names again in its place, below
     /// its recorded parent while that takes it, with its links, which
     /// `caller` relinks only where it may link, and what its record keeps of
     /// its agents; the caller links its PRs, puts the session files in place
     /// and sets a workspace up. The record goes once the space is back.
-    pub async fn restore_space(
+    pub(crate) async fn reopen_space(
         &self,
         selector: &SpaceSelector,
         caller: Option<&Caller>,
