@@ -1,6 +1,7 @@
 //! An open link after its handshake, on either side: calls to the other side
-//! and their replies, calls from it, and the pings that tell a link that went
-//! silent, as one whose network dropped away, from a quiet one.
+//! and their replies, calls from it, the byte streams beside them, and the
+//! pings that tell a link that went silent, as one whose network dropped
+//! away, from a quiet one.
 use std::{
     collections::HashMap,
     sync::{
@@ -14,14 +15,19 @@ use anyhow::{Result, anyhow, bail};
 use shoal_protocol::hub::link::{Call, Frame, Reply, SILENCE};
 use tokio::{sync::oneshot, time::Instant};
 
-use super::transport::{Channel, Sender};
+use super::{
+    streams::{Incoming, Streams},
+    transport::{Channel, Sender},
+};
 
 /// How long a call waits for its reply.
 const CALL_TIMEOUT: Duration = Duration::from_secs(120);
 
-/// The calls this side sends over a link, each waiting for its reply.
+/// The calls this side sends over a link, each waiting for its reply, and
+/// the link's streams.
 pub(crate) struct Calls {
     sender: Sender,
+    streams: Streams,
     /// What the other side is, as failures name it: the hub, or a member.
     peer: String,
     /// The calls waiting for replies, none once the session ended, which
@@ -33,6 +39,7 @@ pub(crate) struct Calls {
 impl Calls {
     pub(super) fn new(sender: Sender, peer: impl Into<String>) -> Arc<Self> {
         Arc::new(Self {
+            streams: Streams::new(sender.clone()),
             sender,
             peer: peer.into(),
             pending: Mutex::new(Some(HashMap::new())),
@@ -76,6 +83,24 @@ impl Calls {
         }
     }
 
+    /// The stream the other side writes in answer to the call `call`
+    /// makes of the new stream's number, once it replies that it does.
+    pub(crate) async fn stream(&self, call: impl FnOnce(u64) -> Call) -> Result<Incoming> {
+        let incoming = self.streams.open();
+        match self.call(call(incoming.number())).await? {
+            Reply::Streaming => Ok(incoming),
+            reply => bail!(
+                "{} answered a stream with an unexpected {reply:?}",
+                self.peer
+            ),
+        }
+    }
+
+    /// The link's streams.
+    pub(crate) fn streams(&self) -> &Streams {
+        &self.streams
+    }
+
     fn replied(&self, id: u64, reply: Reply) {
         let waiting = self
             .pending
@@ -98,6 +123,7 @@ impl Calls {
     /// once the session ended.
     fn close(&self) {
         self.pending.lock().unwrap().take();
+        self.streams.end();
     }
 }
 
@@ -199,6 +225,11 @@ where
                     Ok(None) => return End::Closed,
                     Err(error) => return End::Lost(error),
                 };
+                match calls.streams.take(&frame) {
+                    Ok(true) => continue,
+                    Ok(false) => {}
+                    Err(error) => return End::Lost(error),
+                }
                 match frame {
                     Frame::Ping => {
                         if let Err(error) = sender.try_send(&Frame::Pong) {

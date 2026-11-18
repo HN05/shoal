@@ -375,8 +375,8 @@ impl Manager {
         registration.serve_calls(calls.clone());
         tokio::spawn((self.clone()).keep_delivering(member.id.clone(), calls.clone()));
         let answer = |call| {
-            let (manager, member) = (self.clone(), member.clone());
-            async move { manager.answer_member(&member, call).await }
+            let (manager, member, calls) = (self.clone(), member.clone(), calls.clone());
+            async move { manager.answer_member(&member, call, &calls).await }
         };
         let end = session::serve(channel, &calls, answer, registration.stopped()).await;
         drop(registration);

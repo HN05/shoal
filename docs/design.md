@@ -162,7 +162,14 @@ process's with that space's ID, the reach of its scope and its effective
 permissions, which the owning machine checks through the operation every
 scope check takes, under single-user trust as scope is cooperative; the
 owning machine answers it on its own socket under a token standing for that
-caller, and never forwards a forwarded request again. Following a session sends its files' bytes
+caller, and never forwards a forwarded request again. A request whose
+answer goes on, as following an agent's session does, comes back on a byte
+stream as that machine's daemon writes it, failing at once while the machine
+is offline. Streams run on each link beside its calls, many at once, opened
+by the side that reads them, and each holds its writer to the credit its
+reader granted as it took what came, so a reader that stalls holds up
+neither the calls nor the other streams; the hub relays a stream from one
+link to the other the same way. Following a session sends its files' bytes
 where the agent's tool keeps them, everything so far and then what the tool
 appends, unread: apps parse each tool's format, so a tool changing it changes
 only the app. A request that needs

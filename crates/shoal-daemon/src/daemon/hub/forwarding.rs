@@ -1,8 +1,10 @@
 //! A machine's side of a request for a space another joined machine owns:
 //! its daemon finds that machine in the hub's directory and forwards the
 //! request there through the hub, vouching for its caller, the user or a
-//! space's process, whose scope the owning machine checks. A request that
-//! needs the space's files or processes is refused, naming the machine.
+//! space's process, whose scope the owning machine checks, and reads the
+//! answer of one that goes on, as a follow's, from a stream as it comes. A
+//! request that needs the space's files or processes is refused, naming the
+//! machine.
 use anyhow::{Result, anyhow};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
@@ -16,6 +18,7 @@ use shoal_protocol::{
     space_names::SpaceSelector,
 };
 
+use super::streams::Incoming;
 use crate::{
     daemon::{scope::Caller, workspace::Manager},
     refusal::{Reason, Refusal},
@@ -35,6 +38,8 @@ pub(crate) enum Elsewhere {
     Answered(Vec<serde_json::Value>),
     /// The hub holds it until the machine connects.
     Queued(shoal_protocol::hub::routing::Queued),
+    /// The frames its daemon writes come on this stream.
+    Streamed(Incoming),
 }
 
 impl Manager {
@@ -131,6 +136,10 @@ impl Manager {
             method,
             summary: format!("{name} for space {space}"),
         };
+        if request.forwarding == Forwarding::Streamed {
+            let incoming = self.stream_forwarded(machine, forwarded).await?;
+            return Ok(Elsewhere::Streamed(incoming));
+        }
         match self.send_forwarded(machine, forwarded, delivery).await? {
             Reply::Answered(answered) => Ok(Elsewhere::Answered(answered.frames)),
             Reply::Queued(queued) => Ok(Elsewhere::Queued(queued)),
@@ -156,6 +165,26 @@ impl Manager {
             delivery,
         };
         self.through_hub(call).await
+    }
+
+    /// The stream `machine` answers `request` on, through the hub: from the
+    /// hub, the link to that machine; else, this machine's link to the hub,
+    /// which passes it on. Either fails at once while that machine is
+    /// offline.
+    async fn stream_forwarded(&self, machine: &Member, request: Forwarded) -> Result<Incoming> {
+        if !self.is_hub() {
+            let call = |stream| Call::Stream {
+                machine: machine.id.clone(),
+                request,
+                stream,
+            };
+            return self.hub_calls().await?.stream(call).await;
+        }
+        let machine = self.hub_machine(&machine.id).await?;
+        let Some(calls) = self.hub.links.calls(&machine.id) else {
+            return Err(super::routing::offline(&machine).into());
+        };
+        (calls.stream(|stream| Call::ServeStream { request, stream })).await
     }
 
     /// What this machine vouches for `caller`: the user, or a space's

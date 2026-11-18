@@ -13,6 +13,7 @@ use shoal_protocol::hub::{HubRole, Overview};
 use super::workspace::Manager;
 
 pub(crate) use forwarding::{Elsewhere, Unanswered};
+pub(crate) use streams::Incoming;
 pub(crate) use telling::Event;
 
 mod accept;
@@ -38,6 +39,7 @@ mod routing;
 mod sealing;
 mod serving;
 mod session;
+mod streams;
 mod telling;
 mod transport;
 mod tree;

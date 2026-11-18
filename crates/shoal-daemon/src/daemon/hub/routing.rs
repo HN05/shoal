@@ -1,9 +1,10 @@
 //! The hub's routing of what one machine sends another: a forwarded
 //! request goes to the machine it names, and an event to the machine of
 //! the space it is for, each answered by the hub's own machine for its own
-//! spaces and passed down the link of any other; while that machine is
-//! offline the hub holds what can wait and refuses the rest, naming the
-//! machine and when it last saw it.
+//! spaces and passed down the link of any other, and the stream a streamed
+//! request's answer comes on is relayed from that machine's link to the
+//! caller's; while that machine is offline the hub holds what can wait and
+//! refuses the rest, naming the machine and when it last saw it.
 use std::sync::Arc;
 
 use anyhow::{Result, anyhow, bail};
@@ -15,7 +16,7 @@ use shoal_protocol::hub::{
 };
 use tokio::sync::OwnedRwLockReadGuard;
 
-use super::queue::Held;
+use super::{queue::Held, session::Calls, streams::Outgoing};
 use crate::{
     daemon::workspace::Manager,
     refusal::{Reason, Refusal},
@@ -49,6 +50,33 @@ impl Manager {
         let machine = self.hub_machine(machine).await?;
         self.send_or_hold(&machine, held, delivery == Delivery::Queued)
             .await
+    }
+
+    /// Answer `request`, which the member `from` forwards to the machine
+    /// `machine` and whose answer goes on, on `out`: the hub's own
+    /// machine writes it there, and any other's comes from its link and is
+    /// relayed. A device's goes as the user's, whatever it vouches.
+    pub(super) async fn route_stream(
+        self: &Arc<Self>,
+        from: &Member,
+        machine: &MemberId,
+        mut request: Forwarded,
+        out: Outgoing,
+    ) -> Result<Reply> {
+        if from.kind == MemberKind::Device {
+            request.caller = Vouched::User;
+        }
+        let machine = self.hub_machine(machine).await?;
+        if machine.hub {
+            self.serve_streamed(request, out)?;
+            return Ok(Reply::Streaming);
+        }
+        let Some(calls) = self.hub.links.calls(&machine.id) else {
+            return Err(offline(&machine).into());
+        };
+        let incoming = (calls.stream(|stream| Call::ServeStream { request, stream })).await?;
+        tokio::spawn(super::streams::relay(incoming, out));
+        Ok(Reply::Streaming)
     }
 
     /// The answer to `told`, which the member `from` passes up the tree to
@@ -100,7 +128,7 @@ impl Manager {
     }
 
     /// The member `id`, a machine the hub records.
-    async fn hub_machine(&self, id: &MemberId) -> Result<Member> {
+    pub(super) async fn hub_machine(&self, id: &MemberId) -> Result<Member> {
         let members = self.local_hub_overview().await?.members;
         (members.into_iter())
             .find(|member| &member.id == id && member.kind == MemberKind::Machine)
@@ -133,6 +161,7 @@ impl Manager {
     pub(super) async fn answer_from_hub(
         self: Arc<Self>,
         call: Call,
+        calls: Arc<Calls>,
     ) -> (Reply, Option<OwnedRwLockReadGuard<()>>) {
         let Some(operation) = self.gates.operation_unless_exiting().await else {
             let message = "this machine's daemon is restarting; try again once it is back";
@@ -141,8 +170,15 @@ impl Manager {
             };
             return (reply, None);
         };
-        let reply = super::session::reply(self.answer_hub_call(call).await);
-        (reply, Some(operation))
+        let answered = match call {
+            // Written on the hub's stream, whose number only its link knows.
+            Call::ServeStream { request, stream } => {
+                let out = calls.streams().writer(stream);
+                (self.serve_streamed(request, out)).map(|()| Reply::Streaming)
+            }
+            call => self.answer_hub_call(call).await,
+        };
+        (super::session::reply(answered), Some(operation))
     }
 }
 

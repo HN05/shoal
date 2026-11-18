@@ -14,7 +14,7 @@ use std::sync::Arc;
 use shoal_ids::member_ids::MemberId;
 use tokio::sync::OwnedRwLockReadGuard;
 
-use super::{directory, members};
+use super::{directory, members, session::Calls};
 use crate::{
     daemon::workspace::Manager,
     refusal::{Reason, Refusal},
@@ -44,6 +44,7 @@ impl Manager {
         self: &Arc<Self>,
         member: &Member,
         call: Call,
+        calls: &Calls,
     ) -> (Reply, Held) {
         let Some(operation) = self.gates.operation_unless_exiting().await else {
             let message = "the hub's daemon is restarting; try again once it is back".into();
@@ -53,7 +54,7 @@ impl Manager {
             };
             return (Reply::Failed { message }, held);
         };
-        let reply = super::session::reply(self.answer_call(member, call).await);
+        let reply = super::session::reply(self.answer_call(member, call, calls).await);
         let revoked_itself = match &reply {
             Reply::Left => true,
             Reply::Revoked(revoked) => revoked.id == member.id,
@@ -67,8 +68,14 @@ impl Manager {
     }
 
     /// The hub's reply to `member`'s `call`, refused once the hub revoked
-    /// the member, whose link may still be closing.
-    async fn answer_call(&self, member: &Member, call: Call) -> Result<Reply> {
+    /// the member, whose link may still be closing. A stream it asks for
+    /// goes on its link's `calls`.
+    async fn answer_call(
+        self: &Arc<Self>,
+        member: &Member,
+        call: Call,
+        calls: &Calls,
+    ) -> Result<Reply> {
         self.ensure_hub()?;
         self.ensure_not_revoked(&member.id).await?;
         Ok(match call {
@@ -98,11 +105,19 @@ impl Manager {
                 request,
                 delivery,
             } => (self.route_request(member, &machine, request, delivery)).await?,
+            Call::Stream {
+                machine,
+                request,
+                stream,
+            } => {
+                let out = calls.streams().writer(stream);
+                (self.route_stream(member, &machine, request, out)).await?
+            }
             Call::Tell { told } => {
                 ensure_machine(member)?;
                 self.route_told(&member.id, told).await?
             }
-            Call::Serve { .. } | Call::Expired { .. } => {
+            Call::Serve { .. } | Call::ServeStream { .. } | Call::Expired { .. } => {
                 anyhow::bail!("only the hub passes requests and expiries to machines")
             }
         })

@@ -116,3 +116,56 @@ fn what_a_joiner_signs_names_its_key() {
         joining(8).signed(Signer::Member)
     );
 }
+
+#[test]
+fn a_stream_s_frames_and_call_keep_their_json() {
+    use super::{
+        link::{Call, Frame},
+        routing::{Forwarded, Vouched},
+    };
+    let frames = [
+        Frame::Data {
+            stream: 3,
+            data: "AQI".into(),
+        },
+        Frame::End {
+            stream: 3,
+            error: None,
+        },
+        Frame::End {
+            stream: 3,
+            error: Some("lost".into()),
+        },
+        Frame::Credit {
+            stream: 3,
+            bytes: 131072,
+        },
+        Frame::Close { stream: 3 },
+        Frame::Call {
+            id: 7,
+            call: Call::Stream {
+                machine: "laptop".into(),
+                request: Forwarded {
+                    caller: Vouched::User,
+                    method: serde_json::json!({"follow_session": {"space": "s"}}),
+                    summary: "follow_session for space s".into(),
+                },
+                stream: 3,
+            },
+        },
+    ];
+    let json: Vec<_> = (frames.iter())
+        .map(|frame| serde_json::to_string(frame).unwrap())
+        .collect();
+    assert_eq!(
+        json,
+        [
+            r#"{"data":{"stream":3,"data":"AQI"}}"#,
+            r#"{"end":{"stream":3}}"#,
+            r#"{"end":{"stream":3,"error":"lost"}}"#,
+            r#"{"credit":{"stream":3,"bytes":131072}}"#,
+            r#"{"close":{"stream":3}}"#,
+            r#"{"call":{"id":7,"call":{"stream":{"machine":"laptop","request":{"caller":"user","method":{"follow_session":{"space":"s"}},"summary":"follow_session for space s"},"stream":3}}}}"#,
+        ]
+    );
+}

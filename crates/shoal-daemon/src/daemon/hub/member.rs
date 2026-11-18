@@ -268,7 +268,7 @@ impl Manager {
         let channel = transport.take_channel();
         let calls = Calls::new(channel.sender(), "the hub");
         self.hub.member.set(Some(calls.clone()), None);
-        let answer = |call| self.clone().answer_from_hub(call);
+        let answer = |call| self.clone().answer_from_hub(call, calls.clone());
         let serving = session::serve(channel, &calls, answer, stop);
         let reporting = async {
             // Kept for removals to go by while the link is down.
@@ -374,8 +374,14 @@ impl Manager {
 
     /// The hub's reply to `call`, over this machine's link.
     pub(crate) async fn through_hub(&self, call: Call) -> Result<Reply> {
+        self.hub_calls().await?.call(call).await
+    }
+
+    /// The calls and streams of this machine's link to the hub, failing
+    /// while it has none, naming why.
+    pub(super) async fn hub_calls(&self) -> Result<Arc<Calls>> {
         if let Some(calls) = self.hub.member.calls() {
-            return calls.call(call).await;
+            return Ok(calls);
         }
         let joined = self.store.read(membership::load).await?;
         let problem = self.hub.member.state.lock().unwrap().problem.clone();

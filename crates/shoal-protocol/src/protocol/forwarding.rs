@@ -1,7 +1,8 @@
 //! Which requests a daemon forwards through the hub when the space they act
 //! on belongs to another joined machine. One that reads or changes Shoal's
-//! state goes to the space's machine, which decides it as its own caller's;
-//! one that needs the space's files or processes stays on that machine.
+//! state goes to the space's machine, which decides it as its own caller's,
+//! and one whose answer goes on, as a follow's, comes back on a stream; one
+//! that needs the space's files or processes stays on that machine.
 use crate::{approvals::ApprovalRequest, item_numbers::ItemNumber, questions::Question};
 
 use super::{
@@ -21,6 +22,10 @@ pub enum Forwarding {
     /// It goes to the space's machine, and waits at the hub while that
     /// machine is offline, as messages, answers, decisions and stops can.
     Queued,
+    /// It goes to the space's machine, whose answer comes back on a stream
+    /// as that machine writes it, as a follow's does; it fails at once while
+    /// that machine is offline.
+    Streamed,
 }
 
 impl Operation {
@@ -77,6 +82,8 @@ impl Operation {
     pub fn forwarding(&self) -> Forwarding {
         if self.waits_for_machine() {
             Forwarding::Queued
+        } else if matches!(self, Self::Workspace(WorkspaceMethod::FollowSession { .. })) {
+            Forwarding::Streamed
         } else if self.forwards() {
             Forwarding::Online
         } else {

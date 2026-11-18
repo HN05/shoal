@@ -18,6 +18,15 @@
 //! hub's as salt and [`MEMBER_TO_HUB`] or [`HUB_TO_MEMBER`] as info.
 //! A call or reply too large for one frame goes as [`Frame::Piece`]s of its
 //! JSON, which the other side puts back together before reading it.
+//!
+//! Byte streams run beside the calls, many at once. The side that opens
+//! one names it in the call that asks for it, by a number of its own, and
+//! reads it: the other side writes it as [`Frame::Data`] and ends it with
+//! [`Frame::End`]. The writer sends at most [`STREAM_WINDOW`] bytes before
+//! the reader's first [`Frame::Credit`], and from then on no more than the
+//! credit the reader granted in all; a reader that stops reading sends
+//! [`Frame::Close`]. So a stream whose reader stalls holds up neither the
+//! calls nor the other streams.
 //! Whatever ends TLS between them can then neither pose as a side, read a
 //! frame, such as a pairing code the hub issues, nor change, add, drop or
 //! replay one unnoticed; only a refusal the hub sends before it can seal
@@ -48,6 +57,9 @@ pub const PATH: &str = "/hub";
 /// How long a side waits without a frame from the other before it takes the
 /// link for lost; each side sends [`Frame::Ping`] at a third of it.
 pub const SILENCE: std::time::Duration = std::time::Duration::from_secs(90);
+
+/// The bytes a stream's writer may send before the reader grants credit.
+pub const STREAM_WINDOW: u64 = 256 << 10;
 
 /// The method of a request that opens a link on the daemon's socket. The hub
 /// reads the hello it carries only after checking the request's protocol, so
@@ -167,6 +179,27 @@ pub enum Frame {
         data: String,
         more: bool,
     },
+    /// The next bytes of the stream `stream`, in unpadded base64url, for
+    /// the side that opened it, no more than its credit allows.
+    Data {
+        stream: u64,
+        data: String,
+    },
+    /// The end of the stream `stream`, with why it failed, if it did.
+    End {
+        stream: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    /// The side that opened the stream `stream` takes `bytes` more of it.
+    Credit {
+        stream: u64,
+        bytes: u64,
+    },
+    /// The side that opened the stream `stream` stopped reading it.
+    Close {
+        stream: u64,
+    },
     Ping,
     Pong,
 }
@@ -248,6 +281,21 @@ pub enum Call {
     /// The hub's call to the machine that owns a forwarded request's space.
     /// Answered with [`Reply::Answered`].
     Serve { request: Forwarded },
+    /// A request for a space the machine `machine` owns, whose answer that
+    /// machine's daemon writes as it goes, as following a session's does,
+    /// on the stream `stream` the caller opened; the hub passes it to that
+    /// machine, or answers it itself for its own, and fails it at once
+    /// while that machine is offline. A device's goes as the user's.
+    /// Answered with [`Reply::Streaming`].
+    Stream {
+        machine: MemberId,
+        request: Forwarded,
+        stream: u64,
+    },
+    /// The hub's call to the machine that owns a streamed request's space,
+    /// which writes the answer on the stream `stream` the hub opened.
+    /// Answered with [`Reply::Streaming`].
+    ServeStream { request: Forwarded, stream: u64 },
     /// An event for the space `told.above` and those above it, which the
     /// hub passes to its machine, queuing it while that machine is
     /// offline. Answered with [`Reply::Delivered`] or [`Reply::Queued`].
@@ -270,9 +318,13 @@ pub enum Reply {
     Owner(Option<super::Member>),
     Claimed(Option<SpaceNumber>),
     Answered(Answered),
+    /// The answer goes on the stream the call named.
+    Streaming,
     Queued(Queued),
     Delivered,
-    Failed { message: String },
+    Failed {
+        message: String,
+    },
 }
 
 /// A frame after the proof: its number in its direction, and its text

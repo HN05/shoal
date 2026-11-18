@@ -4,10 +4,11 @@
 //! for until the answer is read. The user's requests go as the user's; a
 //! space's go under that space's scope, which reaches what that space's
 //! reaches on every machine, with the permissions its machine vouches it
-//! holds. A forwarded request is never forwarded again.
+//! holds. One whose answer goes on, as a follow's, goes on a stream as the
+//! daemon writes it. A forwarded request is never forwarded again.
 use std::{
     collections::HashMap,
-    sync::{Mutex, PoisonError},
+    sync::{Arc, Mutex, PoisonError},
 };
 
 use anyhow::{Context as _, Result, bail};
@@ -18,9 +19,13 @@ use shoal_protocol::{
     scope_tokens::ScopeToken,
     space_names::SpaceSelector,
 };
-use tokio::io::{AsyncBufReadExt as _, BufReader};
+use tokio::io::{AsyncBufReadExt as _, AsyncReadExt as _, BufReader};
 
+use super::streams::Outgoing;
 use crate::daemon::{scope::Caller, workspace::Manager};
+
+/// The most bytes of a streamed answer read at once.
+const READ_BYTES: usize = 64 << 10;
 
 /// The callers that forwarded requests stand for while this machine
 /// answers them, by the scope token each request carries.
@@ -91,6 +96,59 @@ impl Manager {
         let frames = self.answer_on_socket(&request).await;
         drop(held);
         Ok(Answered { frames: frames? })
+    }
+
+    /// Answer `request`, another machine's request whose answer goes on,
+    /// as this daemon answers its own callers, writing it to `out` as the
+    /// daemon writes it until either side ends; refused for any other
+    /// request.
+    pub(super) fn serve_streamed(
+        self: &Arc<Self>,
+        request: Forwarded,
+        out: Outgoing,
+    ) -> Result<()> {
+        let Forwarded { caller, method, .. } = request;
+        let method: Method =
+            serde_json::from_value(method).context("unreadable forwarded request")?;
+        match &method {
+            Method::Operation(operation) if operation.forwarding() == Forwarding::Streamed => {}
+            _ => bail!("only a request whose answer goes on is answered on a stream"),
+        }
+        let manager = self.clone();
+        tokio::spawn(async move { manager.stream_from_socket(caller, method, out).await });
+        Ok(())
+    }
+
+    /// Write what this daemon answers `method` from `caller` with on its
+    /// own socket to `out`, ending it as the answer ends, until no one
+    /// reads `out` any longer.
+    async fn stream_from_socket(&self, caller: Vouched, method: Method, mut out: Outgoing) {
+        let held = self.hub.vouches.hold(caller);
+        let request = Request {
+            scope: Some(held.token.clone()),
+            ..Request::new(method)
+        };
+        let streamed = async {
+            let mut stream = tokio::net::UnixStream::connect(&self.paths.socket)
+                .await
+                .context("could not reach this machine's daemon socket")?;
+            protocol::write(&mut stream, &request).await?;
+            let mut bytes = vec![0; READ_BYTES];
+            loop {
+                let read = tokio::select! {
+                    read = stream.read(&mut bytes) => read?,
+                    () = out.closed() => return Ok(()),
+                };
+                if read == 0 {
+                    return Ok(());
+                }
+                out.write(&bytes[..read]).await?;
+            }
+        };
+        let streamed: Result<()> = streamed.await;
+        drop(held);
+        out.end(streamed.err().map(|error| format!("{error:#}")))
+            .await;
     }
 
     /// The frames this daemon writes in answer to `request` on its own

@@ -720,7 +720,7 @@ holds, at the same module paths, the requests and replies with the types they
 carry, and the logic over them that needs no connection, such as where a
 space's agent sessions keep their files on this machine.
 `transcripts::follow_session` follows an agent's session, a named one or the
-space's current one: the
+space's current one, on whichever machine of the hub the space runs: the
 session with the tool whose format its files are in, then the bytes of each of
 its files, everything so far and then what the tool appends, each with its
 path in the tool's session directory and its offset, and the current session
@@ -847,8 +847,11 @@ below its own on every machine and is refused the rest, and a device's go as
 yours. An action a space's permission sets to `propose` is refused from another
 machine, since its approval request would belong to that space's machine. This covers `status`, `log`, `questions`, `approvals`, `messages send`,
 `stop`, `resume`, `rename`, `done`, `rm`, `priority`,
-`progress`, `sleep`, holds, and the issue, PR and CI commands that act on a
-space. `restart` acts on the agents of its own machine. Commands that need the
+`progress`, `sleep`, holds, the issue, PR and CI commands that act on a
+space, and following an agent's session, whose bytes come back as its machine
+reads them. The link to the hub carries such answers as byte streams beside
+its other traffic, each held to what its reader has taken, so a reader that
+falls behind holds up nothing else. `restart` acts on the agents of its own machine. Commands that need the
 space's files or processes, such as `diff`, `conflicts`, `setup`, leases, demos,
 `stop --interrupt`, `--leftovers` and `--processes`, `files` and an agent's
 hooks, run only
@@ -863,8 +866,8 @@ waiting after seven days is dropped, and the space whose process sent it, or
 else you, hears of it in a `hub_expired` alert, as of one the machine received
 but whose link closed before it confirmed it ran, which the hub never sends
 twice. Any other command for an
-offline machine's space fails at once, naming the machine and when the hub
-last saw it.
+offline machine's space, following a session included, fails at once, naming
+the machine and when the hub last saw it.
 
 The tree of spaces may span machines: a space that moves to another machine
 without the space above it stays below it there, once what the hub lists of
