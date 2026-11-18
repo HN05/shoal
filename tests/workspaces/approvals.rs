@@ -545,6 +545,31 @@ fn a_command_the_cli_authorizes_reports_its_pending_approval() {
     assert_eq!(pending["target"], "action/admin", "{pending}");
 }
 
+/// A scoped process starts a setup only as its `admin` permission allows,
+/// which a worker's mode leaves to an approval, asked before the setup
+/// creates anything.
+#[test]
+fn a_scoped_setup_asks_the_admin_permission() {
+    let fixture = Fixture::new();
+    fixture.add("agent");
+    let repo = fixture.repo.to_str().unwrap();
+    for args in [
+        vec!["config", "setup", "--agent", "claude"],
+        vec!["repo", "setup", repo, "--agent", "claude"],
+    ] {
+        let pending = pending_approval(scoped_command(&fixture, "agent", &args));
+        assert_eq!(pending["target"], "action/admin", "{args:?}: {pending}");
+    }
+    assert!(
+        fixture
+            .ok(&["list", "--chats"])
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
+}
+
 pub(crate) fn pending_approval(output: Output) -> Value {
     assert_eq!(
         output.status.code(),

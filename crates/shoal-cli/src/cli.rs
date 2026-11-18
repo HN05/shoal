@@ -271,18 +271,15 @@ impl Command {
         )
     }
 
-    /// Whether the command replaces a config file, or starts an agent that
-    /// edits one, which may drop a narrowing of the permissions, so that no
-    /// scoped process can check it gives only what it holds.
+    /// Whether the command replaces a config file, which may drop a
+    /// narrowing of the permissions, so that no scoped process can check it
+    /// gives only what it holds. A setup's agent edits one instead, which a
+    /// scoped process starts only as its `admin` permission allows.
     pub fn rewrites_config(&self) -> bool {
         matches!(
             self,
-            Command::Repository(RepositoryCommand::Repo {
-                command: Some(RepoCommand::Setup { .. }),
-            }) | Command::Service(ServiceCommand::Config {
-                command: ConfigCommand::Install { .. }
-                    | ConfigCommand::Reset
-                    | ConfigCommand::Setup(_),
+            Command::Service(ServiceCommand::Config {
+                command: ConfigCommand::Install { .. } | ConfigCommand::Reset,
             })
         )
     }
