@@ -48,7 +48,7 @@ pub(super) async fn tracked(
     };
     let space = terminal::AgentSpace::of(&workspace);
     if let Some(code) =
-        terminal::run_agent(ctx, &settings, &space, &agent, &replaces, &command).await?
+        terminal::run_agent(ctx, &settings, &space, &agent, (&replaces, false), &command).await?
     {
         return Ok(code);
     }

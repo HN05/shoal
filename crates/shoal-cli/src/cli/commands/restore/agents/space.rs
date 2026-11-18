@@ -194,12 +194,13 @@ async fn launch(
     let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
     let placed = terminal::AgentSpace::of(space);
     let command = &recovery.command;
-    let ran = terminal::run_agent(ctx, &settings, &placed, &agent, &records, command);
+    let source = restore_source();
+    let restore = (records.as_slice(), source.is_some());
+    let ran = terminal::run_agent(ctx, &settings, &placed, &agent, restore, command);
     if let Some(code) = ran.await? {
         return Ok(code);
     }
     terminal::label_current(&ctx.paths, placed.owner()).await?;
-    let source = restore_source();
     shoal_workers::execution::run_recovery(
         &ctx.paths,
         SpaceSelector::id(&space.id),

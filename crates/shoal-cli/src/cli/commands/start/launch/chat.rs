@@ -391,7 +391,8 @@ async fn run_placed(
 ) -> Result<i32> {
     let space = terminal::AgentSpace::of(chat);
     let (settings, command) = (&tracked.settings, &tracked.command);
-    let ran = terminal::run_agent(ctx, settings, &space, &tracked.agent, &records, command);
+    let restore = (records.as_slice(), false);
+    let ran = terminal::run_agent(ctx, settings, &space, &tracked.agent, restore, command);
     if let Some(code) = ran.await? {
         return Ok(code);
     }

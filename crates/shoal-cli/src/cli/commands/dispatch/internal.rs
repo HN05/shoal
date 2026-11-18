@@ -177,6 +177,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             command,
             host,
             close_in,
+            manual,
         } => {
             // `host` opened this place for the agent.
             terminal::record_owned_here(&ctx, host, &space).await;
@@ -190,17 +191,22 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
                 narrowing,
                 new_session,
             };
-            run_session(&ctx, space, agent, records, command).await
+            let source = manual.then_some(shoal_protocol::launches::LaunchSource::Manual);
+            run_session(&ctx, space, agent, (records, source), command).await
         }
     }
 }
 
-/// Run a session's tracked agent, consuming `records` once it starts.
+/// Run a session's tracked agent, consuming `records` once it starts, a
+/// restore made by `source` when it says.
 async fn run_session(
     ctx: &Context,
     space: SpaceId,
     agent: TrackedAgent,
-    records: Vec<std::path::PathBuf>,
+    (records, source): (
+        Vec<std::path::PathBuf>,
+        Option<shoal_protocol::launches::LaunchSource>,
+    ),
     command: Vec<std::ffi::OsString>,
 ) -> Result<i32> {
     if records.is_empty() {
@@ -217,7 +223,7 @@ async fn run_session(
         SpaceSelector::Id(space),
         command,
         agent,
-        (records, None),
+        (records, source),
     )
     .await
 }

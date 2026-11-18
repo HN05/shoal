@@ -93,6 +93,9 @@ pub enum Worker<'a> {
         /// The host that opened the place.
         host: HostName,
         close_in: Option<HostName>,
+        /// The user restores the agent by hand, which counts as their
+        /// interaction with it.
+        manual: bool,
     },
     /// A demo's wrapper; `launch` is its JSON [`shoal_protocol::demos::Launch`].
     Demo {
@@ -321,6 +324,7 @@ pub(crate) fn internal_command_for(
             command,
             host,
             close_in,
+            manual,
         } => {
             args.extend([
                 SESSION.into(),
@@ -337,6 +341,9 @@ pub(crate) fn internal_command_for(
             }
             if let Some(host) = close_in {
                 args.extend(["--close-in".into(), host.as_str().into()]);
+            }
+            if manual {
+                args.push("--manual".into());
             }
             args.push("--".into());
             args.extend_from_slice(command);

@@ -356,6 +356,7 @@ fn session_round_trips_records_and_literal_arguments() {
             command: parsed_command,
             host,
             close_in: parsed_close_in,
+            manual,
         } = parse(
             Worker::Session {
                 space: &SpaceId::from("space-id"),
@@ -370,6 +371,7 @@ fn session_round_trips_records_and_literal_arguments() {
                 command: &command,
                 host: HostName::Rex,
                 close_in,
+                manual: new,
             },
             false,
         )
@@ -386,6 +388,7 @@ fn session_round_trips_records_and_literal_arguments() {
         assert_eq!(parsed_command, command);
         assert_eq!(host, HostName::Rex);
         assert_eq!(parsed_close_in, close_in);
+        assert_eq!(manual, new);
     }
 }
 

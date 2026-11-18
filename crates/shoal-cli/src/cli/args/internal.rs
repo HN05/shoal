@@ -241,6 +241,9 @@ pub enum InternalCommand {
         /// Close the place of this host once the workspace is done.
         #[arg(long)]
         close_in: Option<HostName>,
+        /// The user restores the agent by hand.
+        #[arg(long)]
+        manual: bool,
         #[arg(last = true, required = true)]
         command: Vec<OsString>,
     },

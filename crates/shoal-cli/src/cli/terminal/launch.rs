@@ -178,7 +178,7 @@ pub(in crate::cli) async fn run_agent(
     settings: &Effective,
     space: &AgentSpace<'_>,
     agent: &TrackedAgent,
-    records: &[PathBuf],
+    (records, manual): (&[PathBuf], bool),
     command: &[OsString],
 ) -> Result<Option<i32>> {
     let current = current(settings);
@@ -187,7 +187,14 @@ pub(in crate::cli) async fn run_agent(
     };
     let origin = groups::beside(&ctx.paths, &current, &space.repo, space.directory).await?;
     let beside = current.beside(origin.as_ref());
-    let worker = agent_worker(ctx, &current, space.owner, agent, records, command)?;
+    let worker = agent_worker(
+        ctx,
+        &current,
+        space.owner,
+        agent,
+        (records, manual),
+        command,
+    )?;
     let mut env = place_env(&ctx.paths)?;
     if let Some(entry) = env::queue_entry() {
         env.push((env::QUEUE_ENTRY, entry.to_string()));
@@ -232,7 +239,7 @@ fn agent_worker(
     host: &Configured,
     owner: Owner<'_>,
     agent: &TrackedAgent,
-    records: &[PathBuf],
+    (records, manual): (&[PathBuf], bool),
     command: &[OsString],
 ) -> Result<Vec<OsString>> {
     let name = host.host.name();
@@ -247,6 +254,7 @@ fn agent_worker(
             command,
             host: name,
             close_in: closes.then_some(name),
+            manual,
         },
     )
 }
