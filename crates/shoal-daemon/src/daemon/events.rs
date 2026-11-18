@@ -456,8 +456,7 @@ impl Manager {
         workspace: &crate::model::Workspace,
     ) -> Result<()> {
         self.verify_worktree(workspace).await?;
-        let head = crate::git::symbolic_revision(&workspace.path, "HEAD", crate::git::run).await?;
-        let branch = crate::git::strip_local(head.trim_end()).map(str::to_owned);
+        let branch = crate::git::checked_out_branch(&workspace.path).await?;
         let id = workspace.id.clone();
         self.store.run(move |db| {
             db.execute("UPDATE workspaces SET observed_branch=?2 WHERE id=?1 AND observed_branch IS NOT ?2", params![id, branch])?;
