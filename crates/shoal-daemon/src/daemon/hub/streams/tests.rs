@@ -123,6 +123,18 @@ async fn bytes_past_a_stream_s_credit_fail_the_link() {
     assert!(link.opener.streams().take(&past).is_err());
 }
 
+/// Fill `channel`'s send queue behind a frame its writer holds half
+/// written, once the other side, `theirs`, read the frame's first byte,
+/// which shows the writer took it.
+async fn saturate(channel: &Channel, theirs: &mut tokio::io::DuplexStream) {
+    channel.sender().send(&"x".repeat(4096)).await.unwrap();
+    let mut first = [0; 1];
+    tokio::io::AsyncReadExt::read_exact(theirs, &mut first)
+        .await
+        .unwrap();
+    while channel.sender().try_send(&"x".repeat(4096)).is_ok() {}
+}
+
 /// The data frame of `bytes` on the stream `stream`.
 fn data(stream: u64, bytes: &[u8]) -> Frame {
     Frame::Data {
@@ -143,13 +155,8 @@ async fn a_read_cancelled_while_the_link_is_saturated_loses_nothing() {
     assert_eq!(incoming.next().await.unwrap().unwrap(), first);
     let second = vec![2; 10];
     streams.take(&data(incoming.number(), &second)).unwrap();
-    // The other side reads nothing, so the link's send queue fills, and
-    // the read owes credit it cannot send yet; cancelled, it keeps both.
-    // Its writer takes a frame and blocks on the pipe before the queue
-    // fills behind it.
-    channel.sender().send(&"x".repeat(4096)).await.unwrap();
-    tokio::task::yield_now().await;
-    while channel.sender().try_send(&"x".repeat(4096)).is_ok() {}
+    // The read owes credit it cannot send yet; cancelled, it keeps both.
+    saturate(&channel, &mut theirs).await;
     tokio::select! {
         biased;
         read = incoming.next() => panic!("read past a full queue: {read:?}"),
@@ -161,17 +168,13 @@ async fn a_read_cancelled_while_the_link_is_saturated_loses_nothing() {
 
 #[tokio::test]
 async fn a_reader_dropped_while_the_link_is_saturated_still_closes_its_stream() {
-    let (ours, theirs) = tokio::io::duplex(64);
+    let (ours, mut theirs) = tokio::io::duplex(64);
     let (read, write) = tokio::io::split(ours);
     let channel = Channel::lines(BufReader::new(read), write);
     let streams = super::Streams::new(channel.sender());
     let incoming = streams.open();
     let stream = incoming.number();
-    // Its writer takes a frame and blocks on the pipe, the other side
-    // reading nothing, and the queue fills behind it.
-    channel.sender().send(&"x".repeat(4096)).await.unwrap();
-    tokio::task::yield_now().await;
-    while channel.sender().try_send(&"x".repeat(4096)).is_ok() {}
+    saturate(&channel, &mut theirs).await;
     drop(incoming);
     let mut lines = tokio::io::AsyncBufReadExt::lines(BufReader::new(theirs));
     let close = serde_json::to_string(&Frame::Close { stream }).unwrap();
