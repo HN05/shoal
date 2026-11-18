@@ -22,6 +22,8 @@ const CALL_TIMEOUT: Duration = Duration::from_secs(120);
 /// The calls this side sends over a link, each waiting for its reply.
 pub(crate) struct Calls {
     sender: Sender,
+    /// What the other side is, as failures name it: the hub, or a member.
+    peer: String,
     /// The calls waiting for replies, none once the session ended, which
     /// fails them.
     pending: Mutex<Option<HashMap<u64, oneshot::Sender<Reply>>>>,
@@ -29,9 +31,10 @@ pub(crate) struct Calls {
 }
 
 impl Calls {
-    pub(super) fn new(sender: Sender) -> Arc<Self> {
+    pub(super) fn new(sender: Sender, peer: impl Into<String>) -> Arc<Self> {
         Arc::new(Self {
             sender,
+            peer: peer.into(),
             pending: Mutex::new(Some(HashMap::new())),
             next: AtomicU64::new(1),
         })
@@ -43,7 +46,7 @@ impl Calls {
         let (replied, reply) = oneshot::channel();
         match self.pending.lock().unwrap().as_mut() {
             Some(pending) => pending.insert(id, replied),
-            None => bail!("the link to the hub closed"),
+            None => bail!("the link to {} closed", self.peer),
         };
         let sent_and_replied = async {
             super::pieces::send(&self.sender, &Frame::Call { id, call }, false).await?;
@@ -60,10 +63,11 @@ impl Calls {
         match reply {
             Ok(Ok(Reply::Failed { message })) => bail!("{message}"),
             Ok(Ok(reply)) => Ok(reply),
-            Ok(Err(_)) => bail!("the link to the hub closed before it answered"),
+            Ok(Err(_)) => bail!("the link to {} closed before it answered", self.peer),
             Err(_) => {
                 self.forget(id);
-                bail!("the hub did not answer within {}s", CALL_TIMEOUT.as_secs())
+                let peer = &self.peer;
+                bail!("{peer} did not answer within {}s", CALL_TIMEOUT.as_secs())
             }
         }
     }

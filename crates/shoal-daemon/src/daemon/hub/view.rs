@@ -31,7 +31,7 @@ impl Manager {
 
     /// This machine's ID at the hub and the hub's directory, none on a
     /// machine that is not the hub and joined none.
-    async fn hub_directory(&self) -> Result<Option<(MemberId, Directory)>> {
+    pub(super) async fn hub_directory(&self) -> Result<Option<(MemberId, Directory)>> {
         if self.is_hub() {
             let machine = self.own_member().await?;
             return Ok(Some((machine, self.local_directory().await?)));

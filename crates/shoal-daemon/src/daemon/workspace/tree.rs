@@ -5,7 +5,10 @@
 //! down that link, whatever each space's kind.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
-use std::path::PathBuf;
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+};
 
 use anyhow::{Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -160,11 +163,13 @@ impl Manager {
     /// Queue `message` about the workspace named `name` for its coordinator,
     /// with Shoal's copies `attachments` of the files it sent: the nearest
     /// space above it with an agent, which receives what arrived once a
-    /// queued restore starts it. `kind` is the notification the event would
-    /// be for the user. Returns false when there is no coordinator, its
-    /// messages are full, or the event comes from an agent and the workspace
-    /// has none of its own, since the coordinator itself or the user acted
-    /// there; the user then receives the event instead.
+    /// queued restore starts it, or, once the tree goes on above this
+    /// machine, the nearest on the machines above, which the event passes
+    /// up to. `kind` is the notification the event would be for the user.
+    /// Returns false when there is no coordinator, its messages are full,
+    /// or the event comes from an agent and the workspace has none of its
+    /// own, since the coordinator itself or the user acted there; the user
+    /// then receives the event instead.
     pub(crate) async fn tell_coordinator(
         &self,
         name: &SpaceName,
@@ -180,23 +185,35 @@ impl Manager {
             .store
             .run(move |db| coordinator(db, id, source, &agents))
             .await;
-        let coordinator = match found {
-            Ok(Some(coordinator)) => coordinator,
-            Ok(None) => return false,
-            Err(error) => {
-                crate::daemon::log!("coordinator of {name}: {error:#}");
-                return false;
+        let told = match found {
+            Ok(Some(Receiver::Here(coordinator))) => {
+                let about = crate::daemon::agent_messages::About {
+                    name: name.clone(),
+                    id: workspace_id.cloned(),
+                    kind,
+                };
+                (self.queue_space_message(&coordinator, Some(about), message, attachments)).await
             }
+            Ok(Some(Receiver::Elsewhere(above))) => {
+                // Found from the space's ID, which the event names.
+                let Some(space) = workspace_id else {
+                    return false;
+                };
+                let event = crate::daemon::hub::Event {
+                    name,
+                    space,
+                    kind,
+                    message,
+                    attachments: &attachments,
+                };
+                // Boxed: on the hub, an event for its own machine's space
+                // comes back here when no space there takes it.
+                Box::pin(self.pass_up(above, event)).await
+            }
+            Ok(None) => return false,
+            Err(error) => Err(error),
         };
-        let about = crate::daemon::agent_messages::About {
-            name: name.clone(),
-            id: workspace_id.cloned(),
-            kind,
-        };
-        let queued = self
-            .queue_space_message(&coordinator, Some(about), message, attachments)
-            .await;
-        match queued {
+        match told {
             Ok(()) => true,
             Err(error) => {
                 crate::daemon::log!("message for the coordinator of {name}: {error:#}");
@@ -400,6 +417,45 @@ pub(crate) fn parent_id(db: &Connection, id: &SpaceId) -> Result<Option<SpaceId>
         .optional()?)
 }
 
+/// The space above each space that has one, which may run on another
+/// machine, by the ID of the space below it.
+pub(crate) fn parent_ids(db: &Connection) -> Result<HashMap<SpaceId, SpaceId>> {
+    Ok(db
+        .prepare("SELECT space_id, parent_id FROM space_parents")?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// The spaces with an agent among `agents`, as [`has_agent`] counts one.
+pub(crate) fn with_agents(db: &Connection, agents: &TrackedAgents) -> Result<HashSet<SpaceId>> {
+    Ok(db
+        .prepare(&format!(
+            "SELECT id FROM spaces WHERE {}",
+            has_agent("spaces.id")
+        ))?
+        .query_map(params![Option::<String>::None, agents.parameter()], |row| {
+            row.get(0)
+        })?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// The first space above the space `id` that this machine does not have,
+/// as when its parent runs on another joined machine.
+pub(crate) fn first_absent_above(db: &Connection, id: &SpaceId) -> Result<Option<SpaceId>> {
+    Ok(db
+        .query_row(
+            &format!(
+                "{} SELECT id FROM up WHERE depth > 0
+                    AND NOT EXISTS (SELECT 1 FROM spaces WHERE spaces.id=up.id)
+                    ORDER BY depth LIMIT 1",
+                up("true")
+            ),
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
 /// A query of `columns` from the workspace whose ID is parameter 1 and the
 /// workspaces below it, through spaces of either kind, or from every
 /// workspace when the parameter is NULL, by name.
@@ -583,22 +639,61 @@ fn has_running_agent(db: &Connection, id: &SpaceId, agents: &TrackedAgents) -> R
     )
 }
 
+/// Where an event a space passes up goes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Receiver {
+    /// To the agent of this machine's space.
+    Here(SpaceId),
+    /// To the machine of the space, the first above that this machine has
+    /// not, where the tree goes on.
+    Elsewhere(SpaceId),
+}
+
 /// The coordinator of the space `id` for an event from `source`: the
-/// nearest space above it with an agent. An event about no known space,
-/// which names repeat too much to find, has none.
+/// nearest space above it with an agent, or the first one above on
+/// another machine. An event about no known space, which names repeat too
+/// much to find, has none.
 fn coordinator(
     db: &Connection,
     id: Option<SpaceId>,
     source: Source,
     agents: &TrackedAgents,
-) -> Result<Option<SpaceId>> {
+) -> Result<Option<Receiver>> {
     let Some(id) = id else {
         return Ok(None);
     };
     if source == Source::Agent && !has_running_agent(db, &id, agents)? {
         return Ok(None);
     }
-    coordinator_of(db, &id, agents)
+    if let Some(coordinator) = coordinator_of(db, &id, agents)? {
+        return Ok(Some(Receiver::Here(coordinator)));
+    }
+    Ok(first_absent_above(db, &id)?.map(Receiver::Elsewhere))
+}
+
+/// What receives an event passed up to the space `id` from below: the
+/// nearest space from `id` up with an agent, or the first one above on
+/// another machine.
+pub(crate) fn receiver_from(
+    db: &Connection,
+    id: &SpaceId,
+    agents: &TrackedAgents,
+) -> Result<Option<Receiver>> {
+    let here = db
+        .query_row(
+            &format!(
+                "{} SELECT id FROM up WHERE {} ORDER BY depth LIMIT 1",
+                up("true"),
+                has_agent("up.id")
+            ),
+            params![id, agents.parameter()],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if let Some(here) = here {
+        return Ok(Some(Receiver::Here(here)));
+    }
+    Ok(first_absent_above(db, id)?.map(Receiver::Elsewhere))
 }
 
 /// The coordinator of the space `id`: the nearest space above it with an

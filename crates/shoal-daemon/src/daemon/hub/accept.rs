@@ -371,7 +371,9 @@ impl Manager {
         } = admitted;
         self.member_seen(&member.id, &version).await;
         log!("hub: {} {} connected", member.kind, member.name);
-        let calls = Calls::new(channel.sender());
+        let calls = Calls::new(channel.sender(), format!("{} {}", member.kind, member.name));
+        registration.serve_calls(calls.clone());
+        tokio::spawn(self.clone().deliver_held(member.id.clone()));
         let answer = |call| {
             let (manager, member) = (self.clone(), member.clone());
             async move { manager.answer_member(&member, call).await }

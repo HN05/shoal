@@ -34,6 +34,7 @@ use super::{
     directory::{Directory, Report},
     numbering::Numbering,
     pairing::Pairing,
+    routing::{Answered, Delivery, Expired, Forwarded, Queued, Told},
 };
 
 /// The info that derives the key of frames the member sends.
@@ -201,7 +202,7 @@ states! {
 
 /// A request one side sends the other once the link is open. Calls from a
 /// member act as the user: a machine refuses its scoped callers before it
-/// sends one.
+/// sends one, except a request it forwards, which names who it vouches for.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Call {
@@ -234,6 +235,26 @@ pub enum Call {
     /// Answered with [`Reply::Claimed`] and the number the space keeps, if
     /// the hub lists it.
     Claim { space: SpaceId },
+    /// A request for a space the machine `machine` owns, which the hub
+    /// passes to it, or answers itself for its own machine; a device's goes
+    /// as the user's, whatever it vouches. Answered with
+    /// [`Reply::Answered`], or while that machine is offline with
+    /// [`Reply::Queued`] for a request that waits for it.
+    Forward {
+        machine: MemberId,
+        request: Forwarded,
+        delivery: Delivery,
+    },
+    /// The hub's call to the machine that owns a forwarded request's space.
+    /// Answered with [`Reply::Answered`].
+    Serve { request: Forwarded },
+    /// An event for the space `told.above` and those above it, which the
+    /// hub passes to its machine, queuing it while that machine is
+    /// offline. Answered with [`Reply::Delivered`] or [`Reply::Queued`].
+    Tell { told: Told },
+    /// The hub's call to a machine whose queued request or event expired.
+    /// Answered with [`Reply::Delivered`].
+    Expired { expired: Expired },
 }
 
 /// The answer to a [`Call`].
@@ -248,6 +269,9 @@ pub enum Reply {
     Directory(Directory),
     Owner(Option<super::Member>),
     Claimed(Option<SpaceNumber>),
+    Answered(Answered),
+    Queued(Queued),
+    Delivered,
     Failed { message: String },
 }
 

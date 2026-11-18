@@ -9,7 +9,7 @@ async fn a_call_fails_once_its_session_ends_without_waiting_for_its_timeout() {
     let (ours, theirs) = tokio::io::duplex(1 << 16);
     let (read, write) = tokio::io::split(ours);
     let channel = Channel::lines(BufReader::new(read), write);
-    let calls = Calls::new(channel.sender());
+    let calls = Calls::new(channel.sender(), "the hub");
     let answer = |_: Call| async { (Reply::Left, ()) };
     let (end, call) = tokio::join!(
         async {

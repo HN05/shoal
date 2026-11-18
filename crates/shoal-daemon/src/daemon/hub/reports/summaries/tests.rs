@@ -18,13 +18,42 @@ fn a_workspace_whose_agent_waits_in_the_queue_reports_queued() {
     }))
     .unwrap();
     let around = Around {
-        stopped: HashSet::new(),
         queued: vec![entry],
-        questions: Vec::new(),
-        approvals: Vec::new(),
+        ..around()
     };
     let summary = summary(Space::from(workspace), None, &around);
     assert_eq!(summary.status, ListStatus::Queued);
+}
+
+fn around() -> Around {
+    Around {
+        stopped: HashSet::new(),
+        queued: Vec::new(),
+        questions: Vec::new(),
+        approvals: Vec::new(),
+        parents: HashMap::new(),
+        agents: HashSet::new(),
+    }
+}
+
+#[test]
+fn a_space_reports_its_parent_on_another_machine_and_its_agent() {
+    let workspace = Workspace::new_record(
+        "repo".into(),
+        "work".into(),
+        "/work".into(),
+        shoal_protocol::model::Head::Branch("work".into()),
+        WorkspaceState::Ready,
+    );
+    let elsewhere = SpaceId::from("coordinator-elsewhere".to_owned());
+    let around = Around {
+        parents: [(workspace.id.clone(), elsewhere.clone())].into(),
+        agents: [workspace.id.clone()].into(),
+        ..around()
+    };
+    let summary = summary(Space::from(workspace), None, &around);
+    assert_eq!(summary.parent, Some(elsewhere));
+    assert!(summary.agent);
 }
 
 #[tokio::test(start_paused = true)]

@@ -47,8 +47,8 @@ pub struct ScopedExecution {
     pub agent_execution: Option<ExecutionId>,
 }
 
-/// Resolve `token` and confine `method` to the spaces the caller's scope
-/// reaches: its own space, a workspace or a chat, and the spaces below it,
+/// Resolve `token`, which may stand for a caller another machine vouches
+/// for, and confine `method` to the spaces the caller's scope reaches: its own space, a workspace or a chat, and the spaces below it,
 /// or every space for a chat without a repository; a chat in a workspace's
 /// worktree also reads that workspace, without changing it. Optional space
 /// filters default to the caller's own; other targets must name one of them.
@@ -60,10 +60,15 @@ pub(crate) async fn authorize(
     let Some(token) = token else {
         return Ok(None);
     };
-    let caller = manager
-        .caller(token)
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("expired or unknown workspace scope"))?;
+    let caller = match manager.vouched_caller(token) {
+        // The user's request, which another machine forwarded.
+        Some(None) => return Ok(None),
+        Some(Some(caller)) => caller,
+        None => manager
+            .caller(token)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("expired or unknown workspace scope"))?,
+    };
     ensure!(
         !caller.read_only || method.changes_nothing(),
         "a read-only scope only reads; this request would change something"

@@ -1,6 +1,7 @@
 //! The spaces a scope reaches: the caller's own space and those below it,
-//! or, for a chat without a repository, which manages the spaces of every
-//! repository, every space.
+//! on every joined machine, or, for a chat without a repository, which
+//! manages the spaces of every repository, every space. Another machine
+//! vouches for its own callers' reach.
 use anyhow::{Result, ensure};
 use shoal_ids::space_ids::SpaceId;
 
@@ -21,6 +22,9 @@ impl Manager {
         let Some(caller) = caller else {
             return Ok(None);
         };
+        if let Some(vouched) = self.vouched_space(&caller.space_id) {
+            return Ok((!vouched.everywhere).then(|| caller.space_id.clone()));
+        }
         let id = caller.space_id.clone();
         let everywhere = (self.store)
             .run(move |db| {
@@ -34,10 +38,12 @@ impl Manager {
         Ok((!everywhere).then(|| caller.space_id.clone()))
     }
 
-    /// Whether `caller`'s scope reaches the space `id`.
+    /// Whether `caller`'s scope reaches the space `id`, through the spaces
+    /// above it on other machines too.
     pub(in crate::daemon) async fn reaches(&self, caller: &Caller, id: &SpaceId) -> Result<bool> {
         match self.reach_root(Some(caller)).await? {
-            Some(root) => self.within_subtree(&root, id).await,
+            Some(root) if self.within_subtree(&root, id).await? => Ok(true),
+            Some(root) => Ok(self.ancestors_elsewhere(id).await.contains(&root)),
             None => Ok(true),
         }
     }

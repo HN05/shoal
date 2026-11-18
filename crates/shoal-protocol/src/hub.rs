@@ -18,6 +18,7 @@ pub mod directory;
 pub mod link;
 pub mod numbering;
 pub mod pairing;
+pub mod routing;
 
 states! {
     /// What a credential belongs to, which the joiner states and the hub

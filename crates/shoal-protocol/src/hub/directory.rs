@@ -37,6 +37,10 @@ pub struct SpaceSummary {
     /// The turn state its running agent last reported.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_state: Option<AgentState>,
+    /// Whether it has an agent, which receives what the spaces below it
+    /// pass up and decides their requests.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub agent: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub progress: Option<Progress>,
     /// Its open questions.
@@ -124,6 +128,7 @@ impl Listed {
                 mode: space.mode.clone(),
                 status: space.status,
                 agent_state: space.agent_state,
+                agent: space.agent,
                 progress: space.progress.clone(),
                 questions: Vec::new(),
                 approvals: Vec::new(),

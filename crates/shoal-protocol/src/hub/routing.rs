@@ -1,0 +1,138 @@
+//! What one joined machine sends another through the hub: a request for a
+//! space the other owns, which the owner decides as it decides its own
+//! callers', and an event a space passes to the space above it there.
+use serde::{Deserialize, Serialize};
+use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
+
+use crate::{
+    config::permissions::{PermissionKey, Permissions},
+    notifications::NotificationKind,
+    space_names::SpaceName,
+    time::UnixTime,
+};
+
+/// Who a forwarded request comes from, as the machine that forwards it
+/// vouches: each machine vouches for its own callers, and a device's
+/// requests are the user's.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Vouched {
+    /// The user: an unscoped caller of the forwarding machine, or a device.
+    User,
+    /// A process of a space on the forwarding machine.
+    Space(VouchedSpace),
+}
+
+/// A space's process whose request its machine forwards, with what the
+/// owning machine needs to decide it as that space's: the reach of its
+/// scope and its effective permissions there.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VouchedSpace {
+    pub space: SpaceId,
+    /// Whether its scope reaches every space, as a chat's without a
+    /// repository does.
+    pub everywhere: bool,
+    /// Its effective permissions, as its machine computes them.
+    pub permissions: Permissions,
+    /// The permission an approval let its command take actions of.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub granted: Option<PermissionKey>,
+    /// It only reads, as the gate's runs do.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub read_only: bool,
+}
+
+/// A request a machine forwards to the machine that owns its space.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Forwarded {
+    pub caller: Vouched,
+    /// The request's method, as its caller sent it, which the owning
+    /// machine reads as its own callers' requests.
+    pub method: serde_json::Value,
+    /// What the request does, for its sender to read should it expire in
+    /// the hub's queue.
+    pub summary: String,
+}
+
+/// How the hub delivers a forwarded request whose machine is offline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Delivery {
+    /// It fails at once, naming the machine and when the hub last saw it.
+    Now,
+    /// It waits in the hub's queue until the machine connects again.
+    Queued,
+}
+
+/// The owning machine's answer to a forwarded request: the response frames
+/// its daemon wrote, which the forwarding daemon writes to its caller.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Answered {
+    pub frames: Vec<serde_json::Value>,
+}
+
+/// A request the hub holds for an offline machine, which its caller reads
+/// as the request's outcome.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Queued {
+    pub machine: MemberId,
+    pub name: String,
+    pub last_seen: Option<UnixTime>,
+    /// When the hub drops it unless the machine connects first.
+    pub expires_at: UnixTime,
+}
+
+/// An event a space passes up the tree to a space on another machine:
+/// what its coordinator receives, which the machine of `above` delivers to
+/// the nearest space from `above` up with an agent, passing it on to the
+/// next machine where the tree goes on there, or to the user at the top.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Told {
+    /// The space whose coordinator receives it, or the nearest above it.
+    pub above: SpaceId,
+    /// The space it is about, below `above`.
+    pub space: SpaceId,
+    pub name: SpaceName,
+    /// The notification the event is for the user, if no space above takes
+    /// it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<NotificationKind>,
+    pub message: String,
+    /// What the space's machine kept of the files it sent, which stay
+    /// there.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<String>,
+}
+
+/// What the hub tells a machine whose queued request or event it dropped
+/// once it expired.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Expired {
+    /// The space whose process sent it, which hears of it, or none for the
+    /// user's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<SpaceId>,
+    /// The machine it was for.
+    pub machine: String,
+    /// What it was.
+    pub summary: String,
+    pub queued_at: UnixTime,
+}
+
+impl std::fmt::Display for Queued {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let now = UnixTime::now();
+        let seen = match self.last_seen {
+            Some(seen) => format!("last seen {}", seen.local_ago(now)),
+            None => "never connected".into(),
+        };
+        write!(
+            f,
+            "machine {} is offline ({seen}); the hub delivers this once it connects, unless it is still offline at {}",
+            self.name,
+            self.expires_at.local_minutes()
+        )
+    }
+}
+
+impl std::error::Error for Queued {}

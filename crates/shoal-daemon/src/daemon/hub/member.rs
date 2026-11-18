@@ -84,7 +84,7 @@ struct State {
 }
 
 impl Link {
-    fn calls(&self) -> Option<Arc<Calls>> {
+    pub(super) fn calls(&self) -> Option<Arc<Calls>> {
         self.state.lock().unwrap().calls.clone()
     }
 
@@ -203,7 +203,7 @@ impl Manager {
 
     /// Open the link `attempt` names and serve it until it ends, the hub
     /// refuses it, or what the link reads changes.
-    async fn keep_link(&self, attempt: Attempt) -> Kept {
+    async fn keep_link(self: &Arc<Self>, attempt: Attempt) -> Kept {
         let stop = self.link_changed(&attempt);
         let plan = match self.link_plan(&attempt) {
             Ok(Some(plan)) => plan,
@@ -256,25 +256,27 @@ impl Manager {
     }
 
     /// Serve the open link on `transport` until it ends or `stop`
-    /// resolves, offering its calls and reporting this machine's spaces
+    /// resolves, answering what the hub passes this machine, and sending
+    /// what waited for the link, then reporting this machine's spaces,
     /// meanwhile.
     async fn serve_hub(
-        &self,
+        self: &Arc<Self>,
         mut transport: Transport,
         route: &Route,
         stop: impl Future<Output = ()>,
     ) -> Kept {
         let channel = transport.take_channel();
-        let calls = Calls::new(channel.sender());
+        let calls = Calls::new(channel.sender(), "the hub");
         self.hub.member.set(Some(calls.clone()), None);
-        let answer = |_| async {
-            let message = "this machine answers no calls of the hub".into();
-            (Reply::Failed { message }, ())
-        };
+        let answer = |call| self.clone().answer_from_hub(call);
         let serving = session::serve(channel, &calls, answer, stop);
+        let reporting = async {
+            self.send_outbox(&calls).await;
+            self.keep_reporting(&calls).await
+        };
         let end = tokio::select! {
             end = serving => end,
-            never = self.keep_reporting(&calls) => match never {},
+            never = reporting => match never {},
         };
         let problem = match end {
             End::Stopped => return Kept::Stopped,

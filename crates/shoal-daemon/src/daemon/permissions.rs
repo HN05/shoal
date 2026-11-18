@@ -2,7 +2,8 @@
 //! the effective permissions of the space above it, up to a top-level
 //! space, with each key the `--permission` given to its agent sets as given.
 //! They are computed at each check from current config, the recorded modes
-//! and the tree, so a config change reaches running agents.
+//! and the tree, so a config change reaches running agents; another joined
+//! machine vouches for its own spaces' permissions.
 use anyhow::{Context, Result};
 use shoal_ids::repository_ids::RepositoryId;
 
@@ -37,6 +38,9 @@ impl Manager {
         caller: &Caller,
         repository: &RepositoryId,
     ) -> Result<Permissions> {
+        if let Some(vouched) = self.vouched_space(&caller.space_id) {
+            return Ok(vouched.permissions);
+        }
         let space = self.space_by_id(&caller.space_id).await?;
         let agent = recorded_agent(&space);
         (self.permissions_below_parent(config, &space, agent, Some(repository))).await
@@ -51,6 +55,9 @@ impl Manager {
         id: &SpaceId,
         repository: Option<&RepositoryId>,
     ) -> Result<Permissions> {
+        if let Some(vouched) = self.vouched_space(id) {
+            return Ok(vouched.permissions);
+        }
         let space = self.space_by_id(id).await?;
         let agent = recorded_agent(&space);
         (self.permissions_below_parent(&self.config(), &space, agent, repository)).await

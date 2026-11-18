@@ -65,11 +65,20 @@ impl Manager {
         let questions = self.open_questions().await?;
         let mut approvals = self.approval_requests(None).await?;
         approvals.retain(|request| request.status == DecisionStatus::Pending);
+        let agents = self.tracked_agents().await;
+        let (parents, with_agents) = (self.store)
+            .run(move |db| {
+                let parents = crate::daemon::workspace::parent_ids(db)?;
+                Ok((parents, crate::daemon::workspace::with_agents(db, &agents)?))
+            })
+            .await?;
         let around = Around {
             stopped,
             queued: self.visible_queue().await?,
             questions,
             approvals,
+            parents,
+            agents: with_agents,
         };
         let repositories = self.repositories().await?;
         let mut summaries = HashMap::new();
@@ -88,20 +97,24 @@ impl Manager {
 }
 
 /// What a summary reads besides a space's record: the spaces whose agent's
-/// stop saved work to restore, the agents queued to start, and the open
-/// questions and pending approval requests of every space.
+/// stop saved work to restore, the agents queued to start, the open
+/// questions and pending approval requests of every space, the space above
+/// each, which may run on another machine, and the spaces with an agent.
 struct Around {
     stopped: HashSet<SpaceId>,
     queued: Vec<QueueEntry>,
     questions: Vec<Question>,
     approvals: Vec<ApprovalRequest>,
+    parents: HashMap<SpaceId, SpaceId>,
+    agents: HashSet<SpaceId>,
 }
 
 /// The summary of `space`, of `repository`, with what `around` holds of it.
 fn summary(space: Space, repository: Option<RepositoryOrigin>, around: &Around) -> SpaceSummary {
     let kind = space.kind();
     let (id, number, name) = (space.id.clone(), space.number, space.name.clone());
-    let parent = space.parent.as_ref().map(|parent| parent.id.clone());
+    let parent = around.parents.get(&space.id).cloned();
+    let agent = around.agents.contains(&space.id);
     let (mode, progress) = (space.mode.clone(), space.progress.clone());
     let agent_state = space.agent_state.map(|status| status.state);
     let stopped = around.stopped.contains(&id);
@@ -129,6 +142,7 @@ fn summary(space: Space, repository: Option<RepositoryOrigin>, around: &Around) 
         mode,
         status,
         agent_state,
+        agent,
         progress,
         questions,
         approvals,

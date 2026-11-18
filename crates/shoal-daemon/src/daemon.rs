@@ -1,5 +1,6 @@
 //! The per-user daemon: owns shared state, serves protocol requests over a
 //! Unix socket, and runs background cleanup.
+mod absent;
 pub mod access;
 pub(crate) mod acquired_leases;
 pub mod agent_messages;
@@ -567,6 +568,7 @@ async fn serve_request(
         Method::Operation(operation) => operation,
     };
     let scope = request.scope.as_ref();
+    let routing = absent::Routing::of(&server, &operation, scope)?;
     let accepted = accept(
         &mut stream,
         &server,
@@ -575,8 +577,13 @@ async fn serve_request(
         scope,
         &mut operation,
     );
-    let Some(caller) = accepted.await? else {
-        return Ok(());
+    let caller = match accepted.await? {
+        Accepted::Caller(caller) => caller,
+        Accepted::Refused(error) => {
+            let refused = (&error, answer::refusal(&error));
+            return absent::answer(stream, &server, request.id, refused, routing, None).await;
+        }
+        Accepted::Answered => return Ok(()),
     };
     let reads_only = operation.reads_only();
     let answer = requests::operation(&server, operation, caller.as_ref(), scope);
@@ -584,20 +591,24 @@ async fn serve_request(
     let Some(answer) = unless_abandoned(&mut stream, &name, reads_only, answer).await else {
         return Ok(());
     };
-    answer
-        .send(stream, request.id, &server.manager, operation_guard)
-        .await
+    match answer {
+        Ok(answer) => (answer.send(stream, request.id, &server.manager, operation_guard)).await,
+        Err(error) => {
+            let failed = (&error, answer::failure(&error));
+            absent::answer(stream, &server, request.id, failed, routing, Some(caller)).await
+        }
+    }
 }
 
 /// The request's answer, or `None` once its client hung up first on a
 /// request that only reads state, which cancels it. One that changes state
 /// finishes, so a hangup never leaves it half done.
-async fn unless_abandoned(
+async fn unless_abandoned<T>(
     stream: &mut UnixStream,
     name: &str,
     reads_only: bool,
-    answer: impl Future<Output = answer::Answer>,
-) -> Option<answer::Answer> {
+    answer: impl Future<Output = T>,
+) -> Option<T> {
     if !reads_only {
         return Some(answer.await);
     }
@@ -650,8 +661,19 @@ async fn admit(
     }
 }
 
+/// Whether a request's scope accepted it.
+enum Accepted {
+    /// Its caller, the user's none, to whose scope it is narrowed.
+    Caller(Option<Caller>),
+    /// Its scope refused it.
+    Refused(anyhow::Error),
+    /// It was answered already, as in another protocol.
+    Answered,
+}
+
 /// The caller of a request this daemon's protocol reads and its scope
-/// allows, narrowing the request to that scope, or `None` once it was refused.
+/// allows, narrowing the request to that scope, or why the scope refused
+/// it.
 async fn accept(
     stream: &mut UnixStream,
     server: &Server,
@@ -659,7 +681,7 @@ async fn accept(
     protocol: u32,
     scope: Option<&ScopeToken>,
     operation: &mut Operation,
-) -> Result<Option<Option<Caller>>> {
+) -> Result<Accepted> {
     if protocol != protocol::VERSION {
         let body = Body::error(
             ErrorCode::ProtocolMismatch,
@@ -669,16 +691,14 @@ async fn accept(
             ),
         );
         protocol::write(stream, &Response::new(request_id, body)).await?;
-        return Ok(None);
+        return Ok(Accepted::Answered);
     }
-    match scope::authorize(&server.manager, scope, operation).await {
-        Ok(caller) => Ok(Some(caller)),
-        Err(error) => {
-            let body = answer::refusal(&error);
-            protocol::write(stream, &Response::new(request_id, body)).await?;
-            Ok(None)
-        }
-    }
+    Ok(
+        match scope::authorize(&server.manager, scope, operation).await {
+            Ok(caller) => Accepted::Caller(caller),
+            Err(error) => Accepted::Refused(error),
+        },
+    )
 }
 
 #[cfg(test)]

@@ -92,15 +92,7 @@ pub enum Operation {
 impl Method {
     /// The request's protocol name, for timing lines.
     pub fn name(&self) -> String {
-        match serde_json::to_value(self) {
-            Ok(serde_json::Value::String(name)) => name,
-            Ok(serde_json::Value::Object(fields)) => fields
-                .into_iter()
-                .next()
-                .map(|(name, _)| name)
-                .unwrap_or_default(),
-            _ => String::new(),
-        }
+        name_of(serde_json::to_value(self))
     }
 
     /// Daemon administration, which must reach a daemon of any release.
@@ -132,6 +124,19 @@ impl Method {
     /// closes the connection unanswered, as across a restart.
     pub fn retries_when_closed(&self) -> bool {
         self.lifetime() == Lifetime::Resumed
+    }
+}
+
+/// The protocol name of a request spelled as `spelled`.
+pub fn name_of(spelled: serde_json::Result<serde_json::Value>) -> String {
+    match spelled {
+        Ok(serde_json::Value::String(name)) => name,
+        Ok(serde_json::Value::Object(fields)) => fields
+            .into_iter()
+            .next()
+            .map(|(name, _)| name)
+            .unwrap_or_default(),
+        _ => String::new(),
     }
 }
 

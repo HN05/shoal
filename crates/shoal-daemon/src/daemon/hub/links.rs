@@ -1,7 +1,8 @@
-//! The hub's open links, at most one per member. A second link that presents
-//! a credential an open one holds is refused, unless it comes from the same
-//! installation, whose earlier link it then replaces: that one was lost, as
-//! a laptop's is when it sleeps.
+//! The hub's open links, at most one per member, with the calls the hub
+//! sends each. A second link that presents a credential an open one holds
+//! is refused, unless it comes from the same installation, whose earlier
+//! link it then replaces: that one was lost, as a laptop's is when it
+//! sleeps.
 use std::{
     collections::{HashMap, HashSet},
     sync::{
@@ -12,6 +13,8 @@ use std::{
 
 use shoal_ids::member_ids::MemberId;
 use tokio::sync::Notify;
+
+use super::session::Calls;
 
 #[derive(Default)]
 pub(super) struct Links {
@@ -24,6 +27,8 @@ struct Open {
     /// Which link of the member this is.
     token: u64,
     stop: Arc<Notify>,
+    /// The hub's calls to the member, once its session serves the link.
+    calls: Option<Arc<Calls>>,
 }
 
 /// A member's open link, which leaves [`Links`] when dropped.
@@ -39,6 +44,15 @@ impl Registration<'_> {
     /// one, or the hub revokes the member.
     pub(super) async fn stopped(&self) {
         self.stop.notified().await
+    }
+
+    /// Send the hub's calls to the member through `calls` while this link
+    /// stays open.
+    pub(super) fn serve_calls(&self, calls: Arc<Calls>) {
+        let mut open = self.links.open.lock().unwrap();
+        if let Some(open) = (open.get_mut(&self.member)).filter(|open| open.token == self.token) {
+            open.calls = Some(calls);
+        }
     }
 }
 
@@ -71,6 +85,7 @@ impl Links {
             instance: instance.to_owned(),
             token,
             stop: stop.clone(),
+            calls: None,
         };
         open.insert(member.clone(), registered);
         Some(Registration {
@@ -94,6 +109,12 @@ impl Links {
         for open in self.open.lock().unwrap().values() {
             open.stop.notify_one();
         }
+    }
+
+    /// The hub's calls to `member`, while its link is open.
+    pub(super) fn calls(&self, member: &MemberId) -> Option<Arc<Calls>> {
+        let open = self.open.lock().unwrap();
+        open.get(member).and_then(|open| open.calls.clone())
     }
 
     /// The members whose links are open.

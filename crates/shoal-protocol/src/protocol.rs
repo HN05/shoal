@@ -11,6 +11,7 @@ mod daemon;
 mod demos;
 mod executions;
 mod files;
+mod forwarding;
 mod frames;
 mod holds;
 mod hub;
@@ -50,6 +51,7 @@ pub use daemon::{DaemonMethod, Exit, ExitRequest, ExitWhen, Exited, Work, WorkPl
 pub use demos::DemoMethod;
 pub use executions::{ExecutionMethod, SessionSignal};
 pub use files::FileMethod;
+pub use forwarding::Forwarding;
 pub use frames::{
     FrameTooLarge, MAX_FRAME, Responses, frame_pages, read, read_buffered, read_response,
     text_pieces, write,
@@ -66,7 +68,7 @@ pub use queue::{QueueMethod, RetryStart};
 pub use recovery::{RecoveryMethod, SavedPiece};
 pub use removal::{QueuedLaunches, RemovalMethod, UntrackedProcesses};
 pub use repositories::RepositoryMethod;
-pub use request::{Lifetime, Method, Operation, Reattachment, Request};
+pub use request::{Lifetime, Method, Operation, Reattachment, Request, name_of};
 pub use resources::ResourceMethod;
 pub use response::{Body, ErrorCode, RemoteError, Response};
 pub use reviews::{ReviewMethod, ReviewPiece};

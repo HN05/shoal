@@ -213,6 +213,7 @@ response_bodies! {
     HubOverview(crate::hub::Overview),
     HubMember(crate::hub::Member),
     HubView(Vec<crate::hub::directory::ViewPart>),
+    Queued(crate::hub::routing::Queued),
     ScopeToken(crate::scope_tokens::ScopeToken),
     Granted(Option<crate::scope_tokens::ScopeToken>),
     Branches(Vec<crate::model::Branch>),
@@ -448,6 +449,7 @@ impl Body {
         match self {
             Self::Error { code, message } => Err(RemoteError { code, message }.into()),
             Self::Undecided(request) => Err(crate::approvals::Undecided(request).into()),
+            Self::Queued(queued) => Err(queued.into()),
             body => Ok(body),
         }
     }

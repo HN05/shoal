@@ -793,6 +793,23 @@ CREATE TABLE failed_launches (
     failed_at INTEGER NOT NULL
 );
 
+CREATE TABLE hub_queue (
+    seq INTEGER PRIMARY KEY,
+    member_id TEXT NOT NULL REFERENCES hub_members(id),
+    sender_id TEXT NOT NULL,
+    sender_space TEXT,
+    call TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    queued_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+);
+
+CREATE TABLE hub_outbox (
+    seq INTEGER PRIMARY KEY,
+    call TEXT NOT NULL,
+    queued_at INTEGER NOT NULL
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
@@ -877,6 +894,8 @@ CREATE INDEX reply_times_space ON reply_times(space_id, id);
 CREATE INDEX hub_spaces_member ON hub_spaces(member_id);
 
 CREATE INDEX hub_numbers_member ON hub_numbers(member_id);
+
+CREATE INDEX hub_queue_member ON hub_queue(member_id, seq);
 
 CREATE VIEW space_refs AS
     SELECT spaces.id, CASE spaces.kind

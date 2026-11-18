@@ -1,6 +1,7 @@
 //! What the hub answers, to its members' calls and to the requests of its
 //! own machine's callers alike: pairing codes, its listener and members,
-//! revoking credentials, and its directory of the machines' spaces.
+//! revoking credentials, its directory of the machines' spaces, and the
+//! requests and events one machine sends another.
 use anyhow::{Result, anyhow};
 use shoal_protocol::hub::{
     Member, MemberKind, Overview,
@@ -92,6 +93,18 @@ impl Manager {
             Call::Owner { space } => {
                 Reply::Owner(self.local_space_owner(&space, &member.id).await?)
             }
+            Call::Forward {
+                machine,
+                request,
+                delivery,
+            } => (self.route_request(member, &machine, request, delivery)).await?,
+            Call::Tell { told } => {
+                ensure_machine(member)?;
+                self.route_told(&member.id, told).await?
+            }
+            Call::Serve { .. } | Call::Expired { .. } => {
+                anyhow::bail!("only the hub passes requests and expiries to machines")
+            }
         })
     }
 
@@ -156,6 +169,7 @@ impl Manager {
                 }
                 members::revoke(tx, &member.id)?;
                 directory::forget(tx, &member.id)?;
+                super::queue::forget(tx, &member.id)?;
                 Ok(member)
             })
             .await?;
@@ -173,7 +187,8 @@ impl Manager {
         self.store
             .write(move |tx| {
                 members::revoke(tx, &member)?;
-                directory::forget(tx, &member)
+                directory::forget(tx, &member)?;
+                super::queue::forget(tx, &member)
             })
             .await
     }
@@ -202,12 +217,12 @@ impl Manager {
     }
 }
 
-/// Refuse a call only a machine makes, such as a report of its spaces,
-/// from a device.
+/// Refuse a call only a machine makes, such as a report of its spaces or
+/// an event one passes up, from a device.
 fn ensure_machine(member: &Member) -> Result<()> {
     anyhow::ensure!(
         member.kind == MemberKind::Machine,
-        "only a machine reports and claims spaces at the hub"
+        "only a machine reports, claims and passes up spaces at the hub"
     );
     Ok(())
 }

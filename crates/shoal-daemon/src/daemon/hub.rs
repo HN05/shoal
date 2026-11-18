@@ -12,9 +12,13 @@ use shoal_protocol::hub::{HubRole, Overview};
 
 use super::workspace::Manager;
 
+pub(crate) use forwarding::{Elsewhere, Unanswered};
+pub(crate) use telling::Event;
+
 mod accept;
 pub(crate) mod answers;
 mod directory;
+mod forwarding;
 mod identity;
 mod links;
 mod listener;
@@ -25,10 +29,15 @@ pub(crate) mod numbering;
 mod owners;
 mod pairing;
 mod pieces;
+mod queue;
 mod reports;
+mod routing;
 mod sealing;
+mod serving;
 mod session;
+mod telling;
 mod transport;
+mod tree;
 mod view;
 
 /// What the hub role and membership keep while the daemon runs.
@@ -48,6 +57,9 @@ pub(crate) struct Hub {
     listener: listener::Bound,
     /// As a member: its link to the hub.
     member: member::Link,
+    /// The callers other machines vouch for, while this machine answers
+    /// their forwarded requests.
+    vouches: serving::Vouches,
 }
 
 /// Serve the hub's listener and keep its own machine's spaces in its
@@ -57,6 +69,7 @@ pub(crate) async fn run(manager: Arc<Manager>) {
     tokio::join!(
         listener::run(manager.clone()),
         manager.report_own_spaces(),
+        manager.expire_held(),
         member::run(manager.clone()),
     );
 }
@@ -119,6 +132,15 @@ impl Manager {
         self.through_hub(shoal_protocol::hub::link::Call::Members)
             .await
             .and_then(answers::overview)
+    }
+
+    /// The hub's own machine, recording it the first time.
+    async fn own_machine(&self) -> Result<shoal_protocol::hub::Member> {
+        let own = self.own_member().await?;
+        let members = self.local_hub_overview().await?.members;
+        (members.into_iter())
+            .find(|member| member.id == own)
+            .ok_or_else(|| anyhow::anyhow!("the hub's own machine is not recorded"))
     }
 
     /// The ID of the hub's own machine, recording it the first time.

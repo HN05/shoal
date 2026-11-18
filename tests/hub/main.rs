@@ -2,6 +2,7 @@
 //! or join it through the command transport.
 mod directory;
 mod numbers;
+mod routing;
 #[path = "../support/mod.rs"]
 mod support;
 
