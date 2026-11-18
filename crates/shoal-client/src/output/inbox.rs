@@ -2,12 +2,13 @@
 use serde::{Deserialize, Serialize};
 
 use crate::output::outputs;
+use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::{
     approvals::ApprovalRequest,
     demos::Running,
     hub::directory::Listed,
     list_status::ListStatus,
-    model::{Chat, CheckoutSync, ReviewMark, UntrackedWorktree, Workspace},
+    model::{Chat, CheckoutSync, QueueEntry, ReviewMark, UntrackedWorktree, Workspace},
     questions::Question,
 };
 
@@ -26,6 +27,13 @@ pub enum Item {
     },
     Failed {
         workspace: Workspace,
+    },
+    /// A space whose agent's launch failed to start, kept as a failed
+    /// entry of the agent queue.
+    StartFailed {
+        entry: QueueEntry,
+        space: SpaceId,
+        number: SpaceNumber,
     },
     /// A workspace whose progress records what blocks it.
     Blocked {

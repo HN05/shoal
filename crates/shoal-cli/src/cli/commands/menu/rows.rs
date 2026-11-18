@@ -91,6 +91,7 @@ impl Row {
             Item::NeedsInput { workspace } => Self::NeedsInput(workspace.id.clone()),
             Item::ChatNeedsInput { chat } => Self::NeedsInput(chat.id.clone()),
             Item::Failed { workspace } => Self::Failed(workspace.id.clone()),
+            Item::StartFailed { space, .. } => Self::Failed(space.clone()),
             Item::Blocked { workspace } => Self::Blocked(workspace.id.clone()),
             Item::ChatBlocked { chat } => Self::Blocked(chat.id.clone()),
             Item::Asleep { workspace } => Self::Asleep(workspace.id.clone()),

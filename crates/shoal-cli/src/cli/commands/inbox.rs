@@ -22,8 +22,8 @@ use crate::{
         ui::{self, Cell, WidthLimit},
     },
     client::questions,
-    model::{Chat, ReviewMark, SpaceLinks, Workspace},
-    state::WorkspaceState,
+    model::{Chat, QueueEntry, ReviewMark, SpaceLinks, Workspace},
+    state::{QueueState, WorkspaceState},
 };
 use shoal_protocol::{
     approvals::{ApprovalRequest, DecisionStatus, GateStep},
@@ -103,6 +103,8 @@ impl Inbox {
         let mut items = decision_items(questions, requests, &workspaces, &chats, detached);
         items.extend(workspace_items(&workspaces, &stopped));
         items.extend(chat_items(&chats));
+        let entries = crate::client::queue::entries(&ctx.paths).await?;
+        items.extend(failed_starts(entries, &workspaces, &chats));
         items.extend(
             demos
                 .into_iter()
@@ -274,6 +276,31 @@ fn user_decides(request: &ApprovalRequest) -> bool {
         && request.gate != Some(GateStep::Deciding)
 }
 
+/// The failed launches among `entries` of the `workspaces` and `chats`
+/// listed, each with its space's number.
+fn failed_starts(entries: Vec<QueueEntry>, workspaces: &[Workspace], chats: &[Chat]) -> Vec<Item> {
+    let number = |space: &SpaceId| {
+        (workspaces.iter().find(|w| w.id == *space).map(|w| w.number)).or_else(|| {
+            chats
+                .iter()
+                .find(|chat| chat.id == *space)
+                .map(|chat| chat.number)
+        })
+    };
+    (entries.into_iter())
+        .filter(|entry| entry.state == QueueState::Failed)
+        .filter_map(|entry| {
+            let space = entry.space()?.clone();
+            let number = number(&space)?;
+            Some(Item::StartFailed {
+                entry,
+                space,
+                number,
+            })
+        })
+        .collect()
+}
+
 /// Workspaces whose agent needs input, then blocked ones, then failed ones,
 /// then those whose agent is asleep, then each mark of those whose agent is
 /// not working.
@@ -391,6 +418,7 @@ impl ItemExt for Item {
             | Self::ChatReady { chat, .. }
             | Self::ChatDone { chat } => Some(&chat.id),
             Self::Demo { demo } => Some(&demo.workspace_id),
+            Self::StartFailed { space, .. } => Some(space),
             Self::Elsewhere { space, .. } => Some(&space.space.id),
             Self::Untracked { .. } | Self::Cleanup { .. } | Self::SyncFailed { .. } => None,
         }
@@ -420,6 +448,7 @@ impl ItemExt for Item {
             | Self::ChatReady { chat, .. }
             | Self::ChatDone { chat } => &chat.name,
             Self::Demo { demo } => &demo.workspace,
+            Self::StartFailed { entry, .. } => &entry.name,
             Self::Elsewhere { space, .. } => &space.space.name,
             // The directory a workspace adopting it would be named after.
             Self::Untracked { worktree } => worktree
@@ -452,6 +481,7 @@ impl ItemExt for Item {
             }
             Self::Blocked { .. } | Self::ChatBlocked { .. } => ("blocked", Style::Warning),
             Self::Failed { .. } => ("failed", Style::Error),
+            Self::StartFailed { .. } => ("start failed", Style::Error),
             Self::Asleep { .. } | Self::ChatAsleep { .. } => ("asleep", Style::Idle),
             Self::Ready { .. } | Self::ChatReady { .. } => ("ready", Style::Success),
             Self::ChatDone { .. } => ("finished", Style::Success),
@@ -490,6 +520,7 @@ impl ItemExt for Item {
                 chat.links.issue_title().unwrap_or_default().to_owned()
             }
             Self::Demo { demo } => demo.launch.name.clone(),
+            Self::StartFailed { entry, .. } => entry.error.clone().unwrap_or_default(),
             Self::Elsewhere { space, need } => elsewhere::text(space, need),
             Self::Untracked { worktree } => home_relative(&worktree.path),
             Self::Cleanup { error } => error.clone(),
@@ -532,6 +563,11 @@ impl ItemExt for Item {
             Self::SyncFailed { .. } => "retry with shoal repo sync".to_owned(),
             Self::Asleep { workspace } => ui::wake_now(workspace.number),
             Self::ChatAsleep { chat } => ui::wake_now(chat.number),
+            Self::StartFailed { number, .. } => {
+                format!(
+                    "start it again with shoal restore {number}, or remove it with shoal rm {number}"
+                )
+            }
             _ => String::new(),
         }
     }

@@ -1036,6 +1036,7 @@ fn inbox_reads_untracked_worktrees_failing_syncs_over_several_frames_and_failing
                 }
                 "list_approvals" => json!({"type": "approval_requests", "data": []}),
                 "list_demos" => json!({"type": "demos", "data": []}),
+                "list_queue" => json!({"type": "queue_entries", "data": []}),
                 "saved_summaries" => {
                     let frames = [
                         json!({"type": "saved_summaries", "data": []}),

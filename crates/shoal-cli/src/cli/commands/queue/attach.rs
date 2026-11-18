@@ -94,6 +94,16 @@ async fn agent_terminal_session(
         let current = (queued_agents::entries(ctx).await?)
             .into_iter()
             .find(|queued| queued.id == entry.id);
+        if let Some(failed) = current
+            .as_ref()
+            .filter(|queued| queued.state == QueueState::Failed)
+        {
+            let error = failed.error.as_deref().unwrap_or("its start failed");
+            bail!(
+                "{} did not start: {error}; shoal restore starts it again",
+                entry.name
+            );
+        }
         if let Some(opened) = current.as_ref().and_then(QueueEntry::space) {
             workspace = Some(opened.to_owned());
         }

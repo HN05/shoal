@@ -41,6 +41,9 @@ pub struct SetUp {
 /// What a restore that started agents at once did.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StartedRestores {
+    /// The failed launches it queued again.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub queued: Vec<QueueEntry>,
     pub commands: Vec<StoppedCommands>,
     pub agents: Vec<RestoredAgent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

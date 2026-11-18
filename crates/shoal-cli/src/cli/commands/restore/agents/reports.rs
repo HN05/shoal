@@ -127,6 +127,10 @@ pub(super) fn started(
     ctx.show(output, |output| {
         reopened_lines(ctx, &output.reopened);
         set_up(&output.set_up);
+        if !output.queued.is_empty() {
+            let starting = (output.queued.iter()).all(|entry| entry.state == QueueState::Starting);
+            outln!("{}", summary(output.queued.len(), starting));
+        }
         if in_wrappers > 0 {
             let noun = if in_wrappers == 1 { "agent" } else { "agents" };
             outln!("Starting {in_wrappers} {noun} where they wait to restore");

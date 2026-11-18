@@ -62,6 +62,7 @@ pub(super) async fn restore(
     let whole = named && !options.forget && options.execution.is_none();
     if whole {
         setups::take_failed(ctx, &mut selected).await?;
+        failed_starts::take(ctx, &mut selected).await?;
     }
     let turns = match whole && !options.no_agents {
         true => interrupted_turns(ctx, &mut selected, change.is_some()).await?,
@@ -330,7 +331,7 @@ async fn restore_each(
             saved.retain_execution(execution, true);
         }
     }
-    if stopped.is_empty() && selected.setups.is_empty() {
+    if stopped.is_empty() && selected.setups.is_empty() && selected.failed_starts.is_empty() {
         let started = forget || queuing == Queuing::Here { now: true };
         return reports::nothing(ctx, alongside.continue_turns(ctx).await, started);
     }
@@ -348,6 +349,7 @@ async fn restore_each(
     match queuing {
         Queuing::Here { now: true } => {
             let restored = StartedRestores {
+                queued: restored.queued,
                 set_up: restored.set_up,
                 reopened: restored.reopened,
                 continued: restored.continued,
@@ -391,11 +393,16 @@ async fn daemon_startable(
 }
 
 /// Retry the `selected` failed setups, starting the agents waiting for them
-/// at once when `now`, going on after one fails, and report them with what
-/// the restore did already, `restored`.
+/// at once when `now`, and queue their failed launches again, going on
+/// after one fails, and report them with what the restore did already,
+/// `restored`.
 async fn set_up(ctx: &Context, selected: &Selected, mut restored: Queued, now: bool) -> Queued {
     let (set_up, mut failed) = setups::retry_each(ctx, &selected.setups, now).await;
     restored.set_up = set_up;
+    restored.failed.append(&mut failed);
+    let (mut retried, mut failed) =
+        failed_starts::retry_each(ctx, &selected.failed_starts, now).await;
+    restored.queued.append(&mut retried);
     restored.failed.append(&mut failed);
     restored
 }
@@ -408,6 +415,7 @@ async fn present_space(ctx: &Context, selector: &SpaceSelector) -> Result<Space>
 
 pub(in crate::cli::commands) mod changed;
 mod commands;
+pub(super) mod failed_starts;
 mod forget;
 pub(in crate::cli::commands) mod permission_change;
 mod picker;

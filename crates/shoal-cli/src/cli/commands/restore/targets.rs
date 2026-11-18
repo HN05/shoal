@@ -55,6 +55,10 @@ pub(super) struct Selected {
     /// it, once [`super::agents::setups::take_failed`] takes them from the
     /// others.
     pub setups: Vec<FailedSetup>,
+    /// The failed launches of the spaces named, which restore by queuing
+    /// them again, once [`super::agents::failed_starts::take`] takes them
+    /// from the others.
+    pub failed_starts: Vec<crate::model::QueueEntry>,
     /// The removed spaces named, which open again in that order.
     pub removed: Vec<RemovedSpace>,
 }
@@ -107,9 +111,13 @@ impl Selected {
             running: _,
             spaces,
             setups,
+            failed_starts,
             removed,
         } = self;
-        spaces.as_ref().is_some_and(Vec::is_empty) && setups.is_empty() && removed.is_empty()
+        spaces.as_ref().is_some_and(Vec::is_empty)
+            && setups.is_empty()
+            && failed_starts.is_empty()
+            && removed.is_empty()
     }
 
     /// Refuse the running chats selected, which have nothing to restore.
