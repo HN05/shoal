@@ -122,7 +122,8 @@ async fn upstream_reads(create: Create) {
             "+refs/heads/other:refs/remotes/origin/other",
         ],
     );
-    assert_eq!(upstream("tracked").await.unwrap().tracking, "");
+    // With no tracking ref, Git reports no upstream at all.
+    assert_eq!(upstream("tracked").await, Some(Upstream::default()));
 }
 
 #[tokio::test]

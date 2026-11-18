@@ -242,6 +242,8 @@ pub(crate) async fn upstream(repo: &Path, reference: &str) -> Result<Option<Upst
     reader::read(repo, in_process, git).await
 }
 
+/// The [`Upstream`] `config` gives the local branch `branch`: all empty, as
+/// Git reports it, where no ref here tracks the branch it names.
 fn upstream_in_process(config: &gix::config::Snapshot<'_>, branch: &str) -> Upstream {
     let file = config.plumbing();
     let remote = file.string(format!("branch.{branch}.remote").as_str());
@@ -249,23 +251,31 @@ fn upstream_in_process(config: &gix::config::Snapshot<'_>, branch: &str) -> Upst
     let remote = remote.map(|remote| remote.to_string()).unwrap_or_default();
     let merge = merge.and_then(|merge| merge.first().map(|merge| merge.to_string()));
     let merge = merge.unwrap_or_default();
-    let tracking = match remote.as_str() {
-        _ if merge.is_empty() => String::new(),
-        "" => String::new(),
-        "." => merge.clone(),
+    match tracking_ref(file, &remote, &merge) {
+        Some(tracking) => Upstream {
+            remote,
+            merge,
+            tracking,
+        },
+        None => Upstream::default(),
+    }
+}
+
+/// The ref that tracks the branch `merge` of the remote `remote` here: the
+/// branch itself for a local upstream (`.`), else where a fetch refspec of
+/// the remote stores it; `None` where neither does.
+fn tracking_ref(file: &gix::config::File, remote: &str, merge: &str) -> Option<String> {
+    match remote {
+        _ if merge.is_empty() => None,
+        "" => None,
+        "." => Some(merge.to_owned()),
         remote => {
             let refspecs = file.strings(format!("remote.{remote}.fetch").as_str());
             let refspecs = refspecs.unwrap_or_default();
-            let mapped = refspecs
+            refspecs
                 .iter()
-                .find_map(|refspec| mapped(&refspec.to_string(), &merge));
-            mapped.unwrap_or_default()
+                .find_map(|refspec| mapped(&refspec.to_string(), merge))
         }
-    };
-    Upstream {
-        remote,
-        merge,
-        tracking,
     }
 }
 
