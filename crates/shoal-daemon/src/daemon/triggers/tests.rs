@@ -138,6 +138,10 @@ async fn a_due_time_fires_once_through_the_launch() {
     let runs = runs(&manager, &repo, "check").await;
     assert_eq!(outcomes(&runs), [RunOutcome::Started]);
     assert_eq!(runs[0].origin, RunOrigin::Source);
+    // The run names the chat it started.
+    let chats = manager.chats().await.unwrap();
+    let started: Vec<_> = chats.iter().map(|chat| Some(chat.id.clone())).collect();
+    assert_eq!(started, [runs[0].space_id.clone()]);
     let tasks = started_tasks();
     assert_eq!(tasks.len(), 1);
     assert!(!tasks[0][0].contains("{{"), "{:?}", tasks[0]);
