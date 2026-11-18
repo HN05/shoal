@@ -23,15 +23,10 @@ pub async fn saved_refs(repo: &Path) -> Result<Vec<(String, CommitId)>> {
 }
 
 async fn refs(repo: &Path, prefix: &str) -> Result<Vec<(String, CommitId)>> {
-    let refs = run_isolated(
-        repo,
-        &["for-each-ref", "--format=%(refname) %(objectname)", prefix],
-    )
-    .await?;
+    let refs = super::refs::list(repo, &[prefix]).await?;
     Ok(refs
-        .lines()
-        .filter_map(|line| line.split_once(' '))
-        .map(|(reference, commit)| (reference.to_owned(), commit.into()))
+        .into_iter()
+        .map(|reference| (reference.name, reference.object.into()))
         .collect())
 }
 

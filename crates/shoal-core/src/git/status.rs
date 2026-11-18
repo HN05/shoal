@@ -192,18 +192,13 @@ async fn upstream_of(repo: &Path, reference: &str) -> Result<Option<String>> {
 
 /// Which of the full ref names in `references` exist, from one listing.
 async fn existing_refs(repo: &Path, references: &[String]) -> Result<Vec<String>> {
-    // Without patterns, for-each-ref would list every ref.
-    if references.is_empty() {
-        return Ok(Vec::new());
-    }
-    let mut args = vec!["for-each-ref", "--format=%(refname)"];
-    args.extend(references.iter().map(String::as_str));
-    let listed = run(repo, &args).await?;
+    let patterns: Vec<&str> = references.iter().map(String::as_str).collect();
+    let listed = super::refs::list(repo, &patterns).await?;
     let mut existing = Vec::new();
     for reference in references {
         // A pattern also matches the refs below it, so only exact names
         // count; `show-ref` confirms a ref the listing left out, as above.
-        if listed.lines().any(|name| name == reference)
+        if listed.iter().any(|listed| listed.name == *reference)
             || super::ref_exists(repo, reference).await?
         {
             existing.push(reference.clone());

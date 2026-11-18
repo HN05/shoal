@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use super::{Listed, list};
 use crate::git::{has_commit, ref_exists, resolve_commit, revision, run, verify_revision};
 use crate::test_support::{git, reftable_repository, repository};
 
@@ -7,7 +8,7 @@ use crate::test_support::{git, reftable_repository, repository};
 /// and in a reftable, which Git reads for it.
 type Create = fn(&Path, &str) -> PathBuf;
 
-/// Lookups of refs in a repository `create` makes.
+/// Lookups and listings of refs in a repository `create` makes.
 async fn ref_reads(create: Create) {
     let root = tempfile::tempdir().unwrap();
     let repo = create(root.path(), "repo");
@@ -70,6 +71,30 @@ async fn ref_reads(create: Create) {
             .await
             .is_err()
     );
+
+    let names = |listed: Vec<Listed>| listed.into_iter().map(|r| r.name).collect::<Vec<_>>();
+    let topic = list(&repo, &["refs/heads/topic"]).await.unwrap();
+    assert_eq!(names(topic), ["refs/heads/topic/nested"]);
+    let remotes = list(&repo, &["refs/remotes/", "refs/heads/main"])
+        .await
+        .unwrap();
+    let origin = |name: &str, symref: Option<&str>, object: &str| Listed {
+        name: format!("refs/remotes/origin/{name}"),
+        object: object.to_owned(),
+        symref: symref.map(|target| format!("refs/remotes/origin/{target}")),
+    };
+    let main = Listed {
+        name: "refs/heads/main".into(),
+        object: head.clone(),
+        symref: None,
+    };
+    let expected = [
+        main,
+        origin("HEAD", Some("main"), &head),
+        origin("main", None, &head),
+    ];
+    assert_eq!(remotes, expected);
+    assert!(list(&repo, &[]).await.unwrap().is_empty());
 }
 
 #[tokio::test]

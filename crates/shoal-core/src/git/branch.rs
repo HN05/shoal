@@ -10,7 +10,7 @@ use crate::{fsutil::off_runtime, git, time::UnixTime};
 pub async fn names_in_use(repo: &Path) -> Result<Vec<BranchName>> {
     let refs = branch_refs(repo).await?;
     Ok(refs
-        .lines()
+        .iter()
         .filter_map(|reference| {
             git::strip_local(reference).or_else(|| {
                 git::strip_remote(reference)?
@@ -30,9 +30,12 @@ pub async fn selectors(repo: &Path) -> Result<Vec<String>> {
 }
 
 /// [`selectors`] of the branches whose full ref names `refs` lists.
-fn switch_selectors(refs: &str) -> Vec<String> {
-    let local: Vec<&str> = refs.lines().filter_map(git::strip_local).collect();
-    let remote: Vec<(&str, &str)> = (refs.lines())
+fn switch_selectors(refs: &[String]) -> Vec<String> {
+    let local: Vec<&str> = refs
+        .iter()
+        .filter_map(|name| git::strip_local(name))
+        .collect();
+    let remote: Vec<(&str, &str)> = (refs.iter())
         .filter_map(|reference| git::strip_remote(reference)?.split_once('/'))
         .filter(|(_, branch)| *branch != "HEAD")
         .collect();
@@ -49,18 +52,10 @@ fn switch_selectors(refs: &str) -> Vec<String> {
         .collect()
 }
 
-/// Every local and remote-tracking branch's full ref name, one per line.
-async fn branch_refs(repo: &Path) -> Result<String> {
-    git::run(
-        repo,
-        &[
-            "for-each-ref",
-            "--format=%(refname)",
-            git::LOCAL_REFS,
-            git::REMOTE_REFS,
-        ],
-    )
-    .await
+/// Every local and remote-tracking branch's full ref name.
+async fn branch_refs(repo: &Path) -> Result<Vec<String>> {
+    let refs = git::refs::list(repo, &[git::LOCAL_REFS, git::REMOTE_REFS]).await?;
+    Ok(refs.into_iter().map(|reference| reference.name).collect())
 }
 
 /// Names Git reads as a revision rather than as a branch: `@` is HEAD's
@@ -147,20 +142,11 @@ async fn remove_config(repo: &Path, name: &BranchName) -> Result<()> {
 /// Whether the local branch is a symbolic ref to another one.
 pub async fn is_symbolic(repo: &Path, name: &BranchName) -> Result<bool> {
     let reference = git::local_ref(name);
-    let listing = git::run(
-        repo,
-        &[
-            "for-each-ref",
-            "--format=%(refname)%00%(symref)",
-            &reference,
-        ],
-    )
-    .await?;
+    let listing = git::refs::list(repo, &[&reference]).await?;
     // The pattern also matches branches nested under the name.
-    Ok(listing.lines().any(|line| {
-        line.split_once('\0')
-            .is_some_and(|(name, target)| name == reference && !target.is_empty())
-    }))
+    Ok(listing
+        .iter()
+        .any(|listed| listed.name == reference && listed.symref.is_some()))
 }
 
 /// Whether a rebase or bisect in some worktree started from the branch, or a

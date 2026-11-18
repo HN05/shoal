@@ -1,11 +1,110 @@
-//! Ref lookups, read in this process where the
+//! Ref lookups and listings, read in this process where the
 //! [`reader`](super::reader) reads the repository, else by Git.
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use shoal_refs::CommitId;
 
 use super::reader;
+
+/// A ref a listing names, as `git for-each-ref` shows it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Listed {
+    /// Its full name, such as `refs/heads/main`.
+    pub(crate) name: String,
+    /// The object it names, through a symbolic ref's target.
+    pub(crate) object: String,
+    /// The full name of the ref a symbolic ref points to.
+    pub(crate) symref: Option<String>,
+}
+
+/// The refs `patterns` match, sorted by name: each pattern a full ref name
+/// that matches that ref and the refs below it, by whole components, as
+/// `git for-each-ref` matches it. A ref that names no object, such as a
+/// symbolic ref to a missing one, is left out, as Git leaves it out with a
+/// warning.
+pub(crate) async fn list(repo: &Path, patterns: &[&str]) -> Result<Vec<Listed>> {
+    // Without patterns, for-each-ref would list every ref.
+    if patterns.is_empty() {
+        return Ok(Vec::new());
+    }
+    let owned: Vec<String> = patterns
+        .iter()
+        .map(|pattern| (*pattern).to_owned())
+        .collect();
+    let in_process = move |repo: &gix::Repository| list_in_process(repo, &owned);
+    reader::read(repo, in_process, async |repo| {
+        list_from_git(repo, patterns).await
+    })
+    .await
+}
+
+fn list_in_process(repo: &gix::Repository, patterns: &[String]) -> Result<Vec<Listed>> {
+    let platform = repo.references()?;
+    let mut listed = Vec::new();
+    for pattern in patterns {
+        for reference in platform.prefixed(pattern.as_str())?.flatten() {
+            let name = reference.name().as_bstr().to_string();
+            if matches(pattern, &name)
+                && let Some(reference) = listed_in_process(reference, name)
+            {
+                listed.push(reference);
+            }
+        }
+    }
+    listed.sort_by(|a, b| a.name.cmp(&b.name));
+    listed.dedup_by(|a, b| a.name == b.name);
+    Ok(listed)
+}
+
+/// `reference`, named `name`, as a listing shows it; `None` when it names
+/// no object.
+fn listed_in_process(mut reference: gix::Reference<'_>, name: String) -> Option<Listed> {
+    let symref = match reference.target() {
+        gix::refs::TargetRef::Symbolic(target) => Some(target.as_bstr().to_string()),
+        gix::refs::TargetRef::Object(_) => None,
+    };
+    let object = reference.follow_to_object().ok()?.to_string();
+    Some(Listed {
+        name,
+        object,
+        symref,
+    })
+}
+
+/// Whether the for-each-ref `pattern` matches the ref `name`: the name
+/// itself, or one below it.
+fn matches(pattern: &str, name: &str) -> bool {
+    name.strip_prefix(pattern)
+        .is_some_and(|rest| rest.is_empty() || pattern.ends_with('/') || rest.starts_with('/'))
+}
+
+/// The [`list`] Git prints for `repo`.
+async fn list_from_git(repo: &Path, patterns: &[&str]) -> Result<Vec<Listed>> {
+    let mut args = vec![
+        "for-each-ref",
+        "--format=%(refname)%00%(objectname)%00%(symref)",
+    ];
+    args.extend(patterns);
+    let listing = super::run(repo, &args).await?;
+    listing
+        .lines()
+        .map(|line| {
+            let mut fields = line.split('\0');
+            let mut field = || {
+                fields
+                    .next()
+                    .context("git for-each-ref printed a short line")
+            };
+            let (name, object, symref) = (field()?, field()?, field()?);
+            Ok(Listed {
+                name: name.to_owned(),
+                object: object.to_owned(),
+                symref: (!symref.is_empty()).then(|| symref.to_owned()),
+            })
+        })
+        .collect()
+}
 
 /// Whether the exact ref `reference`, a full name, exists in `repo`; a
 /// name no ref can have, such as a revision expression, names none.

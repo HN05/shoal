@@ -33,21 +33,14 @@ pub async fn ensure_not_checked_out(repo: &std::path::Path, name: &BranchName) -
 
 /// Local branches and advertised remote heads, including never-fetched branches.
 pub async fn list(repo: &Path) -> Result<Vec<Branch>> {
-    let mut branches: Vec<_> = git::run_isolated(
-        repo,
-        &[
-            "for-each-ref",
-            "--format=%(refname:strip=2)",
-            git::LOCAL_REFS,
-        ],
-    )
-    .await?
-    .lines()
-    .map(|name| Branch {
-        name: name.into(),
-        remote: None,
-    })
-    .collect();
+    let local = git::refs::list(repo, &[git::LOCAL_REFS]).await?;
+    let mut branches: Vec<_> = (local.iter())
+        .filter_map(|reference| git::strip_local(&reference.name))
+        .map(|name| Branch {
+            name: name.into(),
+            remote: None,
+        })
+        .collect();
     for remote in git::remotes(repo, git::run_isolated).await?.lines() {
         let heads = git::run_isolated(repo, &["ls-remote", "--heads", "--", remote])
             .await.with_context(|| format!("could not list branches from {remote}; use --branch <local-branch> to work offline"))?;
