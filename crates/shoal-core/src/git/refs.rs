@@ -191,7 +191,10 @@ pub(crate) fn named_object(repo: &gix::Repository, rev: &str) -> Result<Option<g
 /// The object HEAD, the full ref name or the object ID `name` names.
 fn unpeeled(repo: &gix::Repository, name: &str) -> Result<Option<gix::ObjectId>> {
     if name == "HEAD" {
-        return Ok(repo.head()?.id().map(|id| id.detach()));
+        let commit = super::queries::head_in_process(repo)?.commit;
+        return Ok(commit
+            .map(|commit| gix::ObjectId::from_hex(commit.as_str().as_bytes()))
+            .transpose()?);
     }
     if !name.starts_with("refs/") {
         return Ok(Some(gix::ObjectId::from_hex(name.as_bytes())?));
@@ -229,9 +232,9 @@ pub(crate) fn named_commit(
         return Ok(None);
     };
     let name = match simple(rev) {
-        Some(("HEAD", None)) => repo
-            .head_name()?
-            .map_or_else(|| "HEAD".to_owned(), |name| name.as_bstr().to_string()),
+        Some(("HEAD", None)) => super::queries::head_in_process(repo)?
+            .reference
+            .unwrap_or_else(|| "HEAD".to_owned()),
         Some((name, None)) if name.starts_with("refs/") => name.to_owned(),
         _ => String::new(),
     };

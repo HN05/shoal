@@ -84,13 +84,30 @@ pub(crate) async fn head(repo: &Path) -> Result<Head> {
     reader::read(repo, head_in_process, head_from_git).await
 }
 
-/// The [`Head`] gix reads for `repo`.
-fn head_in_process(repo: &gix::Repository) -> Result<Head> {
-    let head = repo.head()?;
-    Ok(Head {
-        reference: head.referent_name().map(|name| name.as_bstr().to_string()),
-        commit: head.id().map(|id| id.to_string().into()),
-    })
+/// The most symbolic refs Git follows from HEAD.
+const MAX_SYMBOLIC_DEPTH: usize = 5;
+
+/// The [`Head`] gix reads for `repo`, following symbolic refs from HEAD to
+/// the ref that names a commit, or to a missing one, as Git does.
+pub(crate) fn head_in_process(repo: &gix::Repository) -> Result<Head> {
+    let mut name = "HEAD".to_owned();
+    for _ in 0..=MAX_SYMBOLIC_DEPTH {
+        let reference = (name != "HEAD").then(|| name.clone());
+        let Some(found) = repo.try_find_reference(name.as_str())? else {
+            return Ok(Head {
+                reference,
+                commit: None,
+            });
+        };
+        match found.target() {
+            gix::refs::TargetRef::Symbolic(target) => name = target.as_bstr().to_string(),
+            gix::refs::TargetRef::Object(id) => {
+                let commit = Some(id.to_string().into());
+                return Ok(Head { reference, commit });
+            }
+        }
+    }
+    anyhow::bail!("HEAD names a chain of more than {MAX_SYMBOLIC_DEPTH} symbolic refs")
 }
 
 /// The [`Head`] Git reads for `repo`.
@@ -128,10 +145,13 @@ pub(crate) struct HeadState {
 pub(crate) async fn head_state(repo: &Path) -> Result<HeadState> {
     let in_process = |repo: &gix::Repository| {
         let head = head_in_process(repo)?;
+        let branch = head.branch();
+        let commit = head.commit()?;
+        let tree = repo.find_commit(gix::ObjectId::from_hex(commit.as_str().as_bytes())?)?;
         Ok(HeadState {
-            tree: repo.head_tree_id()?.to_string(),
-            branch: head.branch(),
-            commit: head.commit()?,
+            tree: tree.tree_id()?.to_string(),
+            branch,
+            commit,
         })
     };
     reader::read(repo, in_process, head_state_from_git).await

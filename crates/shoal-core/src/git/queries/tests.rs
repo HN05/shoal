@@ -28,6 +28,40 @@ async fn head_reads(create: Create) {
     assert!(head.commit().is_err());
 }
 
+/// HEAD reads through a chain of symbolic refs, which Git follows to the
+/// ref that names a commit, in a repository `create` makes.
+async fn head_reads_through_symbolic_refs(create: Create) {
+    let root = tempfile::tempdir().unwrap();
+    let repo = create(root.path(), "repo");
+    let commit: CommitId = git(&repo, &["rev-parse", "HEAD"]).trim().into();
+    git(
+        &repo,
+        &["symbolic-ref", "refs/heads/alias", "refs/heads/main"],
+    );
+    git(&repo, &["symbolic-ref", "HEAD", "refs/heads/alias"]);
+    let main = Some(BranchName::from("main"));
+    assert_eq!(
+        head_and_branch(&repo).await.unwrap(),
+        (commit.clone(), main.clone())
+    );
+    let state = head_state(&repo).await.unwrap();
+    assert_eq!((state.commit, state.branch), (commit.clone(), main));
+    let (named, name) = crate::git::resolve_named_commit(&repo, "HEAD", run)
+        .await
+        .unwrap();
+    assert_eq!((named, name.as_str()), (commit, "refs/heads/main"));
+}
+
+#[tokio::test]
+async fn a_symbolic_chain_from_head_reads_in_a_repository_with_its_refs_in_files() {
+    head_reads_through_symbolic_refs(repository).await;
+}
+
+#[tokio::test]
+async fn a_symbolic_chain_from_head_reads_in_a_reftable_repository() {
+    head_reads_through_symbolic_refs(reftable_repository).await;
+}
+
 #[tokio::test]
 async fn head_reads_in_a_repository_with_its_refs_in_files() {
     head_reads(repository).await;
