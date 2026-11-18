@@ -5,7 +5,6 @@ use anyhow::{Context as _, Result, ensure};
 use shoal_protocol::model::ByKind;
 
 use super::Output;
-use crate::client::transcripts;
 use crate::{
     cli::{context::Context, ui},
     model::{Chat, Space, SpaceHold, SpaceKind, SpaceRef, Spaces},
@@ -24,7 +23,7 @@ pub(in super::super) struct Checked {
 }
 
 /// What ending a space for its export does: removing a workspace, with
-/// what its removal would delete, or a chat whose agent reported a session.
+/// what its removal would delete, or a chat.
 #[allow(
     clippy::large_enum_variant,
     reason = "one per exported space, moved into its planned export"
@@ -118,7 +117,8 @@ pub(super) async fn check_export(
         }
         ByKind::Chat(chat) => {
             let taken = spaces.taken_with(&chat.id);
-            (Ending::Chat(check_chat_export(ctx, chat).await?), taken)
+            ensure_not_running_in(&chat)?;
+            (Ending::Chat(chat), taken)
         }
     };
     Ok(Checked {
@@ -136,19 +136,6 @@ fn carried_chats(spaces: &Spaces, id: &SpaceId) -> Vec<Chat> {
         .filter_map(|id| chats.iter().find(|chat| chat.id == *id))
         .cloned()
         .collect()
-}
-
-/// Refuse to export a chat whose agent reported no session, which would not
-/// continue elsewhere, or as [`ensure_not_running_in`] refuses.
-async fn check_chat_export(ctx: &Context, chat: Chat) -> Result<Chat> {
-    let sessions = transcripts::space_sessions(&ctx.paths, SpaceSelector::id(&chat.id)).await?;
-    ensure!(
-        !sessions.sessions.is_empty(),
-        "the agent of chat {} reported no session to continue elsewhere, so the chat keeps running",
-        chat.name
-    );
-    ensure_not_running_in(&chat)?;
-    Ok(chat)
 }
 
 /// Refuse to end `chat`, the one this process runs in, which ending the

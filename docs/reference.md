@@ -4175,10 +4175,12 @@ travels as a Git bundle without the commits of the default remote's default
 branch; a checkpoint that branch already has travels without one. Ignored files,
 leases, permits, approvals, grants and holds stay behind; setup rebuilds what the
 workspace needs. A chat's file holds its removal record with its agent's session, and the chats below it, or
-below one of them: the export refuses a chat whose agent reported no session,
-the one it runs in and one with a workspace below it that is not exported with
-it, and asks before stopping the agents unless given `--yes`; the chat is then
-removed with the chats below it. A workspace or chat
+below one of them: the export refuses the chat it runs in, and asks before
+stopping the agents unless given `--yes`; the chat is then removed with the
+chats below it. The export refuses a space of either kind with a workspace
+below it that is not exported with it, and writes one whose agent reported no
+session with a warning, whose agent starts as a new one where it is imported.
+A workspace or chat
 already removed, as by cleanup, is exported from its removal record, which
 stays, under the refusals that still apply, without another removal. The file's manifest names its `kind`, `workspace` or `chat`.
 
@@ -4199,8 +4201,8 @@ naming each failed space.
 `shoal move export [space] --keep -o <file>` leaves the space running and writes a
 copy of it instead: a workspace at a new checkpoint, as `shoal checkpoint`
 takes one, or with `--checkpoint N` at an earlier one `shoal restore
-<workspace> --checkpoint` lists, and a chat with its session. It refuses a removed space
-and a chat whose agent reported no session. With several spaces, a directory or
+<workspace> --checkpoint` lists, and a chat with its session. It refuses a removed space.
+With several spaces, a directory or
 `--all`, it writes a copy of each to `<id>.shoal` in the directory, reporting
 each space it cannot copy and copying the rest. It refuses `--checkpoint` for
 more than one space, since its number names a checkpoint of one workspace. The import

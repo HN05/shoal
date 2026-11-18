@@ -3735,10 +3735,13 @@ setup. Otherwise moved recovery records drop their session, place and wrapper,
 and `shoal restore` starts them through the fresh-agent launch, with its trust
 setup and guidance, told the workspace moved. Moving a chat removes it here,
 stopping its agent, since a session that kept growing here would fork from the one that
-continues there, and the user attends a chat, so export asks first; a chat whose
-agent reported no session refuses before stopping it, since nothing could continue
-it, and so does one with a workspace below it that does not move with it, which
-its removal would take. The chats in a moving workspace's worktree and those
+continues there, and the user attends a chat, so export asks first. A space whose agent reported no
+session moves with a warning, whatever its kind, its agent starting as a new one
+there, told the space moved; a space of either kind with a workspace below it
+that does not move with it refuses before stopping anything, since its removal
+would take that workspace. Export, copy, move and restore each run one path for
+a space of either kind, and only a workspace's worktree step, its checkpoint and
+branch, differs. The chats in a moving workspace's worktree and those
 below a moving space, through chats, move with it in its package as their
 removal records, which the import records and restores, so they keep their IDs,
 their parents and their worktrees wherever those are there; a chat below a
