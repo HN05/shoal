@@ -43,6 +43,29 @@ async fn ref_reads(create: Create) {
     assert!(!ref_exists(&repo, "topical").await.unwrap());
     assert!(!ref_exists(&repo, "refs/heads/topical~1").await.unwrap());
 
+    // A symbolic ref leads through every symbolic ref after it.
+    let symbolic = |name: &str, target: &str| {
+        let (name, target) = (
+            format!("refs/remotes/origin/{name}"),
+            format!("refs/remotes/origin/{target}"),
+        );
+        git(&repo, &["symbolic-ref", &name, &target]);
+    };
+    symbolic("stable", "main");
+    symbolic("latest", "stable");
+    let target = super::symbolic_target(&repo, "refs/remotes/origin/latest")
+        .await
+        .unwrap();
+    assert_eq!(target.as_deref(), Some("refs/remotes/origin/main"));
+    let direct = super::symbolic_target(&repo, "refs/remotes/origin/main")
+        .await
+        .unwrap();
+    assert_eq!(direct, None);
+    for name in ["latest", "stable"] {
+        let name = format!("refs/remotes/origin/{name}");
+        git(&repo, &["update-ref", "-d", "--no-deref", &name]);
+    }
+
     for rev in [
         "HEAD",
         "refs/heads/topical",

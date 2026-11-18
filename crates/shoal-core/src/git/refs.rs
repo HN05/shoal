@@ -118,20 +118,13 @@ pub(crate) fn exists_in_process(repo: &gix::Repository, reference: &str) -> Resu
     Ok(found.is_some_and(|found| found.name().as_bstr() == reference))
 }
 
-/// The full name of the ref the symbolic ref `reference` points to, as
-/// `git symbolic-ref` gives it, whether or not that ref exists; `None` when
-/// `reference` is missing or not symbolic.
+/// The full name of the ref the symbolic ref `reference` leads to, as `git
+/// symbolic-ref` gives it: the end of its chain of symbolic refs, whether
+/// or not that ref exists; `None` when `reference` is missing or not
+/// symbolic.
 pub(crate) async fn symbolic_target(repo: &Path, reference: &str) -> Result<Option<String>> {
     let owned = reference.to_owned();
-    let in_process = move |repo: &gix::Repository| {
-        let found = repo.try_find_reference(owned.as_str())?;
-        Ok(found.and_then(|found| match found.target() {
-            gix::refs::TargetRef::Symbolic(target) if found.name().as_bstr() == owned => {
-                Some(target.as_bstr().to_string())
-            }
-            _ => None,
-        }))
-    };
+    let in_process = move |repo: &gix::Repository| Ok(followed(repo, &owned)?.target);
     let git = async |repo: &Path| {
         let mut command = super::command(repo);
         command.args(["symbolic-ref", "--quiet", reference]);
@@ -160,6 +153,43 @@ fn simple(rev: &str) -> Option<(&str, Option<gix::object::Kind>)> {
         matches!(name.len(), 40 | 64) && name.bytes().all(|byte| byte.is_ascii_hexdigit());
     let is_ref = name.starts_with("refs/") && gix::validate::reference::name(name.into()).is_ok();
     (name == "HEAD" || is_object_id || is_ref).then_some((name, peel))
+}
+
+/// The most symbolic refs Git follows from one ref.
+const MAX_SYMBOLIC_DEPTH: usize = 5;
+
+/// Where following symbolic refs from a ref ends, as Git follows them.
+pub(crate) struct Followed {
+    /// The full name of the last ref the chain reaches; `None` when the ref
+    /// it starts from is missing or names an object itself.
+    pub(crate) target: Option<String>,
+    /// The object that ref names; `None` when it is missing.
+    pub(crate) object: Option<gix::ObjectId>,
+}
+
+/// [`Followed`] from the ref `name`, which may be `HEAD`.
+pub(crate) fn followed(repo: &gix::Repository, name: &str) -> Result<Followed> {
+    let mut current = name.to_owned();
+    for _ in 0..=MAX_SYMBOLIC_DEPTH {
+        let target = (current != name).then(|| current.clone());
+        let found = repo.try_find_reference(current.as_str())?;
+        // A partial name may find a ref of another name; only the exact one
+        // counts.
+        let Some(found) = found.filter(|found| found.name().as_bstr() == current) else {
+            return Ok(Followed {
+                target,
+                object: None,
+            });
+        };
+        match found.target() {
+            gix::refs::TargetRef::Symbolic(next) => current = next.as_bstr().to_string(),
+            gix::refs::TargetRef::Object(id) => {
+                let object = Some(id.to_owned());
+                return Ok(Followed { target, object });
+            }
+        }
+    }
+    anyhow::bail!("{name} leads through more than {MAX_SYMBOLIC_DEPTH} symbolic refs")
 }
 
 /// Whether gix reads `rev` as Git does: `HEAD`, a full ref name or a full
