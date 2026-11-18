@@ -15,7 +15,7 @@ use crate::{
     config::{RunLimit, overload::Overload},
     daemon::workspace::{
         Manager,
-        capacity::{self, Activity, Agents, Unfit},
+        capacity::{self, Activity, Agents, Load, Unfit},
     },
     model::HeldBy,
     protocol::ConfigTarget,
@@ -199,8 +199,9 @@ pub(crate) fn admit(
                 admission.hold(entry, Some(HeldBy::MemoryKept));
                 continue;
             }
-            if let Err(held) = measured_fit(limits.jobs.room, started, |room| room.fits_job(cost)) {
-                starved |= overdue_for_memory(entry, held);
+            let room = limits.jobs.room.as_ref();
+            if let Err(held) = measured_fit(room, started, |room| room.fits_job(cost)) {
+                starved |= overdue_for_memory(entry, &held);
                 admission.hold(entry, held);
                 continue;
             }
@@ -252,10 +253,10 @@ pub(crate) fn admit(
             Work::OneShot { .. } => full_disk(limits, writing),
             _ => full_limit(limits, repository, [total, writing, in_repository], own),
         };
-        if let Err(held) = measured_fit(limits.room, started, capacity::Room::fits_agent) {
+        if let Err(held) = measured_fit(limits.room.as_ref(), started, capacity::Room::fits_agent) {
             // An entry a fixed limit holds anyway gains nothing from memory
             // kept for it.
-            starved |= full.is_none() && overdue_for_memory(entry, held);
+            starved |= full.is_none() && overdue_for_memory(entry, &held);
             admission.hold(entry, held);
             continue;
         }
@@ -280,7 +281,7 @@ pub(crate) fn admit(
 
 /// Whether `entry`, which did not fit for `held`, has waited for its memory
 /// past `BACKFILL_FOR`.
-fn overdue_for_memory(entry: &Waiting, held: Unfit) -> bool {
+fn overdue_for_memory(entry: &Waiting, held: &Unfit) -> bool {
     matches!(held, Some(HeldBy::Memory { .. })) && entry.waited_for_memory >= BACKFILL_FOR
 }
 
@@ -288,8 +289,8 @@ fn overdue_for_memory(entry: &Waiting, held: Unfit) -> bool {
 /// only a critical or missing reading, or disk past the limit it sets beside
 /// the `writing` slots and one-shot runs.
 fn light_hold(limits: &Limits, writing: usize) -> Option<HeldBy> {
-    if let Some(capacity::Room::Held(held)) = limits.room {
-        return Some(held);
+    if let Some(capacity::Room::Held(held)) = &limits.room {
+        return Some(held.clone());
     }
     full_disk(limits, writing)
 }
@@ -305,9 +306,9 @@ fn full_disk(limits: &Limits, writing: usize) -> Option<HeldBy> {
 /// says so under dynamic admission: none does beside one this pass
 /// `started` already.
 fn measured_fit(
-    room: Option<capacity::Room>,
+    room: Option<&capacity::Room>,
     started: bool,
-    fits: impl FnOnce(capacity::Room) -> Result<(), Unfit>,
+    fits: impl FnOnce(&capacity::Room) -> Result<(), Unfit>,
 ) -> Result<(), Unfit> {
     match room {
         None => Ok(()),
@@ -386,7 +387,7 @@ impl Manager {
         &self,
         repositories: Vec<RepositoryId>,
         slots: &[Slot],
-        jobs: &[Activity],
+        jobs: &[Load],
     ) -> Result<Limits> {
         let config = self.config();
         let overload = &config.machine.overload;
@@ -395,22 +396,24 @@ impl Manager {
         // A one-shot run holds no slot, but uses the machine's memory.
         let admitted = self.agent_queue.admitted_oneshots();
         let oneshots = admitted.len();
-        let activities: Vec<Activity> = slots
-            .iter()
-            .map(|slot| slot.activity)
-            .chain(jobs.iter().copied())
-            .chain(admitted.into_iter().map(|(_, held)| Activity::Running {
-                age: held,
-                memory: None,
+        let loads: Vec<Load> = (slots.iter())
+            .map(|slot| slot.load.clone())
+            .chain(jobs.iter().cloned())
+            .chain(admitted.into_iter().map(|run| Load {
+                space: run.space,
+                activity: Activity::Running {
+                    age: run.age,
+                    memory: None,
+                },
             }))
             .collect();
         let measured = match [global, max_jobs].contains(&RunLimit::Dynamic) {
-            true => Some(self.measure(overload, &activities).await?),
+            true => Some(self.measure(overload, loads).await?),
             false => None,
         };
         let mut limits = Limits {
             global: fixed_limit(global),
-            room: measured.filter(|_| global == RunLimit::Dynamic),
+            room: measured.clone().filter(|_| global == RunLimit::Dynamic),
             repositories: HashMap::new(),
             disk: None,
             oneshots,
@@ -461,18 +464,14 @@ impl Manager {
         Ok(room_for_a_job(&occupied, &limits))
     }
 
-    /// What the machine's memory and disk leave beside the slots
-    /// `activities` use.
-    async fn measure(
-        &self,
-        overload: &Overload,
-        activities: &[Activity],
-    ) -> Result<capacity::Room> {
+    /// What the machine's memory and disk leave beside the slots `loads`
+    /// use.
+    async fn measure(&self, overload: &Overload, loads: Vec<Load>) -> Result<capacity::Room> {
         let paths = self.admission_paths().await?;
         let paths: Vec<&Path> = paths.iter().map(PathBuf::as_path).collect();
         Ok(capacity::room(
             capacity::sample(&paths, overload),
-            Agents::count(activities.iter().copied()),
+            Agents::count(loads),
             overload,
         ))
     }

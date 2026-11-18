@@ -38,8 +38,8 @@ pub use merges::{
 };
 pub use ports::{PortCatalog, PortOverview, PortRequest, PortReservation, PortSuggestion};
 pub use queue::{
-    Blocker, ChatQueueRequest, HeldBy, QueueAdmission, QueueEntry, QueueRequest, QueuedJob,
-    QueuedPlan, StoppedSpace,
+    Blocker, ChatQueueRequest, HeldBy, MemoryReservation, QueueAdmission, QueueEntry, QueueRequest,
+    QueuedJob, QueuedPlan, Reserver, StoppedSpace,
 };
 pub use ready::{ReadyMarks, ReadyOutcome, ReviewMark, SkippedPr};
 pub use removal::{

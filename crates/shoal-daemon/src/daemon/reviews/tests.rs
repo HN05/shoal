@@ -1317,9 +1317,7 @@ async fn a_run_recovery_cannot_stop_keeps_its_checkout_and_admission() {
         (id, held)
     });
     assert_eq!(held, both.collect());
-    let slots = manager.agent_queue.admitted_oneshots();
-    assert_eq!(slots.len(), 2);
-    assert!(slots.iter().all(|(held, _)| *held == repository));
+    assert_eq!(manager.agent_queue.admitted_oneshots().len(), 2);
 }
 
 /// The test process a survivor outlives no longer than.

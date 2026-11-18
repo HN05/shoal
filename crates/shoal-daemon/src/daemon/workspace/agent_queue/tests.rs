@@ -1,4 +1,5 @@
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::{BTreeMap, HashSet},
     time::Duration,
@@ -19,7 +20,10 @@ use crate::{
         workspace::{Manager, PermissionTargets, capacity::Activity},
         workspace_files::Attacher,
     },
-    model::{QueueAdmission, QueueEntry, QueueRequest, Repository, Workspace},
+    model::{
+        HeldBy, MemoryReservation, QueueAdmission, QueueEntry, QueueRequest, Repository, Reserver,
+        Workspace,
+    },
     state::{ExecutionState, QueueKind, QueueState, WorkspaceState},
 };
 use shoal_protocol::assignments::Done;
@@ -152,6 +156,41 @@ async fn a_full_machine_queues_until_a_start_ends() {
             .iter()
             .any(|notification| notification.kind == NotificationKind::QueueStarted)
     );
+}
+
+#[tokio::test]
+async fn a_memory_hold_numbers_the_spaces_that_reserve_it_while_they_exist() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    add(&manager, &repo, "first").await;
+    let waiting = add(&manager, &repo, "second").await.entry.unwrap();
+    let reserving = preparing(&manager, &repo, "reserving").await;
+    let reservation = |space: &SpaceId| MemoryReservation {
+        by: Reserver::Job,
+        space_id: Some(space.clone()),
+        number: None,
+        bytes: 1 << 30,
+    };
+    let held = HeldBy::Memory {
+        needed: 2 << 30,
+        left: 1 << 30,
+        reserved: vec![
+            reservation(&reserving.id),
+            reservation(&SpaceId::from("removed".to_owned())),
+        ],
+    };
+    let unstarted = [waiting.id.clone()].into();
+    let now = std::time::Instant::now();
+    let holds = [(waiting.id.clone(), held)].into();
+    manager.agent_queue.record_held_back(holds, &unstarted, now);
+    let entries = manager.queue_entries().await.unwrap();
+    let entry = entries.iter().find(|entry| entry.id == waiting.id).unwrap();
+    let Some(HeldBy::Memory { reserved, .. }) = &entry.held_by else {
+        panic!("not held for memory: {:?}", entry.held_by);
+    };
+    let numbers: Vec<_> = reserved.iter().map(|reserved| reserved.number).collect();
+    assert_eq!(numbers, [Some(reserving.number), None]);
 }
 
 #[tokio::test]
@@ -488,7 +527,7 @@ async fn protection_stopped_agents_keep_their_slot_without_load() {
         .unwrap();
     let agent = connected_agent(&manager, &workspace).await;
     let activities = |slots: Vec<Slot>| -> Vec<Activity> {
-        slots.into_iter().map(|slot| slot.activity).collect()
+        slots.into_iter().map(|slot| slot.load.activity).collect()
     };
     assert!(matches!(
         activities(
@@ -1681,15 +1720,19 @@ async fn an_entrys_wait_for_memory_lasts_while_passes_hold_it_for_memory() {
     let (_temp, manager) = manager().await;
     let queue = &manager.agent_queue;
     let id = QueueEntryId::from("waiting");
-    let memory = crate::model::HeldBy::Memory { needed: 2, left: 1 };
+    let memory = crate::model::HeldBy::Memory {
+        needed: 2,
+        left: 1,
+        reserved: Vec::new(),
+    };
     let start = std::time::Instant::now();
     let at = |seconds| start + Duration::from_secs(seconds);
     let unstarted = [id.clone()].into();
     let hold = |held, seconds| {
         queue.record_held_back([(id.clone(), held)].into(), &unstarted, at(seconds));
     };
-    hold(memory, 0);
-    hold(memory, 60);
+    hold(memory.clone(), 0);
+    hold(memory.clone(), 60);
     // A pass that started another entry first did not measure it.
     queue.record_held_back(Default::default(), &unstarted, at(70));
     assert_eq!(

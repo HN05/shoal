@@ -77,12 +77,18 @@ pub struct QueueEntry {
 }
 
 /// What keeps a waiting entry from starting, besides the work it waits for.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "reason", rename_all = "snake_case")]
 pub enum HeldBy {
     /// Memory below the warning threshold has `left` bytes, no more than the
-    /// `needed` bytes the entry is expected to use.
-    Memory { needed: u64, left: u64 },
+    /// `needed` bytes the entry is expected to use, once the work `reserved`
+    /// lists has what it is counted at.
+    Memory {
+        needed: u64,
+        left: u64,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        reserved: Vec<MemoryReservation>,
+    },
     /// Memory is kept for a higher-ranked entry that has waited for it as
     /// long as work may start ahead of it.
     MemoryKept,
@@ -108,6 +114,31 @@ pub enum HeldBy {
         limit: crate::executions::ServiceLimit,
         until: crate::time::UnixTime,
     },
+}
+
+/// Memory that admission counts a warming agent or a CI job at beyond what
+/// the machine's reading already holds, which leaves that much less for a
+/// waiting entry.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MemoryReservation {
+    pub by: Reserver,
+    /// The space it runs in; none for a launch yet to open its space.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub space_id: Option<SpaceId>,
+    /// That space's number while it exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub number: Option<shoal_ids::space_ids::SpaceNumber>,
+    pub bytes: u64,
+}
+
+/// What reserves memory: an agent, or a one-shot run such as a review, in
+/// its first minutes, before its memory shows, or a CI job until it ends,
+/// for what its earlier runs reached beyond what it uses now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Reserver {
+    Agent,
+    Job,
 }
 
 /// A CI job of a repository's runner, from the forge's queue, with the run

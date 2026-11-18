@@ -1598,7 +1598,7 @@ async fn a_job_counts_as_just_started_until_its_runner_starts() {
             .await
             .unwrap()
             .into_iter()
-            .map(|activity| match activity {
+            .map(|load| match load.activity {
                 Activity::Job { age, .. } => age,
                 other => panic!("{other:?}"),
             })

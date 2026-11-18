@@ -10,9 +10,13 @@ use crate::{
     model::{ChatQueueRequest, QueueEntry, QueueRequest},
     state::{QueueKind, QueueState},
 };
-use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
+use shoal_ids::{
+    queue_entry_ids::QueueEntryId,
+    space_ids::{SpaceId, SpaceNumber},
+};
 use shoal_protocol::launches::LaunchSource;
 use shoal_protocol::time::UnixTime;
+use std::collections::HashMap;
 
 /// A waiting row of the queue.
 pub(super) struct QueuedRow {
@@ -203,6 +207,13 @@ fn setup_failed(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Result<b
             crate::state::WorkspaceState::Preparing
         ],
     )
+}
+
+/// The number of each space that exists, by its ID.
+pub(super) fn space_numbers(db: &rusqlite::Connection) -> Result<HashMap<SpaceId, SpaceNumber>> {
+    let mut statement = db.prepare("SELECT id,number FROM spaces")?;
+    let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
 /// The parents the launches of new chats name with `--parent`, by entry.

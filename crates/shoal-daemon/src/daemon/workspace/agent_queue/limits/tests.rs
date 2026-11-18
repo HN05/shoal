@@ -9,6 +9,7 @@ fn free(memory: u64) -> Option<capacity::Room> {
     Some(capacity::Room::Free {
         memory,
         agent: 2 * GIB,
+        reserved: Vec::new(),
     })
 }
 
@@ -130,8 +131,8 @@ fn jobs_count_only_against_their_own_limits_and_share_the_dynamic_start() {
     assert_eq!(admit(&["a".into()], &queue, &fixed, false), ["j1"]);
     // Measured memory starts one entry a pass, a job or an agent, where it
     // fits.
-    let dynamic = |room| Limits {
-        room,
+    let dynamic = |room: Option<capacity::Room>| Limits {
+        room: room.clone(),
         jobs: JobLimits {
             room,
             ..JobLimits::default()
@@ -145,6 +146,7 @@ fn jobs_count_only_against_their_own_limits_and_share_the_dynamic_start() {
     let big_agents = Some(capacity::Room::Free {
         memory: 5 * GIB,
         agent: 6 * GIB,
+        reserved: Vec::new(),
     });
     assert_eq!(admit(&[], &queue, &dynamic(big_agents), false), ["j1"]);
     // An agent that started takes the pass's start from the job behind it.
@@ -335,7 +337,7 @@ fn each_entry_passed_over_names_what_holds_it() {
     let held_by = |entries: &[(&str, HeldBy)]| -> Vec<(String, HeldBy)> {
         entries
             .iter()
-            .map(|(id, held)| (id.to_string(), *held))
+            .map(|(id, held)| (id.to_string(), held.clone()))
             .collect()
     };
     // Fixed limits: the repository's, then the machine's once it fills.
@@ -387,15 +389,19 @@ fn each_entry_passed_over_names_what_holds_it() {
     // Measured memory names what each needs and what is left.
     let mut queue = waiting(&[("a1", "a")]);
     queue.insert(0, job("j1", 4 * GIB));
-    let dynamic = |room| Limits {
-        room,
+    let dynamic = |room: Option<capacity::Room>| Limits {
+        room: room.clone(),
         jobs: JobLimits {
             room,
             ..JobLimits::default()
         },
         ..Limits::default()
     };
-    let memory = |needed| HeldBy::Memory { needed, left: GIB };
+    let memory = |needed| HeldBy::Memory {
+        needed,
+        left: GIB,
+        reserved: Vec::new(),
+    };
     assert_eq!(
         held(&[], &queue, &dynamic(free(GIB))),
         held_by(&[("a1", memory(2 * GIB)), ("j1", memory(4 * GIB))])
@@ -453,10 +459,14 @@ fn a_light_agent_needs_no_memory_room_but_waits_out_critical_readings_and_low_di
     assert!(admitted(&room(capacity::Room::Free {
         memory: 0,
         agent: 2 * GIB,
+        reserved: Vec::new(),
     })));
     assert!(admitted(&room(capacity::Room::Staggered)));
     for held in [HeldBy::Reading, HeldBy::Disk] {
-        assert!(!admitted(&room(capacity::Room::Held(held))), "{held:?}");
+        assert!(
+            !admitted(&room(capacity::Room::Held(held.clone()))),
+            "{held:?}"
+        );
     }
     // Under a fixed limit, low disk lets a start through only beside no slot.
     let low_disk = |disk| Limits {
@@ -512,7 +522,7 @@ fn work_that_fits_starts_ahead_until_the_entry_waiting_for_memory_waited_its_lim
     // An agent needs 2 GiB where 1 GiB is left, and a small job fits.
     let room = free(GIB);
     let limits = Limits {
-        room,
+        room: room.clone(),
         jobs: JobLimits {
             room,
             ..JobLimits::default()
@@ -539,7 +549,8 @@ fn work_that_fits_starts_ahead_until_the_entry_waiting_for_memory_waited_its_lim
                 "agent".into(),
                 HeldBy::Memory {
                     needed: 2 * GIB,
-                    left: GIB
+                    left: GIB,
+                    reserved: Vec::new(),
                 }
             ),
             ("job".into(), HeldBy::MemoryKept),
@@ -551,7 +562,8 @@ fn work_that_fits_starts_ahead_until_the_entry_waiting_for_memory_waited_its_lim
             fixed: Some(1),
             ..JobLimits::default()
         },
-        ..limits
+        room: limits.room.clone(),
+        ..Limits::default()
     };
     assert_eq!(
         admit(&[], &queue(BACKFILL_FOR), &fixed_jobs, false),

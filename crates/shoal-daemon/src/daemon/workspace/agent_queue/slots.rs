@@ -10,7 +10,10 @@ use rusqlite::params;
 use super::weight::Light;
 use crate::{
     config::modes::ModeName,
-    daemon::workspace::{Manager, capacity::Activity},
+    daemon::workspace::{
+        Manager,
+        capacity::{Activity, Load},
+    },
     state::{ExecutionState, QueueKind, QueueState},
 };
 use shoal_ids::space_ids::SpaceId;
@@ -21,7 +24,7 @@ pub(crate) struct Slot {
     /// The repository of its space; none for a chat without one, whose
     /// slot counts toward the machine's limit alone.
     pub repository: Option<RepositoryId>,
-    pub activity: Activity,
+    pub load: Load,
 }
 
 /// What the store records toward used slots, read in one pass.
@@ -150,7 +153,10 @@ impl Manager {
             .filter_map(|(space, activity)| {
                 Some(Slot {
                     repository: open.get(&space)?.clone(),
-                    activity,
+                    load: Load {
+                        space: Some(space),
+                        activity,
+                    },
                 })
             })
             .collect();
@@ -158,7 +164,10 @@ impl Manager {
             if (launch.space.as_ref()).is_none_or(|space| open.contains_key(space)) {
                 slots.push(Slot {
                     repository: launch.repository,
-                    activity: starting_since(launch.seen_at),
+                    load: Load {
+                        space: launch.space,
+                        activity: starting_since(launch.seen_at),
+                    },
                 });
             }
         }

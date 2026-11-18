@@ -22,7 +22,10 @@ use crate::{
     daemon::{
         notifications::NotificationKind,
         scope::Caller,
-        workspace::{Manager, capacity::Activity},
+        workspace::{
+            Manager,
+            capacity::{Activity, Load},
+        },
     },
     forge::ci::CiAction,
     model::QueuedJob,
@@ -438,23 +441,28 @@ impl Manager {
             .await
     }
 
-    /// The load of each job starting or running: what it is expected to
-    /// use, what its workspace used at the latest usage sample, and how long
-    /// ago its runner started; one whose runner has not started yet has just
-    /// started, so it holds back the next start until it runs. A job whose
-    /// runner ended adds nothing, however long its workspace remains.
-    pub(crate) async fn job_activities(&self) -> Result<Vec<Activity>> {
+    /// The load of each job starting or running, in the workspace it runs
+    /// in once claimed: what it is expected to use, what its workspace used
+    /// at the latest usage sample, and how long ago its runner started; one
+    /// whose runner has not started yet has just started, so it holds back
+    /// the next start until it runs. A job whose runner ended adds nothing,
+    /// however long its workspace remains.
+    pub(crate) async fn job_activities(&self) -> Result<Vec<Load>> {
         let now = crate::time::UnixTime::now();
-        let mut activities = Vec::new();
+        let mut loads = Vec::new();
         for job in self.starting_or_running_jobs().await? {
-            activities.push(Activity::Job {
+            let memory = (job.workspace_id.as_ref())
+                .and_then(|id| self.workspace_usage(id))
+                .map(|usage| usage.memory_bytes);
+            let activity = Activity::Job {
                 age: now.duration_since(job.launched_at.unwrap_or(now)),
                 cost: self.job_cost(&job.repository_id, &job.job).await?,
-                memory: (job.workspace_id.and_then(|id| self.workspace_usage(&id)))
-                    .map(|usage| usage.memory_bytes),
-            });
+                memory,
+            };
+            let space = job.workspace_id;
+            loads.push(Load { space, activity });
         }
-        Ok(activities)
+        Ok(loads)
     }
 
     /// The jobs admitted and not yet claimed, and the claimed jobs whose

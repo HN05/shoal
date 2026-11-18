@@ -69,8 +69,12 @@ impl WaitingWork {
     /// What holds back the entries of `entries` that an upstream limit
     /// holds, leaving out those blockers took away.
     fn upstream_holds(&self) -> impl Iterator<Item = (QueueEntryId, HeldBy)> + '_ {
-        (self.entries.iter())
-            .filter_map(|entry| Some((entry.id.clone(), *self.upstream_limited.get(&entry.id)?)))
+        (self.entries.iter()).filter_map(|entry| {
+            Some((
+                entry.id.clone(),
+                self.upstream_limited.get(&entry.id)?.clone(),
+            ))
+        })
     }
 
     /// The entries that still wait once `admitted` start.

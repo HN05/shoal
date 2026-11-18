@@ -292,6 +292,7 @@ fn render_jobs(status: &SpaceStatus, palette: Palette) {
             .unwrap_or_default();
         let held = entry
             .held_by
+            .as_ref()
             .map(|held| format!("held by {}", ui::held_by_label(held)))
             .unwrap_or_default();
         outln!(

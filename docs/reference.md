@@ -2382,7 +2382,9 @@ agent; `shoal list` shows the entries after the workspaces. `queue --json` gives
 with its run, `blockers` while any remain, the setup of the workspace it opens
 among them,
 `waits_for_update` for a restore of an idle agent, `held_by` with its `reason`
-(`memory` with `needed` and `left` bytes, `memory_kept`, `disk`, `max_heavy_agents`, `max_jobs`,
+(`memory` with `needed` and `left` bytes and, in `reserved`, each warming
+agent or one-shot run and each job the room went to, `by` `agent` or `job`,
+with its space's `space_id`, the `number` while it exists, and its `bytes`, `memory_kept`, `disk`, `max_heavy_agents`, `max_jobs`,
 `repository_limit`, `permits`, `reading`, `cpu` with the `busy` and `level`
 percentages, or `upstream_limit` with the `limit`,
 `rate_limited` or `exhausted`, and the Unix-seconds `until`), a waiting entry's `rank` with its

@@ -114,6 +114,7 @@ fn queue_status_names_the_work_a_launch_waits_for() {
     entry.held_by = Some(HeldBy::Memory {
         needed: 4 << 30,
         left: 3 << 29,
+        reserved: Vec::new(),
     });
     assert_eq!(
         queue_status_cell(&entry).0,

@@ -69,6 +69,14 @@ struct OneShot {
     stop: Option<Box<dyn FnOnce() + Send + Sync>>,
 }
 
+/// A one-shot run admission let start.
+pub(crate) struct AdmittedOneShot {
+    /// The space whose work it serves.
+    pub space: Option<SpaceId>,
+    /// How long it has run.
+    pub age: Duration,
+}
+
 /// Which admitted one-shot runs protection stops.
 pub(crate) enum OneShotStop {
     /// The run that started last.
@@ -183,7 +191,7 @@ impl AgentQueue {
 
     /// What held back the entry `id` at the last admission pass.
     pub(crate) fn held_back(&self, id: &QueueEntryId) -> Option<HeldBy> {
-        self.held_back.lock().unwrap().get(id).copied()
+        self.held_back.lock().unwrap().get(id).cloned()
     }
 
     /// Mark the stopped agent of `execution` as waiting for its restore
@@ -323,19 +331,18 @@ impl AgentQueue {
         stoppable.len()
     }
 
-    /// The repository of each admitted one-shot run, with how long it has
-    /// run.
-    pub(crate) fn admitted_oneshots(&self) -> Vec<(RepositoryId, std::time::Duration)> {
+    /// Each admitted one-shot run.
+    pub(crate) fn admitted_oneshots(&self) -> Vec<AdmittedOneShot> {
         self.oneshots
             .lock()
             .unwrap()
             .runs
             .values()
             .filter_map(|run| {
-                Some((
-                    run.repository.clone(),
-                    run.admitted.borrow().as_ref()?.elapsed(),
-                ))
+                Some(AdmittedOneShot {
+                    space: run.serving.as_ref().map(|serving| serving.space.clone()),
+                    age: run.admitted.borrow().as_ref()?.elapsed(),
+                })
             })
             .collect()
     }
