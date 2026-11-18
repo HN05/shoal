@@ -46,10 +46,17 @@ async fn head_reads_through_symbolic_refs(create: Create) {
     );
     let state = head_state(&repo).await.unwrap();
     assert_eq!((state.commit, state.branch), (commit.clone(), main));
-    let (named, name) = crate::git::resolve_named_commit(&repo, "HEAD", run)
-        .await
-        .unwrap();
-    assert_eq!((named, name.as_str()), (commit, "refs/heads/main"));
+    // A symbolic ref is named by the ref its chain ends at, as Git names it.
+    for rev in ["HEAD", "refs/heads/alias"] {
+        let (named, name) = crate::git::resolve_named_commit(&repo, rev, run)
+            .await
+            .unwrap();
+        assert_eq!(
+            (named, name.as_str()),
+            (commit.clone(), "refs/heads/main"),
+            "{rev}"
+        );
+    }
 }
 
 #[tokio::test]

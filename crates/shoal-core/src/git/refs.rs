@@ -265,7 +265,9 @@ pub(crate) fn named_commit(
         Some(("HEAD", None)) => super::queries::head_in_process(repo)?
             .reference
             .unwrap_or_else(|| "HEAD".to_owned()),
-        Some((name, None)) if name.starts_with("refs/") => name.to_owned(),
+        Some((name, None)) if name.starts_with("refs/") => followed(repo, name)?
+            .target
+            .unwrap_or_else(|| name.to_owned()),
         _ => String::new(),
     };
     Ok(Some((commit, name)))
