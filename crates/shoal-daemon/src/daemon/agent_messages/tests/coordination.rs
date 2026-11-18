@@ -58,7 +58,7 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
     let (temp, manager) = manager().await;
     let (chat, worker) = chat_and_worker(&temp, &manager).await;
     let helper = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&worker.id),
             "helper".into(),
             None,
@@ -394,7 +394,7 @@ async fn a_removed_workspace_gives_the_user_the_events_it_had_not_received() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,

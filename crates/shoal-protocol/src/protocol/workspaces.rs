@@ -42,8 +42,8 @@ pub enum WorkspaceMethod {
         workspace: SpaceSelector,
     },
     /// Create a workspace on a new branch in the repository of the space
-    /// `parent`, a workspace or a chat, split from it as its child.
-    SplitWorkspace {
+    /// `parent`, a workspace or a chat, as its child.
+    CreateChild {
         parent: SpaceSelector,
         name: String,
         base: Option<String>,

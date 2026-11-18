@@ -1,4 +1,4 @@
-use crate::preparation::{self, NewSplit, NewWorkspace};
+use crate::preparation::{self, NewChild, NewWorkspace};
 use crate::test_daemon::Connect as _;
 use shoal_daemon::test_daemon::{HANG, TestDaemon, fake};
 use shoal_protocol::protocol::operations::{Ended, Failure, Progress, Report, WorkspaceStart};
@@ -48,9 +48,9 @@ async fn an_app_creates_a_workspace_and_follows_its_setup_to_a_typed_failure() {
     assert!(!unprepared.set_up(), "setup awaits a retry");
     // A split whose post-setup hook fails after setup left it ready.
     let parent = daemon.workspace("parent").await;
-    let split = NewSplit {
+    let split = NewChild {
         base: Some("HEAD".into()),
-        ..NewSplit::new(SpaceSelector::id(&parent.id), Some("child".into()))
+        ..NewChild::new(SpaceSelector::id(&parent.id), Some("child".into()))
     };
     let preparing = preparation::create(&app, split, Default::default())
         .await

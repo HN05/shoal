@@ -131,7 +131,7 @@ async fn every_deletion_records_one_removed_event_per_file() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&workspace.id),
             "audit".into(),
             None,
@@ -161,7 +161,7 @@ async fn every_deletion_records_one_removed_event_per_file() {
     attach(child.id.clone(), "removed.md").await;
     for result in ["expired.md", "low-disk.md"] {
         let audit = manager
-            .split_workspace(
+            .create_child(
                 &SpaceSelector::id(&workspace.id),
                 result.trim_end_matches(".md").into(),
                 None,

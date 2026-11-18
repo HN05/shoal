@@ -6,8 +6,8 @@ use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
 
 use crate::client::{
-    output::split::Child,
-    preparation::{self, NewSplit, Preparing},
+    output::create::Child,
+    preparation::{self, NewChild, Preparing},
 };
 use crate::{
     cli::{
@@ -64,12 +64,12 @@ pub(super) async fn run(ctx: &Context, space: Option<SpaceSelector>, split: Spli
     if let Some(issue) = &issue {
         options.name = Some(SpaceName::derive(&issue.title, "workspace"));
     }
-    let start = NewSplit {
+    let start = NewChild {
         copy: copy.map(|copy| copy.source),
         base: split.base,
         options,
         issue: issue.map(|issue| issue.url.into()),
-        ..NewSplit::new(parent.clone(), name)
+        ..NewChild::new(parent.clone(), name)
     };
     let preparing = start_child(ctx, start).await?;
     let Some(child) = set_up(ctx, preparing).await? else {
@@ -151,7 +151,7 @@ async fn current_repository(ctx: &Context) -> Result<RepositoryId> {
 /// Split the child `split` describes and follow its preparation.
 pub(super) async fn start_child(
     ctx: &Context,
-    split: NewSplit,
+    split: NewChild,
 ) -> Result<Preparing<'_, CommandPaths>> {
     let env = crate::env::without_secrets();
     preparation::create(&ctx.paths, split, env).await

@@ -1,4 +1,4 @@
-//! Creating a workspace, or a child split from one, and following its
+//! Creating a workspace, or a child of a space, and following its
 //! preparation, the setup and what follows it that the daemon runs in an
 //! operation: its progress as it comes, then the prepared workspace or how
 //! preparing it failed, with the workspace as the failure left it.
@@ -112,9 +112,9 @@ impl NewWorkspace {
     }
 }
 
-/// A child workspace for the daemon to split and prepare in an operation.
-pub struct NewSplit {
-    /// The space it is split from, a workspace or a chat.
+/// A child workspace for the daemon to create and prepare in an operation.
+pub struct NewChild {
+    /// The space it goes below, a workspace or a chat.
     pub parent: SpaceSelector,
     /// Its new branch; a copy's defaults to one named after the copied
     /// workspace's.
@@ -131,7 +131,7 @@ pub struct NewSplit {
     pub agent: Option<Box<LaunchRequest>>,
 }
 
-impl NewSplit {
+impl NewChild {
     /// A child of the space `parent` on a new branch `name`, with defaults
     /// for everything else.
     pub fn new(parent: SpaceSelector, name: Option<String>) -> Self {
@@ -146,7 +146,7 @@ impl NewSplit {
         }
     }
 
-    /// The request that splits it and starts preparing it with `env`.
+    /// The request that creates it and starts preparing it with `env`.
     fn method(self, env: BTreeMap<String, String>) -> OperationMethod {
         let Self {
             parent,
@@ -157,7 +157,7 @@ impl NewSplit {
             issue,
             agent,
         } = self;
-        OperationMethod::StartSplit {
+        OperationMethod::StartChild {
             parent,
             name,
             copy,
@@ -170,10 +170,10 @@ impl NewSplit {
     }
 }
 
-/// A workspace to create: a new one, or a child split from another.
+/// A workspace to create: a new one, or a child of a space.
 pub enum Creation {
     Workspace(NewWorkspace),
-    Split(NewSplit),
+    Child(NewChild),
 }
 
 impl From<NewWorkspace> for Creation {
@@ -182,9 +182,9 @@ impl From<NewWorkspace> for Creation {
     }
 }
 
-impl From<NewSplit> for Creation {
-    fn from(split: NewSplit) -> Self {
-        Self::Split(split)
+impl From<NewChild> for Creation {
+    fn from(child: NewChild) -> Self {
+        Self::Child(child)
     }
 }
 
@@ -209,7 +209,7 @@ pub async fn start<D: Daemon>(
 ) -> Result<StartedWorkspace> {
     let method = match creation.into() {
         Creation::Workspace(new) => new.method(env),
-        Creation::Split(split) => split.method(env),
+        Creation::Child(child) => child.method(env),
     };
     connection::request(daemon, method).await
 }

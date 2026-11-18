@@ -310,7 +310,7 @@ async fn an_app_queues_an_agent_once_it_can_run() {
     // A workspace's agent queues agents only in the workspaces below its own,
     // and regardless of the limits as its limits permission allows.
     let parent = daemon.workspace("parent").await;
-    let split = WorkspaceMethod::SplitWorkspace {
+    let split = WorkspaceMethod::CreateChild {
         parent: SpaceSelector::id(&parent.id),
         name: "child".into(),
         base: Some("HEAD".into()),
@@ -414,7 +414,7 @@ async fn a_scoped_start_reopens_only_a_workspace_below_its_own() {
     let existing = daemon.workspace("api").await;
     let child = daemon
         .manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&existing.id),
             "child".into(),
             None,
@@ -435,7 +435,7 @@ async fn a_scoped_start_reopens_only_a_workspace_below_its_own() {
     let agent = daemon.scoped(&existing).await;
     let own = connection::request::<StartedWorkspace>(&agent, reopen(&existing)).await;
     let refusal = format!("{:#}", own.unwrap_err());
-    assert!(refusal.contains("split from theirs"), "{refusal}");
+    assert!(refusal.contains("below theirs"), "{refusal}");
     let started: StartedWorkspace = connection::request(&agent, reopen(&child)).await.unwrap();
     assert!(started.reused);
     assert_eq!(started.workspace.id, child.id);
@@ -506,7 +506,7 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
     assert_eq!(code(inspect(&app, "api").await), ErrorCode::NotFound);
     // A workspace's agent starts workspaces below its own.
     let parent = daemon.workspace("parent").await;
-    let split = |agent| OperationMethod::StartSplit {
+    let split = |agent| OperationMethod::StartChild {
         parent: SpaceSelector::id(&parent.id),
         name: Some("child".into()),
         copy: None,
@@ -530,7 +530,7 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
     assert!(format!("{error:#}").contains("no mode triage"), "{error:#}");
     // Nor does a split on previous-checkout syntax for its branch.
     let mut previous = split(None);
-    if let OperationMethod::StartSplit { name, .. } = &mut previous {
+    if let OperationMethod::StartChild { name, .. } = &mut previous {
         *name = Some("@{-1}".into());
     }
     let error = connection::request::<StartedWorkspace>(&agent, previous)
@@ -679,7 +679,7 @@ async fn a_scoped_start_takes_no_queue_entry_of_another_launch() {
     let parent = daemon.workspace("parent").await;
     let child = daemon
         .manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -727,7 +727,7 @@ async fn a_workspaces_agent_renames_the_spaces_its_scope_reaches() {
     let app = daemon.connector();
     let parent = daemon.workspace("parent").await;
     let outside = daemon.workspace("outside").await;
-    let split = WorkspaceMethod::SplitWorkspace {
+    let split = WorkspaceMethod::CreateChild {
         parent: SpaceSelector::id(&parent.id),
         name: "child".into(),
         base: Some("HEAD".into()),

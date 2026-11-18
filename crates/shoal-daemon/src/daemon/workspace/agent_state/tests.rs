@@ -289,7 +289,7 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
         )
         .await;
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&own.id),
             "child".into(),
             None,

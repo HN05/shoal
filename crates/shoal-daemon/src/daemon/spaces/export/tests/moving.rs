@@ -221,7 +221,7 @@ async fn a_moving_workspace_takes_the_workspace_below_it_at_its_end() {
     let (source, exporting, source_repo, _origin) = exporter().await;
     let workspace = stopped_workspace(&exporting, &source_repo).await;
     let selector = SpaceSelector::id(&workspace.id);
-    let child = (exporting.split_workspace(&selector, "child".into(), None, Default::default()))
+    let child = (exporting.create_child(&selector, "child".into(), None, Default::default()))
         .await
         .unwrap();
     // As its agent writes while it stops, after the caller's check.

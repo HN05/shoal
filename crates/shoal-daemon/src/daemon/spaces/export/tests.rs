@@ -344,7 +344,7 @@ async fn a_chat_that_starts_after_the_export_checked_keeps_everything() {
         .await
         .unwrap();
     let split = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&workspace.id),
             "split".into(),
             None,

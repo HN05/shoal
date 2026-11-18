@@ -508,7 +508,7 @@ async fn removing_a_chat_removes_the_workspaces_below_it_first_and_stops_its_age
         .await
         .unwrap();
     let split = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&opened.id),
             "split".into(),
             None,

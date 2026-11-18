@@ -260,7 +260,7 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
         .await
         .unwrap();
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,

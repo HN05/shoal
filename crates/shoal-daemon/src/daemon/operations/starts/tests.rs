@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use super::{Opening, Preparing, Split};
+use super::{Child, Opening, Preparing};
 use crate::{
     config::permissions::PermissionsConfig,
     daemon::notifications::NotificationKind,
@@ -311,14 +311,14 @@ async fn a_split_reports_its_failed_preparation_too() {
         )
         .await
         .unwrap();
-    let split = Split {
+    let split = Child {
         name: Some("child".into()),
         copy: None,
         base: None,
         options: Default::default(),
     };
     let selector = SpaceSelector::id(&parent.id);
-    let started = (manager.start_split(&selector, split, without_agent(), None))
+    let started = (manager.start_child(&selector, split, without_agent(), None))
         .await
         .unwrap();
     let message = "setup exited with status 1".to_owned();
@@ -343,14 +343,14 @@ async fn a_chat_splits_a_child_workspace_below_itself() {
     ))
     .await
     .unwrap();
-    let split = Split {
+    let split = Child {
         name: Some("child".into()),
         copy: None,
         base: Some("HEAD".into()),
         options: Default::default(),
     };
     let selector = SpaceSelector::id(&chat.id);
-    let started = (manager.start_split(&selector, split, without_agent(), None))
+    let started = (manager.start_child(&selector, split, without_agent(), None))
         .await
         .unwrap();
     let _worker = fake::take(started.operation.as_deref().unwrap());
@@ -378,14 +378,14 @@ async fn a_chat_without_a_repository_splits_a_copy_in_the_copied_repository() {
     };
     let chat = manager.start_new_chat(None, None, new).await.unwrap();
     let selector = SpaceSelector::id(&chat.id);
-    let split = |copy| Split {
+    let split = |copy| Child {
         name: Some("child".into()),
         copy,
         base: None,
         options: Default::default(),
     };
     // A branch split names no repository for the child.
-    let refused = manager.start_split(&selector, split(None), without_agent(), None);
+    let refused = manager.start_child(&selector, split(None), without_agent(), None);
     assert!(refused.await.is_err());
     let copy = CopySource {
         workspace: SpaceSelector::id(&copied.id),
@@ -403,7 +403,7 @@ async fn a_chat_without_a_repository_splits_a_copy_in_the_copied_repository() {
         })),
         ..without_agent()
     };
-    let started = (manager.start_split(&selector, split(Some(copy)), preparing, None))
+    let started = (manager.start_child(&selector, split(Some(copy)), preparing, None))
         .await
         .unwrap();
     let _worker = fake::take(started.operation.as_deref().unwrap());

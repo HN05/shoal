@@ -1325,7 +1325,7 @@ async fn a_removal_moves_results_up_in_the_transaction_that_deletes_it() {
         .await
         .unwrap();
     let middle = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&top.id),
             "middle".into(),
             None,
@@ -1334,7 +1334,7 @@ async fn a_removal_moves_results_up_in_the_transaction_that_deletes_it() {
         .await
         .unwrap();
     let bottom = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&middle.id),
             "bottom".into(),
             None,
@@ -1390,7 +1390,7 @@ async fn a_removal_moves_results_up_in_the_transaction_that_deletes_it() {
 async fn a_clean_confirmation_naming_children_removes_clean_only() {
     let (_root, manager, workspace) = fixture().await;
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&workspace.id),
             "child".into(),
             None,

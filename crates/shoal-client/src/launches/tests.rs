@@ -44,7 +44,7 @@ async fn a_launch_in_a_workspace_queues_its_worker_on_the_launchs_task() {
 
     // A workspace's agent starts the workers of the workspaces below its
     // own only.
-    let split = WorkspaceMethod::SplitWorkspace {
+    let split = WorkspaceMethod::CreateChild {
         parent: SpaceSelector::id(&parent.id),
         name: "child".into(),
         base: Some("HEAD".into()),

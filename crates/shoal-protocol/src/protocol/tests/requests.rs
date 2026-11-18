@@ -38,7 +38,7 @@ const REQUESTS: &[&str] = &[
     r#"{"held_permissions":{"repository":"r1"}}"#,
     r#"{"create_commit_workspace":{"repository":"app","parent":"fix","start":{"revision":"v1.4.0"},"options":{"skip_setup":true,"disposable":true}}}"#,
     r#"{"open_pull_head":{"repository":"app","url":"https://forge.example/team/app/pulls/8","head":{"number":8,"reference":"refs/pull/8/head","commit":"abc"},"parent":null}}"#,
-    r#"{"split_workspace":{"parent":"fix","name":"part","base":null}}"#,
+    r#"{"create_child":{"parent":"fix","name":"part","base":null}}"#,
     r#"{"check_creation":{"repository":"app","branch":"fix","existing":null,"base":null,"git_profile":null,"path":null}}"#,
     r#"{"check_blockers":{"repository":"app","blockers":[{"space":"fix"},{"issue":"https://forge.example/team/app/issues/1"}]}}"#,
     r#"{"adopt_workspace":{"repository":"app","path":"/work/fix","copy":false}}"#,
@@ -273,7 +273,7 @@ const REQUESTS: &[&str] = &[
     r#"{"subscribe":{"topics":["spaces","questions"]}}"#,
     // Operations that create a workspace.
     r#"{"start_workspace":{"repository":"app","name":"fix","issue":"https://forge.example/team/app/issues/42","agent":{"agent":"claude","prompt":null}}}"#,
-    r#"{"start_split":{"parent":"fix","name":"part","base":"HEAD"}}"#,
+    r#"{"start_child":{"parent":"fix","name":"part","base":"HEAD"}}"#,
     r#"{"convert_to_workspace":{"chat":"app-chat","branch":"fix","issue":"https://forge.example/team/app/issues/42"}}"#,
 ];
 

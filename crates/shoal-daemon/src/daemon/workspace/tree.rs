@@ -32,14 +32,14 @@ impl Manager {
     /// Create a workspace on a new branch named `name` in the repository of
     /// the space `parent`, a workspace or a chat, leaving out what `options`
     /// say, and record `parent` as its parent.
-    pub async fn split_workspace(
+    pub async fn create_child(
         &self,
         parent: &SpaceSelector,
         name: String,
         base: Option<String>,
         options: crate::protocol::CreationOptions,
     ) -> Result<Workspace> {
-        let (parent, repo) = self.split_parent(parent, None).await?;
+        let (parent, repo) = self.child_parent(parent, None).await?;
         let (repo, git) = self.lock_repository(&repo.id).await?;
         crate::git::check_branch_name(&name)?;
         let branch = self.available_branch(&repo, &name).await?;
@@ -61,10 +61,10 @@ impl Manager {
     }
 
     /// The space `selector` names, a workspace or a chat, as the parent of
-    /// a workspace split from it, with the repository the child goes in:
-    /// the parent's own, or for a chat without one that of the workspace
-    /// `copy` copies; a branch split from such a chat names none.
-    pub(crate) async fn split_parent(
+    /// a child workspace, with the repository the child goes in: the
+    /// parent's own, or for a chat without one that of the workspace `copy`
+    /// copies; a child on a branch of such a chat names none.
+    pub(crate) async fn child_parent(
         &self,
         selector: &SpaceSelector,
         copy: Option<&CopySource>,
@@ -74,8 +74,8 @@ impl Manager {
             (Some(own), _) => own.clone(),
             (None, Some(copy)) => self.copied_repository(copy).await?,
             (None, None) => bail!(
-                "{} belongs to no repository to split a workspace in; split from a space \
-                 of the child's repository, or copy a workspace with --copy",
+                "{} belongs to no repository to create a child workspace in; create it below \
+                 a space of the child's repository, or copy a workspace with --copy",
                 parent.label()
             ),
         };

@@ -37,10 +37,9 @@ async fn below_elsewhere(manager: &Manager, root: &std::path::Path) -> (Workspac
         .await
         .unwrap();
     let selector = SpaceSelector::id(&child.id);
-    let grandchild =
-        (manager.split_workspace(&selector, "grandchild".into(), None, <_>::default()))
-            .await
-            .unwrap();
+    let grandchild = (manager.create_child(&selector, "grandchild".into(), None, <_>::default()))
+        .await
+        .unwrap();
     let away = json!({
         "id": "away", "number": 90, "name": "away", "kind": "chat",
         "status": "working", "agent": true,

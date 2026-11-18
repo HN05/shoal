@@ -277,7 +277,7 @@ async fn a_coordinator_that_received_the_question_hears_a_reply_closed_it() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,

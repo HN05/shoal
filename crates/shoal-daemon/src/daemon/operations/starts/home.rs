@@ -1,6 +1,6 @@
 //! Where a new space goes, which decides its kind: a chat in a checkout, a
 //! workspace's worktree or `root_dir`, or a workspace a start opens or a
-//! split creates. The settings its agent resolves under, the name it takes
+//! child a space creates. The settings its agent resolves under, the name it takes
 //! when nothing names it, and the step that records it there.
 use anyhow::{Context as _, Result, ensure};
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
@@ -33,9 +33,9 @@ pub(crate) enum Home<'a> {
     /// The workspace a start opens in a repository: a new one, or the one
     /// on its branch, its PR head or the record it names.
     Opening(Selector, Box<Opening<'a>>),
-    /// The child workspace a split creates in a repository below its
+    /// The child workspace a space creates in a repository below it,
     /// parent, with its worktree.
-    Split(RepositoryId, Split),
+    Child(RepositoryId, Child),
 }
 
 /// What a workspace a start opens is: where it starts, from what base,
@@ -48,9 +48,9 @@ pub(crate) struct Opening<'a> {
     pub parent: Option<SpaceId>,
 }
 
-/// The child a split creates: on the new branch `name` from `base`, or a
+/// The child a space creates: on the new branch `name` from `base`, or a
 /// copy of `copy`, on `name` or a branch named after the copied one's.
-pub(crate) struct Split {
+pub(crate) struct Child {
     pub name: Option<String>,
     pub copy: Option<CopySource>,
     pub base: Option<String>,
@@ -71,7 +71,7 @@ impl Home<'_> {
     pub(super) fn kind(&self) -> SpaceKind {
         match self {
             Self::Checkout(_) | Self::Worktree(_) | Self::Root => SpaceKind::Chat,
-            Self::Opening(..) | Self::Split(..) => SpaceKind::Workspace,
+            Self::Opening(..) | Self::Child(..) => SpaceKind::Workspace,
         }
     }
 }
@@ -80,7 +80,7 @@ impl Manager {
     /// The repository of the space that goes at `home`, if any.
     pub(crate) async fn home_repository(&self, home: &Home<'_>) -> Result<Option<RepositoryId>> {
         Ok(match home {
-            Home::Checkout(repository) | Home::Split(repository, _) => Some(repository.clone()),
+            Home::Checkout(repository) | Home::Child(repository, _) => Some(repository.clone()),
             Home::Worktree(workspace) => self.chat_workspace(workspace).await?.repository_id,
             Home::Root => None,
             Home::Opening(repository, _) => Some(self.repository(repository.clone()).await?.id),
@@ -89,7 +89,7 @@ impl Manager {
 
     /// The settings the agent of a space at `home` in `repository` launches
     /// with: those of the workspace an opening names, its worktree's file
-    /// included, or of the parent a split goes below, else the repository's,
+    /// included, or of the parent a child goes below, else the repository's,
     /// and for a chat without a repository the global config's, with the
     /// mode files beside it.
     pub(super) async fn home_settings(
@@ -105,8 +105,8 @@ impl Manager {
                     return self.workspace_settings_with_templates(&workspace).await;
                 }
             }
-            (Home::Split(..), _) => {
-                let parent = self.space_by_id(parent.context("a split names its parent")?);
+            (Home::Child(..), _) => {
+                let parent = self.space_by_id(parent.context("a child names its parent")?);
                 return (self.space_settings_with_templates(&parent.await?, repository)).await;
             }
             _ => {}
@@ -137,7 +137,7 @@ impl Manager {
                 let root_dir = self.config().root_dir(&self.paths)?;
                 ChatHome::Root(&root_dir).chat_name(mode)
             }
-            Home::Opening(..) | Home::Split(..) => return Ok(None),
+            Home::Opening(..) | Home::Child(..) => return Ok(None),
         };
         Ok(Some(SpaceName::derive(&name, "chat")))
     }
@@ -159,10 +159,10 @@ impl Manager {
                 let opened = self.open_for_start(repository, *opening, parent, caller);
                 Ok(opened.await?.into())
             }
-            Home::Split(repository, mut split) => {
-                split.options.name = name;
-                let parent = parent.context("a split names its parent")?;
-                let child = self.create_child(&parent, &repository, split).await?;
+            Home::Child(repository, mut child) => {
+                child.options.name = name;
+                let parent = parent.context("a child names its parent")?;
+                let child = self.record_child(&parent, &repository, child).await?;
                 Ok(Recorded {
                     space: child.into(),
                     reused: false,
@@ -206,23 +206,23 @@ impl Manager {
         })
     }
 
-    /// Create the child `split` describes below the space `parent`, in
+    /// Create the child `child` describes below the space `parent`, in
     /// `repository`.
-    async fn create_child(
+    async fn record_child(
         &self,
         parent: &SpaceId,
         repository: &RepositoryId,
-        Split {
+        Child {
             name,
             copy,
             base,
             options,
-        }: Split,
+        }: Child,
     ) -> Result<Workspace> {
         let Some(copy) = copy else {
             let name = name.context("name the child's branch")?;
             return self
-                .split_workspace(&SpaceSelector::id(parent), name, base, options)
+                .create_child(&SpaceSelector::id(parent), name, base, options)
                 .await;
         };
         ensure!(base.is_none(), "a copy starts from its source, not a base");

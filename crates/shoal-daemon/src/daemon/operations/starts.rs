@@ -1,5 +1,5 @@
 //! Starting a new space through one sequence, whatever its kind and
-//! whoever starts it, a launch, `StartWorkspace` or `StartSplit`: its agent
+//! whoever starts it, a launch, `StartWorkspace` or `StartChild`: its agent
 //! resolved under the settings where it goes, its name, the checks before
 //! anything is recorded, the space recorded at its home, which decides its
 //! kind, linked to the issue it starts on, its agent queued, and the
@@ -17,7 +17,7 @@ mod queue;
 mod waiting;
 
 pub(crate) use agent::Preparing;
-pub(crate) use home::{Home, Opening, Recorded, Split};
+pub(crate) use home::{Child, Home, Opening, Recorded};
 pub(crate) use link::StartIssue;
 pub(crate) use waiting::{note_stopped, preparation_waits};
 
@@ -201,26 +201,26 @@ impl Manager {
         self.start_space(start, caller).await?.into_workspace()
     }
 
-    /// Split child `split` from the space `parent`, a workspace or a chat,
-    /// on its base or a copy, leaving out what its options say, and start
-    /// preparing it.
-    pub(crate) async fn start_split(
+    /// Create the child `child` of the space `parent`, a workspace or a
+    /// chat, on its base or a copy, leaving out what its options say, and
+    /// start preparing it.
+    pub(crate) async fn start_child(
         self: &Arc<Self>,
         parent: &SpaceSelector,
-        mut split: Split,
+        mut child: Child,
         preparing: Preparing<LaunchRequest>,
         caller: Option<&Caller>,
     ) -> Result<StartedWorkspace> {
-        let (parent, repo) = self.split_parent(parent, split.copy.as_ref()).await?;
+        let (parent, repo) = self.child_parent(parent, child.copy.as_ref()).await?;
         let repository = (&repo.id).into();
         let issue = (self.read_start_issue(&repository, preparing.issue.as_ref())).await?;
         let new = NewSpace {
-            name: split.options.name.take(),
+            name: child.options.name.take(),
             parent: Some(parent.id),
-            priority: split.options.priority,
+            priority: child.options.priority,
         };
         let start = SpaceStart {
-            home: Home::Split(repo.id, split),
+            home: Home::Child(repo.id, child),
             new,
             issue,
             preparing,

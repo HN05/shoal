@@ -287,7 +287,7 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
     let (temp, manager) = manager().await;
     let parent = workspace(&temp, &manager, "parent").await;
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,

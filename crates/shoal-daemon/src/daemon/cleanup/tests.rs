@@ -1060,7 +1060,7 @@ async fn completion_cleanup_keeps_a_parent_whose_child_elsewhere_stalled() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -1131,7 +1131,7 @@ async fn split_across_directories(
             .await
     } else {
         manager
-            .split_workspace(
+            .create_child(
                 &SpaceSelector::id(&parent.id),
                 "child".into(),
                 None,

@@ -106,7 +106,7 @@ async fn the_worktree_goes_with_a_checkpoint_and_the_space_stays_a_chat() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&workspace.id),
             "part".into(),
             None,

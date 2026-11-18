@@ -217,7 +217,7 @@ async fn scoped_callers_set_only_their_own_progress_read_below_and_unblock_below
         )
         .await;
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&own.id),
             "child".into(),
             None,

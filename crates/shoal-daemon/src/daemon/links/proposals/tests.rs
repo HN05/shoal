@@ -340,7 +340,7 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         .await
         .unwrap();
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,

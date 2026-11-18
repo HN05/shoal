@@ -11,7 +11,7 @@ use super::{
     open::{print_warnings, publish, report_proposed},
 };
 use crate::client::output::items::Revert;
-use crate::client::preparation::{self, NewSplit, NewWorkspace, Preparing};
+use crate::client::preparation::{self, NewChild, NewWorkspace, Preparing};
 use crate::client::{forge_reads, items};
 use crate::{
     cli::{
@@ -151,9 +151,9 @@ async fn revert_workspace(
     let base = Some(format!("origin/{}", pr.base));
     let preparing = match from {
         Reverting::Workspace(workspace) if crate::env::is_scoped() => {
-            let start = NewSplit {
+            let start = NewChild {
                 base,
-                ..NewSplit::new(SpaceSelector::id(&workspace.id), Some(name))
+                ..NewChild::new(SpaceSelector::id(&workspace.id), Some(name))
             };
             split::start_child(ctx, start).await?
         }

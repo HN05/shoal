@@ -10,7 +10,7 @@ use super::super::{
     conversions::WorkspaceConversion,
     operations::{
         Entry,
-        starts::{Opening, Preparing, Split},
+        starts::{Child, Opening, Preparing},
     },
     scope::{Caller, Scoped},
     workspace::{Manager, NewWorkspace},
@@ -25,7 +25,7 @@ fn starts_work(method: &OperationMethod) -> bool {
     match method {
         OperationMethod::StartOperation { .. }
         | OperationMethod::StartWorkspace { .. }
-        | OperationMethod::StartSplit { .. }
+        | OperationMethod::StartChild { .. }
         | OperationMethod::ConvertToWorkspace { .. } => true,
         OperationMethod::FollowOperation { .. }
         | OperationMethod::CancelOperation { .. }
@@ -102,7 +102,7 @@ pub(super) async fn handle(
                     .await?,
             )
         }
-        OperationMethod::StartSplit {
+        OperationMethod::StartChild {
             parent,
             name,
             copy,
@@ -112,7 +112,7 @@ pub(super) async fn handle(
             agent,
             env,
         } => {
-            let split = Split {
+            let split = Child {
                 name,
                 copy,
                 base,
@@ -130,7 +130,7 @@ pub(super) async fn handle(
             };
             Body::WorkspaceStarted(
                 manager
-                    .start_split(&parent, split, preparing, caller)
+                    .start_child(&parent, split, preparing, caller)
                     .await?,
             )
         }
@@ -177,7 +177,7 @@ impl Scoped for OperationMethod {
     ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             OperationMethod::StartOperation { spec, .. } => Some(spec.workspace_mut()),
-            OperationMethod::StartSplit { parent, copy, .. } => {
+            OperationMethod::StartChild { parent, copy, .. } => {
                 if let Some(copy) = copy {
                     manager.copy_within(caller, copy).await?;
                 }

@@ -78,7 +78,7 @@ fn bare() -> crate::daemon::operations::starts::Preparing<crate::protocol::opera
 
 #[tokio::test]
 async fn a_started_or_split_workspace_records_the_priority_it_is_given() {
-    use crate::daemon::operations::starts::{Opening, Split};
+    use crate::daemon::operations::starts::{Child, Opening};
     use crate::protocol::operations::WorkspaceStart;
     use shoal_protocol::protocol::CreationOptions;
     let (temp, manager) = manager().await;
@@ -109,14 +109,14 @@ async fn a_started_or_split_workspace_records_the_priority_it_is_given() {
         .create_workspace(&repo.id, "parent".into(), Some("HEAD".into()), None, None)
         .await
         .unwrap();
-    let split = Split {
+    let split = Child {
         name: Some("split".into()),
         copy: None,
         base: None,
         options: options.clone(),
     };
     let split = manager
-        .start_split(&SpaceSelector::id(&parent.id), split, bare(), None)
+        .start_child(&SpaceSelector::id(&parent.id), split, bare(), None)
         .await
         .unwrap();
     let _split_worker = crate::daemon::operations::fake::take(split.operation.as_deref().unwrap());

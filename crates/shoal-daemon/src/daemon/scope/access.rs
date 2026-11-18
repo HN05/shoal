@@ -22,7 +22,7 @@ use shoal_protocol::space_names::SpaceSelector;
 /// Why a scoped caller cannot start the worker of a workspace outside its
 /// tree.
 const WORKER_REFUSAL: &str =
-    "workspace processes can start agents only in the workspaces split from theirs";
+    "workspace processes can start agents only in the workspaces below theirs";
 
 impl Manager {
     /// Put a space `caller` starts below the space `parent` names, which

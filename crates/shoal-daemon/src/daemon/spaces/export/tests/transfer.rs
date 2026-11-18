@@ -249,7 +249,7 @@ async fn an_imported_child_opens_at_the_top_without_its_exporters_parent() {
         .await
         .unwrap();
     let child = exporting
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,

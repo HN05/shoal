@@ -387,7 +387,7 @@ async fn a_chat_never_takes_a_workspace_it_runs_in_or_one_above_it() {
         .await
         .unwrap();
     let split = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&host.id),
             "split".into(),
             None,

@@ -837,7 +837,7 @@ async fn hook_delivery_waits_only_for_the_workspaces_it_reads() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -886,7 +886,7 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
         .await
         .unwrap();
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -895,7 +895,7 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
         .await
         .unwrap();
     let grandchild = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&child.id),
             "grandchild".into(),
             None,
@@ -1057,7 +1057,7 @@ async fn acknowledging_child_updates_leaves_them_to_a_running_child_wait() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -1191,7 +1191,7 @@ async fn hook_responses_fit_messages_and_updates_together() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -1246,7 +1246,7 @@ async fn a_delivery_too_large_for_one_response_arrives_in_parts() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -1313,7 +1313,7 @@ async fn deliveries_left_out_of_a_response_stay_pending_whole() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -1869,7 +1869,7 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -2132,7 +2132,7 @@ async fn messages_queued_during_a_wait_come_with_its_updates() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,

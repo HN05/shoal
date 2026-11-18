@@ -23,7 +23,7 @@ async fn tree(manager: &std::sync::Arc<Manager>, repo: &Repository) -> [SpaceId;
         .unwrap();
     let selector = SpaceSelector::id(&worker.id);
     let base = Some("worker".to_owned());
-    let child = (manager.split_workspace(&selector, "child".into(), base, Default::default()))
+    let child = (manager.create_child(&selector, "child".into(), base, Default::default()))
         .await
         .unwrap();
     fs::write(child.path.join("work"), "work\n").unwrap();
@@ -215,7 +215,7 @@ async fn a_carried_space_that_cannot_go_refuses_before_anything_ends() {
         ..Default::default()
     };
     let scratch = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&worker.id),
             "scratch".into(),
             None,
@@ -284,10 +284,10 @@ async fn a_selection_leaves_the_other_spaces_below_one_level_up() {
     let below = SpaceSelector::id(&worker.id);
     let child = test_support::working_below(&manager, &repo, "child", &worker.id, "worker").await;
     let base = Some("worker".to_owned());
-    let stacked = (manager.split_workspace(&below, "stacked".into(), base, Default::default()))
+    let stacked = (manager.create_child(&below, "stacked".into(), base, Default::default()))
         .await
         .unwrap();
-    let picked = (manager.split_workspace(&below, "picked".into(), None, Default::default()))
+    let picked = (manager.create_child(&below, "picked".into(), None, Default::default()))
         .await
         .unwrap();
     // Its link to the base workspace can go while it still builds on that
@@ -353,7 +353,7 @@ async fn a_selection_moves_nothing_while_a_removal_holds_the_space_above() {
     let top = test_support::chat(&manager, "top", "chat", Some(&repo), None).await;
     let worker = test_support::working_below(&manager, &repo, "worker", &top.id, "worker").await;
     let below = SpaceSelector::id(&worker.id);
-    let child = (manager.split_workspace(&below, "child".into(), None, Default::default()))
+    let child = (manager.create_child(&below, "child".into(), None, Default::default()))
         .await
         .unwrap();
     let _removing = manager.space_removals.reserve(&top.id).unwrap();
@@ -385,7 +385,7 @@ async fn a_copy_carries_a_disposable_workspace_below_it() {
         disposable: true,
         ..Default::default()
     };
-    let scratch = (manager.split_workspace(&selector, "scratch".into(), None, options))
+    let scratch = (manager.create_child(&selector, "scratch".into(), None, options))
         .await
         .unwrap();
     let file = source.path().join("copy.shoal");

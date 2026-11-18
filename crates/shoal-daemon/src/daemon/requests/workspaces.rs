@@ -131,16 +131,12 @@ pub(super) async fn handle(
         WorkspaceMethod::ReopenWorkspace { workspace } => {
             Body::OpenedWorkspace(manager.reopen_workspace(&workspace).await?)
         }
-        WorkspaceMethod::SplitWorkspace {
+        WorkspaceMethod::CreateChild {
             parent,
             name,
             base,
             options,
-        } => Body::Workspace(
-            manager
-                .split_workspace(&parent, name, base, options)
-                .await?,
-        ),
+        } => Body::Workspace(manager.create_child(&parent, name, base, options).await?),
         WorkspaceMethod::CheckCreation {
             repository,
             branch,
@@ -413,7 +409,7 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::SpacePlaces { space: workspace }
             | WorkspaceMethod::RenameBranch { workspace, .. }
             | WorkspaceMethod::ConvertToChat { workspace, .. }
-            | WorkspaceMethod::SplitWorkspace {
+            | WorkspaceMethod::CreateChild {
                 parent: workspace, ..
             }
             | WorkspaceMethod::CreateCommitWorkspace {

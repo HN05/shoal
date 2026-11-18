@@ -529,7 +529,7 @@ async fn agents_copy_only_live_workspaces_of_their_own_tree() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&f.source.id),
             "child".into(),
             None,

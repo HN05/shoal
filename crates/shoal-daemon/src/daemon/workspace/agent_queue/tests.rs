@@ -897,7 +897,7 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -964,7 +964,7 @@ async fn a_scoped_caller_holds_reads_and_fails_only_the_launches_it_reaches() {
         read_only: false,
     };
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "own".into(),
             None,
@@ -1021,7 +1021,7 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
     let parent = create("parent").await.unwrap();
     let sibling = create("sibling").await.unwrap();
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,

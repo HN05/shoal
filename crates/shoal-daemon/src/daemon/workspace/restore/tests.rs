@@ -949,7 +949,7 @@ async fn restore_gives_the_workspace_the_files_the_removed_one_kept() {
         .await
         .unwrap();
     let workspace = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "topic".into(),
             None,
@@ -1045,7 +1045,7 @@ async fn a_scoped_caller_restores_only_below_a_parent_in_its_scope() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -1109,7 +1109,7 @@ async fn a_restored_workspace_goes_below_its_parent_while_that_exists() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,

@@ -1,4 +1,4 @@
-//! What `shoal split` prints.
+//! What `shoal create` prints.
 use serde::{Deserialize, Serialize};
 
 use crate::output::outputs;

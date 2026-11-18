@@ -21,7 +21,7 @@ async fn split_child(manager: &Manager, root: &std::path::Path) -> (Workspace, W
         .await
         .unwrap();
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -98,7 +98,7 @@ async fn a_child_without_an_agent_lists_as_its_coordinators_work() {
     assert!(parent_working(&manager, &child).await);
     // A grandchild split from it is the same agent's work.
     let grandchild = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&child.id),
             "grandchild".into(),
             None,

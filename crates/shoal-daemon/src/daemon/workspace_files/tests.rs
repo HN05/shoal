@@ -609,7 +609,7 @@ async fn results_outlive_removal_as_long_as_its_record() {
     let (temp, manager) = manager().await;
     let parent = workspace(&temp, &manager).await;
     let child = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&parent.id),
             "audit".into(),
             None,
@@ -718,7 +718,7 @@ async fn results_stay_reachable_when_a_workspace_between_goes() {
     let (temp, manager) = manager().await;
     let top = workspace(&temp, &manager).await;
     let middle = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&top.id),
             "middle".into(),
             None,
@@ -727,7 +727,7 @@ async fn results_stay_reachable_when_a_workspace_between_goes() {
         .await
         .unwrap();
     let bottom = manager
-        .split_workspace(
+        .create_child(
             &SpaceSelector::id(&middle.id),
             "bottom".into(),
             None,
