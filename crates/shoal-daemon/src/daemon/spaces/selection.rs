@@ -33,9 +33,9 @@ impl Manager {
     }
 
     /// The refusal of a request for the space `selector` names, which does
-    /// not exist: one selected by the ID of a removed space says it was
-    /// removed, with its repository where that took it, while the journal
-    /// keeps the removal.
+    /// not exist here, as another joined machine's may: one selected by
+    /// the ID of a removed space says it was removed, with its repository
+    /// where that took it, while the journal keeps the removal.
     async fn missing_space(&self, selector: &SpaceSelector) -> anyhow::Error {
         let removal = match selector.given_id().cloned() {
             Some(id) => self.store.run(move |db| events::removal(db, &id)).await,
@@ -46,7 +46,7 @@ impl Manager {
             Ok(None) => format!("no space {selector}"),
             Err(error) => return error,
         };
-        Refusal::new(Reason::NotFound, message).into()
+        Refusal::absent(selector, message).into()
     }
 
     /// The workspace or chat, running or stopped, with the ID `id`, while

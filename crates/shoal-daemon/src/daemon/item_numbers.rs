@@ -8,6 +8,7 @@ use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 
 use crate::refusal::{Reason, Refusal};
 pub(crate) use shoal_protocol::item_numbers::{ItemKind, ItemNumber};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The number of the space `id`, a workspace or a chat.
 pub(crate) fn space_number(db: &Connection, id: &SpaceId) -> Result<SpaceNumber> {
@@ -42,7 +43,9 @@ pub(crate) fn free(db: &Connection, space: SpaceNumber) -> Result<u32> {
 }
 
 /// The refusal of `number`, which names no item of `kind`: one naming the
-/// right command when it names an item of the other kind.
+/// right command when it names an item of the other kind, and one naming
+/// the space when no space here has its number, as another joined
+/// machine's may.
 pub(crate) fn unknown(
     db: &Connection,
     kind: ItemKind,
@@ -65,7 +68,12 @@ pub(crate) fn unknown(
         (false, ItemKind::Question) => format!("unknown question {number}"),
         (false, ItemKind::Approval) => format!("unknown approval request {number}"),
     };
-    Ok(Refusal::new(Reason::NotFound, message).into())
+    let numbered =
+        crate::daemon::store::exists(db, "SELECT 1 FROM spaces WHERE number=?1", [number.space])?;
+    Ok(match numbered {
+        true => Refusal::new(Reason::NotFound, message).into(),
+        false => Refusal::absent(&SpaceSelector::Number(number.space), message).into(),
+    })
 }
 
 #[cfg(test)]

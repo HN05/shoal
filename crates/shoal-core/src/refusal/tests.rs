@@ -19,3 +19,14 @@ fn a_wrapped_error_keeps_its_whole_message() {
     assert_eq!(format!("{error:#}"), "outer: inner");
     assert_eq!(Reason::of(&error), Some(Reason::NotReady));
 }
+
+#[test]
+fn a_refusal_of_an_absent_space_names_it_through_context() {
+    let selector = SpaceSelector::Number(7.into());
+    let error: anyhow::Error = Refusal::absent(&selector, "no space 7").into();
+    let error = Err::<(), _>(error).context("stop 7").unwrap_err();
+    assert_eq!(Refusal::absent_space(&error), Some(&selector));
+    assert_eq!(Reason::of(&error), Some(Reason::NotFound));
+    let other: anyhow::Error = Refusal::new(Reason::NotFound, "no repository").into();
+    assert_eq!(Refusal::absent_space(&other), None);
+}

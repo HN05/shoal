@@ -3,6 +3,8 @@
 //! before the reason existed.
 use std::fmt;
 
+use shoal_protocol::space_names::SpaceSelector;
+
 /// Why the daemon refused an operation, where a caller can act on it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reason {
@@ -23,6 +25,9 @@ pub enum Reason {
 pub struct Refusal {
     pub(crate) reason: Reason,
     message: String,
+    /// The space the request named that this machine has none of, which
+    /// another joined machine may have.
+    absent: Option<SpaceSelector>,
 }
 
 impl Refusal {
@@ -30,7 +35,26 @@ impl Refusal {
         Self {
             reason,
             message: message.to_string(),
+            absent: None,
         }
+    }
+
+    /// The refusal of a request for the space `selector` names, which this
+    /// machine has none of.
+    pub fn absent(selector: &SpaceSelector, message: impl fmt::Display) -> Self {
+        Self {
+            absent: Some(selector.clone()),
+            ..Self::new(Reason::NotFound, message)
+        }
+    }
+
+    /// The space this machine has none of that the first refusal in
+    /// `error`'s chain names, if it names one.
+    pub fn absent_space(error: &anyhow::Error) -> Option<&SpaceSelector> {
+        let refusal = error
+            .chain()
+            .find_map(|cause| cause.downcast_ref::<Self>())?;
+        refusal.absent.as_ref()
     }
 
     /// `error` refused for `reason`, keeping its message.
