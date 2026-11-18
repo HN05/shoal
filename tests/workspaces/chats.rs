@@ -1476,11 +1476,11 @@ fn a_chats_agent_adds_a_workspace_whose_agent_the_daemon_starts() {
         workspace["workspace"]["parent"]["id"], chat["id"],
         "{workspace} {chat}"
     );
-    // One that would start at once, ignoring the queue, is refused before
-    // its workspace exists.
+    // One that would start at once, ignoring the queue, waits for its
+    // `limits` approval before its workspace exists.
     let error = fs::read_to_string(home.join("now.err")).unwrap();
     let code = fs::read_to_string(home.join("now")).unwrap();
-    assert_eq!(code.trim(), "1", "{error}");
+    assert_eq!(code.trim(), "2", "{error}");
     assert!(
         !fixture
             .run(&["status", &fixture.id("now")])

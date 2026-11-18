@@ -535,6 +535,16 @@ fn approval_row(fixture: &Fixture, request: &Value) -> String {
     format!("{id}:{digest}")
 }
 
+/// A command whose permission the CLI asks the daemon for before it runs
+/// waits for the approval request as one the daemon asks for does.
+#[test]
+fn a_command_the_cli_authorizes_reports_its_pending_approval() {
+    let fixture = Fixture::new();
+    fixture.add("agent");
+    let pending = pending_approval(scoped_command(&fixture, "agent", &["cleanup", "spaces"]));
+    assert_eq!(pending["target"], "action/admin", "{pending}");
+}
+
 pub(crate) fn pending_approval(output: Output) -> Value {
     assert_eq!(
         output.status.code(),

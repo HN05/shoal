@@ -301,14 +301,14 @@ pub(crate) async fn run(cli: Cli, daemon: RunDaemon) -> Result<i32> {
         },
     };
     ctx.recent = command.recent_name();
-    authorization::authorize(&ctx, &command).await?;
     let reporting = ctx.reporting();
     let daemon = Daemon {
         run: daemon,
         handoff: cli.daemon_handoff,
     };
-    match dispatch(ctx, command, daemon).await {
-        // An action a permission holds back waits for its approval request.
+    match run_authorized(ctx, command, daemon).await {
+        // An action a permission holds back, the command's own or one it
+        // asks the daemon for, waits for its approval request.
         Err(error) => match error.downcast::<shoal_protocol::approvals::Undecided>() {
             Ok(shoal_protocol::approvals::Undecided(request)) => {
                 approvals::declined(&reporting, &request)
@@ -317,6 +317,12 @@ pub(crate) async fn run(cli: Cli, daemon: RunDaemon) -> Result<i32> {
         },
         result => result,
     }
+}
+
+/// Run `command` once this process's permissions let it take what it does.
+async fn run_authorized(ctx: Context, command: Command, daemon: Daemon) -> Result<i32> {
+    authorization::authorize(&ctx, &command).await?;
+    dispatch(ctx, command, daemon).await
 }
 
 /// Run `command` through its group's dispatcher.
