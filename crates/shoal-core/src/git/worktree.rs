@@ -13,6 +13,7 @@ use crate::{
 };
 
 pub mod interrupted;
+pub mod left;
 
 /// Create a linked worktree of `repo` at `path` on `branch`: a new branch at
 /// revision `base` when given, otherwise the existing branch, which Git
