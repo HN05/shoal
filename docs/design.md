@@ -250,7 +250,11 @@ chat, a launch without a branch or issue included: it resolves the chat's
 agent, mode and name, after its issue's title or where it runs, checks where
 it goes as recording it would, then runs a worker of its own that opens the
 background place, whose chat worker starts the chat there from the handoff it
-waits on, and answers once the chat runs its agent. The queue entry of the
+waits on, and answers once the chat runs its agent. Every launch answers
+with the space it started in, of either kind, as it created or found it, and
+how it started the agent there, so a caller reads the space without asking
+its kind; a background place's worker reports only where the place runs. The
+queue entry of the
 launch's agent carries its source to the agent's start, which the journal
 records with it. The CLI parses the start, picks on a terminal what a picker
 picks there, adds what only its process knows, such as its directory, its
