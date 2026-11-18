@@ -30,12 +30,12 @@ pub async fn name_plan(
     let repos = crate::client::repositories::list(paths).await?;
     let repo = crate::repository::select(&repos, &plan.repository).await?;
     let found = match (issue, plan.issue()) {
+        // A name reads only the issue's number and title, so a workspace
+        // whose issue has closed keeps them.
         (None, Some(url)) => {
             let context = plan_context(plan, repo);
-            Some(
-                crate::client::forge_reads::issue_details(paths, context, url.clone().into())
-                    .await?,
-            )
+            let item = url.clone().into();
+            Some(crate::client::forge_reads::linked_issue_details(paths, context, item).await?)
         }
         _ => None,
     };

@@ -607,6 +607,36 @@ fn herdr_tab_name_templates_survive_handoff() {
     }
 }
 
+/// A start of an existing workspace's agent names the place it opens after
+/// the workspace's issue even once that issue is closed.
+#[test]
+fn a_reopened_workspaces_tab_takes_its_closed_issue() {
+    let fixture = Fixture::with_config(Some(
+        "[terminal.herdr]\ntab_name = '#{issue_number}: {issue_title}'\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
+    ));
+    fixture.add_github_origin();
+    install_fake_herdr(&fixture);
+    let mut issue = github_issue(34, "Fix the timeout", "Details");
+    fixture.script_github(&issue);
+    let url = "https://github.com/team/project/issues/34";
+    let repo = fixture.repo.to_str().unwrap();
+    let added = fixture.ok(&["start", "--wait", repo, "--branch", "topic", "--issue", url]);
+    let id = added["id"].as_str().unwrap();
+    issue["GET repos/team/project/issues/34"]["body"]["state"] = "closed".into();
+    fixture.script_github(&issue);
+    let tabs = herdr_tabs(&fixture);
+    let args = ["start", "--in", id, "--agent", "pi", "--focus"];
+    let (caller, transcript) = herdr_call(&fixture, &args, "");
+    assert!(caller.status.success(), "{} {transcript}", printed(&caller));
+    wait_for_tab(&fixture, tabs);
+    let calls = herdr_changes(&fixture);
+    let create = (calls.iter())
+        .rfind(|call| call[..2] == ["tab", "create"])
+        .unwrap();
+    let label = create.iter().position(|arg| arg == "--label").unwrap();
+    assert_eq!(create[label + 1], "#34: Fix the timeout");
+}
+
 /// `shoal rename` run in the tab Shoal opened for `workspace`.
 fn rename_in_herdr(fixture: &Fixture, workspace: &str, name: &str) -> Output {
     fixture
