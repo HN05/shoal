@@ -136,7 +136,11 @@ pub(super) async fn run_beside(
     }
     let mut plan = place_plan(&started, entry);
     let name = started.workspace.name.to_string();
-    if !terminal::start_add(ctx, settings, focused, &mut plan, None, &name).await? {
+    let placement = match focused {
+        true => terminal::Placement::Focus,
+        false => terminal::Placement::Background,
+    };
+    if !terminal::start_add(ctx, settings, placement, &mut plan, &name).await? {
         return run(ctx, started).await;
     }
     let shown = StartedBeside {

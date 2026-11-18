@@ -1436,3 +1436,21 @@ fn a_focused_worker_start_keeps_its_task_in_the_tab_it_opens() {
     let told = fs::read_to_string(fixture.root.path().join("agent-args")).unwrap();
     assert!(told.split('\0').any(|arg| arg == "do it"), "{told:?}");
 }
+
+/// A start without an agent in a mode whose `focus` is off opens the
+/// workspace's shell in a background tab, whatever `terminal.focus` says.
+#[test]
+fn a_shell_started_in_a_background_mode_opens_its_tab_unfocused() {
+    let fixture = Fixture::with_config(Some(
+        "terminal.focus = true\n[modes.quiet]\nkind = 'workspace'\nfocus = false\n",
+    ));
+    install_fake_herdr(&fixture);
+    let repo = fixture.repo.to_str().unwrap();
+    let args = ["start", repo, "--branch", "quiet-shell", "--mode", "quiet"];
+    let (caller, transcript) = herdr_call(&fixture, &args, "");
+    assert!(caller.status.success(), "{} {transcript}", printed(&caller));
+    let create = (herdr_calls(&fixture).into_iter())
+        .find(|call| call[..2] == ["tab", "create"])
+        .unwrap();
+    assert!(create.iter().any(|arg| arg == "--no-focus"), "{create:?}");
+}

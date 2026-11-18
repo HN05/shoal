@@ -170,11 +170,6 @@ impl Issue {
         crate::launches::workspace::issue_branch(self.number, &self.title)
     }
 
-    /// The issue's number and title, which name a place for its workspace.
-    pub fn place_issue(&self) -> (u64, &str) {
-        (self.number, &self.title)
-    }
-
     /// The issue as an agent's subject, worded the same in every mode; the
     /// body is the issue's description when the agent starts.
     pub fn subject(&self) -> crate::config::templates::Subject {

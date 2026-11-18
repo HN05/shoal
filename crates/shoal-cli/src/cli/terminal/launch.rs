@@ -10,7 +10,7 @@ use anyhow::{Result, ensure};
 
 use super::sessions::{left_open, report_detach};
 use crate::{
-    cli::{commands::issues::Issue, context::Context, recent},
+    cli::{context::Context, recent},
     config::{Effective, modes::ModeName},
     env,
     execution::TrackedAgent,
@@ -24,19 +24,15 @@ use crate::{
 };
 use shoal_workers::places::{groups, naming::name_plan, queued::start_in_background};
 
-/// Start `plan` beside this terminal: focused when it waits for the user,
-/// otherwise in the background, unless its mode's or the terminal's `focus`
-/// setting says otherwise.
-/// Returns whether it left this process; a focused launch without a new tab
-/// stays here, where its agent runs in a session this terminal attaches to.
-/// `name` is the planned workspace name; `focus` focuses the start whatever
-/// the settings say.
+/// Start `plan` beside this terminal as its start placed it, focused or in
+/// the background. Returns whether it left this process; a focused launch
+/// without a new tab stays here, where its agent runs in a session this
+/// terminal attaches to. `name` is the workspace's name.
 pub(in crate::cli) async fn start_add(
     ctx: &Context,
     settings: &Effective,
-    focus: bool,
+    placement: Placement,
     plan: &mut AddPlan,
-    issue: Option<&Issue>,
     name: &str,
 ) -> Result<bool> {
     ensure!(
@@ -44,10 +40,7 @@ pub(in crate::cli) async fn start_add(
         "workspace processes cannot allocate workspaces"
     );
     let host = beside(ctx, settings);
-    let requested = focus.then_some(Placement::Focus);
-    let placement = Placement::of(settings, &plan.mode(), requested, !plan.runs_unattended());
-    let issue = issue.map(Issue::place_issue);
-    name_plan(&ctx.paths, host.options.name_template.clone(), plan, issue).await?;
+    name_plan(&ctx.paths, host.options.name_template.clone(), plan, None).await?;
     let Some(places) = host.places() else {
         return Ok(false);
     };
