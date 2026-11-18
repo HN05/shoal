@@ -160,6 +160,19 @@ async fn an_unreachable_server_is_an_error_not_a_gone_block() {
     assert!(rex.block("block:1").await.is_err());
 }
 
+#[tokio::test(start_paused = true)]
+async fn a_rex_that_never_ends_fails_the_call_naming_it() {
+    let root = tempfile::tempdir().unwrap();
+    let program = root.path().join("rex");
+    install_test_script(&program, "#!/bin/sh\nexec sleep 600\n");
+    let rex = Rex {
+        program,
+        server: None,
+    };
+    let error = format!("{:#}", rex.block("block:1").await.unwrap_err());
+    assert!(error.contains("block inspect block:1"), "{error}");
+}
+
 #[tokio::test]
 async fn a_new_window_runs_its_command() {
     let (root, rex) = fake(

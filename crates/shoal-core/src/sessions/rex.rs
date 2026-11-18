@@ -5,6 +5,7 @@ use std::{
     collections::BTreeMap,
     ffi::OsStr,
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 use anyhow::{Context as _, Result, bail, ensure};
@@ -25,6 +26,11 @@ const BIN_DIR: &str = "bin_dir";
 /// Where the Mac app installs `rex`, below the home directory.
 const APP_BIN_DIR: &str = "Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS";
 const SHELL_FLAVOR: &str = "com.superlogical.terminal.shell";
+/// How long a `rex` command may run before it is stopped; only a hang
+/// guard, since each one answers at once and limits its own requests, while
+/// a `rex` that never ends, or leaves a process holding its output open,
+/// would hold the daemon's operation on it forever.
+const TIMEOUT: Duration = Duration::from_secs(30);
 
 /// The address of the server `data` records, empty for the local default;
 /// which `rex` reaches it does not tell servers apart.
@@ -109,8 +115,9 @@ impl Rex {
         data
     }
 
-    /// A `rex` command for this server, which never starts one.
-    fn command(&self) -> Command {
+    /// `rex` with `args` for this server, which never starts one, stopped
+    /// at [`TIMEOUT`].
+    fn command(&self, args: &[&str]) -> Run {
         let mut command = Command::new(&self.program);
         command
             .arg("--autostart=false")
@@ -120,20 +127,17 @@ impl Rex {
             // A REX_SERVER this process inherited names another server.
             None => command.env_remove("REX_SERVER"),
         };
-        command
+        command.args(args);
+        Run::new(command).timeout(TIMEOUT)
     }
 
     async fn run(&self, args: &[&str]) -> Result<Vec<u8>> {
-        let mut command = self.command();
-        command.args(args);
-        Ok(Run::new(command).checked().await?.stdout)
+        Ok(self.command(args).checked().await?.stdout)
     }
 
     /// Like [`Self::run`], `None` when what `args` name is gone.
     async fn run_found(&self, args: &[&str]) -> Result<Option<Vec<u8>>> {
-        let mut command = self.command();
-        command.args(args);
-        let output = Run::new(command).capture().await?;
+        let output = self.command(args).capture().await?;
         match output.status.code() {
             Some(0) => Ok(Some(output.stdout)),
             Some(NOT_FOUND) => Ok(None),
