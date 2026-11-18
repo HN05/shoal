@@ -79,6 +79,19 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             vec!["list_repositories", "layered_config id:test"],
             "cannot be combined with --repo",
         ),
+        // Nor does a link go with --branch.
+        (
+            vec![
+                "start",
+                "--wait",
+                "https://forge.example/team/repo/issues/5",
+                "--branch",
+                "topic",
+                "--here",
+            ],
+            vec!["list_repositories", "layered_config id:test"],
+            "cannot be combined with --branch",
+        ),
         // A contribution without a terminal registers its repository, then
         // leaves the start to the daemon as a start does.
         (

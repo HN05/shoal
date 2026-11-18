@@ -63,6 +63,11 @@ async fn start_target(ctx: &Context, launch: &mut Launch) -> Result<AddTarget> {
         launch.repository.is_none() || !matches!(launch.target, Some(StartTarget::Repository(_))),
         "a positional repository cannot be combined with --repo"
     );
+    let links = !matches!(launch.target, None | Some(StartTarget::Repository(_)));
+    anyhow::ensure!(
+        !links || (launch.branch.is_none() && launch.issue.is_none()),
+        "an item or branch link cannot be combined with --branch or --issue"
+    );
     let named = (launch.repository.clone()).or_else(|| match &launch.target {
         Some(StartTarget::Repository(named)) => Some(named.clone()),
         _ => None,
@@ -73,7 +78,16 @@ async fn start_target(ctx: &Context, launch: &mut Launch) -> Result<AddTarget> {
         None => linked_repository(ctx, launch).await?,
     };
     let target = resolve_add_target(ctx, named, issue.as_ref()).await?;
-    launch.repository = Some(target.repository(ctx).await?.id.to_string());
+    let repo = target.repository(ctx).await?;
+    // A PR or branch link opens only in the repository it belongs to.
+    if matches!(
+        launch.target,
+        Some(StartTarget::Pull(_) | StartTarget::Branch { .. })
+    ) {
+        let linked = (launch.target.as_ref()).and_then(StartTarget::linked_repository);
+        crate::launches::workspace::ensure_link_in(repo, linked).await?;
+    }
+    launch.repository = Some(repo.id.to_string());
     if matches!(launch.target, Some(StartTarget::Repository(_))) {
         launch.target = None;
     }
