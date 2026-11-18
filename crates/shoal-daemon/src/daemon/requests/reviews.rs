@@ -28,9 +28,7 @@ pub(super) async fn handle(
             }));
         }
         ReviewMethod::CheckPrGate { workspace } => {
-            if caller.is_some() {
-                manager.check_pr_review_gate(&workspace).await?;
-            }
+            manager.check_pr_review_gate(&workspace, caller).await?;
             return Ok(Answer::Body(Body::Ok));
         }
         ReviewMethod::RunReview {

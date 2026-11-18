@@ -390,3 +390,15 @@ fn an_issues_areas_are_its_labels_with_the_area_prefix() {
     );
     assert!(issue(None).areas(labels).is_empty());
 }
+
+#[test]
+fn a_review_gate_takes_whom_it_holds_and_refuses_a_boolean() {
+    let review = parse("[review]\nrequire_for_pr = 'agents'\nrequire_for_ready = 'all'")
+        .unwrap()
+        .review;
+    assert_eq!(review.require_for_pr, Some(ReviewRequirement::Agents));
+    assert_eq!(review.require_for_ready, Some(ReviewRequirement::All));
+    let refused = parse("[review]\nrequire_for_pr = true").unwrap_err();
+    let refused = format!("{refused:#}");
+    assert!(refused.contains("one of off, agents, all"), "{refused}");
+}

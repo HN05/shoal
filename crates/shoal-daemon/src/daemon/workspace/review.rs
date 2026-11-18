@@ -83,8 +83,8 @@ impl Manager {
     /// again refreshes the mark and reruns `hooks.post_ready`. With
     /// `[pr] undraft_on_ready`, marked draft PRs leave draft before the hook runs,
     /// which removes their progress section with the next publication; a
-    /// failure there keeps the marks and runs the hook. For a scoped
-    /// `caller`, `[review] require_for_ready` applies to a workspace's HEAD.
+    /// failure there keeps the marks and runs the hook. `[review]
+    /// require_for_ready` applies to a workspace's HEAD where it holds `caller`.
     pub async fn mark_ready(
         &self,
         selector: &SpaceSelector,
@@ -131,7 +131,7 @@ impl Manager {
     }
 
     /// The HEAD a workspace's marks are for, once `[review]
-    /// require_for_ready` passes for a scoped `caller`. A chat has none: it
+    /// require_for_ready` passes for `caller`. A chat has none: it
     /// works on no branch of its own, so its linked PRs are marked whatever
     /// their head, and has no HEAD for a review to cover.
     async fn ready_head(
@@ -146,9 +146,8 @@ impl Manager {
         workspace.require_branch("shoal ready")?;
         self.verify_worktree(workspace).await?;
         let head = current_head(workspace).await?;
-        if caller.is_some() {
-            self.require_review(workspace, Gate::Ready, &head).await?;
-        }
+        self.require_review(workspace, Gate::Ready, &head, caller)
+            .await?;
         Ok(Some(head))
     }
 

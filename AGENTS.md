@@ -226,7 +226,7 @@ for delivering a PR, under Committing near the end, decide when work is done.
   other methods to the own repository's where their `api_writes` permission allows them, are allowed, and approving or requesting changes on a PR
   as their `pr_review` permission allows, as the host's `review_token`.
   Scoped callers may run, view, cancel and answer the reviews of their own workspace and those below it;
-  with `[review] require_for_pr` or `require_for_ready`, a workspace process's new-PR `pr open` and its
+  with `[review] require_for_pr` or `require_for_ready` holding the caller, a new-PR `pr open` and a
   ready mark are refused until a finished review covers HEAD with every finding resolved.
   Scope is cooperative, not a boundary against hostile same-user processes.
   A scope token is a `ScopeToken`, whose `Debug` redacts it, never a bare

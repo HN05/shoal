@@ -495,9 +495,8 @@ impl Manager {
                 (item, None, None)
             }
             None => {
-                if caller.is_some() {
-                    self.require_review(&workspace, Gate::Pr, &head).await?;
-                }
+                self.require_review(&workspace, Gate::Pr, &head, caller)
+                    .await?;
                 conventions::require(&forge, &account, ItemKind::Pr, required, &options.labels)
                     .await?;
                 let pull = NewPull {
@@ -572,19 +571,19 @@ impl Manager {
         .with_context(|| format!("{} is open, but linking it failed", item.url))
     }
 
-    /// Whether `shoal pr open` from a workspace process would open a new PR
-    /// that its review gate refuses; checked before anything is pushed.
-    pub(crate) async fn check_pr_review_gate(&self, selector: &SpaceSelector) -> Result<()> {
+    /// Whether `caller`'s `shoal pr open` would open a new PR that its
+    /// review gate refuses; checked before anything is pushed.
+    pub(crate) async fn check_pr_review_gate(
+        &self,
+        selector: &SpaceSelector,
+        caller: Option<&Caller>,
+    ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         let Some(branch) = workspace.branch().cloned() else {
             return Ok(());
         };
-        if !self
-            .workspace_settings(&workspace)
-            .await?
-            .review
-            .require_for_pr
-        {
+        let settings = self.workspace_settings(&workspace).await?;
+        if !Gate::Pr.holds(&settings, caller) {
             return Ok(());
         }
         let (forge, account) = self.workspace_forge_account(&workspace).await?;
@@ -596,7 +595,8 @@ impl Manager {
             Some(_) => Ok(()),
             None => {
                 let head = super::pr::current_head(&workspace).await?;
-                self.require_review(&workspace, Gate::Pr, &head).await
+                self.require_review(&workspace, Gate::Pr, &head, caller)
+                    .await
             }
         }
     }

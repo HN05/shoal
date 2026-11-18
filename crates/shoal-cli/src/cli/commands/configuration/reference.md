@@ -1019,9 +1019,12 @@ See [issue and PR actions](../../../../../../docs/reference.md#issue-and-pr-acti
 agent = "codex"            # Default: agent.default
 fallback_agent = "claude"  # Optional; reviews once more after a failure
 post = true                # Post a PR review's findings on the PR
-require_for_pr = false     # A new PR needs a finished, resolved review of HEAD
-require_for_ready = false  # `shoal ready` needs one too
+require_for_pr = "off"     # A new PR needs a finished, resolved review of HEAD
+require_for_ready = "off"  # `shoal ready` needs one too
 ```
+
+Each `require_for_` key takes `"off"`, `"agents"`, which holds agents and the
+commands they run, or `"all"`, which also holds your own.
 
 See [local reviews](../../../../../../docs/reference.md#local-reviews).
 

@@ -838,23 +838,30 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
     use super::gate::Gate;
     let fixture = fixture(
         &[("fake", "cat '{review}'")],
-        "agent = 'fake'\nrequire_for_ready = true",
+        "agent = 'fake'\nrequire_for_ready = 'agents'",
     )
     .await;
     let manager = &fixture.manager;
     let workspace = &fixture.workspace;
+    let caller = agent_caller(workspace);
+    let agent = Some(&caller);
     let head = crate::daemon::links::pr::current_head(workspace)
         .await
         .unwrap();
     manager
-        .require_review(workspace, Gate::Pr, &head)
+        .require_review(workspace, Gate::Pr, &head, agent)
+        .await
+        .unwrap();
+    // "agents" leaves the user's own commands alone.
+    manager
+        .require_review(workspace, Gate::Ready, &head, None)
         .await
         .unwrap();
 
     let mut ended = manager.reviews.ended.subscribe();
     assert!(
         manager
-            .require_review(workspace, Gate::Ready, &head)
+            .require_review(workspace, Gate::Ready, &head, agent)
             .await
             .is_err()
     );
@@ -865,7 +872,7 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
         .await
         .unwrap();
     let refused = manager
-        .require_review(workspace, Gate::Ready, &head)
+        .require_review(workspace, Gate::Ready, &head, agent)
         .await
         .unwrap_err();
     let refused = refused.to_string();
@@ -893,26 +900,47 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
         .await
         .unwrap();
     manager
-        .require_review(workspace, Gate::Ready, &head)
+        .require_review(workspace, Gate::Ready, &head, agent)
         .await
         .unwrap();
     // A workspace process's mark passes once the review covers HEAD.
-    let caller = crate::daemon::scope::Caller {
-        space_id: workspace.id.clone(),
-        execution: None,
-        granted: None,
-        read_only: false,
-    };
     let marks = manager
-        .mark_ready(
-            &SpaceSelector::id(&workspace.id),
-            Default::default(),
-            Some(&caller),
-        )
+        .mark_ready(&SpaceSelector::id(&workspace.id), Default::default(), agent)
         .await
         .unwrap()
         .marks;
     assert_eq!(marks.len(), 1);
+}
+
+#[tokio::test]
+async fn all_holds_the_users_own_commands_too() {
+    use super::gate::Gate;
+    let fixture = fixture(&[], "require_for_pr = 'all'").await;
+    let (manager, workspace) = (&fixture.manager, &fixture.workspace);
+    let head = crate::daemon::links::pr::current_head(workspace)
+        .await
+        .unwrap();
+    let refused = manager
+        .require_review(workspace, Gate::Pr, &head, None)
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(refused.contains(head.short()), "{refused}");
+    // require_for_ready stays off.
+    let selector = SpaceSelector::id(&workspace.id);
+    (manager.mark_ready(&selector, Default::default(), None))
+        .await
+        .unwrap();
+}
+
+/// A scoped caller of `workspace`, as its agent is.
+fn agent_caller(workspace: &crate::model::Workspace) -> crate::daemon::scope::Caller {
+    crate::daemon::scope::Caller {
+        space_id: workspace.id.clone(),
+        execution: None,
+        granted: None,
+        read_only: false,
+    }
 }
 
 /// The frames the daemon answers `method` with, and the JSON their review

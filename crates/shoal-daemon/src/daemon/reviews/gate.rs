@@ -1,5 +1,5 @@
-//! Review gates: with `[review] require_for_pr` or `require_for_ready`, a
-//! workspace process opens a new PR or marks work ready only once a
+//! Review gates: with `[review] require_for_pr` or `require_for_ready`
+//! holding the caller, it opens a new PR or marks work ready only once a
 //! finished review covers HEAD and every finding is resolved.
 use shoal_refs::CommitId;
 use std::fmt::Write as _;
@@ -8,7 +8,8 @@ use anyhow::{Result, bail};
 
 use super::store;
 use crate::{
-    daemon::workspace::Manager,
+    config::{Effective, repo::Requester},
+    daemon::{scope::Caller, workspace::Manager},
     model::Workspace,
     reviews::{Review, ReviewState, ReviewTarget},
 };
@@ -24,22 +25,19 @@ pub(crate) enum Gate {
 }
 
 impl Manager {
-    /// Refuse unless a finished review covers `head`, the commit the caller
-    /// acts on, with every finding resolved, saying what is missing; without
-    /// a review of it and with none queued or running, queue one. Passes when
-    /// `gate` is not required.
+    /// Refuse `caller`, where the workspace's setting for `gate` holds it,
+    /// unless a finished review covers `head`, the commit it acts on, with
+    /// every finding resolved, saying what is missing; without a review of
+    /// it and with none queued or running, queue one.
     pub(crate) async fn require_review(
         &self,
         workspace: &Workspace,
         gate: Gate,
         head: &CommitId,
+        caller: Option<&Caller>,
     ) -> Result<()> {
         let settings = self.workspace_settings(workspace).await?;
-        let required = match gate {
-            Gate::Pr => settings.review.require_for_pr,
-            Gate::Ready => settings.review.require_for_ready,
-        };
-        if !required {
+        if !gate.holds(&settings, caller) {
             return Ok(());
         }
         let (id, covering) = (workspace.id.clone(), head.to_owned());
@@ -102,11 +100,28 @@ impl Manager {
 }
 
 impl Gate {
+    /// Whether `settings` hold `caller` to the gate.
+    pub(crate) fn holds(self, settings: &Effective, caller: Option<&Caller>) -> bool {
+        let required = match self {
+            Self::Pr => settings.review.require_for_pr,
+            Self::Ready => settings.review.require_for_ready,
+        };
+        required.holds(requester(caller))
+    }
+
     fn command(self) -> &'static str {
         match self {
             Self::Pr => "opening a PR",
             Self::Ready => "marking work ready",
         }
+    }
+}
+
+/// Who `caller` stands for: an agent when scoped, else the user.
+fn requester(caller: Option<&Caller>) -> Requester {
+    match caller {
+        Some(_) => Requester::Agent,
+        None => Requester::User,
     }
 }
 

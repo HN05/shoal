@@ -645,13 +645,72 @@ pub struct ReviewConfig {
     /// reason other than running too long.
     #[serde(deserialize_with = "crate::agent::configured")]
     pub fallback_agent: Option<Agent>,
-    /// Whether a workspace process opening a new PR needs a finished review
-    /// of HEAD with every finding resolved.
-    #[option(default = false)]
-    pub require_for_pr: Option<bool>,
-    /// Whether a workspace process marking work ready needs one.
-    #[option(default = false)]
-    pub require_for_ready: Option<bool>,
+    /// Whose opening of a new PR needs a finished review of HEAD with every
+    /// finding resolved.
+    #[option(default = ReviewRequirement::default())]
+    pub require_for_pr: Option<ReviewRequirement>,
+    /// Whose marking of work ready needs one.
+    #[option(default = ReviewRequirement::default())]
+    pub require_for_ready: Option<ReviewRequirement>,
+}
+
+/// Whose commands a review gate holds until a finished review covers the
+/// commit they act on with every finding resolved: nobody's, agents', or
+/// everyone's, the user's own included.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ReviewRequirement {
+    #[default]
+    Off,
+    Agents,
+    All,
+}
+
+/// [`ReviewRequirement`]'s values, which a refusal of any other names.
+const REVIEW_REQUIREMENTS: &[&str] = &["off", "agents", "all"];
+
+impl<'de> Deserialize<'de> for ReviewRequirement {
+    /// Refuses any other value, a boolean too, naming those it takes.
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Values;
+        impl serde::de::Visitor<'_> for Values {
+            type Value = ReviewRequirement;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(formatter, "one of {}", REVIEW_REQUIREMENTS.join(", "))
+            }
+
+            fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Self::Value, E> {
+                match value {
+                    "off" => Ok(ReviewRequirement::Off),
+                    "agents" => Ok(ReviewRequirement::Agents),
+                    "all" => Ok(ReviewRequirement::All),
+                    other => Err(E::unknown_variant(other, REVIEW_REQUIREMENTS)),
+                }
+            }
+        }
+        deserializer.deserialize_any(Values)
+    }
+}
+
+/// Who runs a command a review gate guards.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Requester {
+    /// The user, from the user's own terminal.
+    User,
+    /// An agent or a command it runs, as a scoped caller.
+    Agent,
+}
+
+impl ReviewRequirement {
+    /// Whether it holds a command `requester` runs.
+    pub fn holds(self, requester: Requester) -> bool {
+        match self {
+            Self::Off => false,
+            Self::Agents => requester == Requester::Agent,
+            Self::All => true,
+        }
+    }
 }
 
 /// How agent messages that arrive in quick succession are held to reach the
