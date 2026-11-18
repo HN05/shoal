@@ -637,16 +637,17 @@ CREATE TABLE "workspaces" (
     starting_index TEXT
 );
 
-CREATE TABLE merge_runs (
+CREATE TABLE "merge_runs" (
     space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
-    pr_url TEXT NOT NULL,
+    pr_url TEXT,
+    remote_url TEXT CHECK((pr_url IS NULL) <> (remote_url IS NULL)),
     merge_commit TEXT NOT NULL,
     branch TEXT NOT NULL,
     merged_at INTEGER NOT NULL,
     looking INTEGER NOT NULL DEFAULT 1 CHECK(looking IN (0,1)),
     runs TEXT NOT NULL DEFAULT '[]',
     ended INTEGER NOT NULL DEFAULT 0 CHECK(ended IN (0,1)),
-    PRIMARY KEY(space_id,pr_url)
+    PRIMARY KEY(space_id,merge_commit)
 );
 
 CREATE TABLE pending_worktrees (

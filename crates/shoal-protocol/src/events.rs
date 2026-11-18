@@ -443,11 +443,12 @@ pub struct AlertEvent {
     pub message: String,
 }
 
-/// A PR's merge into the default branch.
+/// A merge into the default branch: a PR's, or one `shoal merge` pushed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MergeEvent {
-    /// The merged PR's URL.
-    pub pr: String,
+    /// The merged PR's URL; none for a merge `shoal merge` pushed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pr: Option<String>,
     /// The commit the merge left on the default branch.
     pub commit: shoal_refs::CommitId,
 }

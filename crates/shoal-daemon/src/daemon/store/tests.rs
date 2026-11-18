@@ -692,6 +692,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 233 {
         db.execute_batch(include_str!("hub_kept_numbers.sql"))?;
     }
+    if version >= 234 {
+        db.execute_batch(include_str!("merge_run_pushes.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -3698,5 +3701,29 @@ fn migration_keeps_questions_requests_and_notifications_with_their_spaces() -> R
         |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
     )?;
     assert_eq!(left, (0, 0, 1));
+    Ok(())
+}
+
+#[test]
+fn migration_keys_merge_run_lookups_by_their_merge_commit() -> Result<()> {
+    let mut db = historical_database(233)?;
+    db.execute_batch(
+        r#"INSERT INTO merge_runs(space_id,pr_url,merge_commit,branch,merged_at,runs)
+            VALUES ('workspace','https://forge.example/team/repo/pulls/8','abc','main',1,'["run"]');"#,
+    )?;
+    migrate(&mut db)?;
+    let kept: (String, Option<String>, String) = db.query_row(
+        "SELECT pr_url,remote_url,runs FROM merge_runs WHERE space_id='workspace' AND merge_commit='abc'",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    assert_eq!(
+        kept,
+        (
+            "https://forge.example/team/repo/pulls/8".to_owned(),
+            None,
+            r#"["run"]"#.to_owned()
+        )
+    );
     Ok(())
 }

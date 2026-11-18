@@ -1,8 +1,10 @@
 //! Following the default branch's CI runs for the merge commits of the PRs
-//! a space watches or links as opened, where `[pr] watch_merge_runs` is on:
-//! the read that records such a PR's merge starts a lookup, which each background poll of
-//! the space runs for [`LOOKUP_WINDOW`], linking every run it finds as
-//! related, so the space's watches report how they end.
+//! a space watches or links as opened, and of the merges of its branch
+//! `shoal merge` pushed, where `[pr] watch_merge_runs` is on: the read that
+//! records such a PR's merge, or the end of the merge that pushed, starts a
+//! lookup, which each background poll of the space runs for
+//! [`LOOKUP_WINDOW`], linking every run it finds as related, so the space's
+//! watches report how they end.
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -52,9 +54,27 @@ pub(super) struct MergeTarget {
     pub default_branch: BranchName,
 }
 
+/// What a lookup follows the merge of, whose forge lists its runs.
+enum Merged {
+    /// A PR.
+    Pr(ItemRef),
+    /// A merge `shoal merge` pushed to the remote at this URL.
+    Push(String),
+}
+
+impl Merged {
+    /// The PR's URL and the remote's, as the store records them.
+    fn columns(&self) -> (Option<&str>, Option<&str>) {
+        match self {
+            Self::Pr(pr) => (Some(pr.url()), None),
+            Self::Push(remote) => (None, Some(remote)),
+        }
+    }
+}
+
 /// A space's lookup of the runs of one merge, as the store records it.
 struct MergeLookup {
-    pr: ItemRef,
+    merged: Merged,
     commit: CommitId,
     branch: BranchName,
     merged_at: UnixTime,
@@ -127,7 +147,10 @@ impl Manager {
     /// The default branch's runs for the lookup's merge commit, read as the
     /// user; none where the forge reads no runs.
     async fn merge_runs(&self, lookup: &MergeLookup) -> Result<Vec<Run>> {
-        let forge = self.item_forge(&lookup.pr).await?;
+        let forge = match &lookup.merged {
+            Merged::Pr(pr) => self.item_forge(pr).await?,
+            Merged::Push(remote) => self.forge(remote).await?,
+        };
         if !forge.supports(Capability::ReadRuns) {
             return Ok(Vec::new());
         }
@@ -270,41 +293,46 @@ pub(super) fn follow_merge(
     target: &MergeTarget,
     now: UnixTime,
 ) -> Result<Following> {
-    if snapshot.base_branch() != Some(&target.default_branch) || !follows_pr(db, id, url)? {
+    if snapshot.base_branch() != Some(&target.default_branch) {
         return Ok(Following::Not);
     }
+    let Some(pr) = followed_pr(db, id, url)? else {
+        return Ok(Following::Not);
+    };
     let Some(commit) = snapshot.merge_commit() else {
         return Ok(Following::NoMergeCommit);
     };
-    start_lookup(db, id, url, commit, &target.default_branch, now)?;
+    let merged = Merged::Pr(pr);
+    start_lookup(db, id, &merged, commit, &target.default_branch, now)?;
     Ok(Following::Runs)
 }
 
-/// Whether the space `id` watches the PR at `url` or links it as opened.
-fn follows_pr(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Result<bool> {
+/// The PR at `url`, when the space `id` watches it or links it as opened.
+fn followed_pr(db: &rusqlite::Connection, id: &SpaceId, url: &str) -> Result<Option<ItemRef>> {
     let watched = linked_items(db, id, Some(ItemKind::Pr))?;
     let opened = crate::daemon::store::recorded_items(db, id, Relation::Opened)?;
     let opened = opened.into_iter().map(|item| item.url);
     Ok(watched
         .into_iter()
         .chain(opened)
-        .any(|pull| pull.url() == url))
+        .find(|pull| pull.url() == url))
 }
 
-/// Look up the runs of `commit` on `branch`, which the PR at `url` merged
-/// into at `now`, for the space `id`.
+/// Look up the runs of `commit` on `branch`, which `merged` left there at
+/// `now`, for the space `id`, unless a lookup of that commit already does.
 fn start_lookup(
     db: &rusqlite::Connection,
     id: &SpaceId,
-    url: &str,
+    merged: &Merged,
     commit: &CommitId,
     branch: &BranchName,
     now: UnixTime,
 ) -> Result<()> {
+    let (pr, remote) = merged.columns();
     db.execute(
-        "INSERT INTO merge_runs(space_id,pr_url,merge_commit,branch,merged_at)
-         VALUES (?1,?2,?3,?4,?5) ON CONFLICT DO NOTHING",
-        params![id, url, commit, branch, now],
+        "INSERT INTO merge_runs(space_id,pr_url,remote_url,merge_commit,branch,merged_at)
+         VALUES (?1,?2,?3,?4,?5,?6) ON CONFLICT DO NOTHING",
+        params![id, pr, remote, commit, branch, now],
     )?;
     Ok(())
 }
@@ -390,14 +418,14 @@ fn end_lookup(
 ) -> Result<()> {
     if found_none {
         let merge = MergeEvent {
-            pr: lookup.pr.to_string(),
+            pr: (lookup.merged.columns().0).map(str::to_owned),
             commit: lookup.commit.clone(),
         };
         events::record_no_merge_runs(db, id, &merge)?;
     }
     db.execute(
-        "UPDATE merge_runs SET looking=0, ended=1 WHERE space_id=?1 AND pr_url=?2",
-        params![id, lookup.pr],
+        "UPDATE merge_runs SET looking=0, ended=1 WHERE space_id=?1 AND merge_commit=?2",
+        params![id, lookup.commit],
     )?;
     Ok(())
 }
@@ -455,20 +483,20 @@ fn run_finished(db: &rusqlite::Connection, id: &SpaceId, run: &ItemRef) -> Resul
 /// The space `id`'s lookups of its merges' runs that have not ended.
 fn merge_lookups(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<MergeLookup>> {
     let mut statement = db.prepare(
-        "SELECT pr_url, merge_commit, branch, merged_at, looking, runs FROM merge_runs
-         WHERE space_id=?1 AND NOT ended ORDER BY merged_at, pr_url",
+        "SELECT pr_url, remote_url, merge_commit, branch, merged_at, looking, runs
+         FROM merge_runs WHERE space_id=?1 AND NOT ended ORDER BY merged_at, merge_commit",
     )?;
     let rows = statement.query_map([id], |row| {
         Ok((
             MergeLookup {
-                pr: row.get(0)?,
-                commit: row.get(1)?,
-                branch: row.get(2)?,
-                merged_at: row.get(3)?,
-                looking: row.get(4)?,
+                merged: merged(row)?,
+                commit: row.get(2)?,
+                branch: row.get(3)?,
+                merged_at: row.get(4)?,
+                looking: row.get(5)?,
                 runs: Vec::new(),
             },
-            row.get::<_, String>(5)?,
+            row.get::<_, String>(6)?,
         ))
     })?;
     let mut lookups = Vec::new();
@@ -480,12 +508,21 @@ fn merge_lookups(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<MergeLoo
     Ok(lookups)
 }
 
+/// What the lookup in `row` follows the merge of, from its `pr_url` and
+/// `remote_url`, of which the store holds exactly one.
+fn merged(row: &rusqlite::Row<'_>) -> rusqlite::Result<Merged> {
+    match row.get::<_, Option<ItemRef>>("pr_url")? {
+        Some(pr) => Ok(Merged::Pr(pr)),
+        None => Ok(Merged::Push(row.get("remote_url")?)),
+    }
+}
+
 fn save_lookup(db: &rusqlite::Connection, id: &SpaceId, lookup: &MergeLookup) -> Result<()> {
     db.execute(
-        "UPDATE merge_runs SET looking=?3, runs=?4 WHERE space_id=?1 AND pr_url=?2",
+        "UPDATE merge_runs SET looking=?3, runs=?4 WHERE space_id=?1 AND merge_commit=?2",
         params![
             id,
-            lookup.pr,
+            lookup.commit,
             lookup.looking,
             serde_json::to_string(&lookup.runs)?
         ],

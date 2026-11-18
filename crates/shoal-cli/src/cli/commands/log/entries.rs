@@ -388,12 +388,17 @@ fn job(event: &EventDetails) -> String {
     format!("{ended}; stopped {}", stopped.join(", "))
 }
 
-/// The merged PR and its merge commit, as `#12 at 0a1b2c3`.
+/// The merged PR and its merge commit, as `#12 at 0a1b2c3`, or the
+/// commit a pushed merge left, as `pushed 0a1b2c3`.
 fn merge(event: &EventDetails) -> String {
     let Some(merge) = &event.merge else {
         return String::new();
     };
-    format!("{} at {}", reference(&merge.pr), merge.commit.short())
+    let commit = merge.commit.short();
+    match &merge.pr {
+        Some(pr) => format!("{} at {commit}", reference(pr)),
+        None => format!("pushed {commit}"),
+    }
 }
 
 fn error(event: &EventDetails) -> String {
