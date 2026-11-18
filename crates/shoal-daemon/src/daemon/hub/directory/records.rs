@@ -112,12 +112,7 @@ fn record(
         }
         Some(owner) if &owner != member => {
             let new = !has_copy(tx, &space.id, member)?;
-            tx.execute(
-                "INSERT INTO hub_space_copies(space_id, member_id, summary, since)
-                 VALUES (?1,?2,?3,?4)
-                 ON CONFLICT(space_id, member_id) DO UPDATE SET summary=excluded.summary",
-                params![space.id, member, summary, now],
-            )?;
+            keep_copy(tx, member, &space.id, &summary, now)?;
             Ok(new.then(|| Conflict {
                 space: space.id.clone(),
                 name: space.name.clone(),
@@ -131,6 +126,24 @@ fn record(
             Ok(None)
         }
     }
+}
+
+/// Keep `member`'s `summary` of the space `id` as a copy, first reported
+/// `now` unless it was before.
+fn keep_copy(
+    tx: &Transaction<'_>,
+    member: &MemberId,
+    id: &SpaceId,
+    summary: &str,
+    now: UnixTime,
+) -> Result<()> {
+    tx.execute(
+        "INSERT INTO hub_space_copies(space_id, member_id, summary, since)
+         VALUES (?1,?2,?3,?4)
+         ON CONFLICT(space_id, member_id) DO UPDATE SET summary=excluded.summary",
+        params![id, member, summary, now],
+    )?;
+    Ok(())
 }
 
 /// Record `member` as the owner of the space `id`, with its `summary`.
@@ -218,17 +231,35 @@ fn has_copy(tx: &Transaction<'_>, id: &SpaceId, member: &MemberId) -> Result<boo
 /// Drop `member`'s space `id`, owned or a copy; the earliest copy of one it
 /// owned takes its place.
 fn release(tx: &Transaction<'_>, member: &MemberId, id: &SpaceId) -> Result<()> {
-    tx.execute(
-        "DELETE FROM hub_space_copies WHERE space_id=?1 AND member_id=?2",
-        params![id, member],
-    )?;
+    drop_copy(tx, member, id)?;
+    if disown(tx, member, id)? {
+        promote_earliest_copy(tx, id)?;
+    }
+    Ok(())
+}
+
+/// Drop the space `id` from the directory if `member` owns it, and whether
+/// it did.
+fn disown(tx: &Transaction<'_>, member: &MemberId, id: &SpaceId) -> Result<bool> {
     let owned = tx.execute(
         "DELETE FROM hub_spaces WHERE space_id=?1 AND member_id=?2",
         params![id, member],
     )?;
-    if owned == 0 {
-        return Ok(());
-    }
+    Ok(owned > 0)
+}
+
+/// Drop `member`'s copy of the space `id`, if it kept one.
+fn drop_copy(tx: &Transaction<'_>, member: &MemberId, id: &SpaceId) -> Result<()> {
+    tx.execute(
+        "DELETE FROM hub_space_copies WHERE space_id=?1 AND member_id=?2",
+        params![id, member],
+    )?;
+    Ok(())
+}
+
+/// Make the earliest copy of the space `id`, which no machine owns now,
+/// its owner's, if any machine kept one.
+fn promote_earliest_copy(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
     let earliest: Option<(MemberId, String, UnixTime)> = tx
         .query_row(
             "SELECT member_id, summary, since FROM hub_space_copies WHERE space_id=?1
@@ -238,15 +269,8 @@ fn release(tx: &Transaction<'_>, member: &MemberId, id: &SpaceId) -> Result<()> 
         )
         .optional()?;
     if let Some((copy, summary, since)) = earliest {
-        tx.execute(
-            "DELETE FROM hub_space_copies WHERE space_id=?1 AND member_id=?2",
-            params![id, copy],
-        )?;
-        tx.execute(
-            "INSERT INTO hub_spaces(space_id, member_id, summary, reported_at)
-             VALUES (?1,?2,?3,?4)",
-            params![id, copy, summary, since],
-        )?;
+        drop_copy(tx, &copy, id)?;
+        own(tx, &copy, id, &summary, since)?;
     }
     Ok(())
 }
