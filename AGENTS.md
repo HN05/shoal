@@ -481,7 +481,8 @@ leaves it out.
 `python3 scripts/profile_tests.py suite` runs each test binary whole, one after
 another, and prints its wall, user and system time; `tests --binary NAME` runs
 every test of a binary alone, as nextest does, and lists the costliest. Both
-count a test's daemons and commands, but not processes that outlive it.
+count a test's daemons and commands, but not processes that outlive it, and
+`--git` counts their Git processes, production code's apart from the fixtures'.
 
 ## CI
 

@@ -240,7 +240,9 @@ pub async fn pushed_commit(
 
 /// `git -C <repo>` with the caller's normal configuration and hooks. Queries
 /// skip optional locks, so a status that refreshes the index never holds the
-/// lock a concurrent Git command in the same worktree needs.
+/// lock a concurrent Git command in the same worktree needs. Every Git
+/// process Shoal starts for itself carries the option, which tells its
+/// processes from a test fixture's in `scripts/profile_tests.py --git`.
 pub(crate) fn command(repo: &Path) -> Command {
     let mut command = Command::new(Tool::Git.program());
     command.arg("--no-optional-locks").arg("-C").arg(repo);
@@ -482,7 +484,7 @@ pub async fn clone(source: &str, destination: &Path, fork: Option<&str>) -> Resu
 fn clone_command(source: &str, destination: &Path, fork: Option<&str>) -> Command {
     let mut command = Command::new(Tool::Git.program());
     without_inherited_repository(&mut command);
-    command.arg("clone");
+    command.args(["--no-optional-locks", "clone"]);
     if let Some(url) = fork {
         for setting in [
             format!("remote.{FORK_REMOTE}.url={url}"),

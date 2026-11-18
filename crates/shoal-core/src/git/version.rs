@@ -40,7 +40,7 @@ pub(crate) async fn checked_output(
 /// The installed Git's release; none when it cannot be read.
 async fn installed() -> Option<Release> {
     let mut command = Command::new(Tool::Git.program());
-    command.arg("--version");
+    command.args(["--no-optional-locks", "--version"]);
     parse(&super::output(command).await.ok()?)
 }
 
