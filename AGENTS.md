@@ -103,8 +103,10 @@ for delivering a PR, under Committing near the end, decide when work is done.
   on everything linked when both are omitted: `view`, `view ci 2765`,
   `watch pr 12`. Leases follow the same grammar: `acquire port`, `release sim`.
   Every other action goes subject first under its kind's group, even when
-  another group has one of the same name: `pr merge`, `issue comment`,
+  another group has one of the same name: `pr close`, `issue comment`,
   `ci rerun`. Listing is one, since each kind filters its own way: `ci ls`.
+  `merge` is top-level because it merges a space's work, through its PR or
+  locally, and reads a PR it is given as the cross-kind verbs read items.
   A command that prints a list and exits is named `ls`; `list` names a picker.
   A new kind joins the cross-kind verbs that apply to it instead of growing its
   own `view` or `watch`.

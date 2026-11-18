@@ -1338,8 +1338,8 @@ A finding that needs your decision stays unresolved while the agent asks with
 With [`[review] require_for_pr`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#reviews), a `shoal pr open` that would open a new
 PR is checked before it pushes, and before a [proposal](#approval-for-agent-issues-and-prs); linking an
 existing PR is not. With `require_for_ready`, `shoal ready` is checked, not
-`ready --undo`. With `require_for_merge`, [`shoal merge`](#merge-into-the-default-branch) is checked for the
-commit of the branch that merges, and [`shoal pr merge`](#issue-and-pr-actions), with or without
+`ready --undo`. With `require_for_merge`, a local [`shoal merge`](#merge-into-the-default-branch) is checked for the
+commit of the branch that merges, and a [PR merge](#issue-and-pr-actions), with or without
 `--auto`, for the PR's head, which the merge then names to the forge, against the
 reviews of the workspace that owns the PR's branch; a PR whose branch no
 workspace owns, such as a fork's, is refused, to merge on the forge, as is a
@@ -1355,7 +1355,7 @@ one of its findings is resolved, whatever the verdict. Otherwise the command is
 refused, naming what is missing and listing the unresolved findings; without a
 review of the commit and with none queued or running, it queues a review of the
 workspace's HEAD, whose findings arrive as a message, where that is the commit and
-the caller's scope reaches the workspace. A `pr merge` refused otherwise names
+the caller's scope reaches the workspace. A PR merge refused otherwise names
 `shoal review run <pr-url>`, which reviews the PR in the workspace that owns its
 branch. A gate's review is a workspace review, never posted. A workspace process runs, cancels and answers the reviews of
 its own workspace and those below it. Removing a workspace cancels its review and
@@ -3261,7 +3261,7 @@ an unrelated path has the same spelling in the caller's directory; if that path
 is another registered checkout, the selector is ambiguous and lists both matches.
 
 The daemon keeps each registered checkout's default branch in sync with its
-remote: when it starts, every minute, and right after `shoal pr merge` or a
+remote: when it starts, every minute, and right after `shoal merge` merges a PR or a
 watch sees a linked PR merge, it fetches the default branch's upstream and default remotes and fast-forwards the local default branch, moving
 only the ref when the checkout is on another branch. An ahead branch stays as it
 is; a missing upstream, failed fetch, divergence, or a dirty or managed checkout
@@ -3489,8 +3489,22 @@ trusted for the agents their workspaces keep for `shoal restore`.
 
 ### Merge into the default branch
 
-`shoal merge [workspace]` merges the workspace's recorded branch into the
-repository default branch for repositories without a pull-request flow. When the
+`shoal merge [pr] [NUMBER|URL] [-s SPACE]` merges a space's work, or the PR
+its item names as `shoal view` reads one: a number, which `--repo` places in
+another repository, or a PR URL of any repository, each alone or after `pr`,
+which alone names the space's assigned PR; issues, CI runs and reviews do not
+merge. Without an item, a space with one open PR linked
+as assigned or opened merges it on the forge as an
+[item action](#issue-and-pr-actions), a space with several is refused, naming
+them, a chat without one is refused, and a workspace without one merges its
+recorded branch into the repository default branch, as below; to merge locally
+while a PR is open, close the PR. `-X`, `--delete-branch`, `--auto` and
+`--cancel-auto` apply to a PR merge, and `--push` and `--no-push` to a local
+merge, which takes `-X merge` alone; a flag of the other path is refused.
+Scoped callers merge the work of the spaces below their own with `-s`, under
+their own `merge` and `push` permissions.
+
+A local merge is for repositories without a pull-request flow. When the
 default branch has an upstream, Shoal fetches and fast-forwards it first,
 preserving an ahead branch and refusing divergence or a failed fetch. The default
 branch cannot be held by a managed workspace, and any other checkout of it must be
@@ -3507,8 +3521,7 @@ its [`push` permission](#approval-for-agent-pushes) is `"direct"` too. The first
 `merge` request in `shoal approvals` and exits 2 with `code: "approval_pending"`;
 the request names the branch, the default branch it merges into, its commit count,
 the remote branch it pushes to, any other local commits of the default branch
-that the push publishes too, any files changed on both sides as below, and any
-open PR the workspace watches. After approval, running it again merges that commit with every check above. A new
+that the push publishes too, and any files changed on both sides as below. After approval, running it again merges that commit with every check above. A new
 commit, a change to where it pushes, other local commits of the default branch
 that its push would publish too, or a new set of files changed on both sides
 replaces the request; a sync of the default branch from its upstream does not.
@@ -3524,16 +3537,15 @@ published, on the forge of the first URL it pushed to on a network host, as it f
 [runs](#linked-items-and-cleanup).
 
 A merge that pushes asks first, after Shoal has checked it and before anything
-changes. As [`pr merge`](#issue-and-pr-actions) does, so does a merge whose last
+changes. As a [PR merge](#issue-and-pr-actions) does, so does a merge whose last
 check found files [changed on both sides](#conflicts) with the default branch.
 The question names the direction, the commit count, where it pushes, other
 local commits of the default branch that the push publishes too, and those
-files, and points to `shoal pr merge` for any open PR the workspace watches:
+files:
 
 ```text
 Merge fix-login (3 commits) into main, then push main to origin.
 Sensitive files changed on both sides by fix-login and main: src/version.rs.
-PR https://forge.example/team/app/pulls/12 is open; shoal pr merge merges it on the forge instead.
 Are you sure? [y/N]
 ```
 
@@ -3548,13 +3560,13 @@ merge asks about its push through its approval request instead; it still asks
 about files changed on both sides, so the agent passes `--yes` and the approver
 decides on them.
 
-`[merge] enabled = false` turns `shoal merge` off for a repository that merges only
-through PRs: it refuses both a merge and an agent's request for one, pointing to
-`shoal pr merge`.
+`[merge] enabled = false` turns local merges off for a repository that merges
+only through PRs: it refuses both a local merge and an agent's request for one,
+pointing to `shoal pr open` and `shoal merge`.
 
 ### Undo a merge
 
-`shoal unmerge [workspace]` undoes the workspace's latest `shoal merge` into the
+`shoal unmerge [-s SPACE]` undoes the workspace's latest local merge into the
 default branch while that merge is unpushed. It works for fast-forwards and merge
 commits alike, and the branch and its commits stay as they are; when cleanup deleted
 the branch, `unmerge` creates it again at the commit that merged. A workspace
@@ -4621,7 +4633,7 @@ has no reactions.
 
 GitLab projects may sit in subgroups, its merge requests are PRs, and its item
 URLs use `/-/issues/` and `/-/merge_requests/`. Reviewers are usernames, and
-`merge` uses the project's merge method, squashed with `--method squash`. CI
+a merge uses the project's merge method, squashed with `--method squash`. CI
 checks are the latest status of each job and external check on the head
 commit, and reviews are reviewers' states and approvals; approval rules and
 merge trains are not modeled.
@@ -4647,8 +4659,8 @@ shoal pr review 42 --request-changes --body-file why.md --comments-file lines.js
 shoal pr close 12                   # reopen works the same way
 shoal pr reviewers 12               # users and teams who can review PR 12
 shoal pr update --method rebase    # take in the base's commits on the forge
-shoal pr merge --method rebase --delete-branch
-shoal pr merge --auto --method squash  # merge once checks pass; --cancel-auto withdraws it
+shoal merge 12 -X rebase --delete-branch  # merge PR 12 on the forge
+shoal merge pr --auto               # merge the linked PR once checks pass; --cancel-auto withdraws it
 shoal pr delete-branch 12           # delete a merged or closed PR's branch on the forge
 shoal pr revert 42                  # open a PR that reverts merged PR 42
 shoal pr comment 12 --repo shoal --body-file notes.md  # in a registered repository, without a workspace
@@ -4770,7 +4782,11 @@ rebasing onto it; workspace processes may update, and then pull the branch
 before pushing again. GitHub refuses the update when the head moved since Shoal
 read it, GitLab only rebases and does so after answering, and Bitbucket cannot
 update a branch.
-`merge` takes `-X`/`--method merge|rebase|squash`; `--delete-branch` deletes the
+`shoal merge` merges a PR with `-X`/`--method merge|rebase|squash`, and
+without it by the repository's default: Forgejo's and Gitea's default merge
+style, GitLab's merge method and squash setting, Bitbucket's default strategy,
+or on GitHub, which has none, the first of merge, squash and rebase that the
+repository allows. `--delete-branch` deletes the
 PR's branch on the forge when it is in the repository, never a local branch.
 `--auto` has the forge merge the PR that way once its required checks and
 approvals pass, merging now when they already do: GitHub's auto-merge,
@@ -4785,7 +4801,7 @@ until it merges, dropping the merge when the branch moves; the others merge
 the head the PR has once checks pass, as `shoal forge capabilities` says.
 When the last check of a workspace that links the PR found files
 [changed on both sides](#conflicts) at the PR's head with its base branch,
-`merge` and `merge --auto` name them and ask before merging, such as
+a merge and `--auto` name them and ask before merging, such as
 `Sensitive files changed on both sides by PR #12 and main: src/version.rs`;
 `--yes` merges without asking, and without a terminal they refuse and name it.
 They read only that record, so a PR without one, a record of another head or
@@ -5032,7 +5048,7 @@ and notifies you; approve it again to retry. While the push runs, denying or
 withdrawing the request, and new push requests and PR proposals from the
 workspace, are refused until it ends. The agent hears the outcome as an
 [agent message](#agent-messages). Unless `push` is `"direct"`, a scoped
-`shoal merge` also needs your approval, since it may push the default branch, and
+local `shoal merge` also needs your approval, since it may push the default branch, and
 `shoal pr revert` through the forge is refused, since the forge pushes its
 branch at once.
 
@@ -5131,8 +5147,8 @@ nothing. A warning names the `edit` command that fixes it, and one whose lookup
 fails is left out.
 
 The daemon sends each change through the forge's REST API as the workspace's
-[agent account](#agent-accounts), except `merge`, which uses your login and is
-refused to processes inside a workspace execution. Each change records an
+[agent account](#agent-accounts), except that `delete-branch` run by you uses
+your login. Each change records an
 `item_changed` [space event](#space-events). `--json` returns the item
 as the forge then reports it: `kind`, `number`, `url`, `title`, `state` (`open`,
 `closed` or `merged`), `labels`, and for a PR, `pr` with `head`, `base` and

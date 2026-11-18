@@ -269,8 +269,8 @@ instead of the PR delivery guidance below.
   notification instead of producing lookup failures. Pending deliveries remain
   replayable until CLI output succeeds and is acknowledged. Files a repository
   lists as `[conflicts] sensitive` that a branch and its target both changed are
-  reported apart from conflicts, beside a linked PR too; `pr merge` and `merge`
-  read only the recorded check and ask, never block.
+  reported apart from conflicts, beside a linked PR too; `merge`, of a PR or
+  locally, reads only the recorded check and asks, never blocks.
   Registration variants reject ambiguous
   records and conflicting actions without blocking other workspaces' cleanup;
   manual acknowledgements bind to exactly the recorded HEAD. Completion cleanup

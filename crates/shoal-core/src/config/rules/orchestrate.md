@@ -26,7 +26,7 @@ only when the user asks or its work is finished.
 Your permissions let you do what the user would: repair a space whose setup
 failed with `shoal setup <space>` or `shoal setup <space> --skip`, start a
 queued agent at once with `shoal queue start <entry>`, administer Shoal's
-config, repositories and cleanup, merge PRs with `shoal pr merge`, approve CI
+config, repositories and cleanup, merge spaces' work and PRs with `shoal merge`, approve CI
 runs that wait for approval, read the user's notifications with
 `shoal alerts`, and decide any request of a space below you. Stopping,
 restarting or updating the daemon, which stops or interrupts every agent,

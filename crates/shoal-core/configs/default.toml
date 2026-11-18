@@ -347,8 +347,8 @@ post = true
 # Agent that reviews once more when the first reviewer fails for a reason other
 # than running longer than 30 minutes (no default).
 # fallback_agent = "claude"
-# Whose shoal pr open of a new PR, shoal ready, and shoal merge or shoal pr merge
-# need a finished review of the commit they act on with every finding resolved:
+# Whose shoal pr open of a new PR, shoal ready, and shoal merge, of a PR or a
+# branch, need a finished review of the commit they act on with every finding resolved:
 # "off", "agents" or "all", the user's own commands included. Refused, they
 # start one.
 require_for_pr = "off"
@@ -361,12 +361,13 @@ require_for_merge = "off"
 settle_seconds = 5
 
 [merge]
-# false turns shoal merge off, as for a repository that merges only through PRs.
+# false turns local merges off, as for a repository that merges only through
+# PRs; shoal merge still merges a space's PR.
 enabled = true
-# Ask before a merge that pushes; shoal merge --yes skips the question once.
+# Ask before a local merge that pushes; shoal merge --yes skips the question once.
 # A merge that brings sensitive files changed on both sides asks regardless.
 confirm = true
-# Push the default branch to its upstream after shoal merge; --push and --no-push override it.
+# Push the default branch to its upstream after a local merge; --push and --no-push override it.
 push = false
 
 # The gate decides an agent's requests under a permission of "gate" at once:
@@ -396,7 +397,7 @@ sensitive = []
 issue_open = "direct"
 pr_open = "direct"
 # Pushes to the repository's remotes, by shoal pr open or git push: "direct",
-# "gate", "propose" or "deny". Unless "direct", shoal merge needs approval too.
+# "gate", "propose" or "deny". Unless "direct", a local shoal merge needs approval too.
 push = "direct"
 # The keys below default per mode, and `orchestrate`, a master session, gets
 # more than the values shown, which are a worker's; a value set here applies
@@ -405,7 +406,7 @@ push = "direct"
 # Issues in other repositories than the workspace's: "deny", "propose", "gate"
 # or "direct".
 # issue_other_repositories = "propose"
-# shoal merge and unmerge, and merging a PR or deleting its branch:
+# shoal merge of a PR or a branch, shoal unmerge, and deleting a PR's branch:
 # "propose", "gate" or "direct".
 # merge = "propose"
 # Requests through shoal forge api that are not reads, which you may always

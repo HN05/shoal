@@ -530,7 +530,7 @@ Permissions say what agents may do: `"direct"` at once, `"gate"` after the
 that order from widest to narrowest; no built-in mode sets `"gate"`.
 `issue_open` and `pr_open` cover issues and PRs in the space's repository,
 `issue_other_repositories` issues in other repositories, `merge` `shoal merge`
-and `unmerge`, and merging a PR, its automatic merge and deleting its branch, `push` pushes to the repository's remotes by `shoal pr open` or
+of a PR or a branch, its automatic merge, `unmerge` and deleting a PR's branch, `push` pushes to the repository's remotes by `shoal pr open` or
 `git push`, `api_writes` `shoal forge api` requests other than reads,
 `daemon` installing, starting, stopping and restarting the daemon and
 `shoal update` while a daemon of the same Shoal answers to decide it, `limits` starting agents regardless of `max_heavy_agents` and
@@ -1007,7 +1007,7 @@ watch_merge_runs = false            # After a PR merges or `shoal merge` pushes,
 shows each agent's progress on its draft PRs until they leave draft.
 `watch_merge_runs = true` links to a space the default branch's runs for the
 merge commit of each PR it watches or links as opened that merges into the
-default branch, and for the commit each `shoal merge` of its branch pushes,
+default branch, and for the commit each local `shoal merge` of its branch pushes,
 and reports how they end.
 See [issue and PR actions](../../../../../../docs/reference.md#issue-and-pr-actions),
 [ready for review](../../../../../../docs/reference.md#ready-for-review) and [progress](../../../../../../docs/reference.md#progress).
@@ -1021,7 +1021,7 @@ fallback_agent = "claude"  # Optional; reviews once more after a failure
 post = true                # Post a PR review's findings on the PR
 require_for_pr = "off"     # A new PR needs a finished, resolved review of HEAD
 require_for_ready = "off"  # `shoal ready` needs one too
-require_for_merge = "off"  # `shoal merge` and `pr merge` need one of what merges
+require_for_merge = "off"  # `shoal merge` needs one of what merges, a PR or a branch
 ```
 
 Each `require_for_` key takes `"off"`, `"agents"`, which holds agents and the
@@ -1033,9 +1033,9 @@ See [local reviews](../../../../../../docs/reference.md#local-reviews).
 
 ```toml
 [merge]
-enabled = true    # false turns `shoal merge` off
-confirm = true    # Ask before a merge that pushes
-push = false      # Push the default branch after merging
+enabled = true    # false turns local merges off; PRs still merge
+confirm = true    # Ask before a local merge that pushes
+push = false      # Push the default branch after a local merge
 ```
 
 See [merge into the default branch](../../../../../../docs/reference.md#merge-into-the-default-branch).

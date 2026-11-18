@@ -1393,8 +1393,19 @@ never sync, so none waits on a fetch or handles a failed sync; workspace
 status shows a failing sync, and one failing for 30 minutes of awake time, which
 a brief outage or a wake before the network does not reach, needs the user and
 joins the inbox with one alert. Git already merges and rebases a workspace onto the
-default branch, so Shoal has no command for that direction. `merge`, the guarded
-local substitute for a pull request, merges the workspace branch into the default
+default branch, so Shoal has no command for that direction. `merge` is one
+command for a space's work, whichever way it merges: the daemon decides from the
+space's links, merging the one open PR it links as assigned or opened on the
+forge, and otherwise a workspace's branch locally. It reads each linked PR's
+state from the forge, since a poll follows no opened PR, and refuses several
+rather than guessing one. There is no flag to merge locally past an open PR,
+which would bypass its review: closing the PR is that decision. Because it
+merges a space's work either way, it is top-level rather than under `pr`, and
+reads a PR it is given as the cross-kind verbs read items. A PR merge without a
+method takes the repository's default, which each forge's merging
+implementation reads or leaves to the forge; GitHub has none, so it takes the
+first method the repository allows. The local merge, the guarded
+substitute for a pull request, merges the workspace branch into the default
 branch, first refreshing a configured upstream while preserving an ahead branch and
 refusing divergence or fetch failure. It pushes the default branch to that upstream
 only on request, checking the upstream before merging and keeping the merge when the
@@ -1406,13 +1417,13 @@ daemon validates, resolves the push target and refreshes, and the CLI worker mer
 Pushing publishes the merge where a local reset cannot reach it, so a merge
 that pushes asks the user first, after the daemon's checks and before it
 changes anything; it names the direction, since `git merge main` in a workspace
-merges the other way, and any open PR `shoal pr merge` would merge instead. A
+merges the other way. A
 local merge asks only when the last check found sensitive files changed on both
 sides, which the same question names. An agent's approval request carries the
 same details and is its confirmation; the agent still answers the question about
 sensitive files with `--yes`, so the approver decides on them.
-A repository that merges only through PRs turns it off with `[merge] enabled =
-false`, which refuses agents' requests to merge too.
+A repository that merges only through PRs turns local merges off with `[merge]
+enabled = false`, which refuses agents' requests for them too.
 Because a local merge can be undone, `unmerge` is a command of its own rather than
 a flag that flips `merge`. The daemon records each merge when its execution ends,
 from what the default branch holds rather than what the worker reports, and drops

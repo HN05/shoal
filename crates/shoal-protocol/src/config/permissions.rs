@@ -171,8 +171,8 @@ permission_keys! {
     pr_open: PrOpen => "pr_open", Opening;
     /// Opening an issue in another repository than the space's.
     issue_other_repositories: IssueOtherRepositories => "issue_other_repositories", OtherRepositories;
-    /// Merging a branch with `shoal merge`, merging a PR and deleting its
-    /// branch.
+    /// Merging a PR or a branch with `shoal merge`, undoing a local merge
+    /// and deleting a PR's branch.
     merge: Merge => "merge", Opening;
     /// Pushing to the workspace repository's remotes, with `shoal pr open`
     /// or plain `git push`.

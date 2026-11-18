@@ -340,8 +340,8 @@ opens a PR that undoes a merged one; where the forge cannot, it opens it from a
 child workspace already marked done, which goes once the revert merges.
 `pr review --approve` and `--request-changes` follow the space's
 `pr_review` [permission](#permitted-actions), as the host's `review_token`,
-which must be set and must not be the account that opened the PR. `pr merge`, its
-`--auto` and `--cancel-auto`, and `pr delete-branch` follow the space's
+which must be set and must not be the account that opened the PR. `merge` of
+a PR, its `--auto` and `--cancel-auto`, and `pr delete-branch` follow the space's
 `merge` permission, a merge bound to the PR's head commit, and `ci approve`
 its `ci_approve` [permission](#permitted-actions).
 
@@ -451,7 +451,7 @@ branch; a failed CI check with its failing step when the runner records it;
 the passed checks once none on the PR's head is pending; a merge conflict,
 again after a push or base change that leaves it conflicting; closing and
 merging. Where `[pr] watch_merge_runs` is on, the merge of a PR linked as
-assigned or opened into the default branch, or a `shoal merge` of the
+assigned or opened into the default branch, or a local `shoal merge` of the
 space's branch that pushes it, also links the default branch's CI runs for
 that commit as related, whose ends it reports, and keeps a done space until
 they finish. It
@@ -521,7 +521,7 @@ coordinator as one line. `resolve` records an outcome with its data, and
 repository receive each `false-positive` finding's title, path and reason and
 skip that claim while the reason holds; the next review checks each `fixed`
 finding. When the repository requires a review, `pr open` of a new PR,
-`ready`, `merge` and `pr merge` are refused until a finished review covers the commit they
+`ready` and `merge`, of a PR or a branch, are refused until a finished review covers the commit they
 act on with every finding resolved. Without one, the refusal starts a review
 of the workspace's HEAD where that is the commit, and otherwise names
 `shoal review run <pr-url>`.
@@ -663,8 +663,9 @@ shoal repo sync
 shoal conflicts [<branch>]
 shoal branch base [set <workspace>]
 shoal refresh [<workspace>]
-shoal merge [<workspace>]
-shoal unmerge [<workspace>]
+shoal merge [-s <space>]
+shoal merge [pr] <number-or-url> [-X merge|squash|rebase] [--auto] [--delete-branch]
+shoal unmerge [-s <workspace>]
 ```
 
 The daemon keeps the local default branch in sync with its remote, within
@@ -686,13 +687,20 @@ under "Changed on both sides" when both branches changed it. Without a watched
 PR, the watch reports a `merge_conflict` when the check newly fails.
 `branch base set` records that a workspace builds on another's branch.
 
-Where the repository merges locally instead of through PRs, `merge` merges a
-committed branch into the default branch and `unmerge` undoes its latest merge
-while the default branch is unpushed. A workspace process's `merge` or
-`unmerge` first exits 2 with `approval_pending` for its current HEAD, unless
-its `merge` permission is `direct`; after approval the same command at the same
-HEAD proceeds, and a new commit needs a new request. A merge that pushes asks
-for confirmation on a terminal, and `--yes` gives it.
+`merge` merges a space's work: its one open PR linked as assigned or opened,
+on the forge, else a workspace's committed branch into the default branch,
+locally; several open PRs, or a chat without one, are refused, and closing the
+PR lets a workspace merge locally. A number, a PR URL or `pr` merges that PR,
+or with `pr` alone the assigned one. A PR merges by `-X`, else by the
+repository's default; `--auto` merges it once its checks pass and
+`--cancel-auto` withdraws that. A local merge takes `--push` or `--no-push`
+and only `-X merge`; a flag of the other path is refused. `unmerge` undoes a
+workspace's latest local merge while the default branch is unpushed. A
+workspace process's `merge` or `unmerge` first exits 2 with `approval_pending`
+for the PR's or branch's current head, unless its `merge` permission is
+`direct`; after approval the same command at the same head proceeds, and a new
+commit needs a new request. `-s` acts on a space below. A merge that pushes
+asks for confirmation on a terminal, and `--yes` gives it.
 
 ## Approvals
 

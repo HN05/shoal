@@ -261,8 +261,8 @@ shoal pr resolve 812 --body-file why.md # Reply in a review thread, then resolve
 shoal pr react +1 --comment 812 # React to a comment; --remove takes it back, issue react too
 shoal pr review 42 --comment --line src/a.rs:7 'Why?' # Review with line comments; --approve is yours
 shoal pr update --method rebase # Update the linked PR's branch from its base on the forge
-shoal pr merge 42 --method rebase # Merge a PR yourself; agents cannot
-shoal pr merge 42 --auto --method squash # Merge it once checks pass; --cancel-auto withdraws it
+shoal merge 42 -X rebase      # Merge a PR yourself; without -X, by the repository's default
+shoal merge 42 --auto         # Merge it once checks pass; --cancel-auto withdraws it
 shoal pr delete-branch 42     # Delete the branch of a merged or closed PR on the forge; agents cannot
 shoal pr revert 42            # Open a PR that reverts merged PR 42
 shoal issue ls --label bug flaky # Search issues by text, label, author and state; pr ls too
@@ -309,9 +309,10 @@ To move changes between your workspace and the default branch:
 ```sh
 shoal repo sync                    # Fetch and fast-forward the default branch
 git rebase main               # Or git merge; use your repo's branch name
-shoal merge                   # Merge your branch into the default branch; no remote needed
+shoal merge                   # Merge the workspace's open PR, or without one its branch, locally
 shoal merge --push            # Then push the default branch, after asking, instead of opening a PR
-shoal unmerge                 # Undo your branch's latest merge while it is unpushed
+shoal merge -s 3              # Merge another space's work
+shoal unmerge                 # Undo your branch's latest local merge while it is unpushed
 ```
 
 To have an agent review a workspace's committed changes or a PR:

@@ -852,13 +852,14 @@ impl PrioritySettings {
     }
 }
 
-/// Whether `shoal merge` merges into the default branch, asks before it
-/// pushes, and pushes the default branch to its upstream afterwards.
+/// Whether `shoal merge` merges a branch locally into the default branch,
+/// asks before it pushes, and pushes the default branch to its upstream
+/// afterwards.
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Merge)]
 pub struct MergeConfig {
-    /// False refuses `shoal merge`, as in a repository that merges only
+    /// False refuses a local merge, as in a repository that merges only
     /// through PRs.
     #[option(default = true)]
     pub enabled: Option<bool>,
