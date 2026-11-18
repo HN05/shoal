@@ -240,3 +240,67 @@ async fn a_failed_launch_restored_now_starts_at_once() {
         (entry.id, QueueState::Starting)
     );
 }
+
+/// The permissions a restore gives its launches change together: a failed
+/// launch gone since refuses the change, and the launch waiting for a
+/// failed setup beside it keeps what it had.
+#[tokio::test]
+async fn a_permission_change_refused_for_one_launch_changes_none() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let child = create(&manager, &repo, "child").await;
+    let failed = crate::state::WorkspaceState::Failed;
+    (manager.set_state(&child.id, failed, Some("setup failed".into())))
+        .await
+        .unwrap();
+    let waiting = manager.queue_add(launch_in(&child, false)).await.unwrap();
+    let waiting = waiting.entry.unwrap();
+    let given = crate::config::permissions::PermissionChange::assigned("merge=direct")
+        .unwrap()
+        .set;
+
+    let changed = manager.give_launches(
+        vec![(waiting.id.clone(), given)],
+        vec![("gone".into(), given)],
+    );
+
+    assert!(changed.await.is_err());
+    let entries = manager.queue_entries().await.unwrap();
+    let kept = entries.iter().find(|entry| entry.id == waiting.id).unwrap();
+    assert!(kept.narrowing.is_empty());
+}
+
+/// A coordinator changes the permissions of the failed launch of a chat
+/// below it, as of a workspace's.
+#[tokio::test]
+async fn a_coordinator_changes_the_permissions_of_a_failed_chat_below_it() {
+    use crate::daemon::scope::Scoped as _;
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let parent = crate::daemon::test_support::chat(&manager, "parent", "chat", Some(&repo), None);
+    let parent = parent.await;
+    let child = NewChat {
+        name: "child".into(),
+        agent: "claude".into(),
+        mode: "chat".into(),
+        narrowing: Default::default(),
+        origin: None,
+        parent: Some(parent.id.clone()),
+        priority: None,
+    };
+    let child = manager.start_new_chat(Some((&repo.id).into()), None, child);
+    let child = child.await.unwrap();
+    let caller = crate::daemon::scope::Caller {
+        space_id: parent.id.clone(),
+        execution: None,
+        granted: None,
+        read_only: false,
+    };
+    let mut method = crate::protocol::AssignmentMethod::ChangeStoppedPermissions {
+        agents: Vec::new(),
+        launches: vec![SpaceSelector::id(&child.id)],
+        change: crate::config::permissions::PermissionChange::assigned("merge=propose").unwrap(),
+    };
+
+    method.scope(&manager, &caller).await.unwrap();
+}

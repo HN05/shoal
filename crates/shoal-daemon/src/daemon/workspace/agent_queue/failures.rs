@@ -70,6 +70,23 @@ fn keep(tx: &Transaction<'_>, id: &QueueEntryId, error: &str) -> Result<bool> {
     Ok(kept == 1)
 }
 
+/// Give the failed launch `id` the permissions its entry's `column` and
+/// its plan's `planned` JSON record, refusing one no longer failed.
+pub(super) fn give(
+    tx: &Transaction<'_>,
+    id: &QueueEntryId,
+    column: &Option<String>,
+    planned: &str,
+) -> Result<()> {
+    let updated = tx.execute(
+        "UPDATE failed_launches SET narrowing=?2,plan=json_set(plan,'$.launch.narrowing',json(?3))
+         WHERE id=?1 AND json_valid(plan)",
+        params![id, column, planned],
+    )?;
+    anyhow::ensure!(updated == 1, "{id} no longer waits to be restored");
+    Ok(())
+}
+
 /// Drop the failed launch of `space`, which a new launch there replaces.
 pub(super) fn replace(tx: &Transaction<'_>, space: &SpaceId) -> Result<()> {
     tx.execute("DELETE FROM failed_launches WHERE space_id=?1", [space])?;
@@ -188,35 +205,6 @@ impl Manager {
     pub(crate) async fn failed_launch_of(&self, space: &SpaceId) -> Result<Option<QueueEntry>> {
         let entries = self.store.run(|db| entries(db)).await?;
         Ok((entries.into_iter()).find(|entry| entry.space() == Some(space)))
-    }
-
-    /// Give each failed launch `given` names the permissions beside it, in
-    /// its plan, which its agent starts under once restored, and in the
-    /// entry the queue shows.
-    pub(crate) async fn give_failed_launches(
-        &self,
-        given: Vec<(QueueEntryId, crate::config::permissions::PermissionsConfig)>,
-    ) -> Result<()> {
-        let given = (given.into_iter())
-            .map(|(id, given)| {
-                let column = crate::daemon::store::narrowing_column(&given)?;
-                Ok((id, column, serde_json::to_string(&given)?))
-            })
-            .collect::<Result<Vec<_>>>()?;
-        self.store
-            .write(move |tx| {
-                for (id, column, planned) in given {
-                    let updated = tx.execute(
-                        "UPDATE failed_launches SET narrowing=?2,
-                            plan=json_set(plan,'$.launch.narrowing',json(?3))
-                         WHERE id=?1 AND json_valid(plan)",
-                        params![id, column, planned],
-                    )?;
-                    anyhow::ensure!(updated == 1, "{id} no longer waits to be restored");
-                }
-                Ok(())
-            })
-            .await
     }
 
     /// Drop the failed launch `id`, returning whether one was there.

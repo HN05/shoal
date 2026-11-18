@@ -77,11 +77,13 @@ impl Scoped for AssignmentMethod {
             AssignmentMethod::ChangeStoppedPermissions {
                 agents, launches, ..
             } => {
+                // A launch waiting for a failed setup or a failed launch is
+                // a space's restore, as a stopped agent is.
                 for agent in agents {
                     manager.stopped_below(caller, &mut agent.workspace).await?;
                 }
-                for workspace in launches {
-                    manager.setup_below(caller, workspace).await?;
+                for space in launches {
+                    manager.stopped_below(caller, space).await?;
                 }
                 None
             }

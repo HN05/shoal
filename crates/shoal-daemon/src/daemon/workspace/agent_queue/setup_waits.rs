@@ -87,23 +87,20 @@ impl Manager {
             .await
     }
 
-    /// Give each launch `given` names the permissions beside it, in its
+    /// Give each launch `waiting` names, waiting for a failed setup, and
+    /// each failed launch `failed` names the permissions beside it, in its
     /// plan, which its agent starts under, and in the entry the queue
-    /// shows, refusing them all when one no longer waits to open its
-    /// workspace.
-    pub(crate) async fn give_launches_awaiting_setup(
+    /// shows, in one transaction, refusing them all when one no longer
+    /// waits to open its workspace or to be restored.
+    pub(crate) async fn give_launches(
         &self,
-        given: Vec<(QueueEntryId, PermissionsConfig)>,
+        waiting: Vec<(QueueEntryId, PermissionsConfig)>,
+        failed: Vec<(QueueEntryId, PermissionsConfig)>,
     ) -> Result<()> {
-        let given = (given.into_iter())
-            .map(|(id, given)| {
-                let column = store::narrowing_column(&given)?;
-                Ok((id, column, serde_json::to_string(&given)?))
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let (waiting, failed) = (given_columns(waiting)?, given_columns(failed)?);
         self.store
             .write(move |tx| {
-                for (id, column, planned) in given {
+                for (id, column, planned) in waiting {
                     let updated = tx.execute(
                         "UPDATE agent_queue SET narrowing=?2,plan=json_set(plan,'$.launch.narrowing',json(?3))
                          WHERE id=?1 AND state=?4 AND json_valid(plan)
@@ -112,10 +109,27 @@ impl Manager {
                     )?;
                     ensure!(updated == 1, "{id} no longer waits to open its workspace");
                 }
+                for (id, column, planned) in failed {
+                    super::failures::give(tx, &id, &column, &planned)?;
+                }
                 Ok(())
             })
             .await
     }
+}
+
+/// The permissions `given` each launch, as its entry's column and its
+/// plan's JSON record them.
+type GivenColumns = Vec<(QueueEntryId, Option<String>, String)>;
+
+/// [`GivenColumns`] of the permissions `given` each launch.
+fn given_columns(given: Vec<(QueueEntryId, PermissionsConfig)>) -> Result<GivenColumns> {
+    (given.into_iter())
+        .map(|(id, given)| {
+            let column = store::narrowing_column(&given)?;
+            Ok((id, column, serde_json::to_string(&given)?))
+        })
+        .collect()
 }
 
 /// The launches waiting to open `workspace` that their start asked to

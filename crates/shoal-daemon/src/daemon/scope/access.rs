@@ -137,20 +137,6 @@ impl Manager {
         Ok(space)
     }
 
-    /// `workspace`, which must be one below the caller's space, whose
-    /// failed setup an agent waits for.
-    pub(in crate::daemon) async fn setup_below<'a>(
-        &self,
-        caller: &Caller,
-        workspace: &'a mut SpaceSelector,
-    ) -> Result<&'a mut SpaceSelector> {
-        const REFUSAL: &str = "scoped processes restore only the workspaces below their own space";
-        let workspace = self.workspace_below(caller, workspace, REFUSAL).await?;
-        let id = self.workspace(workspace).await?.id;
-        ensure!(self.reaches(caller, &id).await?, REFUSAL);
-        Ok(workspace)
-    }
-
     /// Let `caller` remove the space `selector` names, releasing the user's
     /// holds of it and of the spaces below it, as its `user_holds`
     /// permission allows: a removal that `takes` the holds uses up its

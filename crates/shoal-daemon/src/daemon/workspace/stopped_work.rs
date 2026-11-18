@@ -131,9 +131,7 @@ impl Manager {
             .map(|launch| (launch.state, launch.id, change.applied_to(launch.narrowing)))
             .partition(|(state, ..)| *state == crate::state::QueueState::Failed);
         let given = |launches: Vec<_>| (launches.into_iter()).map(|(_, id, given)| (id, given));
-        self.give_launches_awaiting_setup(given(waiting).collect())
-            .await?;
-        self.give_failed_launches(given(failed).collect()).await?;
+        (self.give_launches(given(waiting).collect(), given(failed).collect())).await?;
         claimed.make(change)
     }
 
