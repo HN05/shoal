@@ -252,12 +252,43 @@ fn parse_checkout_dirs(output: &str) -> Result<[PathBuf; 3]> {
     ])
 }
 
-pub(crate) async fn metadata_path(
-    repo: &Path,
-    name: &str,
-    run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
-) -> Result<String> {
-    run(repo, &["rev-parse", "--git-path", name]).await
+/// The names Git keeps in the common directory, which every worktree
+/// shares, rather than in each worktree's own Git directory.
+const SHARED_GIT_PATHS: &[&str] = &[
+    "branches",
+    "common",
+    "config",
+    "gc.pid",
+    "hooks",
+    "info",
+    "logs",
+    "lost-found",
+    "objects",
+    "packed-refs",
+    "refs",
+    "remotes",
+    "rr-cache",
+    "shallow",
+    "svn",
+    "worktrees",
+];
+
+/// The absolute path of `name` in the Git directory of the worktree Git
+/// finds from `repo`, as `git rev-parse --git-path` gives it. Shoal reads a
+/// name of one component that Git keeps per worktree itself; Git places
+/// every other.
+pub(crate) async fn git_path(repo: &Path, name: &str) -> Result<PathBuf> {
+    let git = async |repo: &Path| {
+        let args = ["rev-parse", "--path-format=absolute", "--git-path", name];
+        let path = run(repo, &args).await?;
+        Ok(PathBuf::from(path.trim_end_matches('\n')))
+    };
+    if name.contains('/') || SHARED_GIT_PATHS.contains(&name) {
+        return git(repo).await;
+    }
+    let owned = name.to_owned();
+    let in_process = move |repo: &gix::Repository| Ok(repo.git_dir().join(&owned));
+    reader::read(repo, in_process, git).await
 }
 
 pub async fn remotes(

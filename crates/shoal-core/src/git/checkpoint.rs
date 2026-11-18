@@ -185,12 +185,8 @@ impl<'a> WorktreeIndex<'a> {
         let dir = tempfile::tempdir().context("create a temporary index directory")?;
         let index = dir.path().join("index");
         // The worktree's own index keeps paths staged despite ignore rules.
-        let own = run_isolated(
-            worktree,
-            &["rev-parse", "--path-format=absolute", "--git-path", "index"],
-        )
-        .await?;
-        std::fs::copy(own.trim(), &index).context("copy the worktree's index")?;
+        let own = super::git_path(worktree, "index").await?;
+        std::fs::copy(own, &index).context("copy the worktree's index")?;
         Ok(Self {
             worktree,
             _dir: dir,

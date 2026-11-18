@@ -99,8 +99,8 @@ pub async fn unfinished_operation(checkout: &Path) -> Result<Option<&'static str
         "sequencer",
         "index.lock",
     ] {
-        let path = git::metadata_path(checkout, marker, git_run).await?;
-        if off_runtime::exists(&checkout.join(path.trim())).await? {
+        let path = git::git_path(checkout, marker).await?;
+        if off_runtime::exists(&path).await? {
             return Ok(Some(marker));
         }
     }

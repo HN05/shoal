@@ -127,24 +127,14 @@ pub(super) async fn initialized_submodules(worktree: &Path) -> Result<Vec<String
 
 /// Copy `file` of `source`'s own Git directory into `copy`'s, when it has one.
 async fn copy_admin_file(source: &Path, copy: &Path, file: &str) -> Result<()> {
-    let from = admin_path(source, file).await?;
-    let to = admin_path(copy, file).await?;
+    let from = super::git_path(source, file).await?;
+    let to = super::git_path(copy, file).await?;
     crate::fsutil::off_runtime::run(move || match std::fs::copy(&from, &to) {
         Ok(_) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error).with_context(|| format!("copy {}", from.display())),
     })
     .await
-}
-
-/// Where the worktree keeps `file` of its own Git directory.
-pub(super) async fn admin_path(worktree: &Path, file: &str) -> Result<std::path::PathBuf> {
-    let path = super::run_isolated(
-        worktree,
-        &["rev-parse", "--path-format=absolute", "--git-path", file],
-    )
-    .await?;
-    Ok(path.trim_end_matches('\n').into())
 }
 
 #[cfg(test)]

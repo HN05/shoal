@@ -455,7 +455,7 @@ async fn needs_structural_force(path: &Path) -> Result<bool> {
 /// Git's own test: the worktree's Git directory holds `modules`, or a
 /// submodule is checked out.
 async fn has_submodules(path: &Path) -> Result<bool> {
-    let modules = super::copy::admin_path(path, "modules").await?;
+    let modules = super::git_path(path, "modules").await?;
     Ok(off_runtime::exists(&modules).await?
         || !super::copy::initialized_submodules(path).await?.is_empty())
 }

@@ -366,8 +366,7 @@ const REPLAY_OWNER: &str = "shoal unmerge";
 /// one place, which the repository Git gate gives one unmerge at a time, so
 /// rollback finds what an interrupted replay left.
 async fn replay_directory(repo: &Path) -> Result<PathBuf> {
-    let path = git::metadata_path(repo, "shoal-unmerge", git_run).await?;
-    Ok(repo.join(path.trim()))
+    git::git_path(repo, "shoal-unmerge").await
 }
 
 /// Create a worktree detached at `tip` to replay in, in a directory marked

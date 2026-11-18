@@ -17,7 +17,7 @@ pub(crate) mod predicates;
 pub use predicates::{has_commit, is_ancestor, ref_exists};
 pub(crate) mod queries;
 pub(crate) use queries::{
-    HeadState, RemoteUrls, head_state, is_bare_with_work_tree, metadata_path, remote_urls,
+    HeadState, RemoteUrls, git_path, head_state, is_bare_with_work_tree, remote_urls,
 };
 pub use queries::{
     checked_out_branch, checkout_dirs, common_dir, configured_remote_url, git_dir, head_and_branch,
