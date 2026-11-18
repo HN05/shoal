@@ -604,7 +604,7 @@ async fn session_chat_candidates(paths: &CommandPaths) -> Result<Vec<CompletionC
 /// opens them.
 async fn branch_candidates() -> Result<Vec<CompletionCandidate>> {
     let root = crate::git::worktree_root(&std::env::current_dir()?).await?;
-    let names = crate::git::branch::selectors(std::path::Path::new(root.trim())).await?;
+    let names = crate::git::branch::selectors(&root).await?;
     Ok(names.into_iter().map(CompletionCandidate::new).collect())
 }
 

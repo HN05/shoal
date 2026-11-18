@@ -568,7 +568,7 @@ async fn check_checkout(repo: &Repository, workspaces: &[Workspace]) -> Result<(
     }
     let root = git::worktree_root(&repo.path).await?;
     ensure!(
-        fs::canonicalize(root.trim())? == repo.path,
+        root == repo.path,
         "repository path no longer points to its checkout root"
     );
     let git_dir = repo.path.join(".git");

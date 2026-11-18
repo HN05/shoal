@@ -218,10 +218,27 @@ const NO_AUTO_MAINTENANCE: (&str, &str) = ("maintenance.auto", "false");
 /// with the tests' identity, for the commits Shoal makes there too, without
 /// automatic maintenance, and an initial commit of `files`.
 pub fn repository_with(root: &Path, name: &str, files: &[(&str, &str)]) -> PathBuf {
+    initialized_repository(root, name, &[], files)
+}
+
+/// The repository [`repository`] creates, with its refs in a reftable,
+/// which Git reads and gix does not.
+pub fn reftable_repository(root: &Path, name: &str) -> PathBuf {
+    let files = [("tracked", "initial\n")];
+    initialized_repository(root, name, &["--ref-format=reftable"], &files)
+}
+
+/// The repository [`repository_with`] creates, initialized with `options`.
+fn initialized_repository(
+    root: &Path,
+    name: &str,
+    options: &[&str],
+    files: &[(&str, &str)],
+) -> PathBuf {
     let repo = root.join(name);
     fs::create_dir(&repo).unwrap();
     let repo = fs::canonicalize(repo).unwrap();
-    git(&repo, &["init", "-b", "main"]);
+    git(&repo, &[&["init", "-b", "main"], options].concat());
     set_config(&repo, &[AUTHOR[0], AUTHOR[1], NO_AUTO_MAINTENANCE]);
     for (name, contents) in files {
         fs::write(repo.join(name), contents).unwrap();

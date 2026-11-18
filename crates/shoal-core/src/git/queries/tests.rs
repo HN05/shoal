@@ -1,5 +1,9 @@
 use super::*;
-use crate::test_support::{git, repository};
+use crate::test_support::{git, reftable_repository, repository};
+
+/// The ways a test repository keeps its refs: in files, which gix reads,
+/// and in a reftable, which Git reads for it.
+type Create = fn(&Path, &str) -> PathBuf;
 
 #[tokio::test]
 async fn push_remote_prefers_the_branch_then_the_default_then_origin() {
@@ -38,8 +42,55 @@ fn head_and_branch_without_a_name_for_head_is_unknown() {
     );
 }
 
+/// [`checkout_dirs`] of a main checkout and a linked worktree in a
+/// repository `create` makes.
+async fn checkout_dirs_of_each_worktree(create: Create) {
+    let root = tempfile::tempdir().unwrap();
+    let repo = create(root.path(), "repo");
+    let linked = root.path().join("linked");
+    let add = [
+        "worktree",
+        "add",
+        "-q",
+        "-b",
+        "topic",
+        linked.to_str().unwrap(),
+    ];
+    git(&repo, &add);
+    std::fs::create_dir(linked.join("sub")).unwrap();
+    let common = std::fs::canonicalize(repo.join(".git")).unwrap();
+    let main = CheckoutDirs {
+        root: std::fs::canonicalize(&repo).unwrap(),
+        common_dir: common.clone(),
+        git_dir: common.clone(),
+    };
+    assert_eq!(checkout_dirs(&repo).await.unwrap(), main);
+    let worktree = CheckoutDirs {
+        root: std::fs::canonicalize(&linked).unwrap(),
+        common_dir: common.clone(),
+        git_dir: common.join("worktrees/linked"),
+    };
+    assert_eq!(checkout_dirs(&linked.join("sub")).await.unwrap(), worktree);
+    assert_eq!(git_dir(&linked).await.unwrap(), worktree.git_dir);
+    assert_eq!(common_dir(&linked).await.unwrap(), common);
+    assert_eq!(
+        worktree_root(&linked.join("sub")).await.unwrap(),
+        worktree.root
+    );
+}
+
 #[tokio::test]
 async fn checkout_dirs_tell_a_linked_worktree_from_its_main_checkout() {
+    checkout_dirs_of_each_worktree(repository).await;
+}
+
+#[tokio::test]
+async fn checkout_dirs_in_a_reftable_repository() {
+    checkout_dirs_of_each_worktree(reftable_repository).await;
+}
+
+#[tokio::test]
+async fn a_moved_worktree_is_found_where_it_now_is() {
     let root = tempfile::tempdir().unwrap();
     let repo = repository(root.path(), "repo");
     let linked = root.path().join("linked");
@@ -54,26 +105,15 @@ async fn checkout_dirs_tell_a_linked_worktree_from_its_main_checkout() {
             linked.to_str().unwrap(),
         ],
     );
-    std::fs::create_dir(linked.join("sub")).unwrap();
-    let main = checkout_dirs(&repo).await.unwrap();
+    let moved = root.path().join("moved");
+    std::fs::rename(&linked, &moved).unwrap();
+    assert!(checkout_dirs(&linked).await.is_err());
+    // The admin directory still names the old path; the worktree's own
+    // `.git` file leads Git to it all the same.
+    let dirs = checkout_dirs(&moved).await.unwrap();
+    assert_eq!(dirs.root, std::fs::canonicalize(&moved).unwrap());
     let common = std::fs::canonicalize(repo.join(".git")).unwrap();
-    assert_eq!(
-        main,
-        CheckoutDirs {
-            root: std::fs::canonicalize(&repo).unwrap(),
-            common_dir: common.clone(),
-            git_dir: common.clone(),
-        }
-    );
-    let worktree = checkout_dirs(&linked.join("sub")).await.unwrap();
-    assert_eq!(
-        worktree,
-        CheckoutDirs {
-            root: std::fs::canonicalize(&linked).unwrap(),
-            common_dir: common.clone(),
-            git_dir: common.join("worktrees/linked"),
-        }
-    );
+    assert_eq!(dirs.git_dir, common.join("worktrees/linked"));
 }
 
 #[tokio::test]

@@ -283,8 +283,7 @@ async fn local_checkout_location(
     directory_name: &str,
     recorded: &Recorded<'_>,
 ) -> Result<(PathBuf, PathBuf)> {
-    let toplevel = git::worktree_root(Path::new(source)).await?;
-    let path = fs::canonicalize(toplevel.trim())?;
+    let path = git::worktree_root(Path::new(source)).await?;
     let root = prepare_root(root, state, recorded, Some(&path)).await?;
     let repositories = recorded.repositories;
     outside_local_configs(&path, repositories)?;

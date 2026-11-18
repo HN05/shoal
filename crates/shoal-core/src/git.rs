@@ -21,11 +21,12 @@ pub(crate) use queries::{
     remote_urls,
 };
 pub use queries::{
-    checkout_dirs, configured_remote_url, current_branch, git_dir, head_and_branch, latest_subject,
-    log_stat, push_remote, remote_names, remote_url, remotes, revision, symbolic_revision,
-    verify_revision, worktree_root,
+    checkout_dirs, common_dir, configured_remote_url, current_branch, git_dir, head_and_branch,
+    latest_subject, log_stat, push_remote, remote_names, remote_url, remotes, revision,
+    symbolic_revision, verify_revision, worktree_root,
 };
 pub mod checkpoint;
+mod reader;
 pub mod repo;
 pub mod revert;
 pub mod seed;
@@ -576,16 +577,6 @@ impl Worktree {
     pub fn is_branch(&self, name: &BranchName) -> bool {
         self.branch.as_deref() == Some(&local_ref(name))
     }
-}
-
-/// The canonical Git directory shared by every worktree of the checkout at `path`.
-pub async fn common_dir(path: &Path) -> Result<PathBuf> {
-    let dir = run(
-        path,
-        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
-    )
-    .await?;
-    crate::fsutil::off_runtime::canonicalize(Path::new(dir.trim())).await
 }
 
 pub async fn worktrees(

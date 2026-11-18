@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use shoal_refs::{BranchName, CommitId};
 
-use super::run;
+use super::{reader, run};
 use crate::fsutil::off_runtime;
 
 /// Read an object or revision without peeling it to a commit.
@@ -88,8 +88,14 @@ pub(crate) async fn checked_out_branch(repo: &Path) -> Result<Option<BranchName>
     Ok((!branch.is_empty()).then(|| branch.into()))
 }
 
-pub async fn worktree_root(repo: &Path) -> Result<String> {
-    run(repo, &["rev-parse", "--show-toplevel"]).await
+/// The canonical root of the working tree Git finds from `repo`.
+pub async fn worktree_root(repo: &Path) -> Result<PathBuf> {
+    let in_process = |repo: &gix::Repository| canonical(workdir(repo)?);
+    let git = async |repo: &Path| {
+        let root = run(repo, &["rev-parse", "--show-toplevel"]).await?;
+        off_runtime::canonicalize(Path::new(root.trim_end_matches('\n'))).await
+    };
+    reader::read(repo, in_process, git).await
 }
 
 /// Whether the checkout at `path` has a `.git` directory, yet its Git config
@@ -105,9 +111,28 @@ pub(crate) async fn is_bare_with_work_tree(path: &Path) -> Result<bool> {
         == "true")
 }
 
+/// The canonical Git directory of the checkout Git finds from `repo`: the
+/// common one for a main checkout, its admin directory for a linked
+/// worktree.
 pub async fn git_dir(repo: &Path) -> Result<PathBuf> {
-    let dir = run(repo, &["rev-parse", "--path-format=absolute", "--git-dir"]).await?;
-    off_runtime::canonicalize(Path::new(dir.trim())).await
+    let in_process = |repo: &gix::Repository| canonical(repo.git_dir());
+    let git = async |repo: &Path| {
+        let dir = run(repo, &["rev-parse", "--path-format=absolute", "--git-dir"]).await?;
+        off_runtime::canonicalize(Path::new(dir.trim())).await
+    };
+    reader::read(repo, in_process, git).await
+}
+
+/// The canonical Git directory every worktree of the repository Git finds
+/// from `repo` shares.
+pub async fn common_dir(repo: &Path) -> Result<PathBuf> {
+    let in_process = |repo: &gix::Repository| canonical(repo.common_dir());
+    let git = async |repo: &Path| {
+        let args = ["rev-parse", "--path-format=absolute", "--git-common-dir"];
+        let dir = run(repo, &args).await?;
+        off_runtime::canonicalize(Path::new(dir.trim())).await
+    };
+    reader::read(repo, in_process, git).await
 }
 
 /// Where Git finds the checkout at a path, canonical, from one Git run.
@@ -123,6 +148,18 @@ pub struct CheckoutDirs {
 }
 
 pub async fn checkout_dirs(repo: &Path) -> Result<CheckoutDirs> {
+    let in_process = |repo: &gix::Repository| {
+        Ok(CheckoutDirs {
+            root: canonical(workdir(repo)?)?,
+            common_dir: canonical(repo.common_dir())?,
+            git_dir: canonical(repo.git_dir())?,
+        })
+    };
+    reader::read(repo, in_process, checkout_dirs_from_git).await
+}
+
+/// The [`CheckoutDirs`] Git prints for `repo`.
+async fn checkout_dirs_from_git(repo: &Path) -> Result<CheckoutDirs> {
     let output = run(
         repo,
         &[
@@ -140,6 +177,19 @@ pub async fn checkout_dirs(repo: &Path) -> Result<CheckoutDirs> {
         common_dir: off_runtime::canonicalize(&common_dir).await?,
         git_dir: off_runtime::canonicalize(&git_dir).await?,
     })
+}
+
+/// The root of `repo`'s working tree, which a bare repository lacks, as Git
+/// refuses `--show-toplevel` there.
+fn workdir(repo: &gix::Repository) -> Result<&Path> {
+    repo.workdir()
+        .context("this operation must be run in a work tree")
+}
+
+/// `path` as Git prints a repository path: absolute, with symbolic links
+/// resolved.
+fn canonical(path: &Path) -> Result<PathBuf> {
+    std::fs::canonicalize(path).with_context(|| format!("cannot resolve {}", path.display()))
 }
 
 /// The three paths `rev-parse` prints, one per line, in the order asked.

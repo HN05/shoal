@@ -363,7 +363,7 @@ pub async fn with_remote<'a>(
 /// The root of the worktree `directory` is in, if it still exists.
 pub async fn worktree_root(directory: &Path) -> Result<Option<std::path::PathBuf>> {
     match git::worktree_root(directory).await {
-        Ok(root) => Ok(Some(std::fs::canonicalize(root.trim_end())?)),
+        Ok(root) => Ok(Some(root)),
         Err(_) => Ok(None),
     }
 }
