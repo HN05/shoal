@@ -3766,6 +3766,30 @@ fn a_branch_links_start_refuses_a_missing_branch_before_prompting() {
     assert!(!picked.exists(), "asked a picker: {transcript}");
 }
 
+/// A start on an issue whose earlier workspace cannot reopen, as one whose
+/// setup failed, is refused before a picker asks for its agent.
+#[test]
+fn an_issue_start_refuses_a_workspace_that_cannot_reopen_before_prompting() {
+    let fixture = Fixture::new();
+    fixture.add_github_origin();
+    fixture.script_github(&github_issue(37, "Sort the queue", "Body."));
+    let repo = fixture.repo.to_str().unwrap();
+    commit_resource_config(&fixture.repo, "git_profile = 'missing'\n");
+    let failed = fixture.run(&["start", "--wait", repo, "--issue", "37"]);
+    assert!(!failed.status.success(), "{}", printed(&failed));
+    install_test_script(fixture.root.path().join("bin/codex"), "#!/bin/sh\n");
+    let picked = fixture.root.path().join("picked");
+    install_test_script(
+        fixture.root.path().join("bin/fzf"),
+        "#!/bin/sh\ncat > \"$HOME/picked\"\nexit 130\n",
+    );
+    let args = ["start", repo, "--mode", "worker", "--issue", "37"];
+    let (output, transcript) = fixture.interactive(&args, "");
+    assert!(!output.status.success(), "{transcript}");
+    assert!(transcript.contains("is failed"), "{transcript}");
+    assert!(!picked.exists(), "asked a picker: {transcript}");
+}
+
 /// An existing workspace's start without an agent, run here with `--json`,
 /// reports the workspace it reopens.
 #[test]

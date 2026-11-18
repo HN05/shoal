@@ -14,7 +14,7 @@ use super::{
 };
 use crate::{
     cli::{client, commands::issues, context::Context},
-    forge::PullRequest,
+    forge::{PullRequest, items::issue::IssueDetails},
     model::{Blocker, Workspace},
     protocol::CopySource,
     start_plan::{CopyCreation, Creation},
@@ -40,8 +40,10 @@ pub(super) async fn resolve<'a>(ctx: &'a Context, launch: &mut Launch) -> Result
     crate::cli::commands::permissions::ensure_held(ctx, selector, &launch.permissions).await?;
     check_named_blockers(ctx, &target, &launch.blockers).await?;
     let pull = read_start_pull(ctx, &target, launch).await?;
+    let issue = read_start_issue(ctx, &target, launch).await?;
     // A branch a workspace has reopens it, under its own settings.
-    let reopened = check_launch_creation(ctx, &target, launch, pull.as_ref()).await?;
+    let items = (pull.as_ref(), issue.as_ref());
+    let reopened = check_launch_creation(ctx, &target, launch, items).await?;
     let issue_linked =
         (reopened.as_ref()).is_some_and(|workspace| workspace.links.issue().is_some());
     let settings = match &reopened {
@@ -49,7 +51,6 @@ pub(super) async fn resolve<'a>(ctx: &'a Context, launch: &mut Launch) -> Result
         None => AddSettings::new(ctx, &target.selector),
     };
     ensure_agent_runs(&settings, launch).await?;
-    read_start_issue(ctx, &target, launch).await?;
     Ok(Resolved {
         target,
         settings,
@@ -99,12 +100,18 @@ async fn start_target(ctx: &Context, launch: &mut Launch) -> Result<AddTarget> {
 
 /// Read the issue `launch` starts on in `target`'s repository, so that one
 /// that cannot be read ends the start before a picker asks.
-async fn read_start_issue(ctx: &Context, target: &AddTarget, launch: &Launch) -> Result<()> {
+async fn read_start_issue(
+    ctx: &Context,
+    target: &AddTarget,
+    launch: &Launch,
+) -> Result<Option<IssueDetails>> {
     let Some(issue) = named_issue(launch)? else {
-        return Ok(());
+        return Ok(None);
     };
     let context = issues::read_context(ctx, target.repository(ctx).await?).await?;
-    issues::load(ctx, context, issue).await.map(drop)
+    client::issue_details(&ctx.paths, context, issue)
+        .await
+        .map(Some)
 }
 
 /// Read the PR `launch` starts on in `target`'s repository, so that one
@@ -179,14 +186,14 @@ async fn ensure_agent_runs(settings: &AddSettings<'_>, launch: &Launch) -> Resul
 }
 
 /// Refuse, before a picker asks anything, what creating the workspace
-/// `launch` names in `target`, on the `pull` it starts on if any, would
-/// refuse, returning instead the workspace that already has the branch it
-/// names, which the start opens.
+/// `launch` names in `target`, on the PR or issue it starts on if any,
+/// would refuse, returning instead the workspace that already has the
+/// branch it names, which the start opens.
 async fn check_launch_creation(
     ctx: &Context,
     target: &AddTarget,
     launch: &Launch,
-    pull: Option<&PullRequest>,
+    (pull, issue): (Option<&PullRequest>, Option<&IssueDetails>),
 ) -> Result<Option<Workspace>> {
     let mut creation = crate::launches::workspace::launch_creation(launch, launch_copy(launch));
     link_creation(launch, pull, &mut creation).await?;
@@ -197,7 +204,10 @@ async fn check_launch_creation(
         ensure_takes_existing(launch, &creation, &workspace)?;
         return Ok(Some(workspace));
     }
-    check_add_creation(ctx, target, &creation, launch.parent.as_ref()).await?;
+    // An issue settles the branch nothing else names, refusing a workspace
+    // earlier work on it left that cannot reopen.
+    let creation = crate::launches::workspace::issue_settled(&reads, repo.1, creation, issue);
+    check_add_creation(ctx, target, &creation.await?, launch.parent.as_ref()).await?;
     Ok(None)
 }
 
