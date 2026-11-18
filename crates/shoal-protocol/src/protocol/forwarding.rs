@@ -2,6 +2,8 @@
 //! on belongs to another joined machine. One that reads or changes Shoal's
 //! state goes to the space's machine, which decides it as its own caller's;
 //! one that needs the space's files or processes stays on that machine.
+use crate::{approvals::ApprovalRequest, item_numbers::ItemNumber, questions::Question};
+
 use super::{
     AgentMethod, ApprovalMethod, AssignmentMethod, CiMethod, HoldMethod, ItemMethod, Operation,
     QuestionMethod, QueueMethod, RemovalMethod, WorkspaceMethod,
@@ -28,6 +30,30 @@ impl Operation {
     pub fn leave_caller_machine(&mut self) {
         if let Self::Approval(ApprovalMethod::DecideApproval { env, .. }) = self {
             *env = None;
+        }
+    }
+
+    /// Name the question or approval request a request answers, decides or
+    /// passes on as `questions` and `approvals` hold it, where the caller
+    /// named it by number alone, so that a later item reusing its number,
+    /// as while its machine is offline, is refused instead.
+    pub fn pin_item(&mut self, questions: &[Question], approvals: &[ApprovalRequest]) {
+        let question =
+            |number: &ItemNumber| questions.iter().find(|q| &q.number == number).cloned();
+        let approval = |number: &ItemNumber| {
+            (approvals.iter().find(|a| &a.number == number)).map(|a| Box::new(a.clone()))
+        };
+        match self {
+            Self::Question(
+                QuestionMethod::AnswerQuestion { number, shown, .. }
+                | QuestionMethod::AcceptQuestionRecommendation { number, shown }
+                | QuestionMethod::WithdrawQuestion { number, shown, .. },
+            ) if shown.is_none() => *shown = question(number),
+            Self::Approval(
+                ApprovalMethod::DecideApproval { number, shown, .. }
+                | ApprovalMethod::EscalateApproval { number, shown, .. },
+            ) if shown.is_none() => *shown = approval(number),
+            _ => {}
         }
     }
 
@@ -115,3 +141,6 @@ impl Operation {
         )
     }
 }
+
+#[cfg(test)]
+mod tests;

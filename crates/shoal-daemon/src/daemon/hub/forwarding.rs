@@ -8,6 +8,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     hub::{
         Member,
+        directory::Listed,
         link::{Call, Reply},
         routing::{Delivery, Forwarded, Vouched, VouchedSpace},
     },
@@ -45,7 +46,7 @@ impl Manager {
         space: &SpaceSelector,
         request: Unanswered<'_>,
     ) -> Option<Result<Elsewhere>> {
-        let (machine, id) = match self.machine_of(space).await {
+        let (machine, listed) = match self.machine_of(space).await {
             Ok(Some(found)) => found,
             Ok(None) => return None,
             // A space several machines have is refused as such.
@@ -55,7 +56,7 @@ impl Manager {
                 return None;
             }
         };
-        Some(self.forward(&machine, space, &id, request).await)
+        Some(self.forward(&machine, space, &listed, request).await)
     }
 
     /// The other joined machine whose space `selector` names, as the hub's
@@ -63,7 +64,7 @@ impl Manager {
     pub(super) async fn machine_of(
         &self,
         selector: &SpaceSelector,
-    ) -> Result<Option<(Member, SpaceId)>> {
+    ) -> Result<Option<(Member, Listed)>> {
         let Some(view) = self.hub_view(None).await? else {
             return Ok(None);
         };
@@ -82,7 +83,7 @@ impl Manager {
             }
         };
         let machine = directory.machine(&listed.machine).cloned();
-        Ok(machine.map(|machine| (machine, listed.space.id.clone())))
+        Ok(machine.map(|machine| (machine, listed.clone())))
     }
 
     /// Forward `request` for the space `space` to `machine`, unless it
@@ -91,7 +92,7 @@ impl Manager {
         &self,
         machine: &Member,
         space: &SpaceSelector,
-        id: &SpaceId,
+        listed: &Listed,
         request: Unanswered<'_>,
     ) -> Result<Elsewhere> {
         let Some(method) = request
@@ -108,9 +109,9 @@ impl Manager {
             Forwarding::Queued => Delivery::Queued,
             _ => Delivery::Now,
         };
-        let mut method = left_caller_machine(method)?;
+        let mut method = prepared(method, listed)?;
         // A number another space there may take while it waits, never an ID.
-        bind_space(&mut method, space, id)?;
+        bind_space(&mut method, space, &listed.space.id)?;
         let name = shoal_protocol::protocol::name_of(Ok(method.clone()));
         if attaches_files(&method) {
             let message = format!(
@@ -175,11 +176,14 @@ impl Manager {
     }
 }
 
-/// The request `method` without what belongs to this machine, such as an
-/// environment, which the machine it goes to has its own of.
-fn left_caller_machine(method: serde_json::Value) -> Result<serde_json::Value> {
+/// The request `method` as it goes to the machine of `listed`: without
+/// what belongs to this machine, such as an environment, which that
+/// machine has its own of, and naming the item it acts on as the hub lists
+/// it, where the caller named it by number alone.
+fn prepared(method: serde_json::Value, listed: &Listed) -> Result<serde_json::Value> {
     let mut operation: shoal_protocol::protocol::Operation = serde_json::from_value(method)?;
     operation.leave_caller_machine();
+    operation.pin_item(&listed.space.questions, &listed.space.approvals);
     Ok(serde_json::to_value(operation)?)
 }
 
