@@ -801,13 +801,19 @@ CREATE TABLE hub_queue (
     call TEXT NOT NULL,
     summary TEXT NOT NULL,
     queued_at INTEGER NOT NULL,
-    expires_at INTEGER NOT NULL
+    expires_at INTEGER NOT NULL,
+    delivering INTEGER NOT NULL DEFAULT 0 CHECK(delivering IN (0, 1))
 );
 
 CREATE TABLE hub_outbox (
     seq INTEGER PRIMARY KEY,
     call TEXT NOT NULL,
     queued_at INTEGER NOT NULL
+);
+
+CREATE TABLE hub_known_tree (
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+    tree TEXT NOT NULL
 );
 
 CREATE TABLE hub_escalated_questions (

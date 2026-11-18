@@ -1,6 +1,8 @@
 -- What the hub holds for a joined machine while it is offline: requests
 -- and events for its spaces, in the order they came, each with the
--- machine and space that sent it, which hear of it once it expires.
+-- machine and space that sent it, which hear of it once it expires, and
+-- whether the hub has sent it without hearing back, which it then never
+-- sends again.
 CREATE TABLE hub_queue (
     seq INTEGER PRIMARY KEY,
     member_id TEXT NOT NULL REFERENCES hub_members(id),
@@ -9,7 +11,8 @@ CREATE TABLE hub_queue (
     call TEXT NOT NULL,
     summary TEXT NOT NULL,
     queued_at INTEGER NOT NULL,
-    expires_at INTEGER NOT NULL
+    expires_at INTEGER NOT NULL,
+    delivering INTEGER NOT NULL DEFAULT 0 CHECK(delivering IN (0, 1))
 );
 CREATE INDEX hub_queue_member ON hub_queue(member_id, seq);
 
@@ -29,4 +32,12 @@ CREATE TABLE hub_escalated_questions (
     number INTEGER NOT NULL,
     created_at INTEGER NOT NULL,
     PRIMARY KEY(space_id, number, created_at)
+);
+
+-- What a joined machine last learned of the spaces of other machines and
+-- how they hang together, which a removal goes by while the hub cannot be
+-- asked, across restarts too.
+CREATE TABLE hub_known_tree (
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+    tree TEXT NOT NULL
 );

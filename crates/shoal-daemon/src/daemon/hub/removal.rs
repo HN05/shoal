@@ -97,18 +97,18 @@ impl Manager {
             .collect())
     }
 
-    /// This machine's ID at the hub and the hub's directory, or the one the
-    /// hub last answered with while it cannot be asked, which a removal
-    /// goes by rather than take the spaces below for none; a machine knows
-    /// none before its link first opens, which reads one.
+    /// This machine's ID at the hub and the hub's directory, or the tree it
+    /// last learned while the hub cannot be asked, which a removal goes by
+    /// rather than take the spaces below for none; a machine that never
+    /// reached the hub knows of none.
     async fn directory_or_last(&self) -> Result<Option<(MemberId, Directory)>> {
         match self.hub_directory().await {
             Ok(directory) => Ok(directory),
             Err(error) => {
-                let last = self.hub.last_directory.lock().unwrap().clone();
-                // Before this daemon first reached the hub, it knows of none.
+                let last = self.recall_tree().await?;
+                // A machine that never reached the hub knows of none.
                 let going_by = match last.is_some() {
-                    true => "the last directory the hub answered with",
+                    true => "the tree it last learned",
                     false => "no other machine's spaces",
                 };
                 log!("hub: going by {going_by}: {error:#}");

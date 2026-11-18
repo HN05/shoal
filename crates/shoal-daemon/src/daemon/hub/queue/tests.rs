@@ -49,13 +49,34 @@ fn a_machine_gets_what_the_hub_held_for_it_oldest_first() {
     push(&tx, &laptop, &held("first"), now, expires).unwrap();
     push(&tx, &laptop, &held("second"), now, expires).unwrap();
     let desk = MemberId::from("desk".to_owned());
-    assert!(first(&tx, &desk).unwrap().is_none());
-    let (seq, call) = first(&tx, &laptop).unwrap().unwrap();
+    assert!(claim_first(&tx, &desk).unwrap().is_none());
+    let (seq, call) = claim_first(&tx, &laptop).unwrap().unwrap();
     assert_eq!(message(&call.held.call), "first");
-    assert_eq!(call.held.sender, MemberId::from("desk".to_owned()));
-    remove(&tx, seq).unwrap();
-    let (_, call) = first(&tx, &laptop).unwrap().unwrap();
+    assert_eq!(call.held.sender, desk);
+    // Claimed, it is not handed out again.
+    let (_, call) = claim_first(&tx, &laptop).unwrap().unwrap();
     assert_eq!(message(&call.held.call), "second");
+    remove(&tx, seq).unwrap();
+}
+
+#[test]
+fn a_claim_that_never_left_goes_again_and_one_left_by_a_stop_never_does() {
+    let mut db = database();
+    let tx = db.transaction().unwrap();
+    let laptop = MemberId::from("laptop".to_owned());
+    let (now, expires) = (UnixTime::now(), UnixTime::now() + LIFETIME);
+    push(&tx, &laptop, &held("unsent"), now, expires).unwrap();
+    push(&tx, &laptop, &held("uncertain"), now, expires).unwrap();
+    let (unsent, _) = claim_first(&tx, &laptop).unwrap().unwrap();
+    release(&tx, unsent).unwrap();
+    let (_, again) = claim_first(&tx, &laptop).unwrap().unwrap();
+    assert_eq!(message(&again.held.call), "unsent");
+    claim_first(&tx, &laptop).unwrap().unwrap();
+    let left: Vec<String> = (take_claimed(&tx, &laptop).unwrap().iter())
+        .map(|lapsed| message(&lapsed.held.call))
+        .collect();
+    assert_eq!(left, ["unsent", "uncertain"]);
+    assert!(claim_first(&tx, &laptop).unwrap().is_none());
 }
 
 #[test]
@@ -72,8 +93,8 @@ fn the_hub_drops_only_what_expired_with_whom_it_was_for() {
     assert_eq!(lapsed[0].machine, laptop);
     assert_eq!(lapsed[0].held.summary, "old");
     assert_eq!(lapsed[0].held.sender_space, held("old").sender_space);
-    let (_, call) = first(&tx, &laptop).unwrap().unwrap();
+    let (_, call) = claim_first(&tx, &laptop).unwrap().unwrap();
     assert_eq!(message(&call.held.call), "new");
     forget(&tx, &laptop).unwrap();
-    assert!(first(&tx, &laptop).unwrap().is_none());
+    assert!(claim_first(&tx, &laptop).unwrap().is_none());
 }

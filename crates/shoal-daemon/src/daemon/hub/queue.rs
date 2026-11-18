@@ -67,20 +67,32 @@ impl Manager {
     /// never answered is not sent again, since it may have run, and its
     /// sender hears that it went unconfirmed.
     pub(super) async fn deliver_held(self: Arc<Self>, member: MemberId) {
+        let delivery = self.hub.deliveries.of(&member);
+        let _delivering = delivery.lock().await;
+        // Sent before the hub stopped, without its machine's answer.
+        let to = member.clone();
+        match self.store.write(move |tx| take_claimed(tx, &to)).await {
+            Ok(uncertain) => {
+                for lapsed in uncertain {
+                    self.tell_sender(lapsed, true).await;
+                }
+            }
+            Err(error) => return log!("hub: could not read what it held: {error:#}"),
+        }
         loop {
             let to = member.clone();
-            let next = match self.store.read(move |tx| first(tx, &to)).await {
+            let next = match self.store.write(move |tx| claim_first(tx, &to)).await {
                 Ok(Some(next)) => next,
                 Ok(None) => return,
                 Err(error) => return log!("hub: could not read what it holds: {error:#}"),
             };
-            let Some(calls) = self.hub.links.calls(&member) else {
-                return;
-            };
             let (seq, lapsed) = next;
+            let Some(calls) = self.hub.links.calls(&member) else {
+                return self.release_claim(seq).await;
+            };
             match calls.call(lapsed.held.call.clone()).await {
                 Ok(_) => {}
-                Err(error) if error.is::<Unsent>() => return,
+                Err(error) if error.is::<Unsent>() => return self.release_claim(seq).await,
                 Err(error) if error.is::<Unanswered>() => {
                     log!("hub: a held call went unanswered: {error:#}");
                     self.tell_sender(lapsed, true).await;
@@ -90,6 +102,14 @@ impl Manager {
             if let Err(error) = self.store.write(move |tx| remove(tx, seq)).await {
                 return log!("hub: could not drop a delivered call: {error:#}");
             }
+        }
+    }
+
+    /// Let the held call `seq`, which never left, go with the next link.
+    async fn release_claim(&self, seq: i64) {
+        let released = self.store.write(move |tx| release(tx, seq)).await;
+        if let Err(error) = released {
+            log!("hub: could not keep a held call for the next link: {error:#}");
         }
     }
 
@@ -178,28 +198,72 @@ fn push(
     Ok(())
 }
 
-/// The oldest call held for `member`, with its place in the queue.
-fn first(tx: &Transaction<'_>, member: &MemberId) -> Result<Option<(i64, Lapsed)>> {
+/// Claim the oldest call held for `member` that the hub has not sent, with
+/// its place in the queue.
+fn claim_first(tx: &Transaction<'_>, member: &MemberId) -> Result<Option<(i64, Lapsed)>> {
     let row = tx
         .query_row(
-            "SELECT seq, sender_id, sender_space, call, summary, queued_at FROM hub_queue
-                WHERE member_id=?1 ORDER BY seq LIMIT 1",
+            &format!("SELECT {COLUMNS} FROM hub_queue WHERE member_id=?1 AND NOT delivering ORDER BY seq LIMIT 1"),
             [member],
-            |row| {
-                Ok((
-                    row.get(0)?,
-                    row.get(1)?,
-                    row.get(2)?,
-                    row.get::<_, String>(3)?,
-                    row.get(4)?,
-                    row.get(5)?,
-                ))
-            },
+            row,
         )
         .optional()?;
-    let Some((seq, sender, sender_space, call, summary, queued_at)) = row else {
+    let Some((seq, lapsed)) = row.map(decode).transpose()? else {
         return Ok(None);
     };
+    tx.execute("UPDATE hub_queue SET delivering=1 WHERE seq=?1", [seq])?;
+    Ok(Some((seq, lapsed)))
+}
+
+/// Take the calls held for `member` that the hub sent without hearing
+/// back, oldest first, as when it stopped meanwhile.
+fn take_claimed(tx: &Transaction<'_>, member: &MemberId) -> Result<Vec<Lapsed>> {
+    let rows = tx
+        .prepare(&format!(
+            "SELECT {COLUMNS} FROM hub_queue WHERE member_id=?1 AND delivering ORDER BY seq"
+        ))?
+        .query_map([member], row)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    tx.execute(
+        "DELETE FROM hub_queue WHERE member_id=?1 AND delivering",
+        [member],
+    )?;
+    rows.into_iter().map(|row| Ok(decode(row)?.1)).collect()
+}
+
+fn release(tx: &Transaction<'_>, seq: i64) -> Result<()> {
+    tx.execute("UPDATE hub_queue SET delivering=0 WHERE seq=?1", [seq])?;
+    Ok(())
+}
+
+/// The columns [`row`] reads.
+const COLUMNS: &str = "seq, member_id, sender_id, sender_space, call, summary, queued_at";
+
+type Row = (
+    i64,
+    MemberId,
+    MemberId,
+    Option<SpaceId>,
+    String,
+    String,
+    UnixTime,
+);
+
+fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
+    Ok((
+        row.get(0)?,
+        row.get(1)?,
+        row.get(2)?,
+        row.get(3)?,
+        row.get(4)?,
+        row.get(5)?,
+        row.get(6)?,
+    ))
+}
+
+/// The held call `row` holds, with its place in the queue.
+fn decode(row: Row) -> Result<(i64, Lapsed)> {
+    let (seq, machine, sender, sender_space, call, summary, queued_at) = row;
     let held = Held {
         sender,
         sender_space,
@@ -207,11 +271,11 @@ fn first(tx: &Transaction<'_>, member: &MemberId) -> Result<Option<(i64, Lapsed)
         summary,
     };
     let lapsed = Lapsed {
-        machine: member.clone(),
+        machine,
         held,
         queued_at,
     };
-    Ok(Some((seq, lapsed)))
+    Ok((seq, lapsed))
 }
 
 fn remove(tx: &Transaction<'_>, seq: i64) -> Result<()> {
@@ -222,44 +286,36 @@ fn remove(tx: &Transaction<'_>, seq: i64) -> Result<()> {
 /// Take the calls held past `now`, oldest first.
 fn take_expired(tx: &Transaction<'_>, now: UnixTime) -> Result<Vec<Lapsed>> {
     let rows = tx
-        .prepare(
-            "SELECT member_id, sender_id, sender_space, call, summary, queued_at FROM hub_queue
-                WHERE expires_at <= ?1 ORDER BY seq",
-        )?
-        .query_map([now], |row| {
-            Ok((
-                row.get(0)?,
-                row.get(1)?,
-                row.get(2)?,
-                row.get::<_, String>(3)?,
-                row.get(4)?,
-                row.get(5)?,
-            ))
-        })?
+        .prepare(&format!(
+            "SELECT {COLUMNS} FROM hub_queue WHERE expires_at <= ?1 AND NOT delivering ORDER BY seq"
+        ))?
+        .query_map([now], row)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    tx.execute("DELETE FROM hub_queue WHERE expires_at <= ?1", [now])?;
-    rows.into_iter()
-        .map(
-            |(machine, sender, sender_space, call, summary, queued_at)| {
-                Ok(Lapsed {
-                    machine,
-                    held: Held {
-                        sender,
-                        sender_space,
-                        call: serde_json::from_str(&call).context("unreadable held call")?,
-                        summary,
-                    },
-                    queued_at,
-                })
-            },
-        )
-        .collect()
+    tx.execute(
+        "DELETE FROM hub_queue WHERE expires_at <= ?1 AND NOT delivering",
+        [now],
+    )?;
+    rows.into_iter().map(|row| Ok(decode(row)?.1)).collect()
 }
 
 /// Drop what the hub holds for `member`, which it revoked.
 pub(super) fn forget(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
     tx.execute("DELETE FROM hub_queue WHERE member_id=?1", [member])?;
     Ok(())
+}
+
+/// One lock per machine, which a delivery of what the hub holds for it
+/// takes, so a claim it finds was left by a hub that stopped.
+#[derive(Default)]
+pub(super) struct Deliveries(
+    std::sync::Mutex<std::collections::HashMap<MemberId, Arc<tokio::sync::Mutex<()>>>>,
+);
+
+impl Deliveries {
+    fn of(&self, member: &MemberId) -> Arc<tokio::sync::Mutex<()>> {
+        let mut locks = self.0.lock().unwrap();
+        locks.entry(member.clone()).or_default().clone()
+    }
 }
 
 #[cfg(test)]

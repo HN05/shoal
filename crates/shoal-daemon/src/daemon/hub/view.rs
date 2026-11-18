@@ -43,9 +43,9 @@ impl Manager {
             Reply::Directory(directory) => directory,
             reply => return Err(anyhow!("the hub answered with an unexpected {reply:?}")),
         };
-        let answered = (joined.membership.member, directory);
-        *self.hub.last_directory.lock().unwrap() = Some(answered.clone());
-        Ok(Some(answered))
+        self.remember_tree(&joined.membership.member, &directory)
+            .await;
+        Ok(Some((joined.membership.member, directory)))
     }
 }
 
