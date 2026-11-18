@@ -41,7 +41,8 @@ impl Manager {
     /// export's removal, taking only those that `unsaved` names, once each
     /// workspace among them still has what its checkpoint in `exported`
     /// keeps, which the other machine now has. Their issues' forge
-    /// assignees stay for the spaces on the other machine.
+    /// assignees stay for the spaces on the other machine, and the spaces
+    /// below that a selection does not carry stay here.
     pub async fn end_moved_space(
         &self,
         selector: &SpaceSelector,
@@ -58,6 +59,7 @@ impl Manager {
         for handed in std::iter::once(&space).chain(&carried) {
             self.hand_over_assignees(&handed.id).await?;
         }
+        self.leave_uncarried(&space, &carried, carrying).await?;
         (self.remove_packaged(&space, &carried, moved, InspectionPolicy::GitOnly)).await
     }
 

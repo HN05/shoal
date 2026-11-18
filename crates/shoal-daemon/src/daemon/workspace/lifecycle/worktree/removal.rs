@@ -679,7 +679,8 @@ fn ensure_checkpoint_keeps_files(
 
 /// What removal takes with the worktree the final inspection `check` saw.
 /// A branch goes when its commits are all preserved, except the default
-/// branch, which an unresolved default branch could be; files go by force
+/// branch, which an unresolved default branch could be, and a branch
+/// another workspace that stays builds on; files go by force
 /// only once `removal` may discard unsaved work, or discards unsaved files a
 /// checkpoint keeps. A workspace at a commit owns no branch to delete,
 /// whichever its worktree is on. A disposable workspace's branch counts as
@@ -694,6 +695,7 @@ pub(in crate::daemon::workspace) fn removal_options(
     let branch = if own_branch
         && !removal.converts()
         && check.branch_preserved()
+        && check.workspace.stacked_workspaces.is_empty()
         && check
             .default_branch
             .as_deref()

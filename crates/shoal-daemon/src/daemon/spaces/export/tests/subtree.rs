@@ -259,3 +259,57 @@ async fn an_import_whose_carried_space_is_here_records_nothing() {
     assert!(importing.removed_spaces().await.unwrap().is_empty());
     assert!(importing.find_space(&worker).await.unwrap().is_none());
 }
+
+#[tokio::test]
+async fn a_selection_leaves_the_other_spaces_below_one_level_up() {
+    let (source, manager, repo, _origin) = exporter().await;
+    let top = test_support::chat(&manager, "top", "chat", Some(&repo), None).await;
+    let worker = test_support::working_below(&manager, &repo, "worker", &top.id, "worker").await;
+    let below = SpaceSelector::id(&worker.id);
+    let child = test_support::working_below(&manager, &repo, "child", &worker.id, "worker").await;
+    let base = Some("worker".to_owned());
+    let stacked = (manager.split_workspace(&below, "stacked".into(), base, Default::default()))
+        .await
+        .unwrap();
+    let picked = (manager.split_workspace(&below, "picked".into(), None, Default::default()))
+        .await
+        .unwrap();
+    let reason = Some("review it".to_owned());
+    let held = (manager.request_hold(&SpaceSelector::id(&child.id), "review".into(), reason))
+        .await
+        .unwrap();
+    let crate::daemon::allocation::Allocation::Approval(request) = held else {
+        panic!("the hold waits for approval");
+    };
+    let decider = async || {
+        let request = manager.approval_by_key(&request.key).await.unwrap();
+        request.unwrap().decider
+    };
+    assert_eq!(decider().await, Some(worker.id.clone()));
+    let file = source.path().join("worker.shoal");
+
+    (manager.export_space(
+        &below,
+        UnsavedWork::All,
+        InspectionPolicy::GitOnly,
+        file.clone(),
+        &Carrying::Selected(vec![picked.id.clone()]),
+    ))
+    .await
+    .unwrap();
+
+    let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
+    let carried: Vec<&SpaceId> = (import.manifest.carried.iter())
+        .map(|carried| &carried.space.record.space_id)
+        .collect();
+    assert_eq!(carried, [&picked.id]);
+    for gone in [&worker.id, &picked.id] {
+        assert!(manager.find_space(gone).await.unwrap().is_none());
+    }
+    assert_eq!(placed(&manager, &child.id).await.1.as_ref(), Some(&top.id));
+    let (stacked, parent) = placed(&manager, &stacked.id).await;
+    assert_eq!(parent.as_ref(), Some(&top.id));
+    assert_eq!(stacked.base_ref.as_deref(), Some("refs/heads/worker"));
+    test_support::git(&repo.path, &["rev-parse", "--verify", "refs/heads/worker"]);
+    assert_eq!(decider().await, Some(top.id.clone()));
+}

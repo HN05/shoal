@@ -85,7 +85,7 @@ pub(super) fn by_key(db: &Connection, key: &str) -> Result<Option<ApprovalReques
 }
 
 /// The requests routed to the space `id`, in the order they were made.
-fn list_decided(db: &Connection, id: &SpaceId) -> Result<Vec<ApprovalRequest>> {
+pub(super) fn list_decided(db: &Connection, id: &SpaceId) -> Result<Vec<ApprovalRequest>> {
     db.prepare(&format!("{COLUMNS} WHERE {DECIDED_BY} ORDER BY rowid"))?
         .query_map([id], record_row)?
         .map(|row| decode_record(row?))

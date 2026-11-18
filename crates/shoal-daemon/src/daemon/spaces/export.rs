@@ -21,6 +21,7 @@ use shoal_protocol::transcripts::Environments;
 mod carried;
 mod copy;
 mod moving;
+mod staying;
 mod worktree;
 
 /// A space prepared for its package, ended here or copied, with the
@@ -106,6 +107,7 @@ impl Manager {
         carried::ensure_packable(&space, &carried)?;
         // Its own config may describe its agents, and goes with it.
         let settings = self.space_settings(&space).await;
+        self.leave_uncarried(&space, &carried, carrying).await?;
         let removal = (self.remove_packaged(&space, &carried, unsaved, inspection)).await?;
         let removed = self.removal_record(&space.id).await?;
         let carried = self.removal_records(&carried).await?;
@@ -145,6 +147,21 @@ impl Manager {
             worktree::ensure_files_kept(record)?;
         }
         Prepared::of(self, removed, carried, settings).await
+    }
+
+    /// Leave the spaces below `space` that a selection does not carry here,
+    /// as [`Self::leave_behind`] does; carrying every space below it leaves
+    /// none, and one that joins it meanwhile retains it.
+    async fn leave_uncarried(
+        &self,
+        space: &Space,
+        carried: &[Space],
+        carrying: &Carrying,
+    ) -> Result<()> {
+        match carrying {
+            Carrying::Subtree => Ok(()),
+            Carrying::Selected(_) => self.leave_behind(space, carried).await,
+        }
     }
 
     /// Remove `space` for its package through the removal path, deleting

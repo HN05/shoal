@@ -125,6 +125,27 @@ pub(super) fn route(
     Ok(request)
 }
 
+/// Route each pending request a space among `leaving` decides for a space
+/// that stays to the first space with one of `agents` above that space now,
+/// or to the user; the requests routed.
+fn pass_on(
+    tx: &Transaction<'_>,
+    leaving: &[SpaceId],
+    agents: &crate::daemon::workspace::TrackedAgents,
+) -> Result<Vec<ApprovalRequest>> {
+    let mut routed = Vec::new();
+    for decider in leaving {
+        for request in super::store::list_decided(tx, decider)? {
+            if request.status != DecisionStatus::Pending || leaving.contains(&request.space_id) {
+                continue;
+            }
+            let above = crate::daemon::workspace::spaces_above(tx, &request.space_id, agents)?;
+            routed.push(route(tx, &request.key, &above, Some(decider))?);
+        }
+    }
+    Ok(routed)
+}
+
 /// A decided request; `new` is false when the decision repeats the recorded one.
 pub struct Decision {
     pub request: ApprovalRequest,
@@ -488,6 +509,23 @@ impl Manager {
         // A decider that could not be told gave the request to the user. Its
         // key, unlike its number, never names another request.
         Ok(self.approval_by_key(&routed.key).await?.unwrap_or(routed))
+    }
+
+    /// Pass the pending requests the spaces `leaving` decide for spaces
+    /// that stay on to the nearest space now above each requester with an
+    /// agent, or to the user, as those spaces leave the tree above them.
+    pub(crate) async fn pass_on_from(&self, leaving: &[SpaceId]) -> Result<()> {
+        let agents = self.tracked_agents().await;
+        let leaving = leaving.to_vec();
+        let _gate = self.gates.lock_announcements().await;
+        let routed = self
+            .store
+            .write(move |tx| pass_on(tx, &leaving, &agents))
+            .await?;
+        for request in &routed {
+            self.announce_approval(request).await;
+        }
+        Ok(())
     }
 
     /// Route `request` to the space above its workspace, or to the one above
