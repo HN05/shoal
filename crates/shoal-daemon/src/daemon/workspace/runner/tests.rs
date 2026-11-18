@@ -1465,17 +1465,18 @@ async fn a_jobs_workspace_a_restart_caught_seeding_is_removed() {
     assert!(!workspace.path.exists());
 }
 
-/// A removal stopped once Git deleted the worktree's `.git` link, and a
-/// `worktree prune` then deleted the admin directory no link named, leaves
-/// what Git did not delete, failed with that removal's error; the job's
-/// next pass deletes the rest.
-#[tokio::test]
-async fn a_jobs_workspace_whose_removal_stopped_after_its_admin_directory_went_is_removed() {
-    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
-    let workspace = workspace_a_restart_caught_preparing(&fixture).await;
-    add_worktree(&fixture, &workspace).await;
+/// The workspace of the fixture's one job as a removal leaves it that
+/// stopped once Git deleted the worktree's `.git` link, after a `worktree
+/// prune` deleted the admin directory no link named: what Git did not
+/// delete, failed with that removal's error.
+async fn workspace_whose_removal_stopped_after_its_admin_directory_went(
+    fixture: &Fixture,
+) -> Workspace {
+    let workspace = workspace_a_restart_caught_preparing(fixture).await;
+    add_worktree(fixture, &workspace).await;
     let manager = &fixture.manager;
     manager.record_worktree_identity(&workspace).await.unwrap();
+    manager.record_removal_directory(&workspace).await.unwrap();
     std::fs::create_dir(workspace.path.join("target")).unwrap();
     std::fs::write(workspace.path.join("target/built"), "").unwrap();
     std::fs::remove_file(workspace.path.join(".git")).unwrap();
@@ -1485,8 +1486,42 @@ async fn a_jobs_workspace_whose_removal_stopped_after_its_admin_directory_went_i
     (manager.set_state(&workspace.id, WorkspaceState::Failed, Some(error)))
         .await
         .unwrap();
-    assert!(removed_with_its_claim(manager, &workspace).await);
+    workspace
+}
+
+#[tokio::test]
+async fn a_jobs_workspace_whose_removal_stopped_after_its_admin_directory_went_is_removed() {
+    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
+    let workspace = workspace_whose_removal_stopped_after_its_admin_directory_went(&fixture).await;
+    assert!(removed_with_its_claim(&fixture.manager, &workspace).await);
     assert!(!workspace.path.exists());
+}
+
+/// A directory that replaced such a leftover is not the one the removal
+/// began deleting, so it stays with what it holds.
+#[tokio::test]
+async fn a_directory_that_replaced_a_stopped_removals_leftover_stays() {
+    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
+    let workspace = workspace_whose_removal_stopped_after_its_admin_directory_went(&fixture).await;
+    std::fs::remove_dir_all(&workspace.path).unwrap();
+    std::fs::create_dir(&workspace.path).unwrap();
+    std::fs::write(workspace.path.join("kept"), "").unwrap();
+    assert!(!removed_with_its_claim(&fixture.manager, &workspace).await);
+    assert!(workspace.path.join("kept").exists());
+}
+
+/// Nor is a symbolic link that replaced it, whose target stays whole.
+#[tokio::test]
+async fn a_symbolic_link_that_replaced_a_stopped_removals_leftover_stays() {
+    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
+    let workspace = workspace_whose_removal_stopped_after_its_admin_directory_went(&fixture).await;
+    let target = workspace.path.with_file_name("elsewhere");
+    std::fs::create_dir(&target).unwrap();
+    std::fs::write(target.join("kept"), "").unwrap();
+    std::fs::remove_dir_all(&workspace.path).unwrap();
+    std::os::unix::fs::symlink(&target, &workspace.path).unwrap();
+    assert!(!removed_with_its_claim(&fixture.manager, &workspace).await);
+    assert!(target.join("kept").exists());
 }
 
 #[tokio::test]

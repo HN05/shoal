@@ -387,15 +387,17 @@ async fn a_worktree_whose_admin_directory_is_gone_is_disowned() {
     let root = tempfile::tempdir().unwrap();
     let (_repo, workspace) = with_topic(root.path()).await;
     let admin = admin_dir(&workspace).await;
-    assert!(!disowned(&workspace, &admin).await.unwrap());
+    assert_eq!(disowned(&workspace, &admin).await.unwrap(), None);
     std::fs::remove_dir_all(&admin).unwrap();
-    assert!(disowned(&workspace, &admin).await.unwrap());
+    let leftover = disowned(&workspace, &admin).await.unwrap();
+    assert_eq!(leftover, Some(Leftover::Linked));
     std::fs::remove_file(workspace.join(".git")).unwrap();
-    assert!(disowned(&workspace, &admin).await.unwrap());
+    let leftover = disowned(&workspace, &admin).await.unwrap();
+    assert_eq!(leftover, Some(Leftover::Unlinked));
     read_only_directory(&workspace);
     delete_disowned(&workspace).await.unwrap();
     assert!(!workspace.exists());
-    assert!(!disowned(&workspace, &admin).await.unwrap());
+    assert_eq!(disowned(&workspace, &admin).await.unwrap(), None);
 }
 
 /// A directory whose `.git` names another admin directory, or is a
@@ -411,8 +413,8 @@ async fn another_checkout_at_the_path_is_not_disowned() {
         .unwrap();
     std::fs::copy(other.join(".git"), workspace.join(".git")).unwrap();
     std::fs::remove_dir_all(&admin).unwrap();
-    assert!(!disowned(&workspace, &admin).await.unwrap());
+    assert_eq!(disowned(&workspace, &admin).await.unwrap(), None);
     std::fs::remove_file(workspace.join(".git")).unwrap();
     std::fs::create_dir(workspace.join(".git")).unwrap();
-    assert!(!disowned(&workspace, &admin).await.unwrap());
+    assert_eq!(disowned(&workspace, &admin).await.unwrap(), None);
 }

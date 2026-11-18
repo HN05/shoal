@@ -25,6 +25,7 @@ mod creation;
 mod daemon_exit;
 pub(crate) mod demos;
 mod diff;
+mod disowned;
 pub(crate) mod engagement;
 pub(crate) mod executions;
 mod fast_forward;

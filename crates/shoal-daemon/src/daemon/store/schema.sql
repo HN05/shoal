@@ -696,6 +696,11 @@ CREATE TABLE waiting_preparations (
     waits TEXT NOT NULL
 );
 
+CREATE TABLE removal_directories (
+    workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+    identity TEXT NOT NULL
+);
+
 CREATE TABLE hub_identity (
     id INTEGER PRIMARY KEY CHECK(id = 1),
     private_key BLOB NOT NULL

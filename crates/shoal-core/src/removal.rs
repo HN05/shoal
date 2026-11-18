@@ -5,7 +5,7 @@ use shoal_refs::BranchName;
 
 use crate::{
     fsutil::off_runtime,
-    git::{self, default_branch::DefaultBranch},
+    git::{self, default_branch::DefaultBranch, worktree::Leftover},
     model::Workspace,
     process,
 };
@@ -165,7 +165,7 @@ async fn inspect_git(
     default_branch: Option<&DefaultBranch>,
 ) -> Result<()> {
     if check.workspace.disposable {
-        if !disowned(&check.workspace, repo).await? {
+        if disowned(&check.workspace, repo).await?.is_none() {
             check.branch = git::checked_out_branch(&check.workspace.path).await?;
         }
         return Ok(());
@@ -204,22 +204,24 @@ async fn inspect_git(
     Ok(())
 }
 
-/// Whether Git disowned the worktree of `workspace`, and the workspace is
-/// disposable, so that removal deletes what is left without Git, whatever
-/// it holds: as a removal Git could not finish leaves it, or, when its
-/// checkout never succeeded and so recorded no admin directory, as a
+/// What is left of the worktree of `workspace` when Git disowned it and the
+/// workspace is disposable, so that removal deletes it without Git,
+/// whatever it holds: as a removal Git could not finish leaves it, or, when
+/// its checkout never succeeded and so recorded no admin directory, as a
 /// checkout that failed leaves it. Nothing was at a workspace's path when
-/// Shoal recorded it, and its record keeps the path from every other
-/// workspace, so a `.git` link there naming an admin directory of its
-/// repository, checked out at `repo`, is Git's for this workspace, as is a
-/// directory without one once the admin directory it recorded is gone.
-pub async fn disowned(workspace: &Workspace, repo: &Path) -> Result<bool> {
+/// Shoal recorded it, so a `.git` link there naming an admin directory of
+/// its repository, checked out at `repo`, is Git's for this workspace; a
+/// directory without one is only once its identity proves it.
+pub async fn disowned(workspace: &Workspace, repo: &Path) -> Result<Option<Leftover>> {
     if !workspace.disposable {
-        return Ok(false);
+        return Ok(None);
     }
     match &workspace.git_dir {
         Some(admin_dir) => git::worktree::disowned(&workspace.path, admin_dir).await,
-        None => git::worktree::left_by_failed_add(&workspace.path, repo).await,
+        None => Ok(
+            (git::worktree::left_by_failed_add(&workspace.path, repo).await?)
+                .then_some(Leftover::Linked),
+        ),
     }
 }
 

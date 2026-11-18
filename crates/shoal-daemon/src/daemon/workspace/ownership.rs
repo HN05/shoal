@@ -195,8 +195,7 @@ impl Manager {
     }
 
     /// Verify the worktree a removal deletes as [`Self::verify_worktree`]
-    /// does, except one Git disowned, whose recorded admin directory is gone
-    /// and whose `.git` link, if any, still names it, or the one a checkout
+    /// does, except what is left of one Git disowned, or the one a checkout
     /// that failed or a restart cut short left. What a workspace that
     /// recorded no admin directory holds at its path otherwise is the user's
     /// to delete. `common_dir` is the repository's shared Git directory.
@@ -205,7 +204,7 @@ impl Manager {
         workspace: &Workspace,
         common_dir: &CommonDir,
     ) -> Result<()> {
-        if crate::removal::disowned(workspace, common_dir.checkout()).await?
+        if self.disowned(workspace, common_dir.checkout()).await?
             || self.left_by_unfinished_add(workspace, common_dir).await?
         {
             return Ok(());

@@ -548,7 +548,7 @@ impl Manager {
         let record = self.save_restore_record(workspace, removal).await?;
         ensure_checkpoint_keeps_files(check, removal, record.as_ref())?;
         let (files, branch) = removal_options(check, removal);
-        let registration = match removal::disowned(workspace, repo).await? {
+        let registration = match self.disowned(workspace, repo).await? {
             true => Registration::Disowned,
             false => Registration::Listed,
         };
@@ -592,6 +592,7 @@ impl Manager {
         self.remove_simulators(&workspace.id).await?;
         match registration {
             Registration::Listed => {
+                self.record_removal_directory(workspace).await?;
                 self.destroy_seed_outputs(workspace).await;
                 let removed = git::worktree::remove(repo, &workspace.path, files, branch).await?;
                 return Ok(removed.into());

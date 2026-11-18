@@ -236,26 +236,40 @@ async fn restore_link(path: &Path, text: String) -> Result<()> {
     .await
 }
 
-/// Whether Git disowned the linked worktree at `path`, whose admin
-/// directory was `admin_dir`: that directory is gone while the worktree's
-/// directory stays, with a `.git` link still naming it, as `worktree
-/// remove` leaves it when it cannot delete every file, or with none, as a
-/// removal stopped after deleting the link leaves it once a `worktree
-/// prune` deleted the admin directory that no link named any longer.
-pub(crate) async fn disowned(path: &Path, admin_dir: &Path) -> Result<bool> {
+/// What a directory at a worktree's path holds once Git disowned the
+/// worktree, deleting its admin directory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Leftover {
+    /// A `.git` link still naming that admin directory, which proves the
+    /// directory is the worktree's, as `worktree remove` leaves it when it
+    /// cannot delete every file.
+    Linked,
+    /// No `.git`, as a removal stopped after deleting the link leaves it
+    /// once a `worktree prune` deleted the admin directory no link named
+    /// any longer; only the directory's own identity tells it from one that
+    /// replaced the worktree.
+    Unlinked,
+}
+
+/// What is left at `path` of the linked worktree whose admin directory was
+/// `admin_dir`, when Git disowned it: that directory is gone while a
+/// directory stays at `path` with no `.git` naming another.
+pub(crate) async fn disowned(path: &Path, admin_dir: &Path) -> Result<Option<Leftover>> {
     if !off_runtime::is_dir(path).await? || off_runtime::try_exists(admin_dir).await? {
-        return Ok(false);
+        return Ok(None);
     }
     let linked = {
         let path = path.to_owned();
         off_runtime::run(move || linked_admin_dir(&path)).await
     };
     Ok(match linked {
-        Ok(None) => true,
-        Ok(Some(named)) => resolved(&named).await == resolved(admin_dir).await,
-        // A `.git` directory, or a link that cannot be read, is another
-        // checkout's.
-        Err(_) => false,
+        Ok(None) => Some(Leftover::Unlinked),
+        Ok(Some(named)) if resolved(&named).await == resolved(admin_dir).await => {
+            Some(Leftover::Linked)
+        }
+        // A link naming another admin directory, a `.git` directory or a
+        // link that cannot be read is another checkout's.
+        Ok(Some(_)) | Err(_) => None,
     })
 }
 
