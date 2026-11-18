@@ -2,7 +2,10 @@
 //! detached, in a background place, beside the caller, or here under the
 //! execution wrapper, as an execution of its chat, once the agent queue
 //! admits it.
-use std::{ffi::OsString, path::Path};
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context as _, Result, ensure};
 
@@ -332,17 +335,40 @@ async fn revoke_chat_scope(ctx: &Context, chat: &Chat, token: ScopeToken) {
 }
 
 /// Run the agent of the recorded `chat` as `launch` says, with
-/// `model_args`, here under the execution wrapper, as an execution of the
-/// chat, labelling this terminal as the chat's; it consumes `records`, those
-/// of the stopped agent it continues, once it runs.
+/// `model_args`, here under the execution wrapper, as [`run_tracked`]
+/// does; it consumes `records`, those of the stopped agent it continues,
+/// once it runs.
 async fn run_agent(
     ctx: &Context,
     chat: &Chat,
     agent: Agent,
     launch: ChatLaunch,
     model_args: Vec<OsString>,
-    records: Vec<std::path::PathBuf>,
+    records: Vec<PathBuf>,
 ) -> Result<i32> {
+    let tracked = tracked(ctx, chat, agent, launch, model_args, &records).await?;
+    run_tracked(ctx, chat, tracked, records).await
+}
+
+/// A chat's agent ready to run: the settings it launches under, its
+/// command and what the execution wrapper records of it.
+struct Tracked {
+    settings: Effective,
+    command: Vec<OsString>,
+    agent: crate::execution::TrackedAgent,
+}
+
+/// The agent of the recorded `chat` as `launch` says, with `model_args`;
+/// one that replaces a stopped agent, whose `records` it consumes,
+/// continues its session.
+async fn tracked(
+    ctx: &Context,
+    chat: &Chat,
+    agent: Agent,
+    launch: ChatLaunch,
+    model_args: Vec<OsString>,
+    records: &[PathBuf],
+) -> Result<Tracked> {
     let ChatLaunch {
         repository,
         workspace,
@@ -372,15 +398,31 @@ async fn run_agent(
         opening,
         args,
     )?;
-    terminal::label_current(&ctx.paths, crate::terminal::Owner::Chat(&chat.id)).await?;
     let agent = crate::execution::TrackedAgent {
         name: agent,
         model,
         mode,
         narrowing,
-        // An agent that replaces a stopped one continues its session.
         new_session: new_session && records.is_empty(),
     };
+    Ok(Tracked {
+        settings,
+        command,
+        agent,
+    })
+}
+
+/// Run `tracked`, the agent of `chat`, here under the execution wrapper, as
+/// an execution of the chat, labelling this terminal as the chat's; it
+/// consumes `records` once it runs.
+async fn run_tracked(
+    ctx: &Context,
+    chat: &Chat,
+    tracked: Tracked,
+    records: Vec<PathBuf>,
+) -> Result<i32> {
+    let Tracked { command, agent, .. } = tracked;
+    terminal::label_current(&ctx.paths, crate::terminal::Owner::Chat(&chat.id)).await?;
     let space = SpaceSelector::id(&chat.id);
     match records.is_empty() {
         true => shoal_workers::execution::run(&ctx.paths, space, command, Some(agent)).await,
@@ -391,8 +433,8 @@ async fn run_agent(
 }
 
 /// Start the agent `start` describes of `chat`, which changed since it
-/// stopped, in this terminal in the place it works now, with the rules of
-/// its mode and the fields of the issue the chat links.
+/// stopped, in the place it works now, with the rules of its mode and the
+/// fields of the issue the chat links, as [`run_placed`] runs it.
 pub(in crate::cli::commands) async fn start_changed(
     ctx: &Context,
     chat: &Chat,
@@ -431,7 +473,26 @@ pub(in crate::cli::commands) async fn start_changed(
     };
     let launch = command::chat_launch(settings, &agent, repo, &topic, &options, chat.name.clone())?;
     let model_args = crate::agents::model_args(&launch.settings, &agent, &launch.model)?;
-    run_agent(ctx, chat, agent, launch, model_args, records).await
+    let tracked = tracked(ctx, chat, agent, launch, model_args, &records).await?;
+    run_placed(ctx, chat, tracked, records).await
+}
+
+/// Run `tracked`, the agent of `chat`, where the terminal host runs agents
+/// apart from this process, as a workspace's runs, otherwise here as
+/// [`run_tracked`] does; it consumes `records` once it runs.
+async fn run_placed(
+    ctx: &Context,
+    chat: &Chat,
+    tracked: Tracked,
+    records: Vec<PathBuf>,
+) -> Result<i32> {
+    let space = terminal::AgentSpace::of(chat);
+    let (settings, command) = (&tracked.settings, &tracked.command);
+    let ran = terminal::run_agent(ctx, settings, &space, &tracked.agent, &records, command);
+    if let Some(code) = ran.await? {
+        return Ok(code);
+    }
+    run_tracked(ctx, chat, tracked, records).await
 }
 
 /// The topic of the place the agent of `chat` starts in from `session`,

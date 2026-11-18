@@ -168,8 +168,8 @@ async fn restore(
     launch(ctx, space, recovery, records).await
 }
 
-/// Start the restore command in `space`, consuming `records` once the agent
-/// runs.
+/// Start the restore command in `space`, where its terminal host runs
+/// agents, otherwise here, consuming `records` once the agent runs.
 async fn launch(
     ctx: &Context,
     space: &Space,
@@ -189,23 +189,16 @@ async fn launch(
         );
     }
     let agent = recovery.tracked();
-    let owner = match space.to_workspace() {
-        // A host that runs agents in places of its own runs a workspace's
-        // there; a chat runs where its resume runs, as its start does.
-        Some(workspace) => {
-            let target = ConfigTarget::Space(SpaceSelector::id(&workspace.id));
-            let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
-            let command = &recovery.command;
-            let placed = terminal::AgentSpace::of(&workspace);
-            let ran = terminal::run_agent(ctx, &settings, &placed, &agent, &records, command);
-            if let Some(code) = ran.await? {
-                return Ok(code);
-            }
-            crate::terminal::Owner::Workspace(&space.id)
-        }
-        None => crate::terminal::Owner::Chat(&space.id),
-    };
-    terminal::label_current(&ctx.paths, owner).await?;
+    // A host that runs agents in places of its own runs the space's there.
+    let target = ConfigTarget::Space(SpaceSelector::id(&space.id));
+    let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
+    let placed = terminal::AgentSpace::of(space);
+    let command = &recovery.command;
+    let ran = terminal::run_agent(ctx, &settings, &placed, &agent, &records, command);
+    if let Some(code) = ran.await? {
+        return Ok(code);
+    }
+    terminal::label_current(&ctx.paths, placed.owner()).await?;
     shoal_workers::execution::run_recovery(
         &ctx.paths,
         SpaceSelector::id(&space.id),
