@@ -122,3 +122,87 @@ pub struct HubView {
     #[serde(flatten)]
     pub directory: Directory,
 }
+
+/// A piece of a [`HubView`], which a response carries in pages, since the
+/// spaces of every machine may not fit in one frame, nor one space's
+/// questions and approval requests.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[allow(clippy::large_enum_variant, reason = "a view holds a few spaces")]
+pub enum ViewPart {
+    /// This machine's ID at the hub, which comes first.
+    Here(MemberId),
+    Machine(Member),
+    /// A space without its questions and approval requests, which follow
+    /// it.
+    Space(Listed),
+    Question(Question),
+    Approval(ApprovalRequest),
+    Conflict(Conflict),
+}
+
+impl HubView {
+    /// The view in pieces, this machine's ID first.
+    pub fn into_parts(self) -> Vec<ViewPart> {
+        let Directory {
+            machines,
+            spaces,
+            conflicts,
+        } = self.directory;
+        (std::iter::once(ViewPart::Here(self.machine)))
+            .chain(machines.into_iter().map(ViewPart::Machine))
+            .chain(spaces.into_iter().flat_map(space_parts))
+            .chain(conflicts.into_iter().map(ViewPart::Conflict))
+            .collect()
+    }
+
+    /// The view `parts` hold, in the order [`Self::into_parts`] gives them;
+    /// none for no parts, from a machine that takes no part in a hub.
+    pub fn from_parts(parts: Vec<ViewPart>) -> anyhow::Result<Option<Self>> {
+        let mut parts = parts.into_iter();
+        let machine = match parts.next() {
+            None => return Ok(None),
+            Some(ViewPart::Here(machine)) => machine,
+            Some(_) => anyhow::bail!("a hub view starts with this machine's ID"),
+        };
+        let mut directory = Directory::default();
+        for part in parts {
+            match part {
+                ViewPart::Here(_) => anyhow::bail!("a hub view names this machine once"),
+                ViewPart::Machine(member) => directory.machines.push(member),
+                ViewPart::Space(listed) => directory.spaces.push(listed),
+                ViewPart::Question(question) => asking(&mut directory, &question.space_id)?
+                    .questions
+                    .push(question),
+                ViewPart::Approval(request) => asking(&mut directory, &request.space_id)?
+                    .approvals
+                    .push(request),
+                ViewPart::Conflict(conflict) => directory.conflicts.push(conflict),
+            }
+        }
+        Ok(Some(Self { machine, directory }))
+    }
+}
+
+/// `listed` as parts: the space, then each of its questions and approval
+/// requests.
+fn space_parts(mut listed: Listed) -> Vec<ViewPart> {
+    let questions = std::mem::take(&mut listed.space.questions);
+    let approvals = std::mem::take(&mut listed.space.approvals);
+    (std::iter::once(ViewPart::Space(listed)))
+        .chain(questions.into_iter().map(ViewPart::Question))
+        .chain(approvals.into_iter().map(ViewPart::Approval))
+        .collect()
+}
+
+/// The space `id` that a question or request follows: the last one
+/// `directory` took.
+fn asking<'a>(directory: &'a mut Directory, id: &SpaceId) -> anyhow::Result<&'a mut SpaceSummary> {
+    match directory.spaces.last_mut() {
+        Some(listed) if &listed.space.id == id => Ok(&mut listed.space),
+        _ => anyhow::bail!("a hub view sends a question or request after its space {id}"),
+    }
+}
+
+#[cfg(test)]
+mod tests;

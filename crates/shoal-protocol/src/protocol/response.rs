@@ -212,6 +212,7 @@ response_bodies! {
     LeftHub(crate::hub::Left),
     HubOverview(crate::hub::Overview),
     HubMember(crate::hub::Member),
+    HubView(Vec<crate::hub::directory::ViewPart>),
     ScopeToken(crate::scope_tokens::ScopeToken),
     Granted(Option<crate::scope_tokens::ScopeToken>),
     Branches(Vec<crate::model::Branch>),
@@ -398,6 +399,7 @@ paged_bodies!(
     Simulators,
     SimHistory,
     Records,
+    HubView,
 );
 
 impl TryFrom<Body> for () {

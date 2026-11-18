@@ -26,6 +26,10 @@ pub enum HubMethod {
     /// Revoke the credential of the member `member` names by ID or name.
     /// Answers with [`super::Body::HubMember`].
     RevokeHubMember { member: String },
+    /// The other joined machines' spaces the caller sees, from the hub's
+    /// directory. Answers with the pages of [`super::Body::HubView`], none
+    /// on a machine that is not the hub and joined none.
+    HubDirectory,
 }
 
 /// How a joining machine reaches the hub.

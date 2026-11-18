@@ -82,7 +82,7 @@ impl Operation {
                 )
                 | Self::Secret(SecretMethod::SecretCatalog { .. })
                 | Self::Trigger(TriggerMethod::ListTriggers { .. })
-                | Self::Hub(HubMethod::HubMembers)
+                | Self::Hub(HubMethod::HubMembers | HubMethod::HubDirectory)
                 | Self::Container(
                     ContainerMethod::ContainerCatalog { .. }
                         | ContainerMethod::ContainerOverview { .. }

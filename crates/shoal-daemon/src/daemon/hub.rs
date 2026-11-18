@@ -25,6 +25,7 @@ mod pairing;
 mod sealing;
 mod session;
 mod transport;
+mod view;
 
 /// What the hub role and membership keep while the daemon runs.
 #[derive(Default)]

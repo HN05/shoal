@@ -1,10 +1,11 @@
 //! The daemon's answers to [`HubMethod`] requests, and who may send them:
-//! anyone lists the hub's members, and only the user changes them, joins or
+//! anyone lists the hub's members and the spaces of its machines, as far as
+//! their scope reaches them, and only the user changes the members, joins or
 //! leaves.
 use std::sync::Arc;
 
 use anyhow::Result;
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{hub::directory::HubView, space_names::SpaceSelector};
 
 use super::super::{
     answer::Answer,
@@ -21,7 +22,7 @@ pub(super) async fn handle(
     method: HubMethod,
     caller: Option<&Caller>,
 ) -> Result<Answer> {
-    if caller.is_some() && !matches!(method, HubMethod::HubMembers) {
+    if caller.is_some() && !matches!(method, HubMethod::HubMembers | HubMethod::HubDirectory) {
         return Err(Refusal::new(
             Reason::NotReady,
             "only the user's own terminal pairs, joins, leaves and revokes the hub's machines",
@@ -35,6 +36,11 @@ pub(super) async fn handle(
         HubMethod::HubMembers => Body::HubOverview(manager.hub_overview().await?),
         HubMethod::RevokeHubMember { member } => {
             Body::HubMember(manager.revoke_hub_member(member).await?)
+        }
+        HubMethod::HubDirectory => {
+            let view = manager.hub_view(caller).await;
+            let parts = view.map(|view| view.map(HubView::into_parts).unwrap_or_default());
+            return Ok(Answer::pages(parts, Body::HubView));
         }
     }))
 }
