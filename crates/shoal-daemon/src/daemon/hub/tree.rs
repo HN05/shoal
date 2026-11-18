@@ -33,6 +33,34 @@ impl Manager {
         }
     }
 
+    /// This machine's spaces below the space `root` through spaces on other
+    /// machines: those whose parent elsewhere is below `root` there, as the
+    /// hub lists it, or as it last did while it cannot be asked.
+    pub(crate) async fn reached_through_elsewhere(&self, root: &SpaceId) -> Vec<SpaceId> {
+        let found = async {
+            let pairs = (self.store)
+                .run(|db| crate::daemon::workspace::below_elsewhere(db))
+                .await?;
+            if pairs.is_empty() {
+                return anyhow::Ok(Vec::new());
+            }
+            let Some((_, directory)) = self.directory_or_known().await? else {
+                return Ok(Vec::new());
+            };
+            let reached = pairs
+                .into_iter()
+                .filter(|(_, parent)| chain_from(&directory, parent.clone()).contains(root));
+            Ok(reached.map(|(child, _)| child).collect())
+        };
+        match found.await {
+            Ok(reached) => reached,
+            Err(error) => {
+                log!("hub: could not read the spaces below {root} elsewhere: {error:#}");
+                Vec::new()
+            }
+        }
+    }
+
     /// Whether the hub lists the space `id` on another machine, which a
     /// space here may then have as its parent, or listed it when this
     /// machine last learned the tree, while the hub cannot be asked.

@@ -19,8 +19,21 @@ impl Manager {
     }
 
     /// The space `root` and every space below it, or every space without
-    /// `root`: the workspaces by name, then the chats in start order.
+    /// `root`: the workspaces by name, then the chats in start order, then
+    /// those of this machine below `root` through spaces on other machines.
     pub(crate) async fn spaces_within(&self, root: Option<&SpaceId>) -> Result<Vec<Space>> {
+        let mut spaces = self.local_spaces_within(root).await?;
+        if let Some(root) = root {
+            for below in self.reached_through_elsewhere(root).await {
+                spaces.extend(self.local_spaces_within(Some(&below)).await?);
+            }
+        }
+        Ok(spaces)
+    }
+
+    /// The space `root` and every space below it through this machine's
+    /// spaces, or every space without `root`.
+    async fn local_spaces_within(&self, root: Option<&SpaceId>) -> Result<Vec<Space>> {
         let (root, owner) = (root.cloned(), self.root_dir_owner());
         let (workspaces, chats) = self
             .store
