@@ -1,5 +1,6 @@
 //! `--permission` on `shoal restore`: a change to the permissions the restored
-//! agents and chats and the agents waiting for failed setups were given. A
+//! agents and chats, the agents waiting for failed setups and the failed
+//! launches restored were given. A
 //! scoped process gives only what it holds, which is checked for every
 //! selected space before anything is set up or restores, and a restore makes
 //! the change in the records it restores or starts once nothing refuses it.
@@ -8,8 +9,11 @@ use anyhow::{Context as _, Result};
 use super::super::targets::Selected;
 use super::setups::FailedSetup;
 use crate::{
-    cli::context::Context, config::permissions::PermissionChange, execution::recovery::Saved,
-    model::Space, protocol::SavedAgent,
+    cli::context::Context,
+    config::permissions::PermissionChange,
+    execution::recovery::Saved,
+    model::{QueueEntry, Space},
+    protocol::SavedAgent,
 };
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
@@ -38,18 +42,22 @@ pub(super) async fn check(
         let repository = Some(setup.workspace.repository().as_str().into());
         crate::cli::commands::permissions::ensure_held(ctx, repository, &change.set).await?;
     }
+    for failed in &selected.failed_starts {
+        let repository = failed.repository_id.as_ref().map(|id| id.as_str().into());
+        crate::cli::commands::permissions::ensure_held(ctx, repository, &change.set).await?;
+    }
     Ok(())
 }
 
 /// Have the daemon make `change`, when given, to the permissions each agent
-/// and last session the `stopped` spaces keep and the agent waiting for
-/// each of the failed `setups` was given,
+/// and last session the `stopped` spaces keep, the agent waiting for each
+/// of the failed `setups` and each of the `failed` launches was given,
 /// as their restores and setups begin, so one that fails keeps it too; it
 /// changes none when it refuses one.
 pub(super) async fn apply(
     ctx: &Context,
     stopped: &[(Space, Saved)],
-    setups: &[FailedSetup],
+    (setups, failed): (&[FailedSetup], &[QueueEntry]),
     change: Option<&PermissionChange>,
 ) -> Result<()> {
     let agents = stopped.iter().flat_map(|(space, saved)| {
@@ -60,7 +68,8 @@ pub(super) async fn apply(
     });
     let launches = (setups.iter())
         .filter(|setup| setup.launch.is_some())
-        .map(|setup| SpaceSelector::id(&setup.workspace.id));
+        .map(|setup| SpaceSelector::id(&setup.workspace.id))
+        .chain((failed.iter()).filter_map(|launch| Some(SpaceSelector::id(launch.space()?))));
     let targets = PermissionTargets {
         agents: agents.collect(),
         launches: launches.collect(),
@@ -91,7 +100,8 @@ pub(super) async fn apply_one(
 #[derive(Default)]
 struct PermissionTargets {
     agents: Vec<SavedAgent>,
-    /// The workspaces whose failed setup an agent waits for.
+    /// The workspaces whose failed setup an agent waits for, and the
+    /// spaces of failed launches.
     launches: Vec<SpaceSelector>,
 }
 

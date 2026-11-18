@@ -105,7 +105,10 @@ pub(in crate::cli::commands) async fn start_handed(ctx: &Context, handoff: &Path
 
 /// Start here the chat `handed` describes, in the chat the daemon recorded
 /// for it.
-async fn start_resolved(ctx: &Context, handed: HandedStart) -> Result<i32> {
+pub(in crate::cli::commands) async fn start_resolved(
+    ctx: &Context,
+    handed: HandedStart,
+) -> Result<i32> {
     let HandedStart {
         start: resolved,
         chat,

@@ -45,7 +45,7 @@ async fn start_queued(paths: &CommandPaths, start: ChatStart, chat: SpaceId) -> 
 
 /// The start of `chat`'s agent as `launch` asks for it, where the chat
 /// runs.
-fn chat_start(chat: &Chat, launch: QueuedLaunch) -> ChatStart {
+pub fn chat_start(chat: &Chat, launch: QueuedLaunch) -> ChatStart {
     let QueuedLaunch {
         agent,
         prompt,

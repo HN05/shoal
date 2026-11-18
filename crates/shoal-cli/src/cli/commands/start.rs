@@ -470,7 +470,7 @@ mod options;
 mod topic;
 
 pub(super) use agent::{chat_agent, check_model};
-pub(super) use home::{start_handed, start_outside_repositories};
+pub(super) use home::{start_handed, start_outside_repositories, start_resolved};
 pub(super) use launch::{ending_failed, report_started, start_changed};
 pub(super) use options::{ChatPlace, Narrowing, Options};
 pub(super) use topic::{Relaunch, Topic};

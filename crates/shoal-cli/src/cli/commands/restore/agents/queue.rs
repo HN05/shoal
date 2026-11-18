@@ -43,8 +43,14 @@ pub(super) async fn queue_below(
         }
         None => stopped_in_reach(ctx).await?,
     };
-    permission_change::apply(ctx, &stopped, &selected.setups, change).await?;
-    let resumed = super::set_up(ctx, &selected, alongside.continue_turns(ctx).await, false).await;
+    let launches = (
+        selected.setups.as_slice(),
+        selected.failed_starts.as_slice(),
+    );
+    permission_change::apply(ctx, &stopped, launches, change).await?;
+    let mut resumed =
+        super::set_up(ctx, &selected, alongside.continue_turns(ctx).await, false).await;
+    super::retry_failed_starts(ctx, &selected, &mut resumed, now).await;
     queue_all(ctx, stopped, resumed, now).await
 }
 
@@ -180,7 +186,7 @@ pub(super) async fn queue_space(
     if matches!(queuing, Queuing::Daemon { .. }) {
         ensure_daemon_starts(ctx, &stopped).await?;
     }
-    permission_change::apply(ctx, &stopped, &[], change).await?;
+    permission_change::apply(ctx, &stopped, (&[], &[]), change).await?;
     queue_all(ctx, stopped, Queued::default(), now).await
 }
 
@@ -235,6 +241,7 @@ pub(super) async fn queue_all(
     let mut failed = resumed.failed;
     failed.append(&mut queued.failed);
     queued.failed = failed;
+    queued.queued.splice(0..0, resumed.queued);
     queued.set_up = resumed.set_up;
     queued.reopened = resumed.reopened;
     queued.continued = resumed.continued;

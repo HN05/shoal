@@ -160,8 +160,9 @@ fn ensure_one_agent(selected: &Selected, options: &Options) -> Result<()> {
         options.execution.is_none() || spaces == 1,
         "--execution selects a stopped execution of one space"
     );
+    let launches = selected.setups.len() + selected.failed_starts.len();
     ensure!(
-        !options.focus || spaces + selected.setups.len() == 1,
+        !options.focus || spaces + launches == 1,
         "--focus restores the agent of one space"
     );
     Ok(())
@@ -207,6 +208,12 @@ async fn restore_selected(
         (Some([]), [setup]) if focus => {
             let first = reports::first(ctx, alongside.continue_turns(ctx).await)?;
             let code = setups::retry_here(ctx, setup, change).await?;
+            Ok(first.max(code))
+        }
+        (Some([]), []) if focus && selected.failed_starts.len() == 1 => {
+            let first = reports::first(ctx, alongside.continue_turns(ctx).await)?;
+            let failed = &selected.failed_starts[0];
+            let code = failed_starts::retry_here(ctx, failed, change).await?;
             Ok(first.max(code))
         }
         _ => {
@@ -342,9 +349,14 @@ async fn restore_each(
     if let Queuing::Daemon { .. } = queuing {
         stopped = daemon_startable(ctx, stopped, &mut alongside.reopened, &mut refused).await?;
     }
-    permission_change::apply(ctx, &stopped, &selected.setups, change).await?;
+    let launches = (
+        selected.setups.as_slice(),
+        selected.failed_starts.as_slice(),
+    );
+    permission_change::apply(ctx, &stopped, launches, change).await?;
     let now = matches!(queuing, Queuing::Here { now } | Queuing::Daemon { now } if now);
     let mut restored = set_up(ctx, &selected, alongside.continue_turns(ctx).await, now).await;
+    retry_failed_starts(ctx, &selected, &mut restored, now).await;
     restored.failed.append(&mut refused);
     match queuing {
         Queuing::Here { now: true } => {
@@ -393,18 +405,22 @@ async fn daemon_startable(
 }
 
 /// Retry the `selected` failed setups, starting the agents waiting for them
-/// at once when `now`, and queue their failed launches again, going on
-/// after one fails, and report them with what the restore did already,
-/// `restored`.
+/// at once when `now`, going on after one fails, and report them with what
+/// the restore did already, `restored`.
 async fn set_up(ctx: &Context, selected: &Selected, mut restored: Queued, now: bool) -> Queued {
     let (set_up, mut failed) = setups::retry_each(ctx, &selected.setups, now).await;
     restored.set_up = set_up;
     restored.failed.append(&mut failed);
-    let (mut retried, mut failed) =
-        failed_starts::retry_each(ctx, &selected.failed_starts, now).await;
+    restored
+}
+
+/// Queue the `selected` failed launches again, starting them at once when
+/// `now`, going on after one fails, and report them in `restored`.
+async fn retry_failed_starts(ctx: &Context, selected: &Selected, restored: &mut Queued, now: bool) {
+    let failed_starts = &selected.failed_starts;
+    let (mut retried, mut failed) = failed_starts::retry_each(ctx, failed_starts, now).await;
     restored.queued.append(&mut retried);
     restored.failed.append(&mut failed);
-    restored
 }
 
 /// The space `selector` names, a workspace or a chat.

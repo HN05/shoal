@@ -1,15 +1,18 @@
 //! A space whose agent's launch failed to start restores by queuing that
-//! launch again exactly as it was: as the queue admits it, or at once for
-//! `--now`.
-use anyhow::Result;
+//! launch again exactly as it was: as the queue admits it, at once for
+//! `--now`, or in this terminal for `--focus`.
+use anyhow::{Context as _, Result};
 
 use super::super::targets::Selected;
+use super::permission_change;
 use crate::client::output::batch::Failure;
 use crate::{
     cli::{commands::queued_agents, context::Context, ui},
-    model::QueueEntry,
+    config::permissions::PermissionChange,
+    model::{QueueEntry, Space},
     state::QueueState,
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Move the selected spaces with a failed launch from `selected`'s spaces
 /// to its failed starts.
@@ -59,9 +62,48 @@ pub(super) async fn retry_each(
 
 /// Queue the failed launch `entry` again, starting it at once when `now`.
 async fn retry(ctx: &Context, entry: &QueueEntry, now: bool) -> Result<QueueEntry> {
-    let retried = crate::client::queue::retry(&ctx.paths, entry.id.clone()).await?;
+    let retried = crate::client::queue::retry(&ctx.paths, entry.id.clone(), false).await?;
     match now && retried.state == QueueState::Queued {
         true => crate::client::queue::start(&ctx.paths, retried.id.to_string()).await,
         false => Ok(retried),
     }
+}
+
+/// Queue the failed launch `failed` again and start its agent in this
+/// terminal, which the queue leaves to this process meanwhile, making
+/// `change` to the permissions it starts with.
+pub(super) async fn retry_here(
+    ctx: &Context,
+    failed: &QueueEntry,
+    change: Option<&PermissionChange>,
+) -> Result<i32> {
+    let launches = (&[][..], std::slice::from_ref(failed));
+    permission_change::apply(ctx, &[], launches, change).await?;
+    let retried = crate::client::queue::retry(&ctx.paths, failed.id.clone(), true).await?;
+    let _held = queued_agents::Hold::start(&ctx.paths, &retried.id).await;
+    let entry = crate::client::queue::start_here(&ctx.paths, &retried.id).await?;
+    match &entry.opens {
+        Some(_) => queued_agents::run_here(ctx, &entry.id).await,
+        None => run_chat_here(ctx, &entry).await,
+    }
+}
+
+/// Run here the agent of the chat the starting launch `entry`, which this
+/// process holds, starts in, as the queue's start would in a place.
+async fn run_chat_here(ctx: &Context, entry: &QueueEntry) -> Result<i32> {
+    let chat = (entry.space().cloned()).context("the restored launch names no chat")?;
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
+    let found = spaces.find(&SpaceSelector::id(&chat)).map(Space::into_chat);
+    let chat = found
+        .and_then(Result::ok)
+        .context("the restored launch's chat is gone")?;
+    let queued = crate::client::queue::plan(&ctx.paths, entry.id.clone()).await?;
+    let launch = crate::start_plan::QueuedStart::of(&queued.plan)?.launch;
+    crate::env::launch_queue_entry(&entry.id);
+    let start = crate::queued_starts::chat_start(&chat, launch);
+    let handed = crate::chat_handoff::HandedStart {
+        start,
+        chat: chat.id.clone(),
+    };
+    crate::cli::commands::start::start_resolved(ctx, handed).await
 }

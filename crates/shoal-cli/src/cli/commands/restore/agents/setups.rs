@@ -139,7 +139,7 @@ pub(super) async fn retry_here(
     let launch = (setup.launch.as_ref())
         .with_context(|| format!("no agent waits for the setup of {name} to start here"))?;
     let setups = std::slice::from_ref(setup);
-    permission_change::apply(ctx, &[], setups, change).await?;
+    permission_change::apply(ctx, &[], (setups, &[]), change).await?;
     let _held = queued_agents::Hold::start(&ctx.paths, &launch.id).await;
     set_up(ctx, &setup.workspace).await?;
     let entry = crate::client::queue::start_here(&ctx.paths, &launch.id).await?;
