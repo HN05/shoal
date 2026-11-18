@@ -544,6 +544,11 @@ fn additions_open_owned_tabs_that_removal_closes_leaving_the_users_pane() {
         return;
     };
     add_inside(&fixture, &mut zellij, "placed");
+    // The place the agent's start opened records itself once its worker
+    // runs there, which can follow the agent's registration.
+    wait_until("the place to record itself", || {
+        sessions(&fixture, "placed") == ["placed"]
+    });
     // Where no client shows the user's session, Shoal opens one of its own.
     let status = fixture.ok(&["status", &fixture.id("placed")]);
     assert_eq!(status["places"][0]["group"], "caller", "{status}");
@@ -551,7 +556,6 @@ fn additions_open_owned_tabs_that_removal_closes_leaving_the_users_pane() {
     wait_until("the tab Shoal opened to show", || {
         zellij.tabs().contains(&"placed".to_owned())
     });
-    assert_eq!(sessions(&fixture, "placed"), ["placed"]);
 
     // An agent in the user's own pane is recorded where it runs, but the
     // pane stays the user's.
@@ -666,7 +670,11 @@ fn additions_outside_zellij_open_sessions_that_removal_ends() {
         });
         wait_for_agent(&fixture, "outside");
         assert!(zellij.sessions().contains(&"outside".to_owned()));
-        assert_eq!(sessions(&fixture, "outside"), ["outside"]);
+        // The place the agent's start opened records itself once its worker
+        // runs there, which can follow the agent's registration.
+        wait_until("the place to record itself", || {
+            sessions(&fixture, "outside") == ["outside"]
+        });
         fixture.ok(&["rm", "--wait", &fixture.id("outside"), "--yes"]);
         wait_until("the session Shoal opened to end", || {
             !zellij.sessions().contains(&"outside".to_owned())

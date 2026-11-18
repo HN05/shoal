@@ -241,7 +241,11 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
                 .as_array()
                 .is_some_and(|runs| runs.len() == 1 && runs[0]["agent"] == "pi")
     });
-    assert_eq!(sessions(&fixture, "placed"), ["placed"]);
+    // The place the agent's start opened records itself once its worker
+    // runs there, which can follow the agent's registration.
+    wait_until("the place to record itself", || {
+        sessions(&fixture, "placed") == ["placed"]
+    });
     // The block starts with Shoal's launch step instead of having it typed.
     let placed = rex.block_in(&session, "placed");
     wait_until("the agent's output to show", || {

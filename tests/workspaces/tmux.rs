@@ -198,7 +198,11 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_panes() {
     assert!(output.status.success(), "{} {transcript}", printed(&output));
     wait_for_agent(&fixture, "placed");
     assert!(tmux.windows().contains(&"placed".to_owned()));
-    assert_eq!(sessions(&fixture, "placed"), ["placed"]);
+    // The place the agent's start opened records itself once its worker
+    // runs there, which can follow the agent's registration.
+    wait_until("the place to record itself", || {
+        sessions(&fixture, "placed") == ["placed"]
+    });
 
     // An agent in the user's own pane is recorded where it runs, but the
     // pane stays the user's.
