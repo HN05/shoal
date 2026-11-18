@@ -3,7 +3,7 @@
 //! as JSON in [`QueueRequest::plan`] until the worker runs; the protocol
 //! calls live in `shoal-client`'s `queue`, the worker in `shoal-workers`'
 //! `queued_starts` and the daemon's runner in `daemon::queued_starts`.
-use shoal_ids::space_ids::SpaceId;
+use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use std::{ffi::OsString, path::PathBuf};
 
 use anyhow::Result;
@@ -12,36 +12,27 @@ use crate::{
     agent::{Agent, ModelChoice},
     model::{QueueRequest, Workspace},
     protocol::{
-        ChatStart, CreationOptions, PullHead,
+        CreationOptions, PullHead,
         operations::{QueuedLaunch, WorkspaceStart},
     },
     terminal::PlaceName,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// What the queue's start of a chat launch runs, which a launch of a new
-/// workspace's plan tells apart by its `chat_start`.
+/// The plan of a queued agent start, the same for every kind of space: the
+/// launch of the agent of the recorded space its entry names, and the PR it
+/// links as it starts.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ChatPlan {
-    /// The space the chat goes below, which the queue ranks and scopes the
-    /// launch by until the chat exists.
+pub struct QueuedStart {
+    pub launch: QueuedLaunch,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub parent: Option<SpaceSelector>,
-    pub chat_start: ChatPlanStart,
+    pub pr: Option<crate::forge::items::reference::ItemInput>,
 }
 
-/// How a queued chat starts.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ChatPlanStart {
-    /// The resolved start of the chat recorded when the launch had to wait.
-    Resolved(Box<ChatStart>),
-}
-
-impl ChatPlan {
-    /// The chat plan `plan` holds, if it is one.
-    pub fn of(plan: &str) -> Option<Self> {
-        serde_json::from_str(plan).ok()
+impl QueuedStart {
+    /// The plan a queue entry holds as the JSON `plan`.
+    pub fn of(plan: &str) -> Result<Self> {
+        anyhow::Context::context(serde_json::from_str(plan), "read the queued launch's plan")
     }
 }
 
@@ -175,17 +166,15 @@ pub fn queued_agent_request(
     let issue_title = launch.issue.as_ref().map(|issue| issue.title.clone());
     let issue_labels = (launch.issue.as_ref()).map_or_else(Vec::new, |issue| issue.labels.clone());
     let (agent, now, here) = (launch.agent.clone(), launch.now, launch.here);
-    let source = launch.source.take();
-    let plan = AddPlan {
-        pr,
-        ..AddPlan::agent_in(workspace, launch)?
-    };
+    let (mode, narrowing) = (launch.mode.clone(), launch.narrowing);
+    let source = launch.source.clone();
+    let plan = QueuedStart { launch, pr };
     Ok(QueueRequest {
         repository: workspace.repository().into(),
         name: workspace.name.clone(),
         agent,
-        mode: plan.mode.clone(),
-        narrowing: plan.narrowing,
+        mode,
+        narrowing,
         issue_title,
         issue_labels,
         plan: serde_json::to_string(&plan)?,
@@ -281,6 +270,17 @@ impl AddPlan {
             narrowing,
             fork,
             ..Self::opening(workspace)
+        })
+    }
+
+    /// The plan that runs the queued `start` in `workspace`, the space its
+    /// entry names, taking the slot of `entry`.
+    pub fn queued(workspace: &Workspace, start: QueuedStart, entry: QueueEntryId) -> Result<Self> {
+        let QueuedStart { launch, pr } = start;
+        Ok(Self {
+            pr,
+            queue_entry: Some(entry),
+            ..Self::agent_in(workspace, launch)?
         })
     }
 

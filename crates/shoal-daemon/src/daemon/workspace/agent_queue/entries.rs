@@ -12,7 +12,7 @@ use rusqlite::{OptionalExtension, params};
 use super::{
     blockers,
     dispatch::Start,
-    store::{self, Awaits, ENTRY_COLUMNS, Launch, LaunchRequest, entry, insert_launch},
+    store::{Awaits, ENTRY_COLUMNS, Launch, LaunchRequest, entry, insert_launch},
 };
 use crate::{
     daemon::{notifications::NotificationKind, workspace::Manager},
@@ -152,25 +152,18 @@ impl Manager {
         ))
     }
 
-    /// The spaces the launches of new chats go below, by entry: the present
-    /// one `--parent` names, else the space that queued the launch, in whose
-    /// scope it records the chat; none for a launch the user queued without
-    /// a parent, which records a top-level chat.
-    pub(in crate::daemon) async fn launch_parents(
+    /// The spaces the launches of new chats go below, by entry, until they
+    /// record their chat: the space that queued the launch, in whose scope
+    /// it records the chat; none for a launch the user queued, which
+    /// records it where the user's start names.
+    pub(in crate::daemon) fn launch_parents(
         &self,
         entries: &[QueueEntry],
-    ) -> Result<HashMap<QueueEntryId, SpaceId>> {
-        let named = self.store.read(|tx| store::planned_parents(tx)).await?;
-        let mut parents: HashMap<_, _> = (entries.iter())
+    ) -> HashMap<QueueEntryId, SpaceId> {
+        (entries.iter())
             .filter(|entry| entry.kind == QueueKind::Launch && entry.space().is_none())
             .filter_map(|entry| Some((entry.id.clone(), entry.queued_by.clone()?)))
-            .collect();
-        for (id, parent) in named {
-            if let Ok(parent) = self.space(&parent).await {
-                parents.insert(id, parent.id.clone());
-            }
-        }
-        Ok(parents)
+            .collect()
     }
 
     /// Entries, the starting ones first and then the waiting ones in rank

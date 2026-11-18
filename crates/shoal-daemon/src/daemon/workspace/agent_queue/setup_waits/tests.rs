@@ -2,10 +2,10 @@ use rusqlite::params;
 
 use super::super::tests::{add, admitted, create, launch_in, limit_globally, preparing, register};
 use crate::{
-    daemon::{notifications::NotificationKind, test_support::manager, workspace::Manager},
+    daemon::{test_support::manager, workspace::Manager},
     model::{QueueEntry, QueueRequest, Repository, Workspace},
     protocol::operations::{OperationSpec, Preparation, QueuedLaunch},
-    start_plan::AddPlan,
+    start_plan::QueuedStart,
     state::{QueueState, WorkspaceState},
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -16,7 +16,8 @@ fn opening(workspace: &Workspace) -> String {
         prompt: Some("Fix the login".into()),
         ..QueuedLaunch::new("claude".parse().unwrap())
     };
-    serde_json::to_string(&AddPlan::agent_in(workspace, launch).unwrap()).unwrap()
+    let request = crate::start_plan::queued_agent_request(workspace, launch, None).unwrap();
+    request.plan
 }
 
 /// A start of the `plan` of a new `child` workspace of `repository`,
@@ -57,7 +58,7 @@ async fn failed_start(
     (child, starting)
 }
 
-async fn plan(manager: &Manager, entry: &QueueEntry) -> AddPlan {
+async fn plan(manager: &Manager, entry: &QueueEntry) -> QueuedStart {
     let id = entry.id.clone();
     let plan: String = (manager.store)
         .run(move |db| {
@@ -90,8 +91,8 @@ async fn a_start_whose_setup_failed_waits_for_a_retried_setup_without_its_slot()
     assert_eq!(waiting.opens.as_ref(), Some(&child.id));
     assert_eq!(waiting.blockers, ["setup of child"]);
     let plan = plan(&manager, waiting).await;
-    assert!(plan.opens(&child));
-    assert_eq!(plan.prompt.as_deref(), Some("Fix the login"));
+    assert_eq!(waiting.opens.as_ref(), Some(&child.id));
+    assert_eq!(plan.launch.prompt.as_deref(), Some("Fix the login"));
     assert!(admitted(&add(&manager, &repo, "other").await));
 }
 
@@ -111,20 +112,6 @@ async fn a_start_whose_setup_failed_keeps_its_entry_while_its_preparation_runs()
         .map(|entry| (entry.id, entry.state))
         .collect();
     assert_eq!(ids, [(starting.id, QueueState::Starting)]);
-}
-
-#[tokio::test]
-async fn a_failed_start_that_cannot_open_its_workspace_ends_and_says_so() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    let (child, _) = failed_start(&manager, &repo, |_| "{}".into()).await;
-    manager.dispatch_queue().await.unwrap();
-    assert!(manager.queue_entries().await.unwrap().is_empty());
-    let failed: Vec<_> = (manager.notifications(false, 50).await.unwrap().into_iter())
-        .filter(|notification| notification.kind == NotificationKind::QueueFailed)
-        .map(|notification| notification.space_id)
-        .collect();
-    assert_eq!(failed, [Some(child.id)]);
 }
 
 #[tokio::test]

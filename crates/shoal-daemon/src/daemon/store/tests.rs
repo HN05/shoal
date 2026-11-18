@@ -4,7 +4,7 @@ use shoal_ids::space_ids::SpaceId;
 
 // Reconstruct old schemas from a frozen pre-refactor snapshot, independently
 // of MIGRATIONS, so missing or misnumbered steps cannot fix their own fixture.
-fn historical_database(version: i64) -> Result<Connection> {
+pub(super) fn historical_database(version: i64) -> Result<Connection> {
     let db = Connection::open_in_memory()?;
     db.execute_batch("PRAGMA foreign_keys=ON;")?;
     if version == 0 {
@@ -1741,20 +1741,18 @@ fn migration_leaves_queued_plans_naming_their_workspace_and_pr_alone() -> Result
             })?,
         )
     };
-    let waits: crate::start_plan::AddPlan = serde_json::from_str(&plan("waits")?)?;
-    assert_eq!(waits.workspace, "workspace");
+    // The plans read in the one shape every launch queues now.
+    let waits = crate::start_plan::QueuedStart::of(&plan("waits")?)?;
+    assert_eq!(waits.launch.agent, "claude");
     assert_eq!(
         waits.pr.map(|pr| pr.to_string()).as_deref(),
         Some("https://forge.example/team/repo/pulls/8")
     );
     // Without a PR, it keeps none of a creation's fields.
     let plain: serde_json::Value = serde_json::from_str(&plan("plain")?)?;
-    let mut fields: Vec<_> = plain.as_object().unwrap().keys().cloned().collect();
-    fields.sort();
-    assert_eq!(fields, ["agent", "args", "repository", "workspace"]);
     assert_eq!(
-        plan("chat")?,
-        r#"{"parent":"space","chat_start":{"resolved":{}}}"#
+        plain,
+        serde_json::json!({"launch": {"agent": "claude", "args": []}})
     );
     Ok(())
 }

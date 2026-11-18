@@ -1,5 +1,6 @@
-//! An admitted launch: the add worker that starts its agent in the space
-//! the launch opens runs in a background place where the terminal that
+//! An admitted launch: its agent starts in the recorded space the launch
+//! names, a chat's in a place of its own, and the add worker that starts a
+//! workspace's runs in a background place where the terminal that
 //! queued it would have opened one, or, for an agent that runs its own way,
 //! such as Happy's, which needs no terminal host, in a process of its own.
 use std::process::Stdio;
@@ -13,22 +14,36 @@ use crate::{
     env,
     model::{QueuedPlan, Workspace},
     protocol::ConfigTarget,
-    start_plan::AddPlan,
+    start_plan::{AddPlan, QueuedStart},
     workers::{Worker, internal_command},
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Start the admitted launch `entry`: a chat's in its place, else the add
-/// worker of the workspace it opens.
+/// Start the admitted launch `entry` in the space it names, whatever its
+/// kind: a chat's agent in its place, a workspace's through the add worker.
 pub(super) async fn start(paths: &CommandPaths, entry: &QueueEntryId) -> Result<()> {
     let queued = queue::plan(paths, entry.clone()).await?;
-    if let Some(plan) = crate::start_plan::ChatPlan::of(&queued.plan) {
-        let chat = queued.entry.space_id.clone();
-        return super::chat::start(paths, entry, plan, chat).await;
+    let start = QueuedStart::of(&queued.plan)?;
+    let space = queued_space(paths, &queued).await?;
+    match space.into_workspace() {
+        Ok(workspace) => {
+            let plan = AddPlan::queued(&workspace, start, entry.clone())?;
+            start_admitted(paths, plan, &workspace).await
+        }
+        Err(space) => {
+            let chat = space.into_chat().ok().context("the space is no chat")?;
+            super::chat::start(paths, entry, &chat, start.launch).await
+        }
     }
-    let (plan, workspace) = add_plan(paths, entry, &queued).await?;
-    start_admitted(paths, plan, &workspace).await
+}
+
+/// The recorded space whose agent the launch `queued` starts.
+async fn queued_space(paths: &CommandPaths, queued: &QueuedPlan) -> Result<crate::model::Space> {
+    let space = (queued.entry.space()).context("the queued launch names no space")?;
+    let spaces = crate::client::spaces::list(paths).await?;
+    (spaces.find(&SpaceSelector::id(space)))
+        .with_context(|| format!("the space {space} of the queued launch is gone"))
 }
 
 /// Start the add worker for an admitted launch's `plan` in `workspace`, in
@@ -48,33 +63,16 @@ async fn start_admitted(
     crate::places::queued::start_add(paths, &settings, &mut plan, workspace).await
 }
 
-/// The plan of the starting launch `entry`, refusing one that no longer
-/// opens the workspace it was queued for.
+/// The plan of the starting launch `entry`, which starts its agent in a
+/// workspace.
 pub async fn plan(paths: &CommandPaths, entry: &QueueEntryId) -> Result<(QueuedPlan, AddPlan)> {
     let queued = queue::plan(paths, entry.clone()).await?;
-    let (plan, _) = add_plan(paths, entry, &queued).await?;
+    let start = QueuedStart::of(&queued.plan)?;
+    let workspace = (queued_space(paths, &queued).await?.into_workspace())
+        .ok()
+        .context("the queued launch starts no workspace's agent")?;
+    let plan = AddPlan::queued(&workspace, start, entry.clone())?;
     Ok((queued, plan))
-}
-
-/// The plan `queued` with the starting launch `entry`, and the workspace
-/// it opens, which must be the one the launch was queued for.
-async fn add_plan(
-    paths: &CommandPaths,
-    entry: &QueueEntryId,
-    queued: &QueuedPlan,
-) -> Result<(AddPlan, Workspace)> {
-    let mut plan: AddPlan = serde_json::from_str(&queued.plan)?;
-    plan.queue_entry = Some(entry.clone());
-    let opens = (queued.entry.opens.as_ref()).context("the queued launch opens no workspace")?;
-    let workspace = crate::client::workspaces::inspect(paths, SpaceSelector::id(opens))
-        .await?
-        .workspace;
-    anyhow::ensure!(
-        plan.opens(&workspace),
-        "the queued launch does not open workspace {}",
-        workspace.name
-    );
-    Ok((plan, workspace))
 }
 
 /// Whether `plan`'s agent runs its own way under `settings`, leaving the

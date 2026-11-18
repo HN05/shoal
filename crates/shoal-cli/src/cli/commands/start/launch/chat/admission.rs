@@ -12,7 +12,8 @@ use crate::{
     cli::context::Context,
     model::{ChatQueueRequest, QueueEntry},
     protocol::ChatStart,
-    start_plan::{ChatPlan, ChatPlanStart},
+    protocol::operations::QueuedLaunch,
+    start_plan::QueuedStart,
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::chats::LaunchedChat;
@@ -40,14 +41,18 @@ impl Launch {
         }
     }
 
-    /// The launch of this chat's agent, whose plan starts the chat
-    /// recorded meanwhile in a place of its own.
+    /// The launch of this chat's agent, whose plan starts the agent of the
+    /// chat recorded meanwhile in a place of its own.
     fn queue_request(&self) -> Result<ChatQueueRequest> {
         let chat = &self.chat;
-        let plan = ChatPlan {
-            parent: chat.parent.clone(),
-            chat_start: ChatPlanStart::Resolved(Box::new(self.queued_start()?)),
+        // A chat that continues a session restores it rather than
+        // launching anything.
+        let source = (self.options.session.is_none()).then_some(LaunchSource::Manual);
+        let launch = QueuedLaunch {
+            source: source.clone(),
+            ..(self.queued_start()?).queued_launch(self.agent.clone(), chat.mode.clone())
         };
+        let plan = QueuedStart { launch, pr: None };
         Ok(ChatQueueRequest {
             repository: (chat.repository.registered()).map(|repository| (&repository.id).into()),
             name: chat.name.clone(),
@@ -58,9 +63,7 @@ impl Launch {
             env: crate::terminal::start_environment(),
             now: self.options.now,
             priority: chat.priority,
-            // A chat that continues a session restores it rather than
-            // launching anything.
-            source: (self.options.session.is_none()).then_some(LaunchSource::Manual),
+            source,
         })
     }
 

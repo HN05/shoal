@@ -12,10 +12,10 @@ use crate::{
     config::{Effective, modes::ModeName},
     daemon::{chats::NewChat, links::issue::OpenIssue, scope::Caller, workspace::Manager},
     model::{ChatHome, ChatQueueRequest, LinkedItem, QueueAdmission, SpaceKind},
-    protocol::ChatStart,
+    protocol::{ChatStart, operations::QueuedLaunch},
 };
 use shoal_core::chat_handoff::HandedStart;
-use shoal_core::start_plan::{ChatPlan, ChatPlanStart};
+use shoal_core::start_plan::QueuedStart;
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::chats::LaunchedChat;
 use shoal_protocol::launches::{LaunchSource, Launched, Started};
@@ -275,17 +275,20 @@ impl Manager {
 }
 
 /// The launch of the resolved `start`'s agent to admit, whose plan, once
-/// it waited, starts the chat the daemon recorded meanwhile.
+/// it waited, starts the agent of the chat the daemon recorded meanwhile.
 fn launch_request(start: &ChatStart, source: LaunchSource) -> Result<ChatQueueRequest> {
-    let plan = ChatPlan {
-        parent: start.parent.clone(),
-        chat_start: ChatPlanStart::Resolved(Box::new(start.clone())),
+    let agent = start.agent.clone().context(NO_AGENT)?;
+    let mode = start.mode.clone().unwrap_or_else(crate::model::chat_mode);
+    let launch = QueuedLaunch {
+        source: Some(source.clone()),
+        ..start.queued_launch(agent.clone(), mode.clone())
     };
+    let plan = QueuedStart { launch, pr: None };
     Ok(ChatQueueRequest {
         repository: start.repository.clone(),
         name: start.name.clone().context("the start names the chat")?,
-        agent: start.agent.clone().context(NO_AGENT)?,
-        mode: start.mode.clone().unwrap_or_else(crate::model::chat_mode),
+        agent,
+        mode,
         narrowing: start.narrowing,
         plan: serde_json::to_string(&plan)?,
         env: (start.env.clone())

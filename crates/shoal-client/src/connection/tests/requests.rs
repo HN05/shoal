@@ -304,7 +304,7 @@ async fn an_app_queues_an_agent_once_it_can_run() {
     let queued: QueueEntry = connection::request(&app, queue("probe")).await.unwrap();
     let plan = queued_plan(&daemon, &queued).await;
     // A launcher's `{prompt}` receives it rather than its forwarded arguments.
-    assert_eq!(plan["prompt"], "Fix the build");
+    assert_eq!(plan["launch"]["prompt"], "Fix the build");
     assert_eq!(queued.agent, "probe");
 
     // A workspace's agent queues agents only in the workspaces below its own,
@@ -376,7 +376,7 @@ async fn a_worker_without_an_agent_or_task_takes_the_default_on_its_issue() {
     assert_eq!(queued.issue_title.as_deref(), Some("Report"));
     let plan = queued_plan(&daemon, &queued).await;
     assert!(
-        plan["issue"]
+        plan["launch"]["issue"]["url"]
             .as_str()
             .is_some_and(|url| url.ends_with("/40")),
         "{plan}"

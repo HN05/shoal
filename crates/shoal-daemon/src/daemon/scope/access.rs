@@ -308,7 +308,7 @@ impl Manager {
         let Some(reached) = self.reached_spaces(Some(caller)).await? else {
             return Ok(entries);
         };
-        let parents = self.launch_parents(&entries).await?;
+        let parents = self.launch_parents(&entries);
         entries
             .retain(|entry| reached_through(entry, &parents).any(|space| reached.contains(space)));
         Ok(entries)

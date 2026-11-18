@@ -61,7 +61,8 @@ fn a_queued_launch_keeps_its_model_arguments_fork_issue_and_place() {
     assert_eq!(request.issue_title.as_deref(), Some("Split the API"));
     assert_eq!(request.workspace, SpaceSelector::id(&child.id));
     assert_eq!(request.env["PLACE"], "beside");
-    let plan: super::AddPlan = serde_json::from_str(&request.plan).expect("the plan parses");
+    let start = super::QueuedStart::of(&request.plan).expect("the plan parses");
+    let plan = super::AddPlan::queued(&child, start, "entry".into()).expect("the plan runs");
     assert!(plan.opens(&child));
     assert_eq!(plan.agent.model, model);
     assert_eq!(plan.args, ["Take the child part"]);
@@ -82,8 +83,8 @@ fn a_queued_launch_keeps_its_model_arguments_fork_issue_and_place() {
     let pr = "https://forge.example/team/project/pulls/8";
     let request = super::queued_agent_request(&child, claude(), Some(pr.parse().unwrap()))
         .expect("the launch queues");
-    let plan: super::AddPlan = serde_json::from_str(&request.plan).expect("the plan parses");
-    assert!(plan.opens(&child));
+    let start = super::QueuedStart::of(&request.plan).expect("the plan parses");
+    let plan = super::AddPlan::queued(&child, start, "entry".into()).expect("the plan runs");
     assert_eq!(plan.pr.map(|pr| pr.to_string()).as_deref(), Some(pr));
 }
 

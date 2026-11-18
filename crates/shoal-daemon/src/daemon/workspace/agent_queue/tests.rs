@@ -1535,7 +1535,8 @@ async fn a_launch_waiting_for_setup_takes_a_permission_change() {
             .await
             .unwrap();
         let plan: serde_json::Value = serde_json::from_str(&plan).unwrap();
-        serde_json::from_value::<PermissionsConfig>(plan["narrowing"].clone()).unwrap_or_default()
+        serde_json::from_value::<PermissionsConfig>(plan["launch"]["narrowing"].clone())
+            .unwrap_or_default()
     };
     let change_for = async |launches: &[SpaceSelector]| {
         let targets = PermissionTargets {

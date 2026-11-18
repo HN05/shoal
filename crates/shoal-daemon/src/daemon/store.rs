@@ -29,6 +29,7 @@ mod item_numbers;
 mod migrations;
 mod place_owners;
 mod place_servers;
+mod queue_plans;
 mod record_shapes;
 mod space_titles;
 mod worker;

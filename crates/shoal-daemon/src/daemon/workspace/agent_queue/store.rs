@@ -205,28 +205,6 @@ fn setup_failed(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Result<b
     )
 }
 
-/// The parents the launches of new chats name with `--parent`, by entry.
-pub(super) fn planned_parents(
-    db: &rusqlite::Connection,
-) -> Result<Vec<(QueueEntryId, shoal_protocol::space_names::SpaceSelector)>> {
-    let mut statement =
-        db.prepare("SELECT id,plan FROM agent_queue WHERE kind=?1 AND plan IS NOT NULL")?;
-    let rows = statement.query_map([QueueKind::Launch], |row| {
-        Ok((row.get::<_, QueueEntryId>(0)?, row.get::<_, String>(1)?))
-    })?;
-    let mut parents = Vec::new();
-    for row in rows {
-        let (id, plan) = row?;
-        let parent = serde_json::from_str::<serde_json::Value>(&plan)
-            .ok()
-            .and_then(|plan| serde_json::from_value(plan["parent"].clone()).ok());
-        if let Some(parent) = parent {
-            parents.push((id, parent));
-        }
-    }
-    Ok(parents)
-}
-
 /// Record `launch` unless its repository already queues a launch in the
 /// same workspace, or is being removed; names repeat, so they tell no two
 /// launches apart. A launch in a workspace needs it ready in the same

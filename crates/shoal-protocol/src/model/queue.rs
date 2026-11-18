@@ -222,7 +222,7 @@ impl std::str::FromStr for Blocker {
 }
 
 /// An agent launch in a recorded workspace to admit or queue. The plan is
-/// JSON in the format of the binary's `start_plan::AddPlan`, which the
+/// JSON in the format of the binary's `start_plan::QueuedStart`, which the
 /// `queue-start` worker reads back.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueRequest {
@@ -285,7 +285,8 @@ pub struct ChatQueueRequest {
         skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
     )]
     pub narrowing: crate::config::permissions::PermissionsConfig,
-    /// What the queue's start of the chat runs, which the daemon keeps
+    /// What the queue's start of the chat runs, as JSON in the format of
+    /// the binary's `start_plan::QueuedStart`, which the daemon keeps
     /// without reading.
     pub plan: String,
     /// Terminal multiplexer variables the start needs to reach the same

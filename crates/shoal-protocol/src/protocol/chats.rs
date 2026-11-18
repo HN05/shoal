@@ -115,3 +115,31 @@ pub struct ChatStart {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub now: bool,
 }
+
+impl ChatStart {
+    /// The launch of `agent` in `mode` this start queues in the chat it
+    /// records, on the issue it starts on, titled as its links have it.
+    pub fn queued_launch(
+        &self,
+        agent: crate::agent::Agent,
+        mode: crate::config::modes::ModeName,
+    ) -> super::operations::QueuedLaunch {
+        let issue = (self.links.issues.iter())
+            .find(|linked| self.issue.as_ref() == Some(&linked.url.clone().into()))
+            .map(|linked| super::operations::LaunchIssue {
+                url: linked.url.clone(),
+                title: (linked.title.clone()).unwrap_or_else(|| linked.url.to_string()),
+                labels: Vec::new(),
+            });
+        super::operations::QueuedLaunch {
+            prompt: self.prompt.clone(),
+            mode: Some(mode),
+            narrowing: self.narrowing,
+            model: self.model.clone(),
+            args: self.args.clone(),
+            issue,
+            now: self.now,
+            ..super::operations::QueuedLaunch::new(agent)
+        }
+    }
+}
