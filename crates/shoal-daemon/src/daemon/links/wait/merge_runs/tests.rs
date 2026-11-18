@@ -141,15 +141,20 @@ impl Following {
     }
 
     /// Look up the runs of `commit`, which the workspace's `shoal merge`
-    /// pushed to the forge's `main`.
-    async fn push(&self, commit: &str) {
+    /// pushed to `main` of a local mirror and of the repository at `remote`.
+    async fn push(&self, commit: &str, remote: String) {
         let pushed = PushedMerge {
             space: self.workspace.id.clone(),
-            remote: format!("http://{}/team/repo.git", self.server.host),
+            remotes: vec!["/srv/mirror.git".into(), remote],
             branch: "main".into(),
             commit: commit.into(),
         };
         self.manager.follow_pushed_merge(pushed).await.unwrap();
+    }
+
+    /// The forge's repository, as a remote URL.
+    fn forge_remote(&self) -> String {
+        format!("http://{}/team/repo.git", self.server.host)
     }
 
     async fn follow(&self) {
@@ -684,7 +689,7 @@ async fn completion_cleanup_waits_for_a_poll_to_see_an_opened_prs_merge() {
 #[tokio::test]
 async fn a_pushed_merge_links_the_default_branchs_runs_for_its_commit() {
     let following = following(true, json!([listed_run("running")])).await;
-    following.push(MERGED).await;
+    following.push(MERGED, following.forge_remote()).await;
     assert!(following.awaits().await);
 
     following.follow().await;
@@ -701,6 +706,23 @@ async fn a_pushed_merge_links_the_default_branchs_runs_for_its_commit() {
 #[tokio::test]
 async fn a_pushed_merge_is_not_followed_where_the_option_is_off() {
     let following = following(false, json!([listed_run("running")])).await;
-    following.push(MERGED).await;
+    following.push(MERGED, following.forge_remote()).await;
     assert!(!following.awaits().await);
+}
+
+#[tokio::test]
+async fn a_pushed_merge_whose_forge_cannot_be_found_ends_with_its_window() {
+    let following = following(true, json!([listed_run("running")])).await;
+    // The host answers nothing that says which forge it serves.
+    let host = Server::start(|_| (404, Vec::new(), Vec::new()));
+    let remote = format!("http://{}/team/repo.git", host.host);
+    following.push(MERGED, remote).await;
+    let space = LinkSpace::from(following.workspace.clone());
+    assert!(following.manager.follow_merge_runs(&space).await.is_err());
+    assert!(following.awaits().await);
+
+    following.end_window().await;
+    following.follow().await;
+    assert!(!following.awaits().await);
+    assert_eq!(following.events(EventKind::NoMergeRuns).await, 1);
 }

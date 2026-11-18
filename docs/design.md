@@ -2462,8 +2462,10 @@ runner. A `shoal merge` that pushes the default branch starts the same lookup
 for the tip it published, once the tip holds the merged branch and the
 upstream, as Git tracks it after the push, holds the tip, so a retry that
 publishes a merge an earlier push failed to is followed too. It lists the runs
-on the forge of the URL Git pushed to, and a push to a remote on no forge
-Shoal reads starts no lookup, which no poll could end. A repository that
+on the forge of the first URL Git pushed to on a network host, so a push only
+to local repositories starts none; a poll that cannot find that host's forge
+tries again until the window ends, then ends the lookup, so a host that
+serves no forge never keeps the space. A repository that
 merges locally thus hears of a broken default branch through the same path;
 lookups are keyed by their commit, which a PR's or a push's names.
 

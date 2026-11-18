@@ -95,11 +95,11 @@ async fn a_push_names_the_tip_it_published_and_the_url_it_pushed_to() {
     let pushed = pushed_merge(&plan).await.unwrap().unwrap();
     assert_eq!(
         (
-            pushed.remote,
+            pushed.remotes,
             pushed.branch.as_str(),
             pushed.commit.as_str()
         ),
-        (pushed_to, "main", f.main().as_str())
+        (vec![pushed_to], "main", f.main().as_str())
     );
 }
 

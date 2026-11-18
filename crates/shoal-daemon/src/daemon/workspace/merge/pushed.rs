@@ -54,7 +54,7 @@ async fn pushed_merge(plan: &MergePlan) -> Result<Option<PushedMerge>> {
     }
     Ok(Some(PushedMerge {
         space: plan.workspace.id.clone(),
-        remote: git::remote_push_url(repo, &push.remote).await?,
+        remotes: git::remote_push_urls(repo, &push.remote).await?,
         branch: push.branch().into(),
         commit: tip,
     }))

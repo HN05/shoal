@@ -17,8 +17,9 @@ use super::{
     items::{linked_items, observed_item, opened_open_prs},
 };
 use crate::{
-    daemon::{events, links::space::LinkSpace, workspace::Manager},
+    daemon::{events, links::space::LinkSpace, log, workspace::Manager},
     forge::{
+        ForgeRepo,
         capability::Capability,
         ci::{run_action::Run, run_view::RunFilter},
         items::{
@@ -58,8 +59,8 @@ pub(super) struct MergeTarget {
 /// branch's upstream.
 pub(crate) struct PushedMerge {
     pub space: SpaceId,
-    /// The URL of the remote it was pushed to.
-    pub remote: String,
+    /// The URLs it was pushed to.
+    pub remotes: Vec<String>,
     /// The remote's branch that took it.
     pub branch: BranchName,
     /// The commit it left there.
@@ -130,19 +131,21 @@ impl Manager {
 
     /// Look up the runs of the commit a space's `shoal merge` pushed, as
     /// the read that sees a PR merge does, where `[pr] watch_merge_runs` is
-    /// on. A remote on no forge Shoal reads, such as a local repository,
-    /// starts none, since no poll could ever list its runs or end the
-    /// lookup that keeps the space.
+    /// on. It follows the first URL the merge was pushed to that names a
+    /// repository on a network host, since a local repository has no forge
+    /// to list them on; a push to none starts no lookup.
     pub(crate) async fn follow_pushed_merge(&self, pushed: PushedMerge) -> Result<()> {
         if self.configured_merge_target(&pushed.space).await?.is_none() {
             return Ok(());
         }
-        (self.forge(&pushed.remote).await)
-            .with_context(|| format!("{} is on no forge to list CI runs on", pushed.remote))?;
+        let on_host = |url: &String| ForgeRepo::parse(url).is_ok();
+        let Some(remote) = pushed.remotes.iter().find(|url| on_host(url)).cloned() else {
+            return Ok(());
+        };
         let now = UnixTime::now();
         self.store
             .write(move |tx| {
-                let merged = Merged::Push(pushed.remote);
+                let merged = Merged::Push(remote);
                 let (id, commit, branch) = (&pushed.space, &pushed.commit, &pushed.branch);
                 start_lookup(tx, id, &merged, commit, branch, now)
             })
@@ -168,7 +171,7 @@ impl Manager {
     async fn follow_merge_lookup(&self, id: &SpaceId, lookup: MergeLookup) -> Result<()> {
         let now = UnixTime::now();
         let runs = match lookup.looking {
-            true => self.merge_runs(&lookup).await?,
+            true => self.merge_runs(&lookup, now).await?,
             false => Vec::new(),
         };
         let id = id.to_owned();
@@ -178,11 +181,10 @@ impl Manager {
     }
 
     /// The default branch's runs for the lookup's merge commit, read as the
-    /// user; none where the forge reads no runs.
-    async fn merge_runs(&self, lookup: &MergeLookup) -> Result<Vec<Run>> {
-        let forge = match &lookup.merged {
-            Merged::Pr(pr) => self.item_forge(pr).await?,
-            Merged::Push(remote) => self.forge(remote).await?,
+    /// user at `now`; none where the forge reads no runs.
+    async fn merge_runs(&self, lookup: &MergeLookup, now: UnixTime) -> Result<Vec<Run>> {
+        let Some(forge) = self.lookup_forge(lookup, now).await? else {
+            return Ok(Vec::new());
         };
         if !forge.supports(Capability::ReadRuns) {
             return Ok(Vec::new());
@@ -198,6 +200,25 @@ impl Manager {
         };
         (forge.list_runs(&self.user_account(), &filter).await)
             .with_context(|| format!("could not list the CI runs of {}", lookup.commit))
+    }
+
+    /// The forge that lists the lookup's runs at `now`. Finding a pushed
+    /// remote's forge that fails is tried again by the next poll until the
+    /// lookup's window ends; after that there is none, so a remote on a host
+    /// that serves no forge ends the lookup instead of keeping the space.
+    async fn lookup_forge(&self, lookup: &MergeLookup, now: UnixTime) -> Result<Option<ForgeRepo>> {
+        let remote = match &lookup.merged {
+            Merged::Pr(pr) => return Ok(Some(self.item_forge(pr).await?)),
+            Merged::Push(remote) => remote,
+        };
+        match self.forge(remote).await {
+            Ok(forge) => Ok(Some(forge)),
+            Err(error) if now >= lookup.merged_at + LOOKUP_WINDOW => {
+                log!("no forge lists the CI runs of {}: {error:#}", lookup.commit);
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
     }
 
     /// The PRs the space `id` links as opened, and does not watch, whose
