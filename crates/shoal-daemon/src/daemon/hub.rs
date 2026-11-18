@@ -63,6 +63,8 @@ pub(crate) struct Hub {
     /// The callers other machines vouch for, while this machine answers
     /// their forwarded requests.
     vouches: serving::Vouches,
+    /// As a member: wakes the sending of what its outbox keeps.
+    outbox: tokio::sync::Notify,
     /// As the hub: who delivers what it holds for each machine now.
     deliveries: queue::Deliveries,
     /// As a member: the tree across machines it last learned, as its store

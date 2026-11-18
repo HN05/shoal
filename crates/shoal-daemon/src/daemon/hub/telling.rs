@@ -29,6 +29,10 @@ use crate::{
     time::UnixTime,
 };
 
+/// How often the outbox looks for what it keeps, besides when it keeps
+/// something new.
+const OUTBOX_LOOK: std::time::Duration = std::time::Duration::from_secs(60);
+
 /// An event a space passes up: the space it is about, the notification it
 /// is for the user, its message and the files it sent.
 pub(crate) struct Event<'a> {
@@ -89,13 +93,29 @@ impl Manager {
         let queued_at = UnixTime::now();
         (self.store)
             .write(move |tx| push_outbox(tx, &call, queued_at))
-            .await
+            .await?;
+        // The link may have opened since this looked.
+        self.hub.outbox.notify_one();
+        Ok(())
+    }
+
+    /// Send what the outbox keeps over the link `calls` serves, as it comes,
+    /// for as long as the link lasts.
+    pub(super) async fn keep_sending_outbox(&self, calls: &Calls) -> std::convert::Infallible {
+        loop {
+            self.send_outbox(calls).await;
+            // A lost wake, at worst, waits for the next look.
+            tokio::select! {
+                () = self.hub.outbox.notified() => {}
+                () = tokio::time::sleep(OUTBOX_LOOK) => {}
+            }
+        }
     }
 
     /// Send what waited in the outbox for the link `calls` serves, oldest
     /// first, until none is left or a call fails, which keeps it for the
     /// next link.
-    pub(super) async fn send_outbox(&self, calls: &Calls) {
+    async fn send_outbox(&self, calls: &Calls) {
         loop {
             let next = match self.store.read(first_outbox).await {
                 Ok(Some(next)) => next,
