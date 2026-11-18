@@ -68,3 +68,45 @@ async fn a_directory_outside_any_repository_reads_through_git() {
     assert_eq!(reader(outside.path()).await, "git");
     assert_eq!(reader(&outside.path().join("missing")).await, "git");
 }
+
+/// The variable that names the repository [`a_namespaced_read_helper`]
+/// reads.
+const HELPER_REPOSITORY: &str = "SHOAL_TEST_NAMESPACED_REPOSITORY";
+
+#[test]
+fn a_ref_namespace_leaves_reads_as_git_reads_them() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    let mut helper = std::process::Command::new(std::env::current_exe().unwrap());
+    helper
+        .args([
+            "--exact",
+            "git::reader::tests::a_namespaced_read_helper",
+            "--ignored",
+        ])
+        .env("GIT_NAMESPACE", "elsewhere")
+        .env(HELPER_REPOSITORY, &repo);
+    let output = helper.output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        crate::test_support::printed(&output)
+    );
+}
+
+/// Read refs Git sees whatever `GIT_NAMESPACE` names, in a process whose
+/// environment sets it.
+#[tokio::test]
+#[ignore = "run by a_ref_namespace_leaves_reads_as_git_reads_them"]
+async fn a_namespaced_read_helper() {
+    let repo = std::path::PathBuf::from(std::env::var_os(HELPER_REPOSITORY).unwrap());
+    assert!(
+        crate::git::ref_exists(&repo, "refs/heads/main")
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        crate::git::head_and_branch(&repo).await.unwrap().1,
+        Some("main".into())
+    );
+}
