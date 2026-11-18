@@ -1566,7 +1566,7 @@ fn restore_with_user_files(fixture: &Fixture, workspace: &str) {
 fn exporting_a_parent_needs_its_children_exported_with_it() {
     let fixture = Fixture::new();
     let parent = PathBuf::from(fixture.add("parent")["path"].as_str().unwrap());
-    let child = fixture.ok(&["split", "child", "--workspace", &fixture.id("parent")]);
+    let child = fixture.ok(&["split", "child", "--space", &fixture.id("parent")]);
     let child = PathBuf::from(child["path"].as_str().unwrap());
     let directory = fixture.root.path().join("exports");
     fs::create_dir(&directory).unwrap();

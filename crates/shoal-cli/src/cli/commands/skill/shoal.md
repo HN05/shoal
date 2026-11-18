@@ -110,8 +110,9 @@ shoal split --no-branch [--base <ref>]  # A workspace at a commit, no branch
 shoal split --copy                    # A copy of this workspace's files
 ```
 
-`split` creates a child of the current workspace with its own worktree, branch
-and setup, without an agent, and returns its `path`. Shoal commands run in the
+`split` creates a child of the current space, a workspace or a chat, or of the
+one `--space` names, with its own worktree, branch and setup, without an
+agent, and returns its `path`. Shoal commands run in the
 child's directory act on the child. The child's issue and PR activity reaches
 the parent's agent, each update naming the child. `--no-branch` has no branch,
 PR or agent of its own. `--copy` gives the child the committed, uncommitted,

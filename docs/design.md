@@ -1081,7 +1081,8 @@ a meaningless name.
 
 A child workspace is split from a parent with `shoal split`, so an agent whose
 work needs another PR gets another branch and worktree instead of switching
-branches or creating worktrees Shoal does not own. Splitting creates a new
+branches or creating worktrees Shoal does not own. The parent is a workspace
+or a chat of a repository, as for any child. Splitting creates a new
 branch in the parent's repository, from the default branch or a `--base` that
 stacks it as usual, records the parent, and links an `--issue`. Any space opens
 a child of either kind the same way: `shoal start` run inside a space puts the
@@ -2316,8 +2317,8 @@ passing every push. Every agent, chats included, gets the
 configured `agent.dirs`, `/tmp` by default, as working directories, so it reads what the
 tools it runs leave there without a permission prompt. A workspace's agent also
 gets the repository's workspaces directory as one, so it works in the children it
-splits there without leaving its sandbox or permission rules; chats split nothing
-and get only their temporary directory, plus the local config directory when a
+splits there without leaving its sandbox or permission rules; chats get only
+their temporary directory, plus the local config directory when a
 chat sets up local config. Both trust the repository's checkout,
 which Claude Code keys every worktree's trust by, and its shared Shoal workspaces
 directory, or an explicitly placed workspace outside it, in their user config before

@@ -2480,7 +2480,7 @@ fn split_without_a_branch_creates_a_workspace_at_a_commit() {
         git(Path::new(path), &["branch", "--show-current"]).trim(),
         ""
     );
-    let child = fixture.ok(&["split", "--no-branch", "--workspace", &fixture.id("parent")]);
+    let child = fixture.ok(&["split", "--no-branch", "--space", &fixture.id("parent")]);
     assert_eq!(child["parent"]["name"], "parent");
     assert_eq!(child["name"], format!("main at {short}"));
     assert!(
@@ -2530,7 +2530,7 @@ fn a_workspace_created_without_setup_skips_its_hooks_until_setup_runs() {
     let at_commit = fixture.ok(&[
         "split",
         "--no-branch",
-        "--workspace",
+        "--space",
         &fixture.id("skipped"),
         "--skip-setup",
     ]);
@@ -2576,7 +2576,7 @@ fn a_workspace_created_without_setup_skips_its_hooks_until_setup_runs() {
 fn branch_only_commands_refuse_a_workspace_at_a_commit() {
     let fixture = Fixture::new();
     fixture.add("parent");
-    let created = fixture.ok(&["split", "--no-branch", "--workspace", &fixture.id("parent")]);
+    let created = fixture.ok(&["split", "--no-branch", "--space", &fixture.id("parent")]);
     let name = created["name"].as_str().unwrap().to_owned();
     let path = PathBuf::from(created["path"].as_str().unwrap());
     let run = |args: &[&str]| {

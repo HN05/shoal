@@ -1,7 +1,7 @@
-//! `shoal split`: a child workspace on a new branch, which the parent
-//! workspace's agent works on and receives the activity of, or a workspace
-//! at a commit, with no branch of its own. Neither gets an agent of its own;
-//! `shoal start` starts one.
+//! `shoal split`: a child workspace on a new branch, which the agent of the
+//! parent space, a workspace or a chat, works on and receives the activity
+//! of, or a workspace at a commit, with no branch of its own. Neither gets an
+//! agent of its own; `shoal start` starts one.
 use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
 
@@ -40,18 +40,14 @@ pub(super) struct Split {
     pub options: CreationOptions,
 }
 
-pub(super) async fn run(
-    ctx: &Context,
-    workspace: Option<SpaceSelector>,
-    split: Split,
-) -> Result<i32> {
+pub(super) async fn run(ctx: &Context, space: Option<SpaceSelector>, split: Split) -> Result<i32> {
     // A supplied branch fails before the parent picker opens.
     if let Some(branch) = &split.branch {
         shoal_core::git::check_branch_name(branch)?;
     }
     // A named copy fails before the parent picker too.
     let copy = super::copies::source(ctx, split.copy).await?;
-    let parent = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let parent = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let issue = match &split.issue {
         Some(input) => Some(load_issue(ctx, &parent, input).await?),
         None => None,
@@ -84,19 +80,18 @@ pub(super) async fn run(
 
 /// Create a workspace without a branch at `base`, or at the default branch,
 /// or a copy of the workspace `copy` names: a child of the named or current
-/// workspace, or outside one a top-level workspace in the current
-/// repository, or the copied one's.
+/// space, or outside one a top-level workspace in the current repository, or
+/// the copied one's.
 pub(super) async fn at_commit(
     ctx: &Context,
-    workspace: Option<SpaceSelector>,
+    space: Option<SpaceSelector>,
     base: Option<String>,
     copy: CopyArgs,
     options: CreationOptions,
 ) -> Result<i32> {
     let copy = super::copies::source(ctx, copy).await?;
     let copied = copy.as_ref().map(|copy| copy.repository.clone());
-    let (repository, parent) = commit_owner(ctx, workspace, copied).await?;
-    let parent = parent.or_else(|| ui::current_chat(&None).map(SpaceSelector::Id));
+    let (repository, parent) = commit_owner(ctx, space, copied).await?;
     let start = match copy {
         Some(copy) => CommitStart::Copy(copy.source),
         None => CommitStart::Revision(base),
@@ -112,37 +107,44 @@ pub(super) async fn at_commit(
 }
 
 /// The repository and parent of a workspace at a commit: the named or
-/// current workspace's, or without one the `copied` repository or else the
-/// current one, and none.
+/// current space and its repository, or the `copied` repository or else the
+/// current one for a parent without one, or outside every space none.
 async fn commit_owner(
     ctx: &Context,
-    workspace: Option<SpaceSelector>,
+    space: Option<SpaceSelector>,
     copied: Option<RepositoryId>,
 ) -> Result<(crate::repository::Selector, Option<SpaceSelector>)> {
-    match ui::choose_workspace(ctx, workspace, Fallback::CurrentDirectoryOnly).await {
-        Ok(parent) => {
-            let repository = crate::client::spaces::list(&ctx.paths)
-                .await?
-                .into_workspaces()
-                .into_iter()
-                .find(|workspace| parent.selects(&workspace.id, workspace.number))
-                .and_then(|workspace| workspace.repository_id)
-                .ok_or_else(|| {
-                    Refusal::new(Reason::NotFound, format!("unknown workspace: {parent}"))
-                })?;
-            Ok((repository.into(), Some(parent)))
-        }
-        Err(error) if error.is::<ui::NoCurrentWorkspace>() => {
-            if let Some(repository) = copied {
-                return Ok((repository.into(), None));
-            }
-            let repositories = crate::client::repositories::list(&ctx.paths).await?;
-            let hint = "pass --workspace or run it in a registered checkout";
-            let repository = super::issues::current_repository(ctx, repositories, hint).await?;
-            Ok((repository.into(), None))
-        }
-        Err(error) => Err(error),
-    }
+    let parent = match ui::select_space(ctx, space, Fallback::CurrentDirectoryOnly).await {
+        Ok(parent) => Some(parent),
+        Err(error) if error.is::<ui::NoCurrentWorkspace>() => None,
+        Err(error) => return Err(error),
+    };
+    let own = match &parent {
+        Some(parent) => space_repository(ctx, parent).await?,
+        None => None,
+    };
+    let repository = match own.or(copied) {
+        Some(repository) => repository,
+        None => current_repository(ctx).await?,
+    };
+    Ok((repository.into(), parent))
+}
+
+/// The repository of the space `selector` names; none for a chat without
+/// one.
+async fn space_repository(ctx: &Context, selector: &SpaceSelector) -> Result<Option<RepositoryId>> {
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
+    let space = spaces
+        .find(selector)
+        .ok_or_else(|| Refusal::new(Reason::NotFound, format!("unknown space: {selector}")))?;
+    Ok(space.repository_id)
+}
+
+/// The registered repository of the current directory.
+async fn current_repository(ctx: &Context) -> Result<RepositoryId> {
+    let repositories = crate::client::repositories::list(&ctx.paths).await?;
+    let hint = "pass --space or run it in a registered checkout";
+    super::issues::current_repository(ctx, repositories, hint).await
 }
 
 /// Split the child `split` describes and follow its preparation.

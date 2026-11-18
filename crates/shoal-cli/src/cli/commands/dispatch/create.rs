@@ -14,7 +14,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: CreateCommand) 
         CreateCommand::Split {
             branch,
             no_branch,
-            workspace,
+            space,
             copy,
             disposable,
         } => {
@@ -24,7 +24,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: CreateCommand) 
                 ..Default::default()
             };
             if no_branch {
-                return split::at_commit(&ctx, workspace, branch.base, copy, options).await;
+                return split::at_commit(&ctx, space, branch.base, copy, options).await;
             }
             let split = split::Split {
                 options,
@@ -33,7 +33,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: CreateCommand) 
                 base: branch.base,
                 copy,
             };
-            split::run(&ctx, workspace, split).await
+            split::run(&ctx, space, split).await
         }
         CreateCommand::Convert { command } => match command {
             ConvertCommand::Workspace {

@@ -36,21 +36,23 @@ pub enum CreateCommand {
     Contribute(ContributeArgs),
     /// Create a child workspace on a new branch for work in its own PR.
     ///
-    /// The parent workspace's agent works on the child and receives its
-    /// issue and PR activity; the parent's cleanup waits until its children
-    /// are removed. `shoal start` starts an agent of the child's own.
+    /// The child goes below the current space, a workspace or a chat, whose
+    /// agent works on it and receives its issue and PR activity; the
+    /// parent's cleanup waits until its children are removed. `shoal start`
+    /// starts an agent of the child's own.
     Split {
         #[command(flatten)]
         branch: BranchArgs,
         /// Create a workspace at a commit, with no branch of its own, for
         /// comparisons and research: at --base, a tag or commit, or the default
-        /// branch. Without a parent workspace, the user owns it.
+        /// branch. Without a parent space, the user owns it.
         #[arg(long, conflicts_with_all = ["branch", "issue"])]
         no_branch: bool,
-        /// Parent workspace; defaults to the current workspace or picker, or
-        /// with --no-branch to none outside a workspace.
-        #[arg(short = 'w', long)]
-        workspace: Option<SpaceSelector>,
+        /// Parent space, a workspace or a chat, by number or ID; defaults to
+        /// the current space or a picker, or with --no-branch to none
+        /// outside a space.
+        #[arg(short = 's', long)]
+        space: Option<SpaceSelector>,
         #[command(flatten)]
         copy: CopyArgs,
         /// Nothing in it is worth keeping: every removal deletes it whatever it

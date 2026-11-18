@@ -2938,10 +2938,10 @@ failed request is reported in the update.
 ### Child workspaces
 
 ```sh
-shoal split fix-typo                 # A child of the current workspace, from the default branch
+shoal split fix-typo                 # A child of the current space, from the default branch
 shoal split --issue 42               # Branch named after the issue, which it links
 shoal split part-two --base fix-api  # Stacked on the parent's branch
-shoal split fix-typo --workspace 3
+shoal split fix-typo --space 3
 shoal start --issue 43 --agent claude                  # Inside a workspace: a child with an agent of its own
 shoal start my-project --branch api-part --agent codex -- "Move the API client into its own crate"
 shoal start my-project --branch api-part --fork -- "Implement the API part of the plan"  # Forks the parent agent's session
@@ -2951,10 +2951,14 @@ shoal split --no-branch --base v1.4.0  # At a tag or commit
 
 `shoal split` creates a workspace on a new branch in the parent's repository,
 runs its setup, and records the parent, so work that needs its own PR gets its
-own branch and worktree. The parent must be ready. `--base` works as for
+own branch and worktree. The parent is the space `--space` names, else the
+current one, a workspace or a chat: in a chat, the workspace below it that
+contains the current directory, else the chat, so a chat in a workspace's
+worktree splits below itself. A workspace parent must be ready, and a chat
+without a repository splits none. `--base` works as for
 `shoal start`; naming the parent's branch also [stacks](#stacked-workspaces) the
-child on it. Children can be split from children. Workspace processes may split
-from their own workspace, act on every space below it and `shoal rm` one, or
+child on it. Children can be split from children. A space's processes may split
+from their own space, act on every space below it and `shoal rm` one, or
 one the user holds or holds a workspace below, as their space's
 [`user_holds` permission](#permitted-actions) allows. A split never starts an agent.
 Run inside a workspace or a chat, `shoal start` likewise creates a child of
@@ -2977,9 +2981,9 @@ commit without stacking it. It is named after the branch at its short commit
 `main-3f2a9c1` with the usual suffix when taken, and
 `shoal diff` compares with its starting commit, which
 [`shoal refresh`](#refresh) moves to a PR's new head or a branch's new tip. Run by a workspace's or a chat's
-process it is a child of the caller's space, or of `--workspace` when that names
-one below it; run by the user it is a child of `--workspace`
-or the current workspace, and outside one a top-level workspace of the current
+process it is a child of the caller's space, or of `--space` when that names
+one below it; run by the user it is a child of `--space`
+or the current space, and outside one a top-level workspace of the current
 repository that the user owns. It does not take a branch name, `--issue`,
 `--agent` or `--fork`, and no agent runs there: its owner, a CI job, a reviewer
 or the user runs things in it with `shoal run`, `shoal demo` or a shell.

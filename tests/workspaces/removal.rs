@@ -1203,7 +1203,7 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
 fn removing_a_parent_lists_and_removes_its_children() {
     let fixture = Fixture::new();
     fixture.add("parent");
-    let child = fixture.ok(&["split", "child", "--workspace", &fixture.id("parent")]);
+    let child = fixture.ok(&["split", "child", "--space", &fixture.id("parent")]);
     let child_path = Path::new(child["path"].as_str().unwrap()).to_owned();
     // A clean parent still asks, naming the children it takes.
     let piped = fixture.run(&["rm", "--wait", &fixture.id("parent")]);
@@ -1223,7 +1223,7 @@ fn removing_a_parent_lists_and_removes_its_children() {
     );
 
     fixture.add("parent");
-    fixture.ok(&["split", "child", "--workspace", &fixture.id("parent")]);
+    fixture.ok(&["split", "child", "--space", &fixture.id("parent")]);
     let removed = fixture.ok(&["rm", "--wait", &fixture.id("parent"), "--yes"]);
     assert_eq!(
         removed["children"],
@@ -1242,7 +1242,7 @@ fn a_named_child_its_failed_parent_took_is_not_removed_again() {
     commit_resource_config(&fixture.repo, "");
     fixture.add("parent");
     let parent = fixture.id("parent");
-    let child = fixture.ok(&["split", "child", "--workspace", &parent]);
+    let child = fixture.ok(&["split", "child", "--space", &parent]);
     let child_id = child["id"].as_str().unwrap();
     let output = fixture.run(&["--json", "rm", "--wait", child_id, &parent, "--yes"]);
     assert!(!output.status.success());
@@ -1278,7 +1278,7 @@ fn a_disposable_workspace_goes_whatever_it_holds_without_a_checkpoint() {
     let child = fixture.ok(&[
         "split",
         "--no-branch",
-        "--workspace",
+        "--space",
         &fixture.id("scratch"),
         "--disposable",
     ]);
@@ -1325,7 +1325,7 @@ fn a_disposable_workspace_goes_whatever_it_holds_without_a_checkpoint() {
 fn removing_a_parent_does_not_skip_another_target_its_child_shares_a_name_with() {
     let fixture = Fixture::new();
     fixture.add("parent");
-    let child = fixture.ok(&["split", "child", "--workspace", &fixture.id("parent")]);
+    let child = fixture.ok(&["split", "child", "--space", &fixture.id("parent")]);
     let other = fixture.add("other");
     let (child, other) = (child["id"].as_str().unwrap(), other["id"].as_str().unwrap());
     for id in [child, other] {

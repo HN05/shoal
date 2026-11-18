@@ -1139,7 +1139,7 @@ fn removing_a_chat_removes_the_workspaces_below_it_and_stops_its_agent() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", printed(&output));
-    fixture.ok(&["split", "below", "--workspace", &fixture.id("opened")]);
+    fixture.ok(&["split", "below", "--space", &fixture.id("opened")]);
     // Another chat runs in the opened workspace's worktree.
     let opened = fixture.id("opened");
     let (mut resident, _) = fixture.run_chat("reading", &["--in", &opened]);
@@ -1196,7 +1196,7 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
     };
     let output = add(&fixture.repo, "opened");
     assert!(output.status.success(), "{}", printed(&output));
-    fixture.ok(&["split", "below", "--workspace", &fixture.id("opened")]);
+    fixture.ok(&["split", "below", "--space", &fixture.id("opened")]);
 
     // One parent link names the chat or the workspace above, of either kind.
     let opened = fixture.ok(&["status", &fixture.id("opened")]);
@@ -1258,6 +1258,53 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
         .map(|workspace| workspace["name"].as_str().unwrap().to_owned())
         .collect();
     assert!(!names.contains(&"foreign".to_owned()), "{names:?}");
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
+/// Run `shoal split` with `args` as the agent of the chat `chat` would, in
+/// `dir`, and return the child it created.
+fn split_in_chat(fixture: &Fixture, chat: &str, dir: &Path, args: &[&str]) -> Value {
+    let output = fixture
+        .command()
+        .args(["--json", "split"])
+        .args(args)
+        .env("SHOAL_SPACE", chat)
+        .env("SHOAL_SCOPE_TOKEN", fixture.chat_scope(chat))
+        .current_dir(dir)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", printed(&output));
+    serde_json::from_slice(&output.stdout).unwrap()
+}
+
+#[test]
+fn a_chat_splits_child_workspaces_below_itself() {
+    let fixture = Fixture::new();
+    let (mut agent, chat) = start_test_chat(&fixture, "planning");
+    let child = split_in_chat(&fixture, &chat, &fixture.repo, &["child"]);
+    assert_eq!(child["parent"]["id"], chat.as_str(), "{child}");
+    assert_eq!(child["branch"], "child", "{child}");
+    // The user names the chat for a workspace at a commit.
+    let planning = fixture.id("planning");
+    let at_commit = fixture.ok(&["split", "--no-branch", "--space", &planning]);
+    assert_eq!(at_commit["parent"]["id"], chat.as_str(), "{at_commit}");
+    assert_eq!(at_commit["branch"], Value::Null, "{at_commit}");
+    // Neither queues an agent of its own.
+    assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
+#[test]
+fn a_chat_in_a_workspaces_worktree_splits_below_the_chat() {
+    let fixture = Fixture::new();
+    let opened = fixture.add("opened");
+    let path = PathBuf::from(opened["path"].as_str().unwrap());
+    let (mut agent, chat) = fixture.run_chat("reading", &["--in", &fixture.id("opened")]);
+    let child = split_in_chat(&fixture, &chat, &path, &["child"]);
+    assert_eq!(child["parent"]["id"], chat.as_str(), "{child}");
     agent.kill().unwrap();
     agent.wait().unwrap();
 }
