@@ -90,6 +90,13 @@ impl Manager {
             _ => Delivery::Now,
         };
         let name = shoal_protocol::protocol::name_of(Ok(method.clone()));
+        if attaches_files(&method, &name) {
+            let message = format!(
+                "space {space} runs on machine {}, which cannot read files attached here; send it without them, or from that machine",
+                machine.name
+            );
+            return Err(Refusal::new(Reason::NotReady, message).into());
+        }
         let forwarded = Forwarded {
             caller: self.vouch(request.caller).await?,
             method,
@@ -141,3 +148,12 @@ impl Manager {
         }))
     }
 }
+
+/// Whether the request `method`, named `name`, attaches files by their path
+/// on this machine.
+fn attaches_files(method: &serde_json::Value, name: &str) -> bool {
+    (method[name]["attachments"].as_array()).is_some_and(|files| !files.is_empty())
+}
+
+#[cfg(test)]
+mod tests;

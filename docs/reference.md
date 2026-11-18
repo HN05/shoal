@@ -840,7 +840,8 @@ yours. This covers `status`, `log`, `questions`, `approvals`, `messages send`,
 act on a space. Commands that need the space's files or
 processes, such as `diff`, `conflicts`, `setup`, leases, demos,
 `stop --leftovers` and `--processes`, `files` and an agent's hooks, run only
-on its machine and are refused elsewhere, naming it.
+on its machine and are refused elsewhere, naming it, as is a command that
+attaches files, which that machine cannot read.
 
 While a space's machine is offline, a message, an answer, an approval
 decision or a stop for it waits at the hub, and the command says so, naming
