@@ -396,8 +396,11 @@ instead of the PR delivery guidance below.
   workspace's grant; only tool secrets can be gated.
 - Daemon ref updates disable Git credential and SSH askpass prompts without
   overriding the user's SSH transport; interactive Git retains normal prompting.
-  Production Git command arguments live in `git`; callers use named operations
-  and retain lifecycle and execution policy.
+  Production Git access, command arguments and in-process `gix` reads alike,
+  lives in `git`; callers use named operations and retain lifecycle and
+  execution policy. Flag a `gix` read of what stays with Git: writes, network
+  access, `status`/`ls-files`/`diff`, caller-supplied revisions and the checks
+  behind removal and cleanup decisions, or one kept across operations.
   Interactive prompts and pickers live in `cli::ui`; flag a command that runs
   fzf or reads the terminal itself, or adds a picker or prompt `ui` already offers.
   Ancestry and exact-ref failures stop branch selection, refresh, and removal;

@@ -81,8 +81,14 @@ for delivering a PR, under Committing near the end, decide when work is done.
 - Invoke external tools with argument arrays. Worktrees are created and
   removed with plain Git through the `git` module; preserve Shoal's ownership
   records and cleanup policy.
-- Keep production Git command arguments in the `git` module; callers use named
-  operations and retain lifecycle and execution policy.
+- Keep production Git access in the `git` module, both Git command arguments
+  and the reads it makes in process with `gix`; callers use named operations
+  and retain lifecycle and execution policy. `gix` reads a repository's
+  location, HEAD, refs, remotes and config, opening it afresh for each read on
+  the blocking pool, and reads through Git where it would not read the
+  repository as Git does. Writes, network access, `status`, `ls-files` and
+  `diff`, revisions a caller supplies and the checks behind removal and
+  cleanup decisions run Git.
 - Interactive input lives in `cli::ui`, whose module doc lists what it offers:
   commands prompt and pick through its operations, never through fzf or the
   terminal directly, and a new kind of prompt or picker goes there, built on

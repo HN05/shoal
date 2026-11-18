@@ -911,6 +911,19 @@ SSH transport configuration;
 interactive Git commands retain normal prompting. Ancestry and exact-ref checks
 distinguish negative answers from command failures; failed checks stop branch
 selection, refresh, and removal with the Git diagnostic.
+Decision: Shoal reads a repository's location, HEAD, refs, remotes and config
+in process with `gix` rather than starting a Git process for each fact, since
+those processes dominated the daemon's background load. Each read opens the
+repository afresh, so a moved or replaced worktree is caught as before, sees
+the user's and system config as Git does and none of the repository variables
+Shoal's Git commands drop, and runs on the blocking pool. A repository `gix`
+would not read as Git does, such as one whose refs are in a reftable or that
+enables an extension `gix` lacks, and a process whose environment points Git
+at another repository read through Git. Writes, network access, `status`,
+`ls-files` and `diff`, whose ignore and fsmonitor behaviour must match Git
+exactly, revisions a caller supplies, and the ancestry, `rev-list` and
+`cherry` checks behind removal and cleanup decisions stay with Git, where a
+difference could cost work. Branch names are checked in Rust by Git's rules.
 
 New-branch creation accepts literal Git branch names. A space's name is a
 free-text label that may repeat, so it says what the work is rather than
