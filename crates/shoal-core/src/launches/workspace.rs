@@ -124,21 +124,34 @@ pub async fn pull_creation(
         creation.pr = Some(pull.url.into());
         return Ok(());
     }
+    let owned = pull_head_settled(reads, repo, &pull, creation).await?;
+    if !owned && creation.base.is_none() {
+        let base = pull.base.as_str();
+        creation.base = Some(fetch_pull_branch(&repo.path, "base", &base.into()).await?);
+    }
+    creation.pr = Some(pull.url.into());
+    Ok(())
+}
+
+/// Settle `creation` on the head branch of `pull`, a PR from `repo`'s own
+/// origin, without fetching: the local branch of the workspace that owns
+/// it, which reopens, else the pushed branch; returns whether a workspace
+/// owns it.
+pub async fn pull_head_settled(
+    reads: &impl LaunchReads,
+    repo: &Repository,
+    pull: &PullRequest,
+    creation: &mut Creation,
+) -> Result<bool> {
     let owned = reads.workspaces().await?.iter().any(|workspace| {
         workspace.repository() == &repo.id
             && workspace.branch().map(BranchName::as_str) == Some(pull.head.as_str())
     });
-    if owned {
-        creation.existing = Some(pull.head.into());
-    } else {
-        if creation.base.is_none() {
-            let base = pull.base.as_str();
-            creation.base = Some(fetch_pull_branch(&repo.path, "base", &base.into()).await?);
-        }
-        creation.existing = Some(git::remote_ref("origin", pull.head.as_str()));
-    }
-    creation.pr = Some(pull.url.into());
-    Ok(())
+    creation.existing = Some(match owned {
+        true => pull.head.as_str().to_owned(),
+        false => git::remote_ref("origin", pull.head.as_str()),
+    });
+    Ok(owned)
 }
 
 /// Refuse what `creation` asks of a branch when it opens `pull`, a PR from
