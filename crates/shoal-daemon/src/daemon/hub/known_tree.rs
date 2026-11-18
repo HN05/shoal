@@ -1,7 +1,8 @@
 //! What a joined machine last learned of the other machines' spaces and how
 //! they hang together, kept in its store whenever it changes, which a
-//! removal goes by while the hub cannot be asked, across restarts too, so
-//! it never takes a space whose children elsewhere it cannot reach.
+//! removal and a restore go by while the hub cannot be asked, across
+//! restarts too, so a removal never takes a space whose children elsewhere
+//! it cannot reach, nor a restore lose a parent elsewhere.
 use anyhow::Result;
 use rusqlite::{OptionalExtension as _, Transaction};
 use serde::{Deserialize, Serialize};
@@ -12,7 +13,7 @@ use shoal_ids::{
 use shoal_protocol::{
     hub::{
         Member, MemberKind,
-        directory::{Directory, Listed, SpaceSummary},
+        directory::{Directory, Listed, RepositoryOrigin, SpaceSummary},
     },
     list_status::ListStatus,
     model::SpaceKind,
@@ -36,6 +37,7 @@ struct KnownSpace {
     number: SpaceNumber,
     name: SpaceName,
     kind: SpaceKind,
+    repository: Option<RepositoryOrigin>,
     parent: Option<SpaceId>,
     machine: MemberId,
 }
@@ -53,6 +55,7 @@ impl Known {
                     number: listed.space.number,
                     name: listed.space.name.clone(),
                     kind: listed.space.kind,
+                    repository: listed.space.repository.clone(),
                     parent: listed.space.parent.clone(),
                     machine: listed.machine.clone(),
                 })
@@ -93,7 +96,7 @@ fn listed(space: KnownSpace) -> Listed {
             number: space.number,
             name: space.name,
             kind: space.kind,
-            repository: None,
+            repository: space.repository,
             parent: space.parent,
             mode: None,
             status: ListStatus::Inactive,
@@ -125,6 +128,25 @@ impl Manager {
         }
         if let Err(error) = self.store.write(move |tx| store(tx, &known)).await {
             crate::daemon::log!("hub: could not keep the tree across machines: {error:#}");
+        }
+    }
+
+    /// This machine's ID at the hub and the hub's directory, or the tree it
+    /// last learned while the hub cannot be asked, which a removal and a
+    /// restore go by rather than take the other machines' spaces for none;
+    /// a machine that never reached the hub knows of none.
+    pub(super) async fn directory_or_known(&self) -> Result<Option<(MemberId, Directory)>> {
+        match self.hub_directory().await {
+            Ok(directory) => Ok(directory),
+            Err(error) => {
+                let last = self.recall_tree().await?;
+                let going_by = match last.is_some() {
+                    true => "the tree it last learned",
+                    false => "no other machine's spaces",
+                };
+                crate::daemon::log!("hub: going by {going_by}: {error:#}");
+                Ok(last)
+            }
         }
     }
 

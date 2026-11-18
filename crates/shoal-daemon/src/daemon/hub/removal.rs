@@ -5,11 +5,11 @@
 //! a removal goes by the directory it last answered with, so it never
 //! takes a space whose children elsewhere it cannot reach.
 use anyhow::{Result, anyhow, bail};
-use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     hub::{
         Member,
-        directory::{Directory, Listed},
+        directory::Listed,
         link::Reply,
         routing::{Delivery, Forwarded, Vouched},
     },
@@ -19,10 +19,7 @@ use shoal_protocol::{
     space_names::{SpaceName, SpaceSelector},
 };
 
-use crate::daemon::{
-    log,
-    workspace::{BelowElsewhere, Manager},
-};
+use crate::daemon::workspace::{BelowElsewhere, Manager};
 
 impl Manager {
     /// Remove the spaces directly below the space `id` that other machines
@@ -62,7 +59,7 @@ impl Manager {
     /// The spaces below the space `id` on other machines, as a removal
     /// shows those it takes, deepest first.
     pub(crate) async fn descendants_elsewhere(&self, id: &SpaceId) -> Result<Vec<SpaceRef>> {
-        let Some((machine, directory)) = self.directory_or_last().await? else {
+        let Some((machine, directory)) = self.directory_or_known().await? else {
             return Ok(Vec::new());
         };
         let mut found: Vec<&Listed> = Vec::new();
@@ -85,7 +82,7 @@ impl Manager {
     /// each with its machine, as the hub lists them, or as it last did
     /// while it cannot be asked.
     async fn children_elsewhere(&self, id: &SpaceId) -> Result<Vec<(Listed, Member)>> {
-        let Some((machine, directory)) = self.directory_or_last().await? else {
+        let Some((machine, directory)) = self.directory_or_known().await? else {
             return Ok(Vec::new());
         };
         Ok((directory.spaces.iter())
@@ -95,26 +92,6 @@ impl Manager {
                 Some((listed.clone(), owner))
             })
             .collect())
-    }
-
-    /// This machine's ID at the hub and the hub's directory, or the tree it
-    /// last learned while the hub cannot be asked, which a removal goes by
-    /// rather than take the spaces below for none; a machine that never
-    /// reached the hub knows of none.
-    async fn directory_or_last(&self) -> Result<Option<(MemberId, Directory)>> {
-        match self.hub_directory().await {
-            Ok(directory) => Ok(directory),
-            Err(error) => {
-                let last = self.recall_tree().await?;
-                // A machine that never reached the hub knows of none.
-                let going_by = match last.is_some() {
-                    true => "the tree it last learned",
-                    false => "no other machine's spaces",
-                };
-                log!("hub: going by {going_by}: {error:#}");
-                Ok(last)
-            }
-        }
     }
 
     /// Remove the space `id` on `machine`, as the user, as `below` asks:

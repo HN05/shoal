@@ -13,7 +13,7 @@ use shoal_protocol::{
     },
     list_status::ListStatus,
     model::{RefPart, SpaceKind, SpaceRef},
-    space_names::{SpaceName, SpaceSelector},
+    space_names::SpaceName,
 };
 
 use crate::daemon::{log, workspace::Manager};
@@ -34,11 +34,13 @@ impl Manager {
     }
 
     /// Whether the hub lists the space `id` on another machine, which a
-    /// space here may then have as its parent; not while the hub cannot be
-    /// asked.
+    /// space here may then have as its parent, or listed it when this
+    /// machine last learned the tree, while the hub cannot be asked.
     pub(crate) async fn runs_elsewhere(&self, id: &SpaceId) -> bool {
-        match self.machine_of(&SpaceSelector::id(id)).await {
-            Ok(machine) => machine.is_some(),
+        match self.directory_or_known().await {
+            Ok(Some((machine, directory))) => (directory.spaces.iter())
+                .any(|listed| &listed.space.id == id && listed.machine != machine),
+            Ok(None) => false,
             Err(error) => {
                 log!("hub: could not ask which machine has space {id}: {error:#}");
                 false
@@ -106,7 +108,7 @@ impl Manager {
         repository: Option<&RepositoryId>,
         parent: &SpaceId,
     ) -> Result<()> {
-        let Some((_, directory)) = self.hub_directory().await? else {
+        let Some((_, directory)) = self.directory_or_known().await? else {
             bail!("this machine is in no hub that lists space {parent}");
         };
         let Some(listed) = (directory.spaces.iter()).find(|listed| &listed.space.id == parent)

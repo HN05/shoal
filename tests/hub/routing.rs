@@ -322,9 +322,13 @@ fn a_child_restored_on_another_machine_stays_below_its_coordinator() {
         child,
     } = tree_across_machines();
     laptop.ok(&["rm", &child, "--wait", "--yes"]);
-    laptop.ok(&["restore", &child]);
-    wait_for("the restored child below its coordinator", || {
+    let restored = laptop.ok(&["restore", &child]);
+    let below = try_wait_for(|| {
         let listed = listed(&hub, &child, &laptop_id);
         (listed["parent"] == coordinator.as_str()).then_some(())
     });
+    assert!(
+        below.is_some(),
+        "the restored child is not below its coordinator: {restored}"
+    );
 }
