@@ -87,7 +87,17 @@ async fn a_launched_chat_is_recorded_with_its_issue_before_its_agent_starts() {
     assert_eq!(linked, ["https://github.com/team/repo/issues/316"]);
     assert_eq!(launched.space.id, chat.id);
     assert_eq!(launched.space.links, chat.links);
-    assert_eq!(launched.entry.unwrap().space(), Some(&chat.id));
+    let entry = launched.entry.unwrap();
+    assert_eq!(entry.space(), Some(&chat.id));
+    // Its agent starts on the issue its link resolved, which its start
+    // reads again.
+    let plan = manager.queued_plan(&entry.id).await.unwrap().plan;
+    let start = crate::start_plan::QueuedStart::of(&plan).unwrap();
+    let issue = start.launch.issue.map(|issue| issue.url.url().to_owned());
+    assert_eq!(
+        issue.as_deref(),
+        Some("https://github.com/team/repo/issues/316")
+    );
 }
 
 /// A chat without a repository that starts on nothing links nothing and

@@ -82,8 +82,8 @@ impl Manager {
         self.ensure_chat_allowed(&launch, &start, caller).await?;
         let chat = self.record_launched_chat(&launch, &start, caller).await?;
         let warnings = self.link_chat(&chat, &start, caller).await;
-        let admission = self.queue_chat_agent(&chat, launch, &start, source).await?;
         let chat = (self.chat_by_id(&chat.id).await?).context("the new chat was removed")?;
+        let admission = self.queue_chat_agent(&chat, launch, &start, source).await?;
         Ok(Launched {
             space: Box::new(chat.into()),
             entry: admission.entry.map(Box::new),
@@ -299,7 +299,8 @@ impl Manager {
     }
 
     /// Queue the agent `launch` starts in the recorded `chat`, as `start`
-    /// resolved it, which `source` made.
+    /// resolved it, which `source` made, on the issue it read, else the one
+    /// linking the chat resolved, which its start reads again.
     async fn queue_chat_agent(
         &self,
         chat: &Chat,
@@ -308,11 +309,24 @@ impl Manager {
         source: LaunchSource,
     ) -> Result<QueueAdmission> {
         let open = start.issue.as_ref().and_then(|issue| issue.open.as_ref());
-        let issue = open.map(|issue| LaunchIssue {
+        let linked = || {
+            let linked = chat
+                .links
+                .issues
+                .first()
+                .filter(|_| start.issue.is_some())?;
+            Some(LaunchIssue {
+                url: linked.url.clone(),
+                title: (linked.title.clone()).unwrap_or_else(|| linked.url.to_string()),
+                labels: Vec::new(),
+            })
+        };
+        let issue = (open.map(|issue| LaunchIssue {
             url: issue.url.clone(),
             title: issue.title.clone(),
             labels: issue.labels.clone(),
-        });
+        }))
+        .or_else(linked);
         let queued = QueuedLaunch {
             prompt: launch.prompt,
             mode: Some(start.mode.clone()),
