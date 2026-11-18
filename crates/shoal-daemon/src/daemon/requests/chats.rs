@@ -33,10 +33,6 @@ pub(super) async fn handle(
             };
             Body::LaunchedChat(launched.take(manager, *start, caller).await?)
         }
-        ChatMethod::FailChatStart { chat, error } => {
-            manager.fail_unstarted_chat(&chat, &error).await?;
-            Body::Ok
-        }
         ChatMethod::CheckChatParent {
             repository,
             workspace,
@@ -144,16 +140,6 @@ impl Scoped for ChatMethod {
                 (manager.ensure_parent_not_host(workspace, start.parent.as_ref())).await?;
                 manager.parent_below(caller, &mut start.parent).await?;
                 start.workspace.as_mut()
-            }
-            // A scoped caller ends the start only of a chat its scope
-            // reaches while the chat exists, its own too: the process that
-            // runs a chat's agent acts in the chat's scope, and a chat
-            // whose agent started stays.
-            ChatMethod::FailChatStart { chat, .. } => {
-                if let Some(space) = manager.find_space(chat).await? {
-                    manager.ensure_reaches(caller, &space).await?;
-                }
-                None
             }
             // Its check takes the parent as its start would.
             ChatMethod::CheckChatParent {

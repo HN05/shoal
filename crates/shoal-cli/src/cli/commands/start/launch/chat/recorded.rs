@@ -1,8 +1,7 @@
-//! What a chat's start leaves for its end: the chat it recorded, which a
-//! failed start removes, and the scope a scoped process issued to act in
-//! as that chat, which it holds until the start's failure, if any, is
-//! ended, then revokes.
-use std::sync::{Mutex, OnceLock, PoisonError};
+//! What a chat's start leaves for its end: the scope a scoped process
+//! issued to act in as the chat it records, which it holds until the
+//! start's failure, if any, is ended, then revokes.
+use std::sync::{Mutex, PoisonError};
 
 use anyhow::Result;
 
@@ -11,34 +10,13 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The chat a start recorded and the scope it acts in as that chat.
+/// The scope a start acts in as the chat it recorded.
 #[derive(Default)]
 pub(super) struct Recorded {
-    chat: OnceLock<SpaceId>,
     scope: Mutex<Option<(SpaceId, ScopeToken)>>,
 }
 
 impl Recorded {
-    /// What a start handed the `chat` its starter recorded, if any, has
-    /// recorded so far: that chat.
-    pub(super) fn handed(chat: Option<&SpaceId>) -> Self {
-        let recorded = Self::default();
-        if let Some(chat) = chat {
-            recorded.record(chat);
-        }
-        recorded
-    }
-
-    /// Keep `chat` as the one this start recorded.
-    pub(super) fn record(&self, chat: &SpaceId) {
-        let _ = self.chat.set(chat.clone());
-    }
-
-    /// The chat this start recorded, once it did.
-    pub(super) fn chat(&self) -> Option<&SpaceId> {
-        self.chat.get()
-    }
-
     /// Make a scoped process, which runs `chat`'s agent, act in a scope it
     /// issues for the chat before its starter, whose scope it may hold,
     /// learns that it runs and exits.

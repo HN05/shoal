@@ -31,8 +31,7 @@ use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn run(ctx: &Context, mut args: StartArgs) -> Result<i32> {
     let handoff = args.handoff.take();
-    let chat = args.chat.clone();
-    let started = async { ending_failed(ctx, chat.as_ref(), start(ctx, args).await).await };
+    let started = async { ending_failed(ctx, start(ctx, args).await).await };
     crate::chat_handoff::serve(handoff.as_deref(), started).await
 }
 

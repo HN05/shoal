@@ -202,38 +202,6 @@ async fn a_scoped_chat_start_cannot_take_a_launch_outside_its_scope() {
 /// The process that runs a new chat's agent ends the chat's failed start in
 /// the chat's own scope, while a chat outside the caller's scope is
 /// refused.
-#[tokio::test]
-async fn a_chats_own_scope_ends_its_failed_start_but_no_other() {
-    let (temp, manager) = manager().await;
-    let checkout = repository(temp.path(), "repo");
-    let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let new = chat(&manager, "new", "chat", Some(&repo), None).await;
-    let other = chat(&manager, "other", "chat", Some(&repo), None).await;
-    let caller = Caller {
-        space_id: new.id.clone(),
-        execution: None,
-        granted: None,
-        read_only: false,
-    };
-    let fail = |chat: &crate::model::Chat| ChatMethod::FailChatStart {
-        chat: chat.id.clone(),
-        error: "no tab".into(),
-    };
-
-    let own = fail(&new).scope(&manager, &caller).await.map(drop);
-    let elsewhere = fail(&other).scope(&manager, &caller).await.map(drop);
-
-    own.unwrap();
-    let refused = elsewhere.unwrap_err();
-    assert!(
-        format!("{refused:#}").contains("outside this space's scope"),
-        "{refused:#}"
-    );
-}
-
 /// A scoped caller that runs the global config's setup chat itself queues
 /// its agent only as its `admin` permission allows without a repository.
 #[tokio::test]

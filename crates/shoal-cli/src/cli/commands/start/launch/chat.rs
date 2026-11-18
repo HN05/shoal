@@ -76,7 +76,7 @@ async fn launch(
     let launch = Launch::prepare(ctx, repo, settings, topic, options).await?;
     let recorded = Arc::clone(&launch.recorded);
     let started = launch.start(ctx).await;
-    let started = admission::ending_failed(ctx, recorded.chat(), started).await;
+    let started = admission::ending_failed(ctx, started).await;
     recorded.leave_chat_scope(ctx).await;
     started
 }
@@ -107,7 +107,7 @@ impl Launch {
         let settings = shoal_workers::settings::of(&ctx.paths, repo.config()).await?;
         let chat = command::chat_launch(settings, &agent, repo, &topic, &options, name)?;
         Ok(Self {
-            recorded: Arc::new(Recorded::handed(options.chat.as_ref())),
+            recorded: Arc::new(Recorded::default()),
             agent,
             chat,
             topic,
@@ -170,9 +170,7 @@ impl Launch {
     ) -> Result<LaunchedChat> {
         let start = self.chat_start();
         let (chat, entry) = (self.options.chat.as_ref(), crate::env::queue_entry());
-        let launched = crate::client::chats::launch(&ctx.paths, start, chat, origin, entry).await?;
-        self.recorded.record(&launched.chat.id);
-        Ok(launched)
+        crate::client::chats::launch(&ctx.paths, start, chat, origin, entry).await
     }
 
     /// The start the daemon records the chat from: where it runs, below

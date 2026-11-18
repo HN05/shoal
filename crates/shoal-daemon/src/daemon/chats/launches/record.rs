@@ -1,9 +1,6 @@
 //! The chat a launch records before its agent runs anywhere: below where it
 //! goes, with the launch whose slot its agent takes attached, and linked to
-//! what it starts on, its starter told what that warned of; and the removal
-//! of one whose agent never started.
-use std::pin::Pin;
-
+//! what it starts on, its starter told what that warned of.
 use anyhow::{Context as _, Result};
 
 use crate::{
@@ -14,18 +11,17 @@ use crate::{
     forge::items::reference::ItemInput,
     model::{Assigner, Chat, Relation, SpaceLinks},
     protocol::ChatStart,
-    removal::{InspectionPolicy, UnsavedWork},
 };
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use shoal_protocol::chats::LaunchedChat;
-use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
     /// Record the chat `start` describes as `new` for `caller`, attach the
     /// launch `entry` to it once it is linked to what it starts on, so the
     /// queue starts its agent in no chat linked only in part, and tell its
-    /// starter what linking warned of. A chat its launch cannot take is
-    /// removed again.
+    /// starter what linking warned of. A chat its launch cannot take stays
+    /// without an agent, for its starter to remove.
     pub(in crate::daemon) async fn record_launch(
         &self,
         start: &ChatStart,
@@ -36,11 +32,12 @@ impl Manager {
         let workspace = start.workspace.as_ref();
         let chat = (self.start_new_chat(start.repository.clone(), workspace, new)).await?;
         let warnings = self.link_launch(&chat.id, start, caller).await;
-        if let Some(entry) = entry
-            && let Err(error) = self.queue_attach(entry, &SpaceSelector::id(&chat.id)).await
-        {
-            self.discard_new_chat(&chat.name, &chat.id).await;
-            return Err(error);
+        if let Some(entry) = entry {
+            let attached = self.queue_attach(entry, &SpaceSelector::id(&chat.id)).await;
+            attached.with_context(|| {
+                let number = chat.number;
+                format!("chat {number} stays without its agent, which `shoal rm {number}` removes")
+            })?;
         }
         self.tell_start_warnings(&chat, &warnings).await;
         let linked = (self.chat_by_id(&chat.id).await?).context("the new chat was removed")?;
@@ -123,72 +120,6 @@ impl Manager {
         let message = format!("starting {} warned: {}", chat.name, warnings.join("; "));
         let kind = NotificationKind::StartWarned;
         self.notify_space(&chat.name, &chat.id, kind, message).await;
-    }
-
-    /// Remove the new chat `id`, named `name`, whose agent did not start
-    /// with `error`, telling its starter as its warnings are; one whose
-    /// agent runs after all stays.
-    pub(in crate::daemon) async fn fail_new_chat(
-        &self,
-        name: &SpaceName,
-        id: &SpaceId,
-        error: &str,
-    ) {
-        match self.chat_by_id(id).await {
-            Ok(Some(chat)) if !chat.running => {}
-            _ => return,
-        }
-        let message = format!("{name} did not start, so Shoal removed it: {error}");
-        (self.notify_space(name, id, NotificationKind::StartFailed, message)).await;
-        self.discard_new_chat(name, id).await;
-    }
-
-    /// Remove the new chat `id`, whose start failed with `error`, as
-    /// [`Self::fail_new_chat`] does, unless its agent ever started, since a
-    /// start that ran it failed after it and its removal is the user's, or
-    /// the other side of its start removed it already.
-    pub(in crate::daemon) async fn fail_unstarted_chat(
-        &self,
-        id: &SpaceId,
-        error: &str,
-    ) -> Result<()> {
-        let Some(chat) = self.chat_by_id(id).await? else {
-            return Ok(());
-        };
-        if !self.agent_ever_started(id).await? {
-            self.fail_new_chat(&chat.name, id, error).await;
-        }
-        Ok(())
-    }
-
-    /// Whether an agent ever started in the space `id`: an execution of it
-    /// is tracked, or its log, which lasts as long as the space, records a
-    /// start, since a completed execution's record goes.
-    async fn agent_ever_started(&self, id: &SpaceId) -> Result<bool> {
-        let id = id.to_owned();
-        (self.store)
-            .read(move |tx| {
-                let tracked = "SELECT 1 FROM executions WHERE space_id=?1";
-                let logged = "SELECT 1 FROM space_events WHERE space_id=?1
-                AND json_extract(record,'$.kind')=?2";
-                let started = crate::daemon::events::EventKind::AgentStarted;
-                Ok(crate::daemon::store::exists(tx, tracked, [&id])?
-                    || crate::daemon::store::exists(tx, logged, rusqlite::params![id, started])?)
-            })
-            .await
-    }
-
-    /// Remove the new chat `id`, named `name`, which nothing ran in.
-    async fn discard_new_chat(&self, name: &SpaceName, id: &SpaceId) {
-        let selector = SpaceSelector::id(id);
-        let unsaved = UnsavedWork::taking(Vec::new());
-        // Boxed, since a removal can end a queue entry whose failure removes
-        // its new chat.
-        let removed: Pin<Box<dyn Future<Output = Result<_>> + Send + '_>> =
-            Box::pin(self.remove_selected(&selector, unsaved, InspectionPolicy::GitOnly));
-        if let Err(error) = removed.await {
-            crate::daemon::log!("chat {name} kept without its agent: {error:#}");
-        }
     }
 }
 

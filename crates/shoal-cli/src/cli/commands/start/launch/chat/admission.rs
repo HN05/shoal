@@ -15,7 +15,6 @@ use crate::{
     protocol::operations::QueuedLaunch,
     start_plan::QueuedStart,
 };
-use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::chats::LaunchedChat;
 use shoal_protocol::launches::{LaunchSource, Launched};
 
@@ -117,15 +116,11 @@ impl Launch {
 }
 
 /// `started`, how a start of a chat went, once a failure has ended that
-/// start: it frees the slot of the launch its agent was to take, whose
-/// failure removes the chat recorded for it, and without one has the
-/// daemon remove the recorded `chat`, when given, as it removes a chat its
-/// own launch could not start. The daemon keeps a chat whose agent
-/// started, and one the other side of its start removed is gone already.
+/// start: it fails the launch its agent was to take, whose space keeps it
+/// as a failed entry for `shoal restore`, as any space's failed start.
 /// Only this process's first ending counts, since the start ends once.
 pub(in crate::cli::commands) async fn ending_failed<T>(
     ctx: &Context,
-    chat: Option<&SpaceId>,
     started: Result<T>,
 ) -> Result<T> {
     static ENDED: AtomicBool = AtomicBool::new(false);
@@ -135,17 +130,9 @@ pub(in crate::cli::commands) async fn ending_failed<T>(
     if ENDED.swap(true, Ordering::SeqCst) {
         return started;
     }
-    let error = format!("{error:#}");
-    match (crate::env::queue_entry(), chat) {
-        // An agent that took the slot over ended the entry; nothing is left.
-        (Some(entry), _) => drop(queue::fail(&ctx.paths, entry.clone(), error).await),
-        (None, Some(chat)) => {
-            let ended = crate::client::chats::fail_start(&ctx.paths, chat.clone(), error).await;
-            if let Err(kept) = ended {
-                eprintln!("shoal: chat {chat} stays without its agent: {kept:#}");
-            }
-        }
-        (None, None) => {}
+    // An agent that took the slot over ended the entry; nothing is left.
+    if let Some(entry) = crate::env::queue_entry() {
+        drop(queue::fail(&ctx.paths, entry.clone(), format!("{error:#}")).await);
     }
     started
 }
