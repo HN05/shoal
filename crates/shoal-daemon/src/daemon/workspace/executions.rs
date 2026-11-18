@@ -771,8 +771,7 @@ impl Manager {
         );
         let (workspace_id, agent_execution, narrowing) =
             self.authorize_reattachment(request).await?;
-        let space = (self.find_space(&workspace_id).await?)
-            .with_context(|| format!("no space {workspace_id}"))?;
+        let space = self.space_by_id(&workspace_id).await?;
         // Before protection can know the agent again and save a new stop.
         // A wrapper awaiting a restore has received its stop.
         if request.awaiting_restore.is_none() {

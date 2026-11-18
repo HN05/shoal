@@ -83,6 +83,17 @@ impl Manager {
         }
     }
 
+    /// The workspace with the ID `id`, which is never read as a name,
+    /// refusing a chat as [`Self::workspace`] does and a removed workspace
+    /// as [`Self::space`] does.
+    pub async fn workspace_by_id(&self, id: &SpaceId) -> Result<Workspace> {
+        if let Some(workspace) = self.find_workspace(id).await? {
+            return Ok(workspace);
+        }
+        (self.space_by_id(id).await?.into_workspace())
+            .map_err(|chat| other_kind(&chat, SpaceKind::Workspace))
+    }
+
     /// Whether a workspace or chat, running or stopped, has the ID `id`.
     pub(crate) async fn space_exists(&self, id: &SpaceId) -> Result<bool> {
         let id = id.to_owned();

@@ -135,6 +135,8 @@ async fn a_removed_space_s_id_names_the_repository_removed_with_it() {
         .to_string();
     let repository = format!("removed with its repository {}", repo.id);
     assert!(refused.contains(&repository), "{refused}");
+    let refused = manager.workspace_by_id(&taken.id).await.unwrap_err();
+    assert!(refused.to_string().contains(&repository), "{refused}");
     // A chat below goes with the repository too.
     let refused = manager.space_by_id(&chat.id).await.unwrap_err().to_string();
     assert!(refused.contains(&repository), "{refused}");

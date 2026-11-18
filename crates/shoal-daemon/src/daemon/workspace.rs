@@ -97,7 +97,6 @@ pub(crate) use tree::{
     set_parent, spaces_above, subtree,
 };
 
-use crate::refusal::{Reason, Refusal};
 use crate::{
     config::Config,
     daemon::{
@@ -359,12 +358,6 @@ impl Manager {
                 Ok(usize::try_from(count)?)
             })
             .await
-    }
-
-    /// The workspace with the ID `id`, which is never read as a name.
-    pub async fn workspace_by_id(&self, id: &SpaceId) -> Result<Workspace> {
-        let missing = || Refusal::new(Reason::NotFound, format!("unknown workspace: {id}"));
-        Ok(self.find_workspace(id).await?.ok_or_else(missing)?)
     }
 
     /// The workspace with this ID, unless it was removed, read in one store

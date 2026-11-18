@@ -189,7 +189,7 @@ impl Manager {
             !removal.refuses_holds() || !self.user_holds(id).await?,
             "the space has holds, which are the user's; ask the user to remove it"
         );
-        let space = (self.find_space(id).await?).with_context(|| format!("no space {id}"))?;
+        let space = self.space_by_id(id).await?;
         let worktree = match space.to_workspace() {
             Some(workspace) => Some(self.reserve_worktree(&workspace, removal).await?),
             None => None,

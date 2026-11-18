@@ -53,7 +53,7 @@ impl Manager {
     /// worktree is there and verified to be its own, or a chat whose home
     /// is there. Running there counts as the space's activity.
     pub(super) async fn execution_home(&self, id: &SpaceId) -> Result<Home> {
-        let space = (self.find_space(id).await?).with_context(|| format!("no space {id}"))?;
+        let space = self.space_by_id(id).await?;
         let home = match space.by_kind() {
             ByKind::Workspace(workspace) => {
                 ensure!(
