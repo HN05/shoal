@@ -848,7 +848,9 @@ decision or a stop for it waits at the hub, and the command says so, naming
 the machine, when the hub last saw it and when the request expires; the hub
 delivers what waits, in order, once the machine connects. A request still
 waiting after seven days is dropped, and the space whose process sent it, or
-else you, hears of it in a `hub_expired` alert. Any other command for an
+else you, hears of it in a `hub_expired` alert, as of one the machine received
+but whose link closed before it confirmed it ran, which the hub never sends
+twice. Any other command for an
 offline machine's space fails at once, naming the machine and when the hub
 last saw it.
 

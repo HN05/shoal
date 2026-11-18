@@ -51,10 +51,11 @@ fn a_machine_gets_what_the_hub_held_for_it_oldest_first() {
     let desk = MemberId::from("desk".to_owned());
     assert!(first(&tx, &desk).unwrap().is_none());
     let (seq, call) = first(&tx, &laptop).unwrap().unwrap();
-    assert_eq!(message(&call), "first");
+    assert_eq!(message(&call.held.call), "first");
+    assert_eq!(call.held.sender, MemberId::from("desk".to_owned()));
     remove(&tx, seq).unwrap();
     let (_, call) = first(&tx, &laptop).unwrap().unwrap();
-    assert_eq!(message(&call), "second");
+    assert_eq!(message(&call.held.call), "second");
 }
 
 #[test]
@@ -72,7 +73,7 @@ fn the_hub_drops_only_what_expired_with_whom_it_was_for() {
     assert_eq!(lapsed[0].held.summary, "old");
     assert_eq!(lapsed[0].held.sender_space, held("old").sender_space);
     let (_, call) = first(&tx, &laptop).unwrap().unwrap();
-    assert_eq!(message(&call), "new");
+    assert_eq!(message(&call.held.call), "new");
     forget(&tx, &laptop).unwrap();
     assert!(first(&tx, &laptop).unwrap().is_none());
 }

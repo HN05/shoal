@@ -14,6 +14,7 @@ use shoal_protocol::hub::{
     routing::{Expired, Queued},
 };
 
+use super::session::{Unanswered, Unsent};
 use crate::{
     daemon::{log, workspace::Manager},
     time::UnixTime,
@@ -35,7 +36,8 @@ pub(super) struct Held {
     pub summary: String,
 }
 
-/// A held call that expired, with the machine it was for.
+/// A held call that expired, or that the hub delivered, with the machine
+/// it was for.
 struct Lapsed {
     machine: MemberId,
     held: Held,
@@ -60,7 +62,10 @@ impl Manager {
     }
 
     /// Deliver what the hub holds for `member`, oldest first, now that its
-    /// link is open, until none is left or the link closes.
+    /// link is open, until none is left or the link closes. A call that
+    /// never left stays for the next link; one the machine received but
+    /// never answered is not sent again, since it may have run, and its
+    /// sender hears that it went unconfirmed.
     pub(super) async fn deliver_held(self: Arc<Self>, member: MemberId) {
         loop {
             let to = member.clone();
@@ -72,13 +77,15 @@ impl Manager {
             let Some(calls) = self.hub.links.calls(&member) else {
                 return;
             };
-            let (seq, call) = next;
-            if let Err(error) = calls.call(call).await {
-                // A closed link keeps the call for the next one.
-                if self.hub.links.calls(&member).is_none() {
-                    return;
+            let (seq, lapsed) = next;
+            match calls.call(lapsed.held.call.clone()).await {
+                Ok(_) => {}
+                Err(error) if error.is::<Unsent>() => return,
+                Err(error) if error.is::<Unanswered>() => {
+                    log!("hub: a held call went unanswered: {error:#}");
+                    self.tell_sender(lapsed, true).await;
                 }
-                log!("hub: a held call failed at its machine: {error:#}");
+                Err(error) => log!("hub: a held call failed at its machine: {error:#}"),
             }
             if let Err(error) = self.store.write(move |tx| remove(tx, seq)).await {
                 return log!("hub: could not drop a delivered call: {error:#}");
@@ -107,30 +114,43 @@ impl Manager {
         if lapsed.is_empty() {
             return Ok(());
         }
-        let machines = self.local_hub_overview().await?.members;
-        for Lapsed {
+        for lapsed in lapsed {
+            self.tell_sender(lapsed, false).await;
+        }
+        Ok(())
+    }
+}
+
+impl Manager {
+    /// Tell the sender of `lapsed` that the hub dropped it, once it expired
+    /// or went `unconfirmed`; what tells a sender of that is not reported in
+    /// turn.
+    async fn tell_sender(&self, lapsed: Lapsed, unconfirmed: bool) {
+        let Lapsed {
             machine,
             held,
             queued_at,
-        } in lapsed
-        {
-            // What tells a sender of an expiry is not reported in turn.
-            if matches!(held.call, Call::Expired { .. }) {
-                continue;
-            }
-            let name = (machines.iter().find(|member| member.id == machine))
-                .map_or_else(|| machine.to_string(), |member| member.name.clone());
-            let expired = Expired {
-                from: held.sender_space,
-                machine: name,
-                summary: held.summary,
-                queued_at,
-            };
-            if let Err(error) = self.send_expired(&held.sender, expired).await {
-                log!("hub: could not tell a sender what expired: {error:#}");
-            }
+        } = lapsed;
+        if matches!(held.call, Call::Expired { .. }) {
+            return;
         }
-        Ok(())
+        let members = self
+            .local_hub_overview()
+            .await
+            .map(|overview| overview.members);
+        let name = (members.iter().flatten())
+            .find(|member| member.id == machine)
+            .map_or_else(|| machine.to_string(), |member| member.name.clone());
+        let expired = Expired {
+            from: held.sender_space,
+            machine: name,
+            summary: held.summary,
+            queued_at,
+            unconfirmed,
+        };
+        if let Err(error) = self.send_expired(&held.sender, expired).await {
+            log!("hub: could not tell a sender what became of its call: {error:#}");
+        }
     }
 }
 
@@ -159,21 +179,39 @@ fn push(
 }
 
 /// The oldest call held for `member`, with its place in the queue.
-fn first(tx: &Transaction<'_>, member: &MemberId) -> Result<Option<(i64, Call)>> {
+fn first(tx: &Transaction<'_>, member: &MemberId) -> Result<Option<(i64, Lapsed)>> {
     let row = tx
         .query_row(
-            "SELECT seq, call FROM hub_queue WHERE member_id=?1 ORDER BY seq LIMIT 1",
+            "SELECT seq, sender_id, sender_space, call, summary, queued_at FROM hub_queue
+                WHERE member_id=?1 ORDER BY seq LIMIT 1",
             [member],
-            |row| Ok((row.get(0)?, row.get::<_, String>(1)?)),
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            },
         )
         .optional()?;
-    row.map(|(seq, call)| {
-        Ok((
-            seq,
-            serde_json::from_str(&call).context("unreadable held call")?,
-        ))
-    })
-    .transpose()
+    let Some((seq, sender, sender_space, call, summary, queued_at)) = row else {
+        return Ok(None);
+    };
+    let held = Held {
+        sender,
+        sender_space,
+        call: serde_json::from_str(&call).context("unreadable held call")?,
+        summary,
+    };
+    let lapsed = Lapsed {
+        machine: member.clone(),
+        held,
+        queued_at,
+    };
+    Ok(Some((seq, lapsed)))
 }
 
 fn remove(tx: &Transaction<'_>, seq: i64) -> Result<()> {

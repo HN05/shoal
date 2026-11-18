@@ -114,7 +114,7 @@ pub struct ToldAbout {
 }
 
 /// What the hub tells a machine whose queued request or event it dropped
-/// once it expired.
+/// once it expired, or delivered without hearing whether it ran.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Expired {
     /// The space whose process sent it, which hears of it, or none for the
@@ -126,6 +126,10 @@ pub struct Expired {
     /// What it was.
     pub summary: String,
     pub queued_at: UnixTime,
+    /// It reached the machine once it connected, which never confirmed
+    /// that it ran, rather than expired.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unconfirmed: bool,
 }
 
 impl std::fmt::Display for Queued {

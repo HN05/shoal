@@ -158,12 +158,16 @@ impl Manager {
     /// Tell whoever sent what expired at the hub: the space that sent it,
     /// when it still has an agent here, else the user.
     pub(super) async fn hear_expired(&self, expired: Expired) {
-        let message = format!(
-            "The hub dropped {}, which waited for machine {} from {} and expired before that machine connected",
-            expired.summary,
-            expired.machine,
-            expired.queued_at.local_minutes()
-        );
+        let (summary, machine) = (&expired.summary, &expired.machine);
+        let queued = expired.queued_at.local_minutes();
+        let message = match expired.unconfirmed {
+            false => format!(
+                "The hub dropped {summary}, which waited for machine {machine} from {queued} and expired before that machine connected"
+            ),
+            true => format!(
+                "The hub delivered {summary}, which waited for machine {machine} from {queued}, but the link closed before {machine} confirmed it ran; check there before sending it again"
+            ),
+        };
         if let Some(space) = &expired.from
             && (self.queue_agent_message(space, message.clone()).await).is_ok()
         {

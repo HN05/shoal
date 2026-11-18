@@ -46,28 +46,32 @@ impl Calls {
         let (replied, reply) = oneshot::channel();
         match self.pending.lock().unwrap().as_mut() {
             Some(pending) => pending.insert(id, replied),
-            None => bail!("the link to {} closed", self.peer),
+            None => return Err(Unsent(format!("the link to {} closed", self.peer)).into()),
         };
         let sent_and_replied = async {
-            super::pieces::send(&self.sender, &Frame::Call { id, call }, false).await?;
-            anyhow::Ok(reply.await)
+            let sent = super::pieces::send(&self.sender, &Frame::Call { id, call }, false).await;
+            sent.map_err(|error| Unsent(format!("{error:#}")))?;
+            Ok::<_, Unsent>(reply.await)
         };
         let reply = match tokio::time::timeout(CALL_TIMEOUT, sent_and_replied).await {
             Ok(Ok(reply)) => Ok(reply),
-            Ok(Err(error)) => {
+            Ok(Err(unsent)) => {
                 self.forget(id);
-                return Err(error);
+                return Err(unsent.into());
             }
             Err(timeout) => Err(timeout),
         };
+        let peer = &self.peer;
         match reply {
             Ok(Ok(Reply::Failed { message })) => bail!("{message}"),
             Ok(Ok(reply)) => Ok(reply),
-            Ok(Err(_)) => bail!("the link to {} closed before it answered", self.peer),
+            Ok(Err(_)) => {
+                Err(Unanswered(format!("the link to {peer} closed before it answered")).into())
+            }
             Err(_) => {
                 self.forget(id);
-                let peer = &self.peer;
-                bail!("{peer} did not answer within {}s", CALL_TIMEOUT.as_secs())
+                let waited = CALL_TIMEOUT.as_secs();
+                Err(Unanswered(format!("{peer} did not answer within {waited}s")).into())
             }
         }
     }
@@ -96,6 +100,31 @@ impl Calls {
         self.pending.lock().unwrap().take();
     }
 }
+
+/// A call that never left this side, which the other side never ran.
+#[derive(Debug)]
+pub(crate) struct Unsent(String);
+
+/// A call the other side received but never answered, which it may have
+/// run.
+#[derive(Debug)]
+pub(crate) struct Unanswered(String);
+
+impl std::fmt::Display for Unsent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Unsent {}
+
+impl std::fmt::Display for Unanswered {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Unanswered {}
 
 /// How a session ended.
 pub(super) enum End {
