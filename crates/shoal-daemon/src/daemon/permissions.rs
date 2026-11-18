@@ -16,7 +16,7 @@ use crate::{
     model::{Space, SpaceKind, Workspace},
 };
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{hub::routing::VouchedSpace, space_names::SpaceSelector};
 
 impl Manager {
     /// The permissions `caller` acts under in the registered repository
@@ -39,7 +39,7 @@ impl Manager {
         repository: &RepositoryId,
     ) -> Result<Permissions> {
         if let Some(vouched) = self.vouched_space(&caller.space_id) {
-            return Ok(vouched.permissions);
+            return self.vouched_permissions(vouched, Some(repository)).await;
         }
         let space = self.space_by_id(&caller.space_id).await?;
         let agent = recorded_agent(&space);
@@ -56,11 +56,34 @@ impl Manager {
         repository: Option<&RepositoryId>,
     ) -> Result<Permissions> {
         if let Some(vouched) = self.vouched_space(id) {
-            return Ok(vouched.permissions);
+            return self.vouched_permissions(vouched, repository).await;
         }
         let space = self.space_by_id(id).await?;
         let agent = recorded_agent(&space);
         (self.permissions_below_parent(&self.config(), &space, agent, repository)).await
+    }
+
+    /// The permissions of a space another machine vouches for, for an
+    /// action in `repository`: a chat's without a repository resolves its
+    /// mode in that repository's config, as on its own machine, and any
+    /// other's are those its machine computed.
+    async fn vouched_permissions(
+        &self,
+        vouched: VouchedSpace,
+        repository: Option<&RepositoryId>,
+    ) -> Result<Permissions> {
+        let (Some(chat), Some(repository)) = (vouched.chat_mode, repository) else {
+            return Ok(vouched.permissions);
+        };
+        let settings = self.space_settings_in(Some(repository)).await?;
+        let mode = SpaceMode {
+            name: &chat.mode,
+            kind: SpaceKind::Chat,
+            repository: false,
+        };
+        let permissions = permissions::resolve(&settings, Some(mode))
+            .context("the permissions of a chat on another machine")?;
+        Ok(permissions.given(&chat.given))
     }
 
     /// Refuse the permissions `given` sets where `caller` does not hold them

@@ -32,7 +32,8 @@ pub struct VouchedSpace {
     /// Whether its scope reaches every space, as a chat's without a
     /// repository does.
     pub everywhere: bool,
-    /// Its effective permissions, as its machine computes them.
+    /// Its effective permissions, as its machine computes them in its own
+    /// repository, or for a chat without one in the global config.
     pub permissions: Permissions,
     /// The permission an approval let its command take actions of.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -40,6 +41,19 @@ pub struct VouchedSpace {
     /// It only reads, as the gate's runs do.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub read_only: bool,
+    /// For a chat without a repository, whose permissions resolve in the
+    /// repository each action is in, its agent's mode and given values,
+    /// which the owning machine resolves in the action's repository there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chat_mode: Option<VouchedMode>,
+}
+
+/// The mode a chat's agent started in, with the values its `--permission`
+/// gave.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VouchedMode {
+    pub mode: crate::config::modes::ModeName,
+    pub given: crate::config::permissions::PermissionsConfig,
 }
 
 /// A request a machine forwards to the machine that owns its space.
