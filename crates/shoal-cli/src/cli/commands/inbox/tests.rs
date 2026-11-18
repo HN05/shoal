@@ -16,6 +16,7 @@ fn a_lone_sync_failure_names_its_repository() {
         }],
         workspaces: Vec::new(),
         chats: Vec::new(),
+        view: None,
     };
     let repositories = [("r1".to_owned(), "app".to_owned())];
     let rows = inbox.rows(&repositories, Palette::stdout(true), None);
@@ -72,6 +73,7 @@ fn a_chat_in_a_workspace_names_the_workspace() {
         items: vec![Item::ChatDone { chat: chat.clone() }],
         workspaces: Vec::new(),
         chats: vec![chat],
+        view: None,
     };
     let rows = inbox.rows(&[], Palette::stdout(true), None);
     assert_eq!(rows.len(), 1);
@@ -91,6 +93,7 @@ fn a_chat_item_shows_its_mode_in_its_own_column() {
         items: vec![Item::ChatDone { chat: chat.clone() }],
         workspaces: Vec::new(),
         chats: vec![chat],
+        view: None,
     };
     let rows = inbox.rows(&[], Palette::stdout(true), None);
     assert_eq!(rows, ["finished  repo-plan-7  plan"]);
@@ -193,4 +196,46 @@ fn marks_wait_in_the_inbox_only_while_their_agent_is_not_working() {
     let none = Default::default();
     assert_eq!(marked(super::workspace_items(&workspaces, &none)), ["idle"]);
     assert_eq!(marked(super::chat_items(&chats)), ["idle"]);
+}
+
+#[test]
+fn another_machines_question_names_its_machine() {
+    let view: shoal_protocol::hub::directory::HubView = serde_json::from_value(serde_json::json!({
+        "machine": "desk",
+        "machines": [
+            {"id": "desk", "kind": "machine", "name": "desk", "joined_at": 0,
+             "connected": true, "hub": true},
+            {"id": "laptop", "kind": "machine", "name": "laptop", "joined_at": 0,
+             "connected": true, "hub": false},
+        ],
+        "spaces": [{
+            "machine": "laptop", "id": "remote", "number": 4, "name": "port", "kind": "chat",
+            "status": "needs-input", "reported_at": 0,
+            "questions": [{
+                "space_number": 4, "item": 1, "space_id": "remote", "space": "port", "created_at": 0,
+                "question": "Which database?", "recommendation": "SQLite", "status": "open",
+            }],
+        }],
+    }))
+    .unwrap();
+    let items = super::elsewhere::items(Some(&view), |_| true);
+    // Each item names its own need, without its space's others.
+    assert!(items.iter().all(|item| matches!(
+        item,
+        Item::Elsewhere { space, .. } if space.space.questions.is_empty()
+    )));
+    let inbox = Inbox {
+        items,
+        workspaces: Vec::new(),
+        chats: Vec::new(),
+        view: Some(view),
+    };
+    let rows = inbox.rows(&[], Palette::stdout(true), None);
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert!(
+        rows[0].starts_with("question 4.1  port  laptop"),
+        "{rows:?}"
+    );
+    assert!(rows[0].contains("Which database?"), "{rows:?}");
+    assert!(rows[1].starts_with("needs input"), "{rows:?}");
 }

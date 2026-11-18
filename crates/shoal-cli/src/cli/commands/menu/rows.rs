@@ -68,6 +68,8 @@ pub(super) enum Row {
     Cleanup,
     /// A repository whose default branch stopped syncing, by its ID.
     SyncFailed(RepositoryId),
+    /// Another joined machine's space, whose status the row shows.
+    Elsewhere(SpaceId),
     Workspace(SpaceId),
     /// A notification, by the ID of its space, if any.
     Notification(String),
@@ -113,6 +115,7 @@ impl Row {
             Item::Untracked { worktree } => Self::Untracked(worktree.path.clone()),
             Item::Cleanup { .. } => Self::Cleanup,
             Item::SyncFailed { sync } => Self::SyncFailed(sync.repository_id.clone()),
+            Item::Elsewhere { space, .. } => Self::Elsewhere(space.space.id.clone()),
         }
     }
 
@@ -138,6 +141,7 @@ impl Row {
             Self::Untracked(path) => format!("untracked:{}", encode_path(path)),
             Self::Cleanup => "cleanup:".into(),
             Self::SyncFailed(repository) => format!("sync-failed:{repository}"),
+            Self::Elsewhere(space) => format!("elsewhere:{space}"),
             Self::Workspace(workspace) => workspace.to_string(),
             Self::Notification(id) => format!("notification:{id}"),
             Self::Add => ADD_ENTRY.into(),
@@ -192,6 +196,7 @@ impl Row {
                 workspace: space,
                 name: detail.to_owned(),
             },
+            "elsewhere" => Self::Elsewhere(space),
             _ => anyhow::bail!("picker returned an unknown row"),
         })
     }
@@ -215,7 +220,12 @@ impl Row {
             Self::Notification(id) => {
                 (!id.is_empty()).then(|| SpaceSelector::Id(id.clone().into()))
             }
-            Self::Untracked(_) | Self::Cleanup | Self::SyncFailed(_) | Self::Add => None,
+            // Keys that act on a space act on this machine's.
+            Self::Untracked(_)
+            | Self::Cleanup
+            | Self::SyncFailed(_)
+            | Self::Elsewhere(_)
+            | Self::Add => None,
         }
     }
 }

@@ -107,6 +107,32 @@ pub struct Directory {
     pub conflicts: Vec<Conflict>,
 }
 
+impl Listed {
+    /// The space without its questions and approval requests, which it
+    /// never copies.
+    pub fn without_requests(&self) -> Self {
+        let space = &self.space;
+        Self {
+            machine: self.machine.clone(),
+            space: SpaceSummary {
+                id: space.id.clone(),
+                number: space.number,
+                name: space.name.clone(),
+                kind: space.kind,
+                repository: space.repository.clone(),
+                parent: space.parent.clone(),
+                mode: space.mode.clone(),
+                status: space.status,
+                agent_state: space.agent_state,
+                progress: space.progress.clone(),
+                questions: Vec::new(),
+                approvals: Vec::new(),
+            },
+            reported_at: self.reported_at,
+        }
+    }
+}
+
 impl Directory {
     /// The machine `id`.
     pub fn machine(&self, id: &MemberId) -> Option<&Member> {

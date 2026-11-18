@@ -24,8 +24,8 @@ use crate::{
     },
     config::modes::ModeName,
     model::{
-        Asleep, Chat, HeldBy, PreparationWait, QueueEntry, Repository, ReviewMark, Workspace,
-        WorkspaceUsage,
+        Asleep, Chat, HeldBy, PreparationWait, QueueEntry, Repository, ReviewMark, SpaceKind,
+        Workspace, WorkspaceUsage,
     },
     state::{AgentState, QueueKind, QueueState},
 };
@@ -296,6 +296,15 @@ pub fn workspace_mode_cell(workspace: &Workspace) -> Cell {
     mode_cell(workspace.mode.as_ref(), &ModeName::DEFAULT)
 }
 
+/// The mode of a space of `kind`, left out when it is the kind's usual one.
+pub fn space_mode_cell(kind: SpaceKind, mode: Option<&ModeName>) -> Cell {
+    let usual = match kind {
+        SpaceKind::Workspace => ModeName::DEFAULT,
+        SpaceKind::Chat => crate::model::chat_mode(),
+    };
+    mode_cell(mode, &usual)
+}
+
 /// A chat's mode, left out for `chat`.
 pub fn chat_mode_cell(chat: &Chat) -> Cell {
     mode_cell(chat.mode.as_ref(), &crate::model::chat_mode())
@@ -523,14 +532,19 @@ fn repository_column(workspaces: &[Workspace], repositories: &[(String, String)]
 /// The name of each repository ID, or empty cells when all name one.
 pub fn repository_cells<'a>(
     ids: impl Iterator<Item = Option<&'a RepositoryId>>,
-    repositories: &[(String, String)],
+    repositories: &'a [(String, String)],
 ) -> Vec<String> {
-    let names: Vec<&str> = ids
-        .map(|repository| {
-            repository
-                .and_then(|repository| repositories.iter().find(|(id, _)| repository == id))
-                .map_or("unknown repository", |(_, name)| name.as_str())
-        })
+    named_repository_cells(ids.map(|repository| {
+        let named =
+            repository.and_then(|repository| repositories.iter().find(|(id, _)| repository == id));
+        named.map(|(_, name)| name.as_str())
+    }))
+}
+
+/// [`repository_cells`] of repositories by their names.
+pub fn named_repository_cells<'a>(names: impl Iterator<Item = Option<&'a str>>) -> Vec<String> {
+    let names: Vec<&str> = names
+        .map(|name| name.unwrap_or("unknown repository"))
         .collect();
     let several = names.iter().collect::<HashSet<_>>().len() > 1;
     names

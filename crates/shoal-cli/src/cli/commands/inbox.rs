@@ -3,15 +3,16 @@
 //! agents Shoal put to sleep, work marked ready at its current commit, running demos, Git worktrees
 //! under Shoal's directories that no workspace owns, automatic cleanup
 //! failing other than in a workspace, and repositories whose default branch
-//! has stopped syncing.
+//! has stopped syncing, and what of the other joined machines' spaces needs
+//! the user.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use std::collections::HashSet;
 
 use anyhow::{Result, ensure};
 
-use super::listing::ListFilter;
-use crate::client::output::inbox::Item;
+use super::{listing::ListFilter, machines};
+use crate::client::output::inbox::{Item, Need};
 use crate::{
     cli::{
         client,
@@ -26,8 +27,11 @@ use crate::{
 };
 use shoal_protocol::{
     approvals::{ApprovalRequest, DecisionStatus, GateStep},
+    hub::directory::HubView,
     questions::Question,
 };
+
+mod elsewhere;
 
 /// The inbox's items in the order it lists them, and the workspaces and
 /// chats they belong to.
@@ -35,6 +39,9 @@ pub(in crate::cli) struct Inbox {
     pub items: Vec<Item>,
     workspaces: Vec<Workspace>,
     chats: Vec<Chat>,
+    /// The hub's view of the other machines' spaces, which names the
+    /// machines of their items.
+    view: Option<HubView>,
 }
 
 pub(super) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
@@ -64,7 +71,8 @@ pub(super) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
 impl Inbox {
     /// Questions, then approvals, agents that need input, failed workspaces,
     /// ready marks and running demos, for the workspaces `filter` keeps, then
-    /// untracked worktrees and failing automatic cleanup.
+    /// untracked worktrees and failing automatic cleanup, then what needs the
+    /// user of the other machines' spaces it keeps.
     pub(in crate::cli) async fn request(ctx: &Context, filter: &ListFilter) -> Result<Self> {
         // Without its token, the daemon would answer a workspace process as the user.
         ensure!(
@@ -126,35 +134,37 @@ impl Inbox {
                     .map(|sync| Item::SyncFailed { sync }),
             );
         }
+        let view = machines::view(ctx).await;
+        items.extend(elsewhere::items(view.as_ref(), |remote| {
+            filter.keeps_remote(remote)
+        }));
         Ok(Self {
             items,
             workspaces,
             chats,
+            view,
         })
     }
 
-    /// One aligned row per item: its kind, workspace, the workspace's
-    /// repository when the rows span several, its mode, what it is about,
-    /// cut to fit `width`, and a note, which names the workspace a chat runs
-    /// in.
+    /// One aligned row per item: its kind, space, the space's machine once
+    /// any item is another machine's, its repository when the rows span
+    /// several, its mode, what it is about, cut to fit `width`, and a note,
+    /// which names the workspace a chat runs in.
     pub(in crate::cli) fn rows(
         &self,
         repositories: &[(String, String)],
         palette: Palette,
         width: Option<usize>,
     ) -> Vec<String> {
-        let repository = |item| repository_of(&self.workspaces, &self.chats, item);
-        let cells: Vec<[Cell; 6]> = self
-            .items
-            .iter()
-            .zip(ui::repository_cells(
-                self.items.iter().map(repository),
-                repositories,
-            ))
+        let machines = self.machines();
+        let repository = |item| self.repository_name(item, repositories);
+        let names = ui::named_repository_cells(self.items.iter().map(repository));
+        let cells: Vec<[Cell; 7]> = (self.items.iter().zip(names))
             .map(|(item, repository)| {
                 [
                     item.kind(),
                     (item.name(repositories), None),
+                    machine_cell(machines.as_ref(), item),
                     (repository, None),
                     item.mode(),
                     (item.text(), None),
@@ -162,8 +172,43 @@ impl Inbox {
                 ]
             })
             .collect();
-        let limit = width.map(|width| WidthLimit { column: 4, width });
+        let limit = width.map(|width| WidthLimit { column: 5, width });
         ui::aligned_to(cells, palette, limit)
+    }
+
+    /// The machines rows name, once any item is another machine's.
+    fn machines(&self) -> Option<ui::Machines<'_>> {
+        let elsewhere = |item: &Item| matches!(item, Item::Elsewhere { .. });
+        let view = self.view.as_ref()?;
+        self.items
+            .iter()
+            .any(elsewhere)
+            .then(|| ui::Machines::new(view))
+    }
+
+    /// The name of the repository of the item's space, or of the one that
+    /// owns a proposed issue whose workspace is gone, of `(id, name)` pairs
+    /// for this machine's.
+    fn repository_name<'a>(
+        &'a self,
+        item: &'a Item,
+        repositories: &'a [(String, String)],
+    ) -> Option<&'a str> {
+        if let Item::Elsewhere { space, .. } = item {
+            return (space.space.repository.as_ref()).map(|origin| origin.name.as_str());
+        }
+        let id = repository_of(&self.workspaces, &self.chats, item)?;
+        let named = repositories.iter().find(|(repository, _)| id == repository);
+        named.map(|(_, name)| name.as_str())
+    }
+}
+
+/// The machine of the item's space, when rows name one.
+fn machine_cell(machines: Option<&ui::Machines<'_>>, item: &Item) -> Cell {
+    match (machines, item) {
+        (None, _) => (String::new(), None),
+        (Some(machines), Item::Elsewhere { space, .. }) => machines.cell(&space.machine),
+        (Some(machines), _) => machines.here(),
     }
 }
 
@@ -216,14 +261,17 @@ fn decision_items(
         .map(|question| Item::Question { question });
     let requests = requests
         .into_iter()
-        .filter(|request| {
-            request.status == DecisionStatus::Pending
-                && request.decider.is_none()
-                && request.gate != Some(GateStep::Deciding)
-                && (kept(&request.space_id) || detached(request))
-        })
+        .filter(|request| user_decides(request) && (kept(&request.space_id) || detached(request)))
         .map(|request| Item::Approval { request });
     questions.chain(requests).collect()
+}
+
+/// Whether the user decides `request` now: a pending request that no space
+/// above its own decides and no gate is deciding.
+fn user_decides(request: &ApprovalRequest) -> bool {
+    request.status == DecisionStatus::Pending
+        && request.decider.is_none()
+        && request.gate != Some(GateStep::Deciding)
 }
 
 /// Workspaces whose agent needs input, then blocked ones, then failed ones,
@@ -343,6 +391,7 @@ impl ItemExt for Item {
             | Self::ChatReady { chat, .. }
             | Self::ChatDone { chat } => Some(&chat.id),
             Self::Demo { demo } => Some(&demo.workspace_id),
+            Self::Elsewhere { space, .. } => Some(&space.space.id),
             Self::Untracked { .. } | Self::Cleanup { .. } | Self::SyncFailed { .. } => None,
         }
     }
@@ -371,6 +420,7 @@ impl ItemExt for Item {
             | Self::ChatReady { chat, .. }
             | Self::ChatDone { chat } => &chat.name,
             Self::Demo { demo } => &demo.workspace,
+            Self::Elsewhere { space, .. } => &space.space.name,
             // The directory a workspace adopting it would be named after.
             Self::Untracked { worktree } => worktree
                 .path
@@ -409,6 +459,7 @@ impl ItemExt for Item {
             Self::Untracked { .. } => ("untracked", Style::Warning),
             Self::Cleanup { .. } => ("cleanup", Style::Error),
             Self::SyncFailed { .. } => ("sync failed", Style::Warning),
+            Self::Elsewhere { need, .. } => return elsewhere::kind(need),
         };
         (label.into(), Some(style))
     }
@@ -439,6 +490,7 @@ impl ItemExt for Item {
                 chat.links.issue_title().unwrap_or_default().to_owned()
             }
             Self::Demo { demo } => demo.launch.name.clone(),
+            Self::Elsewhere { space, need } => elsewhere::text(space, need),
             Self::Untracked { worktree } => home_relative(&worktree.path),
             Self::Cleanup { error } => error.clone(),
             Self::SyncFailed { sync } => sync
@@ -462,13 +514,20 @@ impl ItemExt for Item {
             | Self::ChatAsleep { chat }
             | Self::ChatReady { chat, .. }
             | Self::ChatDone { chat } => ui::chat_mode_cell(chat),
+            Self::Elsewhere { space, .. } => {
+                ui::space_mode_cell(space.space.kind, space.space.mode.as_ref())
+            }
             _ => (String::new(), None),
         }
     }
 
     fn note(&self) -> String {
         match self {
-            Self::Question { question } => question_note(question),
+            Self::Question { question }
+            | Self::Elsewhere {
+                need: Need::Question(question),
+                ..
+            } => question_note(question),
             Self::Untracked { .. } => "adopt it with shoal adopt".to_owned(),
             Self::SyncFailed { .. } => "retry with shoal repo sync".to_owned(),
             Self::Asleep { workspace } => ui::wake_now(workspace.number),

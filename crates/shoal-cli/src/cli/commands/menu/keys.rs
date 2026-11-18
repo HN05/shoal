@@ -188,10 +188,12 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             target: Some(SpaceSelector::Id(space)),
             session: None,
         }),
-        Row::Failed(space) | Row::Blocked(space) => Command::Space(SpaceCommand::Status {
-            space: Some(space.to_string()),
-            item: None,
-        }),
+        Row::Failed(space) | Row::Blocked(space) | Row::Elsewhere(space) => {
+            Command::Space(SpaceCommand::Status {
+                space: Some(space.to_string()),
+                item: None,
+            })
+        }
         Row::Ready {
             space,
             url: Some(url),

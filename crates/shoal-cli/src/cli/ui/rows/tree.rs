@@ -3,13 +3,13 @@ use std::collections::HashSet;
 
 use super::{
     Cell, Machines, Statuses, WidthLimit, aligned_to, chat_row, indented, mode_cell, number_cell,
-    progress_cell, queue_subject, status_cell, status_line, statuses::place_cell, title_limit,
-    usage_cell, workspace_mode_cell, workspace_status_cell, workspace_text,
+    progress_cell, queue_subject, space_mode_cell, status_cell, status_line, statuses::place_cell,
+    title_limit, usage_cell, workspace_mode_cell, workspace_status_cell, workspace_text,
 };
 use crate::cli::list_status::{ListStatus, ListStatusStyle};
 use crate::cli::output::{Palette, Style};
 use crate::config::modes::ModeName;
-use crate::model::{Chat, QueueEntry, SpaceKind, Workspace};
+use crate::model::{Chat, QueueEntry, Workspace};
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::hub::directory::Listed as Remote;
 
@@ -272,17 +272,13 @@ fn remote_row(
     palette: Palette,
 ) -> (String, [Cell; 8]) {
     let space = &remote.space;
-    let usual = match space.kind {
-        SpaceKind::Workspace => ModeName::DEFAULT,
-        SpaceKind::Chat => crate::model::chat_mode(),
-    };
     (
         space.status.marker(palette),
         [
             number_cell(space.number),
             (indented(&space.name, depth), Some(Style::Heading)),
             repository,
-            mode_cell(space.mode.as_ref(), &usual),
+            space_mode_cell(space.kind, space.mode.as_ref()),
             status_cell(space.status),
             (String::new(), None),
             progress_cell(space.progress.as_ref()),

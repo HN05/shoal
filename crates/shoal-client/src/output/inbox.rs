@@ -5,6 +5,8 @@ use crate::output::outputs;
 use shoal_protocol::{
     approvals::ApprovalRequest,
     demos::Running,
+    hub::directory::Listed,
+    list_status::ListStatus,
     model::{Chat, CheckoutSync, ReviewMark, UntrackedWorktree, Workspace},
     questions::Question,
 };
@@ -73,6 +75,23 @@ pub enum Item {
     SyncFailed {
         sync: CheckoutSync,
     },
+    /// Another joined machine's space that needs the user, as its machine
+    /// last reported it.
+    Elsewhere {
+        space: Listed,
+        need: Need,
+    },
+}
+
+/// What another machine's space needs of the user.
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[allow(clippy::large_enum_variant, reason = "an inbox holds a few items")]
+pub enum Need {
+    Question(Question),
+    Approval(ApprovalRequest),
+    /// What it is doing, such as needing input or having failed.
+    Status(ListStatus),
 }
 
 outputs!(Item);
