@@ -126,10 +126,7 @@ impl ProtectionExt for Protection {
     }
 
     fn is_idle(&self) -> bool {
-        [AWAY_REASON, ROOM_REASON, BLOCKED_REASON]
-            .iter()
-            .chain(EARLIER_IDLE_REASONS)
-            .any(|reason| self.reason == *reason)
+        [AWAY_REASON, ROOM_REASON, BLOCKED_REASON].contains(&self.reason.as_str())
     }
 
     fn is_blocked(&self) -> bool {
@@ -150,15 +147,6 @@ const RESTART_REASON: &str = "restarted by shoal restart";
 
 /// The stop reason of an idle agent the user is away from.
 const AWAY_REASON: &str = "idle while the user is away";
-
-/// The reasons earlier releases put idle agents to sleep for, which the
-/// wrappers of agents asleep across an upgrade still report; #2936 removes
-/// them.
-const EARLIER_IDLE_REASONS: &[&str] = &[
-    "idle in a done workspace whose cleanup is held",
-    "idle with its prompt cache expired",
-    "shoal sleep",
-];
 
 /// The stop reason of an idle agent put to sleep for queued work.
 const ROOM_REASON: &str = "making room for queued work";
