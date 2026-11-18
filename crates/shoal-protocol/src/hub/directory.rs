@@ -41,6 +41,10 @@ pub struct SpaceSummary {
     /// pass up and decides their requests.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub agent: bool,
+    /// Its effective permissions, which narrow those of the spaces below it
+    /// on other machines.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permissions: Option<crate::config::permissions::Permissions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub progress: Option<Progress>,
     /// Its open questions.
@@ -129,6 +133,7 @@ impl Listed {
                 status: space.status,
                 agent_state: space.agent_state,
                 agent: space.agent,
+                permissions: space.permissions,
                 progress: space.progress.clone(),
                 questions: Vec::new(),
                 approvals: Vec::new(),

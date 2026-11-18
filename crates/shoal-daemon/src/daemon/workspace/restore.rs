@@ -307,22 +307,25 @@ impl Manager {
         let Some(parent) = removed.parent.clone() else {
             return Ok(None);
         };
-        // Its own machine decides what a space elsewhere takes.
-        if self.find_space(&parent.id).await?.is_none() && self.runs_elsewhere(&parent.id).await {
-            return Ok(Some(parent.id));
-        }
         let (repository, space) = (removed.repository_id.clone(), removed.space_id.clone());
-        let id = parent.id.clone();
-        let taken = (self.store)
-            .read(move |tx| {
-                Ok(super::tree::ensure_parent(
-                    tx,
-                    repository.as_ref(),
-                    &space,
-                    &id,
-                ))
-            })
-            .await?;
+        let elsewhere =
+            self.find_space(&parent.id).await?.is_none() && self.runs_elsewhere(&parent.id).await;
+        let taken = match elsewhere {
+            true => (self.ensure_parent_elsewhere(&space, repository.as_ref(), &parent.id)).await,
+            false => {
+                let id = parent.id.clone();
+                (self.store)
+                    .read(move |tx| {
+                        Ok(super::tree::ensure_parent(
+                            tx,
+                            repository.as_ref(),
+                            &space,
+                            &id,
+                        ))
+                    })
+                    .await?
+            }
+        };
         match taken {
             Ok(()) => Ok(Some(parent.id)),
             Err(error) if caller.is_some() => Err(error.context(format!(

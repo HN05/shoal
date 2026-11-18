@@ -159,15 +159,16 @@ impl Manager {
     }
 
     /// The effective permissions of the space above `id`, each space's
-    /// narrowed by the one above it from the top-level space down; none for
-    /// a top-level space.
+    /// narrowed by the one above it from the top-level space down, from
+    /// those of the first space above on another machine, as its machine
+    /// reports them; none for a top-level space.
     async fn parent_permissions(
         &self,
         config: &Config,
         id: &SpaceId,
         repository: Option<&RepositoryId>,
     ) -> Result<Option<Permissions>> {
-        let mut effective: Option<Permissions> = None;
+        let mut effective = self.permissions_elsewhere(id).await?;
         for above in self.ancestors(id).await?.into_iter().rev() {
             let space = self.space_by_id(&above.id).await?;
             let agent = recorded_agent(&space);

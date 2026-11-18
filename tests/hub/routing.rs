@@ -10,7 +10,7 @@ use super::{
         daemon_client,
         fixture::{Base, home},
         printed, shoal_binary,
-        wait::wait_for,
+        wait::{try_wait_for, wait_for},
     },
 };
 
@@ -41,7 +41,14 @@ struct Tree {
 }
 
 fn tree_across_machines() -> Tree {
-    let hub = machine(true, "app");
+    tree_below_hub_config("")
+}
+
+/// [`tree_across_machines`] with the hub's global config `extra` besides
+/// its role.
+fn tree_below_hub_config(extra: &str) -> Tree {
+    let config = format!("[machine.hub]\nenabled = true\nlisten = \"127.0.0.1:0\"\n{extra}");
+    let hub = Base::start(home(), &config, "app", &[]);
     let laptop = machine(false, "app");
     let laptop_id = join(&laptop, &hub, "laptop");
     reach(&hub, &laptop);
@@ -59,8 +66,14 @@ fn tree_across_machines() -> Tree {
     let child = hub.id("child");
     let moved = hub.ok(&["move", "ssh", "laptop", &child, "--shoal", shoal_binary()]);
     assert_eq!(moved["failed"], json!([]), "{moved}");
-    let listed = listed(&hub, &child, &laptop_id);
-    assert_eq!(listed["parent"], coordinator.as_str(), "{listed}");
+    // The laptop reports the child below the hub's coordinator.
+    let below = try_wait_for(|| {
+        (listed(&hub, &child, &laptop_id)["parent"] == coordinator.as_str()).then_some(())
+    });
+    assert!(
+        below.is_some(),
+        "the hub never listed the child below its coordinator: {moved}"
+    );
     working(&hub, &coordinator);
     Tree {
         hub,
@@ -112,6 +125,8 @@ fn the_user_s_terminal_renames_and_removes_a_space_on_another_machine() {
     let status = hub.ok(&["status", &there]);
     assert_eq!(status["workspace"]["name"], "Renamed there", "{status}");
     assert!(status["machine"].is_string(), "{status}");
+    let stopped = hub.ok(&["stop", &there]);
+    assert_eq!(stopped["stopped"], true, "{stopped}");
     hub.ok(&["rm", &there, "--wait", "--yes"]);
     let gone = laptop.run(&["status", &there, "--json"]);
     assert!(!gone.status.success(), "{}", printed(&gone));
@@ -201,6 +216,8 @@ fn the_hub_holds_a_message_for_an_offline_machine_and_refuses_what_cannot_wait()
     let queued = hub.ok(&["messages", "send", "--space", &there, "while away"]);
     assert_eq!(queued["name"], "laptop", "{queued}");
     assert!(queued["expires_at"].is_number(), "{queued}");
+    let stop = hub.ok(&["stop", &there]);
+    assert_eq!(stop["name"], "laptop", "{stop}");
     let refused = hub.run(&["rename", &there, "Renamed away"]);
     assert!(!refused.status.success(), "{}", printed(&refused));
     let error = String::from_utf8_lossy(&refused.stderr);
@@ -256,4 +273,31 @@ fn a_question_for_an_offline_coordinator_goes_on_to_the_user() {
             .find(|alert| alert["kind"] == "question_asked" && alert["space_id"] == child.as_str())
             .cloned()
     });
+}
+
+#[test]
+fn a_child_on_another_machine_holds_no_permission_its_parent_lacks() {
+    let Tree { laptop, child, .. } = tree_below_hub_config("[permissions]\npush = \"deny\"\n");
+    // Read once the laptop's link to the hub settles after the move.
+    let push = wait_for("the child's permissions", || {
+        let status = laptop.ok(&["status", &child]);
+        let push = status["permissions"]["push"]["value"].clone();
+        (!push.is_null()).then_some(push)
+    });
+    assert_eq!(push, "deny");
+}
+
+#[test]
+fn removing_a_coordinator_removes_its_child_on_another_machine_first() {
+    let Tree {
+        hub,
+        laptop,
+        coordinator,
+        child,
+        ..
+    } = tree_across_machines();
+    let removed = hub.run(&["rm", &coordinator, "--wait", "--yes"]);
+    assert!(removed.status.success(), "{}", printed(&removed));
+    let gone = laptop.run(&["status", &child, "--json"]);
+    assert!(!gone.status.success(), "{}", printed(&gone));
 }

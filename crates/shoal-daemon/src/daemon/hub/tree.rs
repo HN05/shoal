@@ -3,10 +3,13 @@
 //! as when a space moves to another machine without its parent.
 use std::collections::HashMap;
 
-use anyhow::Result;
-use shoal_ids::space_ids::SpaceId;
+use anyhow::{Context as _, Result, bail, ensure};
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
+    config::permissions::Permissions,
     hub::directory::{Directory, Listed},
+    list_status::ListStatus,
+    model::SpaceKind,
     space_names::SpaceSelector,
 };
 
@@ -58,6 +61,109 @@ impl Manager {
                 Vec::new()
             }
         }
+    }
+
+    /// Refuse the space `parent`, which runs on another machine, as the
+    /// parent of the space `space` of `repository`, by what its machine
+    /// last reported to the hub, as a parent here is refused: it must be a
+    /// ready workspace or a chat of the same repository, by origin, or a
+    /// chat without one, and not below `space`.
+    pub(crate) async fn ensure_parent_elsewhere(
+        &self,
+        space: &SpaceId,
+        repository: Option<&RepositoryId>,
+        parent: &SpaceId,
+    ) -> Result<()> {
+        let Some((_, directory)) = self.hub_directory().await? else {
+            bail!("this machine is in no hub that lists space {parent}");
+        };
+        let Some(listed) = (directory.spaces.iter()).find(|listed| &listed.space.id == parent)
+        else {
+            bail!("parent space {parent} no longer exists");
+        };
+        let summary = &listed.space;
+        ensure!(
+            takes_children(summary.status),
+            "parent {} is {}; open a child below a ready workspace",
+            summary.name,
+            summary.status.label()
+        );
+        let origin = match repository {
+            Some(id) => self.repository_origin(id).await?,
+            None => None,
+        };
+        let any_repository = summary.kind == SpaceKind::Chat && summary.repository.is_none();
+        let same = match (&summary.repository, &origin) {
+            (Some(theirs), Some(ours)) => theirs.origin.as_ref() == Some(ours),
+            _ => false,
+        };
+        ensure!(
+            any_repository || same,
+            "parent {} belongs to another repository",
+            summary.name
+        );
+        ensure!(
+            !chain_from(&directory, parent.clone()).contains(space),
+            "parent {} is below the space it would take",
+            summary.name
+        );
+        Ok(())
+    }
+
+    /// The effective permissions of the first space above the space `id`
+    /// that runs on another machine, as its machine reports them; none when
+    /// every space above it is here or that space is gone. While the hub
+    /// cannot be asked, those it last reported stand; a machine that never
+    /// read them refuses, rather than leave the space wider than that
+    /// parent allows.
+    pub(crate) async fn permissions_elsewhere(&self, id: &SpaceId) -> Result<Option<Permissions>> {
+        let owned = id.clone();
+        let first = (self.store)
+            .run(move |db| crate::daemon::workspace::first_absent_above(db, &owned))
+            .await?;
+        let Some(first) = first else {
+            return Ok(None);
+        };
+        let directory = match self.hub_directory().await {
+            Ok(directory) => directory,
+            Err(error) => {
+                let last = self
+                    .hub
+                    .parent_permissions
+                    .lock()
+                    .unwrap()
+                    .get(&first)
+                    .copied();
+                return last.map(Some).with_context(|| {
+                    format!("the permissions of space {first}, above {id} on another machine, cannot be read: {error:#}")
+                });
+            }
+        };
+        let listed = (directory.into_iter())
+            .flat_map(|(_, directory)| directory.spaces)
+            .find(|listed| listed.space.id == first);
+        // A parent no machine lists is gone, as a removed parent here
+        // leaves the space at the top level.
+        let Some(listed) = listed else {
+            return Ok(None);
+        };
+        let permissions = listed
+            .space
+            .permissions
+            .with_context(|| format!("the hub has no permissions of space {first}, above {id}"))?;
+        (self.hub.parent_permissions.lock().unwrap()).insert(first, permissions);
+        Ok(Some(permissions))
+    }
+
+    /// The origin other machines know the registered repository `id` by.
+    async fn repository_origin(&self, id: &RepositoryId) -> Result<Option<String>> {
+        let repositories = self.repositories().await?;
+        let Some(repository) = repositories.iter().find(|repository| &repository.id == id) else {
+            return Ok(None);
+        };
+        Ok(crate::repository::identity(&repository.source)
+            .await
+            .unwrap_or_default())
     }
 
     async fn try_ancestors_elsewhere(&self, id: &SpaceId) -> Result<Vec<SpaceId>> {
@@ -127,6 +233,21 @@ fn chain_from(directory: &Directory, first: SpaceId) -> Vec<SpaceId> {
         }
     }
     chain
+}
+
+/// Whether a space in `status` takes children: a workspace only once it is
+/// ready, while it is not being changed or removed.
+fn takes_children(status: ListStatus) -> bool {
+    !matches!(
+        status,
+        ListStatus::Preparing
+            | ListStatus::Stopping
+            | ListStatus::Removing
+            | ListStatus::Reconciling
+            | ListStatus::Restoring
+            | ListStatus::Updating
+            | ListStatus::Failed
+    )
 }
 
 #[cfg(test)]

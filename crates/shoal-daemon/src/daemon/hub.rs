@@ -31,6 +31,7 @@ mod owners;
 mod pairing;
 mod pieces;
 mod queue;
+mod removal;
 mod reports;
 mod routing;
 mod sealing;
@@ -61,6 +62,15 @@ pub(crate) struct Hub {
     /// The callers other machines vouch for, while this machine answers
     /// their forwarded requests.
     vouches: serving::Vouches,
+    /// The effective permissions the hub last listed of each space on
+    /// another machine above a space here, which stand while it cannot be
+    /// asked.
+    parent_permissions: std::sync::Mutex<
+        std::collections::HashMap<
+            shoal_ids::space_ids::SpaceId,
+            shoal_protocol::config::permissions::Permissions,
+        >,
+    >,
 }
 
 /// Serve the hub's listener and keep its own machine's spaces in its

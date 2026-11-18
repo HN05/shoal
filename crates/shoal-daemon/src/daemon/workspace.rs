@@ -35,7 +35,7 @@ pub(in crate::daemon) mod identity;
 mod imported_sessions;
 mod kept_branches;
 mod lifecycle;
-pub(crate) use lifecycle::fail_interrupted_removals;
+pub(crate) use lifecycle::{BelowElsewhere, fail_interrupted_removals};
 mod location;
 pub(crate) mod lost_reports;
 mod merge;

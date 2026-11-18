@@ -10,6 +10,7 @@ use anyhow::Result;
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     approvals::{ApprovalRequest, DecisionStatus},
+    config::permissions::Permissions,
     hub::directory::{RepositoryOrigin, SpaceSummary},
     list_status::ListStatus,
     model::{ByKind, QueueEntry, Repository, Space},
@@ -89,10 +90,30 @@ impl Manager {
                 Some(repository) => Some(origins.of(repository).await),
                 None => None,
             };
-            let summary = summary(space, repository, &around);
+            let permissions = self.reported_permissions(&space).await;
+            let mut summary = summary(space, repository, &around);
+            summary.permissions = permissions;
             summaries.insert(summary.id.clone(), summary);
         }
         Ok(summaries)
+    }
+}
+
+impl Manager {
+    /// The effective permissions of `space`, which narrow those of the
+    /// spaces below it on other machines; none while they cannot be read.
+    async fn reported_permissions(&self, space: &Space) -> Option<Permissions> {
+        let repository = space.repository_id.as_ref();
+        match self.space_permissions(&space.id, repository).await {
+            Ok(permissions) => Some(permissions),
+            Err(error) => {
+                crate::daemon::log!(
+                    "hub: could not report the permissions of {}: {error:#}",
+                    space.name
+                );
+                None
+            }
+        }
     }
 }
 
@@ -143,6 +164,7 @@ fn summary(space: Space, repository: Option<RepositoryOrigin>, around: &Around) 
         status,
         agent_state,
         agent,
+        permissions: None,
         progress,
         questions,
         approvals,

@@ -348,7 +348,8 @@ impl Manager {
     }
 
     /// Carry out `removal` of the reserved `space`: check it, stop its agent
-    /// and commands, check it again, remove the spaces below it, then its
+    /// and commands, check it again, remove the spaces below it, here and on
+    /// other machines, then its
     /// worktree where it has one, once a last check passes, and delete its
     /// record, or for a conversion replace it with the chat's. Checked again
     /// after the reservation, so a space restored meanwhile cannot go by an
@@ -390,7 +391,10 @@ impl Manager {
         self.check_space_and_worktree(id, removal, Stage::AfterStop, worktree.as_ref(), &cancelled)
             .await?;
         let below = self.taken_with(id, removal).await?;
-        let children = self.remove_children(&space.name, below, removal).await?;
+        let mut children = self.remove_children(&space.name, below, removal).await?;
+        if let Some(elsewhere) = removal.below_elsewhere() {
+            children.extend(self.remove_children_elsewhere(id, elsewhere).await?);
+        }
         if let Some(worktree) = &worktree {
             self.run_removal_hooks(worktree).await?;
         }

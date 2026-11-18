@@ -111,7 +111,7 @@ impl Manager {
 
     /// Send `request` to `machine` through the hub: this daemon's own
     /// routing on the hub, else this machine's link to it.
-    async fn send_forwarded(
+    pub(super) async fn send_forwarded(
         &self,
         machine: &Member,
         request: Forwarded,

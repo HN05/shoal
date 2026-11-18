@@ -126,7 +126,35 @@ pub(in crate::daemon::workspace) enum Removal<'a> {
     },
 }
 
+/// What a removal asks of the spaces directly below its space that other
+/// machines run, each of which its own machine removes.
+pub(crate) struct BelowElsewhere<'a> {
+    /// What of a space's work its removal may delete.
+    pub unsaved: UnsavedWork,
+    /// The only spaces it may take, when the caller confirmed the spaces
+    /// below it that it saw.
+    pub taking: Option<&'a [SpaceId]>,
+}
+
 impl<'a> Removal<'a> {
+    /// What this removal asks of the spaces below on other machines; none
+    /// for a conversion, which keeps them.
+    pub(super) fn below_elsewhere(self) -> Option<BelowElsewhere<'a>> {
+        let (unsaved, taking) = match self {
+            Self::Manual {
+                unsaved, taking, ..
+            } => (unsaved.clone(), taking),
+            Self::Parent { confirmed, .. } => (UnsavedWork::All, confirmed),
+            Self::UnderCompleted { .. } => (UnsavedWork::All, None),
+            Self::Merged { .. }
+            | Self::Completed { .. }
+            | Self::Automatic { .. }
+            | Self::Deleted => (NOTHING.clone(), None),
+            Self::Converted { .. } => return None,
+        };
+        Some(BelowElsewhere { unsaved, taking })
+    }
+
     pub(super) fn cause(self) -> EventCause {
         match self {
             Self::Manual {

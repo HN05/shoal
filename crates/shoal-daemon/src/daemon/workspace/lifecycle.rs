@@ -21,6 +21,7 @@ mod worktree;
 
 pub(crate) use abandoned::fail_interrupted_removals;
 pub(in crate::daemon::workspace) use abandoned::{STOPPED_REMOVAL, Underway};
+pub(crate) use policy::BelowElsewhere;
 pub(in crate::daemon::workspace) use policy::Removal;
 use policy::{Retention, Stage};
 pub(crate) use worktree::{WorktreeRemoval, not_ready};
