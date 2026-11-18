@@ -10,7 +10,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::launches::{Launch, LaunchSource, Launched};
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 use super::shape::Shape;
 use crate::{
@@ -103,13 +103,13 @@ impl Manager {
         (shape, source): (&Shape, LaunchSource),
         profile: &'a mut Option<String>,
     ) -> Result<SpaceStart<'a>> {
-        let (home, pr) = placed_home(home, profile);
+        let (home, pr, name) = placed_home(home, launch.name.clone(), profile);
         // A launch that starts now waits for nothing, what it names included.
         if launch.now {
             blockers.clear();
         }
         let new = NewSpace {
-            name: launch.name.clone(),
+            name,
             parent: self.space_id(launch.parent.as_ref()).await?,
             priority: launch.priority,
         };
@@ -181,10 +181,16 @@ impl Manager {
 }
 
 /// The home `placed` names, a workspace's Git profile kept in `profile`,
-/// and the PR a workspace it opens links once it is ready.
-fn placed_home(placed: PlacedHome, profile: &mut Option<String>) -> (Home<'_>, Option<ItemInput>) {
+/// the PR a workspace it opens links once it is ready, and the name of
+/// the space: the one the launch `named`, or for a workspace on a PR, the
+/// title its placement read.
+fn placed_home(
+    placed: PlacedHome,
+    named: Option<SpaceName>,
+    profile: &mut Option<String>,
+) -> (Home<'_>, Option<ItemInput>, Option<SpaceName>) {
     let (repository, opening) = match placed {
-        PlacedHome::Chat(home) => return (home, None),
+        PlacedHome::Chat(home) => return (home, None, named),
         PlacedHome::Workspace(repository, opening) => (repository, opening),
     };
     let crate::start_plan::Opening {
@@ -192,10 +198,11 @@ fn placed_home(placed: PlacedHome, profile: &mut Option<String>) -> (Home<'_>, O
         base,
         path,
         git_profile,
-        options,
+        mut options,
         pr,
     } = opening;
     *profile = git_profile;
+    let name = options.name.take();
     let new = NewWorkspace {
         git_profile: profile.as_deref(),
         path,
@@ -208,7 +215,11 @@ fn placed_home(placed: PlacedHome, profile: &mut Option<String>) -> (Home<'_>, O
         new,
         parent: None,
     };
-    (Home::Opening(repository.into(), Box::new(opening)), pr)
+    (
+        Home::Opening(repository.into(), Box::new(opening)),
+        pr,
+        name,
+    )
 }
 
 /// The agent `launch` asks for in `mode`, which `source` made.
