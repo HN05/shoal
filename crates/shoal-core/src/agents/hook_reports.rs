@@ -65,7 +65,7 @@ pub struct Kept {
 /// A report this process sends, whose file it holds locked so that the
 /// daemon leaves it alone until the process ends.
 pub struct Sending {
-    _lock: File,
+    _lock: Lock,
     path: PathBuf,
     kept: Kept,
 }
@@ -98,7 +98,7 @@ impl Sending {
             .persist_noclobber(&path)
             .map_err(|error| error.error)?;
         Ok(Self {
-            _lock: file,
+            _lock: Lock(file),
             path,
             kept,
         })
@@ -134,7 +134,7 @@ impl Sending {
         if let Ok(copy) = locked_copy(directory, &self.kept)
             && let Ok(file) = copy.persist(&self.path)
         {
-            self._lock = file;
+            self._lock = Lock(file);
         }
     }
 }
@@ -150,10 +150,22 @@ const DELIVERED: &str = ".delivered";
 const DELIVERED_LOCK: &str = ".delivered.lock";
 
 /// The lock at `path` on the mark of the latest report delivered, held.
-fn lock_mark(path: &Path) -> io::Result<File> {
+fn lock_mark(path: &Path) -> io::Result<Lock> {
     let lock = File::create(path)?;
     fs2::FileExt::lock_exclusive(&lock)?;
-    Ok(lock)
+    Ok(Lock(lock))
+}
+
+/// A file this process holds locked until the lock drops, which unlocks
+/// it: closing the file would leave it locked while a child that another
+/// thread forked meanwhile holds a copy of the file, until that child runs
+/// its program.
+struct Lock(File);
+
+impl Drop for Lock {
+    fn drop(&mut self) {
+        let _ = fs2::FileExt::unlock(&self.0);
+    }
 }
 
 /// When the report whose file is `mark` was made.
@@ -220,7 +232,7 @@ pub fn spaces(paths: &Paths) -> io::Result<Vec<SpaceId>> {
 /// A report a hook left, held locked until the daemon has handled it; one
 /// dropped before stays for a later look.
 pub struct Left {
-    _lock: File,
+    _lock: Lock,
     path: PathBuf,
     /// The report, or `None` when its file does not read as one.
     pub kept: Option<Kept>,
@@ -262,9 +274,9 @@ pub fn find(paths: &Paths, space: &SpaceId) -> io::Result<Found> {
         }
         let path = entry.path();
         match lock_left(&path)? {
-            Held::Left(mut lock) => {
+            Held::Left(lock) => {
                 let mut contents = Vec::new();
-                lock.read_to_end(&mut contents)?;
+                (&lock.0).read_to_end(&mut contents)?;
                 let kept = serde_json::from_slice(&contents).ok();
                 found.left.push(Left {
                     _lock: lock,
@@ -302,7 +314,7 @@ pub fn forget(paths: &Paths, space: &SpaceId) -> io::Result<()> {
 /// Who holds the report file at `path`.
 enum Held {
     /// The daemon now, its hook having ended.
-    Left(File),
+    Left(Lock),
     /// Its hook, which still sends it.
     Sending(File),
     /// Nobody: it went meanwhile, as a delivered report's file does before
@@ -317,14 +329,14 @@ fn lock_left(path: &Path) -> io::Result<Held> {
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Held::Gone),
         Err(error) => return Err(error),
     };
-    match fs2::FileExt::try_lock_exclusive(&file) {
-        Ok(()) => {}
+    let lock = match fs2::FileExt::try_lock_exclusive(&file) {
+        Ok(()) => Lock(file),
         Err(error) if error.kind() == fs2::lock_contended_error().kind() => {
             return Ok(Held::Sending(file));
         }
         Err(error) => return Err(error),
-    }
-    let held = file.metadata()?;
+    };
+    let held = lock.0.metadata()?;
     let current = match fs::metadata(path) {
         Ok(current) => current,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Held::Gone),
@@ -332,7 +344,7 @@ fn lock_left(path: &Path) -> io::Result<Held> {
     };
     Ok(
         match (held.dev(), held.ino()) == (current.dev(), current.ino()) {
-            true => Held::Left(file),
+            true => Held::Left(lock),
             false => Held::Gone,
         },
     )

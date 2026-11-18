@@ -102,3 +102,22 @@ fn an_unreadable_report_is_left_as_none() {
     forget(&paths, &space()).unwrap();
     assert!(spaces(&paths).unwrap().is_empty());
 }
+
+#[test]
+fn a_report_is_let_go_while_a_forked_child_holds_a_copy_of_its_file() {
+    let temp = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(temp.path());
+    let sending = Sending::keep(&paths, &space(), idle(), None).unwrap();
+    // A child another thread forks holds a copy of each open file until it
+    // runs its program.
+    let _hooks = sending._lock.0.try_clone().unwrap();
+
+    drop(sending);
+    let Ok([left]) = <[Left; 1]>::try_from(find(&paths, &space()).unwrap().left) else {
+        panic!("one report is left");
+    };
+    let _daemons = left._lock.0.try_clone().unwrap();
+    drop(left);
+
+    assert_eq!(handle_left(&paths).len(), 1);
+}
