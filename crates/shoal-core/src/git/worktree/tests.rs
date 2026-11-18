@@ -380,7 +380,8 @@ async fn files_git_leaves_behind_go_with_the_worktree() {
 }
 
 /// What a `worktree remove` that failed partway leaves: the directory,
-/// with its `.git` link, and no admin directory.
+/// with its `.git` link or, once a removal stopped after deleting it,
+/// without, and no admin directory.
 #[tokio::test]
 async fn a_worktree_whose_admin_directory_is_gone_is_disowned() {
     let root = tempfile::tempdir().unwrap();
@@ -389,15 +390,16 @@ async fn a_worktree_whose_admin_directory_is_gone_is_disowned() {
     assert!(!disowned(&workspace, &admin).await.unwrap());
     std::fs::remove_dir_all(&admin).unwrap();
     assert!(disowned(&workspace, &admin).await.unwrap());
+    std::fs::remove_file(workspace.join(".git")).unwrap();
+    assert!(disowned(&workspace, &admin).await.unwrap());
     read_only_directory(&workspace);
     delete_disowned(&workspace).await.unwrap();
     assert!(!workspace.exists());
     assert!(!disowned(&workspace, &admin).await.unwrap());
 }
 
-/// A directory without a `.git` link naming the admin directory, whether
-/// it has none, names another or is a repository of its own, is not the
-/// worktree that was disowned.
+/// A directory whose `.git` names another admin directory, or is a
+/// repository of its own, is not the worktree that was disowned.
 #[tokio::test]
 async fn another_checkout_at_the_path_is_not_disowned() {
     let root = tempfile::tempdir().unwrap();
@@ -411,7 +413,6 @@ async fn another_checkout_at_the_path_is_not_disowned() {
     std::fs::remove_dir_all(&admin).unwrap();
     assert!(!disowned(&workspace, &admin).await.unwrap());
     std::fs::remove_file(workspace.join(".git")).unwrap();
-    assert!(!disowned(&workspace, &admin).await.unwrap());
     std::fs::create_dir(workspace.join(".git")).unwrap();
     assert!(!disowned(&workspace, &admin).await.unwrap());
 }

@@ -3605,7 +3605,9 @@ needed to retry. Git forgets a worktree once it starts deleting its files, so
 removal deletes what Git could not, and a later removal deletes what such a
 failure, or a checkout that failed, left of a disposable workspace without Git,
 proven its own by the `.git` link naming a deleted admin directory of its
-repository;
+repository, or by its recorded admin directory being gone while no `.git`
+names another, as a removal stopped after Git deleted the link leaves it once
+a `git worktree prune` deletes that admin directory;
 any other workspace's stays, since Git can no longer read its work. Workspaces are cheap to remove because removal is reversible,
 except that of a disposable workspace, which holds nothing worth keeping.
 A checkpoint is a commit of HEAD plus the unsaved files Git does not ignore, built

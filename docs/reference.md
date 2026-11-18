@@ -4009,8 +4009,9 @@ nothing worth keeping, such as one a CI job runs in: every removal, `shoal rm`,
 its parent's removal and idle or other cleanup, deletes it without inspecting its
 unsaved work or asking, keeps no checkpoint, and deletes its branch whatever
 commits only it has while the worktree is still on it. Removal deletes what Git
-could not, and when that is cut short too, or a checkout that failed leaves its
-directory, the next removal deletes the rest and keeps the branch. It applies only to a new
+could not, and when that or Git's own removal is cut short, or a checkout that
+failed leaves its directory, the next removal deletes the rest and keeps the
+branch. It applies only to a new
 branch, never to an existing one that removal would then delete. Holds, open questions and running commands keep it from
 unattended removal as they keep any workspace. `status` shows `Disposable: yes`
 and `--json` `disposable`.

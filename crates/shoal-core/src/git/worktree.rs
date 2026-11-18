@@ -237,13 +237,25 @@ async fn restore_link(path: &Path, text: String) -> Result<()> {
 }
 
 /// Whether Git disowned the linked worktree at `path`, whose admin
-/// directory was `admin_dir`: that directory is gone, as `worktree remove`
-/// leaves it when it cannot delete every file, while the worktree's
-/// directory stays with a `.git` link still naming it.
+/// directory was `admin_dir`: that directory is gone while the worktree's
+/// directory stays, with a `.git` link still naming it, as `worktree
+/// remove` leaves it when it cannot delete every file, or with none, as a
+/// removal stopped after deleting the link leaves it once a `worktree
+/// prune` deleted the admin directory that no link named any longer.
 pub(crate) async fn disowned(path: &Path, admin_dir: &Path) -> Result<bool> {
-    Ok(match vanished_admin_dir(path).await? {
-        Some(named) => resolved(&named).await == resolved(admin_dir).await,
-        None => false,
+    if !off_runtime::is_dir(path).await? || off_runtime::try_exists(admin_dir).await? {
+        return Ok(false);
+    }
+    let linked = {
+        let path = path.to_owned();
+        off_runtime::run(move || linked_admin_dir(&path)).await
+    };
+    Ok(match linked {
+        Ok(None) => true,
+        Ok(Some(named)) => resolved(&named).await == resolved(admin_dir).await,
+        // A `.git` directory, or a link that cannot be read, is another
+        // checkout's.
+        Err(_) => false,
     })
 }
 

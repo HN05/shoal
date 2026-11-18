@@ -14,11 +14,14 @@ use crate::{
     daemon::{
         notifications::NotificationKind,
         test_support::{configure, git, manager, repository},
-        workspace::{Ending, ExecutionKind, Manager, StartedExecution, runner::JobStop},
+        workspace::{
+            Ending, ExecutionKind, Manager, StartedExecution, lifecycle::STOPPED_REMOVAL,
+            runner::JobStop,
+        },
     },
     forge::backends::ForgeKind,
     model::{QueueEntry, Workspace},
-    state::{QueueKind, QueueState},
+    state::{QueueKind, QueueState, WorkspaceState},
 };
 use shoal_forge::{RepoRequests, ci::runner::JobCommand, test_support::Server};
 use shoal_protocol::resources::ResourceRequest;
@@ -1458,6 +1461,30 @@ async fn a_jobs_workspace_a_restart_caught_seeding_is_removed() {
     add_worktree(&fixture, &workspace).await;
     let manager = &fixture.manager;
     manager.record_worktree_identity(&workspace).await.unwrap();
+    assert!(removed_with_its_claim(manager, &workspace).await);
+    assert!(!workspace.path.exists());
+}
+
+/// A removal stopped once Git deleted the worktree's `.git` link, and a
+/// `worktree prune` then deleted the admin directory no link named, leaves
+/// what Git did not delete, failed with that removal's error; the job's
+/// next pass deletes the rest.
+#[tokio::test]
+async fn a_jobs_workspace_whose_removal_stopped_after_its_admin_directory_went_is_removed() {
+    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
+    let workspace = workspace_a_restart_caught_preparing(&fixture).await;
+    add_worktree(&fixture, &workspace).await;
+    let manager = &fixture.manager;
+    manager.record_worktree_identity(&workspace).await.unwrap();
+    std::fs::create_dir(workspace.path.join("target")).unwrap();
+    std::fs::write(workspace.path.join("target/built"), "").unwrap();
+    std::fs::remove_file(workspace.path.join(".git")).unwrap();
+    let checkout = manager.repository(&fixture.repository).await.unwrap().path;
+    git(&checkout, &["worktree", "prune"]);
+    let error = format!("{STOPPED_REMOVAL} when its work ended early");
+    (manager.set_state(&workspace.id, WorkspaceState::Failed, Some(error)))
+        .await
+        .unwrap();
     assert!(removed_with_its_claim(manager, &workspace).await);
     assert!(!workspace.path.exists());
 }

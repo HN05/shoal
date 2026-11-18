@@ -209,8 +209,10 @@ async fn inspect_git(
 /// it holds: as a removal Git could not finish leaves it, or, when its
 /// checkout never succeeded and so recorded no admin directory, as a
 /// checkout that failed leaves it. Nothing was at a workspace's path when
-/// Shoal recorded it, so a `.git` link there naming an admin directory of
-/// its repository, checked out at `repo`, is Git's for this workspace.
+/// Shoal recorded it, and its record keeps the path from every other
+/// workspace, so a `.git` link there naming an admin directory of its
+/// repository, checked out at `repo`, is Git's for this workspace, as is a
+/// directory without one once the admin directory it recorded is gone.
 pub async fn disowned(workspace: &Workspace, repo: &Path) -> Result<bool> {
     if !workspace.disposable {
         return Ok(false);
