@@ -169,7 +169,7 @@ fn readable(repo: &gix::Repository) -> bool {
         && readable_extensions
         && !has_promisor_remote(&config)
         && !(is_linked_worktree(repo) && includes_differ_by_git_directory(repo, &config))
-        && !includes_by_included_remote_url(&config)
+        && !includes_by_late_remote_url(&config)
         && !names_remotes_in_files(repo)
 }
 
@@ -231,19 +231,34 @@ fn matches_alike(condition: &str, common: &Path) -> bool {
 }
 
 /// Whether `config` includes a file on a condition on a remote's URL while
-/// some remote's URL comes from an included file: Git looks through every
-/// file for the URLs such a condition matches, gix only through those it
-/// has loaded by the time it meets the condition.
-fn includes_by_included_remote_url(config: &gix::config::Snapshot<'_>) -> bool {
+/// some remote's URL comes from an included file or from the environment:
+/// Git looks through all of its configuration for the URLs such a
+/// condition matches, gix only through the files it has loaded by the time
+/// it meets the condition.
+fn includes_by_late_remote_url(config: &gix::config::Snapshot<'_>) -> bool {
+    use gix::config::Source;
     let file = config.plumbing();
     let includes = file.sections_by_name("includeIf").into_iter().flatten();
     let mut conditions =
         includes.filter_map(|section| section.header().subsection_name().map(ToOwned::to_owned));
     let on_remote_url =
         conditions.any(|condition| condition.starts_with(b"hasconfig:remote.*.url:"));
+    let late = |section: &gix::config::file::SectionRef<'_>| {
+        let meta = section.meta();
+        let from_file = matches!(
+            meta.source,
+            Source::GitInstallation
+                | Source::System
+                | Source::Git
+                | Source::User
+                | Source::Local
+                | Source::Worktree
+        );
+        meta.level > 0 || !from_file
+    };
     let remotes = file.sections_by_name("remote").into_iter().flatten();
-    let mut included_urls = remotes.filter(|section| section.meta().level > 0);
-    on_remote_url && included_urls.any(|section| !section.values("url").is_empty())
+    let mut late_urls = remotes.filter(late);
+    on_remote_url && late_urls.any(|section| !section.values("url").is_empty())
 }
 
 /// Whether a remote of `config` promises objects the repository lacks,

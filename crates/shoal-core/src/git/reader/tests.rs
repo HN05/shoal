@@ -302,3 +302,24 @@ async fn a_condition_on_a_remote_url_a_later_include_sets_includes_as_git_includ
     let remote = crate::git::push_remote(&repo, &"topic".into()).await;
     assert_eq!(remote.unwrap(), "fork");
 }
+
+#[test]
+fn a_condition_on_a_remote_url_the_environment_sets_includes_as_git_includes() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = remote_conditioned(root.path(), "");
+    run_helper("a_push_remote_fork_helper", &repo, |command| {
+        command
+            .env("GIT_CONFIG_COUNT", "1")
+            .env("GIT_CONFIG_KEY_0", "remote.origin.url")
+            .env("GIT_CONFIG_VALUE_0", "https://example.com/app")
+    });
+}
+
+/// Read the push remote `fork`, which only an included file sets.
+#[tokio::test]
+#[ignore = "run by a_condition_on_a_remote_url_the_environment_sets_includes_as_git_includes"]
+async fn a_push_remote_fork_helper() {
+    let repo = helper_repository();
+    let remote = crate::git::push_remote(&repo, &"topic".into()).await;
+    assert_eq!(remote.unwrap(), "fork");
+}
