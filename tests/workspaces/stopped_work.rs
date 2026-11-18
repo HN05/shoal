@@ -381,3 +381,32 @@ fn manual_resume_consumes_the_record_on_start_even_if_other_commands_run_or_rest
     assert!(!workspace.record(&execution).exists());
     workspace.stop(&fixture, vec![unrelated]);
 }
+
+/// A failed launch named beside a space with stopped work restores with
+/// it, rather than being passed over for that space's own restore.
+#[test]
+fn a_failed_launch_restores_beside_a_stopped_space() {
+    let fixture = Fixture::with_config(Some(AGENT));
+    let workspace = Stopped::new(&fixture, "stopped");
+    let command = workspace.start_command(&fixture);
+    workspace.stop(&fixture, vec![command]);
+    // A launch its caller runs itself, which fails before its agent starts.
+    let failed = fixture.add("failed");
+    let failed = failed["id"].as_str().unwrap();
+    let launch = serde_json::json!({"agent": "claude", "here": true});
+    let queued = fixture
+        .request(serde_json::json!({"queue_agent": {"workspace": failed, "launch": launch}}));
+    let entry = queued["data"]["id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("{queued}"));
+    let ended =
+        fixture.request(serde_json::json!({"queue_fail": {"entry": entry, "error": "no place"}}));
+    assert!(ended.get("error").is_none(), "{ended}");
+
+    let restored = fixture.ok(&["restore", &fixture.id("stopped"), failed]);
+
+    let queued: Vec<_> = (restored["queued"].as_array().unwrap().iter())
+        .filter_map(|entry| entry["opens"].as_str())
+        .collect();
+    assert!(queued.contains(&failed), "{restored}");
+}

@@ -189,7 +189,9 @@ async fn restore_selected(
     let change = change.as_ref();
     let queuing = Queuing::of(ctx.on_terminal(), now);
     let setups = selected.setups.as_slice();
-    let alone = alongside.is_empty();
+    // A space restores alone only when nothing else, such as a failed
+    // launch, restores with it.
+    let alone = alongside.is_empty() && selected.failed_starts.is_empty();
     match (selected.spaces.as_deref(), setups) {
         (Some([space]), []) if forget && alone => {
             forget::forget_work(ctx, space.clone(), execution).await
