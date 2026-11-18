@@ -139,3 +139,12 @@ pub(super) fn seen(tx: &Transaction<'_>, id: &MemberId, version: &str) -> Result
     )?;
     Ok(())
 }
+
+/// Whether `id` names a member the hub has not revoked.
+pub(super) fn admitted(tx: &Transaction<'_>, id: &MemberId) -> Result<bool> {
+    Ok(tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM hub_members WHERE id=?1 AND revoked_at IS NULL)",
+        [id],
+        |row| row.get(0),
+    )?)
+}

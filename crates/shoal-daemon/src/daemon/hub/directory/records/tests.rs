@@ -125,6 +125,7 @@ fn a_claimed_space_changes_hands_without_a_conflict() {
     let tx = db.transaction().unwrap();
     assert!(read(&tx).unwrap().1.is_empty());
 }
+
 #[test]
 fn a_machine_that_claims_a_space_sees_no_other_owner() {
     let mut db = database();
@@ -142,4 +143,17 @@ fn a_machine_that_claims_a_space_sees_no_other_owner() {
     claim(&tx, &laptop, &id).unwrap();
     assert_eq!(owner_seen_by(&tx, &id, &laptop).unwrap(), None);
     assert_eq!(owner_seen_by(&tx, &id, &desk).unwrap(), Some(desk));
+}
+
+#[test]
+fn a_revoked_machine_records_nothing() {
+    let mut db = database();
+    db.execute("UPDATE hub_members SET revoked_at=1 WHERE id='desk'", [])
+        .unwrap();
+    let tx = db.transaction().unwrap();
+    let desk = MemberId::from("desk".to_owned());
+    assert!(apply(&tx, &desk, Report::Whole(vec![space("a", "late")])).is_err());
+    assert!(claim(&tx, &desk, &"b".to_owned().into()).is_err());
+    drop(tx);
+    assert!(listed(&mut db).is_empty());
 }

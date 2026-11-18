@@ -7,15 +7,18 @@ use rusqlite::{OptionalExtension as _, Transaction, params};
 use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
 use shoal_protocol::hub::directory::{Conflict, Listed, Report, SpaceSummary};
 
+use super::super::members;
 use crate::time::UnixTime;
 
 /// Apply `member`'s `report`, and the conflicts it newly raised: the space
-/// IDs it reported that another machine owns.
+/// IDs it reported that another machine owns. A member the hub revoked
+/// meanwhile, whose spaces left the directory, is refused.
 pub(super) fn apply(
     tx: &Transaction<'_>,
     member: &MemberId,
     report: Report,
 ) -> Result<Vec<Conflict>> {
+    ensure_admitted(tx, member)?;
     let (changed, removed) = match report {
         Report::Whole(spaces) => {
             let reported: HashSet<&SpaceId> = spaces.iter().map(|space| &space.id).collect();
@@ -148,8 +151,10 @@ fn own(
     Ok(())
 }
 
-/// Record that `member` claims the space `id`, which it imports.
+/// Record that `member` claims the space `id`, which it imports, unless the
+/// hub revoked it meanwhile.
 pub(super) fn claim(tx: &Transaction<'_>, member: &MemberId, id: &SpaceId) -> Result<()> {
+    ensure_admitted(tx, member)?;
     tx.execute(
         "INSERT INTO hub_space_claims(space_id, member_id) VALUES (?1,?2)
          ON CONFLICT(space_id) DO UPDATE SET member_id=excluded.member_id",
@@ -274,6 +279,16 @@ fn conflicts(tx: &Transaction<'_>) -> Result<Vec<Conflict>> {
         });
     }
     Ok(conflicts)
+}
+
+/// Refuse what `member` records once the hub revoked it, in the
+/// transaction that records it, so nothing of it outlasts the revocation.
+fn ensure_admitted(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
+    anyhow::ensure!(
+        members::admitted(tx, member)?,
+        "the hub revoked this machine's credential"
+    );
+    Ok(())
 }
 
 fn summary_of(text: &str) -> Result<SpaceSummary> {
