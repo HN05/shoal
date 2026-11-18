@@ -16,10 +16,10 @@ use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 
 impl Manager {
     /// Admit the launch of the new chat `request` describes for `caller`, or
-    /// queue it: one that no limit applies to starts untracked, and one admitted here starts in the caller,
-    /// which records the chat and attaches the launch to it. One that waits
-    /// has its caller record the chat at once, and starts from the queue,
-    /// which runs its plan, only once the chat is attached.
+    /// queue it: one admitted here, at once where no limit applies, starts
+    /// in the caller, which records the chat and attaches the launch to it.
+    /// One that waits has its caller record the chat at once, and starts
+    /// from the queue, which runs its plan, only once the chat is attached.
     pub(in crate::daemon) async fn queue_chat_add(
         &self,
         mut request: ChatQueueRequest,
@@ -33,15 +33,8 @@ impl Manager {
         let _gate = self.agent_queue.lock_admission().await;
         let repositories = repository.iter().cloned().collect();
         let limits = self.agent_limits(repositories, &[], &[]).await?;
-        if !limits.apply_to(repository.as_ref()) {
-            return Ok(QueueAdmission {
-                start: true,
-                entry: None,
-                waiting: 0,
-            });
-        }
         let id = QueueEntryId::generate();
-        let now = request.now;
+        let now = request.now || !limits.apply_to(repository.as_ref());
         let launch = Launch {
             id: id.clone(),
             repository,

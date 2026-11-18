@@ -307,7 +307,7 @@ pub struct ChatQueueRequest {
 pub struct QueueAdmission {
     /// Whether the caller starts the agent now.
     pub start: bool,
-    /// `None` when no limit applies, so nothing tracks the launch.
+    /// The launch's entry; `None` once an agent took it over.
     pub entry: Option<QueueEntry>,
     /// Entries waiting, including this one when it waits.
     pub waiting: usize,

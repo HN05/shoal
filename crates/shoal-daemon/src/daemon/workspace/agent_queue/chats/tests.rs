@@ -67,6 +67,20 @@ async fn a_chats_launch_waits_for_a_slot_by_its_modes_weight() {
     assert_eq!(light.entry.unwrap().state, QueueState::Starting);
 }
 
+/// A chat's launch that no limit applies to is admitted at once with an
+/// entry, whose slot its agent takes over as any other launch's.
+#[tokio::test]
+async fn a_chats_launch_without_a_limit_has_an_admitted_entry() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+
+    let admission = manager.queue_chat_add(chat_launch(Some(&repo), "chat"), None);
+    let admission = admission.await.unwrap();
+
+    assert!(admission.start);
+    assert_eq!(admission.entry.unwrap().state, QueueState::Starting);
+}
+
 /// A waiting chat launch stays out of admission until it takes the chat
 /// its caller records, even with a slot free, and then
 /// starts from the queue in that chat, in the place the queuing terminal
