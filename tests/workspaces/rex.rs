@@ -180,28 +180,11 @@ impl Drop for RexServer {
     }
 }
 
-/// The names of `workspace`'s sessions, as `shoal status` lists them.
-fn sessions(fixture: &Fixture, workspace: &str) -> Vec<String> {
-    fixture.ok(&["status", &fixture.id(workspace)])["sessions"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|session| session["name"].as_str().unwrap_or_default().to_owned())
-        .collect()
-}
-
-fn executions(fixture: &Fixture, workspace: &str) -> usize {
-    fixture.ok(&["status", &fixture.id(workspace)])["executions"]
-        .as_array()
-        .unwrap()
-        .len()
-}
-
 #[test]
 fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
-    let fixture = Fixture::with_config(Some(
-        "machine.max_heavy_agents = 'none'\n[agents.pi]\ncommand = ['sh', '-c', 'echo agent ran; exec sleep 600']\n",
-    ));
+    let fixture = Fixture::with_config(Some(&format!(
+        "machine.max_heavy_agents = 'none'\n{SLEEPING_AGENT}"
+    )));
     let Some(rex) = RexServer::start(&fixture) else {
         return;
     };
@@ -231,16 +214,8 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
     });
     assert!(rex.windows(&session).contains(&"placed".to_owned()));
     // Every rex call above was a client that has since disconnected; the
-    // agent keeps running in its block. Setup records its place too, and a
-    // status that says setup finished can still list setup's execution,
-    // which it read first: only the agent's name tells its execution apart.
-    wait_until("setup to finish with the agent running", || {
-        let status = fixture.ok(&["status", &fixture.id("placed")]);
-        status["setup_finished"] == true
-            && status["executions"]
-                .as_array()
-                .is_some_and(|runs| runs.len() == 1 && runs[0]["agent"] == "pi")
-    });
+    // agent keeps running in its block.
+    wait_for_agent(&fixture, "placed");
     // The place the agent's start opened records itself once its worker
     // runs there, which can follow the agent's registration.
     wait_until("the place to record itself", || {
@@ -272,9 +247,9 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
 
 #[test]
 fn split_placement_opens_additions_and_chats_beside_the_callers_block() {
-    let fixture = Fixture::with_config(Some(
-        "machine.max_heavy_agents = 'none'\n[terminal.rex]\nplacement = 'split'\n[agents.pi]\ncommand = ['sh', '-c', 'echo agent ran; exec sleep 600']\n",
-    ));
+    let fixture = Fixture::with_config(Some(&format!(
+        "machine.max_heavy_agents = 'none'\n[terminal.rex]\nplacement = 'split'\n{SLEEPING_AGENT}"
+    )));
     let Some(rex) = RexServer::start(&fixture) else {
         return;
     };
@@ -295,16 +270,7 @@ fn split_placement_opens_additions_and_chats_beside_the_callers_block() {
     launch(&[
         "start", "--wait", repo, "--branch", "placed", "--agent", "pi",
     ]);
-    wait_until("setup to finish with the agent running", || {
-        fixture
-            .ok(&["list"])
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|workspace| workspace["name"] == "placed")
-            && executions(&fixture, "placed") == 1
-            && fixture.ok(&["status", &fixture.id("placed")])["setup_finished"] == true
-    });
+    wait_for_agent(&fixture, "placed");
     // The split names itself, never the caller's window. The queue's start
     // records the place it opened once its worker runs there.
     wait_until("the split to record its place", || {

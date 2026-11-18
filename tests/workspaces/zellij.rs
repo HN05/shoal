@@ -477,49 +477,6 @@ fn zellij_log() -> String {
         )
 }
 
-/// The names of `workspace`'s sessions, as `shoal status` lists them.
-fn sessions(fixture: &Fixture, workspace: &str) -> Vec<String> {
-    fixture.ok(&["status", &fixture.id(workspace)])["sessions"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|session| session["name"].as_str().unwrap_or_default().to_owned())
-        .collect()
-}
-
-fn executions(fixture: &Fixture, workspace: &str) -> usize {
-    fixture.ok(&["status", &fixture.id(workspace)])["executions"]
-        .as_array()
-        .unwrap()
-        .len()
-}
-
-const AGENT: &str = "[agents.pi]\ncommand = ['sh', '-c', 'echo agent ran; exec sleep 600']\n";
-
-/// Wait until `workspace` finished setup with one execution, its agent's.
-/// Setup runs as an execution of its own, which can end before the add
-/// worker records the place it opened and starts the agent there. A status
-/// that says setup finished can still list setup's execution, which it
-/// read first, so only the agent's name tells the agent's execution apart.
-fn wait_for_agent(fixture: &Fixture, workspace: &str) {
-    wait_until("setup to finish with the agent running", || {
-        if !fixture
-            .ok(&["list"])
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|listed| listed["name"] == workspace)
-        {
-            return false;
-        }
-        let status = fixture.ok(&["status", &fixture.id(workspace)]);
-        status["setup_finished"] == true
-            && status["executions"]
-                .as_array()
-                .is_some_and(|runs| runs.len() == 1 && runs[0]["agent"] == "pi")
-    });
-}
-
 /// Add `workspace` with the agent from the user's pane, while a client
 /// shows it.
 fn add_inside(fixture: &Fixture, zellij: &mut ZellijServer, workspace: &str) {
@@ -538,7 +495,7 @@ fn add_inside(fixture: &Fixture, zellij: &mut ZellijServer, workspace: &str) {
 #[test]
 fn additions_open_owned_tabs_that_removal_closes_leaving_the_users_pane() {
     let fixture = Fixture::with_config(Some(&format!(
-        "machine.max_heavy_agents = 'none'\n[terminal.zellij]\nenabled = true\n{AGENT}"
+        "machine.max_heavy_agents = 'none'\n[terminal.zellij]\nenabled = true\n{SLEEPING_AGENT}"
     )));
     let Some(mut zellij) = ZellijServer::start(&fixture) else {
         return;
@@ -579,7 +536,7 @@ fn additions_open_owned_tabs_that_removal_closes_leaving_the_users_pane() {
 #[test]
 fn split_placement_opens_additions_beside_the_callers_pane() {
     let fixture = Fixture::with_config(Some(&format!(
-        "machine.max_heavy_agents = 'none'\n[terminal.zellij]\nenabled = true\nplacement = 'split'\n{AGENT}"
+        "machine.max_heavy_agents = 'none'\n[terminal.zellij]\nenabled = true\nplacement = 'split'\n{SLEEPING_AGENT}"
     )));
     let Some(mut zellij) = ZellijServer::start(&fixture) else {
         return;
@@ -651,7 +608,7 @@ fn removal_leaves_a_pane_recorded_on_an_earlier_server() {
 #[test]
 fn additions_outside_zellij_open_sessions_that_removal_ends() {
     let fixture = Fixture::with_config(Some(&format!(
-        "machine.max_heavy_agents = 'none'\n[terminal]\ndefault_host = 'zellij'\n{AGENT}"
+        "machine.max_heavy_agents = 'none'\n[terminal]\ndefault_host = 'zellij'\n{SLEEPING_AGENT}"
     )));
     let Some(zellij) = ZellijServer::start(&fixture) else {
         return;
@@ -717,7 +674,7 @@ impl ZellijServer {
 #[test]
 fn a_workspace_title_relabels_the_tab_shoal_opened_leaving_the_users() {
     let fixture = Fixture::with_config(Some(&format!(
-        "machine.max_heavy_agents = 'none'\n[terminal.zellij]\nenabled = true\n{AGENT}"
+        "machine.max_heavy_agents = 'none'\n[terminal.zellij]\nenabled = true\n{SLEEPING_AGENT}"
     )));
     let Some(mut zellij) = ZellijServer::start(&fixture) else {
         return;
@@ -741,7 +698,7 @@ fn a_workspace_title_relabels_the_tab_shoal_opened_leaving_the_users() {
 #[test]
 fn chat_rename_relabels_a_zellij_tab_that_still_shows_the_old_name() {
     let fixture = Fixture::with_config(Some(&format!(
-        "machine.max_heavy_agents = 'none'\n[terminal.zellij]\nenabled = true\n{AGENT}"
+        "machine.max_heavy_agents = 'none'\n[terminal.zellij]\nenabled = true\n{SLEEPING_AGENT}"
     )));
     let Some(mut zellij) = ZellijServer::start(&fixture) else {
         return;

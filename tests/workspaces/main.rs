@@ -57,9 +57,10 @@ use support::{
 };
 
 use fixture::{
-    Fixture, READABLE_SLEEP, UNLIMITED_AGENTS, commit_file, commit_resource_config,
-    install_fake_agents, lines, link_runner_program, process_running, scoped_command, scoped_hook,
-    set_repository_toml, upstream_remote, wait_registered_execution,
+    Fixture, READABLE_SLEEP, SLEEPING_AGENT, UNLIMITED_AGENTS, commit_file, commit_resource_config,
+    executions, install_fake_agents, lines, link_runner_program, process_running, scoped_command,
+    scoped_hook, sessions, set_repository_toml, upstream_remote, wait_for_agent,
+    wait_registered_execution,
 };
 use launch::Launch;
 use serde_json::Value;

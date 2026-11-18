@@ -444,6 +444,53 @@ pub(crate) fn upstream_remote(fixture: &Fixture) -> PathBuf {
     author
 }
 
+/// Global config for the `pi` agent terminal host tests place, which runs
+/// until its workspace stops it.
+pub(crate) const SLEEPING_AGENT: &str =
+    "[agents.pi]\ncommand = ['sh', '-c', 'echo agent ran; exec sleep 600']\n";
+
+/// The names of `workspace`'s sessions, as `shoal status` lists them.
+pub(crate) fn sessions(fixture: &Fixture, workspace: &str) -> Vec<String> {
+    fixture.ok(&["status", &fixture.id(workspace)])["sessions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|session| session["name"].as_str().unwrap_or_default().to_owned())
+        .collect()
+}
+
+pub(crate) fn executions(fixture: &Fixture, workspace: &str) -> usize {
+    fixture.ok(&["status", &fixture.id(workspace)])["executions"]
+        .as_array()
+        .unwrap()
+        .len()
+}
+
+/// Wait until `workspace` finished setup with one execution, the
+/// [`SLEEPING_AGENT`]'s. Setup runs as an execution of its own, and a
+/// status that says setup finished can still list it, while the add worker
+/// of a place a terminal host opened refreshes the workspace before its
+/// agent starts, keeping it `updating`; only the agent's name tells the
+/// agent's execution apart.
+pub(crate) fn wait_for_agent(fixture: &Fixture, workspace: &str) {
+    wait_until("setup to finish with the agent running", || {
+        if !fixture
+            .ok(&["list"])
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|listed| listed["name"] == workspace)
+        {
+            return false;
+        }
+        let status = fixture.ok(&["status", &fixture.id(workspace)]);
+        status["setup_finished"] == true
+            && status["executions"]
+                .as_array()
+                .is_some_and(|runs| runs.len() == 1 && runs[0]["agent"] == "pi")
+    });
+}
+
 pub(crate) fn wait_registered_execution(fixture: &Fixture, workspace: &str) -> Value {
     let workspace = fixture.id(workspace);
     wait_for("registered execution with a child", || {
