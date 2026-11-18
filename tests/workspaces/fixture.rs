@@ -189,6 +189,23 @@ impl Fixture {
         self.interactive_command(self.command().args(args), answer)
     }
 
+    /// Run `args` on a terminal where a picker would ask for the agent, with
+    /// an installed agent it would offer and a picker that records it was
+    /// asked, and cancels, and assert the start is refused with `refusal`
+    /// before any picker asks.
+    pub(crate) fn assert_refused_before_prompting(&self, args: &[&str], refusal: &str) {
+        install_test_script(self.root.path().join("bin/codex"), "#!/bin/sh\n");
+        let picked = self.root.path().join("picked");
+        install_test_script(
+            self.root.path().join("bin/fzf"),
+            "#!/bin/sh\ncat > \"$HOME/picked\"\nexit 130\n",
+        );
+        let (output, transcript) = self.interactive(args, "");
+        assert!(!output.status.success(), "{args:?}: {transcript}");
+        assert!(transcript.contains(refusal), "{args:?}: {transcript}");
+        assert!(!picked.exists(), "{args:?} asked a picker: {transcript}");
+    }
+
     pub(crate) fn interactive_command(
         &self,
         command: &mut Command,

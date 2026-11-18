@@ -3705,14 +3705,6 @@ fn an_existing_workspaces_start_refuses_its_arguments_before_prompting() {
     let workspace = fixture.add("owned");
     let id = workspace["id"].as_str().unwrap();
     let repo = fixture.repo.to_str().unwrap();
-    // An installed agent the agent picker would offer, and a picker that
-    // records that it was asked, and cancels.
-    install_test_script(fixture.root.path().join("bin/codex"), "#!/bin/sh\n");
-    let picked = fixture.root.path().join("picked");
-    install_test_script(
-        fixture.root.path().join("bin/fzf"),
-        "#!/bin/sh\ncat > \"$HOME/picked\"\nexit 130\n",
-    );
     for (args, refusal) in [
         (
             vec!["start", "--in", id, "--add-blocker", "missing"],
@@ -3727,10 +3719,7 @@ fn an_existing_workspaces_start_refuses_its_arguments_before_prompting() {
             "--copy applies to a new workspace",
         ),
     ] {
-        let (output, transcript) = fixture.interactive(&args, "");
-        assert!(!output.status.success(), "{args:?}: {transcript}");
-        assert!(transcript.contains(refusal), "{args:?}: {transcript}");
-        assert!(!picked.exists(), "{args:?} asked a picker: {transcript}");
+        fixture.assert_refused_before_prompting(&args, refusal);
     }
 }
 
@@ -3753,17 +3742,8 @@ fn a_branch_links_start_refuses_a_missing_branch_before_prompting() {
         &fixture.repo,
         &["config", "core.sshCommand", ssh.to_str().unwrap()],
     );
-    install_test_script(fixture.root.path().join("bin/codex"), "#!/bin/sh\n");
-    let picked = fixture.root.path().join("picked");
-    install_test_script(
-        fixture.root.path().join("bin/fzf"),
-        "#!/bin/sh\ncat > \"$HOME/picked\"\nexit 130\n",
-    );
     let link = "https://github.com/team/project/tree/missing";
-    let (output, transcript) = fixture.interactive(&["start", link], "");
-    assert!(!output.status.success(), "{transcript}");
-    assert!(transcript.contains("missing"), "{transcript}");
-    assert!(!picked.exists(), "asked a picker: {transcript}");
+    fixture.assert_refused_before_prompting(&["start", link], "missing");
 }
 
 /// A start on an issue whose earlier workspace cannot reopen, as one whose
@@ -3777,17 +3757,8 @@ fn an_issue_start_refuses_a_workspace_that_cannot_reopen_before_prompting() {
     commit_resource_config(&fixture.repo, "git_profile = 'missing'\n");
     let failed = fixture.run(&["start", "--wait", repo, "--issue", "37"]);
     assert!(!failed.status.success(), "{}", printed(&failed));
-    install_test_script(fixture.root.path().join("bin/codex"), "#!/bin/sh\n");
-    let picked = fixture.root.path().join("picked");
-    install_test_script(
-        fixture.root.path().join("bin/fzf"),
-        "#!/bin/sh\ncat > \"$HOME/picked\"\nexit 130\n",
-    );
     let args = ["start", repo, "--mode", "worker", "--issue", "37"];
-    let (output, transcript) = fixture.interactive(&args, "");
-    assert!(!output.status.success(), "{transcript}");
-    assert!(transcript.contains("is failed"), "{transcript}");
-    assert!(!picked.exists(), "asked a picker: {transcript}");
+    fixture.assert_refused_before_prompting(&args, "is failed");
 }
 
 /// A copy's start in a repository named by a number, which beside a branch

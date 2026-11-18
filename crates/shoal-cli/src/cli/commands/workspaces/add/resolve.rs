@@ -15,7 +15,7 @@ use super::{
 use crate::{
     cli::{client, commands::issues, context::Context},
     forge::{PullRequest, items::issue::IssueDetails},
-    model::{Blocker, Workspace},
+    model::{Blocker, Repository, Workspace},
     protocol::CopySource,
     start_plan::{CopyCreation, Creation},
 };
@@ -196,9 +196,9 @@ async fn check_launch_creation(
     (pull, issue): (Option<&PullRequest>, Option<&IssueDetails>),
 ) -> Result<Option<Workspace>> {
     let mut creation = crate::launches::workspace::launch_creation(launch, launch_copy(launch));
-    link_creation(launch, pull, &mut creation).await?;
     let repo = (&target.selector, target.repository(ctx).await?);
     let reads = DaemonReads(ctx);
+    link_creation((&reads, repo.1), launch, pull, &mut creation).await?;
     let settle = crate::launches::workspace::settle(&reads, repo, &mut creation);
     if let Some(workspace) = settle.await? {
         ensure_takes_existing(launch, &creation, &workspace)?;
@@ -211,22 +211,24 @@ async fn check_launch_creation(
     Ok(None)
 }
 
-/// Fill `creation` from the link `launch` starts on as the daemon does,
-/// short of fetching a PR's branches: a branch link opens its pushed
-/// branch, which creation refuses when it is missing, and a fork PR's
-/// head, `pull`, refuses what only a branch takes.
+/// Fill `creation` from the link `launch` starts on in `repo` as the daemon
+/// does, short of fetching a PR's branches: a branch link opens its pushed
+/// branch, which creation refuses when it is missing, a fork PR's head,
+/// `pull`, refuses what only a branch takes, and another PR opens its head
+/// branch, in the workspace that owns it if any.
 async fn link_creation(
+    (reads, repo): (&DaemonReads<'_>, &Repository),
     launch: &Launch,
     pull: Option<&PullRequest>,
     creation: &mut Creation,
 ) -> Result<()> {
+    use crate::launches::workspace as settle;
     match (&launch.target, pull) {
         (Some(StartTarget::Branch { branch, .. }), _) => {
-            crate::launches::workspace::branch_creation(branch, creation).await
+            settle::branch_creation(branch, creation).await
         }
-        (_, Some(pull)) if pull.fork => {
-            crate::launches::workspace::ensure_fork_opens(pull, creation)
-        }
+        (_, Some(pull)) if pull.fork => settle::ensure_fork_opens(pull, creation),
+        (_, Some(pull)) => (settle::pull_head_settled(reads, repo, pull, creation).await).map(drop),
         _ => Ok(()),
     }
 }

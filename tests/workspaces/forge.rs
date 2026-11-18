@@ -73,6 +73,23 @@ fn github_pr(number: u64, branch: &str) -> serde_json::Map<String, Value> {
     responses.as_object().unwrap().clone()
 }
 
+/// A start on a PR whose head branch a workspace that cannot reopen has,
+/// as one whose setup failed, is refused before a picker asks for its
+/// agent.
+#[test]
+fn a_prs_start_refuses_a_head_workspace_that_cannot_reopen_before_prompting() {
+    let fixture = Fixture::new();
+    fixture.add_github_origin();
+    fixture.script_github(&github_pr(7, "topic"));
+    let repo = fixture.repo.to_str().unwrap();
+    commit_resource_config(&fixture.repo, "git_profile = 'missing'\n");
+    let failed = fixture.run(&["start", "--wait", repo, "--branch", "topic"]);
+    assert!(!failed.status.success(), "{}", printed(&failed));
+    let link = "https://github.com/team/project/pull/7";
+    let args = ["start", link, "--mode", "worker"];
+    fixture.assert_refused_before_prompting(&args, "is failed");
+}
+
 /// The answer listing `runs` as the check runs on the head commit of a
 /// [`github_pr`].
 fn github_check_runs(runs: Value) -> (String, Value) {
