@@ -91,8 +91,10 @@ impl Manager {
                 None => None,
             };
             let permissions = self.reported_permissions(&space).await;
+            let chat_modes = self.chat_modes(&space).await.unwrap_or_default();
             let mut summary = summary(space, repository, &around);
             summary.permissions = permissions;
+            summary.chat_modes = chat_modes;
             summaries.insert(summary.id.clone(), summary);
         }
         Ok(summaries)
@@ -165,6 +167,7 @@ fn summary(space: Space, repository: Option<RepositoryOrigin>, around: &Around) 
         agent_state,
         agent,
         permissions: None,
+        chat_modes: Vec::new(),
         progress,
         questions,
         approvals,

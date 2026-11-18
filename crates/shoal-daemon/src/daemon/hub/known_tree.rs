@@ -100,6 +100,7 @@ fn listed(space: KnownSpace) -> Listed {
             agent_state: None,
             agent: false,
             permissions: None,
+            chat_modes: Vec::new(),
             progress: None,
             questions: Vec::new(),
             approvals: Vec::new(),

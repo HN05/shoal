@@ -42,17 +42,20 @@ pub struct VouchedSpace {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub read_only: bool,
     /// For a chat without a repository, whose permissions resolve in the
-    /// repository each action is in, its agent's mode and given values,
-    /// which the owning machine resolves in the action's repository there.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub chat_mode: Option<VouchedMode>,
+    /// repository each action is in: its tree's modes, which the owning
+    /// machine resolves in the action's repository there.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chat_modes: Vec<ChainedMode>,
 }
 
-/// The mode a chat's agent started in, with the values its `--permission`
-/// gave.
+/// The mode a space's agent started in, with the values its `--permission`
+/// gave, in the chain of a chat without a repository from the top of its
+/// tree down to it, each narrowed by the one above.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct VouchedMode {
-    pub mode: crate::config::modes::ModeName,
+pub struct ChainedMode {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<crate::config::modes::ModeName>,
+    #[serde(default)]
     pub given: crate::config::permissions::PermissionsConfig,
 }
 

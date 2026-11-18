@@ -16,7 +16,10 @@ use crate::{
     model::{Space, SpaceKind, Workspace},
 };
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::{hub::routing::VouchedSpace, space_names::SpaceSelector};
+use shoal_protocol::{
+    hub::routing::{ChainedMode, VouchedSpace},
+    space_names::SpaceSelector,
+};
 
 impl Manager {
     /// The permissions `caller` acts under in the registered repository
@@ -65,25 +68,64 @@ impl Manager {
 
     /// The permissions of a space another machine vouches for, for an
     /// action in `repository`: a chat's without a repository resolves its
-    /// mode in that repository's config, as on its own machine, and any
-    /// other's are those its machine computed.
+    /// tree's modes in that repository's config, as on its own machine, and
+    /// any other's are those its machine computed.
     async fn vouched_permissions(
         &self,
         vouched: VouchedSpace,
         repository: Option<&RepositoryId>,
     ) -> Result<Permissions> {
-        let (Some(chat), Some(repository)) = (vouched.chat_mode, repository) else {
-            return Ok(vouched.permissions);
-        };
+        match repository {
+            Some(repository) if !vouched.chat_modes.is_empty() => {
+                self.chained_permissions(&vouched.chat_modes, repository)
+                    .await
+            }
+            _ => Ok(vouched.permissions),
+        }
+    }
+
+    /// The effective permissions of a chat without a repository whose tree
+    /// has `chain`'s modes, from the top down, for an action in
+    /// `repository`: each mode resolved in its config, no wider than the
+    /// one above, with what its `--permission` gives.
+    pub(crate) async fn chained_permissions(
+        &self,
+        chain: &[ChainedMode],
+        repository: &RepositoryId,
+    ) -> Result<Permissions> {
         let settings = self.space_settings_in(Some(repository)).await?;
-        let mode = SpaceMode {
-            name: &chat.mode,
-            kind: SpaceKind::Chat,
-            repository: false,
-        };
-        let permissions = permissions::resolve(&settings, Some(mode))
-            .context("the permissions of a chat on another machine")?;
-        Ok(permissions.given(&chat.given))
+        let mut effective: Option<Permissions> = None;
+        for link in chain {
+            let mode = (link.mode.as_ref()).map(|name| SpaceMode {
+                name,
+                kind: SpaceKind::Chat,
+                repository: false,
+            });
+            let permissions = permissions::resolve(&settings, mode)
+                .context("the permissions of a chat on another machine")?;
+            let permissions = match effective {
+                Some(above) => permissions.below(&above),
+                None => permissions,
+            };
+            effective = Some(permissions.given(&link.given));
+        }
+        effective.context("a chat's tree has at least its own mode")
+    }
+
+    /// The modes of the tree of `space`, a chat without a repository, from
+    /// the top down, which another machine resolves in the repository of
+    /// each action; none for any other space.
+    pub(crate) async fn chat_modes(&self, space: &Space) -> Result<Vec<ChainedMode>> {
+        if space.repository_id.is_some() || space.kind() != SpaceKind::Chat {
+            return Ok(Vec::new());
+        }
+        let mut chain = Vec::new();
+        for above in self.ancestors(&space.id).await?.into_iter().rev() {
+            let above = self.space_by_id(&above.id).await?;
+            chain.push(chained(&above));
+        }
+        chain.push(chained(space));
+        Ok(chain)
     }
 
     /// Refuse the permissions `given` sets where `caller` does not hold them
@@ -191,7 +233,7 @@ impl Manager {
         id: &SpaceId,
         repository: Option<&RepositoryId>,
     ) -> Result<Option<Permissions>> {
-        let mut effective = self.permissions_elsewhere(id).await?;
+        let mut effective = self.permissions_elsewhere(id, repository).await?;
         for above in self.ancestors(id).await?.into_iter().rev() {
             let space = self.space_by_id(&above.id).await?;
             let agent = recorded_agent(&space);
@@ -221,6 +263,14 @@ impl Manager {
             None => permissions,
         };
         Ok(permissions.given(&given.unwrap_or_default()))
+    }
+}
+
+/// The mode `space`'s agent started in, with what its `--permission` gave.
+fn chained(space: &Space) -> ChainedMode {
+    ChainedMode {
+        mode: space.mode.clone(),
+        given: space.narrowing,
     }
 }
 

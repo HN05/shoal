@@ -71,12 +71,8 @@ pub(crate) struct Hub {
     /// The effective permissions the hub last listed of each space on
     /// another machine above a space here, which stand while it cannot be
     /// asked.
-    parent_permissions: std::sync::Mutex<
-        std::collections::HashMap<
-            shoal_ids::space_ids::SpaceId,
-            shoal_protocol::config::permissions::Permissions,
-        >,
-    >,
+    parent_permissions:
+        std::sync::Mutex<std::collections::HashMap<shoal_ids::space_ids::SpaceId, tree::Reported>>,
 }
 
 /// Serve the hub's listener and keep its own machine's spaces in its

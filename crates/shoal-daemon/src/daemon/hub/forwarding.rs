@@ -8,7 +8,7 @@ use shoal_protocol::{
     hub::{
         Member,
         link::{Call, Reply},
-        routing::{Delivery, Forwarded, Vouched, VouchedMode, VouchedSpace},
+        routing::{Delivery, Forwarded, Vouched, VouchedSpace},
     },
     protocol::Forwarding,
     space_names::SpaceSelector,
@@ -139,20 +139,14 @@ impl Manager {
         let space = self.space_by_id(&caller.space_id).await?;
         let repository = space.repository_id.as_ref();
         let permissions = self.space_permissions(&caller.space_id, repository).await?;
-        let chat_mode = match (&space.mode, repository) {
-            (Some(mode), None) => Some(VouchedMode {
-                mode: mode.clone(),
-                given: space.narrowing,
-            }),
-            _ => None,
-        };
+        let chat_modes = self.chat_modes(&space).await?;
         Ok(Vouched::Space(VouchedSpace {
             space: caller.space_id.clone(),
             everywhere,
             permissions,
             granted: caller.granted,
             read_only: caller.read_only,
-            chat_mode,
+            chat_modes,
         }))
     }
 }

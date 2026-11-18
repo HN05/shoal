@@ -45,6 +45,10 @@ pub struct SpaceSummary {
     /// on other machines.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permissions: Option<crate::config::permissions::Permissions>,
+    /// For a chat without a repository, whose permissions resolve in the
+    /// repository of each action: its tree's modes, from the top down.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chat_modes: Vec<crate::hub::routing::ChainedMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub progress: Option<Progress>,
     /// Its open questions.
@@ -134,6 +138,7 @@ impl Listed {
                 agent_state: space.agent_state,
                 agent: space.agent,
                 permissions: space.permissions,
+                chat_modes: space.chat_modes.clone(),
                 progress: space.progress.clone(),
                 questions: Vec::new(),
                 approvals: Vec::new(),

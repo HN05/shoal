@@ -329,3 +329,24 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
 /// The mode the workspaces here record.
 static WORKER: crate::config::modes::ModeName = crate::config::modes::ModeName::DEFAULT;
 static CHAT: crate::config::modes::ModeName = crate::config::modes::ModeName::CHAT;
+
+#[tokio::test]
+async fn another_machine_resolves_a_nested_chat_without_a_repository_as_its_own_does() {
+    let (temp, manager) = manager().await;
+    let repo = register(&temp, &manager, "repo").await;
+    let config = "[modes.orchestrate.permissions]\nuser_holds = 'deny'\n\
+                  [modes.chat.permissions]\nuser_holds = 'direct'\nmerge = 'propose'\n";
+    (manager.write_local_config(&repo.id, Some(config.into())))
+        .await
+        .unwrap();
+    let master = chat(&manager, "master", "orchestrate", None, None).await;
+    let nested = chat(&manager, "nested", "chat", None, Some(&master.id)).await;
+    let nested = manager.space_by_id(&nested.id).await.unwrap();
+    let here = manager.space_permissions(&nested.id, Some(&repo.id));
+    let here = here.await.unwrap();
+    // What another machine reads of it, resolved in the action's repository.
+    let chain = manager.chat_modes(&nested).await.unwrap();
+    assert_eq!(chain.len(), 2);
+    let elsewhere = manager.chained_permissions(&chain, &repo.id).await.unwrap();
+    assert_eq!(elsewhere, here);
+}

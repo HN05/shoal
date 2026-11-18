@@ -7,7 +7,10 @@ use anyhow::{Context as _, Result, bail, ensure};
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     config::permissions::Permissions,
-    hub::directory::{Directory, Listed},
+    hub::{
+        directory::{Directory, Listed},
+        routing::ChainedMode,
+    },
     list_status::ListStatus,
     model::SpaceKind,
     space_names::SpaceSelector,
@@ -111,12 +114,17 @@ impl Manager {
     }
 
     /// The effective permissions of the first space above the space `id`
-    /// that runs on another machine, as its machine reports them; none when
-    /// every space above it is here or that space is gone. While the hub
-    /// cannot be asked, those it last reported stand; a machine that never
-    /// read them refuses, rather than leave the space wider than that
-    /// parent allows.
-    pub(crate) async fn permissions_elsewhere(&self, id: &SpaceId) -> Result<Option<Permissions>> {
+    /// that runs on another machine, as its machine reports them, or for a
+    /// chat without a repository, as its tree's modes resolve in
+    /// `repository`, where the action is; none when every space above it is
+    /// here or that space is gone. While the hub cannot be asked, what it
+    /// last reported stands; a machine that never read it refuses, rather
+    /// than leave the space wider than that parent allows.
+    pub(crate) async fn permissions_elsewhere(
+        &self,
+        id: &SpaceId,
+        repository: Option<&RepositoryId>,
+    ) -> Result<Option<Permissions>> {
         let owned = id.clone();
         let first = (self.store)
             .run(move |db| crate::daemon::workspace::first_absent_above(db, &owned))
@@ -124,8 +132,21 @@ impl Manager {
         let Some(first) = first else {
             return Ok(None);
         };
-        let directory = match self.hub_directory().await {
-            Ok(directory) => directory,
+        let reported = match self.hub_directory().await {
+            Ok(directory) => {
+                let listed = (directory.into_iter())
+                    .flat_map(|(_, directory)| directory.spaces)
+                    .find(|listed| listed.space.id == first);
+                // A parent no machine lists is gone, as a removed parent
+                // here leaves the space at the top level.
+                let Some(listed) = listed else {
+                    return Ok(None);
+                };
+                let reported = (listed.space.permissions, listed.space.chat_modes);
+                (self.hub.parent_permissions.lock().unwrap())
+                    .insert(first.clone(), reported.clone());
+                reported
+            }
             Err(error) => {
                 let last = self
                     .hub
@@ -133,26 +154,19 @@ impl Manager {
                     .lock()
                     .unwrap()
                     .get(&first)
-                    .copied();
-                return last.map(Some).with_context(|| {
+                    .cloned();
+                last.with_context(|| {
                     format!("the permissions of space {first}, above {id} on another machine, cannot be read: {error:#}")
-                });
+                })?
             }
         };
-        let listed = (directory.into_iter())
-            .flat_map(|(_, directory)| directory.spaces)
-            .find(|listed| listed.space.id == first);
-        // A parent no machine lists is gone, as a removed parent here
-        // leaves the space at the top level.
-        let Some(listed) = listed else {
-            return Ok(None);
-        };
-        let permissions = listed
-            .space
-            .permissions
-            .with_context(|| format!("the hub has no permissions of space {first}, above {id}"))?;
-        (self.hub.parent_permissions.lock().unwrap()).insert(first, permissions);
-        Ok(Some(permissions))
+        match (reported, repository) {
+            ((_, chain), Some(repository)) if !chain.is_empty() => {
+                self.chained_permissions(&chain, repository).await.map(Some)
+            }
+            ((Some(permissions), _), _) => Ok(Some(permissions)),
+            ((None, _), _) => bail!("the hub has no permissions of space {first}, above {id}"),
+        }
     }
 
     /// The origin other machines know the registered repository `id` by.
@@ -217,6 +231,10 @@ fn with_agents(chain: Vec<SpaceId>, directory: &Directory, online: bool) -> Vec<
     };
     chain.into_iter().filter(|id| decides(id)).collect()
 }
+
+/// What a machine reports of a space's permissions: its effective ones,
+/// and for a chat without a repository its tree's modes.
+pub(super) type Reported = (Option<Permissions>, Vec<ChainedMode>);
 
 /// `first` and the spaces above it in `directory`, nearest first.
 fn chain_from(directory: &Directory, first: SpaceId) -> Vec<SpaceId> {
