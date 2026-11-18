@@ -19,7 +19,7 @@ fn number(machine: &Base, id: &str) -> Value {
 /// Point `machine`'s link to the hub at `command`, or back at the command
 /// it joined through for none, and wait until the link is as that leaves
 /// it.
-fn reroute(machine: &Base, command: Option<&str>) {
+pub(super) fn reroute(machine: &Base, command: Option<&str>) {
     let file = machine.root.path().join(".config/shoal/config.toml");
     let config = fs::read_to_string(&file).unwrap();
     let (kept, _) = config.split_once("[machine.hub]").unwrap_or((&config, ""));

@@ -1,4 +1,5 @@
-//! What `shoal hub` prints.
+//! What `shoal hub` prints, and what a command for an offline machine's
+//! space prints while the hub holds its request.
 use serde::{Deserialize, Serialize};
 use shoal_protocol::hub::pairing::Pairing;
 
@@ -20,4 +21,5 @@ outputs!(
     shoal_protocol::hub::Member,
     shoal_protocol::hub::Membership,
     shoal_protocol::hub::Overview,
+    shoal_protocol::hub::routing::Queued,
 );

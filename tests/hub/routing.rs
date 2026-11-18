@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 
 use super::{
     directory::{join, listed, machine, reach, workspace},
+    numbers::reroute,
     support::{daemon_client, fixture::Base, printed, shoal_binary, wait::wait_for},
 };
 
@@ -180,4 +181,24 @@ fn listed_number(hub: &Base, id: &str) -> u64 {
     listed.unwrap_or_else(|| panic!("no space {id}: {spaces}"))["number"]
         .as_u64()
         .unwrap()
+}
+
+#[test]
+fn the_hub_holds_a_message_for_an_offline_machine_and_refuses_what_cannot_wait() {
+    let (hub, laptop, there) = laptop_space();
+    reroute(&laptop, Some("false"));
+    wait_for("the hub to see the laptop go", || {
+        let members = hub.ok(&["hub", "ls"])["members"].clone();
+        let laptop = (members.as_array().unwrap().iter()).find(|member| member["name"] == "laptop");
+        (laptop?["connected"] == false).then_some(())
+    });
+    let queued = hub.ok(&["messages", "send", "--space", &there, "while away"]);
+    assert_eq!(queued["name"], "laptop", "{queued}");
+    assert!(queued["expires_at"].is_number(), "{queued}");
+    let refused = hub.run(&["rename", &there, "Renamed away"]);
+    assert!(!refused.status.success(), "{}", printed(&refused));
+    let error = String::from_utf8_lossy(&refused.stderr);
+    assert!(error.contains("machine laptop is offline"), "{error}");
+    reroute(&laptop, None);
+    message_with(&laptop, &there, "while away");
 }

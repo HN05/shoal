@@ -313,7 +313,11 @@ pub(crate) async fn run(cli: Cli, daemon: RunDaemon) -> Result<i32> {
             Ok(shoal_protocol::approvals::Undecided(request)) => {
                 approvals::declined(&reporting, &request)
             }
-            Err(error) => Err(error),
+            // The hub holds it for the offline machine of its space.
+            Err(error) => match error.downcast::<shoal_protocol::hub::routing::Queued>() {
+                Ok(queued) => machines::queued(&reporting, &queued),
+                Err(error) => Err(error),
+            },
         },
         result => result,
     }
