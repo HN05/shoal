@@ -190,24 +190,27 @@ fn starting_agent(launch: &Launch, settings: &Effective) -> Option<crate::agent:
     }
 }
 
-/// Pick on a terminal what `launch` leaves to a picker there: its
-/// repository, what it starts from and its agent, returning the settings of
-/// the repository it starts in. Without a terminal the daemon decides.
 /// Pick on a terminal what the `resolved` start `launch` leaves to a
 /// picker: what it starts from and its agent. A start that begins as a chat
 /// picks its agent there, and a fork PR's head holds none.
 async fn pick_missing(ctx: &Context, launch: &mut Launch, resolved: &Resolved<'_>) -> Result<()> {
     let mut fork_head = resolved.fork_head;
+    let mut picked_issue = false;
     if names_nothing(launch) {
         let mut creation = Creation::default();
         let picked = pick_add_source(ctx, &resolved.target, &mut creation).await?;
         fork_head |= creation.pull_head.is_some();
+        picked_issue = picked.is_some();
         picked_source(launch, creation, picked);
     }
     if begins_as_chat(launch) || fork_head {
         return Ok(());
     }
     let settings = &resolved.settings;
+    // A picked issue takes `agent.default`, as a positional one does.
+    if launch.agent.is_none() && picked_issue {
+        launch.agent = settings.get().await?.agent.default.clone();
+    }
     if launch.agent.is_none() && !(issue_default(launch) && has_default(settings).await?) {
         launch.agent = agents::pick_default_agent(ctx, settings.get().await?)?;
         if launch.agent.is_none() {
