@@ -36,7 +36,7 @@ impl Manager {
         let id = &removed.space_id;
         warnings.extend(self.relink_space(id, &removed.links, caller).await);
         let session_files = self.restore_agents(&removed, id, &mut warnings).await;
-        if removed.saved_no_session() {
+        if removed.saved_no_agent() {
             warnings.push(format!(
                 "{} saved no session of its agent, whose restore starts a new one",
                 removed.name

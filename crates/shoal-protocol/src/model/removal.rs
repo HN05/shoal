@@ -180,6 +180,13 @@ impl RemovedSpace {
         !self.has_session() && !moved && (ran || self.chat().is_some())
     }
 
+    /// Whether it is a chat that saved nothing of its agent, which a chat
+    /// always runs, so its restore starts a new one. An agent saved without
+    /// a session continues as its resume command or latest session does.
+    pub fn saved_no_agent(&self) -> bool {
+        self.chat().is_some() && self.agents.is_empty() && self.last_sessions.is_empty()
+    }
+
     /// Whether it is a copy of another space, whose agents start from forks
     /// of the original's sessions.
     pub fn is_copy(&self) -> bool {

@@ -4110,8 +4110,7 @@ stays open. `--no-agents` keeps them saved for a later `shoal restore`, keeping 
 workspace from idle cleanup as stopped work does, and `--forget` forgets them.
 An agent whose session another space here holds, running or stopped, starts
 from a fork of it, as a [copy](#copies)'s does, with a warning naming that
-space, and one that saved no session starts a new one, with a warning; this
-holds for a chat's restore too. A branch that no longer contains
+space; this holds for a chat's restore too. A branch that no longer contains
 the removed HEAD, as after a removal during a rebase, leaves the workspace to
 reopen, with a warning, on a branch named after the short commit. It refuses
 when another workspace uses the branch, when neither branch contains the
@@ -4136,7 +4135,8 @@ must still exist, or the worktree of its workspace, which must exist and be
 ready; while that workspace is removed, the restore refuses and names `shoal
 restore <workspace id> <chat id>`, which opens the workspace first. It links
 its items and PRs again, gives back its attached files, and restores its agent
-as a stopped chat's, under the same flags. Links cannot change once removal
+as a stopped chat's, under the same flags; a chat that saved nothing of its
+agent starts a new one, with a warning. Links cannot change once removal
 starts, so the record holds the final ones. Removal stops agents as `shoal stop`
 does, keeping their recovery records in the removal record; interrupted commands
 are not saved. When the removal's checkpoint keeps HEAD only, merged cleanup keeps the workspace instead.
