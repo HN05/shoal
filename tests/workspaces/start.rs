@@ -3729,3 +3729,14 @@ fn an_existing_workspaces_start_refuses_its_arguments_before_prompting() {
         assert!(!picked.exists(), "{args:?} asked a picker: {transcript}");
     }
 }
+
+/// An existing workspace's start without an agent, run here with `--json`,
+/// reports the workspace it reopens.
+#[test]
+fn an_agentless_existing_workspaces_start_here_reports_it_as_json() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("owned");
+    let id = workspace["id"].as_str().unwrap();
+    let reopened = fixture.ok(&["start", "--in", id, "--here"]);
+    assert_eq!(reopened["id"], id, "{reopened}");
+}

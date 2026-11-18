@@ -69,6 +69,10 @@ async fn run_named(
         // An existing workspace opened without an agent, which the daemon
         // reopens as any start's, verifying its worktree first.
         None if entry.is_none() => {
+            // The reopening names its workspace, so it reports nothing.
+            if ctx.json {
+                ctx.show(&*started.workspace, |_| ())?;
+            }
             let plan = AddPlan::opening(&started.workspace);
             return Box::pin(super::finish::execute_add(ctx, plan)).await;
         }
