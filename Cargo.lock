@@ -2327,7 +2327,7 @@ checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "shoal"
-version = "0.18.2"
+version = "0.18.3"
 dependencies = [
  "anyhow",
  "base64",
@@ -2352,7 +2352,7 @@ dependencies = [
 
 [[package]]
 name = "shoal-cli"
-version = "0.18.2"
+version = "0.18.3"
 dependencies = [
  "anyhow",
  "clap",
@@ -2413,7 +2413,7 @@ dependencies = [
 
 [[package]]
 name = "shoal-core"
-version = "0.18.2"
+version = "0.18.3"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -2453,7 +2453,7 @@ dependencies = [
 
 [[package]]
 name = "shoal-daemon"
-version = "0.18.2"
+version = "0.18.3"
 dependencies = [
  "anyhow",
  "base64",
@@ -2639,7 +2639,7 @@ dependencies = [
 
 [[package]]
 name = "shoal-workers"
-version = "0.18.2"
+version = "0.18.3"
 dependencies = [
  "anyhow",
  "libc",
