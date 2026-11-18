@@ -2088,7 +2088,7 @@ async fn merge_turned_off_refuses_runs_and_agent_requests() {
 async fn a_merge_without_a_review_is_refused_before_its_approval() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
-    require_merge_review(&workspace, "agents");
+    require_merge_review(&f, "agents");
     let head = git(&workspace.path, &["rev-parse", "--short", "HEAD"]);
     let refused = merge_as_agent(&f, &workspace).await.unwrap_err();
     let refused = format!("{refused:#}");
@@ -2109,8 +2109,8 @@ async fn a_merge_without_a_review_is_refused_before_its_approval() {
 #[tokio::test]
 async fn all_refuses_the_users_merge_before_asking_about_it() {
     let f = Fixture::new().await;
-    let workspace = f.add("worker").await;
-    require_merge_review(&workspace, "all");
+    f.add("worker").await;
+    require_merge_review(&f, "all");
     let main = git(&f.repo, &["rev-parse", "main"]);
     let selector = f.manager.named("worker").await;
     (f.manager.preview_merge(&selector, false, None))
@@ -2120,11 +2120,12 @@ async fn all_refuses_the_users_merge_before_asking_about_it() {
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), main);
 }
 
-/// Commit to `workspace` a config whose `require_for_merge` is `holds`.
-fn require_merge_review(workspace: &crate::model::Workspace, holds: &str) {
+/// Commit to the checkout's default branch a config whose
+/// `require_for_merge` is `holds`, which decides the merges into it.
+fn require_merge_review(f: &Fixture, holds: &str) {
     let config = format!("[review]\nrequire_for_merge = '{holds}'\n");
-    fs::write(workspace.path.join(".shoal.toml"), config).unwrap();
-    commit(&workspace.path, ".shoal.toml");
+    fs::write(f.repo.join(".shoal.toml"), config).unwrap();
+    commit(&f.repo, ".shoal.toml");
 }
 
 #[tokio::test]

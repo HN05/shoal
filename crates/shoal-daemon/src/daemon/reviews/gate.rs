@@ -60,8 +60,8 @@ impl Manager {
         self.queue_unreviewed(checked).await
     }
 
-    /// Refuse `caller`, where the workspace's setting for `gate` holds it,
-    /// as [`Self::check_reviewed`] does.
+    /// Refuse `caller`, where the setting for `gate` holds it, as
+    /// [`Self::check_reviewed`] does.
     pub(crate) async fn check_review(
         &self,
         workspace: &Workspace,
@@ -69,11 +69,21 @@ impl Manager {
         head: &CommitId,
         caller: Option<&Caller>,
     ) -> Result<()> {
-        let settings = self.workspace_settings(workspace).await?;
+        let settings = self.gate_settings(workspace, gate).await?;
         if !gate.holds(&settings, caller) {
             return Ok(());
         }
         self.check_reviewed(workspace, gate, head).await
+    }
+
+    /// The settings that decide `gate` for `workspace`: its own, except for
+    /// a merge those of the repository it merges into, which no branch's own
+    /// config file turns off.
+    async fn gate_settings(&self, workspace: &Workspace, gate: Gate) -> Result<Effective> {
+        match gate {
+            Gate::Merge => self.space_settings_in(Some(workspace.repository())).await,
+            Gate::Pr | Gate::Ready => self.workspace_settings(workspace).await,
+        }
     }
 
     /// Refuse unless a finished review of the workspace covers `head`, the

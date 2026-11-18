@@ -1342,7 +1342,10 @@ existing PR is not. With `require_for_ready`, `shoal ready` is checked, not
 commit of the branch that merges, and [`shoal pr merge`](#issue-and-pr-actions), with or without
 `--auto`, for the PR's head, which the merge then names to the forge, against the
 reviews of the workspace that owns the PR's branch; a PR whose branch no
-workspace owns, such as a fork's, is refused, to merge on the forge. A merge is
+workspace owns, such as a fork's, is refused, to merge on the forge. A merge's gate follows
+the config of the repository it merges into, its checkout's file, local config
+and global config, never the merging branch's own file, and for an unregistered
+repository's PR the global config. A merge is
 checked before the question it asks and before an agent's approval request,
 which a refused merge never makes. Each gate holds agents and the commands they run with `"agents"`,
 and your own commands too with `"all"`. A gate passes once a finished review covers HEAD exactly and every

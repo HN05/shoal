@@ -1,7 +1,7 @@
 //! The review gate of a PR merge: with `[review] require_for_merge` holding
 //! the caller, a finished review by the workspace that owns the PR's head
 //! branch must cover the head the merge names, with every finding resolved.
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, bail};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_refs::CommitId;
 
@@ -40,10 +40,8 @@ impl Manager {
             return Ok(());
         }
         let head = action.merge_head().cloned();
-        if let Some(head) = self
-            .require_pull_review(target, input, head, caller)
-            .await?
-        {
+        let reviewed = self.require_pull_review(target, input, head, caller);
+        if let Some(head) = reviewed.await? {
             action.bind_merge_head(head);
         }
         Ok(())
@@ -51,11 +49,11 @@ impl Manager {
 
     /// Refuse merging the PR `input` names, or `target`'s linked PR, at
     /// `head`, else at the head it has now, where `[review]
-    /// require_for_merge` holds `caller`, unless a finished review of the
+    /// require_for_merge` of its repository, or of the global config for an
+    /// unregistered one, holds `caller`, unless a finished review of the
     /// workspace that owns its head branch covers that head with every
-    /// finding resolved; that workspace's settings decide, or its
-    /// repository's where none owns it. Returns the head checked, which the
-    /// merge must name, or none where the gate does not hold `caller`.
+    /// finding resolved. Returns the head checked, which the merge must name, or
+    /// none where the gate does not hold `caller`.
     pub(crate) async fn require_pull_review(
         &self,
         target: &RepoTarget,
@@ -65,24 +63,20 @@ impl Manager {
     ) -> Result<Option<CommitId>> {
         let pull = self.target_item(target, input, ItemKind::Pr, Access::Read, caller);
         let (target, url) = pull.await?;
-        let Some(repository) = self.target_repository(&target).await? else {
+        let repository = self.target_repository(&target).await?;
+        let settings = self.space_settings_in(repository.as_ref()).await?;
+        if !Gate::Merge.holds(&settings, caller) {
             return Ok(None);
-        };
+        }
+        let forge = target.forge()?;
         let account = self.target_account(&target, Access::Read, caller);
-        let pull = target.forge()?.pull_request(&account, &url).await?;
+        let pull = forge.pull_request(&account, &url).await?;
+        let owner = self.pull_owner(repository.as_ref(), &pull).await?;
+        let owner = owner.with_context(|| unowned(&pull))?;
         let head = match head {
             Some(head) => head,
             None => (pull.head_commit.clone()).context("the forge names no PR head")?,
         };
-        let Some(owner) = self.pull_owner(&repository, &pull).await? else {
-            let settings = self.repository_settings(&repository).await?;
-            ensure!(!Gate::Merge.holds(&settings, caller), unowned(&pull));
-            return Ok(None);
-        };
-        let settings = self.workspace_settings(&owner).await?;
-        if !Gate::Merge.holds(&settings, caller) {
-            return Ok(None);
-        }
         let checked = self.check_reviewed(&owner, Gate::Merge, &head).await;
         self.queue_pull_review(checked, &owner, &head, &url, caller)
             .await?;
@@ -134,16 +128,17 @@ impl Manager {
         Ok(None)
     }
 
-    /// The workspace of `repository` that owns `pull`'s head branch, whose
-    /// reviews are the PR's; a fork's head branch is in no repository here.
+    /// The workspace of the registered `repository` that owns `pull`'s head
+    /// branch, whose reviews are the PR's; a fork's head branch is in no
+    /// repository here.
     async fn pull_owner(
         &self,
-        repository: &RepositoryId,
+        repository: Option<&RepositoryId>,
         pull: &PullRequest,
     ) -> Result<Option<Workspace>> {
-        let owner = match pull.fork {
-            true => None,
-            false => self.branch_owner_in(repository, &pull.head).await?,
+        let owner = match repository.filter(|_| !pull.fork) {
+            Some(repository) => self.branch_owner_in(repository, &pull.head).await?,
+            None => None,
         };
         match owner {
             Some(owner) => self.workspace_by_id(&owner).await.map(Some),

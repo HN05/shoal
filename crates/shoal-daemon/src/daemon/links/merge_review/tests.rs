@@ -189,12 +189,11 @@ async fn a_pr_whose_branch_no_workspace_owns_is_refused() {
 }
 
 #[tokio::test]
-async fn the_owners_own_config_decides_whom_its_pr_merge_holds() {
-    let f = Fixture::new("off", "topic").await;
-    assert_eq!(f.gate(None, None).await.unwrap(), None);
-    let config = "[review]\nrequire_for_merge = 'all'\n";
+async fn a_branchs_own_config_does_not_turn_its_merge_gate_off() {
+    let f = Fixture::new("agents", "topic").await;
+    let config = "[review]\nrequire_for_merge = 'off'\n";
     std::fs::write(f.workspace.path.join(".shoal.toml"), config).unwrap();
-    f.gate(None, None).await.unwrap_err();
+    f.gate(None, Some(&f.agent())).await.unwrap_err();
 }
 
 #[tokio::test]
@@ -227,4 +226,17 @@ async fn a_caller_outside_the_owners_tree_queues_no_review_there() {
     assert!(refused.contains("shoal review run"), "{refused}");
     let selector = SpaceSelector::id(&f.workspace.id);
     assert!(f.manager.latest_review(&selector).await.is_err());
+}
+
+#[tokio::test]
+async fn the_global_config_holds_a_pr_of_an_unregistered_repository() {
+    let f = Fixture::new("all", "topic").await;
+    let host = &f._server.host;
+    let elsewhere: ItemInput = format!("http://{host}/team/other/pulls/1").parse().unwrap();
+    let context = f.context();
+    let gated = f
+        .manager
+        .require_pull_review(&context, Some(elsewhere), None, None);
+    let refused = gated.await.unwrap_err().to_string();
+    assert!(refused.contains("no workspace owns"), "{refused}");
 }
