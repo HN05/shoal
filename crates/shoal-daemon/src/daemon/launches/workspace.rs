@@ -54,8 +54,9 @@ impl Manager {
                 .launch_as_chat(launch, target.repo.id.to_string(), shape, source, caller)
                 .await;
         }
+        let issue_named = (issue.as_ref()).map(|issue| (&issue.url, issue.title.as_str()));
         let creation =
-            fits::workspace::issue_settled(&reads, &target.repo, creation, issue.as_ref()).await?;
+            fits::workspace::issue_settled(&reads, &target.repo, creation, issue_named).await?;
         ensure_placeable(&launch, &agent)?;
         let planned = start::Planned {
             repo: target.repo,

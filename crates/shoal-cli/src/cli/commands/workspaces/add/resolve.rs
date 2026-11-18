@@ -211,6 +211,7 @@ async fn check_launch_creation(
     }
     // An issue settles the branch nothing else names, refusing a workspace
     // earlier work on it left that cannot reopen.
+    let issue = issue.map(|issue| (&issue.url, issue.title.as_str()));
     let creation = crate::launches::workspace::issue_settled(&reads, repo.1, creation, issue);
     check_add_creation(ctx, target, &creation.await?, launch.parent.as_ref()).await?;
     Ok(None)
