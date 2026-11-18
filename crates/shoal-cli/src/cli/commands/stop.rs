@@ -45,8 +45,9 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
     if crate::env::inherits_scope(&ctx.paths.state) {
         targets::ensure_scoped()?;
     }
-    if let Some(code) = elsewhere::stop(ctx, &selected, skip_children, yes).await? {
-        return Ok(code);
+    let (selected, elsewhere) = elsewhere::stop(ctx, selected, skip_children, yes).await?;
+    if elsewhere && selected.is_empty() {
+        return Ok(0);
     }
     let selected = resolve(ctx, selected, !skip_children).await?;
     if crate::env::inherits_scope(&ctx.paths.state) {

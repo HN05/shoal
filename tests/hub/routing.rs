@@ -350,3 +350,19 @@ fn stopping_a_coordinator_from_its_child_s_machine_stops_the_child_too() {
     let reports = String::from_utf8_lossy(&stopped.stdout);
     assert_eq!(reports.matches("\"stopped\":true").count(), 2, "{reports}");
 }
+
+#[test]
+fn a_stop_takes_spaces_here_and_on_another_machine_together() {
+    let Tree {
+        hub,
+        laptop: _laptop,
+        child,
+        ..
+    } = tree_across_machines();
+    let here = workspace(&hub, "here");
+    let stopped = hub.run(&["stop", &here, &child, "--skip-children", "--json"]);
+    assert!(stopped.status.success(), "{}", printed(&stopped));
+    let reports = String::from_utf8_lossy(&stopped.stdout);
+    // One report for the space here, one for the laptop's.
+    assert_eq!(reports.matches("\"stopped\":true").count(), 2, "{reports}");
+}

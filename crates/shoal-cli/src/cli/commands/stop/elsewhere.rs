@@ -22,29 +22,35 @@ use crate::{
     protocol::{QueuedLaunches, UntrackedProcesses},
 };
 
-/// Stop the space `selected` names, when it is one other machine's space,
-/// and the spaces below it unless `skip_children`; none when it is not.
+/// Stop the spaces among `selected` that other machines run, and the
+/// spaces below them unless `skip_children`, returning the selectors that
+/// name spaces here, which the caller stops, and whether any was elsewhere.
 pub(super) async fn stop(
     ctx: &Context,
-    selected: &[SpaceSelector],
+    selected: Vec<SpaceSelector>,
     skip_children: bool,
     yes: bool,
-) -> Result<Option<i32>> {
-    let [selector] = selected else {
-        return Ok(None);
-    };
-    let Some((remote, view)) = machines::space_elsewhere(ctx, selector).await? else {
-        return Ok(None);
-    };
-    stop_one(ctx, &remote, yes).await?;
-    if !skip_children {
-        let stopped = Stopped {
-            here: Vec::new(),
-            elsewhere: vec![remote],
-        };
-        stop_across(ctx, &view, stopped, yes).await?;
+) -> Result<(Vec<SpaceSelector>, bool)> {
+    let mut here = Vec::new();
+    let mut elsewhere = Vec::new();
+    for selector in selected {
+        match machines::space_elsewhere(ctx, &selector).await? {
+            Some(found) => elsewhere.push(found),
+            None => here.push(selector),
+        }
     }
-    Ok(Some(0))
+    let any = !elsewhere.is_empty();
+    for (remote, view) in elsewhere {
+        stop_one(ctx, &remote, yes).await?;
+        if !skip_children {
+            let stopped = Stopped {
+                here: Vec::new(),
+                elsewhere: vec![remote],
+            };
+            stop_across(ctx, &view, stopped, yes).await?;
+        }
+    }
+    Ok((here, any))
 }
 
 /// Stop the spaces below each of `stopped`, spaces of this machine that
