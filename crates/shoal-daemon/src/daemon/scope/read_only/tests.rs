@@ -41,8 +41,13 @@ async fn read_only_scope_reads_without_changing() {
                 space: space.clone(),
             }),
             Operation::Agent(AgentMethod::MarkAgentMessagesDelivered {
-                space,
+                space: space.clone(),
                 ids: Vec::new(),
+            }),
+            // Its review gate may queue a review.
+            Operation::Workspace(WorkspaceMethod::PreviewMerge {
+                workspace: space,
+                push: false,
             }),
         ]
     };
@@ -54,8 +59,8 @@ async fn read_only_scope_reads_without_changing() {
             allowed.push(authorized.is_ok());
         }
         let expected = match read_only {
-            false => [true, true, true],
-            true => [true, false, false],
+            false => [true, true, true, true],
+            true => [true, false, false, false],
         };
         assert_eq!(allowed, expected, "read_only: {read_only}");
     }

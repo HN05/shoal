@@ -104,7 +104,6 @@ impl Operation {
                         | WorkspaceMethod::SpaceSessions { .. }
                         | WorkspaceMethod::DiffBase { .. }
                         | WorkspaceMethod::Conflicts { .. }
-                        | WorkspaceMethod::PreviewMerge { .. }
                         | WorkspaceMethod::LayeredConfig { .. }
                 )
         )
