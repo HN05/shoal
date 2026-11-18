@@ -21,7 +21,7 @@ use crate::{
 };
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, params};
-use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceSelector;
 use std::{collections::BTreeMap, fs, path::Path};
 
@@ -158,11 +158,11 @@ impl Manager {
         verify_directory(&repo.path, identity, progress.deleting_files)?;
         if progress.deleting_files {
             ensure!(
-                workspaces.is_empty(),
-                "repository has workspaces after file deletion began"
+                self.spaces_deepest_first(&repo.id).await?.is_empty(),
+                "repository has spaces after file deletion began"
             );
         } else {
-            self.remove_repository_workspaces(&repo, &workspaces, identity, &workspace_paths)
+            self.remove_repository_spaces(&repo, &workspaces, identity, &workspace_paths)
                 .await?;
         }
         verify_directory(&repo.path, identity, true)?;
@@ -314,9 +314,9 @@ impl Manager {
             .await
     }
 
-    /// Verify ownership of every workspace, record the removal, delete the
-    /// workspaces, then mark the checkout ready for deletion.
-    async fn remove_repository_workspaces(
+    /// Verify ownership of every workspace, record the removal, remove the
+    /// repository's spaces, then mark the checkout ready for deletion.
+    async fn remove_repository_spaces(
         &self,
         repo: &Repository,
         workspaces: &[Workspace],
@@ -350,19 +350,18 @@ impl Manager {
                 Ok(())
             })
             .await?;
-        for workspace in self.deepest_first(workspaces).await? {
-            // Another removal took it meanwhile.
-            if self.find_workspace(&workspace.id).await?.is_none() {
+        for id in self.spaces_deepest_first(&repo.id).await? {
+            // Another removal took it meanwhile, or that of one before it.
+            let Some(space) = self.find_space(&id).await? else {
                 continue;
-            }
-            self.remove_for_repository(&workspace.id)
-                .await
-                .with_context(|| {
-                    format!(
-                        "remove workspace {}; repository retained for retry",
-                        workspace.name
-                    )
-                })?;
+            };
+            self.remove_for_repository(&id).await.with_context(|| {
+                format!(
+                    "remove {} {}; repository retained for retry",
+                    space.kind(),
+                    space.name
+                )
+            })?;
         }
         verify_directory(&repo.path, identity, false)?;
         if identity.is_some() {
@@ -381,27 +380,22 @@ impl Manager {
             .await
     }
 
-    /// `workspaces` with each one before the spaces whose removals take it
-    /// first, so that each goes through its own removal, which takes it
-    /// while it is being prepared, rather than through theirs.
-    async fn deepest_first<'a>(&self, workspaces: &'a [Workspace]) -> Result<Vec<&'a Workspace>> {
-        let ids: Vec<_> = workspaces
-            .iter()
-            .map(|workspace| workspace.id.clone())
-            .collect();
-        let depths = (self.store)
+    /// The IDs of the spaces of the repository `id`, workspaces and chats,
+    /// each before the spaces whose removals take it first, so that each
+    /// goes through its own removal, which takes a workspace while it is
+    /// being prepared, rather than through theirs.
+    async fn spaces_deepest_first(&self, id: &RepositoryId) -> Result<Vec<SpaceId>> {
+        let id = id.to_owned();
+        (self.store)
             .read(move |tx| {
-                ids.iter()
-                    .map(|id| super::tree::removal_depth(tx, id))
-                    .collect::<Result<Vec<_>>>()
+                let mut ordered = store::repository_spaces(tx, &id)?
+                    .into_iter()
+                    .map(|space| Ok((super::tree::removal_depth(tx, &space)?, space)))
+                    .collect::<Result<Vec<_>>>()?;
+                ordered.sort_by_key(|(depth, _)| std::cmp::Reverse(*depth));
+                Ok(ordered.into_iter().map(|(_, space)| space).collect())
             })
-            .await?;
-        let mut ordered: Vec<_> = depths.into_iter().zip(workspaces).collect();
-        ordered.sort_by_key(|(depth, _)| std::cmp::Reverse(*depth));
-        Ok(ordered
-            .into_iter()
-            .map(|(_, workspace)| workspace)
-            .collect())
+            .await
     }
 
     /// Refuse a workspace the repository's removal cannot take: one an
@@ -475,8 +469,8 @@ impl Manager {
         self.store
             .write(move |tx| {
                 ensure!(
-                    !store::repository_has_workspaces(tx, &id)?,
-                    "repository still has workspaces"
+                    !store::repository_has_spaces(tx, &id)?,
+                    "repository still has spaces"
                 );
                 tx.execute(
                     "DELETE FROM resource_pools WHERE scope=?1",

@@ -3351,8 +3351,8 @@ shoal repo rm my-project -y
 ```
 
 Permanently deletes the checkout (including in-place local repositories with
-uncommitted or unpushed work), all its workspaces, their ports, simulators, and
-leases, its seed and shared caches, and its local config, stopping managed commands first. A workspace
+uncommitted or unpushed work), all its workspaces and chats, their ports, simulators, and
+leases, its seed and shared caches, and its local config, stopping managed commands and agents first. A workspace
 still being prepared goes too, once the creation of its worktree under way ends, and a
 `shoal start --wait` following its preparation fails naming the repository; one whose setup runs
 refuses the removal until setup ends. Shoal attempts to

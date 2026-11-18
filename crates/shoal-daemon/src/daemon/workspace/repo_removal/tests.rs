@@ -161,6 +161,39 @@ async fn removal_takes_a_child_being_prepared_below_a_chat_in_a_workspace_listed
 }
 
 #[tokio::test]
+async fn removal_takes_a_chat_in_the_checkout_with_the_workspace_below_it() {
+    let (root, manager) = test_support::manager().await;
+    let checkout = test_support::repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(repo.id.clone().into(), "talk".into(), "claude".into(), None)
+        .await
+        .unwrap();
+    let below_chat = crate::daemon::workspace::NewWorkspace {
+        parent: Some(chat.id.clone()),
+        ..Default::default()
+    };
+    let child = manager
+        .create_workspace_with(&repo.id, "child".into(), None, below_chat)
+        .await
+        .unwrap();
+
+    let removal = manager.remove_repository(&repo.id).await.unwrap();
+    assert_eq!(removal.workspaces_removed, 1);
+    assert!(manager.chats().await.unwrap().is_empty());
+    // The removal journals each space, so a request for it names the
+    // repository it went with.
+    let repository = format!("removed with its repository {}", repo.id);
+    for id in [&chat.id, &child.id] {
+        let refused = manager.space_by_id(id).await.unwrap_err().to_string();
+        assert!(refused.contains(&repository), "{refused}");
+    }
+}
+
+#[tokio::test]
 async fn removal_refuses_a_checkout_whose_config_sets_bare() -> Result<()> {
     let (root, manager) = test_support::manager().await;
     let checkout = test_support::repository(root.path(), "repo");

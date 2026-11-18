@@ -307,11 +307,18 @@ pub fn ensure_repository_not_moving(db: &Connection, repository_id: &RepositoryI
     Ok(())
 }
 
-const REPOSITORY_WORKSPACES_QUERY: &str =
-    "SELECT 1 FROM spaces WHERE repository_id=?1 AND kind='workspace'";
+const REPOSITORY_SPACES_QUERY: &str = "SELECT 1 FROM spaces WHERE repository_id=?1";
 
-pub fn repository_has_workspaces(db: &Connection, repository_id: &RepositoryId) -> Result<bool> {
-    exists(db, REPOSITORY_WORKSPACES_QUERY, [repository_id])
+pub fn repository_has_spaces(db: &Connection, repository_id: &RepositoryId) -> Result<bool> {
+    exists(db, REPOSITORY_SPACES_QUERY, [repository_id])
+}
+
+/// The IDs of the repository's spaces, workspaces and chats.
+pub fn repository_spaces(db: &Connection, repository_id: &RepositoryId) -> Result<Vec<SpaceId>> {
+    Ok(db
+        .prepare("SELECT id FROM spaces WHERE repository_id=?1 ORDER BY id")?
+        .query_map([repository_id], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
 }
 
 /// Fail unless the workspace is ready; resources may only change then.

@@ -230,19 +230,19 @@ fn execution_owner_reads_search_migrated_index() -> Result<()> {
 }
 
 #[test]
-fn repository_workspace_reads_search_migrated_index() -> Result<()> {
+fn repository_space_reads_search_migrated_index() -> Result<()> {
     let mut db = populated_database()?;
     super::tests::migrate_through_v0_17_0(&mut db)?;
     // A missing repository exercises the entire lookup even with EXISTS short-circuiting.
     check_query_growth(
         &db,
-        &format!("SELECT EXISTS({REPOSITORY_WORKSPACES_QUERY})"),
+        &format!("SELECT EXISTS({REPOSITORY_SPACES_QUERY})"),
         "spaces",
         "repository_id",
         "missing",
     )?;
-    assert!(!repository_has_workspaces(&db, &"missing".into())?);
-    assert!(repository_has_workspaces(&db, &"owner-0".into())?);
+    assert!(!repository_has_spaces(&db, &"missing".into())?);
+    assert!(repository_has_spaces(&db, &"owner-0".into())?);
     Ok(())
 }
 
