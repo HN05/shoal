@@ -7,10 +7,12 @@ use std::{collections::HashSet, path::Path, time::Duration};
 use super::Entries;
 
 mod machines;
+mod remote;
 mod statuses;
 mod tree;
 
 pub use machines::Machines;
+pub use remote::remote_rows;
 pub use statuses::Statuses;
 pub use tree::{Elsewhere, Listing, space_tree_rows};
 

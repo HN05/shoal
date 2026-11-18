@@ -335,8 +335,8 @@ async fn inbox_rows(ctx: &Context) -> Result<Entries> {
         .collect())
 }
 
-/// Every workspace by status, then number, then an entry that adds one
-/// unless workspace processes ask.
+/// Every workspace by status, then number, then the other joined machines'
+/// spaces, then an entry that adds one unless workspace processes ask.
 async fn space_rows(ctx: &Context, scoping: Scoping) -> Result<Entries> {
     let repos = ui::repository_choices(crate::client::repositories::list(&ctx.paths).await?).await;
     let mut workspaces = crate::client::spaces::list(&ctx.paths)
@@ -354,6 +354,7 @@ async fn space_rows(ctx: &Context, scoping: Scoping) -> Result<Entries> {
         .map(|w| w.id.into())
         .zip(rows)
         .collect();
+    entries.extend(elsewhere_rows(ctx, palette).await);
     if scoping == Scoping::Unscoped {
         entries.push((
             ADD_ENTRY.into(),
@@ -361,6 +362,20 @@ async fn space_rows(ctx: &Context, scoping: Scoping) -> Result<Entries> {
         ));
     }
     Ok(entries)
+}
+
+/// A row per other joined machine's space, which shows its status.
+async fn elsewhere_rows(ctx: &Context, palette: Palette) -> Entries {
+    let Some(view) = super::super::machines::view(ctx).await else {
+        return Entries::new();
+    };
+    let spaces: Vec<_> = view.directory.spaces.iter().collect();
+    let machines = ui::Machines::new(&view);
+    let rows = ui::remote_rows(&spaces, &machines, palette, ui::picker_width());
+    (spaces.iter())
+        .map(|remote| Row::Elsewhere(remote.space.id.clone()).id())
+        .zip(rows)
+        .collect()
 }
 
 #[cfg(test)]

@@ -2,9 +2,11 @@
 use std::collections::HashSet;
 
 use super::{
-    Cell, Machines, Statuses, WidthLimit, aligned_to, chat_row, indented, mode_cell, number_cell,
-    progress_cell, queue_subject, space_mode_cell, status_cell, status_line, statuses::place_cell,
-    title_limit, usage_cell, workspace_mode_cell, workspace_status_cell, workspace_text,
+    Cell, Machines, Statuses, aligned_to, chat_row, indented, mode_cell, number_cell,
+    progress_cell, queue_subject,
+    remote::{self, remote_row, with_machine},
+    statuses::place_cell,
+    usage_cell, workspace_mode_cell, workspace_status_cell, workspace_text,
 };
 use crate::cli::list_status::{ListStatus, ListStatusStyle};
 use crate::cli::output::{Palette, Style};
@@ -50,11 +52,7 @@ pub fn space_tree_rows(
         tree.push(&mut rows, root, 0);
     }
     let (markers, cells): (Vec<_>, Vec<_>) = rows.into_iter().unzip();
-    // The machine column comes before the title.
-    let limit = title_limit(width).map(|limit| WidthLimit {
-        column: limit.column + 1,
-        ..limit
-    });
+    let limit = remote::machine_title_limit(width);
     markers
         .into_iter()
         .zip(aligned_to(cells, palette, limit))
@@ -262,40 +260,6 @@ fn tree_workspace_row(
             (workspace_text(workspace), None),
         ],
     )
-}
-
-/// The row of another machine's space, as its machine last reported it.
-fn remote_row(
-    remote: &Remote,
-    repository: Cell,
-    depth: usize,
-    palette: Palette,
-) -> (String, [Cell; 8]) {
-    let space = &remote.space;
-    (
-        space.status.marker(palette),
-        [
-            number_cell(space.number),
-            (indented(&space.name, depth), Some(Style::Heading)),
-            repository,
-            space_mode_cell(space.kind, space.mode.as_ref()),
-            status_cell(space.status),
-            (String::new(), None),
-            progress_cell(space.progress.as_ref()),
-            (
-                status_line(space.progress.as_ref())
-                    .unwrap_or_default()
-                    .to_owned(),
-                None,
-            ),
-        ],
-    )
-}
-
-/// `cells` with `machine` after the space's name.
-fn with_machine([number, name, rest @ ..]: [Cell; 8], machine: Cell) -> [Cell; 9] {
-    let [a, b, c, d, e, f] = rest;
-    [number, name, machine, a, b, c, d, e, f]
 }
 
 /// The row of an agent queued to start in a workspace without a row: the

@@ -56,3 +56,13 @@ fn blocked_rows_round_trip_their_space() {
     assert_eq!(space.as_str(), "space-id");
     assert_eq!(row.space(), Some(SpaceSelector::id(&"space-id".into())));
 }
+
+#[test]
+fn another_machines_rows_round_trip_their_space_and_act_on_none_here() {
+    let row = Row::parse(Row::Elsewhere("space-id".into()).id()).unwrap();
+    let Row::Elsewhere(space) = &row else {
+        panic!("expected another machine's row");
+    };
+    assert_eq!(space.as_str(), "space-id");
+    assert!(row.space().is_none());
+}
