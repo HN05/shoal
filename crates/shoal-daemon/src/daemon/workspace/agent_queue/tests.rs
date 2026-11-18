@@ -952,6 +952,13 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
     assert_eq!(entry.space_id, None);
     assert_eq!(entry.state, QueueState::Starting);
     assert!(started(&entry.id));
+    // Its slot names the workspace before its worker attaches it.
+    let slots = manager
+        .occupied_slots(&HashSet::new(), &Default::default())
+        .await
+        .unwrap();
+    let spaces: Vec<_> = slots.iter().map(|slot| slot.load.space.as_ref()).collect();
+    assert_eq!(spaces, [Some(&child.id)]);
     // A launch that has yet to start keeps its workspace from cleanup.
     assert_eq!(
         manager

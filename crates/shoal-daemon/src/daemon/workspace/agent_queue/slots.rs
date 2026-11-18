@@ -51,6 +51,9 @@ struct StartingEntry {
     repository: Option<RepositoryId>,
     /// The space it starts in, once known.
     space: Option<SpaceId>,
+    /// The existing workspace a launch in it opens, which it starts in
+    /// before its worker attaches it.
+    opens: Option<SpaceId>,
     /// When its holder was last seen.
     seen_at: Option<UnixTime>,
     /// The execution a restore resumes; a launch has none.
@@ -82,13 +85,15 @@ fn persisted_slots(db: &rusqlite::Connection) -> Result<PersistedSlots> {
         .collect::<rusqlite::Result<_>>()?;
     let starting = db
         .prepare(
-            "SELECT repository_id,space_id,seen_at,execution_id,mode FROM agent_queue
+            "SELECT repository_id,space_id,opens_workspace_id,seen_at,execution_id,mode
+             FROM agent_queue
              WHERE state=?1 AND kind!=?2",
         )?
         .query_map(params![QueueState::Starting, QueueKind::Job], |row| {
             Ok(StartingEntry {
                 repository: row.get("repository_id")?,
                 space: row.get("space_id")?,
+                opens: row.get("opens_workspace_id")?,
                 seen_at: row.get("seen_at")?,
                 execution: row.get("execution_id")?,
                 mode: row.get("mode")?,
@@ -165,7 +170,7 @@ impl Manager {
                 slots.push(Slot {
                     repository: launch.repository,
                     load: Load {
-                        space: launch.space,
+                        space: launch.space.or(launch.opens),
                         activity: starting_since(launch.seen_at),
                     },
                 });
