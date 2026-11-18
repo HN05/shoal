@@ -19,6 +19,16 @@ pub(super) struct Recorded {
 }
 
 impl Recorded {
+    /// What a start handed the `chat` its starter recorded, if any, has
+    /// recorded so far: that chat.
+    pub(super) fn handed(chat: Option<&SpaceId>) -> Self {
+        let recorded = Self::default();
+        if let Some(chat) = chat {
+            recorded.record(chat);
+        }
+        recorded
+    }
+
     /// Keep `chat` as the one this start recorded.
     pub(super) fn record(&self, chat: &SpaceId) {
         let _ = self.chat.set(chat.clone());

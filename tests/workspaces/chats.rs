@@ -2151,11 +2151,13 @@ fn chat_starts_from_the_checkout_without_syncing() {
     assert_eq!(head, local);
 }
 
-/// A chat whose focused tab opens, but whose start there fails before its
-/// agent runs, goes, as the start recorded it before the tab opened.
-#[test]
-fn a_chat_whose_tab_fails_to_start_its_agent_goes() {
-    let fixture = Fixture::with_config(Some("terminal.focus = false\n"));
+/// A fixture whose chat's focused Herdr tab has opened, its chat recorded
+/// without a launch entry, since no limit applies, and the command that
+/// runs the tab's own call.
+fn chat_with_an_open_tab() -> (Fixture, Command) {
+    let fixture = Fixture::with_config(Some(
+        "terminal.focus = false\nmachine.max_heavy_agents = 'none'\n",
+    ));
     install_fake_herdr(&fixture);
     install_recording_agent(&fixture, "codex");
     let repo = fixture.repo.to_str().unwrap();
@@ -2166,19 +2168,38 @@ fn a_chat_whose_tab_fails_to_start_its_agent_goes() {
         fixture.ok(&["list", "--chats"]).as_array().unwrap().len(),
         1
     );
+    let mut tab = herdr_worker_command(&fixture);
+    tab.current_dir(&fixture.repo)
+        .env("HERDR_ENV", "1")
+        .env("HERDR_PANE_ID", "w1:p9");
+    (fixture, tab)
+}
 
+/// A chat whose focused tab opens, but whose start there fails before its
+/// agent runs, goes, as the start recorded it before the tab opened.
+#[test]
+fn a_chat_whose_tab_fails_to_start_its_agent_goes() {
+    let (fixture, mut tab) = chat_with_an_open_tab();
     fs::remove_file(fixture.root.path().join("bin/codex")).unwrap();
-    let (output, transcript) = fixture.interactive_command(
-        herdr_worker_command(&fixture)
-            .current_dir(&fixture.repo)
-            .env("HERDR_ENV", "1")
-            .env("HERDR_PANE_ID", "w1:p9"),
-        "",
-    );
+
+    let (output, transcript) = fixture.interactive_command(&mut tab, "");
 
     assert!(!output.status.success(), "{transcript}");
     let chats = fixture.ok(&["list", "--chats"]);
     assert_eq!(chats, serde_json::json!([]), "{transcript}");
+}
+
+/// A chat whose tab's start fails before it takes the recorded chat, as one
+/// without a terminal does, goes too.
+#[test]
+fn a_chat_whose_tab_fails_before_taking_it_goes() {
+    let (fixture, mut tab) = chat_with_an_open_tab();
+
+    let output = tab.stdin(Stdio::null()).output().unwrap();
+
+    assert!(!output.status.success(), "{}", printed(&output));
+    let chats = fixture.ok(&["list", "--chats"]);
+    assert_eq!(chats, serde_json::json!([]), "{}", printed(&output));
 }
 
 #[test]

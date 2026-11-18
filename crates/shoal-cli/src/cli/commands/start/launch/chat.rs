@@ -110,11 +110,11 @@ impl Launch {
         let settings = shoal_workers::settings::of(&ctx.paths, repo.config()).await?;
         let chat = command::chat_launch(settings, &agent, repo, &topic, &options, name)?;
         Ok(Self {
+            recorded: Arc::new(Recorded::handed(options.chat.as_ref())),
             agent,
             chat,
             topic,
             options,
-            recorded: Arc::default(),
         })
     }
 
