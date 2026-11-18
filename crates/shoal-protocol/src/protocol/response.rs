@@ -101,6 +101,10 @@ shoal_states::open_enum! {
         /// An import failed before it recorded anything of the space, which
         /// this machine then does not have.
         NotImported => "not_imported",
+        /// The other joined machine a request goes to cannot be reached
+        /// through the hub now, or its answer broke off, as while it or the
+        /// hub restarts.
+        MachineUnreachable => "machine_unreachable",
     }
 }
 
@@ -121,6 +125,7 @@ impl ErrorCode {
                 | Self::HookFailed
                 | Self::PushFailed
                 | Self::NotImported
+                | Self::MachineUnreachable
         )
     }
 }

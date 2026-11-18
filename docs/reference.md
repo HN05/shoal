@@ -726,8 +726,10 @@ session with the tool whose format its files are in, then the bytes of each of
 its files, everything so far and then what the tool appends, each with its
 path in the tool's session directory and its offset, and the current session
 again whenever the space goes on in another, of whichever agent. Across a
-daemon restart the follow follows again from where it read each file to;
-one under a scope token ends once the token is revoked.
+daemon restart, or while the space's machine or the hub restarts, which
+the daemon reports as `machine_unreachable`, the follow follows again from
+where it read each file to; one under a scope token ends once the token is
+revoked.
 Shoal copies the bytes unread, so
 the app parses each tool's format itself and sends input through the requests
 the protocol has. Following an agent and messaging it are your

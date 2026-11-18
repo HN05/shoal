@@ -137,7 +137,10 @@ impl Manager {
             summary: format!("{name} for space {space}"),
         };
         if request.forwarding == Forwarding::Streamed {
-            let incoming = self.stream_forwarded(machine, forwarded).await?;
+            // Refusals of the request itself come on the stream, so what
+            // fails here is reaching the machine.
+            let incoming = (self.stream_forwarded(machine, forwarded).await)
+                .map_err(|error| Refusal::wrap(Reason::MachineUnreachable, error))?;
             return Ok(Elsewhere::Streamed(incoming));
         }
         match self.send_forwarded(machine, forwarded, delivery).await? {

@@ -19,6 +19,9 @@ pub enum Reason {
     UnsavedWork,
     /// An import failed before it recorded anything of the space.
     NotImported,
+    /// The other joined machine a request goes to cannot be reached through
+    /// the hub now, or its answer broke off.
+    MachineUnreachable,
 }
 
 #[derive(Debug)]
@@ -91,6 +94,7 @@ impl Reason {
             Self::NotReady => ErrorCode::NotReady,
             Self::UnsavedWork => ErrorCode::UnsavedWork,
             Self::NotImported => ErrorCode::NotImported,
+            Self::MachineUnreachable => ErrorCode::MachineUnreachable,
         }
     }
 

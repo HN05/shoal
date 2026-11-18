@@ -17,7 +17,7 @@ use super::{
     hub::{Elsewhere, Incoming, Unanswered},
     scope::Caller,
 };
-use crate::refusal::Refusal;
+use crate::refusal::{Reason, Refusal};
 
 /// What a request for a space elsewhere goes on with: its method as its
 /// caller sent it, before its scope narrowed it, and its scope token.
@@ -172,6 +172,7 @@ impl Streamed<'_> {
                 Ok(None) => return Ok(()),
                 Err(error) => {
                     let error = error.context("the other machine's answer broke off");
+                    let error = Refusal::wrap(Reason::MachineUnreachable, error);
                     let failure = body_frame(self.request_id, answer::failure(&error))?;
                     return self.write(&mut writer, vec![failure]).await.map(drop);
                 }

@@ -111,7 +111,8 @@ async fn open(
 
 impl<D: Daemon> SessionFollow<D> {
     /// What comes next, waiting for the session's tool to write more, and
-    /// following again once a daemon restart closed the connection.
+    /// following again once a daemon restart closed the connection or the
+    /// space's machine went out of reach.
     pub async fn next(&mut self) -> Result<Followed> {
         if let Some(session) = self.first.take() {
             return Ok(Followed::Session(session));
@@ -131,7 +132,11 @@ impl<D: Daemon> SessionFollow<D> {
                 }
                 Err(error) => return Err(error),
             };
-            return self.take(response.body.into_result()?);
+            match response.body.into_result() {
+                // As while the space's machine or the hub restarts.
+                Err(error) if connection::machine_unreachable(&error) => self.responses = None,
+                body => return self.take(body?),
+            }
         }
     }
 

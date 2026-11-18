@@ -4,7 +4,7 @@
 use std::{fs, io::Write as _, path::PathBuf, process::Stdio};
 
 use shoal_client::{
-    connection::Daemon,
+    connection::{Connector, Daemon},
     transcripts::{Followed, SessionFollow, follow_session},
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -93,9 +93,9 @@ fn second_turn(session: &Session) -> &'static [u8] {
 }
 
 /// `machine`'s daemon as an app reaches it, as the user.
-fn app(machine: &Base) -> shoal_client::connection::Connector {
+fn app(machine: &Base) -> Connector {
     let state = machine.root.path().join("state");
-    shoal_client::connection::Connector {
+    Connector {
         paths: shoal_protocol::paths::Paths {
             home: machine.root.path().into(),
             socket: state.join("daemon.sock"),
@@ -162,13 +162,13 @@ fn a_machine_follows_a_session_on_a_third_machine_as_its_tool_writes_it() {
     });
 }
 
-#[test]
-fn a_follow_goes_on_from_where_it_read_after_a_daemon_restart() {
-    let hub = machine(true, "app");
-    let mut session = laptop_session(&hub);
+/// Follow `session` from `follower`, restart the laptop's daemon while
+/// the follow reads, and check that it goes on with only what the
+/// transcript gained since.
+fn follows_on_across_a_restart_of_the_laptop(session: &mut Session, follower: Connector) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let mut follow = runtime.block_on(async {
-        let mut follow = follow_session(app(&session.laptop), selected(&session), None)
+        let mut follow = follow_session(follower, selected(session), None)
             .await
             .unwrap();
         followed_session(&mut follow).await;
@@ -176,7 +176,7 @@ fn a_follow_goes_on_from_where_it_read_after_a_daemon_restart() {
         follow
     });
     session.laptop.restart();
-    let second = second_turn(&session);
+    let second = second_turn(session);
     let next = runtime.block_on(follow.next()).unwrap();
     let Followed::Bytes { offset, bytes, .. } = next else {
         panic!("expected only what the transcript gained, got {next:?}");
@@ -185,6 +185,24 @@ fn a_follow_goes_on_from_where_it_read_after_a_daemon_restart() {
         (offset, bytes.as_slice()),
         (first_turn().len() as u64, second)
     );
+}
+
+#[test]
+fn a_follow_goes_on_from_where_it_read_after_a_daemon_restart() {
+    let hub = machine(true, "app");
+    let mut session = laptop_session(&hub);
+    let follower = app(&session.laptop);
+    follows_on_across_a_restart_of_the_laptop(&mut session, follower);
+}
+
+#[test]
+fn a_follow_through_the_hub_goes_on_once_the_restarted_machine_rejoins() {
+    let hub = machine(true, "app");
+    let mut session = laptop_session(&hub);
+    let desk = machine(false, "app");
+    join(&desk, &hub, "desk");
+    listed(&desk, &session.space, &session.laptop_id);
+    follows_on_across_a_restart_of_the_laptop(&mut session, app(&desk));
 }
 
 #[test]

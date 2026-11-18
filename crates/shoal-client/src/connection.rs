@@ -664,7 +664,9 @@ pub async fn await_reply<M: Into<Method>>(
 /// The result of `ask`, requests that are safe to repeat, from a daemon
 /// that restarted: an unreachable socket, a closed connection or a scope
 /// refusal is tried again within the restart budget, since a restarted
-/// daemon knows an execution's scope only once its wrapper reattaches.
+/// daemon knows an execution's scope only once its wrapper reattaches, as
+/// is another machine that the hub cannot reach while it or the hub
+/// restarts.
 pub async fn after_restart<T, F>(ask: impl Fn() -> F) -> Result<T>
 where
     F: Future<Output = Result<T>>,
@@ -676,7 +678,8 @@ where
                 if Instant::now() < deadline
                     && (is_unreachable(&error)
                         || stream_closed(&error)
-                        || scope_denied(&error)) =>
+                        || scope_denied(&error)
+                        || machine_unreachable(&error)) =>
             {
                 sleep(timing::DAEMON_POLL_INTERVAL).await;
             }
@@ -718,6 +721,14 @@ pub fn scope_denied(error: &anyhow::Error) -> bool {
     error
         .downcast_ref::<protocol::RemoteError>()
         .is_some_and(|remote| remote.code == protocol::ErrorCode::ScopeDenied)
+}
+
+/// The daemon answered that the other machine a request goes to cannot be
+/// reached now.
+pub fn machine_unreachable(error: &anyhow::Error) -> bool {
+    error
+        .downcast_ref::<protocol::RemoteError>()
+        .is_some_and(|remote| remote.code == protocol::ErrorCode::MachineUnreachable)
 }
 
 /// The daemon answered that it is still starting.
