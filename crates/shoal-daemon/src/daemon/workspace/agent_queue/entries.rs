@@ -15,7 +15,7 @@ use super::{
     store::{self, Awaits, ENTRY_COLUMNS, Launch, LaunchRequest, entry, insert_launch},
 };
 use crate::{
-    daemon::{notifications::NotificationKind, scope::Caller, workspace::Manager},
+    daemon::{notifications::NotificationKind, workspace::Manager},
     model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan, SpaceKind, Workspace},
     state::{QueueKind, QueueState},
 };
@@ -367,30 +367,6 @@ impl Manager {
                 )
             })
             .await
-    }
-
-    /// The caller as which the launch `id`, waiting or starting, records the
-    /// chat it starts in: the space whose scoped process queued it, or none
-    /// for a launch of the user's.
-    pub(in crate::daemon) async fn chat_launch_scope(
-        &self,
-        id: &QueueEntryId,
-    ) -> Result<Option<Caller>> {
-        let id = id.to_owned();
-        let scope: Option<Option<SpaceId>> = self
-            .store
-            .run(move |db| {
-                Ok(db
-                    .query_row(
-                        "SELECT scope_space_id FROM agent_queue WHERE id=?1 AND state IN (?2,?3)",
-                        params![id, QueueState::Starting, QueueState::Queued],
-                        |row| row.get(0),
-                    )
-                    .optional()?)
-            })
-            .await?;
-        let scope = scope.context("the queue entry no longer starts")?;
-        Ok(scope.map(Caller::of_space))
     }
 
     /// The workspaces in which an agent launch or restore waits in the queue

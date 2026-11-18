@@ -61,18 +61,17 @@ struct Launched {
 }
 
 impl Launched {
-    /// The chat whose agent `caller` runs: the one the daemon recorded for
-    /// its start, placed at its origin, which a scoped caller's scope must
-    /// reach, else a new one `start` describes, recorded with its launch
-    /// attached and linked.
+    /// The chat whose agent `caller` runs: the one recorded for its start,
+    /// placed at its origin, which a scoped caller's scope must reach, else
+    /// a new one `start` describes, recorded with its launch attached and
+    /// linked.
     async fn take(
         self,
         manager: &Manager,
         start: ChatStart,
         caller: Option<&Caller>,
     ) -> Result<LaunchedChat> {
-        let recorded = manager.recorded_launch(self.chat.as_ref(), self.entry.as_ref());
-        let Some(chat) = recorded.await? else {
+        let Some(chat) = manager.space_id(self.chat.as_ref()).await? else {
             return self.record(manager, start, caller).await;
         };
         if let Some(caller) = caller {
@@ -82,8 +81,7 @@ impl Launched {
         manager.take_recorded_chat(&chat, self.origin).await
     }
 
-    /// Record the new chat `start` describes for `caller`, confined as the
-    /// scoped process that queued its launch would be, with the
+    /// Record the new chat `start` describes for `caller`, with the
     /// permissions and priority it may give.
     async fn record(
         self,
@@ -95,37 +93,14 @@ impl Launched {
             let (workspace, parent) = (start.workspace.as_ref(), start.parent.as_ref());
             manager.ensure_parent_not_host(workspace, parent).await?;
         }
-        let entry = self.entry.as_ref();
-        let queued = queued_scope(manager, caller, entry, &mut start.parent).await?;
-        let caller = caller.or(queued.as_ref());
         let held = (start.repository.as_ref(), start.workspace.as_ref());
         (manager.ensure_chat_given_held(caller, &start.narrowing, held)).await?;
         start.priority = manager.given_priority(caller, start.priority).await?;
         let parent = manager.space_id(start.parent.as_ref()).await?;
         let new = NewChat::of(&start, parent, self.origin)?;
+        let entry = self.entry.as_ref();
         manager.record_launch(&start, new, entry, caller).await
     }
-}
-
-/// The scope a chat the user's process records for the launch `entry` is
-/// confined to: that of the space whose scoped process queued the launch,
-/// below which `parent` then goes, as that process's own start would put
-/// it; none for a scoped `caller`, whose own scope confines it, or for a
-/// launch the user queued.
-async fn queued_scope(
-    manager: &Manager,
-    caller: Option<&Caller>,
-    entry: Option<&shoal_ids::queue_entry_ids::QueueEntryId>,
-    parent: &mut Option<SpaceSelector>,
-) -> Result<Option<Caller>> {
-    let (None, Some(entry)) = (caller, entry) else {
-        return Ok(None);
-    };
-    let Some(queued) = manager.chat_launch_scope(entry).await? else {
-        return Ok(None);
-    };
-    manager.parent_below(&queued, parent).await?;
-    Ok(Some(queued))
 }
 
 impl Scoped for ChatMethod {

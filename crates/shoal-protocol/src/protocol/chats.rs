@@ -9,19 +9,17 @@ use crate::space_names::SpaceSelector;
 pub enum ChatMethod {
     /// The chat whose agent the caller runs itself, in its terminal, a
     /// place it opened or an app, at `origin` where a terminal host runs
-    /// it: `chat`, which the daemon recorded for this start, else the one
-    /// the launch `queue_entry` recorded while it waited, else a new one
-    /// `start` describes, recorded with that launch attached and linked to
-    /// what it starts on. Answers with [`crate::chats::LaunchedChat`].
+    /// it: `chat`, which was recorded for this start, else a new one
+    /// `start` describes, recorded with the launch `queue_entry` attached
+    /// and linked to what it starts on. Answers with
+    /// [`crate::chats::LaunchedChat`].
     LaunchChat {
         start: Box<ChatStart>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         chat: Option<SpaceSelector>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         origin: Option<crate::sessions::Origin>,
-        /// The launch whose slot the chat's agent takes, which a scoped
-        /// process may have queued: a new chat is then confined as that
-        /// process's start would be.
+        /// The launch whose slot the chat's agent takes.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         queue_entry: Option<shoal_ids::queue_entry_ids::QueueEntryId>,
     },

@@ -51,25 +51,6 @@ impl Manager {
         Ok(LaunchedChat { chat, warnings })
     }
 
-    /// The chat the daemon recorded for a start whose agent its caller
-    /// runs: `chat`, else the one the launch `entry` recorded while it
-    /// waited.
-    pub(in crate::daemon) async fn recorded_launch(
-        &self,
-        chat: Option<&SpaceSelector>,
-        entry: Option<&QueueEntryId>,
-    ) -> Result<Option<SpaceId>> {
-        if let Some(chat) = self.space_id(chat).await? {
-            return Ok(Some(chat));
-        }
-        let Some(entry) = entry else {
-            return Ok(None);
-        };
-        let entries = self.queue_entries().await?;
-        let queued = entries.into_iter().find(|queued| queued.id == *entry);
-        Ok(queued.and_then(|queued| queued.space_id))
-    }
-
     /// The chat `id` the daemon recorded for a start whose agent its caller
     /// runs, placed at `origin` when it runs in a terminal host.
     pub(in crate::daemon) async fn take_recorded_chat(

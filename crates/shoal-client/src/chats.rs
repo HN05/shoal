@@ -14,10 +14,9 @@ use shoal_protocol::{
 };
 
 /// The chat whose agent the caller runs itself, at `origin` in a terminal
-/// host when it runs in one: `chat`, which the daemon recorded for this
-/// start, else the one the launch `queue_entry` recorded while it waited,
-/// else a new one `start` describes, which the daemon records with that
-/// launch attached and links to what it starts on.
+/// host when it runs in one: `chat`, which was recorded for this start,
+/// else a new one `start` describes, which the daemon records with the
+/// launch `queue_entry` attached and links to what it starts on.
 pub async fn launch(
     daemon: &impl Daemon,
     start: ChatStart,
