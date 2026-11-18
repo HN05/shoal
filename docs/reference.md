@@ -4047,8 +4047,9 @@ returns only once the space is removed and reports the branch it kept.
 Removal deletes the workspace's branch when a remote-tracking branch or the
 default branch has every one of its commits, including squash and rebase merges
 the default branch's remote-tracking branch knows about. A branch with commits
-only it has stays, and so do the default branch and every branch while the
-default branch is unknown. Removal never asks about the branch. Shoal deletes a
+only it has stays, and so do the default branch, a branch another workspace
+builds on, and every branch while the default branch is unknown. Removal never
+asks about the branch. Shoal deletes a
 kept branch later, once a remote or the default branch has all its commits, unless
 it moved, is checked out or belongs to a workspace again.
 Uncommitted changes, untracked files and commits on a detached HEAD are deleted
@@ -4218,6 +4219,7 @@ shoal move export 7 | ssh other shoal move import --restore      # agents contin
 shoal move ssh other 5                         # the same, once ssh reaches Shoal there
 shoal move export --repo app --all -o moving   # end every space of app, a file per tree
 shoal move export 7 8 -o moving                # remove both, a file each unless 8 is below 7
+shoal move export 7 --no-children -o topic.shoal  # leave the spaces below 7 here, one level up
 shoal move export 7 --keep -o copy.shoal       # keep workspace 7 running and write a copy of it
 shoal move ssh other 7 --keep                  # keep workspace 7 running and copy it there
 shoal move import moving                       # continue every space exported to moving
@@ -4250,6 +4252,17 @@ A workspace or chat
 already removed, as by cleanup, is exported from its removal record, which
 stays, with the records of the spaces its removal took, under the refusals that
 still apply, without another removal. The file's manifest names each record's `kind`, `workspace` or `chat`.
+
+`--no-children` leaves the spaces below here, except those named too, which go
+in the file where it carries the space above them; the chats in the worktree of
+a workspace it carries still go with it. Each space that stays keeps running and
+moves up one level, below the exported space's parent, or to the top level when
+that cannot take it, with the spaces below it; a workspace keeps its branch and
+the branch it builds on, which the removal keeps, and loses only its link to the
+exported workspace. The requests the exported spaces decided for those that stay
+pass to the nearest space above them with an agent, or to the user. A removed
+space exports with its own record only; the records of the spaces its removal
+took stay here, and restoring one opens it at the top level.
 
 `shoal move export <space>... -o <directory>`, for several spaces or those the
 picker selects when `-o` names an existing directory, and `shoal move export

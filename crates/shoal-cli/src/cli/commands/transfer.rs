@@ -26,13 +26,19 @@ pub(super) async fn run(ctx: &Context, command: MoveCommand) -> Result<i32> {
             repository: Some(repository),
             output,
             keep,
+            no_children,
             confirmation,
             ..
         }) => {
             let directory = output.context("--all writes a file each; name a directory with -o")?;
+            let spaces = export::repository_spaces(ctx, repository).await?;
+            let carrying = export::carrying(no_children, &spaces);
             match keep {
-                true => export::copy::export_all_copies(ctx, repository, directory).await,
-                false => export::export_all(ctx, repository, directory, confirmation.yes).await,
+                true => export::copy::copy_into(ctx, &spaces, directory, None, &carrying).await,
+                false => {
+                    let yes = confirmation.yes;
+                    export::export_into(ctx, &spaces, directory, yes, &carrying).await
+                }
             }
         }
         MoveCommand::Export(ExportArgs {
@@ -41,13 +47,14 @@ pub(super) async fn run(ctx: &Context, command: MoveCommand) -> Result<i32> {
             output,
             keep,
             checkpoint,
+            no_children,
             confirmation,
             ..
         }) => {
             let file = output.map_or_else(standard_output, Ok)?;
             match keep {
-                true => export::copy::export_copy(ctx, space, file, checkpoint).await,
-                false => export::export(ctx, space, file, confirmation.yes).await,
+                true => export::copy::export_copy(ctx, space, file, checkpoint, no_children).await,
+                false => export::export(ctx, space, file, confirmation.yes, no_children).await,
             }
         }
         MoveCommand::Import(ImportArgs {

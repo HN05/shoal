@@ -3757,7 +3757,10 @@ carries; only recording it differs by kind. A package carries every space
 below its space, whatever its kind, since removing the space takes them: one
 walk down `space_parents`, with the chats in each carried worktree, gives them
 parents first, so each opens below its parent again and a copied tree keeps
-its shape, each copy below the copy of its parent. An imported space's agents, a
+its shape, each copy below the copy of its parent. `--no-children` instead
+leaves the spaces below here, moved up one level through the tree's parent
+link, and keeps the branch a staying workspace builds on, so they keep running
+as they were. An imported space's agents, a
 chat's as a workspace's, stay stopped unless the import queues their restores.
 Each package uses the lowest format version that reads it, so an older importer
 refuses as newer what it would misread; a chat package from before chats moved

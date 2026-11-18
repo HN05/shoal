@@ -1592,3 +1592,36 @@ fn exporting_a_parent_takes_its_children_which_import_opens_below_it() {
     let status = fixture.ok(&["status", &ids[1]]);
     assert_eq!(status["workspace"]["parent"]["id"], ids[0], "{status}");
 }
+
+#[test]
+fn a_batch_writes_a_file_per_tree_unless_children_stay() {
+    let fixture = Fixture::new();
+    let split = |parent: &str, name: &str| {
+        fixture.add(parent);
+        let child = fixture.ok(&["split", name, "--workspace", &fixture.id(parent)]);
+        PathBuf::from(child["path"].as_str().unwrap())
+    };
+    let child = split("parent", "child");
+    let kid = split("lone", "kid");
+    let directory = fixture.root.path().join("exports");
+
+    // Named together, the child goes in its parent's file.
+    let (parent, below) = (fixture.id("parent"), fixture.id("child"));
+    let output = directory.to_str().unwrap();
+    let exported = fixture.ok(&["move", "export", &parent, &below, "-o", output, "--yes"]);
+    assert_eq!(exported["failed"], serde_json::json!([]), "{exported}");
+    let files: Vec<_> = (fs::read_dir(&directory).unwrap())
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert_eq!(files, [format!("{parent}.shoal").as_str()]);
+    assert!(!child.exists());
+
+    // Without the spaces below, the kid stays, one level up.
+    let file = fixture.root.path().join("lone.shoal");
+    let lone = fixture.id("lone");
+    let args = ["move", "export", &lone, "-o", file.to_str().unwrap()];
+    fixture.ok(&[&args[..], &["--no-children"]].concat());
+    assert!(kid.exists());
+    let status = fixture.ok(&["status", &fixture.id("kid")]);
+    assert_eq!(status["workspace"]["parent"], Value::Null, "{status}");
+}

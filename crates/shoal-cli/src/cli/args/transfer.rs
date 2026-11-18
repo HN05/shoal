@@ -21,7 +21,8 @@ pub enum MoveCommand {
     /// removal took. Without -o, or with `-`, it writes to standard output, which must not be a
     /// terminal. When -o names a directory, several spaces, or with --all every space of the
     /// repository, go to a file each in it, those below another in its file, once each one can
-    /// be exported. --keep leaves the spaces running and writes copies of them instead.
+    /// be exported. --no-children leaves the spaces below here instead, moved up one level.
+    /// --keep leaves the spaces running and writes copies of them instead.
     Export(ExportArgs),
     /// Continue workspaces and chats shoal move export wrote, in the repository with the same origin.
     ///
@@ -72,6 +73,9 @@ pub struct ExportArgs {
     /// --checkpoint lists them.
     #[arg(long, requires = "keep", conflicts_with = "all", value_name = "N")]
     pub checkpoint: Option<CheckpointNumber>,
+    /// Leave the spaces below each space here, one level up, except those named too.
+    #[arg(long)]
+    pub no_children: bool,
     #[command(flatten)]
     pub confirmation: ConfirmationArgs,
 }
@@ -120,6 +124,9 @@ pub struct SshArgs {
     /// Leave the agents stopped on the other machine instead of queueing their restores.
     #[arg(long)]
     pub no_restore: bool,
+    /// Leave the spaces below each space here, one level up, except those named too.
+    #[arg(long)]
+    pub no_children: bool,
     /// The shoal program on the other machine, when SSH's PATH does not find it.
     #[arg(long, value_name = "PATH", default_value = "shoal")]
     pub shoal: String,

@@ -33,16 +33,18 @@ use directory::DirectoryReport;
 pub(super) use directory::ExportDirectory;
 
 /// `shoal move export`: end the space here, or take an already removed
-/// one, and write it with the spaces below it to `file`. Several spaces,
-/// or any written to a directory, go to a file each in it. The destination
-/// is checked before a picker opens.
+/// one, and write it with the spaces below it to `file`, or only with the
+/// named ones among them when `no_children`. Several spaces, or any written
+/// to a directory, go to a file each in it. The destination is checked
+/// before a picker opens.
 pub(super) async fn export(
     ctx: &Context,
     names: Vec<SpaceSelector>,
     file: PathBuf,
     yes: bool,
+    no_children: bool,
 ) -> Result<i32> {
-    let carrying = Carrying::Subtree;
+    let carrying = carrying(no_children, &[]);
     if let [selector] = names.as_slice()
         && crate::client::workspaces::present_space(&ctx.paths, selector)
             .await?
@@ -58,6 +60,7 @@ pub(super) async fn export(
             "several spaces export to a file each; name a directory with -o"
         );
         let spaces = selected_spaces(ctx, names).await?;
+        let carrying = self::carrying(no_children, &spaces);
         return export_into(ctx, &spaces, file, yes, &carrying).await;
     }
     let output = Output::reserve(&file)?;
@@ -71,16 +74,13 @@ pub(super) async fn export(
     output.report(ctx, &exported)
 }
 
-/// `shoal move export --all`: export every space of `repository` to a file
-/// of its own in `directory`, those below another in its file.
-pub(super) async fn export_all(
-    ctx: &Context,
-    repository: String,
-    directory: PathBuf,
-    yes: bool,
-) -> Result<i32> {
-    let spaces = repository_spaces(ctx, repository).await?;
-    export_into(ctx, &spaces, directory, yes, &Carrying::Subtree).await
+/// Which spaces below each of the `spaces` an export carries: every one,
+/// or with `no_children` only those among the `spaces`.
+pub(super) fn carrying(no_children: bool, spaces: &[Space]) -> Carrying {
+    match no_children {
+        false => Carrying::Subtree,
+        true => Carrying::Selected(spaces.iter().map(|space| space.id.clone()).collect()),
+    }
 }
 
 /// The spaces `names` selects, or the current one or those the picker
@@ -100,9 +100,10 @@ pub(super) async fn selected_spaces(
 }
 
 /// Export `spaces` with the spaces below them that `carrying` carries to
-/// a file each in `directory`, once each one can be exported, so a space
-/// that cannot be leaves every other one in place.
-async fn export_into(
+/// a file each in `directory`, those below another in its file, once each
+/// one can be exported, so a space that cannot be leaves every other one in
+/// place.
+pub(super) async fn export_into(
     ctx: &Context,
     spaces: &[Space],
     directory: PathBuf,

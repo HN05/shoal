@@ -6,8 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Result, ensure};
 
 use super::{
-    super::STANDARD_STREAM, DirectoryReport, ExportDirectory, Output, repository_spaces,
-    selected_spaces, warn,
+    super::STANDARD_STREAM, DirectoryReport, ExportDirectory, Output, selected_spaces, warn,
 };
 use crate::{
     cli::{
@@ -29,6 +28,7 @@ pub(in super::super) async fn export_copy(
     names: Vec<SpaceSelector>,
     file: PathBuf,
     checkpoint: Option<CheckpointNumber>,
+    no_children: bool,
 ) -> Result<i32> {
     if names.len() > 1 || file.is_dir() {
         ensure!(
@@ -36,41 +36,33 @@ pub(in super::super) async fn export_copy(
             "several copies export to a file each; name a directory with -o"
         );
         let spaces = selected_spaces(ctx, names).await?;
-        return copy_into(ctx, &spaces, file, checkpoint).await;
+        let carrying = super::carrying(no_children, &spaces);
+        return copy_into(ctx, &spaces, file, checkpoint, &carrying).await;
     }
     let output = Output::reserve(&file)?;
     let space = ui::select_space(ctx, names.into_iter().next(), Fallback::CurrentDirectory).await?;
-    let exported = copy(ctx, space, checkpoint, output.file(), Carrying::Subtree).await?;
+    let carrying = super::carrying(no_children, &[]);
+    let exported = copy(ctx, space, checkpoint, output.file(), carrying).await?;
     output.report(ctx, &exported)
 }
 
-/// `shoal move export --all --keep`: write a copy of every space of
-/// `repository` to a file of its own in `directory`.
-pub(in super::super) async fn export_all_copies(
-    ctx: &Context,
-    repository: String,
-    directory: PathBuf,
-) -> Result<i32> {
-    let spaces = repository_spaces(ctx, repository).await?;
-    copy_into(ctx, &spaces, directory, None).await
-}
-
-/// Write a copy of each of `spaces`, with copies of the spaces below it,
-/// to a file of its own in `directory`, a space below another in its file,
-/// going on after one fails, since a copy removes nothing.
-async fn copy_into(
+/// Write a copy of each of `spaces`, with copies of the spaces below it
+/// that `carrying` carries, to a file of its own in `directory`, a space
+/// below another in its file, going on after one fails, since a copy
+/// removes nothing.
+pub(in super::super) async fn copy_into(
     ctx: &Context,
     spaces: &[Space],
     directory: PathBuf,
     checkpoint: Option<CheckpointNumber>,
+    carrying: &Carrying,
 ) -> Result<i32> {
-    let carrying = Carrying::Subtree;
-    let spaces = copied_alone(ctx, spaces, &carrying).await?;
+    let spaces = copied_alone(ctx, spaces, carrying).await?;
     ensure_one_at_checkpoint(spaces.len(), checkpoint)?;
     let directory = ExportDirectory::create(directory)?;
     let mut report = DirectoryReport::new(&directory, true);
     for space in &spaces {
-        let copied = copy_one(ctx, &directory, space, checkpoint, &carrying).await;
+        let copied = copy_one(ctx, &directory, space, checkpoint, carrying).await;
         report.add(ctx, (&space.name, &space.id), copied);
     }
     report.finish(ctx)
