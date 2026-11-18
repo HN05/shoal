@@ -1459,3 +1459,28 @@ fn repository_setup_refuses_named_arguments_before_any_picker() {
         assert!(rows.is_empty(), "{args:?} opened the picker: {rows}");
     }
 }
+
+#[test]
+fn a_repository_that_keeps_its_refs_in_a_reftable_takes_workspaces() {
+    let fixture = Fixture::new();
+    let repo = shoal_core::test_support::reftable_repository(fixture.root.path(), "reftable");
+    fixture.ok(&["repo", "add", repo.to_str().unwrap()]);
+    let workspace = fixture.ok(&[
+        "start",
+        "--wait",
+        repo.to_str().unwrap(),
+        "--branch",
+        "topic",
+    ]);
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    assert_eq!(git(path, &["branch", "--show-current"]), "topic\n");
+    fs::write(path.join("tracked"), "changed\n").unwrap();
+    git(path, &["commit", "-qam", "work"]);
+    let head = git(path, &["rev-parse", "HEAD"]);
+    let status = fixture.ok(&["status", &fixture.id("topic")]);
+    assert_eq!(status["workspace"]["branch"], "topic");
+    fixture.ok(&["rm", "--wait", &fixture.id("topic"), "--yes"]);
+    assert!(!path.exists());
+    // Removal keeps the branch, whose commit the default branch lacks.
+    assert_eq!(git(&repo, &["rev-parse", "refs/heads/topic"]), head);
+}
