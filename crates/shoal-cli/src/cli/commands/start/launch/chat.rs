@@ -316,6 +316,7 @@ async fn run_tracked(
     match records.is_empty() {
         true => shoal_workers::execution::run(&ctx.paths, space, command, Some(agent)).await,
         false => {
+            let records = (records, None);
             shoal_workers::execution::run_recovery(&ctx.paths, space, command, agent, records).await
         }
     }

@@ -338,6 +338,7 @@ fn tracked_execution_requests_require_a_known_kind() {
             kind,
             agent: Some("test-agent".into()),
             recover: false,
+            source: None,
             reattach: true,
             queue_entry: None,
             demo: None,

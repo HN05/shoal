@@ -78,19 +78,21 @@ pub async fn run_command(
 
 /// Consume the selected recovery records only after the replacement process is
 /// recorded, so failed launches remain recoverable without duplicating sessions.
+/// `source` says what made a restore the user runs here, which counts as
+/// their interaction with the agent.
 pub async fn run_recovery(
     paths: &CommandPaths,
     workspace: SpaceSelector,
     command: Vec<OsString>,
     agent: TrackedAgent,
-    records: Vec<PathBuf>,
+    (records, source): (Vec<PathBuf>, Option<shoal_protocol::launches::LaunchSource>),
 ) -> Result<i32> {
     ensure!(!command.is_empty(), "a restore command is required");
     run_tracked(
         paths,
         workspace,
         command,
-        Mode::Recovery { records },
+        Mode::Recovery { records, source },
         Some(agent),
     )
     .await

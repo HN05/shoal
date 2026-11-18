@@ -1413,7 +1413,7 @@ async fn resumed_agent_child() {
         id,
         vec!["sh".into(), "-c".into(), script.into()],
         shoal_core::execution::TrackedAgent::named("fixture"),
-        vec![record.into()],
+        (vec![record.into()], None),
     )
     .await
     .unwrap_or_else(|error| {

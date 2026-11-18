@@ -240,7 +240,7 @@ fn handoff_terminal(terminal: &mut Option<Terminal>, group: &ProcessGroup) -> Re
 /// the `recovery_record` an agent resumed in place restores from.
 fn restored_records<'a>(mode: &'a Mode, recovery_record: Option<&'a Path>) -> Vec<&'a Path> {
     let records = match mode {
-        Mode::Recovery { records } => records.as_slice(),
+        Mode::Recovery { records, .. } => records.as_slice(),
         _ => &[],
     };
     (records.iter().map(PathBuf::as_path))

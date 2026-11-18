@@ -1345,6 +1345,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
                     kind: requested,
                     agent: None,
                     recover: false,
+                    source: None,
                     reattach: false,
                     queue_entry: None,
                     demo: None,

@@ -204,7 +204,10 @@ async fn launch(
         SpaceSelector::id(&space.id),
         recovery.command,
         agent,
-        records,
+        (
+            records,
+            Some(shoal_protocol::launches::LaunchSource::Manual),
+        ),
     )
     .await
 }

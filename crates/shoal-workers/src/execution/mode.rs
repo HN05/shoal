@@ -10,7 +10,11 @@ pub(super) enum Mode {
     /// `shoal restore` to report when `shoal stop` interrupts it.
     Command { record: bool },
     /// A restored agent session; `records` are consumed once it starts.
-    Recovery { records: Vec<PathBuf> },
+    /// `source` says what made a restore the user runs here.
+    Recovery {
+        records: Vec<PathBuf>,
+        source: Option<shoal_protocol::launches::LaunchSource>,
+    },
     /// A caller-chosen command without a terminal: no stdin, output appended
     /// to `log`, and the launch reported on stdout for the spawning CLI.
     Detached { log: PathBuf },
@@ -56,5 +60,13 @@ impl Mode {
     /// unmerge depend on gates the daemon holds.
     pub(super) fn reattaches(&self) -> bool {
         self.kind() == ExecutionKind::Command
+    }
+
+    /// What made the restore this mode runs, if it says.
+    pub(super) fn source(&self) -> Option<shoal_protocol::launches::LaunchSource> {
+        match self {
+            Self::Recovery { source, .. } => source.clone(),
+            _ => None,
+        }
     }
 }

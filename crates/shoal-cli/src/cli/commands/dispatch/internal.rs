@@ -217,7 +217,7 @@ async fn run_session(
         SpaceSelector::Id(space),
         command,
         agent,
-        records,
+        (records, None),
     )
     .await
 }

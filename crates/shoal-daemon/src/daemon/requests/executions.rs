@@ -28,12 +28,18 @@ pub(super) async fn handle(
             narrowing,
             new_session,
             recover,
+            source,
             reattach,
             queue_entry,
             demo,
             origin,
             merge,
         } => {
+            // A restore the user runs in their own terminal is their
+            // interaction with its agent, as one they queue is.
+            if recover && source == Some(shoal_protocol::launches::LaunchSource::Manual) {
+                manager.record_user_interaction(caller, &space).await;
+            }
             let manager = manager.clone();
             let context = execution_connection::ExecutionContext {
                 space,
@@ -162,3 +168,6 @@ fn refuse_nested_setup(caller: &Caller) -> Result<()> {
     );
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

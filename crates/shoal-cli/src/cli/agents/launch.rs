@@ -67,7 +67,7 @@ pub(super) async fn tracked(
         SpaceSelector::Id(workspace.id),
         command,
         agent,
-        replaces,
+        (replaces, None),
     )
     .await
 }

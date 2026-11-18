@@ -31,7 +31,6 @@ pub(super) async fn handle(
             blockers,
             pr,
         } => {
-            manager.record_user_interaction(caller, &workspace).await;
             let entry = manager.queue_agent(&workspace, *launch, blockers, pr);
             Body::QueueEntry(entry.await?)
         }

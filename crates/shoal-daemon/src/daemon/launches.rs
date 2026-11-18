@@ -79,10 +79,23 @@ impl Manager {
         let shape = self.launch_shape(&launch, caller).await?;
         launches::ensure_fits(&launch, &[], shape.kind, Some(&shape.mode))?;
         self.authorize_setup(&launch, caller).await?;
-        match shape.starts_worker(&launch) {
+        let manual = source == LaunchSource::Manual;
+        let launched = match shape.starts_worker(&launch) {
             true => self.launch_worker(launch, shape, source, caller).await,
             false => self.launch_space(launch, shape, source, caller).await,
+        }?;
+        if manual && launched.entry.is_some() {
+            self.record_launch_interaction(&launched, caller).await;
         }
+        Ok(launched)
+    }
+
+    /// Record that the user interacted with the agent `launched` started,
+    /// which the user's own start made by hand; a scoped caller's start is
+    /// not theirs.
+    async fn record_launch_interaction(&self, launched: &Launched, caller: Option<&Caller>) {
+        let space = SpaceSelector::id(&launched.space.id);
+        self.record_user_interaction(caller, &space).await;
     }
 
     /// Name the spaces `launch` names by ID: the space it goes below, and
@@ -100,3 +113,6 @@ impl Manager {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;

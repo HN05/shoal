@@ -115,6 +115,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         kind: crate::daemon::workspace::ExecutionKind::Command,
         agent: None,
         recover: false,
+        source: None,
         reattach: true,
         queue_entry: None,
         demo: None,

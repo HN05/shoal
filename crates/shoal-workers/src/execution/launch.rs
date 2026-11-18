@@ -545,6 +545,7 @@ async fn open_execution(
             _ => None,
         },
         origin: place.map(Box::new),
+        source: mode.source(),
         merge: match mode {
             Mode::Merge { options, .. } => Some(Box::new(options.clone())),
             _ => None,
