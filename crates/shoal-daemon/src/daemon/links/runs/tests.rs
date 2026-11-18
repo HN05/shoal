@@ -37,6 +37,9 @@ async fn only_a_chat_without_a_repository_watches_runs_beyond_its_own_repository
     };
     use shoal_protocol::space_names::SpaceSelector;
     let (root, manager) = manager().await;
+    // Settled in config, the forge's type needs no probe of the network.
+    let forge = "[machine.forges.\"codeberg.org\"]\ntype = \"forgejo\"\n";
+    crate::daemon::test_support::configure(&manager, forge).await;
     let manager = std::sync::Arc::new(manager);
     let path = repository(root.path(), "repo");
     let repo = manager
