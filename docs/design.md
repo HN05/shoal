@@ -918,8 +918,9 @@ repository afresh, so a moved or replaced worktree is caught as before, sees
 the user's and system config as Git does and none of the repository variables
 Shoal's Git commands drop, and runs on the blocking pool. A repository `gix`
 would not read as Git does, such as one whose refs are in a reftable, a partial
-clone, whose missing objects Git fetches, or one that enables an extension
-`gix` lacks, and a process whose environment points Git
+clone, whose missing objects Git fetches, one that enables an extension
+`gix` lacks, or one whose config includes a file on a condition `gix` evaluates
+otherwise, such as one on the branch, and a process whose environment points Git
 at another repository read through Git. Writes, network access, `status`,
 `ls-files` and `diff`, whose ignore and fsmonitor behaviour must match Git
 exactly, revision syntax Git interprets, such as a caller's `--base HEAD~2`,
