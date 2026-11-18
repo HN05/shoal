@@ -62,16 +62,20 @@ impl RexServer {
         Some(server)
     }
 
+    /// What `rex` printed with `args`; a `rex` that does not end fails the
+    /// test, naming the call.
+    #[track_caller]
     fn rex(&self, args: &[&str]) -> Output {
-        support::isolated(&self.root, &self.program)
-            .arg("--server")
-            .arg(&self.socket)
-            .arg("--autostart=false")
-            .args(args)
-            .output()
-            .unwrap()
+        support::run::output(
+            support::isolated(&self.root, &self.program)
+                .arg("--server")
+                .arg(&self.socket)
+                .arg("--autostart=false")
+                .args(args),
+        )
     }
 
+    #[track_caller]
     fn json(&self, args: &[&str]) -> Value {
         let output = self.rex(args);
         assert!(
@@ -83,6 +87,7 @@ impl RexServer {
     }
 
     /// A new session's ID and its first block, a shell the user opened.
+    #[track_caller]
     fn session(&self, label: &str, cwd: &Path) -> (String, String) {
         let created = self.json(&["new", label, "-c", cwd.to_str().unwrap(), "--json"]);
         (
@@ -104,6 +109,7 @@ impl RexServer {
     }
 
     /// The labels of `session`'s windows.
+    #[track_caller]
     fn windows(&self, session: &str) -> Vec<String> {
         self.json(&["window", "ls", "-s", session, "--json"])["windows"]
             .as_array()
@@ -114,6 +120,7 @@ impl RexServer {
     }
 
     /// The labels of `session`'s blocks.
+    #[track_caller]
     fn blocks(&self, session: &str) -> Vec<String> {
         let input = serde_json::json!({"session_id": session}).to_string();
         self.json(&["api", "call", "session.list_blocks", &input])["blocks"]
@@ -125,6 +132,7 @@ impl RexServer {
     }
 
     /// The first block of `session`'s window labelled `label`.
+    #[track_caller]
     fn block_in(&self, session: &str, label: &str) -> String {
         let windows = self.json(&["window", "ls", "-s", session, "--json"]);
         let window = windows["windows"]
@@ -140,10 +148,12 @@ impl RexServer {
     }
 
     /// What `block` shows, with its scrollback.
+    #[track_caller]
     fn screen(&self, block: &str) -> String {
         String::from_utf8_lossy(&self.rex(&["capture", "-b", block]).stdout).into_owned()
     }
 
+    #[track_caller]
     fn block_open(&self, block: &str) -> bool {
         self.rex(&["block", "inspect", block, "--json"])
             .status
@@ -151,6 +161,7 @@ impl RexServer {
     }
 
     /// Type `args` for this test's Shoal into `block`, as a user would.
+    #[track_caller]
     fn type_shoal(&self, fixture: &Fixture, block: &str, args: &str) {
         let line = format!(
             " '{}' --state-dir '{}' {args}\r",
@@ -389,14 +400,11 @@ fn demos_fall_back_to_the_configured_session_and_take_input() {
     };
     fixture.add("tried");
     let demo = |args: &[&str]| {
-        let output = rex
-            .inside(
-                fixture.command().arg("--json").arg("demo").args(args),
-                "session:gone",
-                "block:gone",
-            )
-            .output()
-            .unwrap();
+        let output = fixture.output(rex.inside(
+            fixture.command().arg("--json").arg("demo").args(args),
+            "session:gone",
+            "block:gone",
+        ));
         assert!(output.status.success(), "{args:?}: {}", printed(&output));
         serde_json::from_slice::<Value>(&output.stdout).unwrap()
     };

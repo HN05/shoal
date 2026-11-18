@@ -11,14 +11,19 @@ use std::{
 };
 
 /// What `command` printed once it ended; see [`output_within`].
+#[track_caller]
 pub fn output(command: &mut Command) -> Output {
     output_within(command, super::HANG_GUARD)
 }
 
-/// What `command` printed once it ended, failing the test when it runs for
-/// `limit`; see [`try_output_within`].
+/// What `command` printed once it ended, failing the test at the caller's
+/// line when it runs for `limit`; see [`try_output_within`].
+#[track_caller]
 pub fn output_within(command: &mut Command, limit: Duration) -> Output {
-    try_output_within(command, limit).unwrap_or_else(|error| panic!("{error}"))
+    match try_output_within(command, limit) {
+        Ok(output) => output,
+        Err(error) => panic!("{error}"),
+    }
 }
 
 /// What `command` printed once it ended; see [`try_output_within`].
