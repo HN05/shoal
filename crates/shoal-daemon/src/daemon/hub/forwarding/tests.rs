@@ -31,13 +31,30 @@ fn a_forwarded_request_names_its_space_by_id() {
 
 #[test]
 fn binding_a_space_leaves_what_a_request_carries_alone() {
+    use shoal_protocol::protocol::{CiMethod, ItemContext, Operation, RepoTarget};
     let selector = SpaceSelector::Number(7.into());
     let id = SpaceId::from("space-seven".to_owned());
-    let named = serde_json::to_value(&selector).unwrap();
-    let mut method = json!({"start_ci_run": {"space": named.clone(), "workflow": "ci.yml",
-        "inputs": {"space": named.clone()}}});
+    let context = ItemContext::Space {
+        space: selector.clone(),
+        repository: None,
+    };
+    let inputs = [("space".to_owned(), "7".to_owned())].into();
+    let run = Operation::Ci(CiMethod::StartCiRun {
+        target: RepoTarget::from(context),
+        workflow: Some("ci.yml".into()),
+        branch: None,
+        inputs,
+    });
+    let mut method = serde_json::to_value(run).unwrap();
     bind_space(&mut method, &selector, &id).unwrap();
-    let bound = serde_json::to_value(SpaceSelector::id(&id)).unwrap();
-    assert_eq!(method["start_ci_run"]["space"], bound);
-    assert_eq!(method["start_ci_run"]["inputs"]["space"], named);
+    let Operation::Ci(CiMethod::StartCiRun { target, inputs, .. }) =
+        serde_json::from_value(method).unwrap()
+    else {
+        panic!("a CI run stays one");
+    };
+    let Some(ItemContext::Space { space, .. }) = target.context else {
+        panic!("its target stays the space");
+    };
+    assert_eq!(space, SpaceSelector::id(&id));
+    assert_eq!(inputs["space"], "7");
 }

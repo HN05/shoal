@@ -210,13 +210,30 @@ fn bind_space(
         .into_iter()
         .flat_map(|request| request.values_mut());
     for fields in requests.filter_map(serde_json::Value::as_object_mut) {
-        for key in ["space", "workspace"] {
-            if fields.get(key) == Some(&named) {
-                fields.insert(key.to_owned(), bound.clone());
-            }
+        bind_fields(fields, &named, &bound);
+        // A forge request's target, `{"space": {"space": ...}}`.
+        if let Some(context) = fields
+            .get_mut("space")
+            .and_then(serde_json::Value::as_object_mut)
+        {
+            bind_fields(context, &named, &bound);
         }
     }
     Ok(())
+}
+
+/// Replace `named` with `bound` in the space and workspace fields of
+/// `fields`.
+fn bind_fields(
+    fields: &mut serde_json::Map<String, serde_json::Value>,
+    named: &serde_json::Value,
+    bound: &serde_json::Value,
+) {
+    for key in ["space", "workspace"] {
+        if fields.get(key) == Some(named) {
+            fields.insert(key.to_owned(), bound.clone());
+        }
+    }
 }
 
 /// Whether the request `method` attaches files by their path on this
