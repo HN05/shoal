@@ -38,16 +38,27 @@ impl Manager {
 
     /// Whether the agent of the coordinator that does the work of the space
     /// `id` runs, in any turn state, since its subagents may work on past
-    /// its turn.
+    /// its turn: one here, or above it on another machine with an agent,
+    /// whatever that machine's link, as the hub last listed it.
     pub(super) async fn coordinator_runs(&self, id: &SpaceId) -> Result<bool> {
         let agents = self.tracked_agents().await;
-        let id = id.to_owned();
-        self.store
-            .run(move |db| match working_coordinator(db, &id, &agents)? {
-                Some(coordinator) => tree::agent_runs(db, &coordinator, &agents),
-                None => Ok(false),
+        let owned = id.to_owned();
+        let working = self
+            .store
+            .run(move |db| {
+                Ok(match working_coordinator(db, &owned, &agents)? {
+                    Working::Here(coordinator) => {
+                        Some(tree::agent_runs(db, &coordinator, &agents)?)
+                    }
+                    Working::Above => None,
+                    Working::Own => Some(false),
+                })
             })
-            .await
+            .await?;
+        match working {
+            Some(runs) => Ok(runs),
+            None => Ok(!self.deciders_elsewhere(id, false).await.is_empty()),
+        }
     }
 }
 
@@ -58,19 +69,26 @@ fn coordinator_state(
     id: &SpaceId,
     agents: &TrackedAgents,
 ) -> Result<Option<AgentState>> {
-    let Some(coordinator) = working_coordinator(db, id, agents)? else {
+    let Working::Here(coordinator) = working_coordinator(db, id, agents)? else {
         return Ok(None);
     };
     Ok(agent_state::current(db, &coordinator)?.map(|status| status.state))
 }
 
-/// The coordinator of the space `id` while no agent of its own works there:
-/// none has started in the workspace, or the chat's has stopped.
-fn working_coordinator(
-    db: &Connection,
-    id: &SpaceId,
-    agents: &TrackedAgents,
-) -> Result<Option<SpaceId>> {
+/// Who does the work of a space.
+enum Working {
+    /// An agent of its own has started there.
+    Own,
+    /// The coordinator here, the nearest space above with an agent.
+    Here(SpaceId),
+    /// None here does; one above on another machine may.
+    Above,
+}
+
+/// Who does the work of the space `id`: its coordinator while no agent of
+/// its own works there, as none has started in the workspace, or the chat's
+/// has stopped.
+fn working_coordinator(db: &Connection, id: &SpaceId, agents: &TrackedAgents) -> Result<Working> {
     let agentless = store::exists(
         db,
         "SELECT 1 FROM spaces WHERE id=?1 AND CASE kind
@@ -79,9 +97,12 @@ fn working_coordinator(
         [id],
     )?;
     if !agentless {
-        return Ok(None);
+        return Ok(Working::Own);
     }
-    tree::coordinator_of(db, id, agents)
+    Ok(match tree::coordinator_of(db, id, agents)? {
+        Some(coordinator) => Working::Here(coordinator),
+        None => Working::Above,
+    })
 }
 
 #[cfg(test)]
