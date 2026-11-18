@@ -19,7 +19,7 @@ pub(crate) use shoal_protocol::approvals::{
     UnmergeSpecification,
 };
 pub use store::{ReasonRequired, check, current, release, request_action};
-pub(crate) use store::{pending_count, release_decided_by};
+pub(crate) use store::{pending_count, release_decided_by, renumber};
 
 /// Operations on the client type [`ApprovalRequest`] that only the `shoal` command uses.
 pub trait ApprovalRequestExt {

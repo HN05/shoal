@@ -14,7 +14,7 @@ use shoal_protocol::{
 };
 
 use crate::daemon::{
-    agent_messages::Delivery, log, notifications::NotificationKind, workspace::Manager,
+    agent_messages::Delivery, approvals, log, notifications::NotificationKind, workspace::Manager,
 };
 
 /// A space here that took the number the hub gave it.
@@ -147,7 +147,7 @@ fn renumber(tx: &Transaction<'_>, renumbered: &[Renumbering]) -> Result<Vec<Renu
             log!("hub: space {space} keeps {from}, since a space here holds {number}");
             continue;
         }
-        give_number(tx, space, *number)?;
+        give_number(tx, space, from, *number)?;
         done.push(Renumbered {
             id: space.clone(),
             name,
@@ -158,17 +158,21 @@ fn renumber(tx: &Transaction<'_>, renumbered: &[Renumbering]) -> Result<Vec<Renu
     Ok(done)
 }
 
-/// Give the space `id` the number `number`, and its questions and approval
-/// requests with it.
-fn give_number(tx: &Transaction<'_>, id: &SpaceId, number: SpaceNumber) -> Result<()> {
+/// Give the space `id` the number `to` instead of `from`, and its
+/// questions and approval requests with it.
+fn give_number(
+    tx: &Transaction<'_>,
+    id: &SpaceId,
+    from: SpaceNumber,
+    to: SpaceNumber,
+) -> Result<()> {
     for update in [
         "UPDATE spaces SET number=?2 WHERE id=?1",
         "UPDATE questions SET space_number=?2 WHERE space_id=?1",
-        "UPDATE access_requests SET space_number=?2 WHERE space_id=?1",
     ] {
-        tx.execute(update, params![id, number])?;
+        tx.execute(update, params![id, to])?;
     }
-    Ok(())
+    approvals::renumber(tx, id, from, to)
 }
 
 /// The name and number of the space `id`, if it is here.

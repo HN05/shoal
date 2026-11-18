@@ -89,6 +89,20 @@ async fn a_renumbered_space_takes_its_questions_and_their_waits_along() -> Resul
         let (manager, selector) = (manager.clone(), selector.clone());
         async move { manager.await_answer(&selector, item, &ask).await }
     });
+    // An issue proposal belongs to the repository and names its space in
+    // its record.
+    let (repository, proposer) = (repo.id.clone(), asker.id.clone());
+    (manager.store)
+        .write(move |tx| {
+            tx.execute(
+                "INSERT INTO access_requests(id, repository_id, target_key, name, record,
+                        space_number, number)
+                    VALUES ('proposal', ?1, 'issue', 'issue', json_object('space_id', ?2), 1, 2)",
+                params![repository, proposer],
+            )?;
+            Ok(())
+        })
+        .await?;
     let renumbering = |space: &SpaceId| Numbering {
         spares: Vec::new(),
         renumbered: vec![Renumbering {
@@ -104,6 +118,11 @@ async fn a_renumbered_space_takes_its_questions_and_their_waits_along() -> Resul
         numbers.push(manager.space(&SpaceSelector::id(id)).await?.number.get());
     }
     assert_eq!(numbers, [4, 2]);
+    let proposal = (manager.store).read(|tx| {
+        let number = "SELECT space_number FROM access_requests WHERE id='proposal'";
+        Ok(tx.query_row(number, [], |row| row.get::<_, u32>(0))?)
+    });
+    assert_eq!(proposal.await?, 4);
     let renumbered = ItemNumber {
         space: SpaceNumber::new(4),
         item,

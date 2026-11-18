@@ -2,7 +2,7 @@
 //! approval requests.
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Params, Transaction, params};
-use shoal_ids::space_ids::SpaceId;
+use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use std::fmt;
 
 use super::{ApprovalRequest, DecisionStatus, Lifetime, MERGE, Target, proposals};
@@ -139,6 +139,25 @@ pub(super) fn write_record(db: &Connection, request: &ApprovalRequest) -> Result
 
 fn by_number(db: &Connection, number: ItemNumber) -> Result<Option<ApprovalRequest>> {
     lookup(db, BY_NUMBER, params![number.space, number.item])
+}
+
+/// Number the requests of the space `id` after its new number `to`,
+/// instead of `from`: its own, and the issues it proposed for its
+/// repository.
+pub(crate) fn renumber(
+    tx: &Transaction<'_>,
+    id: &SpaceId,
+    from: SpaceNumber,
+    to: SpaceNumber,
+) -> Result<()> {
+    tx.execute(
+        &format!(
+            "UPDATE access_requests SET space_number=?3
+            WHERE space_number=?2 AND (space_id=?1 OR {REPOSITORY_OWNED})"
+        ),
+        params![id, from, to],
+    )?;
+    Ok(())
 }
 
 /// Every request, or those `owner` made, including the issues it proposed
