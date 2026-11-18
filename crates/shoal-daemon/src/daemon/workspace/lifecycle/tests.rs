@@ -1524,10 +1524,8 @@ async fn the_log_shows_a_removal_that_failed_once_however_often_it_fails() {
     );
 }
 
-/// A workspace, disposable or not, whose worktree Git disowned as a
-/// `worktree remove` that failed partway leaves it: the directory stays
-/// without the admin directory its `.git` names.
-async fn disowned_workspace(disposable: bool) -> (tempfile::TempDir, Arc<Manager>, Workspace) {
+/// A workspace, disposable or not, with its worktree.
+async fn workspace_of_kind(disposable: bool) -> (tempfile::TempDir, Arc<Manager>, Workspace) {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
@@ -1545,9 +1543,40 @@ async fn disowned_workspace(disposable: bool) -> (tempfile::TempDir, Arc<Manager
         .create_workspace_with(&repo.id, "scratch".into(), None, new)
         .await
         .unwrap();
+    (root, manager, workspace)
+}
+
+/// A workspace, disposable or not, whose worktree Git disowned as a
+/// `worktree remove` that failed partway leaves it: the directory stays
+/// without the admin directory its `.git` names.
+async fn disowned_workspace(disposable: bool) -> (tempfile::TempDir, Arc<Manager>, Workspace) {
+    let (root, manager, workspace) = workspace_of_kind(disposable).await;
     let admin_dir = git(&workspace.path, &["rev-parse", "--absolute-git-dir"]);
     fs::remove_dir_all(admin_dir.trim_end()).unwrap();
     (root, manager, workspace)
+}
+
+/// A disposable workspace whose directory was deleted while Git still lists
+/// it has no directory whose identity a removal could record, and goes.
+#[tokio::test]
+async fn removal_forgets_a_deleted_disposable_worktree_git_still_lists() {
+    let (_root, manager, workspace) = workspace_of_kind(true).await;
+    fs::remove_dir_all(&workspace.path).unwrap();
+    manager
+        .remove_selected(
+            &SpaceSelector::id(&workspace.id),
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .find_workspace(&workspace.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[tokio::test]

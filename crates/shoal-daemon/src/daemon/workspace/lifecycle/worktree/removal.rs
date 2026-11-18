@@ -548,12 +548,25 @@ impl Manager {
         let record = self.save_restore_record(workspace, removal).await?;
         ensure_checkpoint_keeps_files(check, removal, record.as_ref())?;
         let (files, branch) = removal_options(check, removal);
-        let registration = match self.disowned(workspace, repo).await? {
-            true => Registration::Disowned,
-            false => Registration::Listed,
-        };
+        let registration = self.existing_registration(workspace, repo).await?;
         self.remove_worktree(repo, workspace, files, branch, registration)
             .await
+    }
+
+    /// What Git records of the existing worktree of `workspace` that the
+    /// removal deletes: disowned, or listed once the identity of its
+    /// directory is recorded, which proves what Git leaves there should the
+    /// deletion stop partway.
+    async fn existing_registration(
+        &self,
+        workspace: &Workspace,
+        repo: &Path,
+    ) -> Result<Registration> {
+        if self.disowned(workspace, repo).await? {
+            return Ok(Registration::Disowned);
+        }
+        self.record_removal_directory(workspace).await?;
+        Ok(Registration::Listed)
     }
 
     /// The record that restores the workspace, with a checkpoint of its HEAD
@@ -592,7 +605,6 @@ impl Manager {
         self.remove_simulators(&workspace.id).await?;
         match registration {
             Registration::Listed => {
-                self.record_removal_directory(workspace).await?;
                 self.destroy_seed_outputs(workspace).await;
                 let removed = git::worktree::remove(repo, &workspace.path, files, branch).await?;
                 return Ok(removed.into());
