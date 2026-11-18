@@ -158,3 +158,27 @@ async fn a_read_cancelled_while_the_link_is_saturated_loses_nothing() {
     tokio::spawn(async move { tokio::io::copy(&mut theirs, &mut tokio::io::sink()).await });
     assert_eq!(incoming.next().await.unwrap().unwrap(), second);
 }
+
+#[tokio::test]
+async fn a_reader_dropped_while_the_link_is_saturated_still_closes_its_stream() {
+    let (ours, theirs) = tokio::io::duplex(64);
+    let (read, write) = tokio::io::split(ours);
+    let channel = Channel::lines(BufReader::new(read), write);
+    let streams = super::Streams::new(channel.sender());
+    let incoming = streams.open();
+    let stream = incoming.number();
+    // Its writer takes a frame and blocks on the pipe, the other side
+    // reading nothing, and the queue fills behind it.
+    channel.sender().send(&"x".repeat(4096)).await.unwrap();
+    tokio::task::yield_now().await;
+    while channel.sender().try_send(&"x".repeat(4096)).is_ok() {}
+    drop(incoming);
+    let mut lines = tokio::io::AsyncBufReadExt::lines(BufReader::new(theirs));
+    let close = serde_json::to_string(&Frame::Close { stream }).unwrap();
+    while let Some(line) = lines.next_line().await.unwrap() {
+        if line == close {
+            return;
+        }
+    }
+    panic!("the link ended without closing stream {stream}");
+}

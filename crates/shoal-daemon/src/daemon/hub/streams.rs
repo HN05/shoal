@@ -151,7 +151,7 @@ impl Streams {
         let mut state = lock(&self.state);
         let Some(reading) = state.reading.get_mut(&stream) else {
             drop(state);
-            let _ = self.sender.try_send(&Frame::Close { stream });
+            send_soon(&self.sender, Frame::Close { stream });
             return Ok(());
         };
         let Some(allowed) = reading.allowed.checked_sub(bytes.len() as u64) else {
@@ -277,9 +277,10 @@ impl Drop for Incoming {
     /// Tell the writer of a stream this side stops reading before its end.
     fn drop(&mut self) {
         if lock(&self.state).reading.remove(&self.stream).is_some() {
-            let _ = self.sender.try_send(&Frame::Close {
+            let close = Frame::Close {
                 stream: self.stream,
-            });
+            };
+            send_soon(&self.sender, close);
         }
     }
 }
@@ -354,11 +355,28 @@ impl Drop for Outgoing {
             return;
         }
         lock(&self.state).writing.remove(&self.stream);
-        let _ = self.sender.try_send(&Frame::End {
-            stream: self.stream,
-            error: Some("its writer stopped".into()),
-        });
+        send_soon(
+            &self.sender,
+            Frame::End {
+                stream: self.stream,
+                error: Some("its writer stopped".into()),
+            },
+        );
     }
+}
+
+/// Send `frame`, which ends a stream for one side, without waiting: at
+/// once while the link's send queue has room, else once it has, so the
+/// other side hears of it while the link lasts and stops waiting for it.
+fn send_soon(sender: &Sender, frame: Frame) {
+    if sender.try_send(&frame).is_ok() {
+        return;
+    }
+    let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+        return;
+    };
+    let sender = sender.clone();
+    runtime.spawn(async move { sender.send(&frame).await });
 }
 
 /// Write what `incoming` brings to `outgoing` until it ends, ending
