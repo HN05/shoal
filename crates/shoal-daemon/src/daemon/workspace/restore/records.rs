@@ -68,6 +68,11 @@ impl Manager {
         // those of the snapshot taken before it started; the spaces below go
         // first, so its parent is still there.
         let Workspace { links, parent, .. } = self.workspace_by_id(&workspace.id).await?;
+        // A parent on another machine stays, so a restore keeps it.
+        let parent = match parent {
+            Some(parent) => Some(parent),
+            None => self.parent_elsewhere(&workspace.id).await?,
+        };
         let (agents, last_sessions) = self.saved_agents(&workspace.id, carried_on)?;
         // The agents carrying on in the chat keep the session files.
         let session_files = match carried_on {
