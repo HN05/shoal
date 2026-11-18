@@ -84,7 +84,7 @@ impl Manager {
             inspection,
             release_holds: true,
             taking: None,
-            holds_git: false,
+            for_repository: false,
         };
         self.remove_requested(selector, removal).await
     }
@@ -104,7 +104,7 @@ impl Manager {
             inspection,
             release_holds: true,
             taking: Some(taking),
-            holds_git: false,
+            for_repository: false,
         };
         self.remove_requested(selector, removal).await
     }
@@ -121,7 +121,7 @@ impl Manager {
             inspection: InspectionPolicy::GitOnly,
             release_holds: true,
             taking: None,
-            holds_git: true,
+            for_repository: true,
         };
         Ok(self.remove_space(id, removal).await?.result())
     }
@@ -139,7 +139,7 @@ impl Manager {
             inspection,
             release_holds: false,
             taking: None,
-            holds_git: false,
+            for_repository: false,
         };
         self.remove_requested(selector, removal).await
     }

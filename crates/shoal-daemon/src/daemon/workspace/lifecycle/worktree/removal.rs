@@ -102,9 +102,9 @@ impl From<RemovalResult> for WorktreeRemoval {
 
 impl WorktreeStage {
     /// What the journal records as the removal's cause: `removal`'s, or the
-    /// deleted directory's.
+    /// deleted directory's, which a worktree yet to be created never had.
     pub(in crate::daemon::workspace) fn cause(&self, removal: Removal<'_>) -> EventCause {
-        if self.present {
+        if self.present || self.workspace.unborn() {
             removal.cause()
         } else {
             EventCause::MissingDirectory

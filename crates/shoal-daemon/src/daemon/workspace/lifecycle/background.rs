@@ -115,7 +115,7 @@ fn manual(unsaved: &UnsavedWork, release_holds: bool) -> Removal<'_> {
         inspection: InspectionPolicy::GitOnly,
         release_holds,
         taking: None,
-        holds_git: false,
+        for_repository: false,
     }
 }
 

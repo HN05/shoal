@@ -211,6 +211,7 @@ fn cause(cause: EventCause) -> String {
         EventCause::Merged => "branch merged",
         EventCause::Removed => "base removed",
         EventCause::Parent => "parent removed",
+        EventCause::Repository => "repository removed",
         EventCause::ParentCompletion => "parent done",
         EventCause::StartFailed => "start failed",
         EventCause::Blocker => "blocker done",

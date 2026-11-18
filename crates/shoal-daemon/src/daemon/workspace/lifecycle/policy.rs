@@ -90,10 +90,10 @@ pub(in crate::daemon::workspace) enum Removal<'a> {
         /// The IDs of the only spaces it may take first, when the caller
         /// narrows what `unsaved` confirms.
         taking: Option<&'a [SpaceId]>,
-        /// The caller holds the repository's Git gate, under which no
-        /// creation or setup starts, and waited for the creations under way
-        /// to end, as a repository's removal does.
-        holds_git: bool,
+        /// The space goes with its repository, whose removal holds the
+        /// repository's Git gate, under which no creation or setup starts,
+        /// and waited for the creations under way to end.
+        for_repository: bool,
     },
     /// Idle, merged or disk-space cleanup, or the user's request to clean up;
     /// only safe, unchanged spaces may go.
@@ -129,6 +129,10 @@ pub(in crate::daemon::workspace) enum Removal<'a> {
 impl<'a> Removal<'a> {
     pub(super) fn cause(self) -> EventCause {
         match self {
+            Self::Manual {
+                for_repository: true,
+                ..
+            } => EventCause::Repository,
             Self::Manual { .. } => EventCause::Manual,
             Self::Automatic { cause, .. } => cause,
             Self::Merged { .. } => EventCause::Pr,
@@ -285,12 +289,14 @@ impl<'a> Removal<'a> {
     }
 
     /// Whether the user hears of the children it removes: those of any
-    /// removal they did not ask for.
+    /// removal they did not ask for, themselves or through the space's
+    /// repository.
     pub(super) fn announces_children(self) -> bool {
-        match self {
-            Removal::Parent { cause, .. } => cause != EventCause::Manual,
-            removal => removal.cause() != EventCause::Manual,
-        }
+        let cause = match self {
+            Removal::Parent { cause, .. } => cause,
+            removal => removal.cause(),
+        };
+        !matches!(cause, EventCause::Manual | EventCause::Repository)
     }
 
     /// What the worktree's state must be: automatic removal needs a safe

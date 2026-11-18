@@ -5894,7 +5894,8 @@ its device deleted, add `simulator` with the lease's `name` and the device's
 Causes are `manual`, `idle`, `issue`, `pr` (including a base workspace's merged
 PRs), `completion`, `missing_directory`, `disk_space`, `merged` for
 [merged cleanup](#merged-workspaces), `removed` for a base workspace's removal,
-`parent` for the removal of the space above, `parent_completion` for an
+`parent` for the removal of the space above, `repository` for its
+repository's removal, `parent_completion` for an
 ancestor's `done` with cleanup, `start_failed` for a chat that could not
 start, or `blocker` for a new workspace that builds on the done work its agent
 waited for, and null when inapplicable; `error` describes

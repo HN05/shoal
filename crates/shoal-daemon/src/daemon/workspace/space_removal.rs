@@ -216,10 +216,11 @@ impl Manager {
         removal: Removal<'_>,
     ) -> Result<WorktreeReservation> {
         let manual = matches!(removal, Removal::Manual { .. });
+        // A repository's removal holds its Git gate.
         let holds_git = matches!(
             removal,
             Removal::Manual {
-                holds_git: true,
+                for_repository: true,
                 ..
             }
         );
