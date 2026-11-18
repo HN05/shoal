@@ -149,7 +149,8 @@ fn keep_copy(
     Ok(())
 }
 
-/// Record `member` as the owner of the space `id`, with its `summary`.
+/// Record `member` as the owner of the space `id`, with its `summary`, in
+/// place of any copy of it `member` kept.
 fn own(
     tx: &Transaction<'_>,
     member: &MemberId,
@@ -157,6 +158,7 @@ fn own(
     summary: &str,
     now: UnixTime,
 ) -> Result<()> {
+    drop_copy(tx, member, id)?;
     tx.execute(
         "INSERT INTO hub_spaces(space_id, member_id, summary, reported_at)
          VALUES (?1,?2,?3,?4)

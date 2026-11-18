@@ -167,6 +167,31 @@ fn a_claim_is_spent_when_its_space_ended_at_the_source_first() {
 }
 
 #[test]
+fn a_space_that_moves_back_before_its_copy_ends_conflicts_with_no_one() {
+    let mut db = database();
+    let (desk, laptop) = (
+        MemberId::from("desk".to_owned()),
+        MemberId::from("laptop".to_owned()),
+    );
+    let id = SpaceId::from("a".to_owned());
+    let claim_by = |db: &mut Connection, member: &MemberId| {
+        let tx = db.transaction().unwrap();
+        claim(&tx, member, &id).unwrap();
+        tx.commit().unwrap();
+    };
+    report(&mut db, "desk", Report::Whole(vec![space("a", "moving")]));
+    claim_by(&mut db, &laptop);
+    report(&mut db, "laptop", Report::Whole(vec![space("a", "moving")]));
+    // Back to desk before desk reported that its first copy ended.
+    claim_by(&mut db, &desk);
+    report(&mut db, "desk", Report::Whole(vec![space("a", "back")]));
+    assert_eq!(listed(&mut db), [("a".into(), "desk".into())]);
+    let tx = db.transaction().unwrap();
+    let (_, conflicts) = read(&tx).unwrap();
+    assert!(conflicts.iter().all(|conflict| conflict.copy != desk));
+}
+
+#[test]
 fn a_revoked_machine_records_nothing() {
     let mut db = database();
     db.execute("UPDATE hub_members SET revoked_at=1 WHERE id='desk'", [])
