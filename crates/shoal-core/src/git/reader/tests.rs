@@ -170,3 +170,23 @@ async fn an_installation_config_helper() {
     let remote = crate::git::push_remote(&repo, &"topic".into()).await;
     assert_eq!(remote.unwrap(), "fork");
 }
+
+#[test]
+fn a_config_file_named_by_git_config_is_read_as_git_reads_it() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    let file = root.path().join("chosen.gitconfig");
+    std::fs::write(&file, "[remote]\n\tpushDefault = chosen\n").unwrap();
+    run_helper("a_chosen_config_helper", &repo, |command| {
+        command.env("GIT_CONFIG", &file)
+    });
+}
+
+/// Read the push remote the file `GIT_CONFIG` names sets.
+#[tokio::test]
+#[ignore = "run by a_config_file_named_by_git_config_is_read_as_git_reads_it"]
+async fn a_chosen_config_helper() {
+    let repo = helper_repository();
+    let remote = crate::git::push_remote(&repo, &"topic".into()).await;
+    assert_eq!(remote.unwrap(), "chosen");
+}

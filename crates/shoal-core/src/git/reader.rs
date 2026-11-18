@@ -33,10 +33,12 @@ const READABLE_FORMAT: i64 = 1;
 /// Variables that change where Git finds a repository or how it reads one
 /// in ways gix does not follow: the [`super::REPOSITORY_ENV`] that Shoal's
 /// Git commands drop and gix would read, those Git reads and gix leaves
-/// out, such as the `-c` settings Git passes on to hooks and aliases, and
+/// out, such as the `-c` settings Git passes on to hooks and aliases or the
+/// one file `git config` reads under `GIT_CONFIG`, and
 /// the ref namespace, which gix applies to every ref it reads and Git only
 /// to what it serves a fetch or push.
 const DIVERGING_ENV: &[&str] = &[
+    "GIT_CONFIG",
     "GIT_CONFIG_PARAMETERS",
     "GIT_DISCOVERY_ACROSS_FILESYSTEM",
     "GIT_NAMESPACE",
