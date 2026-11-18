@@ -15,7 +15,7 @@ use super::{
     waiting::AfterSetup,
 };
 use crate::{
-    cli::{commands::queued_agents, context::Context, shell, terminal},
+    cli::{commands::queued_agents, context::Context, terminal},
     client::output::workspaces::StartedBeside,
     client::preparation::Preparing,
     config::Effective,
@@ -66,8 +66,12 @@ async fn run_named(
             Some(workspace) => workspace,
             None => return unprepared(ctx, &recorded, entry.is_some()).await,
         },
-        // An existing workspace, with nothing to prepare.
-        None if entry.is_none() => return opened(ctx, &started.workspace).await,
+        // An existing workspace opened without an agent, which the daemon
+        // reopens as any start's, verifying its worktree first.
+        None if entry.is_none() => {
+            let plan = AddPlan::opening(&started.workspace);
+            return Box::pin(super::finish::execute_add(ctx, plan)).await;
+        }
         None => *started.workspace,
     };
     match entry {
@@ -99,22 +103,6 @@ async fn shell_in(ctx: &Context, workspace: &Workspace) -> Result<i32> {
 async fn give_shell(ctx: &Context, workspace: &Workspace) -> Result<i32> {
     terminal::host_workspace(ctx, workspace, false, workspace.name.as_str()).await?;
     terminal::open_shell(ctx, &workspace.path).await
-}
-
-/// Report the existing `workspace` a start without an agent opened, which
-/// the caller's shell enters, or the place opened for it gives a shell.
-async fn opened(ctx: &Context, workspace: &Workspace) -> Result<i32> {
-    ctx.show(workspace, |workspace| {
-        outln!(
-            "Opened {} {}",
-            workspace.name,
-            super::super::location_phrase(workspace)
-        );
-    })?;
-    if terminal::follows_caller(ctx) {
-        shell::navigate(ctx, &workspace.path)?;
-    }
-    give_shell(ctx, workspace).await
 }
 
 /// Run the agent of the workspace the daemon `started`, or its shell

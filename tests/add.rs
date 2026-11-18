@@ -64,6 +64,9 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             vec![
                 "list_repositories",
                 "layered_config id:test",
+                "list_repositories",
+                "list_spaces",
+                "layered_config test",
                 "launch here now=false",
             ],
             "creation reached",
@@ -151,6 +154,9 @@ fn a_scoped_start_here_takes_its_own_slot_without_skipping_the_limits() {
         [
             "list_repositories",
             "layered_config id:test",
+            "list_repositories",
+            "list_spaces",
+            "layered_config test",
             "launch here now=false",
         ],
         "{}",

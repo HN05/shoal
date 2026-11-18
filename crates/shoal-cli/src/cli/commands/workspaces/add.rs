@@ -9,6 +9,7 @@ mod launch;
 mod mode;
 mod plan;
 mod reads;
+mod resolve;
 mod source;
 mod target;
 mod waiting;

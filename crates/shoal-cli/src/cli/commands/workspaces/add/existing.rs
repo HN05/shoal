@@ -8,8 +8,9 @@ use anyhow::{Result, ensure};
 use super::{
     AddOptions,
     agent::{AddSettings, choose_add_agent, resolve_add_agent},
-    launch::{check_named_blockers, launch_worker},
+    launch::launch_worker,
     mode::choose_add_mode,
+    resolve::check_named_blockers,
     target::AddTarget,
 };
 use crate::{agent::Agent, cli::context::Context};
