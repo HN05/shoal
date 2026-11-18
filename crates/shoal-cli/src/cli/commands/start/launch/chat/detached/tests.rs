@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use shoal_protocol::launches::StartTarget;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_schedule::priority::Priority;
@@ -60,6 +62,25 @@ fn a_new_chat_on_an_issue_becomes_the_daemons_start_in_its_repository() {
     assert_eq!(launch.agent, Some("claude".into()));
     assert_eq!(launch.name, Some("talk".into()));
     assert_eq!(launch.priority, Some(Priority::URGENT));
+}
+
+#[test]
+fn the_config_setup_becomes_the_daemons_setup_of_the_global_config() {
+    let topic = crate::cli::commands::config_setup::topic(Path::new("/home/me/config.toml"));
+    let options = Options {
+        parent: None,
+        priority: None,
+        ..options()
+    };
+    let (agent, name) = (Agent::from("claude"), SpaceName::from("setup"));
+    let launch = request(&topic, &options, (&agent, &name)).unwrap();
+    assert_eq!(launch.setup, Some(Setup::Config));
+    assert!(!launch.chat);
+    assert_eq!(launch.target, None);
+    assert_eq!(launch.mode, Some(ModeName::SETUP));
+    let prompt = launch.prompt.unwrap();
+    assert!(prompt.contains("`/home/me/config.toml`"), "{prompt}");
+    assert_eq!(launch.task, ["Read the build"]);
 }
 
 #[test]

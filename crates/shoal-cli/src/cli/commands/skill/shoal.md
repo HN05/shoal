@@ -388,10 +388,10 @@ above or the user, and a failed gate run denies it without telling the user.
 
 Other keys govern administering Shoal and the actions that reach beyond a
 space, each `deny`, `propose` or `direct`: `admin` administering Shoal, such as `config set`, `repo add`,
-`cleanup`, `setup --skip`, `contribute`, `move`, and restoring removed
-workspaces, which reopen below your space (a permission you set in config
-only to a value your space holds, and `config reset`, `install`, `setup` and
-`repo setup` stay the user's), `limits` starting agents regardless of the limits, with
+`cleanup`, `setup --skip`, `contribute`, `move`, `config setup`, `repo setup`,
+and restoring removed workspaces, which reopen below your space (a
+permission you set in config only to a value your space holds, and
+`config reset` and `install` stay the user's), `limits` starting agents regardless of the limits, with
 `--now`, `--focus` or `queue start`, `ci_approve` approving CI runs that wait
 for approval, `pr_review` approving and requesting changes on PRs, bound to
 the PR's head and the review's text, `triggers` pausing, resuming and running

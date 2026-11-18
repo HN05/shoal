@@ -12,29 +12,20 @@ use crate::{
     },
     model::{QueueEntry, Space},
 };
-use shoal_protocol::launches::{self, IssueChoice, Launch, Launched, SpaceChoice};
+use shoal_protocol::launches::{self, IssueChoice, Launch, Launched, Setup, SpaceChoice};
 use shoal_protocol::space_names::SpaceName;
 
 /// The launch the daemon carries out for the chat about `topic` with
-/// `options`, run by `agent` under `name`: the chat its `shoal start` makes,
-/// in the caller's terminal's host. `None` for one only this process can
-/// start, since the request cannot carry it: a restore, a session the chat
-/// continues or forks, an imported chat's links, `shoal config setup`, or
-/// arguments that are not UTF-8.
+/// `options`, run by `agent` under `name`: the chat its `shoal start` or
+/// `shoal config setup` makes, in the caller's terminal's host. `None` for
+/// one only this process can start, since the request cannot carry it: a
+/// restore, a session the chat continues or forks, an imported chat's
+/// links, or arguments that are not UTF-8.
 pub(super) fn request(
     topic: &Topic,
     options: &Options,
     (agent, name): (&Agent, &SpaceName),
 ) -> Option<Launch> {
-    let Relaunch::Start(start) = &topic.relaunch else {
-        return None;
-    };
-    let StartArgs {
-        repository,
-        in_workspace,
-        issue,
-        ..
-    } = &**start;
     let Narrowing::Requested(narrowing) = options.narrowing else {
         return None;
     };
@@ -45,23 +36,45 @@ pub(super) fn request(
     let task = (options.args.iter())
         .map(|arg| arg.to_str().map(str::to_owned))
         .collect::<Option<_>>()?;
-    Some(Launch {
-        target: repository.clone(),
-        in_workspace: in_workspace.clone().flatten().map(SpaceChoice::Space),
-        chat: true,
+    let launch = Launch {
         parent: options.parent.clone(),
         name: Some(name.clone()),
         agent: Some(agent.clone()),
         mode: Some(topic.mode.clone()),
         model: options.model.clone(),
         permissions: narrowing,
-        issue: issue.clone().flatten().map(IssueChoice::Named),
         task,
         priority: options.priority,
         env: Some(crate::terminal::start_environment()),
         now: options.now,
         ..Default::default()
+    };
+    Some(match &topic.relaunch {
+        Relaunch::Start(start) => in_place(start, launch),
+        Relaunch::ConfigSetup => Launch {
+            setup: Some(Setup::Config),
+            prompt: (topic.subject.as_ref()).map(|subject| subject.text.clone()),
+            ..launch
+        },
     })
+}
+
+/// `launch` as a chat in the place `shoal start` with `start` names: the
+/// repository or workspace it runs in, and the issue it starts on.
+fn in_place(start: &StartArgs, launch: Launch) -> Launch {
+    let StartArgs {
+        repository,
+        in_workspace,
+        issue,
+        ..
+    } = start;
+    Launch {
+        target: repository.clone(),
+        in_workspace: in_workspace.clone().flatten().map(SpaceChoice::Space),
+        chat: true,
+        issue: issue.clone().flatten().map(IssueChoice::Named),
+        ..launch
+    }
 }
 
 /// Have the daemon launch the chat `launch` describes, leaving its report

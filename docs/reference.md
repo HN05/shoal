@@ -2797,8 +2797,8 @@ cleanup, and repairing, adopting and moving workspaces, in the
 caller's own repository where the action names one. A scoped process changes
 Shoal's config only key by key, setting a permission only to a value its
 space holds and removing none, since that could hand it more; it never
-replaces the config or runs `config setup` or `repo setup`. A removed
-workspace it restores opens below its own space.
+replaces the config, and runs `config setup` and `repo setup` as `admin`
+allows. A removed workspace it restores opens below its own space.
 
 A [local review](#local-reviews)'s instructions start with the fixed part of the
 [review template](../crates/shoal-core/src/config/templates/review.md), its task,
@@ -3229,11 +3229,11 @@ install default` does. Every launch and restore of the agent gets the file's
 directory as another working directory; `--here` and `--agent` work as for
 `repo setup`.
 
-`repo setup` and `config setup` change the user's own config, so only the
-user runs them. Both start their agent at once regardless of the limits,
-in a tab that takes focus whatever `terminal.focus` says; without a terminal,
-`repo setup` starts it detached and `config setup` in a
-background place.
+`repo setup` and `config setup` change the user's config, so a scoped
+process runs them only as its `admin` permission allows, `config setup`
+without a repository. Both start their agent at once regardless of the
+limits, in a tab that takes focus whatever `terminal.focus` says; without a
+terminal, or from a scoped process, they start it detached.
 
 ### Contributions
 

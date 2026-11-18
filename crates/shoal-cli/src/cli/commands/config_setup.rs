@@ -31,32 +31,22 @@ async fn setup(ctx: &Context, mut args: ConfigSetupArgs) -> Result<i32> {
     let model = std::mem::take(&mut args.model).into();
     start::check_model(&settings, &agent, &model)?;
     let config = installed_config(ctx)?;
-    let options = options(args, agent, model, ctx.on_terminal());
+    let options = options(args, agent, model);
     start::start_outside_repositories(ctx, topic(&config), options).await
 }
 
 /// How the setup chat of `agent` starts: as chats do, at once, and unless
 /// `--here` in a focused place beside this terminal, whatever the `focus`
-/// setting says, since the user works with it straight away. A call that
-/// is not `on_terminal` has no terminal to start it beside, so it starts
-/// in a background place instead.
-fn options(
-    args: ConfigSetupArgs,
-    agent: Agent,
-    model: ModelChoice,
-    on_terminal: bool,
-) -> start::Options {
-    let place = match (args.here, on_terminal) {
-        (true, _) => start::ChatPlace::Here,
-        (false, true) => start::ChatPlace::Beside,
-        (false, false) => start::ChatPlace::Background,
-    };
+/// setting says, since the user works with it straight away. Without a
+/// terminal, or from a scoped process, the daemon starts it detached
+/// instead, as it starts any chat.
+fn options(args: ConfigSetupArgs, agent: Agent, model: ModelChoice) -> start::Options {
     start::Options {
         now: false,
         priority: None,
         narrowing: start::Narrowing::Requested(Default::default()),
         agent: Some(agent),
-        place,
+        place: start::ChatPlace::here(args.here),
         name: args.name,
         model,
         args: args.args,

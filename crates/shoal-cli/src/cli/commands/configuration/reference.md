@@ -538,9 +538,9 @@ approval, `pr_review` approving and requesting changes on PRs, as the host's
 config, registering, renaming and removing repositories and their local
 config and kept branches, `shoal cleanup`, `shoal setup --skip`,
 `shoal contribute`, adopting worktrees, and restoring, copying and moving
-workspaces. An agent sets a permission in config only to a value its space
-holds, changes a trigger only where its `triggers` is `"direct"`, and leaves replacing the config and `config setup` and `repo setup`
-to you.
+workspaces, and `shoal config setup` and `shoal repo setup`. An agent sets a
+permission in config only to a value its space holds, changes a trigger only
+where its `triggers` is `"direct"`, and leaves replacing the config to you.
 
 `[permissions]` and `[modes.<name>.permissions]` take the same keys. A mode's
 key resolves, highest first, from its `permissions` in any layer, then

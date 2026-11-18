@@ -125,7 +125,6 @@ impl Launch {
         }
         match self.options.place {
             ChatPlace::Detached => self.start_detached(ctx).await,
-            ChatPlace::Background => self.start_in_background(ctx).await,
             ChatPlace::Beside | ChatPlace::Here => self.start_in_terminal(ctx).await,
         }
     }

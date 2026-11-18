@@ -67,9 +67,6 @@ pub(in crate::cli::commands) enum ChatPlace {
     Beside,
     /// In this terminal instead of a new tab or detached session.
     Here,
-    /// In a new background place this process opens, for the user to
-    /// attach to.
-    Background,
     /// In a new background place the daemon opens for a new chat, as it
     /// does for an app, for the user to attach to.
     Detached,
@@ -120,7 +117,7 @@ impl Options {
     }
 
     /// `start` with these options, as [`Options::taken_from`] takes them
-    /// again, except that a background place is written as beside this
+    /// again, except that a detached place is written as beside this
     /// terminal, which an agent's start takes for one, and a session and its
     /// fork as none: only a chat that runs here continues one.
     pub(super) fn into_start(self, start: StartArgs) -> StartArgs {

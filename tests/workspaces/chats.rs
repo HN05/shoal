@@ -5,7 +5,7 @@ use super::herdr::{
     herdr_call, herdr_calls, herdr_worker, herdr_worker_command, install_fake_herdr,
 };
 use super::start::guidance_end;
-use super::zmx::zmx_calls;
+use super::zmx::{wait_zmx_sessions_ended, zmx_calls};
 use super::*;
 
 /// A fixture whose Claude chat agent reports its session as Claude Code's
@@ -1617,6 +1617,43 @@ fn a_background_place_below_its_starter_takes_the_handed_scope() {
         "{}",
         printed(&place)
     );
+}
+
+/// `shoal config setup` without a terminal has the daemon start its agent
+/// in a chat without a repository, in the setup mode, on the global config,
+/// whose directory the agent gets to work in.
+#[test]
+fn config_setup_without_a_terminal_launches_its_agent_through_the_daemon() {
+    let fixture = Fixture::new();
+    install_test_script(fixture.root.path().join("bin/zmx"), terminal_zmx());
+    // The agent writes its arguments whole, so their file holds them all
+    // once it exists.
+    install_test_script(
+        fixture.root.path().join("bin/claude"),
+        "#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$HOME/chat-args.tmp\"\nmv \"$HOME/chat-args.tmp\" \"$HOME/chat-args\"\n",
+    );
+    let output = fixture
+        .command()
+        .args(["config", "setup", "--agent", "claude"])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", printed(&output));
+    let args = fixture.root.path().join("chat-args");
+    wait_until("the setup agent start", || args.exists());
+    let args = chat_args(&fixture);
+    // As agents compare paths, through links such as macOS's `/tmp`.
+    let config_dir = fs::canonicalize(fixture.root.path().join(".config/shoal")).unwrap();
+    let given = format!("--add-dir={}", config_dir.display());
+    assert!(args.contains(&given), "{args:?}");
+    let prompt = args.last().unwrap();
+    let config = config_dir.join("config.toml");
+    assert!(prompt.contains(config.to_str().unwrap()), "{prompt}");
+    let chats = fixture.ok(&["list", "--chats"]);
+    let chat = &chats[0];
+    assert_eq!(chat["mode"], "setup", "{chats}");
+    assert_eq!(chat["repository_id"], Value::Null, "{chats}");
+    wait_zmx_sessions_ended(fixture.root.path());
 }
 
 /// A scoped caller's `start --here` runs a chat below its space in its own
