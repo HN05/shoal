@@ -48,6 +48,9 @@ enum Status {
     /// Checked out by a worktree Shoal does not manage, or the start of a
     /// rebase or bisect in one.
     CheckedOut,
+    /// The branch a workspace builds on, which keeps it while that
+    /// workspace does.
+    BuiltOn,
     /// Still at the kept commit, with this many commits only it has.
     Kept { unkept_commits: u64 },
 }
@@ -211,6 +214,10 @@ impl Manager {
                         "{} is checked out; switch that checkout away before deleting it",
                         target.branch
                     ),
+                    Status::BuiltOn => bail!(
+                        "a workspace builds on {}; remove it or change its base first",
+                        target.branch
+                    ),
                     Status::Released => {
                         bail!("{} is no longer a branch Shoal kept", target.branch)
                     }
@@ -305,27 +312,38 @@ impl Manager {
             .await
     }
 
-    /// The branches of the repository's workspaces.
-    async fn workspace_branches(&self, repository_id: &RepositoryId) -> Result<Vec<BranchName>> {
-        Ok(self
-            .list_workspaces()
-            .await?
-            .into_iter()
-            .filter(|workspace| workspace.repository() == repository_id)
-            .filter_map(|workspace| workspace.part.branch().cloned())
-            .collect())
+    /// The branches of the repository's workspaces, and the local branches
+    /// they build on.
+    async fn workspace_branches(&self, repository_id: &RepositoryId) -> Result<WorkspaceBranches> {
+        let workspaces = self.list_workspaces().await?;
+        let workspaces =
+            (workspaces.iter()).filter(|workspace| workspace.repository() == repository_id);
+        let mut branches = WorkspaceBranches::default();
+        for workspace in workspaces {
+            branches.own.extend(workspace.part.branch().cloned());
+            let base = (workspace.base_ref.as_deref()).and_then(git::strip_local);
+            branches.bases.extend(base.map(BranchName::from));
+        }
+        Ok(branches)
     }
+}
+
+/// The branches a repository's workspaces are on, and those they build on.
+#[derive(Debug, Default)]
+struct WorkspaceBranches {
+    own: Vec<BranchName>,
+    bases: Vec<BranchName>,
 }
 
 async fn kept_status(
     repo: &Path,
     record: &Record,
     default: Option<&DefaultBranch>,
-    workspaces: &[BranchName],
+    workspaces: &WorkspaceBranches,
     evidence: Evidence<'_>,
 ) -> Result<Status> {
     if default.is_some_and(|default| default.name == record.branch)
-        || workspaces.contains(&record.branch)
+        || workspaces.own.contains(&record.branch)
     {
         return Ok(Status::Released);
     }
@@ -340,6 +358,9 @@ async fn kept_status(
         || git::branch::in_operation(repo, &branch).await?
     {
         return Ok(Status::CheckedOut);
+    }
+    if workspaces.bases.contains(&record.branch) {
+        return Ok(Status::BuiltOn);
     }
     let unkept_commits = match (default, evidence) {
         (Some(default), Evidence::Advertised(heads)) => {

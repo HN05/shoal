@@ -326,6 +326,10 @@ async fn a_selection_leaves_the_other_spaces_below_one_level_up() {
     let (stacked, parent) = placed(&manager, &stacked.id).await;
     assert_eq!(parent.as_ref(), Some(&top.id));
     assert_eq!(stacked.base_ref.as_deref(), Some("refs/heads/worker"));
+    // Neither the removal nor a later sweep of kept branches deletes it.
+    (manager.delete_kept_branches_kept_elsewhere(&repo.id, &[]))
+        .await
+        .unwrap();
     test_support::git(&repo.path, &["rev-parse", "--verify", "refs/heads/worker"]);
     assert_eq!(decider().await, Some(top.id.clone()));
 }

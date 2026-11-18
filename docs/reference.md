@@ -4051,7 +4051,8 @@ only it has stays, and so do the default branch, a branch another workspace
 builds on, and every branch while the default branch is unknown. Removal never
 asks about the branch. Shoal deletes a
 kept branch later, once a remote or the default branch has all its commits, unless
-it moved, is checked out or belongs to a workspace again.
+it moved, is checked out, belongs to a workspace again or a workspace builds on
+it.
 Uncommitted changes, untracked files and commits on a detached HEAD are deleted
 only after `Are you sure? [y/N]`, which lists the changes with Git status codes
 first, or with `--yes`. Large previews show an omitted-entry count; use
