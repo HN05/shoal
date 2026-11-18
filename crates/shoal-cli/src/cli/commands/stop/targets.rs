@@ -55,11 +55,22 @@ const REFUSAL: &str =
 /// now, as while another lifecycle operation or a resource hook runs in a
 /// workspace, or a restart in a chat.
 pub(super) async fn check_each(ctx: &Context, spaces: &[Space]) -> Result<()> {
+    let targets =
+        (spaces.iter()).map(|space| (space.name.to_string(), SpaceSelector::id(&space.id)));
+    check_targets(ctx, targets.collect()).await
+}
+
+/// [`check_each`] over `targets`, each named for its refusal, which may run
+/// on another machine.
+pub(super) async fn check_targets(
+    ctx: &Context,
+    targets: Vec<(String, SpaceSelector)>,
+) -> Result<()> {
     let mut refusals = Vec::new();
-    for space in spaces {
-        let checked = crate::client::stopping::check(&ctx.paths, SpaceSelector::id(&space.id));
+    for (name, selector) in targets {
+        let checked = crate::client::stopping::check(&ctx.paths, selector);
         if let Err(error) = checked.await {
-            refusals.push(format!("{}: {error:#}", space.name));
+            refusals.push(format!("{name}: {error:#}"));
         }
     }
     ensure!(
