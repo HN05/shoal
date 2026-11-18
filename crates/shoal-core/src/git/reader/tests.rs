@@ -40,6 +40,15 @@ async fn an_extension_gix_does_not_know_reads_through_git() {
 }
 
 #[tokio::test]
+async fn a_partial_clone_reads_through_git() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    git(&repo, &["config", "core.repositoryFormatVersion", "1"]);
+    git(&repo, &["config", "extensions.partialClone", "origin"]);
+    assert_eq!(reader(&repo).await, "git");
+}
+
+#[tokio::test]
 async fn a_directory_outside_any_repository_reads_through_git() {
     let outside = tempfile::tempdir().unwrap();
     assert_eq!(reader(outside.path()).await, "git");

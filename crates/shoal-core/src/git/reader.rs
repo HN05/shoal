@@ -12,12 +12,13 @@ use anyhow::Result;
 use crate::fsutil::off_runtime;
 
 /// The repository-format extensions with which gix reads a repository's
-/// location, refs and config as Git does, lowercase as Git compares them.
+/// location, refs and config as Git does, lowercase as Git compares them. A
+/// partial clone is not among them: Git fetches an object it lacks, gix
+/// does not.
 const READABLE_EXTENSIONS: &[&str] = &[
     "noop",
     "noop-v1",
     "objectformat",
-    "partialclone",
     "preciousobjects",
     "relativeworktrees",
     "worktreeconfig",
