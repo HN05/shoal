@@ -16,6 +16,8 @@
 //! is 4 zero bytes and then the number, big-endian, under a key HKDF-SHA256
 //! derives from the X25519 shared secret, with the member's nonce then the
 //! hub's as salt and [`MEMBER_TO_HUB`] or [`HUB_TO_MEMBER`] as info.
+//! A call or reply too large for one frame goes as [`Frame::Piece`]s of its
+//! JSON, which the other side puts back together before reading it.
 //! Whatever ends TLS between them can then neither pose as a side, read a
 //! frame, such as a pairing code the hub issues, nor change, add, drop or
 //! replay one unnoticed; only a refusal the hub sends before it can seal
@@ -151,6 +153,14 @@ pub enum Frame {
     Reply {
         id: u64,
         reply: Reply,
+    },
+    /// A piece of a call or reply too large for one frame: the next run of
+    /// the message `id`'s JSON, which the pieces after it continue while
+    /// `more`.
+    Piece {
+        id: u64,
+        data: String,
+        more: bool,
     },
     Ping,
     Pong,

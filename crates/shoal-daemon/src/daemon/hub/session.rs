@@ -46,7 +46,7 @@ impl Calls {
             None => bail!("the link to the hub closed"),
         };
         let sent_and_replied = async {
-            self.sender.send(&Frame::Call { id, call }).await?;
+            super::pieces::send(&self.sender, &Frame::Call { id, call }, false).await?;
             anyhow::Ok(reply.await)
         };
         let reply = match tokio::time::timeout(CALL_TIMEOUT, sent_and_replied).await {
@@ -139,6 +139,7 @@ where
     let sender = channel.sender();
     let mut pings = tokio::time::interval(SILENCE / 3);
     let mut heard = Instant::now();
+    let mut assembly = super::pieces::Assembly::default();
     tokio::pin!(stop);
     loop {
         tokio::select! {
@@ -154,6 +155,13 @@ where
             frame = channel.receive::<Frame>() => {
                 heard = Instant::now();
                 let frame = match frame {
+                    Ok(Some(Frame::Piece { id, data, more })) => {
+                        match assembly.take(id, data, more) {
+                            Ok(Some(frame)) => frame,
+                            Ok(None) => continue,
+                            Err(error) => return End::Lost(error),
+                        }
+                    }
                     Ok(Some(frame)) => frame,
                     Ok(None) => return End::Closed,
                     Err(error) => return End::Lost(error),
@@ -172,7 +180,8 @@ where
                         // and drops what it holds, even once the link ends.
                         tokio::spawn(async move {
                             let (reply, held) = answer.await;
-                            let _ = sender.send_written(&Frame::Reply { id, reply }).await;
+                            let reply = Frame::Reply { id, reply };
+                            let _ = super::pieces::send(&sender, &reply, true).await;
                             drop(held);
                         });
                     }

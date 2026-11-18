@@ -23,6 +23,7 @@ mod members;
 mod membership;
 mod owners;
 mod pairing;
+mod pieces;
 mod reports;
 mod sealing;
 mod session;
