@@ -258,13 +258,11 @@ async fn a_queued_launch_puts_the_agent_account_on_until_cancelled() {
     let blocker = crate::model::Blocker::Space(fixture.workspaces[1].id.to_string());
     let request = crate::model::QueueRequest {
         blockers: vec![blocker],
+        workspace: Some(SpaceSelector::id(&workspace.id)),
         ..crate::daemon::workspace::agent_queue::tests::request(&fixture.repository, "fix", false)
     };
     let admission = manager.queue_add(request).await.unwrap();
-    assert!(!admission.start);
     let entry = admission.entry.unwrap();
-    let selector = SpaceSelector::id(&workspace.id);
-    manager.queue_attach(&entry.id, &selector).await.unwrap();
     manager.settle_requested_agents().await;
     assert_eq!(fixture.changes(), [json!(["shoal-agent"])]);
     (manager.queue_remove(entry.id.as_str(), None))

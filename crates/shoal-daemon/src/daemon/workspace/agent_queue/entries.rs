@@ -111,7 +111,7 @@ impl Manager {
             repository: Some(repository.id),
             request: request.into(),
             state,
-            opens: target,
+            opens: target.clone(),
             scope,
             awaits,
         };
@@ -120,6 +120,10 @@ impl Manager {
         self.store
             .write(move |tx| insert_launch(tx, &launch, &removing))
             .await?;
+        // Its queued agent works the workspace's issues.
+        if let Some(workspace) = &target {
+            self.agent_settles.request(workspace);
+        }
         let admitted = now || self.admit_waiting(Some(&id)).await?;
         // Kept before the gate opens, so no pass starts it in the background
         // before its caller holds it.
