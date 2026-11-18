@@ -13,8 +13,24 @@ use super::{reader, run};
 /// them.
 pub async fn remote_names(repo: &Path) -> Result<Vec<String>> {
     let in_process = |repo: &gix::Repository| {
-        let names = repo.remote_names();
-        Ok(names.iter().map(|name| name.to_string()).collect())
+        let config = repo.config_snapshot();
+        let sections = config
+            .plumbing()
+            .sections_by_name("remote")
+            .into_iter()
+            .flatten();
+        let mut names: Vec<String> = sections
+            .filter(defines_something)
+            .filter_map(|section| {
+                section
+                    .header()
+                    .subsection_name()
+                    .map(|name| name.to_string())
+            })
+            .collect();
+        names.sort();
+        names.dedup();
+        Ok(names)
     };
     let git = async |repo: &Path| {
         let listing = run(repo, &["remote"]).await?;
@@ -108,8 +124,9 @@ pub async fn configured_remote_url(repo: &Path, remote: &str) -> Result<Option<S
 
 /// The fetch URL of the remote `name` in `repo`'s configuration: its first
 /// `url`, or its name where it has none, as Git takes it, rewritten; `None`
-/// unless the repository's own config has a section for the remote, as
-/// `git remote get-url` requires, whatever other files define.
+/// unless the repository's own config has a section for the remote that
+/// sets a key, as `git remote get-url` requires, whatever other files
+/// define.
 fn fetch_url(repo: &gix::Repository, name: &str) -> Option<String> {
     let config = repo.config_snapshot();
     let file = config.plumbing();
@@ -123,7 +140,8 @@ fn fetch_url(repo: &gix::Repository, name: &str) -> Option<String> {
         .collect();
     let in_repository = |section: &&gix::config::file::SectionRef<'_>| {
         use gix::config::Source;
-        matches!(section.meta().source, Source::Local | Source::Worktree)
+        let local = matches!(section.meta().source, Source::Local | Source::Worktree);
+        local && defines_something(section)
     };
     if !sections.iter().any(|section| in_repository(&section)) {
         return None;
@@ -131,6 +149,12 @@ fn fetch_url(repo: &gix::Repository, name: &str) -> Option<String> {
     let urls = sections.iter().flat_map(|section| section.values("url"));
     let url = urls.map(|url| url.to_string()).next();
     Some(rewritten(file, &url.unwrap_or_else(|| name.to_owned())))
+}
+
+/// Whether the remote section `section` sets a key: Git ignores one that
+/// only names a remote.
+fn defines_something(section: &gix::config::file::SectionRef<'_>) -> bool {
+    section.value_names().next().is_some()
 }
 
 /// `url` with the longest `url.<base>.insteadOf` prefix it starts with

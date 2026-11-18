@@ -435,6 +435,16 @@ async fn an_inherited_remote_helper() {
             .unwrap();
         assert_eq!(url, None, "{remote}");
     }
+    // A section naming a remote without a key configures nothing.
+    let config = repo.join(".git/config");
+    let text = std::fs::read_to_string(&config).unwrap();
+    std::fs::write(&config, text + "[remote \"origin\"]\n[remote \"empty\"]\n").unwrap();
+    let url = crate::git::configured_remote_url(&repo, "origin")
+        .await
+        .unwrap();
+    assert_eq!(url, None);
+    let names = crate::git::remote_names(&repo).await.unwrap();
+    assert!(!names.iter().any(|name| name == "empty"), "{names:?}");
     git(
         &repo,
         &[
