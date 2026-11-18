@@ -3,7 +3,8 @@
 //! a new space never waits for the hub, and once none is left, above its
 //! own highest number. A space whose number another machine's space held
 //! first takes the number the hub gives it instead, with its questions and
-//! approval requests, and the user and its agent hear of it.
+//! approval requests, and the user and its agent hear of it. A space this
+//! machine imports as another moves it here keeps the number it had there.
 use anyhow::Result;
 use rusqlite::{OptionalExtension as _, Transaction, params};
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
@@ -55,6 +56,19 @@ impl Manager {
         }
     }
 
+    /// Keep `number`, which the hub keeps for the space `id` this machine
+    /// imports, for when the import records the space here.
+    pub(super) async fn keep_imported_number(
+        &self,
+        id: &SpaceId,
+        number: SpaceNumber,
+    ) -> Result<()> {
+        let id = id.clone();
+        (self.store)
+            .write(move |tx| keep_imported(tx, &id, number))
+            .await
+    }
+
     /// Give new spaces the smallest number free here again, once this
     /// machine neither takes the hub role nor is a member of a hub.
     pub(super) async fn forget_numbering_unless_joined(&self) -> Result<()> {
@@ -62,9 +76,14 @@ impl Manager {
     }
 }
 
-/// The number a new space takes here from the hub's sequence; none while
-/// this machine takes no part in one, where it takes the smallest free.
-pub(crate) fn next(tx: &Transaction<'_>) -> Result<Option<SpaceNumber>> {
+/// The number the new space `id` takes here from the hub's sequence: the
+/// one it keeps as an import while no space here holds it, else the next
+/// one; none while this machine takes no part in a hub's sequence, where it
+/// takes the smallest free.
+pub(crate) fn next(tx: &Transaction<'_>, id: &SpaceId) -> Result<Option<SpaceNumber>> {
+    if let Some(kept) = take_kept(tx, id)? {
+        return Ok(Some(kept));
+    }
     Ok(tx
         .query_row(
             "SELECT COALESCE(
@@ -76,6 +95,31 @@ pub(crate) fn next(tx: &Transaction<'_>) -> Result<Option<SpaceNumber>> {
             |row| row.get(0),
         )
         .optional()?)
+}
+
+/// Keep `number` for the imported space `id`.
+fn keep_imported(tx: &Transaction<'_>, id: &SpaceId, number: SpaceNumber) -> Result<()> {
+    tx.execute(
+        "INSERT OR REPLACE INTO hub_kept_numbers(space_id, number) VALUES (?1,?2)",
+        params![id, number],
+    )?;
+    Ok(())
+}
+
+/// The number the hub keeps for the imported space `id`, which this
+/// spends, unless a space here holds it.
+fn take_kept(tx: &Transaction<'_>, id: &SpaceId) -> Result<Option<SpaceNumber>> {
+    let kept = tx
+        .query_row(
+            "DELETE FROM hub_kept_numbers WHERE space_id=?1 RETURNING number",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    match kept {
+        Some(number) if !held(tx, number)? => Ok(Some(number)),
+        _ => Ok(None),
+    }
 }
 
 /// Keep the spares `numbering` brings as those new spaces here take.

@@ -2,7 +2,10 @@
 //! machine sends of its own, the view the hub serves from them, the
 //! machine that owns each space ID, and the one sequence of their numbers.
 use anyhow::Result;
-use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
+use shoal_ids::{
+    member_ids::MemberId,
+    space_ids::{SpaceId, SpaceNumber},
+};
 use shoal_protocol::hub::{
     Member, MemberKind,
     directory::{Conflict, Directory, Report},
@@ -51,11 +54,19 @@ impl Manager {
     }
 
     /// Record that the machine `member` claims the space `id`, which it
-    /// imports as another machine moves it there.
-    pub(super) async fn record_space_claim(&self, member: &MemberId, id: &SpaceId) -> Result<()> {
+    /// imports as another machine moves it there, and return the number
+    /// the space keeps there, if the directory lists it.
+    pub(super) async fn record_space_claim(
+        &self,
+        member: &MemberId,
+        id: &SpaceId,
+    ) -> Result<Option<SpaceNumber>> {
         let (member, id) = (member.clone(), id.clone());
         self.store
-            .write(move |tx| records::claim(tx, &member, &id))
+            .write(move |tx| {
+                records::claim(tx, &member, &id)?;
+                numbers::keep_for_claim(tx, &member, &id)
+            })
             .await
     }
 

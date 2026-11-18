@@ -3,7 +3,8 @@
 //! space, and by the spares and new numbers the hub keeps for a machine. A
 //! space whose number another machine's space or reservation held first
 //! takes the smallest number none holds, which the hub keeps for it until
-//! its machine reports it with that number.
+//! its machine reports it with that number. A space another machine claims
+//! keeps its number there the same way.
 use anyhow::Result;
 use rusqlite::{OptionalExtension as _, Transaction, params};
 use shoal_ids::{
@@ -48,6 +49,26 @@ pub(super) fn settle(tx: &Transaction<'_>, member: &MemberId, id: &SpaceId) -> R
     reserve(tx, member, Some(id), new)
 }
 
+/// Keep the number of the space `id` for `member`, which claims it as it
+/// imports the space, and return it: its new number, should the hub
+/// renumber it, or else the one the directory lists it with, if any.
+pub(super) fn keep_for_claim(
+    tx: &Transaction<'_>,
+    member: &MemberId,
+    id: &SpaceId,
+) -> Result<Option<SpaceNumber>> {
+    let Some(number) = renumbering(tx, id)?.or(of_listed(tx, id)?) else {
+        return Ok(None);
+    };
+    tx.execute(
+        "INSERT INTO hub_numbers(number, member_id, space_id) VALUES (?1,?2,?3)
+         ON CONFLICT(number) DO UPDATE SET member_id=excluded.member_id,
+            space_id=excluded.space_id",
+        params![number, member, id],
+    )?;
+    Ok(Some(number))
+}
+
 /// Drop the new number the hub keeps for `member`'s space `id`, which
 /// ended there.
 pub(super) fn release(tx: &Transaction<'_>, member: &MemberId, id: &SpaceId) -> Result<()> {
@@ -66,11 +87,18 @@ pub(super) fn forget(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
 
 /// The number the directory lists the space `id` with.
 fn listed_number(tx: &Transaction<'_>, id: &SpaceId) -> Result<SpaceNumber> {
-    Ok(tx.query_row(
-        "SELECT json_extract(summary,'$.number') FROM hub_spaces WHERE space_id=?1",
-        [id],
-        |row| row.get(0),
-    )?)
+    of_listed(tx, id)?.ok_or_else(|| anyhow::anyhow!("the hub lists no space {id}"))
+}
+
+/// The number the directory lists the space `id` with, if it lists it.
+fn of_listed(tx: &Transaction<'_>, id: &SpaceId) -> Result<Option<SpaceNumber>> {
+    Ok(tx
+        .query_row(
+            "SELECT json_extract(summary,'$.number') FROM hub_spaces WHERE space_id=?1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?)
 }
 
 /// Whether `number`, which `member`'s space `id` has, is held by another

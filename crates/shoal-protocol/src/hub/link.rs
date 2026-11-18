@@ -23,7 +23,10 @@
 //! replay one unnoticed; only a refusal the hub sends before it can seal
 //! comes as it is, and the member takes no such refusal as final.
 use serde::{Deserialize, Serialize};
-use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
+use shoal_ids::{
+    member_ids::MemberId,
+    space_ids::{SpaceId, SpaceNumber},
+};
 use shoal_states::states;
 
 use super::{
@@ -222,7 +225,8 @@ pub enum Call {
     Owner { space: SpaceId },
     /// A machine's claim of the space `space`, which it imports as another
     /// machine moves it here: its report of the space takes the ID over.
-    /// Answered with [`Reply::Claimed`].
+    /// Answered with [`Reply::Claimed`] and the number the space keeps, if
+    /// the hub lists it.
     Claim { space: SpaceId },
 }
 
@@ -237,7 +241,7 @@ pub enum Reply {
     Reported(Numbering),
     Directory(Directory),
     Owner(Option<super::Member>),
-    Claimed,
+    Claimed(Option<SpaceNumber>),
     Failed { message: String },
 }
 

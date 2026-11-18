@@ -36,7 +36,7 @@ pub(crate) fn record(tx: &Transaction<'_>, space: &NewSpace<'_>) -> Result<Space
     // The trigger that numbers a recorded space gives one recorded with 0
     // the smallest number free.
     let number = match space.number.get() {
-        0 => numbering::next(tx)?.unwrap_or_default(),
+        0 => numbering::next(tx, space.id)?.unwrap_or_default(),
         _ => space.number,
     };
     tx.execute(

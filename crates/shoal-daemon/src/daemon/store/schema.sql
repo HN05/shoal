@@ -761,6 +761,11 @@ CREATE TABLE hub_numbering (
     spares TEXT NOT NULL
 );
 
+CREATE TABLE hub_kept_numbers (
+    space_id TEXT PRIMARY KEY,
+    number INTEGER NOT NULL
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);

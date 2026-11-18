@@ -1,8 +1,8 @@
 //! Which machine owns a space ID, as the hub's directory says: a restore
 //! asks before it opens a space again, so the same space never runs on two
-//! machines, and an import claims the space it opens.
+//! machines, and an import claims the space it opens, with its number.
 use anyhow::{Result, anyhow, bail};
-use shoal_ids::space_ids::SpaceId;
+use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::hub::{
     Member,
     link::{Call, Reply},
@@ -34,23 +34,33 @@ impl Manager {
 
     /// Claim the space `id` at the hub, which this machine imports as
     /// another moves it here, so this machine's report of it takes the ID
-    /// over without a conflict. A hub that cannot be asked takes no claim,
-    /// and the space shows as a conflict until the other machine ends it.
+    /// over without a conflict, and keep the number the hub keeps for it
+    /// for when the import records it. A hub that cannot be asked takes no
+    /// claim, and the space shows as a conflict until the other machine
+    /// ends it.
     pub(crate) async fn claim_space(&self, id: &SpaceId) {
-        if let Err(error) = self.claim_at_hub(id).await {
+        let claimed = async {
+            if let Some(number) = self.claim_at_hub(id).await? {
+                self.keep_imported_number(id, number).await?;
+            }
+            anyhow::Ok(())
+        };
+        if let Err(error) = claimed.await {
             log!("hub: could not claim space {id}: {error:#}");
         }
     }
 
-    async fn claim_at_hub(&self, id: &SpaceId) -> Result<()> {
+    /// Claim the space `id` at the hub, and the number the hub keeps for
+    /// it, if any.
+    async fn claim_at_hub(&self, id: &SpaceId) -> Result<Option<SpaceNumber>> {
         if self.is_hub() {
             return self.record_space_claim(&self.own_member().await?, id).await;
         }
         if self.store.read(membership::load).await?.is_none() {
-            return Ok(());
+            return Ok(None);
         }
         match self.through_hub(Call::Claim { space: id.clone() }).await? {
-            Reply::Claimed => Ok(()),
+            Reply::Claimed(number) => Ok(number),
             reply => Err(anyhow!("the hub answered with an unexpected {reply:?}")),
         }
     }

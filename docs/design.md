@@ -148,7 +148,9 @@ while the hub cannot be reached, above its own highest. A space whose
 number another machine's space or spares held first, as after that or after
 joining with spaces of its own, takes the smallest number none holds, with
 its questions and approval requests, and its machine tells the user and the
-space's agent; the space that held the number first keeps it. Browser
+space's agent; the space that held the number first keeps it. An import's
+claim of a space's ID also keeps its number for the claiming machine, so a
+move between the hub's machines keeps it. Browser
 sessions and routing requests between machines are later steps.
 The minimum Rust version follows current stable so the code can use its newest
 features; the manifest and CI toolchain advance together, with locked dependencies.

@@ -116,3 +116,28 @@ fn a_space_that_ends_frees_the_number_kept_for_it() {
     let laptop = report(&mut db, "laptop", Vec::new());
     assert_eq!(laptop.renumbered, []);
 }
+
+#[test]
+fn a_claimed_space_keeps_its_number_on_the_machine_that_claims_it() {
+    let mut db = database();
+    report(&mut db, "laptop", vec![space("a", 2)]);
+    let (desk, id) = (MemberId::from("desk".to_owned()), SpaceId::from("a"));
+    let tx = db.transaction().unwrap();
+    super::super::records::claim(&tx, &desk, &id).unwrap();
+    assert_eq!(keep_for_claim(&tx, &desk, &id).unwrap(), Some(2.into()));
+    // The machine it moves from may end it before the claiming machine
+    // reports it, which leaves the number to the claiming machine.
+    let removed = Report::Changes {
+        changed: Vec::new(),
+        removed: vec![id.clone()],
+    };
+    let laptop = MemberId::from("laptop".to_owned());
+    super::super::records::apply(&tx, &laptop, removed).unwrap();
+    tx.commit().unwrap();
+    assert_eq!(
+        report(&mut db, "desk", Vec::new()).spares,
+        numbers(&[5, 6, 7])
+    );
+    let desk = report(&mut db, "desk", vec![space("a", 2)]);
+    assert_eq!(desk.renumbered, []);
+}

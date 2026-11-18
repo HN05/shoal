@@ -186,7 +186,7 @@ fn a_restore_of_a_space_another_machine_runs_is_refused() {
 }
 
 #[test]
-fn a_move_between_joined_machines_hands_the_space_over() {
+fn a_move_between_joined_machines_hands_the_space_over_with_its_number() {
     let hub = machine(true, "app");
     let laptop = machine(false, "app");
     let desk = machine(false, "desk-app");
@@ -194,10 +194,11 @@ fn a_move_between_joined_machines_hands_the_space_over() {
     let desk_id = join(&desk, &hub, "desk");
     reach(&laptop, &desk);
     let work = workspace(&laptop, "work");
-    listed(&hub, &work, &laptop_id);
+    let number = listed(&hub, &work, &laptop_id)["number"].clone();
     let moved = laptop.ok(&["move", "ssh", "desk", &work, "--shoal", shoal_binary()]);
     assert_eq!(moved["failed"], serde_json::json!([]), "{moved}");
-    listed(&hub, &work, &desk_id);
+    // It keeps its number.
+    assert_eq!(listed(&hub, &work, &desk_id)["number"], number);
     let alerts = hub.ok(&["alerts"]);
     let conflict =
         (alerts.as_array().unwrap().iter()).find(|alert| alert["kind"] == "space_conflict");

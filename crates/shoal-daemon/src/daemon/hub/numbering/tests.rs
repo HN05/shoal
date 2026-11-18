@@ -59,10 +59,10 @@ async fn a_machine_that_leaves_its_hub_numbers_on_its_own() -> Result<()> {
             )?;
             keep_spares(tx, &spares(&[7]))?;
             forget_unless_joined(tx)?;
-            let joined = next(tx)?;
+            let joined = next(tx, &SpaceId::from("new"))?;
             tx.execute("UPDATE hub_membership SET revoked=1", [])?;
             forget_unless_joined(tx)?;
-            Ok((joined, next(tx)?))
+            Ok((joined, next(tx, &SpaceId::from("new"))?))
         })
         .await?;
     assert_eq!(numbered, (Some(SpaceNumber::new(7)), None));
@@ -121,5 +121,29 @@ async fn a_renumbered_space_takes_its_questions_and_their_waits_along() -> Resul
         "{}",
         notice.message
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_imported_space_keeps_the_number_the_hub_kept_for_it() -> Result<()> {
+    let (_root, manager) = crate::daemon::test_support::manager().await;
+    for (id, number) in [("moved", 5), ("taken", 1)] {
+        let number = SpaceNumber::new(number);
+        manager
+            .keep_imported_number(&SpaceId::from(id), number)
+            .await?;
+    }
+    let numbers = (manager.store)
+        .write(|tx| {
+            let numbers = [
+                record(tx, "here")?,
+                record(tx, "moved")?,
+                record(tx, "taken")?,
+            ];
+            Ok(numbers.map(SpaceNumber::get))
+        })
+        .await?;
+    // A number a space here holds is not kept.
+    assert_eq!(numbers, [1, 5, 2]);
     Ok(())
 }

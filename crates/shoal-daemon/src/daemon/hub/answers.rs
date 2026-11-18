@@ -86,8 +86,7 @@ impl Manager {
             }
             Call::Claim { space } => {
                 ensure_machine(member)?;
-                self.record_space_claim(&member.id, &space).await?;
-                Reply::Claimed
+                Reply::Claimed(self.record_space_claim(&member.id, &space).await?)
             }
             Call::Directory => Reply::Directory(self.local_directory().await?),
             Call::Owner { space } => {
