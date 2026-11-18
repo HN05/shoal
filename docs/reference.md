@@ -4028,7 +4028,12 @@ stay; Git hooks are disabled. When its time limit or a signal stops a
 `git worktree remove` partway, Shoal checks the tracked files it deleted out
 again at once. When the daemon's stop cut it short, or that fails, the workspace
 stays failed, and they come back when the daemon next starts or at the next
-removal. The next removal continues with the ignored files left.
+removal. The next removal continues with the ignored files left. Once Git
+deleted the worktree's admin directory, Git no longer knows the worktree, and
+the next removal deletes what is left of it as it does a disposable
+workspace's, `--json` reporting `disowned`: it asks first, counts the files
+left that differ from its branch's commit as uncommitted, keeps them laid over
+that commit in the checkpoint, and keeps the branch.
 Git protects other checkouts. Failed ancestry or exact-ref checks stop removal
 with the Git diagnostic, as they do branch selection and refresh; a missing ref
 is a negative answer. Shell integration returns to `<root_dir>/<repo>`.

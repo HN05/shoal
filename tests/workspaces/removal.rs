@@ -553,6 +553,26 @@ fn removal_accepts_switched_branch_but_refuses_replaced_repository() {
     );
 }
 
+/// Git deleted the worktree's admin directory, as a removal stopped partway
+/// leaves it, so only the user's confirmation lets what is left go.
+#[test]
+fn removal_asks_before_deleting_a_worktree_git_no_longer_knows() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("disowned");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    let admin_dir = git(path, &["rev-parse", "--absolute-git-dir"]);
+    fs::remove_dir_all(admin_dir.trim_end()).unwrap();
+    let id = fixture.id("disowned");
+    let refused = fixture.run(&["rm", "--wait", &id]);
+    assert!(!refused.status.success());
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(stderr.contains("pass --yes"), "{}", printed(&refused));
+    assert!(path.exists());
+    let removed = fixture.ok(&["rm", "--wait", &id, "--yes"]);
+    assert_eq!(removed["disowned"], true, "{removed}");
+    assert!(!path.exists());
+}
+
 #[test]
 fn removal_goes_on_in_the_background_once_its_checks_pass() {
     let fixture = Fixture::new();

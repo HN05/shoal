@@ -3611,8 +3611,11 @@ failure, or a checkout that failed, left of a disposable workspace without Git,
 proven its own by the `.git` link naming a deleted admin directory of its
 repository, or, once a removal stopped after Git deleted that link and a
 `git worktree prune` deleted the admin directory, by the directory's identity,
-which a removal records before Git begins deleting it;
-any other workspace's stays, since Git can no longer read its work. Workspaces are cheap to remove because removal is reversible,
+which a removal records before Git begins deleting it. Git no longer has its
+HEAD, index or ignore rules, so the files left of a workspace that is not
+disposable are read against its branch's commit, with the commit's missing
+files taken as unchanged; those that differ are unsaved work, kept laid over
+that commit in the checkpoint. Workspaces are cheap to remove because removal is reversible,
 except that of a disposable workspace, which holds nothing worth keeping.
 A checkpoint is a commit of HEAD plus the unsaved files Git does not ignore, built
 with a temporary index and kept under `refs/shoal/checkpoints/<commit>`, with a

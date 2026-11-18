@@ -23,6 +23,10 @@ pub struct Removed {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background: Option<BackgroundRemoval>,
     pub holds: Vec<SpaceHold>,
+    /// Git no longer knew its worktree, so the removal deleted what was
+    /// left of it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub disowned: bool,
 }
 
 impl Removed {

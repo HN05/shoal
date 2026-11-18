@@ -120,10 +120,10 @@ instead of the PR delivery guidance below.
   signal the daemon and await its ownership lock before removing its service job,
   including jobs loaded with an older termination limit.
   Worktree ownership is proven by the owner marker in the Git admin directory alone;
-  a missing marker never establishes ownership. Once Git deleted a disposable
-  workspace's admin directory, what it left is proven by a `.git` link naming that
-  directory, or without one by the directory identity a removal recorded before Git
-  began deleting it, never by the path alone.
+  a missing marker never establishes ownership. Once Git deleted a workspace's
+  admin directory, what it left is proven by a `.git` link naming that directory,
+  or without one by the directory identity a removal recorded before Git began
+  deleting it, never by the path alone.
   Only an explicit reclaim (`adopt` of the recorded path) may
   re-establish ownership that failed verification, and only at the recorded path,
   repository and branch. Automatic recovery only readies a workspace the startup

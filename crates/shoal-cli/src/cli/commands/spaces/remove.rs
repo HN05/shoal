@@ -148,6 +148,7 @@ async fn remove_checked(
         removal,
         background,
         holds: check.space.holds.clone(),
+        disowned: (check.worktree.as_ref()).is_some_and(|worktree| worktree.disowned),
     })
 }
 
@@ -214,6 +215,7 @@ fn confirm_removals(ctx: &Context, checks: &[SpaceRemovalCheck]) -> Result<()> {
 fn removal_losses(ctx: &Context, check: &SpaceRemovalCheck) -> Vec<String> {
     let mut lines: Vec<String> = children_loss(check).into_iter().collect();
     let worktree = check.worktree.as_ref();
+    lines.extend(worktree.and_then(disowned_loss));
     lines.extend(worktree.map(unsaved_losses).unwrap_or_default());
     if !worktree.is_some_and(|worktree| worktree.workspace.disposable) {
         lines.extend(super::super::holds::losses(&check.space.holds));
@@ -237,6 +239,15 @@ fn children_loss(check: &SpaceRemovalCheck) -> Option<String> {
             "Removes the spaces below it first, whatever their work or holds; shoal restore brings each back: {}",
             below.join(", ")
         )
+    })
+}
+
+/// That Git no longer knows the worktree `check` inspected, so removal
+/// reads what is left there against its branch; none for a disposable
+/// workspace, whose files count for nothing.
+fn disowned_loss(check: &RemovalCheck) -> Option<String> {
+    (check.disowned && !check.workspace.disposable).then(|| {
+        "Git no longer knows its worktree, so files left there that differ from its branch count as uncommitted; the branch stays.".into()
     })
 }
 
@@ -294,6 +305,12 @@ fn removal_message(name: &SpaceName, removed: &Removed) -> String {
             "; also {also} {}",
             space_names::join(removed.children(), ", ")
         ));
+    }
+    if removed.disowned {
+        message.push_str(match removed.removal {
+            Some(_) => "; Git no longer knew its worktree",
+            None => "; Git no longer knows its worktree",
+        });
     }
     message
 }
