@@ -1,49 +1,69 @@
 use super::*;
-use crate::transfer::ManifestExt;
+use crate::transfer::{ManifestExt, PackagedSpaceExt};
 use shoal_ids::agent_session_ids::AgentSessionId;
 
-/// The chat `id` of repository `r1`, below `parent` when given and in the
-/// worktree of `workspace` when given, whose agent reported `s-<id>`.
-fn chat(id: &str, parent: Option<&str>, workspace: Option<&str>) -> Chat {
-    let space = |id: &str, kind: &str| serde_json::json!({"id": id, "name": id, "kind": kind});
-    serde_json::from_value(serde_json::json!({
-        "id": id, "repository_id": "r1", "name": id, "agent": "claude", "started_at": 0,
-        "session": format!("s-{id}"),
-        "parent": parent.map(|parent| space(parent, "chat")),
-        "workdir": match workspace {
-            Some(workspace) => serde_json::json!({
-                "kind": "worktree", "path": format!("/{workspace}"),
-                "workspace": {"id": workspace, "name": workspace, "branch": null},
-            }),
-            None => serde_json::json!({"kind": "checkout", "path": "/repo"}),
-        },
-    }))
-    .unwrap()
+/// Where the space `id` sits: below `parent`, in the worktree of
+/// `worktree`.
+fn placed(id: &str, parent: Option<&str>, worktree: Option<&str>) -> Ids {
+    (
+        id.into(),
+        parent.map(SpaceId::from),
+        worktree.map(SpaceId::from),
+    )
 }
 
-#[test]
-fn a_space_carries_the_chats_in_its_worktree_and_below_it_through_chats() {
-    let chats = [
-        // Below a chat it carries, listed before that chat.
-        chat("grandchild", Some("reading"), None),
+/// A space's ID with those of its parent and of the workspace whose
+/// worktree it works in.
+type Ids = (SpaceId, Option<SpaceId>, Option<SpaceId>);
+
+/// The IDs [`carried_spaces`] carries with `w1` among `spaces`.
+fn carried_with_w1(spaces: &[Ids], carrying: &Carrying) -> Vec<String> {
+    let placed: Vec<Placed<'_>> = (spaces.iter())
+        .map(|(id, parent, worktree)| Placed {
+            id,
+            parent: parent.as_ref(),
+            worktree: worktree.as_ref(),
+        })
+        .collect();
+    let carried = carried_spaces(&placed, &"w1".into(), carrying);
+    carried.iter().map(|id| id.as_str().to_owned()).collect()
+}
+
+/// A tree below `w1`, each space listed before the spaces it waits for.
+fn tree() -> Vec<Ids> {
+    vec![
+        // Below a chat it carries, and in the worktree of a workspace
+        // below it, listed before both.
+        placed("grandchild", Some("reading"), Some("w2")),
         // In its worktree, below a space that stays.
-        chat("reading", Some("elsewhere"), Some("w1")),
-        chat("child", Some("w1"), None),
-        // In the worktree of a workspace below it, which carries it.
-        chat("split-reading", None, Some("w2")),
-        chat("other", None, None),
-    ];
-
-    let carried = carried_chats(&chats, &"w1".into());
-
-    assert_eq!(
-        carried.iter().map(SpaceId::as_str).collect::<Vec<_>>(),
-        ["reading", "grandchild", "child"]
-    );
+        placed("reading", Some("elsewhere"), Some("w1")),
+        placed("w3", Some("w2"), None),
+        placed("w2", Some("w1"), None),
+        placed("chat", Some("w1"), None),
+        placed("other", None, None),
+    ]
 }
 
 #[test]
-fn a_carried_chat_keeps_its_session_only_where_its_agent_continues_it() {
+fn a_space_carries_every_space_below_it_and_in_its_worktrees_parents_first() {
+    let carried = carried_with_w1(&tree(), &Carrying::Subtree);
+
+    assert_eq!(carried, ["reading", "w2", "grandchild", "w3", "chat"]);
+}
+
+#[test]
+fn a_selection_carries_only_its_spaces_and_those_in_their_worktrees() {
+    let selected = Carrying::Selected(vec!["w2".into(), "w3".into()]);
+    let carried = carried_with_w1(&tree(), &selected);
+    assert_eq!(carried, ["reading", "w2", "grandchild", "w3"]);
+
+    // A selected space below one that stays stays with it.
+    let below_staying = Carrying::Selected(vec!["w3".into()]);
+    assert_eq!(carried_with_w1(&tree(), &below_staying), ["reading"]);
+}
+
+#[test]
+fn a_carried_space_keeps_its_session_only_where_its_agent_continues_it() {
     let removed: RemovedSpace = serde_json::from_value(serde_json::json!({
         "workspace_id": "c1", "repository_id": "r1", "name": "reading",
         "links": {"issues": [], "prs": [], "opened": [], "related": []},
@@ -53,14 +73,14 @@ fn a_carried_chat_keeps_its_session_only_where_its_agent_continues_it() {
         "chat": {"mode": "chat"},
     }))
     .unwrap();
-    let carried = CarriedChat::of(None, Some("m1".into()), removed);
+    let carried = CarriedSpace::of(None, Some("m1".into()), removed);
     // The record carries no place its agent ran in.
-    assert_eq!(carried.chat.last_sessions[0].origin, None);
+    assert_eq!(carried.space.record.last_sessions[0].origin, None);
     let manifest = crate::transfer::Manifest {
         remote_url: None,
         space: crate::transfer::PackagedSpace {
             prerequisite: None,
-            bundle: false,
+            bundle: None,
             record: serde_json::from_value(serde_json::json!({
                 "workspace_id": "lead", "repository_id": null, "name": "lead",
                 "links": {"issues": [], "prs": [], "opened": [], "related": []},
@@ -72,11 +92,11 @@ fn a_carried_chat_keeps_its_session_only_where_its_agent_continues_it() {
         sessions: None,
         session_files: Vec::new(),
         copy: None,
-        chats: vec![carried.clone()],
+        carried: vec![carried.clone()],
     };
     let session = |machine| {
-        let sessions = manifest.chat_sessions_on(&carried, Some(machine), None);
-        let chat = carried.chat_with(sessions);
+        let sessions = manifest.carried_sessions_on(&carried, Some(machine), None);
+        let chat = carried.space.record_with(sessions);
         (chat.last_sessions.first()).and_then(|last| last.session.clone())
     };
 

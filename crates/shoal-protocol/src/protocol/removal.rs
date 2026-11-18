@@ -98,30 +98,41 @@ pub enum RemovalMethod {
     /// Delete the agents' session files the restore that opened `space`
     /// returned, once the caller has put them in place.
     DropRestoredSessions { space: SpaceSelector },
-    /// End a space here, removing a workspace or stopping a chat's agent,
-    /// or take a removed space, and write it for another Shoal to the
-    /// new file `file`.
+    /// End a space here through the removal path, with the spaces below it
+    /// that `carrying` carries, or take a removed space with those its
+    /// removal took, and write them for another Shoal to the new file
+    /// `file`. The spaces below that it does not carry stay here.
     ExportSpace {
         space: SpaceSelector,
         unsaved: UnsavedWork,
         file: std::path::PathBuf,
+        #[serde(default)]
+        carrying: crate::transfer::Carrying,
     },
-    /// Stop the agents of the workspace or chat `space`, saving their
-    /// sessions, and write it for another Shoal to the new file `file`
-    /// without ending it here, as `shoal move ssh` does before its import
-    /// there.
+    /// Stop the agents of the workspace or chat `space` and of the spaces
+    /// below it that `carrying` carries, saving their sessions, and write
+    /// them for another Shoal to the new file `file` without ending them
+    /// here, as `shoal move ssh` does before its import there.
     ExportMovingSpace {
         space: SpaceSelector,
         file: std::path::PathBuf,
+        #[serde(default)]
+        carrying: crate::transfer::Carrying,
     },
-    /// End `space` here once another Shoal imported its move, deleting only
-    /// the `unsaved` work the caller saw: a workspace only while it still
-    /// has what its exported checkpoint `checkpoint` keeps.
+    /// End `space` here with the spaces below it that `carrying` carries,
+    /// once another Shoal imported their move, deleting only the `unsaved`
+    /// work the caller saw: each workspace only while it still has what
+    /// its exported checkpoint in `checkpoints` keeps.
     EndMovedSpace {
         space: SpaceSelector,
         unsaved: UnsavedWork,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        checkpoint: Option<shoal_ids::checkpoint_numbers::CheckpointNumber>,
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        checkpoints: std::collections::BTreeMap<
+            shoal_ids::space_ids::SpaceId,
+            shoal_ids::checkpoint_numbers::CheckpointNumber,
+        >,
+        #[serde(default)]
+        carrying: crate::transfer::Carrying,
     },
     /// Record a space another Shoal exported as removed here, keeping its
     /// agents' session files with the record, and open it again.

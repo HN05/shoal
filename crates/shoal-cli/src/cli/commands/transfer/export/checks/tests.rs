@@ -1,41 +1,11 @@
 use super::*;
-use crate::model::{Chat, RefPart};
+use crate::model::{RefPart, SpaceRef};
 
-/// A chat named `name`, with a session to continue, in the worktree of
-/// `workspace` when given.
-fn chat(name: &str, workspace: Option<&str>) -> Chat {
-    serde_json::from_value(serde_json::json!({
-        "id": name, "repository_id": "repo", "name": name, "agent": "claude",
-        "started_at": 0, "session": "session",
-        "workdir": match workspace {
-            Some(workspace) => serde_json::json!({
-                "kind": "worktree", "path": format!("/{workspace}"),
-                "workspace": {"id": workspace, "name": workspace, "branch": workspace},
-            }),
-            None => serde_json::json!({"kind": "checkout", "path": "/repo"}),
-        },
-    }))
-    .unwrap()
-}
-
-/// The workspace `name`, with the spaces `children` below it.
-fn workspace(name: &str, children: Vec<SpaceRef>) -> crate::model::Workspace {
-    let mut workspace = crate::model::Workspace::new_record(
-        "repo".into(),
-        name.into(),
-        format!("/work/{name}").into(),
-        crate::model::Head::Branch(name.into()),
-        crate::state::WorkspaceState::Ready,
-    );
-    workspace.id = name.into();
-    workspace.children = children;
-    workspace
-}
-
-fn space(id: &str, name: &str, kind: SpaceKind) -> SpaceRef {
+/// A reference to the workspace or chat `id`.
+fn reference(id: &str, kind: SpaceKind) -> SpaceRef {
     SpaceRef {
         id: id.into(),
-        name: name.into(),
+        name: id.into(),
         part: match kind {
             SpaceKind::Workspace => RefPart::Workspace { branch: None },
             SpaceKind::Chat => RefPart::Chat,
@@ -43,85 +13,121 @@ fn space(id: &str, name: &str, kind: SpaceKind) -> SpaceRef {
     }
 }
 
-/// The export check of `workspace`, whose removal takes `taken` first.
-fn checked(workspace: crate::model::Workspace, taken: Vec<SpaceRef>) -> Checked {
+/// The chat `id`, below the workspace `parent` when given, whose agent is
+/// Claude.
+fn chat(id: &str, parent: Option<&str>) -> Space {
+    let chat: Chat = serde_json::from_value(serde_json::json!({
+        "id": id, "repository_id": "repo", "name": id, "agent": "claude",
+        "started_at": 0, "session": "session",
+        "parent": parent.map(|parent| reference(parent, SpaceKind::Workspace)),
+        "workdir": {"kind": "checkout", "path": "/repo"},
+    }))
+    .unwrap();
+    chat.into()
+}
+
+/// The workspace `id`, below the workspace `parent` when given.
+fn workspace(id: &str, parent: Option<&str>) -> Space {
+    let mut workspace = crate::model::Workspace::new_record(
+        "repo".into(),
+        id.into(),
+        format!("/work/{id}").into(),
+        crate::model::Head::Branch(id.into()),
+        crate::state::WorkspaceState::Ready,
+    );
+    workspace.id = id.into();
+    workspace.parent = parent.map(|parent| reference(parent, SpaceKind::Workspace));
+    workspace.into()
+}
+
+/// A hold named `name`.
+fn hold(name: &str) -> SpaceHold {
+    serde_json::from_value(serde_json::json!({
+        "space_id": "held", "name": name, "reason": null, "created_at": 0,
+    }))
+    .unwrap()
+}
+
+/// The export check of the workspace `space`, which carries `carried`.
+fn checked(space: Space, carried: Vec<Space>) -> Checked {
+    let workspace = space.to_workspace().unwrap();
     let worktree = serde_json::json!({
         "workspace": workspace, "running_commands": 0, "processes": [], "dirty": false,
         "unpushed_commits": 0, "branch": "worker", "matches_default_branch": true,
     });
     let check: SpaceRemovalCheck = serde_json::from_value(serde_json::json!({
-        "space": workspace, "worktree": worktree, "children": taken,
+        "space": workspace, "worktree": worktree, "children": [],
     }))
     .unwrap();
     Checked {
-        taken: check.children.clone(),
         space: Ending::Workspace(check),
-        carried: Vec::new(),
+        carried,
     }
 }
 
-#[test]
-fn a_space_goes_only_with_the_workspaces_below_it_while_its_chats_go_with_it() {
-    let taken = vec![
-        space("split", "split", SpaceKind::Workspace),
-        space("reading", "reading", SpaceKind::Chat),
-    ];
-    let check = checked(workspace("worker", Vec::new()), taken);
-    let worker = SpaceId::from("worker");
+fn ids(spaces: &[Space]) -> Vec<&str> {
+    spaces.iter().map(|space| space.id.as_str()).collect()
+}
 
-    let error = check.ensure_children_exported(&[&worker]).unwrap_err();
-    assert!(error.to_string().contains("(split)"), "{error}");
-    check
-        .ensure_children_exported(&[&worker, &SpaceId::from("split")])
-        .unwrap();
+/// A tree of spaces: `split` and the chat `talk` below `worker`,
+/// `nested` below `split`, and `other` on its own.
+fn tree() -> Spaces {
+    Spaces(vec![
+        workspace("worker", None),
+        workspace("split", Some("worker")),
+        workspace("nested", Some("split")),
+        chat("talk", Some("worker")),
+        workspace("other", None),
+    ])
 }
 
 #[test]
-fn a_child_sharing_its_parents_name_is_not_taken_as_exported() {
-    let child = space("child-id", "worker", SpaceKind::Workspace);
-    let check = checked(workspace("worker", Vec::new()), vec![child]);
-    let worker = SpaceId::from("worker");
+fn a_batch_writes_a_file_for_each_space_no_other_selected_space_carries() {
+    let tree = tree();
+    let find = |id: &str| tree.iter().find(|space| space.id == id).unwrap().clone();
+    let batch = [find("nested"), find("worker"), find("other")];
 
-    let error = check.ensure_children_exported(&[&worker]).unwrap_err();
-    assert!(error.to_string().contains("(worker)"), "{error}");
-    check
-        .ensure_children_exported(&[&worker, &SpaceId::from("child-id")])
-        .unwrap();
-}
+    let alone = exported_alone(&batch, &tree, &Carrying::Subtree);
+    assert_eq!(ids(&alone), ["worker", "other"]);
 
-#[test]
-fn a_batch_ends_the_chats_that_go_with_a_space_with_it_and_spaces_below_first() {
-    let below = |id, kind| space(id, id, kind);
-    let child: Chat = serde_json::from_value(serde_json::json!({
-        "workdir": {"kind": "checkout", "path": "/repo"},
-        "id": "child", "repository_id": "repo", "name": "child", "agent": "claude",
-        "started_at": 0, "session": "session",
-        "parent": below("worker", SpaceKind::Workspace),
-    }))
-    .unwrap();
-    let split = workspace("split", Vec::new());
-    let worker = workspace(
-        "worker",
-        vec![
-            below("split", SpaceKind::Workspace),
-            below("child", SpaceKind::Chat),
-        ],
+    // Without the spaces below, only a selected one goes in its parent's
+    // file, and one below a space that stays goes in a file of its own.
+    let selected = Carrying::Selected(vec!["nested".into(), "split".into()]);
+    let batch = [find("worker"), find("split"), find("nested")];
+    assert_eq!(ids(&exported_alone(&batch, &tree, &selected)), ["worker"]);
+    let selected = Carrying::Selected(vec!["worker".into(), "nested".into()]);
+    let batch = [find("worker"), find("nested")];
+    assert_eq!(
+        ids(&exported_alone(&batch, &tree, &selected)),
+        ["worker", "nested"]
     );
-    let tree = Spaces(vec![
-        worker.clone().into(),
-        split.clone().into(),
-        child.clone().into(),
-        chat("talk", None).into(),
-    ]);
-    let batch = [
-        worker.into(),
-        child.into(),
-        split.into(),
-        chat("talk", None).into(),
-    ];
+}
 
-    let alone = exported_alone(&batch, &tree);
+#[test]
+fn the_confirmation_lists_every_space_that_ends_with_the_named_one() {
+    let tree = tree();
+    let carried = carried_spaces(&tree, &"worker".into(), &Carrying::Subtree);
+    let check = checked(workspace("worker", None), carried);
 
-    let ids: Vec<&str> = alone.iter().map(|space| space.id.as_str()).collect();
-    assert_eq!(ids, ["split", "talk", "worker"]);
+    let action = ending_action("Export worker".into(), &[&check]).unwrap();
+
+    let listed: Vec<&str> = action.lines().skip(2).collect();
+    assert_eq!(
+        listed,
+        [
+            "  split (workspace)",
+            "  nested (workspace)",
+            "  talk (chat, claude)"
+        ]
+    );
+}
+
+#[test]
+fn a_lone_space_asks_only_for_its_holds() {
+    assert!(ending_action("Export".into(), &[&checked(workspace("w", None), vec![])]).is_none());
+
+    let mut held = workspace("held", None);
+    held.holds = vec![hold("review")];
+    let action = ending_action("Export".into(), &[&checked(held, vec![])]).unwrap();
+    assert!(action.ends_with("\n  review"), "{action}");
 }

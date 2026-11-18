@@ -12,10 +12,11 @@ use crate::{
     git,
     model::{Head, RemovedKind, RemovedSpace, Repository, RestoredSpace},
     time::UnixTime,
-    transfer::{CarriedSessionFile, SpaceImport},
+    transfer::{CarriedSessionFile, ImportTarget, SpaceImport},
 };
 use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
+use std::collections::BTreeMap;
 
 impl Manager {
     /// Open a space another Shoal exported, as `import` describes: record
@@ -48,15 +49,18 @@ impl Manager {
     /// [`Self::import_space`] does before opening it, with the warnings of
     /// what it changed; an error leaves no record.
     async fn record_package(&self, import: SpaceImport) -> Result<(RemovedSpace, Vec<String>)> {
-        self.ensure_not_here(&import).await?;
+        self.ensure_not_here(&import.space.space_id, import.copy)
+            .await?;
+        self.ensure_importable(&import.carried, import.copy).await?;
         let repo = match &import.repository {
             Some(selector) => Some(self.repository(selector).await?),
             None => None,
         };
         let mut warnings = Vec::new();
         let prerequisite = import.prerequisite.as_deref();
+        let space = self.below_copies(import.space, &import.copies).await?;
         let removed =
-            (self.recorded_here(repo.as_ref(), prerequisite, import.space, &mut warnings)).await?;
+            (self.recorded_here(repo.as_ref(), prerequisite, space, &mut warnings)).await?;
         // A repository move holds this gate; the checkout may have moved.
         let locked = match &repo {
             Some(repo) => Some(self.lock_repository(&repo.id).await?),
@@ -78,12 +82,24 @@ impl Manager {
         Ok((removed, warnings))
     }
 
-    /// Refuse to import the space `import` packages under its ID while a
-    /// space here has that ID, whose kept session files and record the
-    /// import would replace; a copy takes an ID of its own.
-    async fn ensure_not_here(&self, import: &SpaceImport) -> Result<()> {
-        let id = &import.space.space_id;
-        if import.copy {
+    /// Refuse the spaces of a package an import opens after the one it
+    /// records first, `carried`, copies when `copy`, when their repository
+    /// is not here or a space here has the ID one of them keeps.
+    async fn ensure_importable(&self, carried: &[ImportTarget], copy: bool) -> Result<()> {
+        for target in carried {
+            if let Some(repository) = &target.repository {
+                self.repository(repository).await?;
+            }
+            self.ensure_not_here(&target.space, copy).await?;
+        }
+        Ok(())
+    }
+
+    /// Refuse to import the packaged space `id` under its ID while a space
+    /// here has that ID, whose kept session files and record the import
+    /// would replace; a `copy` takes an ID of its own.
+    async fn ensure_not_here(&self, id: &SpaceId, copy: bool) -> Result<()> {
+        if copy {
             return Ok(());
         }
         if let Some(here) = self.find_space(id).await? {
@@ -140,6 +156,33 @@ impl Manager {
         );
         chat.workspace = None;
         Some(warning)
+    }
+
+    /// The packaged `removed` below the copy among `copies` of the space it
+    /// was below, which this import opened before it, and for a workspace
+    /// that builds on that space's branch, building on the copy's branch.
+    async fn below_copies(
+        &self,
+        mut removed: RemovedSpace,
+        copies: &BTreeMap<SpaceId, SpaceId>,
+    ) -> Result<RemovedSpace> {
+        let Some(parent) = &removed.parent else {
+            return Ok(removed);
+        };
+        let Some(copy) = copies.get(&parent.id) else {
+            return Ok(removed);
+        };
+        let copy = (self.find_space(copy).await?)
+            .with_context(|| format!("the copy of {} is no longer here", parent.name))?
+            .space_ref();
+        if let RemovedKind::Workspace(kept) = &mut removed.kind
+            && let (Some(original), Some(branch)) = (parent.branch(), copy.branch())
+            && kept.base_ref.as_deref() == Some(git::local_ref(original).as_str())
+        {
+            kept.base_ref = Some(git::local_ref(branch));
+        }
+        removed.parent = Some(copy);
+        Ok(removed)
     }
 
     /// Fetch the default branch when the repository lacks `commit`, which

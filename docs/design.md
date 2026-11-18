@@ -3752,8 +3752,12 @@ Moving a space to another machine ends it there and continues it here, through
 one path for both kinds: the package holds the space's removal record, whose
 kind it names, with the agents' sessions and their files, and the import
 records it as removed here and restores it as `shoal restore` does, under its
-ID and below its parent where that is here, as it does each chat the package
-carries; only recording it differs by kind. An imported space's agents, a
+ID and below its parent where that is here, as it does each space the package
+carries; only recording it differs by kind. A package carries every space
+below its space, whatever its kind, since removing the space takes them: one
+walk down `space_parents`, with the chats in each carried worktree, gives them
+parents first, so each opens below its parent again and a copied tree keeps
+its shape, each copy below the copy of its parent. An imported space's agents, a
 chat's as a workspace's, stay stopped unless the import queues their restores.
 Each package uses the lowest format version that reads it, so an older importer
 refuses as newer what it would misread; a chat package from before chats moved

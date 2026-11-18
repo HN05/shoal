@@ -1,7 +1,7 @@
-//! `shoal move export`: end spaces here, removing workspaces and stopping
-//! chats' agents, and write each to a file, or to standard output.
-use crate::transfer::ManifestExt;
-use shoal_ids::space_ids::SpaceId;
+//! `shoal move export`: end spaces here with the spaces below them through
+//! the removal path, and write each with those below to a file, or to
+//! standard output.
+use crate::transfer::{Carrying, ManifestExt};
 use std::{
     io::Write,
     path::{Path, PathBuf},
@@ -33,22 +33,23 @@ use directory::DirectoryReport;
 pub(super) use directory::ExportDirectory;
 
 /// `shoal move export`: end the space here, or take an already removed
-/// one, and write it to `file`. Several spaces, or any written to a
-/// directory, go to a file each in it. The destination is checked before a
-/// picker opens.
+/// one, and write it with the spaces below it to `file`. Several spaces,
+/// or any written to a directory, go to a file each in it. The destination
+/// is checked before a picker opens.
 pub(super) async fn export(
     ctx: &Context,
     names: Vec<SpaceSelector>,
     file: PathBuf,
     yes: bool,
 ) -> Result<i32> {
+    let carrying = Carrying::Subtree;
     if let [selector] = names.as_slice()
         && crate::client::workspaces::present_space(&ctx.paths, selector)
             .await?
             .is_none()
     {
         let output = Output::reserve(&file)?;
-        let exported = export_removed(ctx, selector, &output).await?;
+        let exported = export_removed(ctx, selector, &output, carrying).await?;
         return output.report(ctx, &exported);
     }
     if names.len() > 1 || file.is_dir() {
@@ -57,7 +58,7 @@ pub(super) async fn export(
             "several spaces export to a file each; name a directory with -o"
         );
         let spaces = selected_spaces(ctx, names).await?;
-        return export_into(ctx, &spaces, file, yes).await;
+        return export_into(ctx, &spaces, file, yes, &carrying).await;
     }
     let output = Output::reserve(&file)?;
     let named = names.into_iter().next();
@@ -66,12 +67,12 @@ pub(super) async fn export(
     let space = crate::client::workspaces::present_space(&ctx.paths, &selector)
         .await?
         .with_context(|| format!("no space {selector}"))?;
-    let exported = export_space(ctx, space, yes, &output).await?;
+    let exported = export_space(ctx, space, yes, &output, &carrying).await?;
     output.report(ctx, &exported)
 }
 
 /// `shoal move export --all`: export every space of `repository` to a file
-/// of its own in `directory`.
+/// of its own in `directory`, those below another in its file.
 pub(super) async fn export_all(
     ctx: &Context,
     repository: String,
@@ -79,7 +80,7 @@ pub(super) async fn export_all(
     yes: bool,
 ) -> Result<i32> {
     let spaces = repository_spaces(ctx, repository).await?;
-    export_into(ctx, &spaces, directory, yes).await
+    export_into(ctx, &spaces, directory, yes, &Carrying::Subtree).await
 }
 
 /// The spaces `names` selects, or the current one or those the picker
@@ -98,13 +99,15 @@ pub(super) async fn selected_spaces(
     Ok(spaces)
 }
 
-/// Export `spaces` to a file each in `directory`, once each one can be
-/// exported, so a space that cannot be leaves every other one in place.
+/// Export `spaces` with the spaces below them that `carrying` carries to
+/// a file each in `directory`, once each one can be exported, so a space
+/// that cannot be leaves every other one in place.
 async fn export_into(
     ctx: &Context,
     spaces: &[Space],
     directory: PathBuf,
     yes: bool,
+    carrying: &Carrying,
 ) -> Result<i32> {
     let directory = ExportDirectory::create(directory)?;
     let heading = format!(
@@ -112,12 +115,25 @@ async fn export_into(
         spaces.len(),
         directory.shown().display()
     );
-    let planned = check_exports(ctx, spaces, &directory, yes, &heading, EXPORT).await?;
+    let batch = Batch {
+        operation: EXPORT,
+        heading: &heading,
+        carrying,
+    };
+    let planned = check_exports(ctx, spaces, &directory, yes, batch).await?;
     export_each(ctx, planned, &directory).await
 }
 
 /// What a batch export is called in its refusals: its noun and verb.
 pub(super) type Operation = (&'static str, &'static str);
+
+/// A batch of exports: what refusals call it, the heading its confirmation
+/// asks under and the spaces below each that it carries.
+pub(super) struct Batch<'a> {
+    pub(super) operation: Operation,
+    pub(super) heading: &'a str,
+    pub(super) carrying: &'a Carrying,
+}
 
 const EXPORT: Operation = ("export", "export");
 
@@ -203,40 +219,49 @@ impl Output {
     }
 }
 
-/// Export the removed space `selector` names, which needs no removal.
+/// Export the removed space `selector` names, which needs no removal, with
+/// the spaces its removal took that `carrying` carries.
 async fn export_removed(
     ctx: &Context,
     selector: &SpaceSelector,
     output: &Output,
+    carrying: Carrying,
 ) -> Result<ExportedSpace> {
     let exported = crate::client::transfer::export(
         &ctx.paths,
         selector.clone(),
         UnsavedWork::default(),
         output.file(),
+        carrying,
     )
     .await?;
     warn(&exported);
     Ok(exported)
 }
 
-/// Export `space` to `output` once it can end for the export and the user
-/// lets it end.
+/// Export `space` with the spaces below it that `carrying` carries to
+/// `output` once they can end for the export and the user lets them end.
 async fn export_space(
     ctx: &Context,
     space: Space,
     yes: bool,
     output: &Output,
+    carrying: &Carrying,
 ) -> Result<ExportedSpace> {
     let spaces = crate::client::spaces::list(&ctx.paths).await?;
-    let check = check_export(ctx, space, output, &spaces).await?;
-    check.ensure_children_exported(&[])?;
+    let check = check_export(ctx, space, output, &spaces, carrying).await?;
     confirm_ending(ctx, yes, format!("Export {}", check.label()), &[&check])?;
-    export_checked(ctx, &check, output).await
+    export_checked(ctx, &check, output, carrying).await
 }
 
-/// End the space `check` describes and export it to `output`.
-async fn export_checked(ctx: &Context, check: &Checked, output: &Output) -> Result<ExportedSpace> {
+/// End the space `check` describes with the spaces below it that
+/// `carrying` carries and export them to `output`.
+async fn export_checked(
+    ctx: &Context,
+    check: &Checked,
+    output: &Output,
+    carrying: &Carrying,
+) -> Result<ExportedSpace> {
     let exported = match &check.space {
         Ending::Workspace(check) => {
             let space = check.space.id.clone();
@@ -246,6 +271,7 @@ async fn export_checked(ctx: &Context, check: &Checked, output: &Output) -> Resu
                 SpaceSelector::id(&space),
                 unsaved,
                 output.file(),
+                carrying.clone(),
             );
             super::super::workspaces::leaving(ctx, &check.space, exported).await?
         }
@@ -255,6 +281,7 @@ async fn export_checked(ctx: &Context, check: &Checked, output: &Output) -> Resu
                 SpaceSelector::id(&chat.id),
                 check.chat_ending(),
                 output.file(),
+                carrying.clone(),
             )
             .await?
         }
@@ -298,10 +325,12 @@ pub(super) async fn repository_spaces(ctx: &Context, repository: String) -> Resu
     Ok(spaces)
 }
 
-/// A space that passed its export check, with the file it goes to.
+/// A space that passed its export check, with the file it goes to and the
+/// spaces below it that it carries.
 pub(super) struct PlannedExport {
     check: Checked,
     output: Output,
+    carrying: Carrying,
 }
 
 impl PlannedExport {
@@ -323,33 +352,30 @@ impl PlannedExport {
     pub(super) fn file(&self) -> PathBuf {
         self.output.file()
     }
+
+    /// Which of the spaces below it go with it.
+    pub(super) fn carrying(&self) -> &Carrying {
+        &self.carrying
+    }
 }
 
-/// Check every space before exporting any, refusing with each one that
-/// cannot be exported, then let the user end all of them at once where that
-/// needs the user, asking under `heading`; `operation` names the batch in
-/// refusals. The chats that go with another of them go in its export, and
-/// each space goes after the spaces below it.
+/// Check every space and the spaces below it that the `batch` carries
+/// before exporting any, refusing with each one that cannot be exported,
+/// then let the user end all of them at once where that needs the user.
+/// A space that goes with another of them goes in its export.
 pub(super) async fn check_exports(
     ctx: &Context,
     spaces: &[Space],
     directory: &ExportDirectory,
     yes: bool,
-    heading: &str,
-    operation: Operation,
+    batch: Batch<'_>,
 ) -> Result<Vec<PlannedExport>> {
     let tree = crate::client::spaces::list(&ctx.paths).await?;
-    let spaces = exported_alone(spaces, &tree);
+    let spaces = exported_alone(spaces, &tree, batch.carrying);
     let mut planned = Vec::new();
     let mut refusals = Vec::new();
-    let exported: Vec<&SpaceId> = spaces.iter().map(|space| &space.id).collect();
     for space in &spaces {
-        let export = async {
-            let export = plan_export(ctx, space, directory, operation, &tree).await?;
-            export.check.ensure_children_exported(&exported)?;
-            Ok::<_, anyhow::Error>(export)
-        };
-        match export.await {
+        match plan_export(ctx, space, directory, &batch, &tree).await {
             Ok(export) => planned.push(export),
             Err(error) => refusals.push(format!("{}: {error:#}", space.name)),
         }
@@ -357,29 +383,33 @@ pub(super) async fn check_exports(
     ensure!(
         refusals.is_empty(),
         "cannot {} these spaces, so none was ended:\n  {}",
-        operation.1,
+        batch.operation.1,
         refusals.join("\n  ")
     );
     let checks: Vec<&Checked> = planned.iter().map(|export| &export.check).collect();
-    confirm_ending(ctx, yes, heading.to_owned(), &checks)?;
+    confirm_ending(ctx, yes, batch.heading.to_owned(), &checks)?;
     Ok(planned)
 }
 
-/// Reserve the space's file in `directory` and check it as a batch's,
+/// Reserve the space's file in `directory` and check it as the `batch`'s,
 /// among the spaces `tree` shows.
 async fn plan_export(
     ctx: &Context,
     space: &Space,
     directory: &ExportDirectory,
-    operation: Operation,
+    batch: &Batch<'_>,
     tree: &crate::model::Spaces,
 ) -> Result<PlannedExport> {
     let output = Output::reserve(&directory.file(&space.id))?;
-    let check = check_export(ctx, space.clone(), &output, tree).await?;
+    let check = check_export(ctx, space.clone(), &output, tree, batch.carrying).await?;
     if let Ending::Workspace(check) = &check.space {
-        super::super::workspaces::ensure_batch_removable(ctx, check, operation).await?;
+        super::super::workspaces::ensure_batch_removable(ctx, check, batch.operation).await?;
     }
-    Ok(PlannedExport { check, output })
+    Ok(PlannedExport {
+        check,
+        output,
+        carrying: batch.carrying.clone(),
+    })
 }
 
 /// Export each planned space, going on after one fails.
@@ -389,8 +419,13 @@ async fn export_each(
     directory: &ExportDirectory,
 ) -> Result<i32> {
     let mut report = DirectoryReport::new(directory, false);
-    for PlannedExport { check, output } in planned {
-        let exported = export_checked(ctx, &check, &output).await;
+    for PlannedExport {
+        check,
+        output,
+        carrying,
+    } in planned
+    {
+        let exported = export_checked(ctx, &check, &output, &carrying).await;
         report.add(ctx, (check.name(), check.id()), exported);
     }
     report.finish(ctx)

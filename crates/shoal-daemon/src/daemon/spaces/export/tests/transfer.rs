@@ -79,6 +79,7 @@ async fn export_removed(manager: &Manager, workspace: &SpaceId) -> Vec<u8> {
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
             file.clone(),
+            &Carrying::Subtree,
         )
         .await
         .unwrap();
@@ -91,6 +92,7 @@ async fn export_removed(manager: &Manager, workspace: &SpaceId) -> Vec<u8> {
                 UnsavedWork::All,
                 InspectionPolicy::GitOnly,
                 file.clone(),
+                &Carrying::Subtree,
             )
             .await
             .is_err()
@@ -147,14 +149,13 @@ pub(super) fn workspace_import(
     let packaged = packaged_workspace(&import.manifest);
     SpaceImport {
         repository: Some((&repo.id).into()),
-        bundle: import
-            .bundle
-            .as_ref()
-            .map(|bundle| bundle.path().to_owned()),
+        bundle: (import.bundles.get(&workspace.space_id)).map(|bundle| bundle.path().to_owned()),
         prerequisite: packaged.prerequisite.clone(),
         space: workspace,
         copy: import.manifest.copy.is_some(),
         session_files: session_files.to_vec(),
+        copies: Default::default(),
+        carried: Vec::new(),
     }
 }
 
@@ -205,7 +206,7 @@ async fn import_opens_the_exported_branch_with_its_files_and_agents() {
     let file = export_removed(&exporting, &workspace.id).await;
     let read = Import::read(&mut &file[..]).unwrap();
     assert_eq!(read.manifest.remote_url.as_deref(), origin.to_str());
-    assert!(packaged_workspace(&read.manifest).bundle);
+    assert!(packaged_workspace(&read.manifest).bundle.is_some());
     // The exporting machine's import can resume the session it recorded.
     let sessions = read.manifest.sessions.as_ref().unwrap();
     assert_eq!(sessions.machine, crate::process::machine::id());
@@ -360,6 +361,7 @@ async fn an_import_that_cannot_open_the_workspace_keeps_its_session_files_for_th
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
             again.clone(),
+            &Carrying::Subtree,
         )
         .await
         .unwrap();
@@ -419,7 +421,7 @@ async fn export_leaves_out_a_checkpoint_the_default_branch_has() {
     let file = export_removed(&exporting, &workspace.id).await;
     let read = Import::read(&mut &file[..]).unwrap();
     let packaged = packaged_workspace(&read.manifest);
-    assert!(!packaged.bundle);
+    assert!(packaged.bundle.is_none());
     assert_eq!(packaged.prerequisite.as_deref(), Some(head.trim()));
     let restored = import(&importing, &target_repo, &file).await;
     assert_eq!(
@@ -444,6 +446,7 @@ async fn export_the_daemon_cannot_write_keeps_the_workspace() {
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
             blocked.join("workspace.shoal"),
+            &Carrying::Subtree,
         )
         .await;
     assert!(exported.is_err());
@@ -496,7 +499,12 @@ async fn a_copy_keeps_the_workspace_and_imports_on_a_branch_of_its_own() {
     let file = directory.path().join("topic.shoal");
 
     let exported = manager
-        .copy_space(&SpaceSelector::id(&workspace.id), None, file.clone())
+        .copy_space(
+            &SpaceSelector::id(&workspace.id),
+            None,
+            file.clone(),
+            &Carrying::Subtree,
+        )
         .await
         .unwrap();
     assert!(exported.removal.is_none());
@@ -558,6 +566,7 @@ async fn a_copy_of_an_earlier_checkpoint_marks_its_sessions_newer() {
             &SpaceSelector::id(&workspace.id),
             Some(first.number),
             file.clone(),
+            &Carrying::Subtree,
         )
         .await
         .unwrap();
@@ -575,7 +584,8 @@ async fn a_copy_of_an_earlier_checkpoint_marks_its_sessions_newer() {
             .copy_space(
                 &SpaceSelector::id(&workspace.id),
                 Some(99.into()),
-                directory.path().join("missing.shoal")
+                directory.path().join("missing.shoal"),
+                &Carrying::Subtree
             )
             .await
             .is_err()
@@ -603,6 +613,7 @@ async fn a_removed_workspace_has_nothing_to_copy() {
             &manager.named("topic").await,
             None,
             directory.path().join("topic.shoal"),
+            &Carrying::Subtree,
         )
         .await
         .unwrap_err();
@@ -622,7 +633,12 @@ async fn concurrent_imports_of_a_copy_take_branches_of_their_own() {
     let directory = tempfile::tempdir().unwrap();
     let file = directory.path().join("topic.shoal");
     manager
-        .copy_space(&SpaceSelector::id(&workspace.id), None, file.clone())
+        .copy_space(
+            &SpaceSelector::id(&workspace.id),
+            None,
+            file.clone(),
+            &Carrying::Subtree,
+        )
         .await
         .unwrap();
     let bytes = fs::read(&file).unwrap();

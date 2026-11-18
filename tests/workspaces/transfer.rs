@@ -55,7 +55,7 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     let exported = fixture.ok(&["move", "export", &fixture.id("moving"), "-o", file]);
     assert!(agent.wait_with_output().unwrap().status.success());
     assert_eq!(exported["manifest"]["record"]["name"], "moving");
-    assert!(exported["manifest"]["bundle"].as_bool().unwrap());
+    assert!(exported["manifest"]["bundle"].as_u64().is_some());
     let agents = exported["manifest"]["record"]["agents"].as_array().unwrap();
     assert_eq!(agents.len(), 1, "{exported}");
     assert_eq!(agents[0]["record"]["moved"], true);
@@ -1284,11 +1284,8 @@ fn a_chat_moves_with_its_session_and_continues_it() {
         assert!(!inside.status.success(), "{}", printed(&inside));
         assert_eq!(fixture.ok(&["list", "--chats"])[0]["name"], "talk");
 
-        // Ending a chat the user talks with needs a confirmation.
-        let unconfirmed = fixture.run(&["move", "export", &fixture.id("talk"), "-o", file]);
-        assert!(!unconfirmed.status.success(), "{}", printed(&unconfirmed));
-        assert_eq!(fixture.ok(&["list", "--chats"])[0]["name"], "talk");
-        let exported = fixture.ok(&["move", "export", &fixture.id("talk"), "-o", file, "--yes"]);
+        // A chat that ends alone, without holds, needs no confirmation.
+        let exported = fixture.ok(&["move", "export", &fixture.id("talk"), "-o", file]);
         let manifest = &exported["manifest"];
         assert!(manifest["record"]["chat"].is_object(), "{exported}");
         assert_eq!(manifest["record"]["name"], "talk", "{exported}");
@@ -1339,7 +1336,7 @@ fn a_workspace_moves_with_the_chat_in_its_worktree() {
 
     let exported = fixture.ok(&["move", "export", &worker, "-o", file, "--yes"]);
     assert_eq!(
-        exported["manifest"]["chats"][0]["chat"]["name"], "reading",
+        exported["manifest"]["carried"][0]["record"]["name"], "reading",
         "{exported}"
     );
     assert_eq!(fixture.ok(&["list", "--chats"]), serde_json::json!([]));
@@ -1563,53 +1560,35 @@ fn restore_with_user_files(fixture: &Fixture, workspace: &str) {
 }
 
 #[test]
-fn exporting_a_parent_needs_its_children_exported_with_it() {
+fn exporting_a_parent_takes_its_children_which_import_opens_below_it() {
     let fixture = Fixture::new();
     let parent = PathBuf::from(fixture.add("parent")["path"].as_str().unwrap());
     let child = fixture.ok(&["split", "child", "--space", &fixture.id("parent")]);
     let child = PathBuf::from(child["path"].as_str().unwrap());
-    let directory = fixture.root.path().join("exports");
-    fs::create_dir(&directory).unwrap();
-    let output = directory.to_str().unwrap();
-    let file = directory.join("parent.shoal");
-    // Every path refuses before removing anything.
-    for args in [
-        &[
-            "move",
-            "export",
-            &fixture.id("parent"),
-            "-o",
-            file.to_str().unwrap(),
-            "--yes",
-        ][..],
-        &[
-            "move",
-            "export",
-            &fixture.id("parent"),
-            "-o",
-            output,
-            "--yes",
-        ],
-    ] {
-        let refused = fixture.run(args);
-        assert!(!refused.status.success(), "{args:?}");
-        assert!(parent.exists() && child.exists());
-    }
-    // Exported together, the child comes from the checkpoint its parent's
-    // removal kept, whichever goes first.
+    fs::write(child.join("notes"), "draft\n").unwrap();
     let ids = ["parent", "child"].map(|name| fixture.id(name));
-    let exported = fixture.ok(&[
-        "move",
-        "export",
-        &fixture.id("parent"),
-        &fixture.id("child"),
-        "-o",
-        output,
-        "--yes",
-    ]);
-    assert_eq!(exported["failed"], serde_json::json!([]), "{exported}");
-    for id in ids {
-        assert!(directory.join(format!("{id}.shoal")).exists(), "{id}");
-    }
+    let file = fixture.root.path().join("parent.shoal");
+    let file = file.to_str().unwrap();
+    let export = |extra: &[&str]| {
+        let mut args = vec!["move", "export", &ids[0], "-o", file];
+        args.extend(extra);
+        fixture.run(&args)
+    };
+
+    // Ending the child too needs confirming.
+    assert!(!export(&[]).status.success());
+    assert!(parent.exists() && child.exists());
+    let exported = export(&["--yes", "--json"]);
+    assert!(exported.status.success(), "{}", printed(&exported));
+    let exported: Value = serde_json::from_slice(&exported.stdout).unwrap();
+    let carried = &exported["manifest"]["carried"];
+    assert_eq!(carried[0]["record"]["workspace_id"], ids[1], "{exported}");
     assert!(!parent.exists() && !child.exists());
+
+    let repo = fixture.repo.to_str().unwrap();
+    let imported = fixture.run(&["move", "import", file, "--repo", repo]);
+    assert!(imported.status.success(), "{}", printed(&imported));
+    assert_eq!(fs::read_to_string(child.join("notes")).unwrap(), "draft\n");
+    let status = fixture.ok(&["status", &ids[1]]);
+    assert_eq!(status["workspace"]["parent"]["id"], ids[0], "{status}");
 }

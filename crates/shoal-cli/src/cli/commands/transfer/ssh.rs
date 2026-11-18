@@ -17,6 +17,7 @@ use crate::protocol::ErrorCode;
 use crate::{
     cli::{args::transfer::SshArgs, context::Context},
     subprocess::{Run, diagnostic},
+    transfer::Carrying,
 };
 
 /// The exit status of a remote shell that cannot find the command.
@@ -40,9 +41,13 @@ pub(super) async fn run(ctx: &Context, args: SshArgs) -> Result<i32> {
         remote.check(),
     )
     .await?;
+    let carrying = Carrying::Subtree;
     match args.keep {
-        true => copy::copy_spaces(ctx, &remote, &spaces, args.checkpoint).await,
-        false => moving::move_spaces(ctx, &remote, &spaces, args.confirmation.yes).await,
+        true => copy::copy_spaces(ctx, &remote, &spaces, args.checkpoint, &carrying).await,
+        false => {
+            let yes = args.confirmation.yes;
+            moving::move_spaces(ctx, &remote, &spaces, yes, &carrying).await
+        }
     }
 }
 

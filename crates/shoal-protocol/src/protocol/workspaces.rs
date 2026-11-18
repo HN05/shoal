@@ -200,14 +200,17 @@ pub enum WorkspaceMethod {
     SpaceSessions {
         space: SpaceSelector,
     },
-    /// Write a copy of a workspace or chat for another Shoal to the new file
-    /// `file`, leaving it running: a workspace at its checkpoint
-    /// `checkpoint`, or at a new one.
+    /// Write a copy of a workspace or chat, with copies of the spaces below
+    /// it that `carrying` carries, for another Shoal to the new file
+    /// `file`, leaving them running: a workspace at its checkpoint
+    /// `checkpoint`, or at a new one, and those below at new ones.
     CopySpace {
         space: SpaceSelector,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         checkpoint: Option<CheckpointNumber>,
         file: std::path::PathBuf,
+        #[serde(default)]
+        carrying: crate::transfer::Carrying,
     },
     DiffBase {
         workspace: SpaceSelector,

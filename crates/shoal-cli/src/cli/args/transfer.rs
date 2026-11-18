@@ -15,11 +15,12 @@ pub enum MoveCommand {
     /// A workspace is removed: the file holds its checkpoint, as a Git bundle without the
     /// commits of the default branch, its base, links and stopped agents. A chat's agent is
     /// stopped once it has reported its session: the file holds the chat's name and agent.
-    /// The chats in a workspace's worktree and those below a space end with it, in its file.
-    /// Both carry the files of the agents' sessions, such as their transcripts. A removed
-    /// workspace is exported without another removal. Without -o, or with `-`, it writes to
-    /// standard output, which must not be a terminal. When -o names a directory, several spaces,
-    /// or with --all every space of the repository, go to a file each in it, once each one can
+    /// Every space below it, and the chats in the worktree of each workspace among them, end
+    /// with it, in its file. The file carries the files of the agents' sessions, such as their
+    /// transcripts. A removed space is exported without another removal, with the spaces its
+    /// removal took. Without -o, or with `-`, it writes to standard output, which must not be a
+    /// terminal. When -o names a directory, several spaces, or with --all every space of the
+    /// repository, go to a file each in it, those below another in its file, once each one can
     /// be exported. --keep leaves the spaces running and writes copies of them instead.
     Export(ExportArgs),
     /// Continue workspaces and chats shoal move export wrote, in the repository with the same origin.
@@ -29,10 +30,10 @@ pub enum MoveCommand {
     /// override that. Each space opens again under its ID, as shoal restore opens a removed
     /// one: a workspace fetching the default branch when the file builds on commits the
     /// repository lacks, a chat in the worktree it ran in when that workspace is here, else in
-    /// the repository's checkout, or in root_dir without a repository. The chats a file carries
-    /// open after it, below it. shoal restore restores their agents. Without a file, or with
-    /// `-`, it reads from standard input, which must not be a terminal. A directory imports
-    /// each .shoal file in it.
+    /// the repository's checkout, or in root_dir without a repository. The spaces a file
+    /// carries open after it, parents first, each below its parent. shoal restore restores
+    /// their agents. Without a file, or with `-`, it reads from standard input, which must not
+    /// be a terminal. A directory imports each .shoal file in it.
     Import(ImportArgs),
     /// Move workspaces and chats to another machine's Shoal over SSH, where their agents continue.
     ///
@@ -62,9 +63,9 @@ pub struct ExportArgs {
     /// and --all need; defaults to standard output.
     #[arg(short, long, required_if_eq("all", "true"))]
     pub output: Option<PathBuf>,
-    /// Leave the spaces running and export copies of them, which shoal move import opens as new
-    /// spaces: a workspace at a new checkpoint on a branch of its own, or a chat whose agent
-    /// starts from a fork of its session.
+    /// Leave the spaces running and export copies of them and of the spaces below them, which
+    /// shoal move import opens as new spaces: a workspace at a new checkpoint on a branch of its
+    /// own, or a chat whose agent starts from a fork of its session.
     #[arg(long)]
     pub keep: bool,
     /// Export a copy of the workspace at this earlier checkpoint, numbered as shoal restore

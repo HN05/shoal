@@ -125,19 +125,27 @@ pub(super) async fn handle(
             space,
             unsaved,
             file,
+            carrying,
         } => Body::ExportedSpace(
             manager
-                .export_space(&space, unsaved, InspectionPolicy::GitOnly, file)
+                .export_space(&space, unsaved, InspectionPolicy::GitOnly, file, &carrying)
                 .await?,
         ),
-        RemovalMethod::ExportMovingSpace { space, file } => {
-            Body::ExportedSpace(manager.export_moving_space(&space, file).await?)
-        }
+        RemovalMethod::ExportMovingSpace {
+            space,
+            file,
+            carrying,
+        } => Body::ExportedSpace(manager.export_moving_space(&space, file, &carrying).await?),
         RemovalMethod::EndMovedSpace {
             space,
             unsaved,
-            checkpoint,
-        } => Body::RemovalResult(manager.end_moved_space(&space, unsaved, checkpoint).await?),
+            checkpoints,
+            carrying,
+        } => Body::RemovalResult(
+            manager
+                .end_moved_space(&space, unsaved, &checkpoints, &carrying)
+                .await?,
+        ),
         RemovalMethod::ImportSpace(import) => {
             Body::RestoredSpace(manager.import_space(*import).await?)
         }

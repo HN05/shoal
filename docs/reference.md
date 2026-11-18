@@ -3013,8 +3013,8 @@ files, and its branch unless a remote or the default branch has its commits, so
 `shoal restore` brings it back, and each chat stops its agent. A child that cannot go retains the parent. `shoal rm` names the children
 before asking, and its result names them in `children`; each child's journal
 records a `removed` event with the cause `parent`, and the user is notified of
-those an unattended removal took. Exporting one workspace with children is
-refused; `export --all` exports each.
+those an unattended removal took. `shoal move export` takes the spaces below a
+space with it, in its file.
 
 While a parent's `done` with cleanup stands at its HEAD, each workspace and
 chat below it has `cleanup_reason` `ancestor_completed` and goes after the
@@ -4216,8 +4216,8 @@ shoal move export 5 -o plan.shoal              # end the chat 5 and write it to 
 shoal move import topic.shoal                  # continue it in the repository with the same origin
 shoal move export 7 | ssh other shoal move import --restore      # agents continue there
 shoal move ssh other 5                         # the same, once ssh reaches Shoal there
-shoal move export --repo app --all -o moving   # end every space of app, a file each
-shoal move export 7 8 -o moving                # remove both, a file each
+shoal move export --repo app --all -o moving   # end every space of app, a file per tree
+shoal move export 7 8 -o moving                # remove both, a file each unless 8 is below 7
 shoal move export 7 --keep -o copy.shoal       # keep workspace 7 running and write a copy of it
 shoal move ssh other 7 --keep                  # keep workspace 7 running and copy it there
 shoal move import moving                       # continue every space exported to moving
@@ -4231,46 +4231,49 @@ it is complete even when the terminal closes with the space. It refuses before
 ending anything when the file exists, when the daemon cannot create a file in its
 directory within 30 seconds, or when `-` would stream from a place that closes
 with the space. A workspace is removed as `shoal rm` removes it, and its file
-holds its removal record and checkpoint. The export also refuses one whose file
-lies inside it or whose uncommitted files a checkpoint cannot keep, and asks
-before ending the chats that go with it or releasing holds unless given
-`--yes`. The chats in its worktree and those below it, or below one of them, go
-with it in its file; a chat below a workspace below it goes with that
-workspace. The checkpoint
+holds its removal record and checkpoint; a chat's file holds its removal record
+with its agent's session. Every space below it, workspaces and chats alike, and
+the chats in the worktree of each workspace among them, go with it in its file,
+parents first, ended by the same removal, each workspace with a checkpoint of
+its own. Before ending anything, the export refuses, listing each space that
+fails, when one of them is a workspace whose uncommitted files a checkpoint
+cannot keep, that another lifecycle operation holds, that holds the file or
+that the terminal closes with, or is the chat the export runs in. It asks,
+unless given `--yes`, when it ends spaces besides the one named, listing each
+with its kind and agent, or releases holds. Each checkpoint
 travels as a Git bundle without the commits of the default remote's default
 branch; a checkpoint that branch already has travels without one. Ignored files,
 leases, permits, approvals, grants and holds stay behind; setup rebuilds what the
-workspace needs. A chat's file holds its removal record with its agent's session, and the chats below it, or
-below one of them: the export refuses the chat it runs in, and asks before
-stopping the agents unless given `--yes`; the chat is then removed with the
-chats below it. The export refuses a space of either kind with a workspace
-below it that is not exported with it, and writes one whose agent reported no
-session with a warning, whose agent starts as a new one where it is imported.
+workspace needs. A space whose agent reported no session exports with a warning,
+and its agent starts as a new one where it is imported.
 A workspace or chat
 already removed, as by cleanup, is exported from its removal record, which
-stays, under the refusals that still apply, without another removal. The file's manifest names its `kind`, `workspace` or `chat`.
+stays, with the records of the spaces its removal took, under the refusals that
+still apply, without another removal. The file's manifest names each record's `kind`, `workspace` or `chat`.
 
 `shoal move export <space>... -o <directory>`, for several spaces or those the
 picker selects when `-o` names an existing directory, and `shoal move export
 --repo <repository> --all -o <directory>`, for every workspace and running chat
 of the repository, export each to `<id>.shoal` in the directory, named after
-the space's ID since names repeat, creating it when missing. A chat that goes
-with another of the spaces goes in that space's file, and each space is
-exported after the spaces below it. It checks every space as a single export does, that no workspace
+the space's ID since names repeat, creating it when missing. A space below
+another of them goes in that space's file, so the directory gets a file for
+each space no other selected space carries. It checks every space as a single export does, that no workspace
 is in the middle of another lifecycle operation, and that the terminal does not
 close with one of them, before ending any: when one cannot be exported, it lists
-each refusal and ends nothing. It asks once before ending the chats and releasing
-the workspaces' holds, then exports each space and lists the files it wrote; a
+each refusal and ends nothing. It asks once, as a single export does, before
+ending them, then exports each space and lists the files it wrote; a
 failure there leaves the remaining ones to export, and the command exits 1
 naming each failed space.
 
-`shoal move export [space] --keep -o <file>` leaves the space running and writes a
-copy of it instead: a workspace at a new checkpoint, as `shoal checkpoint`
-takes one, or with `--checkpoint N` at an earlier one `shoal restore
-<workspace> --checkpoint` lists, and a chat with its session. It refuses a removed space.
+`shoal move export [space] --keep -o <file>` leaves the space and the spaces
+below it running and writes copies of them instead: a workspace at a new
+checkpoint, as `shoal checkpoint` takes one, or for the named workspace with
+`--checkpoint N` at an earlier one `shoal restore <workspace> --checkpoint`
+lists, and a chat with its session. It refuses a removed space.
 With several spaces, a directory or
-`--all`, it writes a copy of each to `<id>.shoal` in the directory, reporting
-each space it cannot copy and copying the rest. It refuses `--checkpoint` for
+`--all`, it writes a copy of each space no other selected space carries to
+`<id>.shoal` in the directory, reporting each space it cannot copy and copying
+the rest. It refuses `--checkpoint` for
 more than one space, since its number names a checkpoint of one workspace. The import
 opens a workspace copy as a new workspace on the nearest free `-2`, `-3`, ...
 variant of its branch, linked to its issues but not its PRs or CI runs, where
@@ -4278,7 +4281,9 @@ variant of its branch, linked to its issues but not its PRs or CI runs, where
 --fork` does, or as new agents told the workspace is a copy; a chat copy opens
 as a new chat whose agent `shoal restore` starts from a fork of its session,
 or as a new agent told the chat is a copy.
-A copy of either kind opens under an ID of its own. Forks get session IDs of their own, so
+A copy of either kind opens under an ID of its own, below the copy of the
+space it was below, and a workspace copy that builds on its parent's branch
+builds on the copy's branch. Forks get session IDs of their own, so
 the original conversations never change. A copy of an earlier checkpoint warns at
 export and import that the agents' conversations describe work its files lack,
 and tells the agents so. Import refuses `--keep-sessions` for a copy.
@@ -4286,7 +4291,9 @@ and tells the agents so. Import refuses `--keep-sessions` for a copy.
 `shoal move import <file>` reads an export, or standard input without a file or for
 `-`, refusing a terminal and an export another Shoal version wrote, and continues it in the registered repository with the
 exported repository's origin, or the one `--repo` names, or a chat without a
-repository in `root_dir`. Given several files, or a
+repository in `root_dir`. A space the file carries goes to the repository
+with its own origin, or where the file goes when it is of the file's
+repository. Given several files, or a
 directory, whose `.shoal` files it reads in name order, it imports each one, going
 on after a failure, lists every space it continued and exits 1 naming each file it
 could not import or whose `hooks.post_setup` failed. The export carries the files of each
@@ -4317,14 +4324,16 @@ its `resume_command`. An imported chat opens as `shoal restore` reopens a
 removed chat, stopped, in the worktree it ran in where the importing machine
 has that workspace ready, such as one that moved there before, otherwise in
 the repository's checkout with a warning, or in `root_dir` without a
-repository. The chats a file carries open again after its space the same way,
-parents first, below their parents where those are there, so a chat's own
-chats open below it. Without `--restore`, the agents of every imported space
+repository. The spaces a file carries open again after its space the same way,
+parents first, each below its parent and each workspace set up before the
+spaces below it; one that cannot open is a warning, and its record stays for
+`shoal restore <id>`. Without `--restore`, the agents of every imported space
 stay stopped and the report names the `shoal restore` that restores them.
-An import is refused, before it records anything, when a space with the
-package's ID is already here: `shoal rm` removes that space here, or `shoal
-move export --keep` where the package was exported writes a copy, which opens
-under an ID of its own. An import that fails before it records
+An import is refused, before it records anything, when a space with the ID of
+the package's space, or of a space it carries, is already here, or a carried
+space's repository is not registered: `shoal rm` removes that space here, or
+`shoal move export --keep` where the package was exported writes a copy, which
+opens under an ID of its own. An import that fails before it records
 anything of the space reports the error code `not_imported`. Workspace
 processes can neither export nor import.
 

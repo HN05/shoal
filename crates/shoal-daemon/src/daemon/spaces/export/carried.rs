@@ -1,53 +1,34 @@
-//! The chats a package carries with its space: which go with it, which keep
-//! it here, and what the package holds of each once its removal recorded it.
-use anyhow::{Context, Result, ensure};
+//! The spaces a package carries with its space: which go with it, and what
+//! the package holds of each once its removal recorded it.
+use anyhow::{Context, Result};
 
 use crate::{
-    daemon::{
-        events::EventCause,
-        workspace::{Manager, StopRequest},
-    },
-    model::RemovedSpace,
-    transfer::{CarriedChat, CarriedChatExt},
+    daemon::{events::EventCause, workspace::Manager},
+    model::{RemovedSpace, Repository, Space},
+    transfer::{CarriedSpace, CarriedSpaceExt, Carrying, Manifest, ManifestExt, Placed},
 };
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 impl Manager {
-    /// The IDs of the chats that go with the space `id`, each after its
-    /// parent among them.
-    pub(super) async fn chats_carried_by(&self, id: &SpaceId) -> Result<Vec<SpaceId>> {
-        Ok(crate::transfer::carried_chats(&self.chats().await?, id))
+    /// The spaces that go with the space `id` as `carrying` says, each
+    /// after its parent and the workspace whose worktree it works in.
+    pub(super) async fn carried_by(&self, id: &SpaceId, carrying: &Carrying) -> Result<Vec<Space>> {
+        let spaces = self.present_spaces().await?;
+        let placed: Vec<Placed<'_>> = spaces.iter().map(Placed::space).collect();
+        let carried = crate::transfer::carried_spaces(&placed, id, carrying);
+        Ok((carried.iter())
+            .filter_map(|id| spaces.iter().find(|space| &space.id == id))
+            .cloned()
+            .collect())
     }
 
-    /// Refuse to move the space `id`, called `name`, while a space below it
-    /// that does not go with it stays, which its removal would take.
-    pub(super) async fn ensure_only_carried_below(
-        &self,
-        id: &SpaceId,
-        name: &SpaceName,
-    ) -> Result<()> {
-        let carried = self.chats_carried_by(id).await?;
-        let staying: Vec<String> = (self.spaces_taken_with(id).await?.into_iter())
-            .filter(|space| !carried.contains(&space.id))
-            .map(|space| space.name.into())
-            .collect();
-        ensure!(
-            staying.is_empty(),
-            "spaces below {name} stay here ({}); move or remove them first",
-            staying.join(", ")
-        );
-        Ok(())
-    }
-
-    /// What a package holds of the chats `ids` that went with its space,
-    /// from the removal records their removal saved.
-    pub(super) async fn carried_records(&self, ids: &[SpaceId]) -> Result<Vec<CarriedChat>> {
-        let mut carried = Vec::new();
-        for id in ids {
-            carried.push(self.carried(self.removal_record(id).await?).await?);
+    /// The records the removals of the spaces `carried` saved.
+    pub(super) async fn removal_records(&self, carried: &[Space]) -> Result<Vec<RemovedSpace>> {
+        let mut records = Vec::new();
+        for space in carried {
+            records.push(self.removal_record(&space.id).await?);
         }
-        Ok(carried)
+        Ok(records)
     }
 
     /// The record the removal of the space `id` saved.
@@ -57,34 +38,78 @@ impl Manager {
             .with_context(|| format!("the removal of {id} kept no record"))
     }
 
-    /// Stop the agents of the chats `ids`, saving their sessions, and say
-    /// what a package holds of each, as their removal would record them,
-    /// for a move that ends them only once another machine imported it.
-    pub(super) async fn stopped_records(&self, ids: &[SpaceId]) -> Result<Vec<CarriedChat>> {
+    /// What the removal of `space`, whose agents stopped, would record of
+    /// it, a workspace at a new checkpoint, for a move that ends it only
+    /// once another machine imported it.
+    pub(super) async fn moving_record(&self, space: &Space) -> Result<RemovedSpace> {
+        let checkpoint = self.move_checkpoint(space).await?;
+        (self.present_removal_record(&space.id, checkpoint, EventCause::Manual)).await
+    }
+
+    /// The package, without its session files, of the space `record`
+    /// records with the spaces `carried` records, spaces of `repos` or of
+    /// none.
+    pub(super) async fn manifest_of(
+        &self,
+        repos: &[Repository],
+        record: RemovedSpace,
+        carried: Vec<RemovedSpace>,
+    ) -> Result<Manifest> {
+        let repo =
+            (record.repository_id.as_ref()).and_then(|id| repos.iter().find(|repo| &repo.id == id));
+        let mut manifest = Manifest::of(repo, record).await?;
+        manifest.carried = self.carried_packages(repos, carried).await?;
+        Ok(manifest)
+    }
+
+    /// What a package of spaces of `repos` holds of the spaces `records`
+    /// records.
+    async fn carried_packages(
+        &self,
+        repos: &[Repository],
+        records: Vec<RemovedSpace>,
+    ) -> Result<Vec<CarriedSpace>> {
+        let machine = crate::process::machine::id();
         let mut carried = Vec::new();
-        for id in ids {
-            carried.push(self.carried(self.stopped_record(id).await?).await?);
+        for record in records {
+            let repo = (record.repository_id.as_ref())
+                .and_then(|id| repos.iter().find(|repo| &repo.id == id));
+            let remote_url = match repo {
+                Some(repo) => crate::repository::remote_url_from_source(&repo.source).await?,
+                None => None,
+            };
+            carried.push(CarriedSpace::of(remote_url, machine.clone(), record));
         }
         Ok(carried)
     }
+}
 
-    /// Stop the agents of the chat `id`, saving their sessions, and say
-    /// what its removal would record of it.
-    pub(super) async fn stopped_record(&self, id: &SpaceId) -> Result<RemovedSpace> {
-        (self.stop_space(&SpaceSelector::id(id), StopRequest::moving())).await?;
-        (self.present_removal_record(id, None, EventCause::Manual)).await
-    }
+/// Refuse to package `space` with the spaces `carried` when one of them is
+/// a workspace whose removal keeps no record.
+pub(super) fn ensure_packable(space: &Space, carried: &[Space]) -> Result<()> {
+    std::iter::once(space)
+        .chain(carried)
+        .try_for_each(super::worktree::ensure_packable)
+}
 
-    /// What a package holds of the chat `record` records.
-    async fn carried(&self, record: RemovedSpace) -> Result<CarriedChat> {
-        let remote_url = match &record.repository_id {
-            Some(repository) => {
-                let repo = self.repository(repository).await?;
-                crate::repository::remote_url_from_source(&repo.source).await?
-            }
-            None => None,
-        };
-        let machine = crate::process::machine::id();
-        Ok(CarriedChat::of(remote_url, machine, record))
+/// The records among `records` of the spaces the removal of the space `id`
+/// took, each after the records it waits for, when `carrying` carries the
+/// spaces below it; a selection leaves them here, below the space's record.
+pub(super) fn taken_by_removal(
+    records: &[RemovedSpace],
+    id: &SpaceId,
+    carrying: &Carrying,
+) -> Vec<RemovedSpace> {
+    if let Carrying::Selected(_) = carrying {
+        return Vec::new();
     }
+    let taken: Vec<&RemovedSpace> = (records.iter())
+        .filter(|record| record.cause == EventCause::Parent)
+        .collect();
+    let placed: Vec<Placed<'_>> = taken.iter().map(|record| Placed::removed(record)).collect();
+    let carried = crate::transfer::carried_spaces(&placed, id, carrying);
+    (carried.iter())
+        .filter_map(|id| taken.iter().find(|record| &record.space_id == id))
+        .map(|record| (*record).clone())
+        .collect()
 }

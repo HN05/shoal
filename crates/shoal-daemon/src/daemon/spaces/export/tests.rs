@@ -8,11 +8,12 @@ use crate::{
     model::RemovedSpace,
     process::identity,
     removal::{InspectionPolicy, UnsavedWork},
-    transfer::{CarriedChatExt, ExportedSpace, Import, ManifestExt, SpaceImport},
+    transfer::{Carrying, ExportedSpace, Import, ManifestExt, PackagedSpaceExt, SpaceImport},
 };
 use shoal_protocol::space_names::SpaceSelector;
 
 mod moving;
+mod subtree;
 mod transfer;
 
 /// A manager with a chat `name` about a registered repository, whose
@@ -69,6 +70,8 @@ fn chat_import(repository: Option<&crate::model::Repository>, chat: RemovedSpace
         space: chat,
         copy: false,
         session_files: Vec::new(),
+        copies: Default::default(),
+        carried: Vec::new(),
     }
 }
 
@@ -102,6 +105,7 @@ async fn export(manager: &Manager, selector: &str, file: &Path) -> anyhow::Resul
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
             file.to_owned(),
+            &Carrying::Subtree,
         )
         .await
 }
@@ -123,7 +127,7 @@ async fn a_chat_ends_into_a_package_that_continues_its_session() {
     assert_eq!(packaged.space_id, chat.id);
     assert!(packaged.chat().is_some(), "a chat's record");
     assert_eq!(packaged.name.as_str(), "plan-cache");
-    assert!(import.bundle.is_none());
+    assert!(import.bundles.is_empty());
     let sessions = import.manifest.sessions.as_ref().unwrap();
     assert_eq!(
         sessions.reported().collect::<Vec<_>>(),
@@ -225,40 +229,6 @@ async fn a_disposable_workspace_is_refused_before_its_removal() {
 }
 
 #[tokio::test]
-async fn a_workspace_with_a_space_below_that_stays_is_not_exported() {
-    let (temp, manager) = manager().await;
-    let checkout = repository(temp.path(), "repo");
-    let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let workspace = manager
-        .create_workspace(&repo.id, "topic".into(), None, None, None)
-        .await
-        .unwrap();
-    let selector = SpaceSelector::id(&workspace.id);
-    let split = (manager.split_workspace(&selector, "child".into(), None, Default::default()))
-        .await
-        .unwrap();
-    let file = temp.path().join("topic.shoal");
-
-    let refused = manager
-        .export_space(
-            &selector,
-            UnsavedWork::All,
-            InspectionPolicy::GitOnly,
-            file.clone(),
-        )
-        .await;
-    assert!(refused.is_err());
-    assert!(!file.exists());
-    for kept in [&workspace, &split] {
-        assert!(manager.find_workspace(&kept.id).await.unwrap().is_some());
-        assert!(kept.path.exists());
-    }
-}
-
-#[tokio::test]
 async fn a_chat_in_a_workspace_moves_naming_the_workspace() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
@@ -322,22 +292,23 @@ async fn a_workspace_moves_with_the_chats_in_it_and_below_it() {
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
             file.clone(),
+            &Carrying::Subtree,
         )
         .await
         .unwrap();
     assert!(exporting.chats().await.unwrap().is_empty());
     let bytes = fs::read(&file).unwrap();
     let import = Import::read(&mut &bytes[..]).unwrap();
-    let carried: Vec<_> = (import.manifest.chats.iter())
-        .map(|carried| &carried.chat.space_id)
+    let carried: Vec<_> = (import.manifest.carried.iter())
+        .map(|carried| &carried.space.record.space_id)
         .collect();
     assert_eq!(carried.len(), 3, "{carried:?}");
     let position = |id| carried.iter().position(|carried| *carried == id).unwrap();
     assert!(position(&child.id) < position(&grandchild.id));
     transfer::import(&importing, &target_repo, &bytes).await;
-    for carried in &import.manifest.chats {
-        let sessions = (import.manifest).chat_sessions_on(carried, Some("elsewhere"), None);
-        let chat = carried.chat_with(sessions);
+    for carried in &import.manifest.carried {
+        let sessions = (import.manifest).carried_sessions_on(carried, Some("elsewhere"), None);
+        let chat = carried.space.record_with(sessions);
         let import = chat_import(Some(&target_repo), chat);
         importing.import_space(import).await.unwrap();
     }
@@ -419,6 +390,7 @@ async fn a_chat_copy_keeps_the_chat_running() {
             &manager.named("plan-cache").await,
             Some(1.into()),
             root.path().join("refused.shoal"),
+            &Carrying::Subtree,
         )
         .await
         .unwrap_err();
@@ -429,7 +401,12 @@ async fn a_chat_copy_keeps_the_chat_running() {
     let file = root.path().join("plan-cache.shoal");
 
     let exported = manager
-        .copy_space(&manager.named("plan-cache").await, None, file.clone())
+        .copy_space(
+            &manager.named("plan-cache").await,
+            None,
+            file.clone(),
+            &Carrying::Subtree,
+        )
         .await
         .unwrap();
     assert!(exported.manifest.copy.is_some());
@@ -451,7 +428,12 @@ async fn a_chat_without_a_session_is_copied_with_a_warning() {
     let file = root.path().join("talk.shoal");
 
     let exported = manager
-        .copy_space(&manager.named("talk").await, None, file.clone())
+        .copy_space(
+            &manager.named("talk").await,
+            None,
+            file.clone(),
+            &Carrying::Subtree,
+        )
         .await
         .unwrap();
     assert!(warns_of(&exported, "talk"), "{:?}", exported.warnings);
@@ -501,6 +483,7 @@ async fn export_removed(
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
             file.to_owned(),
+            &Carrying::Subtree,
         )
         .await
 }
@@ -554,7 +537,7 @@ async fn a_chat_without_a_repository_moves_and_copies_for_root_dir() {
     let moved = root.path().join("lead.shoal");
 
     manager
-        .copy_space(&selector, None, copy.clone())
+        .copy_space(&selector, None, copy.clone(), &Carrying::Subtree)
         .await
         .unwrap();
     let exported = manager
@@ -563,6 +546,7 @@ async fn a_chat_without_a_repository_moves_and_copies_for_root_dir() {
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
             moved.clone(),
+            &Carrying::Subtree,
         )
         .await
         .unwrap();
@@ -592,17 +576,18 @@ async fn a_chat_without_a_repository_below_one_moves_with_it_into_root_dir() {
         UnsavedWork::All,
         InspectionPolicy::GitOnly,
         file.clone(),
+        &Carrying::Subtree,
     ))
     .await
     .unwrap();
     let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
-    let [carried] = import.manifest.chats.as_slice() else {
-        panic!("one chat goes with it: {:?}", import.manifest.chats);
+    let [carried] = import.manifest.carried.as_slice() else {
+        panic!("one chat goes with it: {:?}", import.manifest.carried);
     };
     let (_other, importing) = crate::daemon::test_support::manager().await;
 
-    let sessions = (import.manifest).chat_sessions_on(carried, Some("elsewhere"), None);
-    (importing.import_space(chat_import(None, carried.chat_with(sessions))))
+    let sessions = (import.manifest).carried_sessions_on(carried, Some("elsewhere"), None);
+    (importing.import_space(chat_import(None, carried.space.record_with(sessions))))
         .await
         .unwrap();
 
@@ -711,6 +696,7 @@ async fn a_moved_chat_keeps_its_id_with_the_chats_it_carried_below_it() {
         UnsavedWork::All,
         InspectionPolicy::GitOnly,
         file.clone(),
+        &Carrying::Subtree,
     ))
     .await
     .unwrap();
@@ -721,9 +707,9 @@ async fn a_moved_chat_keeps_its_id_with_the_chats_it_carried_below_it() {
     (importing.import_space(chat_import(Some(&target_repo), record)))
         .await
         .unwrap();
-    for carried in &import.manifest.chats {
-        let sessions = (import.manifest).chat_sessions_on(carried, Some("elsewhere"), None);
-        let chat = chat_import(Some(&target_repo), carried.chat_with(sessions));
+    for carried in &import.manifest.carried {
+        let sessions = (import.manifest).carried_sessions_on(carried, Some("elsewhere"), None);
+        let chat = chat_import(Some(&target_repo), carried.space.record_with(sessions));
         importing.import_space(chat).await.unwrap();
     }
 

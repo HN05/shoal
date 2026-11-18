@@ -642,9 +642,9 @@ and with a number returns to one after keeping the current state in a new
 checkpoint, refusing while another command runs in the workspace. `cleanup spaces` removes every
 space automatic cleanup would remove without waiting for its idle delay;
 `--dry-run` lists those, kept branches and shared caches, and why each other
-space stays. `move ssh` moves a workspace to another machine and queues its
-stopped agents there; with `--keep`, it copies the workspace there as a new one
-and leaves it running here.
+space stays. `move ssh` moves a workspace, with the spaces below it, to another machine and
+queues its stopped agents there; with `--keep`, it copies them there as new
+ones and leaves them running here.
 
 ## Branches
 

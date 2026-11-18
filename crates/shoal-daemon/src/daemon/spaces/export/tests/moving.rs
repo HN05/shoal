@@ -1,4 +1,3 @@
-use crate::execution::recovery::SavedExt as _;
 use shoal_ids::execution_ids::ExecutionId;
 use std::fs;
 
@@ -13,9 +12,10 @@ use crate::{
     model::Workspace,
     process::identity,
     removal::UnsavedWork,
-    transfer::{ExportedSpace, Import, SpaceImport},
+    transfer::{Carrying, ExportedSpace, Import, ManifestExt, SpaceImport},
 };
 use shoal_protocol::space_names::SpaceSelector;
+use std::collections::BTreeMap;
 
 /// Export `space` for a move into a new file in `directory` and read it
 /// back.
@@ -26,7 +26,7 @@ async fn export_moving(
 ) -> (ExportedSpace, Vec<u8>) {
     let file = directory.join("moving.shoal");
     let exported = manager
-        .export_moving_space(space, file.clone())
+        .export_moving_space(space, file.clone(), &Carrying::Subtree)
         .await
         .unwrap();
     (exported, fs::read(file).unwrap())
@@ -73,7 +73,12 @@ async fn a_moving_workspace_stays_until_its_import_ends_it() {
 
     let checkpoint = packaged.record.kept_workspace().unwrap().checkpoint.number;
     let ended = exporting
-        .end_moved_space(&selector, UnsavedWork::default(), Some(checkpoint))
+        .end_moved_space(
+            &selector,
+            UnsavedWork::default(),
+            &BTreeMap::from([(workspace.id.clone(), checkpoint)]),
+            &Carrying::Subtree,
+        )
         .await
         .unwrap();
     assert!(ended.removed);
@@ -99,7 +104,12 @@ async fn files_written_before_the_export_end_with_the_workspace_the_caller_saw_c
         .number;
 
     let ended = exporting
-        .end_moved_space(&selector, UnsavedWork::default(), Some(checkpoint))
+        .end_moved_space(
+            &selector,
+            UnsavedWork::default(),
+            &BTreeMap::from([(workspace.id.clone(), checkpoint)]),
+            &Carrying::Subtree,
+        )
         .await
         .unwrap();
     assert!(ended.removed);
@@ -118,7 +128,9 @@ async fn a_workspace_that_changed_after_its_export_stays() {
         .unwrap()
         .checkpoint
         .number;
-    let end = || exporting.end_moved_space(&selector, UnsavedWork::All, Some(checkpoint));
+    let exported = BTreeMap::from([(workspace.id.clone(), checkpoint)]);
+    let end =
+        || exporting.end_moved_space(&selector, UnsavedWork::All, &exported, &Carrying::Subtree);
 
     // A new unsaved file keeps it, and so does a commit made here.
     fs::write(workspace.path.join("newer"), "newer\n").unwrap();
@@ -143,7 +155,12 @@ async fn a_moving_chat_stops_its_agent_and_stays_until_its_end() {
     assert!(import.manifest.space.record.chat().is_some());
 
     let ended = manager
-        .end_moved_space(&selector, UnsavedWork::default(), None)
+        .end_moved_space(
+            &selector,
+            UnsavedWork::default(),
+            &BTreeMap::new(),
+            &Carrying::Subtree,
+        )
         .await
         .unwrap();
     assert!(ended.removed);
@@ -160,9 +177,15 @@ async fn a_chat_without_a_session_moves_with_a_warning() {
     let warned = (exported.warnings.iter()).any(|warning| warning.contains("talk"));
     assert!(warned, "{:?}", exported.warnings);
     assert_eq!(identity::capture(pid).unwrap(), None);
-    (manager.end_moved_space(&selector, UnsavedWork::default(), None))
-        .await
-        .unwrap();
+    let nothing = BTreeMap::new();
+    (manager.end_moved_space(
+        &selector,
+        UnsavedWork::default(),
+        &nothing,
+        &Carrying::Subtree,
+    ))
+    .await
+    .unwrap();
     assert!(manager.chats().await.unwrap().is_empty());
 }
 
@@ -180,34 +203,52 @@ async fn a_moving_chat_stops_the_chats_below_it_and_takes_them_at_its_end() {
     process.wait().unwrap();
     assert_eq!(manager.chats().await.unwrap().len(), 2);
     let import = Import::read(&mut &file[..]).unwrap();
-    let carried: Vec<_> = (import.manifest.chats.iter())
-        .map(|carried| &carried.chat.space_id)
+    let carried: Vec<_> = (import.manifest.carried.iter())
+        .map(|carried| &carried.space.record.space_id)
         .collect();
     assert_eq!(carried, [&child.id]);
 
     let confirmed = UnsavedWork::taking(vec![child.id.clone()]);
-    (manager.end_moved_space(&selector, confirmed, None))
+    let nothing = BTreeMap::new();
+    (manager.end_moved_space(&selector, confirmed, &nothing, &Carrying::Subtree))
         .await
         .unwrap();
     assert!(manager.chats().await.unwrap().is_empty());
 }
 
 #[tokio::test]
-async fn a_workspace_with_a_space_below_that_stays_is_not_exported() {
+async fn a_moving_workspace_takes_the_workspace_below_it_at_its_end() {
     let (source, exporting, source_repo, _origin) = exporter().await;
     let workspace = stopped_workspace(&exporting, &source_repo).await;
     let selector = SpaceSelector::id(&workspace.id);
-    (exporting.split_workspace(&selector, "child".into(), None, Default::default()))
+    let child = (exporting.split_workspace(&selector, "child".into(), None, Default::default()))
         .await
         .unwrap();
-    let file = source.path().join("moving.shoal");
+    // As its agent writes while it stops, after the caller's check.
+    fs::write(child.path.join("notes"), "notes\n").unwrap();
 
-    let exported = exporting.export_moving_space(&selector, file.clone()).await;
-    assert!(exported.is_err());
-    assert!(!file.exists());
-    // Its agent's record stays as it was, not restored by a move.
-    let saved = recovery::Saved::load(&exporting.paths, &workspace.id).unwrap();
-    assert_eq!(saved.agents.len(), 1);
+    let (exported, _) = export_moving(&exporting, &selector, source.path()).await;
+    assert!(child.path.exists());
+    let checkpoints: BTreeMap<_, _> = (exported.manifest.packaged())
+        .map(|packaged| {
+            let kept = packaged.record.kept_workspace().unwrap();
+            (packaged.record.space_id.clone(), kept.checkpoint.number)
+        })
+        .collect();
+    assert_eq!(checkpoints.len(), 2);
+    // A child that changed after its export keeps both here.
+    fs::write(child.path.join("newer"), "newer\n").unwrap();
+    let taking = UnsavedWork::taking(vec![child.id.clone()]);
+    let end =
+        |unsaved| exporting.end_moved_space(&selector, unsaved, &checkpoints, &Carrying::Subtree);
+    assert!(end(taking.clone()).await.is_err());
+    fs::remove_file(child.path.join("newer")).unwrap();
+
+    let ended = end(taking).await.unwrap();
+    assert!(ended.removed);
+    assert!(!child.path.exists());
+    let removed = exporting.removed_workspaces().await.unwrap();
+    assert_eq!(removed.len(), 2);
 }
 
 #[tokio::test]
@@ -226,6 +267,8 @@ async fn an_import_that_records_nothing_says_so() {
         space: packaged.record.clone(),
         copy: false,
         session_files: Vec::new(),
+        copies: BTreeMap::new(),
+        carried: Vec::new(),
     };
     let error = importing.import_space(import).await.unwrap_err();
     assert_eq!(Reason::of(&error), Some(Reason::NotImported));

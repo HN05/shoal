@@ -1,25 +1,24 @@
 //! What ending a space for its export would do, the refusals of an export
 //! that would lose work or cut its own output off, and the confirmation
 //! ending the spaces needs.
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
 use shoal_protocol::model::ByKind;
 
 use super::Output;
 use crate::{
     cli::{context::Context, ui},
-    model::{Chat, Space, SpaceHold, SpaceKind, SpaceRef, Spaces},
+    model::{Chat, Space, SpaceHold, SpaceKind, Spaces},
     removal::{SpaceRemovalCheck, UnsavedWork},
+    transfer::{Carrying, Placed},
 };
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+use shoal_protocol::space_names::SpaceSelector;
 
-/// A space that passed its export check, with the spaces its removal takes
-/// first and the chats among them that go with it, which its export ends
-/// too.
+/// A space that passed its export check, with the spaces below it that go
+/// with it, which its export ends too.
 pub(in super::super) struct Checked {
     pub(in super::super) space: Ending,
-    taken: Vec<SpaceRef>,
-    carried: Vec<Chat>,
+    carried: Vec<Space>,
 }
 
 /// What ending a space for its export does: removing a workspace, with
@@ -56,95 +55,107 @@ impl Checked {
         }
     }
 
-    /// The space and the chats that go with it, each with its holds, which
-    /// ending them here releases.
-    fn holds(&self) -> impl Iterator<Item = (&SpaceId, &SpaceName, &[SpaceHold])> {
-        let own = match &self.space {
-            Ending::Workspace(check) => (&check.space.id, &check.space.name, &check.space.holds),
-            Ending::Chat(chat) => (&chat.id, &chat.name, &chat.holds),
-        };
-        let carried = (self.carried.iter()).map(|chat| (&chat.id, &chat.name, &chat.holds));
-        std::iter::once(own)
-            .chain(carried)
-            .map(|(id, name, holds)| (id, name, holds.as_slice()))
+    /// The space's holds, which ending it here releases.
+    fn own_holds(&self) -> &[SpaceHold] {
+        match &self.space {
+            Ending::Workspace(check) => &check.space.holds,
+            Ending::Chat(chat) => &chat.holds,
+        }
     }
 
-    /// The space and the chats that go with it, whose agents a move stops.
+    /// The space and the spaces that go with it, whose agents a move stops.
     pub(in super::super) fn spaces(&self) -> impl Iterator<Item = &SpaceId> {
-        std::iter::once(self.id()).chain(self.carried.iter().map(|chat| &chat.id))
+        std::iter::once(self.id()).chain(self.carried.iter().map(|space| &space.id))
     }
 
-    /// Consent to end the chat with the chats that go with it, the only
+    /// Consent to end the chat with the spaces that go with it, the only
     /// spaces below it its removal may take.
     pub(in super::super) fn chat_ending(&self) -> UnsavedWork {
-        UnsavedWork::taking(self.carried.iter().map(|chat| chat.id.clone()).collect())
-    }
-
-    /// Refuse to export the space without the workspaces below it, which
-    /// removing it here would take unexported, unless they are among the
-    /// `exported` too; the chats below those go with them.
-    pub(super) fn ensure_children_exported(&self, exported: &[&SpaceId]) -> Result<()> {
-        let missing: Vec<&str> = (self.taken.iter())
-            .filter(|space| space.kind() == SpaceKind::Workspace && !exported.contains(&&space.id))
-            .map(|space| space.name.as_str())
-            .collect();
-        ensure!(
-            missing.is_empty(),
-            "workspaces are below it ({}); export them with it, as shoal move export --all does, or remove them first",
-            missing.join(", ")
-        );
-        Ok(())
+        UnsavedWork::taking(self.carried.iter().map(|space| space.id.clone()).collect())
     }
 }
 
-/// What ending `space`, among the `spaces` there are, for an export would
-/// do, refusing an export that would lose work or cut its own output off.
+/// What ending `space`, among the `spaces` there are, with the spaces
+/// below it that `carrying` carries, for an export would do, refusing an
+/// export that would lose work or cut its own output off with each space
+/// that would.
 pub(super) async fn check_export(
     ctx: &Context,
     space: Space,
     output: &Output,
     spaces: &Spaces,
+    carrying: &Carrying,
 ) -> Result<Checked> {
-    let carried = carried_chats(spaces, &space.id);
-    for chat in &carried {
-        ensure_not_running_in(chat)?;
+    let carried = carried_spaces(spaces, &space.id, carrying);
+    let name = space.name.clone();
+    let ending = check_ending(ctx, space, output).await;
+    let mut refusals = Vec::new();
+    for below in &carried {
+        if let Err(error) = check_carried(ctx, below, output).await {
+            refusals.push(format!("{}: {error:#}", below.name));
+        }
     }
-    let (space, taken) = match space.by_kind() {
+    match ending {
+        Ok(space) if refusals.is_empty() => Ok(Checked { space, carried }),
+        Err(error) if refusals.is_empty() => Err(error),
+        ending => {
+            if let Err(error) = ending {
+                refusals.insert(0, format!("{name}: {error:#}"));
+            }
+            bail!(
+                "the spaces that would end with it cannot:\n  {}",
+                refusals.join("\n  ")
+            )
+        }
+    }
+}
+
+/// What ending `space` for an export would do, refusing an export that
+/// would lose its work or cut `output` off.
+async fn check_ending(ctx: &Context, space: Space, output: &Output) -> Result<Ending> {
+    Ok(match space.by_kind() {
         ByKind::Workspace(workspace) => {
-            let check = check_workspace_export(ctx, &workspace.id, output).await?;
-            let taken = check.children.clone();
-            (Ending::Workspace(check), taken)
+            Ending::Workspace(check_workspace_export(ctx, &workspace.id, output).await?)
         }
         ByKind::Chat(chat) => {
-            let taken = spaces.taken_with(&chat.id);
-            ensure_not_running_in(&chat)?;
-            (Ending::Chat(chat), taken)
+            ensure_not_running_in(&chat.id, chat.name.as_str())?;
+            Ending::Chat(chat)
         }
-    };
-    Ok(Checked {
-        space,
-        taken,
-        carried,
     })
 }
 
-/// The chats among `spaces` that go with the space `id`, each after its
-/// parent among them.
-fn carried_chats(spaces: &Spaces, id: &SpaceId) -> Vec<Chat> {
-    let chats = spaces.chats();
-    (crate::transfer::carried_chats(&chats, id).iter())
-        .filter_map(|id| chats.iter().find(|chat| chat.id == *id))
+/// Refuse to end `space`, which goes with another, as [`check_ending`]
+/// refuses a space it ends, or a workspace while another lifecycle
+/// operation holds it or this terminal closes with it.
+async fn check_carried(ctx: &Context, space: &Space, output: &Output) -> Result<()> {
+    match space.kind() {
+        SpaceKind::Workspace => {
+            let check = check_workspace_export(ctx, &space.id, output).await?;
+            let workspaces = super::super::super::workspaces::ensure_batch_removable;
+            workspaces(ctx, &check, super::EXPORT).await?;
+        }
+        SpaceKind::Chat => ensure_not_running_in(&space.id, space.name.as_str())?,
+    }
+    Ok(())
+}
+
+/// The spaces among `spaces` that go with the space `id` as `carrying`
+/// says, each after the spaces it waits for.
+fn carried_spaces(spaces: &Spaces, id: &SpaceId, carrying: &Carrying) -> Vec<Space> {
+    let placed: Vec<Placed<'_>> = spaces.iter().map(Placed::space).collect();
+    (crate::transfer::carried_spaces(&placed, id, carrying).iter())
+        .filter_map(|id| spaces.iter().find(|space| space.id == *id))
         .cloned()
         .collect()
 }
 
-/// Refuse to end `chat`, the one this process runs in, which ending the
-/// chat would end before the export finished.
-fn ensure_not_running_in(chat: &Chat) -> Result<()> {
+/// Refuse to end the chat `id`, called `name`, when it is the one this
+/// process runs in, which ending the chat would end before the export
+/// finished.
+fn ensure_not_running_in(id: &SpaceId, name: &str) -> Result<()> {
     ensure!(
-        crate::env::own_space().as_ref() != Some(&chat.id),
-        "this process runs in chat {}, which the export ends; export it from another terminal",
-        chat.name
+        crate::env::own_space().as_ref() != Some(id),
+        "this process runs in chat {name}, which the export ends; export it from another terminal"
     );
     Ok(())
 }
@@ -183,62 +194,62 @@ async fn check_workspace_export(
     Ok(check)
 }
 
-/// The `spaces` an export of them all ends one by one: those that do not go
-/// with another of them, which its export ends, each after the spaces below
-/// it that its removal would otherwise take.
-pub(super) fn exported_alone(spaces: &[Space], tree: &Spaces) -> Vec<Space> {
-    let chats = tree.chats();
-    let carried: Vec<SpaceId> = (spaces.iter())
-        .flat_map(|space| crate::transfer::carried_chats(&chats, &space.id))
+/// The `spaces` an export of them all exports to a file each: those that do
+/// not go with another of them as `carrying` says, whose export carries
+/// them, in the order given.
+pub(super) fn exported_alone(spaces: &[Space], tree: &Spaces, carrying: &Carrying) -> Vec<Space> {
+    let carried: Vec<Space> = (spaces.iter())
+        .flat_map(|space| carried_spaces(tree, &space.id, carrying))
         .collect();
-    let mut alone: Vec<Space> = (spaces.iter())
-        .filter(|space| !carried.contains(&space.id))
+    (spaces.iter())
+        .filter(|space| !carried.iter().any(|carried| carried.id == space.id))
         .cloned()
-        .collect();
-    alone.sort_by_key(|space| tree.taken_with(&space.id).len());
-    alone
+        .collect()
 }
 
 /// Ask under `heading`, unless `yes` confirms it, before ending the spaces
-/// `checks` describe where that needs the user: a chat, which the user
-/// talks with, with the chats that go with them, or a space with holds that
-/// external sessions keep, which the export releases, naming each hold's
-/// space when there are several.
+/// `checks` describe where that ends more than the spaces named or
+/// releases holds: listing each space that goes with them, with its kind
+/// and agent, and the holds the export releases, naming each hold's space
+/// when there are several.
 pub(super) fn confirm_ending(
     ctx: &Context,
     yes: bool,
     heading: String,
     checks: &[&Checked],
 ) -> Result<()> {
-    let mut chats: Vec<&Chat> = Vec::new();
-    for check in checks {
-        let own = match &check.space {
-            Ending::Chat(chat) => Some(chat),
-            Ending::Workspace(_) => None,
-        };
-        for chat in own.into_iter().chain(&check.carried) {
-            if !chats.iter().any(|listed| listed.id == chat.id) {
-                chats.push(chat);
-            }
+    let Some(action) = ending_action(heading, checks).filter(|_| !yes) else {
+        return Ok(());
+    };
+    ensure!(ui::confirm(ctx, &action, "--yes")?, "export canceled");
+    Ok(())
+}
+
+/// The question [`confirm_ending`] asks under `heading`; none when ending
+/// the spaces `checks` describe ends only them and releases no holds.
+fn ending_action(heading: String, checks: &[&Checked]) -> Option<String> {
+    let mut carried: Vec<&Space> = Vec::new();
+    for space in checks.iter().flat_map(|check| &check.carried) {
+        if !carried.iter().any(|listed| listed.id == space.id) {
+            carried.push(space);
         }
     }
-    let mut held: Vec<(&SpaceId, &SpaceName, &[SpaceHold])> = Vec::new();
-    for space in checks.iter().flat_map(|check| check.holds()) {
+    let own = (checks.iter()).map(|check| (check.id(), check.name().as_str(), check.own_holds()));
+    let below = (carried.iter()).map(|space| (&space.id, space.name.as_str(), &space.holds[..]));
+    let mut held: Vec<(&SpaceId, &str, &[SpaceHold])> = Vec::new();
+    for space in own.chain(below) {
         if !space.2.is_empty() && !held.iter().any(|listed| listed.0 == space.0) {
             held.push(space);
         }
     }
-    if yes || (chats.is_empty() && held.is_empty()) {
-        return Ok(());
+    if carried.is_empty() && held.is_empty() {
+        return None;
     }
     let mut action = heading;
-    if !chats.is_empty() {
-        action.push_str("\nEnds these chats here, stopping their agents:");
-        for chat in &chats {
-            match &chat.agent {
-                Some(agent) => action.push_str(&format!("\n  {} ({agent})", chat.name)),
-                None => action.push_str(&format!("\n  {}", chat.name)),
-            }
+    if !carried.is_empty() {
+        action.push_str("\nEnds these spaces below here too, stopping their agents:");
+        for space in &carried {
+            action.push_str(&format!("\n  {} ({})", space.name, described(space)));
         }
     }
     if !held.is_empty() {
@@ -256,8 +267,20 @@ pub(super) fn confirm_ending(
             }
         }
     }
-    ensure!(ui::confirm(ctx, &action, "--yes")?, "export canceled");
-    Ok(())
+    Some(action)
+}
+
+/// The kind of `space` with its agent, as the confirmation lists it: a
+/// chat's agent by name, a workspace's while it runs.
+fn described(space: &Space) -> String {
+    let agent = match space.clone().by_kind() {
+        ByKind::Chat(chat) => chat.agent.as_ref().map(ToString::to_string),
+        ByKind::Workspace(_) => space.running.then(|| "agent running".to_owned()),
+    };
+    match agent {
+        Some(agent) => format!("{}, {agent}", space.kind()),
+        None => space.kind().to_string(),
+    }
 }
 
 #[cfg(test)]

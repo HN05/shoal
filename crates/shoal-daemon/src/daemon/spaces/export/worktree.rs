@@ -2,6 +2,7 @@
 //! workspace do with the worktree it owns, which a chat, working in a place
 //! it does not own, has nothing of.
 use anyhow::{Context, Result, ensure};
+use std::collections::BTreeMap;
 
 use crate::{
     daemon::workspace::Manager,
@@ -81,6 +82,24 @@ impl Manager {
             .ensure_unchanged_since_export(&workspace, exported)
             .await?;
         Ok(checkpointed_work(&checkpoint, unsaved.children()))
+    }
+
+    /// Refuse to end the moved `space`, carried by another, once it is a
+    /// workspace that changed since its checkpoint in `exported`, which the
+    /// other machine now has.
+    pub(super) async fn ensure_moved_unchanged(
+        &self,
+        space: &Space,
+        exported: &BTreeMap<SpaceId, CheckpointNumber>,
+    ) -> Result<()> {
+        let Some(workspace) = space.to_workspace() else {
+            return Ok(());
+        };
+        let exported = (exported.get(&workspace.id).copied())
+            .with_context(|| format!("the package of {} holds no checkpoint", workspace.name))?;
+        self.ensure_unchanged_since_export(&workspace, exported)
+            .await?;
+        Ok(())
     }
 
     /// The checkpoint `exported` of `workspace`, refusing to end it once it

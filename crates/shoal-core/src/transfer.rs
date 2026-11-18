@@ -6,19 +6,20 @@ use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceName;
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     io::{BufRead, Read, Write},
     path::{Component, Path, PathBuf},
 };
 
 use anyhow::{Context, Result, ensure};
 
-pub use carried::{CarriedChatExt, carried_chats};
+pub use carried::{CarriedSpaceExt, Placed, carried_spaces};
 pub use shoal_protocol::transfer::{
-    CarriedChat, CarriedSessionFile, ExportedSpace, Manifest, PackagedSpace, SessionFile, Sessions,
-    SpaceImport,
+    CarriedSessionFile, CarriedSpace, Carrying, ExportedSpace, ImportTarget, Manifest,
+    PackagedSpace, SessionFile, Sessions, SpaceImport,
 };
 
 mod carried;
@@ -105,13 +106,14 @@ pub fn session_sources(
     (sources, warnings)
 }
 
-/// Write the package `manifest` describes, a space of `repo` or of none,
-/// with its agents' session files `sessions`, to the new file `path` for
-/// `shoal move import`, with a warning for each session left out because a
-/// file of it cannot be read; a failure leaves no partial file and an
-/// existing one is never replaced.
+/// Write the package `manifest` describes, spaces of `repos` or of none,
+/// with their agents' session files `sessions` and a bundle of each
+/// workspace's checkpoint, to the new file `path` for `shoal move import`,
+/// with a warning for each session left out because a file of it cannot
+/// be read; a failure leaves no partial file and an existing one is never
+/// replaced.
 pub async fn export(
-    repo: Option<&Repository>,
+    repos: &[Repository],
     mut manifest: Manifest,
     sessions: Vec<SessionSource>,
     path: PathBuf,
@@ -120,18 +122,47 @@ pub async fn export(
         .await
         .context("read the session files")?;
     manifest.session_files = sessions.iter().map(|(file, _)| file.clone()).collect();
-    let bundle = match manifest.space.bundle {
-        true => {
-            let repo = repo.context("a workspace belongs to a repository")?;
-            Some(Bundle::create(&repo.path, &manifest.space).await?)
-        }
-        false => None,
-    };
+    let mut bundles = Vec::new();
+    for packaged in packaged_mut(&mut manifest) {
+        bundles.extend(deliver(repos, packaged).await?);
+    }
     let written = manifest.clone();
-    tokio::task::spawn_blocking(move || write_new(&path, &written, &sessions, bundle.as_ref()))
+    tokio::task::spawn_blocking(move || write_new(&path, &written, &sessions, &bundles))
         .await
         .context("write the export")??;
     Ok((manifest, warnings))
+}
+
+/// Every space `manifest` packages, its own first, then those it carries in
+/// order: the order their bundles follow in.
+fn packaged_mut(manifest: &mut Manifest) -> impl Iterator<Item = &mut PackagedSpace> {
+    let carried = manifest
+        .carried
+        .iter_mut()
+        .map(|carried| &mut carried.space);
+    std::iter::once(&mut manifest.space).chain(carried)
+}
+
+/// Decide how the checkpoint of the workspace `packaged` holds, of one of
+/// `repos`, reaches the importer, recording it, and bundle it unless the
+/// default branch the importer fetches already has it; a chat has none.
+async fn deliver(repos: &[Repository], packaged: &mut PackagedSpace) -> Result<Option<Bundle>> {
+    let Some(kept) = packaged.record.workspace() else {
+        return Ok(None);
+    };
+    let repository = packaged.record.repository()?;
+    let repo = (repos.iter())
+        .find(|repo| &repo.id == repository)
+        .context("a workspace belongs to a repository")?;
+    let (prerequisite, bundled) = checkpoint_delivery(&repo.path, &kept.checkpoint.commit).await?;
+    packaged.prerequisite = prerequisite;
+    if !bundled {
+        packaged.bundle = None;
+        return Ok(None);
+    }
+    let bundle = Bundle::create(&repo.path, packaged).await?;
+    packaged.bundle = Some(std::fs::metadata(bundle.path())?.len());
+    Ok(Some(bundle))
 }
 
 /// A session file opened for the export, with its size now; its agent has
@@ -199,18 +230,22 @@ pub trait ManifestExt: Sized {
     /// forks of their sessions, in no place of the original's.
     fn sessions_on(&self, machine: Option<&str>, keep_sessions: Option<bool>) -> Sessions;
 
-    /// The agent of the carried `chat` to import on `machine`, which keeps
-    /// its session as [`Self::sessions_on`] says.
-    fn chat_sessions_on(
+    /// The agents of the `carried` space to import on `machine`, which
+    /// keep their sessions as [`Self::sessions_on`] says.
+    fn carried_sessions_on(
         &self,
-        chat: &CarriedChat,
+        carried: &CarriedSpace,
         machine: Option<&str>,
         keep_sessions: Option<bool>,
     ) -> Sessions;
 
-    /// The agents of the space and of the chats it carries, with their
+    /// The agents of the space and of the spaces it carries, with their
     /// sessions, whose files go in the package.
     fn every_session(&self) -> Sessions;
+
+    /// Every space it packages, its own first, then those it carries in
+    /// order.
+    fn packaged(&self) -> impl Iterator<Item = &PackagedSpace>;
 
     /// Whether the export carries the files of `session`.
     fn carries(&self, session: &AgentSessionId) -> bool;
@@ -225,11 +260,11 @@ impl ManifestExt for Manifest {
         let sessions = recorded_sessions(crate::process::machine::id(), &removed);
         Ok(Self {
             remote_url,
-            space: PackagedSpace::of(repo, removed).await?,
+            space: PackagedSpace::of(removed),
             sessions: Some(sessions),
             session_files: Vec::new(),
             copy: None,
-            chats: Vec::new(),
+            carried: Vec::new(),
         })
     }
 
@@ -241,29 +276,30 @@ impl ManifestExt for Manifest {
         let Some(sessions) = &self.sessions else {
             return recorded_sessions(None, &self.space.record);
         };
-        let sessions = kept_on(self, sessions, machine, keep_sessions);
-        match self.copy {
-            Some(copied) => copied_sessions(sessions, copied),
-            None => sessions,
-        }
+        continued_on(self, sessions, machine, keep_sessions)
     }
 
-    fn chat_sessions_on(
+    fn carried_sessions_on(
         &self,
-        chat: &CarriedChat,
+        carried: &CarriedSpace,
         machine: Option<&str>,
         keep_sessions: Option<bool>,
     ) -> Sessions {
-        kept_on(self, &chat.sessions, machine, keep_sessions)
+        continued_on(self, &carried.sessions, machine, keep_sessions)
     }
 
     fn every_session(&self) -> Sessions {
         let mut every = self.sessions.clone().unwrap_or_default();
-        for chat in &self.chats {
-            every.agents.extend(chat.sessions.agents.iter().cloned());
-            (every.last_sessions).extend(chat.sessions.last_sessions.iter().cloned());
+        for carried in &self.carried {
+            every.agents.extend(carried.sessions.agents.iter().cloned());
+            (every.last_sessions).extend(carried.sessions.last_sessions.iter().cloned());
         }
         every
+    }
+
+    fn packaged(&self) -> impl Iterator<Item = &PackagedSpace> {
+        let carried = self.carried.iter().map(|carried| &carried.space);
+        std::iter::once(&self.space).chain(carried)
     }
 
     fn carries(&self, session: &AgentSessionId) -> bool {
@@ -274,32 +310,22 @@ impl ManifestExt for Manifest {
 }
 
 /// Operations on the client type [`PackagedSpace`] that only the `shoal` command uses.
-// Only Shoal's own crates implement and await it.
-#[allow(async_fn_in_trait)]
 pub trait PackagedSpaceExt: Sized {
-    /// The package of the space `removed` records, of the repository `repo`
-    /// or of none, for another machine: a workspace's with a bundle unless
-    /// the default branch the importer fetches already has the checkpoint.
-    async fn of(repo: Option<&Repository>, removed: RemovedSpace) -> Result<Self>;
+    /// The package of the space `removed` records for another machine,
+    /// before the export decides how a workspace's checkpoint reaches it.
+    fn of(removed: RemovedSpace) -> Self;
 
     /// The removal record to import, whose agents have `sessions`.
     fn record_with(&self, sessions: Sessions) -> RemovedSpace;
 }
 
 impl PackagedSpaceExt for PackagedSpace {
-    async fn of(repo: Option<&Repository>, removed: RemovedSpace) -> Result<Self> {
-        let (prerequisite, bundle) = match removed.workspace() {
-            Some(kept) => {
-                let repo = repo.context("a workspace belongs to a repository")?;
-                checkpoint_delivery(&repo.path, &kept.checkpoint.commit).await?
-            }
-            None => (None, false),
-        };
-        Ok(Self {
-            prerequisite,
-            bundle,
+    fn of(removed: RemovedSpace) -> Self {
+        Self {
+            prerequisite: None,
+            bundle: None,
             record: moved(removed),
-        })
+        }
     }
 
     fn record_with(&self, sessions: Sessions) -> RemovedSpace {
@@ -373,13 +399,13 @@ impl Bundle {
     }
 }
 
-/// Write the header, `manifest`, the contents of `sessions` and `bundle` to a
-/// temporary file beside `path`, then move it there unless a file exists.
+/// Write the header, `manifest`, the contents of `sessions` and `bundles` to
+/// a temporary file beside `path`, then move it there unless a file exists.
 fn write_new(
     path: &Path,
     manifest: &Manifest,
     sessions: &[OpenedSessionFile],
-    bundle: Option<&Bundle>,
+    bundles: &[Bundle],
 ) -> Result<()> {
     let directory = directory(path);
     let file = tempfile::NamedTempFile::new_in(directory)
@@ -396,7 +422,7 @@ fn write_new(
             session.path.display()
         );
     }
-    if let Some(bundle) = bundle {
+    for bundle in bundles {
         std::io::copy(&mut std::fs::File::open(bundle.path())?, &mut out)?;
     }
     out.into_inner().map_err(|error| error.into_error())?;
@@ -414,12 +440,13 @@ pub fn directory(path: &Path) -> &Path {
     }
 }
 
-/// A package read back: its manifest, and its session files and bundle in
-/// temporary files.
+/// A package read back: its manifest, and its session files and the bundle
+/// of each workspace's checkpoint, by the workspace's ID, in temporary
+/// files.
 pub struct Import {
     pub manifest: Manifest,
     pub sessions: Vec<ImportedSessionFile>,
-    pub bundle: Option<tempfile::NamedTempFile>,
+    pub bundles: BTreeMap<SpaceId, tempfile::NamedTempFile>,
 }
 
 /// A session file read back from an export.
@@ -457,23 +484,22 @@ impl Import {
             .iter()
             .map(|file| ImportedSessionFile::read(input, file.clone()))
             .collect::<Result<_>>()?;
-        let bundle = if manifest.space.bundle {
-            let mut bundle = tempfile::NamedTempFile::new()?;
-            std::io::copy(input, &mut bundle)?;
-            bundle.flush()?;
-            Some(bundle)
-        } else {
-            let mut rest = [0; 1];
-            ensure!(
-                input.read(&mut rest)? == 0,
-                "the export has data after its manifest"
-            );
-            None
-        };
+        let mut bundles = BTreeMap::new();
+        for packaged in manifest.packaged() {
+            if let Some(size) = packaged.bundle {
+                let bundle = read_part(input, size, "a bundle")?;
+                bundles.insert(packaged.record.space_id.clone(), bundle);
+            }
+        }
+        let mut rest = [0; 1];
+        ensure!(
+            input.read(&mut rest)? == 0,
+            "the export has data after its last part"
+        );
         Ok(Self {
             manifest,
             sessions,
-            bundle,
+            bundles,
         })
     }
 }
@@ -489,12 +515,19 @@ impl ImportedSessionFile {
             "the export names the session file {}, outside the agent's session directory",
             file.path.display()
         );
-        let mut contents = tempfile::NamedTempFile::new()?;
-        let copied = std::io::copy(&mut input.take(file.size), &mut contents)?;
-        ensure!(copied == file.size, "the export ends inside a session file");
-        contents.flush()?;
+        let contents = read_part(input, file.size, "a session file")?;
         Ok(Self { file, contents })
     }
+}
+
+/// The next `size` bytes of `input`, the contents of `part`, in a
+/// temporary file.
+fn read_part(input: &mut impl BufRead, size: u64, part: &str) -> Result<tempfile::NamedTempFile> {
+    let mut contents = tempfile::NamedTempFile::new()?;
+    let copied = std::io::copy(&mut input.take(size), &mut contents)?;
+    ensure!(copied == size, "the export ends inside {part}");
+    contents.flush()?;
+    Ok(contents)
 }
 
 /// The default remote's default branch, which the importing repository can
@@ -512,6 +545,21 @@ async fn shared_commit(repo: &Path) -> Result<Option<String>> {
     }
     let commit = git::revision(repo, &format!("{reference}^{{commit}}"), git::run).await?;
     Ok(Some(commit.trim().to_owned()))
+}
+
+/// `sessions` of the package `manifest` on `machine`, as [`kept_on`] keeps
+/// them, a copy's as [`copied_sessions`] starts them.
+fn continued_on(
+    manifest: &Manifest,
+    sessions: &Sessions,
+    machine: Option<&str>,
+    keep_sessions: Option<bool>,
+) -> Sessions {
+    let sessions = kept_on(manifest, sessions, machine, keep_sessions);
+    match manifest.copy {
+        Some(copied) => copied_sessions(sessions, copied),
+        None => sessions,
+    }
 }
 
 /// `sessions` of the package `manifest` on `machine`: each agent with a

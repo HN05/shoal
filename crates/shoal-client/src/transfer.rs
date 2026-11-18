@@ -1,6 +1,7 @@
 //! Packages of spaces `shoal move` carries between machines: what one holds.
-use shoal_protocol::transfer::{ExportedSpace, SpaceImport};
-use std::path::PathBuf;
+use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::transfer::{Carrying, ExportedSpace, SpaceImport};
+use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::Result;
 
@@ -14,69 +15,79 @@ use shoal_protocol::{
 
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 
-/// End `space`, deleting only the `unsaved` work the caller saw, and
-/// package it into `file`.
+/// End `space` with the spaces below it that `carrying` carries,
+/// deleting only the `unsaved` work the caller saw, and package them into
+/// `file`.
 pub async fn export(
     daemon: &impl Daemon,
     space: SpaceSelector,
     unsaved: UnsavedWork,
     file: PathBuf,
+    carrying: Carrying,
 ) -> Result<ExportedSpace> {
-    request(
-        daemon,
-        RemovalMethod::ExportSpace {
-            space,
-            unsaved,
-            file,
-        },
-    )
-    .await
-}
-
-/// Stop the agents of `space`, saving their sessions, and package it into
-/// `file` for a move, leaving it here until [`end_moved`] ends it.
-pub async fn export_moving(
-    daemon: &impl Daemon,
-    space: SpaceSelector,
-    file: PathBuf,
-) -> Result<ExportedSpace> {
-    request(daemon, RemovalMethod::ExportMovingSpace { space, file }).await
-}
-
-/// End `space`, which another Shoal imported, deleting only the `unsaved`
-/// work the caller saw: a workspace only while it still has what its
-/// exported `checkpoint` keeps. Returns its removal.
-pub async fn end_moved(
-    daemon: &impl Daemon,
-    space: SpaceSelector,
-    unsaved: UnsavedWork,
-    checkpoint: Option<CheckpointNumber>,
-) -> Result<RemovalResult> {
-    let method = RemovalMethod::EndMovedSpace {
+    let method = RemovalMethod::ExportSpace {
         space,
         unsaved,
-        checkpoint,
+        file,
+        carrying,
     };
     request(daemon, method).await
 }
 
-/// Package a copy of `space` into `file`, leaving it running: a workspace
-/// at its checkpoint `checkpoint`, or at a new one.
+/// Stop the agents of `space` and of the spaces below it that `carrying`
+/// carries, saving their sessions, and package them into `file` for a
+/// move, leaving them here until [`end_moved`] ends them.
+pub async fn export_moving(
+    daemon: &impl Daemon,
+    space: SpaceSelector,
+    file: PathBuf,
+    carrying: Carrying,
+) -> Result<ExportedSpace> {
+    let method = RemovalMethod::ExportMovingSpace {
+        space,
+        file,
+        carrying,
+    };
+    request(daemon, method).await
+}
+
+/// End `space` with the spaces below it that `carrying` carries, which
+/// another Shoal imported, deleting only the `unsaved` work the caller
+/// saw: each workspace only while it still has what its exported
+/// checkpoint in `checkpoints` keeps. Returns the removal.
+pub async fn end_moved(
+    daemon: &impl Daemon,
+    space: SpaceSelector,
+    unsaved: UnsavedWork,
+    checkpoints: BTreeMap<SpaceId, CheckpointNumber>,
+    carrying: Carrying,
+) -> Result<RemovalResult> {
+    let method = RemovalMethod::EndMovedSpace {
+        space,
+        unsaved,
+        checkpoints,
+        carrying,
+    };
+    request(daemon, method).await
+}
+
+/// Package a copy of `space`, with copies of the spaces below it that
+/// `carrying` carries, into `file`, leaving them running: a workspace at
+/// its checkpoint `checkpoint`, or at a new one.
 pub async fn copy(
     daemon: &impl Daemon,
     space: SpaceSelector,
     checkpoint: Option<CheckpointNumber>,
     file: PathBuf,
+    carrying: Carrying,
 ) -> Result<ExportedSpace> {
-    request(
-        daemon,
-        WorkspaceMethod::CopySpace {
-            space,
-            checkpoint,
-            file,
-        },
-    )
-    .await
+    let method = WorkspaceMethod::CopySpace {
+        space,
+        checkpoint,
+        file,
+        carrying,
+    };
+    request(daemon, method).await
 }
 
 /// Record the space `import` packages as removed and open it again.

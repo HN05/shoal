@@ -81,16 +81,16 @@ fn a_chat_package_holds_its_removal_record_and_continues_its_session() {
         sessions: Some(recorded_sessions(Some("m1".into()), &record)),
         space: PackagedSpace {
             prerequisite: None,
-            bundle: false,
+            bundle: None,
             record: moved(record.clone()),
         },
         session_files: vec![session_file("p/s1.jsonl", 3)],
         copy: None,
-        chats: Vec::new(),
+        carried: Vec::new(),
     };
     let bytes = export_bytes(&header(), &manifest, &["abc"]);
     let import = Import::read(&mut &bytes[..]).unwrap();
-    assert!(import.bundle.is_none());
+    assert!(import.bundles.is_empty());
     // The record comes back whole, under its ID and below its parent, with
     // its links' relations, for the import to restore.
     let packaged = &import.manifest.space.record;
@@ -163,6 +163,40 @@ fn import_reads_session_files_and_refuses_paths_outside_their_directory() {
     }
 }
 
+#[test]
+fn import_reads_the_bundle_of_each_packaged_workspace_after_the_session_files() {
+    let mut manifest = manifest_with_sessions();
+    manifest.session_files = vec![session_file("p/s1.jsonl", 3)];
+    manifest.space.bundle = Some(2);
+    let mut child = manifest.space.clone();
+    child.record.space_id = "child".into();
+    child.bundle = Some(4);
+    let mut chat = manifest.space.clone();
+    chat.record.space_id = "unbundled".into();
+    chat.bundle = None;
+    manifest.carried = [chat, child]
+        .into_iter()
+        .map(|space| CarriedSpace {
+            remote_url: None,
+            space,
+            sessions: Sessions::default(),
+        })
+        .collect();
+    let bytes = export_bytes(&header(), &manifest, &["abc", "de", "fghi"]);
+
+    let import = Import::read(&mut &bytes[..]).unwrap();
+
+    let bundles: Vec<(&str, String)> = (import.bundles.iter())
+        .map(|(id, bundle)| (id.as_str(), fs::read_to_string(bundle.path()).unwrap()))
+        .collect();
+    let own = manifest.space.record.space_id.as_str();
+    let mut expected = vec![("child", "fghi".to_owned()), (own, "de".to_owned())];
+    expected.sort();
+    assert_eq!(bundles, expected);
+    let trailing = export_bytes(&header(), &manifest, &["abc", "de", "fghi", "j"]);
+    assert!(Import::read(&mut &trailing[..]).is_err());
+}
+
 /// An export's manifest with one stopped agent and a last session, both with
 /// sessions, made on machine `m1`.
 fn manifest_with_sessions() -> Manifest {
@@ -229,12 +263,12 @@ fn manifest_with_sessions() -> Manifest {
         }),
         space: PackagedSpace {
             prerequisite: None,
-            bundle: false,
+            bundle: None,
             record: moved(workspace),
         },
         session_files: Vec::new(),
         copy: None,
-        chats: Vec::new(),
+        carried: Vec::new(),
     }
 }
 

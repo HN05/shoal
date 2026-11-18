@@ -1,11 +1,11 @@
 //! `shoal move import`: continue spaces from the packages `shoal move
 //! export` wrote: record each space as removed here and open it again as
-//! `shoal restore` does, then the chats that go with it.
+//! `shoal restore` does, then the spaces that go with it.
 use crate::cli::commands::restore::reopen::ReopenedExt;
 use crate::transfer::ManifestExt;
 use crate::transfer::PackagedSpaceExt;
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     io::BufReader,
     path::{Path, PathBuf},
 };
@@ -31,12 +31,13 @@ use crate::{
     },
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_ids::space_ids::SpaceId;
 
 use super::STANDARD_STREAM;
 
-mod chats;
+mod carried;
 
-use chats::ChatImport;
+use carried::CarriedImport;
 
 /// How `shoal move import` opens each space.
 pub(super) struct ImportOptions {
@@ -66,8 +67,9 @@ pub(super) async fn import(
         let package = Package::read(file, &options)
             .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
         let restored = package.open(ctx).await?;
+        let opened = restored_id(&restored).clone();
         let reopened = reopen::finish_reopen(ctx, restored, "Imported", options.restore).await;
-        package.open_chats(ctx, options.restore).await;
+        carried::open(ctx, &package, &opened, options.restore).await;
         return reopened;
     }
     let files = import_files(files)?;
@@ -75,18 +77,18 @@ pub(super) async fn import(
 }
 
 /// A package read for its import: the space, the repository it goes to,
-/// its agents as they continue here, the chats that go with it and the
-/// session files they keep.
+/// its agents as they continue here, the spaces that go with it, the
+/// session files they keep and the bundles of the workspaces' checkpoints.
 struct Package {
     space: PackagedSpace,
-    /// Set for a copy, which opens as a new space.
+    /// Set for a copy, which opens as new spaces.
     copy: bool,
     /// None for a chat without a repository.
     repository: Option<crate::repository::Selector>,
     sessions: Sessions,
-    chats: Vec<ChatImport>,
-    carried: Vec<ImportedSessionFile>,
-    bundle: Option<tempfile::NamedTempFile>,
+    carried: Vec<CarriedImport>,
+    files: Vec<ImportedSessionFile>,
+    bundles: BTreeMap<SpaceId, tempfile::NamedTempFile>,
 }
 
 impl Package {
@@ -97,7 +99,7 @@ impl Package {
         let Import {
             manifest,
             sessions: files,
-            bundle,
+            bundles,
         } = read_import(file)?;
         if let Some(copied) = manifest.copy {
             ensure!(
@@ -117,12 +119,12 @@ impl Package {
             None => None,
         };
         let sessions = sessions_here(&manifest, options.sessions);
-        let chats = chats::chats_here(&manifest, repository.as_ref(), options.sessions);
+        let carried = carried::carried_here(&manifest, repository.as_ref(), options.sessions)?;
         let kept: BTreeSet<&AgentSessionId> = (sessions.reported())
             .map(|(_, session)| session)
-            .chain(chats.iter().flat_map(ChatImport::sessions))
+            .chain(carried.iter().flat_map(CarriedImport::sessions))
             .collect();
-        let carried = files
+        let files = files
             .into_iter()
             .filter(|imported| kept.contains(&imported.file.session))
             .collect();
@@ -131,43 +133,54 @@ impl Package {
             copy: manifest.copy.is_some(),
             repository,
             sessions,
-            chats,
             carried,
-            bundle,
+            files,
+            bundles,
         })
     }
 
     /// Record the packaged space as removed in its repository, or in none,
     /// keeping its agents' session files with the record for the restore
-    /// that opens it, and open it again.
+    /// that opens it, and open it again, once the spaces it carries can
+    /// follow it.
     async fn open(&self, ctx: &Context) -> Result<RestoredSpace> {
         let own: Vec<&AgentSessionId> = (self.sessions.reported())
             .map(|(_, session)| session)
             .collect();
         let import = SpaceImport {
             repository: self.repository.clone(),
-            bundle: self.bundle.as_ref().map(|bundle| bundle.path().to_owned()),
+            bundle: self.bundle_of(&self.space.record.space_id),
             prerequisite: self.space.prerequisite.clone(),
             space: self.space.record_with(self.sessions.clone()),
             copy: self.copy,
             session_files: self.carried_for(&own),
+            copies: BTreeMap::new(),
+            carried: self.carried.iter().map(CarriedImport::target).collect(),
         };
         let importing = crate::client::transfer::import(&ctx.paths, import);
         ctx.progress("Importing", importing).await
     }
 
-    /// Open again the chats that went with the space, queueing the restores
-    /// of their agents when `restore`.
-    async fn open_chats(&self, ctx: &Context, restore: bool) {
-        chats::open(ctx, &self.chats, self, restore).await;
+    /// The bundle of the checkpoint of the packaged workspace `id`, while
+    /// the package lives.
+    fn bundle_of(&self, id: &SpaceId) -> Option<PathBuf> {
+        (self.bundles.get(id)).map(|bundle| bundle.path().to_owned())
     }
 
     /// The session files the package carries for `sessions`.
     fn carried_for(&self, sessions: &[&AgentSessionId]) -> Vec<CarriedSessionFile> {
-        (self.carried.iter())
+        (self.files.iter())
             .filter(|imported| sessions.contains(&&imported.file.session))
             .map(ImportedSessionFile::carried)
             .collect()
+    }
+}
+
+/// The ID of the space `restored` opened.
+fn restored_id(restored: &RestoredSpace) -> &SpaceId {
+    match restored {
+        RestoredSpace::Workspace(restored) => &restored.opened.workspace.id,
+        RestoredSpace::Chat(restored) => &restored.chat.id,
     }
 }
 
@@ -206,7 +219,7 @@ fn import_files(files: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
     Ok(found)
 }
 
-/// Import each of `files`, going on after one fails, then the chats that
+/// Import each of `files`, going on after one fails, then the spaces that
 /// go with the space of each.
 async fn import_each(ctx: &Context, files: &[PathBuf], options: &ImportOptions) -> ImportReport {
     let mut report = ImportReport::default();
@@ -218,8 +231,8 @@ async fn import_each(ctx: &Context, files: &[PathBuf], options: &ImportOptions) 
                 continue;
             }
         };
-        if import_one(ctx, file, &package, options, &mut report).await {
-            package.open_chats(ctx, options.restore).await;
+        if let Some(opened) = import_one(ctx, file, &package, options, &mut report).await {
+            carried::open(ctx, &package, &opened, options.restore).await;
         }
     }
     report
@@ -227,26 +240,27 @@ async fn import_each(ctx: &Context, files: &[PathBuf], options: &ImportOptions) 
 
 /// Open the space `package` holds, from `file`, and set a workspace up,
 /// queueing its agents' restores once its post-setup hook succeeded when
-/// `options` says; whether it opened.
+/// `options` says; the ID it opened under.
 async fn import_one(
     ctx: &Context,
     file: &Path,
     package: &Package,
     options: &ImportOptions,
     report: &mut ImportReport,
-) -> bool {
+) -> Option<SpaceId> {
     let restored = match package.open(ctx).await {
         Ok(restored) => restored,
         Err(error) => {
             report.failed(ctx, file, &error);
-            return false;
+            return None;
         }
     };
+    let opened = restored_id(&restored).clone();
     let mut reopened = match reopen::prepare_set_up(ctx, restored).await {
         Ok(reopened) => reopened,
         Err(error) => {
             report.failed(ctx, file, &error);
-            return false;
+            return None;
         }
     };
     let post_setup = reopen::run_post_setup(ctx, &reopened).await;
@@ -260,7 +274,7 @@ async fn import_one(
         let error = error.context(format!("imported {name}, but its hooks.post_setup failed"));
         report.failed(ctx, file, &error);
     }
-    true
+    Some(opened)
 }
 
 /// The spaces an import of several files continued, and the files it could

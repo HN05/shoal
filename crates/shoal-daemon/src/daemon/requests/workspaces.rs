@@ -254,7 +254,12 @@ pub(super) async fn handle(
             space,
             checkpoint,
             file,
-        } => Body::ExportedSpace(manager.copy_space(&space, checkpoint, file).await?),
+            carrying,
+        } => Body::ExportedSpace(
+            manager
+                .copy_space(&space, checkpoint, file, &carrying)
+                .await?,
+        ),
         WorkspaceMethod::FindSpaces { target } => {
             Body::Spaces(manager.find_visible_spaces(&target, caller).await?)
         }

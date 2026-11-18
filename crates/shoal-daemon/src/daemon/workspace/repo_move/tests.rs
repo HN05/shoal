@@ -880,6 +880,8 @@ async fn a_root_move_takes_the_session_files_kept_for_chats_without_a_repository
         space: record,
         copy: false,
         session_files: vec![carried],
+        copies: Default::default(),
+        carried: Vec::new(),
     };
     manager.import_space(import).await?;
 

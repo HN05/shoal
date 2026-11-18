@@ -1,5 +1,6 @@
 //! `shoal move export --keep`: write copies of spaces that keep running
-//! here, which `shoal move import` opens as new spaces.
+//! here, with copies of the spaces below them, which `shoal move import`
+//! opens as new spaces.
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, ensure};
@@ -14,7 +15,7 @@ use crate::{
         ui::{self, Fallback},
     },
     model::Space,
-    transfer::ExportedSpace,
+    transfer::{Carrying, ExportedSpace},
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_protocol::space_names::SpaceSelector;
@@ -39,7 +40,7 @@ pub(in super::super) async fn export_copy(
     }
     let output = Output::reserve(&file)?;
     let space = ui::select_space(ctx, names.into_iter().next(), Fallback::CurrentDirectory).await?;
-    let exported = copy(ctx, space, checkpoint, output.file()).await?;
+    let exported = copy(ctx, space, checkpoint, output.file(), Carrying::Subtree).await?;
     output.report(ctx, &exported)
 }
 
@@ -54,7 +55,8 @@ pub(in super::super) async fn export_all_copies(
     copy_into(ctx, &spaces, directory, None).await
 }
 
-/// Write a copy of each of `spaces` to a file of its own in `directory`,
+/// Write a copy of each of `spaces`, with copies of the spaces below it,
+/// to a file of its own in `directory`, a space below another in its file,
 /// going on after one fails, since a copy removes nothing.
 async fn copy_into(
     ctx: &Context,
@@ -62,26 +64,42 @@ async fn copy_into(
     directory: PathBuf,
     checkpoint: Option<CheckpointNumber>,
 ) -> Result<i32> {
+    let carrying = Carrying::Subtree;
+    let spaces = copied_alone(ctx, spaces, &carrying).await?;
     ensure_one_at_checkpoint(spaces.len(), checkpoint)?;
     let directory = ExportDirectory::create(directory)?;
     let mut report = DirectoryReport::new(&directory, true);
-    for space in spaces {
-        let copied = copy_one(ctx, &directory, space, checkpoint).await;
+    for space in &spaces {
+        let copied = copy_one(ctx, &directory, space, checkpoint, &carrying).await;
         report.add(ctx, (&space.name, &space.id), copied);
     }
     report.finish(ctx)
 }
 
-/// Write a copy of `space` to its file in `directory`, refusing a file
-/// that exists.
+/// The `spaces` a copy of them all copies to a file each: those that do
+/// not go with another of them as `carrying` says.
+pub(in super::super) async fn copied_alone(
+    ctx: &Context,
+    spaces: &[Space],
+    carrying: &Carrying,
+) -> Result<Vec<Space>> {
+    let tree = crate::client::spaces::list(&ctx.paths).await?;
+    Ok(super::checks::exported_alone(spaces, &tree, carrying))
+}
+
+/// Write a copy of `space`, with copies of the spaces below it that
+/// `carrying` carries, to its file in `directory`, refusing a file that
+/// exists.
 async fn copy_one(
     ctx: &Context,
     directory: &ExportDirectory,
     space: &Space,
     checkpoint: Option<CheckpointNumber>,
+    carrying: &Carrying,
 ) -> Result<ExportedSpace> {
     let output = Output::reserve(&directory.file(&space.id))?;
-    copy(ctx, SpaceSelector::id(&space.id), checkpoint, output.file()).await
+    let selector = SpaceSelector::id(&space.id);
+    copy(ctx, selector, checkpoint, output.file(), carrying.clone()).await
 }
 
 /// Refuse `--checkpoint` for `count` spaces other than one, since its
@@ -97,15 +115,18 @@ pub(in super::super) fn ensure_one_at_checkpoint(
     Ok(())
 }
 
-/// Write a copy of `space` to `file`, at the workspace's checkpoint
+/// Write a copy of `space`, with copies of the spaces below it that
+/// `carrying` carries, to `file`, at the workspace's checkpoint
 /// `checkpoint` or a new one, warning about what the copy lacks.
 pub(in super::super) async fn copy(
     ctx: &Context,
     space: SpaceSelector,
     checkpoint: Option<CheckpointNumber>,
     file: PathBuf,
+    carrying: Carrying,
 ) -> Result<ExportedSpace> {
-    let exported = crate::client::transfer::copy(&ctx.paths, space, checkpoint, file).await?;
+    let copying = crate::client::transfer::copy(&ctx.paths, space, checkpoint, file, carrying);
+    let exported = copying.await?;
     warn(&exported);
     if let Some(number) = checkpoint {
         eprintln!(

@@ -4,12 +4,12 @@
 use anyhow::{Context as _, Result};
 
 use super::{
-    super::export::{self, Checked, Ending, ExportDirectory, PlannedExport},
+    super::export::{self, Ending, ExportDirectory, PlannedExport},
     ImportFailure, Remote, arrived, summary,
 };
 use crate::cli::commands::restore::agents::queue::{Stopped, restore_stopped, saved_executions};
 use crate::client::output::{restore::Reopened, transfer::Moves};
-use crate::transfer::ExportedSpace;
+use crate::transfer::{Carrying, ExportedSpace, ManifestExt};
 use crate::{
     cli::{context::Context, ui},
     model::Space,
@@ -17,18 +17,20 @@ use crate::{
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
-/// Move `spaces` to `remote` once each one can end here, asking once where
-/// ending them needs the user unless `yes`. Each space moves after those
-/// below it, which its end here would otherwise take, and a space that
-/// fails to move stays here without keeping the others.
+/// Move `spaces` with the spaces below them that `carrying` carries to
+/// `remote` once each one can end here, asking once where ending them
+/// needs the user unless `yes`. A space below another moves with it, and a
+/// space that fails to move stays here without keeping the others.
 pub(super) async fn move_spaces(
     ctx: &Context,
     remote: &Remote,
     spaces: &[Space],
     yes: bool,
+    carrying: &Carrying,
 ) -> Result<i32> {
     let staging = tempfile::tempdir()?;
     let directory = ExportDirectory::create(staging.path().to_owned())?;
@@ -36,8 +38,12 @@ pub(super) async fn move_spaces(
         [space] => format!("Move {} to {}", space.name, remote.host),
         _ => format!("Move {} spaces to {}", spaces.len(), remote.host),
     };
-    let operation = ("move", "move");
-    let planned = export::check_exports(ctx, spaces, &directory, yes, &heading, operation).await?;
+    let batch = export::Batch {
+        operation: ("move", "move"),
+        heading: &heading,
+        carrying,
+    };
+    let planned = export::check_exports(ctx, spaces, &directory, yes, batch).await?;
     let mut report = ui::Report::new("move");
     for planned in planned {
         let name = planned.name().to_owned();
@@ -53,16 +59,16 @@ pub(super) async fn move_spaces(
     report.finish(ctx, &summary, |moved, failed| Moves { moved, failed })
 }
 
-/// Export the planned space, which stops its agents, and import it on
-/// `remote`, queueing its agents' restores there when it resumes them, then
-/// end it here. When the export fails or the other
+/// Export the planned space with the spaces it carries, which stops their
+/// agents, and import them on `remote`, queueing their agents' restores
+/// there when it resumes them, then end them here. When the export fails or the other
 /// machine refuses the import, the space stays here and the agents its
 /// export stopped restore here; when how the import ended is unknown, they
 /// stay stopped, since the space may continue there.
 async fn move_one(ctx: &Context, remote: &Remote, planned: &PlannedExport) -> Result<Reopened> {
     let saved = saved_now(ctx, planned).await?;
-    let checkpoint = match export_moving(ctx, planned).await {
-        Ok(checkpoint) => checkpoint,
+    let checkpoints = match export_moving(ctx, planned).await {
+        Ok(checkpoints) => checkpoints,
         Err(error) => return Err(stays_here(ctx, planned, saved, error).await),
     };
     let imported = match remote.import(&planned.file()).await {
@@ -78,7 +84,7 @@ async fn move_one(ctx: &Context, remote: &Remote, planned: &PlannedExport) -> Re
             )));
         }
     };
-    end_moved(ctx, planned.checked(), checkpoint)
+    end_moved(ctx, planned, checkpoints)
         .await
         .with_context(|| {
             format!(
@@ -102,47 +108,57 @@ async fn stays_here(
     error.context("it stays here")
 }
 
-/// Stop the agents of the planned space and export it to its file, leaving
-/// it here, returning the checkpoint a workspace's package holds.
-async fn export_moving(ctx: &Context, planned: &PlannedExport) -> Result<Option<CheckpointNumber>> {
+/// Stop the agents of the planned space and of the spaces it carries and
+/// export them to its file, leaving them here, returning the checkpoint
+/// each workspace's package holds.
+async fn export_moving(ctx: &Context, planned: &PlannedExport) -> Result<Checkpoints> {
     let space = SpaceSelector::id(planned.id());
-    let exported =
-        crate::client::transfer::export_moving(&ctx.paths, space, planned.file()).await?;
+    let carrying = planned.carrying().clone();
+    let exporting =
+        crate::client::transfer::export_moving(&ctx.paths, space, planned.file(), carrying);
+    let exported = exporting.await?;
     export::warn(&exported);
-    Ok(exported_checkpoint(&exported))
+    Ok(exported_checkpoints(&exported))
 }
 
-/// The number of the checkpoint the package of a workspace holds.
-fn exported_checkpoint(exported: &ExportedSpace) -> Option<CheckpointNumber> {
-    (exported.manifest.space.record.workspace()).map(|kept| kept.checkpoint.number)
+/// The checkpoints a package holds, by the ID of each workspace it holds.
+type Checkpoints = BTreeMap<SpaceId, CheckpointNumber>;
+
+/// The number of the checkpoint the package holds of each workspace.
+fn exported_checkpoints(exported: &ExportedSpace) -> Checkpoints {
+    (exported.manifest.packaged())
+        .filter_map(|packaged| {
+            let kept = packaged.record.workspace()?;
+            Some((packaged.record.space_id.clone(), kept.checkpoint.number))
+        })
+        .collect()
 }
 
-/// End the space `checked` describes, which the other machine imported
-/// from its export at `checkpoint`.
-async fn end_moved(
-    ctx: &Context,
-    checked: &Checked,
-    checkpoint: Option<CheckpointNumber>,
-) -> Result<()> {
+/// End the `planned` space with the spaces it carries, which the other
+/// machine imported from its export at `checkpoints`.
+async fn end_moved(ctx: &Context, planned: &PlannedExport, checkpoints: Checkpoints) -> Result<()> {
+    let (checked, carrying) = (planned.checked(), planned.carrying().clone());
     let removal = match &checked.space {
         Ending::Workspace(check) => {
             let space = SpaceSelector::id(&check.space.id);
             let unsaved = UnsavedWork::confirming(check);
-            let ended = crate::client::transfer::end_moved(&ctx.paths, space, unsaved, checkpoint);
+            let end = crate::client::transfer::end_moved;
+            let ended = end(&ctx.paths, space, unsaved, checkpoints, carrying);
             super::super::super::workspaces::leaving(ctx, &check.space, ended).await?
         }
         Ending::Chat(chat) => {
             let space = SpaceSelector::id(&chat.id);
             let unsaved = checked.chat_ending();
-            crate::client::transfer::end_moved(&ctx.paths, space, unsaved, None).await?
+            let end = crate::client::transfer::end_moved;
+            end(&ctx.paths, space, unsaved, checkpoints, carrying).await?
         }
     };
     export::warn_removal(Some(&removal));
     Ok(())
 }
 
-/// The executions whose stopped work the planned space, and each chat that
-/// goes with it, saves now.
+/// The executions whose stopped work the planned space, and each space
+/// that goes with it, saves now.
 async fn saved_now(ctx: &Context, planned: &PlannedExport) -> Result<Stopped> {
     let mut saved = Stopped::new();
     for space in planned.checked().spaces() {
@@ -152,7 +168,7 @@ async fn saved_now(ctx: &Context, planned: &PlannedExport) -> Result<Stopped> {
 }
 
 /// Queue the restores of the agents the export of the planned space
-/// stopped, its own and those of the chats that go with it: those they
+/// stopped, its own and those of the spaces that go with it: those they
 /// save now beyond the `saved` before the export.
 async fn restore_here(ctx: &Context, planned: &PlannedExport, saved: Stopped) {
     let now = match saved_now(ctx, planned).await {
