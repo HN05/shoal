@@ -1093,20 +1093,31 @@ The daemon records every new chat, below where it goes and linked to what it
 starts on, before its agent runs anywhere, in one operation whatever runs the
 agent: the caller's terminal, a background place, the queue or an app only
 runs the recorded chat's agent, so a start that names nothing to link sends no
-link request. A start that opens a place for the chat, beside its terminal or
-in the background, records the chat first, with its queue entry attached, and
-passes the place the recorded chat with `--chat`, as the daemon's own launch
-hands its chat worker the chat; only a chat its starting process runs itself
-records itself there. A start whose agent must wait records the chat at once,
-from any caller, and the queue starts it from the start it was recorded with. What linking warns of goes to the agent of the nearest space
-above the chat with one, else to the user's notifications, never only to a
-terminal the agent then takes over, and a chat whose place never starts its
-agent is removed, since nothing ran in it, its failure told the same way.
-A chat an agent starts opens in a background place, since the agent cannot
-hand over its terminal, unless `start --here` runs it in the caller's own; a
-scoped starter's place takes the chat with a scope token issued for the space
-the chat goes below, which the starter revokes once the place reports, and
-runs the chat's agent in the chat's own scope. Every start in a background place waits for the place
+link request. The daemon's launch starts chats and workspaces through one
+space launch: it resolves the name, agent, mode and issue from the launch,
+records the space, whose home decides its kind, links what the start names,
+queues the agent with one plan, the space and the launch, and prepares a
+workspace; the queue starts every admitted agent the same way, opening a
+place for any recorded space, and every agent start has an entry, admitted at
+once where no limit applies. A start that opens a place for the chat beside
+its terminal records the chat first, with its queue entry attached, and
+passes the place the recorded chat with `--chat`; only a chat its starting
+process runs itself records itself there. What linking warns of goes to the
+agent of the nearest space above the chat with one, else to the user's
+notifications, never only to a terminal the agent then takes over. A space
+whose place never starts its agent is kept, whatever its kind, with its
+launch as a failed queue entry, which nothing admits and which keeps no
+space from cleanup; its failure goes to the starter the same way, naming
+`shoal restore <space>`, which queues the launch again as it was, and
+`shoal rm <space>`. A new launch in the space replaces it, and the space's
+removal drops it. A start the user makes by hand from their own terminal, of
+a new space or an existing workspace's agent, and a restore they run in their
+terminal record their interaction with the space's agent; a trigger's or a
+scoped caller's do not.
+A chat an agent starts opens in a background place, which the agent queue
+opens once it admits the chat's agent, since the agent cannot hand over its
+terminal, unless `start --here` runs it in the caller's own; the place runs
+the chat's agent in the chat's own scope. Every start in a background place waits for the place
 to report that the chat is about to run its agent, or why not, since an open
 place proves neither. The place takes the handoff before anything checks its
 scope, which it may still inherit from the starter's processes, and reports

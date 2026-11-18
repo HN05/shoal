@@ -70,8 +70,8 @@ left.
 Run inside a space, `start` creates a child of it, or of a space its scope
 reaches that `--parent` names, in its repository, or for a master session in any registered
 one, on a branch from the default branch;
-a chat-kind mode starts a child chat in a background place and returns once the chat
-has started. Outside any space it creates top-level
+a chat-kind mode starts a child chat in a background place, which the agent
+queue opens, and returns once the chat is recorded, with its agent's entry. Outside any space it creates top-level
 spaces. Without a terminal, as from a tool call, and from inside a space, agents
 start detached; `--here` runs one in the calling terminal, once its workspace
 is prepared, until it exits, as the new space's own agent. `--fork` starts the caller's
@@ -84,7 +84,11 @@ commands that read it refuse the workspace. A failed preparation reaches the
 agent of the nearest space above with one, or else the user, naming what
 retries it, `shoal restore <space>`, or `shoal setup <space>` for a failed
 post-setup hook, and `shoal rm <space>`. `--wait`
-returns once that preparation ends. The daemon starts queued agents of heavy modes as `max_heavy_agents` allows
+returns once that preparation ends. An agent whose start fails, in a
+workspace or a chat, stays on its space as a `failed` entry `shoal queue` and
+`shoal inbox` list with its error, and its failure reaches the same way,
+naming `shoal restore <space>`, which queues it again as it was, and
+`shoal rm <space>`. The daemon starts queued agents of heavy modes as `max_heavy_agents` allows
 (`state: queued`, `position`), work close to finished, work that other work
 waits on and new workspaces whose issues share fewer `[issue] area_prefix`
 labels with existing workspaces first (`rank`), higher priority before all

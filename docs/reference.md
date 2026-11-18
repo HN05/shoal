@@ -462,6 +462,9 @@ as a restored agent would: as the queue admits it, at once with `--now`, or in
 this terminal with `--focus`, under the permissions `--permission` changes.
 Such workspaces restore together with the other spaces named, every one of
 which is checked before any setup runs.
+A named space whose agent's launch [failed to start](#agent-queue), a
+workspace or a chat, queues that launch again exactly as it was, with its
+task, prompt and permissions, as the queue admits it, or at once with `--now`.
 Completion describes each workspace the same way.
 A workspace without stopped agents continues one of its last sessions at once,
 placed as `--now` places an agent, or without a terminal through the queue, started at once, when restored by itself, left by `shoal stop`
@@ -1961,11 +1964,12 @@ permissions decide merging, CI approval, your notifications and
 administration, and PR verdicts stay with you. `--parent`
 names the space the chat goes below, by number or ID; a workspace's or a
 chat's agent that starts a chat starts it below its own space, or below one
-under it that `--parent` names, in the background, and returns once the chat
-holds its own scope, or with the error that stopped it. A start without a
-terminal also runs its chat in the background. The daemon opens the place for
-these chats, as it does for an app, unless the chat continues or forks a
-session, which the calling process starts itself. `--here` runs the chat in
+under it that `--parent` names, in the background, and returns once the
+daemon has recorded the chat and queued its agent, with its entry. A start
+without a terminal also runs its chat in the background. The daemon records
+these chats and queues their agents as it does for an app, and the agent
+queue opens their place, unless the chat continues or forks a session, which
+the calling process starts itself. `--here` runs the chat in
 the caller's terminal with the chat's own scope, and the caller's stops leave
 it running. A
 workspace process that cleared its scope token cannot run `shoal start` or
@@ -1986,7 +1990,8 @@ daemon records each chat under its name, linked to the issue it starts on,
 before its agent runs or its place opens, so a detach from its zmx session
 names `shoal attach <number>`: what linking warns of reaches the agent of the nearest
 space above the chat with one, else your notifications, and a chat whose
-place fails to start its agent is removed, its failure told the same way. It
+place fails to start its agent stays, as a new workspace does, with its
+[failed start](#agent-queue) told the same way. It
 records its agent's session as a
 workspace agent's, the one the agent's session-start hook last reported, which
 [`shoal move`](#move-a-space-to-another-machine) continues on another machine.
@@ -2193,7 +2198,7 @@ shoal restore -A                               # Queues the restore of every sto
 shoal queue                                   # Waiting and starting entries; on a terminal, pick one to act on
 shoal queue start <entry>                     # Starts a waiting entry, or a space's queued restore, now regardless of the limits
 shoal queue start --attach <entry>            # Starts it and attaches this terminal to its agent's session
-shoal queue cancel <entry>                    # Removes a waiting entry; a restore's agent stays stopped
+shoal queue cancel <entry>                    # Removes a waiting entry or a failed launch; a restore's agent stays stopped
 shoal start <issue-url> --priority urgent      # Its queued launch and new space rank ahead of the rest
 shoal priority urgent [space]                 # Ranks the space's queued work ahead of the rest
 shoal priority 30 [space]                     # Any number from 0 to 100; low is 25, normal 50
@@ -2293,9 +2298,14 @@ limit, unless a request through it succeeds first. An entry queued from another 
 or tab opens a background tab or window where it was queued; otherwise it runs where
 `terminal.default_host` puts it, by default a detached zmx session that `shoal attach`
 reaches. An admitted agent keeps its slot until it
-registers; a start that fails, or whose agent does not register for two
-minutes, records a `queue_failed` notification with the reason and frees the
-slot. `--now` starts the agent at once once its workspace is prepared, and
+registers. A start that fails, or whose agent does not register for two
+minutes, frees the slot, and its launch stays on its space, a workspace or a
+chat, as a `failed` entry with its error, which `shoal queue` and `shoal inbox`
+list: nothing admits it, it keeps no space from cleanup, and its failure
+reaches the agent of the nearest space above with one, else your
+notifications, naming `shoal restore <space>`, which queues it again exactly
+as it was, and `shoal rm <space>`. A new launch in the space replaces it, and
+the space's removal drops it. `--now` starts the agent at once once its workspace is prepared, and
 still takes a slot, and so does a start the user waits for: one `--focus`
 focuses, or an agent started from a terminal without an issue or arguments
 that the `focus` setting does not send to the background, unless
