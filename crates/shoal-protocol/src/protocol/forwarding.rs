@@ -90,6 +90,8 @@ impl Operation {
                         | ItemMethod::ItemAction { .. }
                         | ItemMethod::SelectItems { .. }
                         | ItemMethod::OpenIssue { .. }
+                        | ItemMethod::MergeWarning { .. }
+                        | ItemMethod::NumberKind { .. }
                 )
                 | Self::Ci(
                     CiMethod::CheckLog { .. }
