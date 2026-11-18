@@ -354,14 +354,22 @@ async fn registered_at(admin_dir: &Path, path: &Path) -> Result<bool> {
 
 /// Delete the directory of the linked worktree at `path`, whatever it
 /// holds, then its admin directory `admin_dir`, which [`own_admin_dir`]
-/// read. Unlike `git worktree prune`, this takes no other worktree's admin
-/// directory, such as that of a workspace whose removal stopped after Git
-/// deleted its link, which the next removal reads to put the link back.
+/// read, while that still records `path`. Unlike `git worktree prune`, this
+/// takes no other worktree's admin directory, such as that of a workspace
+/// whose removal stopped after Git deleted its link, which the next removal
+/// reads to put the link back.
 pub(crate) async fn delete_with_admin_dir(path: &Path, admin_dir: Option<PathBuf>) -> Result<()> {
     delete_disowned(path).await?;
     let Some(admin_dir) = admin_dir else {
         return Ok(());
     };
+    // A failed `worktree remove` may already have deleted it, and another
+    // worktree created since may have taken its name; while it records
+    // `path`, it is still this one's, and Git gives no new worktree a name
+    // in use.
+    if !registered_at(&admin_dir, path).await? {
+        return Ok(());
+    }
     off_runtime::run(move || match std::fs::remove_dir_all(&admin_dir) {
         Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
             Err(error).with_context(|| format!("remove {}", admin_dir.display()))

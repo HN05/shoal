@@ -418,3 +418,44 @@ async fn another_checkout_at_the_path_is_not_disowned() {
     std::fs::create_dir(workspace.join(".git")).unwrap();
     assert_eq!(disowned(&workspace, &admin).await.unwrap(), None);
 }
+
+/// A checkout whose admin directory a failed `worktree remove` deleted
+/// leaves the worktree that took its name since registered.
+#[tokio::test]
+async fn deleting_a_checkout_keeps_the_admin_directory_another_took_since() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "sha1");
+    let (first, second) = (
+        root.path().join("1/checkout"),
+        root.path().join("2/checkout"),
+    );
+    git(
+        &repo,
+        &["worktree", "add", "-q", "--detach", first.to_str().unwrap()],
+    )
+    .await;
+    let admin_dir = own_admin_dir(&first).await.unwrap().unwrap();
+    std::fs::remove_dir_all(&admin_dir).unwrap();
+    git(
+        &repo,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "--detach",
+            second.to_str().unwrap(),
+        ],
+    )
+    .await;
+    assert_eq!(
+        own_admin_dir(&second).await.unwrap(),
+        Some(admin_dir.clone())
+    );
+
+    delete_with_admin_dir(&first, Some(admin_dir.clone()))
+        .await
+        .unwrap();
+    assert!(!first.exists());
+    assert!(admin_dir.exists());
+    git(&second, &["status", "--porcelain"]).await;
+}
