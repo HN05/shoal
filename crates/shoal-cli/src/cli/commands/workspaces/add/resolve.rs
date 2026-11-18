@@ -15,7 +15,8 @@ use super::{
 use crate::{
     cli::{client, commands::issues, context::Context},
     model::{Blocker, Workspace},
-    start_plan::Creation,
+    protocol::CopySource,
+    start_plan::{CopyCreation, Creation},
 };
 use shoal_protocol::launches::{IssueChoice, Launch, StartTarget};
 
@@ -185,6 +186,7 @@ async fn check_launch_creation(
             skip_setup: launch.skip_setup,
             disposable: launch.disposable,
         },
+        copy: launch_copy(launch),
         ..Creation::default()
     };
     let repo = (&target.selector, target.repository(ctx).await?);
@@ -196,6 +198,21 @@ async fn check_launch_creation(
     }
     check_add_creation(ctx, target, &creation, launch.parent.as_ref()).await?;
     Ok(None)
+}
+
+/// The copy of the workspace `launch` names with `--copy`, as far as the
+/// checks before a picker read it: they ask only whether it copies, and the
+/// daemon names the copy.
+fn launch_copy(launch: &Launch) -> Option<CopyCreation> {
+    let workspace = launch.copy.as_ref()?.named()?.clone();
+    let source = CopySource {
+        workspace,
+        checkpoint: launch.checkpoint,
+    };
+    Some(CopyCreation {
+        source,
+        name: String::new(),
+    })
 }
 
 /// Refuse what only a new workspace takes for `launch`, which goes into the

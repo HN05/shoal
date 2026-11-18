@@ -3722,6 +3722,10 @@ fn an_existing_workspaces_start_refuses_its_arguments_before_prompting() {
             vec!["start", repo, "--branch", "owned", "--name", "other"],
             "--name applies to a new workspace",
         ),
+        (
+            vec!["start", repo, "--copy", id, "--branch", "owned"],
+            "--copy applies to a new workspace",
+        ),
     ] {
         let (output, transcript) = fixture.interactive(&args, "");
         assert!(!output.status.success(), "{args:?}: {transcript}");
