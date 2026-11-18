@@ -303,6 +303,7 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
     let mut remove = crate::protocol::RemovalMethod::RemoveSpace {
         space: SpaceSelector::id(&child.id),
         unsaved: Default::default(),
+        keep_user_holds: false,
     };
     scope::authorize(&manager, Some(&"parent".into()), &mut remove)
         .await

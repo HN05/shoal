@@ -99,9 +99,14 @@ pub(super) async fn handle(
                 .check_manual_removal(&space, include_changes)
                 .await?,
         )),
-        RemovalMethod::RemoveSpace { space, unsaved } => {
+        RemovalMethod::RemoveSpace {
+            space,
+            unsaved,
+            keep_user_holds,
+        } => {
             let inspection = InspectionPolicy::GitOnly;
-            Body::RemovalResult(match releases_holds(manager, caller, &space).await? {
+            let releases = !keep_user_holds && releases_holds(manager, caller, &space).await?;
+            Body::RemovalResult(match releases {
                 true => manager.remove_selected(&space, unsaved, inspection).await?,
                 false => manager.remove_unheld(&space, unsaved, inspection).await?,
             })

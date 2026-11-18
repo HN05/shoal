@@ -33,7 +33,12 @@ pub async fn remove(
     space: SpaceSelector,
     unsaved: UnsavedWork,
 ) -> Result<RemovalResult> {
-    request(daemon, RemovalMethod::RemoveSpace { space, unsaved }).await
+    let method = RemovalMethod::RemoveSpace {
+        space,
+        unsaved,
+        keep_user_holds: false,
+    };
+    request(daemon, method).await
 }
 
 /// Start removing `space`, returning once nothing but a change made

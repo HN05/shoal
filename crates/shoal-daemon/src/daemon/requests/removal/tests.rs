@@ -37,6 +37,7 @@ async fn a_scoped_removal_takes_the_user_s_holds_as_user_holds_allows() {
         let mut method = RemovalMethod::RemoveSpace {
             space: selector,
             unsaved: UnsavedWork::default(),
+            keep_user_holds: false,
         };
         method.scope(&manager, &scoped).await.unwrap();
         handle(&manager, method, Some(&scoped)).await.unwrap();

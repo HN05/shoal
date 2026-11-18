@@ -272,6 +272,10 @@ impl Manager {
         let serving = session::serve(channel, &calls, answer, stop);
         let reporting = async {
             self.send_outbox(&calls).await;
+            // Kept for removals to go by while the link is down.
+            if let Err(error) = self.hub_directory().await {
+                log!("hub: could not read the hub's directory: {error:#}");
+            }
             self.keep_reporting(&calls).await
         };
         let end = tokio::select! {

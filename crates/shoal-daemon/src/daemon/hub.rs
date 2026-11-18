@@ -62,6 +62,9 @@ pub(crate) struct Hub {
     /// The callers other machines vouch for, while this machine answers
     /// their forwarded requests.
     vouches: serving::Vouches,
+    /// As a member: this machine's ID at the hub and the directory the hub
+    /// last answered with, which a removal goes by while it cannot ask.
+    last_directory: std::sync::Mutex<Option<(MemberId, shoal_protocol::hub::directory::Directory)>>,
     /// The effective permissions the hub last listed of each space on
     /// another machine above a space here, which stand while it cannot be
     /// asked.

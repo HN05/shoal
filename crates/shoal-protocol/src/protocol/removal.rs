@@ -74,6 +74,10 @@ pub enum RemovalMethod {
     RemoveSpace {
         space: SpaceSelector,
         unsaved: UnsavedWork,
+        /// Leave the spaces the user holds, as when the removal of a space
+        /// above it on another machine came from a space's process.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        keep_user_holds: bool,
     },
     /// Remove `space` as `RemoveSpace` does, answering once removal has
     /// reserved it and passed the checks it makes before changing anything,

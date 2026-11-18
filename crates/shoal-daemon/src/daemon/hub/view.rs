@@ -39,10 +39,13 @@ impl Manager {
         let Some(joined) = self.store.read(membership::load).await? else {
             return Ok(None);
         };
-        match self.through_hub(Call::Directory).await? {
-            Reply::Directory(directory) => Ok(Some((joined.membership.member, directory))),
-            reply => Err(anyhow!("the hub answered with an unexpected {reply:?}")),
-        }
+        let directory = match self.through_hub(Call::Directory).await? {
+            Reply::Directory(directory) => directory,
+            reply => return Err(anyhow!("the hub answered with an unexpected {reply:?}")),
+        };
+        let answered = (joined.membership.member, directory);
+        *self.hub.last_directory.lock().unwrap() = Some(answered.clone());
+        Ok(Some(answered))
     }
 }
 

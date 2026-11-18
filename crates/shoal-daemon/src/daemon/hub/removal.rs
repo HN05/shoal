@@ -1,17 +1,21 @@
 //! Removing a space whose tree goes on on other machines: the spaces
 //! directly below it there go first, each through its own machine's
 //! removal, which takes the spaces below it in turn, and one that cannot go
-//! keeps the space, as a child here would.
+//! keeps the space, as a child here would. While the hub cannot be asked,
+//! a removal goes by the directory it last answered with, so it never
+//! takes a space whose children elsewhere it cannot reach.
 use anyhow::{Result, anyhow, bail};
-use shoal_ids::space_ids::SpaceId;
+use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
 use shoal_protocol::{
     hub::{
         Member,
-        directory::Listed,
+        directory::{Directory, Listed},
         link::Reply,
         routing::{Delivery, Forwarded, Vouched},
     },
+    model::{RefPart, SpaceKind, SpaceRef},
     protocol::{Body, Operation, RemovalMethod, Response},
+    removal::UnsavedWork,
     space_names::{SpaceName, SpaceSelector},
 };
 
@@ -30,19 +34,12 @@ impl Manager {
         id: &SpaceId,
         below: BelowElsewhere<'_>,
     ) -> Result<Vec<SpaceName>> {
-        let children = match self.children_elsewhere(id).await {
-            Ok(children) => children,
-            Err(error) => {
-                log!("hub: could not ask which spaces below {id} other machines run: {error:#}");
-                return Ok(Vec::new());
-            }
-        };
         let mut removed = Vec::new();
-        for (child, machine) in children {
+        for (child, machine) in self.children_elsewhere(id).await? {
             let (name, child_id) = (&child.space.name, &child.space.id);
             if below
-                .taking
-                .is_some_and(|taking| !taking.contains(child_id))
+                .confirmed
+                .is_some_and(|confirmed| !confirmed.contains(child_id))
             {
                 bail!(
                     "{name} ({child_id}), below it on machine {}, was not confirmed; remove it first",
@@ -62,33 +59,87 @@ impl Manager {
         Ok(removed)
     }
 
-    /// The spaces directly below the space `id` that other machines run,
-    /// each with its machine.
-    async fn children_elsewhere(&self, id: &SpaceId) -> Result<Vec<(Listed, Member)>> {
-        let Some(view) = self.hub_view(None).await? else {
+    /// The spaces below the space `id` on other machines, as a removal
+    /// shows those it takes, deepest first.
+    pub(crate) async fn descendants_elsewhere(&self, id: &SpaceId) -> Result<Vec<SpaceRef>> {
+        let Some((machine, directory)) = self.directory_or_last().await? else {
             return Ok(Vec::new());
         };
-        let directory = view.directory;
+        let mut found: Vec<&Listed> = Vec::new();
+        let mut above = vec![id.clone()];
+        while let Some(parent) = above.pop() {
+            for listed in &directory.spaces {
+                let below = listed.space.parent.as_ref() == Some(&parent)
+                    && !found.iter().any(|known| known.space.id == listed.space.id);
+                if below {
+                    above.push(listed.space.id.clone());
+                    found.push(listed);
+                }
+            }
+        }
+        let elsewhere = found.into_iter().filter(|listed| listed.machine != machine);
+        Ok(elsewhere.rev().map(space_ref).collect())
+    }
+
+    /// The spaces directly below the space `id` that other machines run,
+    /// each with its machine, as the hub lists them, or as it last did
+    /// while it cannot be asked.
+    async fn children_elsewhere(&self, id: &SpaceId) -> Result<Vec<(Listed, Member)>> {
+        let Some((machine, directory)) = self.directory_or_last().await? else {
+            return Ok(Vec::new());
+        };
         Ok((directory.spaces.iter())
-            .filter(|listed| listed.space.parent.as_ref() == Some(id))
+            .filter(|listed| listed.space.parent.as_ref() == Some(id) && listed.machine != machine)
             .filter_map(|listed| {
-                let machine = directory.machine(&listed.machine)?.clone();
-                Some((listed.clone(), machine))
+                let owner = directory.machine(&listed.machine)?.clone();
+                Some((listed.clone(), owner))
             })
             .collect())
     }
 
-    /// Remove the space `id` on `machine`, as the user, with what `below`
-    /// lets its removal delete.
+    /// This machine's ID at the hub and the hub's directory, or the one the
+    /// hub last answered with while it cannot be asked, which a removal
+    /// goes by rather than take the spaces below for none; a machine knows
+    /// none before its link first opens, which reads one.
+    async fn directory_or_last(&self) -> Result<Option<(MemberId, Directory)>> {
+        match self.hub_directory().await {
+            Ok(directory) => Ok(directory),
+            Err(error) => {
+                let last = self.hub.last_directory.lock().unwrap().clone();
+                // Before this daemon first reached the hub, it knows of none.
+                let going_by = match last.is_some() {
+                    true => "the last directory the hub answered with",
+                    false => "no other machine's spaces",
+                };
+                log!("hub: going by {going_by}: {error:#}");
+                Ok(last)
+            }
+        }
+    }
+
+    /// Remove the space `id` on `machine`, as the user, as `below` asks:
+    /// with whatever work it has, which its checkpoint keeps, the spaces
+    /// below it that the removal confirmed, and the user's holds where it
+    /// leaves them.
     async fn remove_on(
         &self,
         machine: &Member,
         id: &SpaceId,
         below: &BelowElsewhere<'_>,
     ) -> Result<()> {
+        let unsaved = match below.confirmed {
+            None => UnsavedWork::All,
+            Some(confirmed) => UnsavedWork::Confirmed {
+                files: true,
+                detached_head: None,
+                files_restorable: false,
+                children: Some(confirmed.to_vec()),
+            },
+        };
         let method = Operation::Removal(RemovalMethod::RemoveSpace {
             space: SpaceSelector::id(id),
-            unsaved: below.unsaved.clone(),
+            unsaved,
+            keep_user_holds: below.refuse_holds,
         });
         let request = Forwarded {
             caller: Vouched::User,
@@ -106,5 +157,18 @@ impl Manager {
             }
         }
         Ok(())
+    }
+}
+
+/// How a removal names `listed`, a space on another machine.
+fn space_ref(listed: &Listed) -> SpaceRef {
+    let part = match listed.space.kind {
+        SpaceKind::Workspace => RefPart::Workspace { branch: None },
+        SpaceKind::Chat => RefPart::Chat,
+    };
+    SpaceRef {
+        id: listed.space.id.clone(),
+        name: listed.space.name.clone(),
+        part,
     }
 }

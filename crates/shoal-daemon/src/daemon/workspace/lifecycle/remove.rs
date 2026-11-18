@@ -163,6 +163,9 @@ impl Manager {
         };
         let mut children = self.spaces_taken_with(&space.id).await?;
         children.reverse();
+        // Those on other machines go first, each with the spaces below it.
+        let elsewhere = self.descendants_elsewhere(&space.id).await?;
+        children.splice(0..0, elsewhere);
         let disposable_children = self.disposable_among(&children).await?;
         Ok(SpaceRemovalCheck {
             space,

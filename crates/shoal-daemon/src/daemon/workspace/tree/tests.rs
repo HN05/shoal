@@ -306,6 +306,7 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
     let remove = |space: &str| RemovalMethod::RemoveSpace {
         space: space.into(),
         unsaved: UnsavedWork::default(),
+        keep_user_holds: false,
     };
     // The removal asks for the user's holds once its scope check passes.
     let server = crate::daemon::tests::server(manager.clone());
