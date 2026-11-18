@@ -323,3 +323,64 @@ async fn a_push_remote_fork_helper() {
     let remote = crate::git::push_remote(&repo, &"topic".into()).await;
     assert_eq!(remote.unwrap(), "fork");
 }
+
+#[tokio::test]
+async fn a_condition_on_the_branch_or_other_config_reads_through_git() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    git(
+        &repo,
+        &["config", "includeIf.onbranch:main.path", "/dev/null"],
+    );
+    assert_eq!(reader(&repo).await, "git");
+    git(
+        &repo,
+        &["config", "--remove-section", "includeIf.onbranch:main"],
+    );
+    assert_eq!(reader(&repo).await, "gix");
+    let condition = "includeIf.hasconfig:remote.*.url:https://example.com/**.path";
+    git(&repo, &["config", condition, "/dev/null"]);
+    assert_eq!(reader(&repo).await, "git");
+}
+
+#[tokio::test]
+async fn a_branch_condition_through_symbolic_refs_includes_as_git_includes() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    let included = root.path().join("included.gitconfig");
+    std::fs::write(&included, "[remote]\n\tpushDefault = fork\n").unwrap();
+    git(
+        &repo,
+        &[
+            "config",
+            "includeIf.onbranch:main.path",
+            included.to_str().unwrap(),
+        ],
+    );
+    git(
+        &repo,
+        &["symbolic-ref", "refs/heads/alias", "refs/heads/main"],
+    );
+    git(&repo, &["symbolic-ref", "HEAD", "refs/heads/alias"]);
+    let remote = crate::git::push_remote(&repo, &"topic".into()).await;
+    assert_eq!(remote.unwrap(), "fork");
+}
+
+#[test]
+fn a_condition_the_environment_sets_includes_as_git_includes() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    git(
+        &repo,
+        &["config", "remote.origin.url", "https://example.com/app"],
+    );
+    let included = root.path().join("included.gitconfig");
+    std::fs::write(&included, "[remote]\n\tpushDefault = fork\n").unwrap();
+    let key = "includeIf.hasconfig:remote.*.url:https://example.com/**.path";
+    run_helper("a_push_remote_fork_helper", &repo, |command| {
+        command
+            .env("GIT_CONFIG_COUNT", "1")
+            .env("GIT_CONFIG_KEY_0", key)
+            .env("GIT_CONFIG_VALUE_0", &included)
+    });
+}

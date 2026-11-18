@@ -168,39 +168,37 @@ fn readable(repo: &gix::Repository) -> bool {
     format <= READABLE_FORMAT
         && readable_extensions
         && !has_promisor_remote(&config)
-        && !(is_linked_worktree(repo) && includes_differ_by_git_directory(repo, &config))
-        && !includes_by_late_remote_url(&config)
+        && includes_alike(repo, &config)
         && !names_remotes_in_files(repo)
+}
+
+/// Whether every conditional include of `config` includes for `repo` what
+/// Git's would. Only a condition on the Git directory does: gix evaluates
+/// one on the branch or on other configuration in its own way, such as
+/// against HEAD's first symbolic target or before later files load, and
+/// in a linked worktree matches one on the Git directory against the
+/// common directory, where Git takes the worktree's own.
+fn includes_alike(repo: &gix::Repository, config: &gix::config::Snapshot<'_>) -> bool {
+    let linked = is_linked_worktree(repo);
+    let common = std::fs::canonicalize(repo.common_dir()).ok();
+    let includes = config.plumbing().sections_by_name("includeIf");
+    let mut conditions = (includes.into_iter().flatten()).filter_map(|section| {
+        section
+            .header()
+            .subsection_name()
+            .map(|name| name.to_string())
+    });
+    conditions.all(|condition| {
+        let lowercase = condition.to_ascii_lowercase();
+        let on_git_directory =
+            lowercase.starts_with("gitdir:") || lowercase.starts_with("gitdir/i:");
+        let alike = |common: &Path| matches_alike(&condition, common);
+        on_git_directory && (!linked || common.as_deref().is_some_and(alike))
+    })
 }
 
 fn is_linked_worktree(repo: &gix::Repository) -> bool {
     repo.git_dir() != repo.common_dir()
-}
-
-/// Whether a condition of `config` on the Git directory could include a
-/// file for the linked worktree `repo` that it would not for the main
-/// checkout, or the other way round: Git matches it against the worktree's
-/// own Git directory, gix against the common one.
-fn includes_differ_by_git_directory(
-    repo: &gix::Repository,
-    config: &gix::config::Snapshot<'_>,
-) -> bool {
-    let Ok(common) = std::fs::canonicalize(repo.common_dir()) else {
-        return true;
-    };
-    let includes = config.plumbing().sections_by_name("includeIf");
-    includes.into_iter().flatten().any(|section| {
-        let condition = section
-            .header()
-            .subsection_name()
-            .map(|name| name.to_string());
-        condition.is_some_and(|condition| {
-            let lowercase = condition.to_ascii_lowercase();
-            let on_git_directory =
-                lowercase.starts_with("gitdir:") || lowercase.starts_with("gitdir/i:");
-            on_git_directory && !matches_alike(&condition, &common)
-        })
-    })
 }
 
 /// Whether the condition `gitdir:<pattern>` matches a linked worktree's
@@ -228,37 +226,6 @@ fn matches_alike(condition: &str, common: &Path) -> bool {
     };
     let prefix = std::fs::canonicalize(&prefix).unwrap_or(prefix);
     !prefix.starts_with(common)
-}
-
-/// Whether `config` includes a file on a condition on a remote's URL while
-/// some remote's URL comes from an included file or from the environment:
-/// Git looks through all of its configuration for the URLs such a
-/// condition matches, gix only through the files it has loaded by the time
-/// it meets the condition.
-fn includes_by_late_remote_url(config: &gix::config::Snapshot<'_>) -> bool {
-    use gix::config::Source;
-    let file = config.plumbing();
-    let includes = file.sections_by_name("includeIf").into_iter().flatten();
-    let mut conditions =
-        includes.filter_map(|section| section.header().subsection_name().map(ToOwned::to_owned));
-    let on_remote_url =
-        conditions.any(|condition| condition.starts_with(b"hasconfig:remote.*.url:"));
-    let late = |section: &gix::config::file::SectionRef<'_>| {
-        let meta = section.meta();
-        let from_file = matches!(
-            meta.source,
-            Source::GitInstallation
-                | Source::System
-                | Source::Git
-                | Source::User
-                | Source::Local
-                | Source::Worktree
-        );
-        meta.level > 0 || !from_file
-    };
-    let remotes = file.sections_by_name("remote").into_iter().flatten();
-    let mut late_urls = remotes.filter(late);
-    on_remote_url && late_urls.any(|section| !section.values("url").is_empty())
 }
 
 /// Whether a remote of `config` promises objects the repository lacks,
