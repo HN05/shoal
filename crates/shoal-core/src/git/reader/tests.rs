@@ -384,3 +384,21 @@ fn a_condition_the_environment_sets_includes_as_git_includes() {
             .env("GIT_CONFIG_VALUE_0", &included)
     });
 }
+
+#[tokio::test]
+async fn files_one_include_section_names_take_precedence_as_in_git() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    let mut section = String::from("[include]\n");
+    for name in ["first", "second"] {
+        let file = root.path().join(format!("{name}.gitconfig"));
+        std::fs::write(&file, format!("[remote]\n\tpushDefault = {name}\n")).unwrap();
+        section.push_str(&format!("\tpath = {}\n", file.display()));
+    }
+    let config = repo.join(".git/config");
+    let text = std::fs::read_to_string(&config).unwrap();
+    std::fs::write(&config, text + &section).unwrap();
+    let expected = git(&repo, &["config", "--get", "remote.pushDefault"]);
+    let remote = crate::git::push_remote(&repo, &"topic".into()).await;
+    assert_eq!(remote.unwrap(), expected.trim());
+}

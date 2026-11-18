@@ -172,13 +172,31 @@ fn readable(repo: &gix::Repository) -> bool {
         && !names_remotes_in_files(repo)
 }
 
+/// Whether gix includes for `repo` the files `config` includes, in the
+/// order Git's includes give them precedence.
+fn includes_alike(repo: &gix::Repository, config: &gix::config::Snapshot<'_>) -> bool {
+    one_file_per_include(config) && conditions_alike(repo, config)
+}
+
+/// Whether every include section of `config` names at most one file: gix
+/// gives several files of one section the opposite precedence to Git's.
+fn one_file_per_include(config: &gix::config::Snapshot<'_>) -> bool {
+    let file = config.plumbing();
+    let sections = ["include", "includeIf"]
+        .into_iter()
+        .flat_map(|name| file.sections_by_name(name));
+    sections
+        .flatten()
+        .all(|section| section.values("path").len() <= 1)
+}
+
 /// Whether every conditional include of `config` includes for `repo` what
 /// Git's would. Only a condition on the Git directory does: gix evaluates
 /// one on the branch or on other configuration in its own way, such as
 /// against HEAD's first symbolic target or before later files load, and
 /// in a linked worktree matches one on the Git directory against the
 /// common directory, where Git takes the worktree's own.
-fn includes_alike(repo: &gix::Repository, config: &gix::config::Snapshot<'_>) -> bool {
+fn conditions_alike(repo: &gix::Repository, config: &gix::config::Snapshot<'_>) -> bool {
     let linked = is_linked_worktree(repo);
     let common = std::fs::canonicalize(repo.common_dir()).ok();
     let includes = config.plumbing().sections_by_name("includeIf");
