@@ -4,6 +4,7 @@
 //! on, an issue, or a PR's or a branch link's branch, which fills the
 //! creation.
 use anyhow::{Context as _, Result, ensure};
+use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::launches::{IssueChoice, Launch, StartTarget};
 
 use super::ManagerReads;
@@ -85,7 +86,8 @@ impl Manager {
     }
 
     /// The target in the repository `named` names, else that of `issue`'s
-    /// URL, else that of the checkout or worktree the start was made in.
+    /// URL, else that of the space the launch goes below, which a child
+    /// shares, else that of the checkout or worktree the start was made in.
     async fn target(
         &self,
         launch: &Launch,
@@ -106,7 +108,10 @@ impl Manager {
                     Some(_) => "pass --repo <repository> or a forge URL",
                     None => "pass <repository>",
                 };
-                self.current_repository(launch, &repos, reads, hint).await?
+                match self.parent_repository(launch).await? {
+                    Some(repository) => self.repository(repository).await?,
+                    None => self.current_repository(launch, &repos, reads, hint).await?,
+                }
             }
         };
         Ok(Target {
@@ -140,6 +145,14 @@ impl Manager {
                 let hint = "pass --repo <repository> or a forge URL";
                 self.current_repository(launch, &repos, reads, hint).await
             }
+        }
+    }
+
+    /// The repository of the space `launch` names to go below, if any.
+    async fn parent_repository(&self, launch: &Launch) -> Result<Option<RepositoryId>> {
+        match &launch.parent {
+            Some(parent) => Ok(self.space(parent).await?.repository_id),
+            None => Ok(None),
         }
     }
 
