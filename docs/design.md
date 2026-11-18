@@ -129,9 +129,19 @@ refuses a revoked one or one another installation's link holds, and
 versions match exactly: the hub refuses a member of another protocol,
 reading only the protocol of its first request, and records an alert naming
 the upgrade, while the member keeps working on its own. Pairing codes live
-in the hub's memory and admit one join within ten minutes. Browser
-sessions, the directory of every machine's spaces and routing requests
-between machines are later steps.
+in the hub's memory and admit one join within ten minutes. Each machine
+owns its spaces' records and reports a summary of each to the hub as it
+changes, all of them whenever its link opens; the hub keeps a directory of
+those summaries, not copies of the records, and serves one view of every
+machine's spaces from it, keeping an unreachable machine's with when it last
+heard from it. Repositories match across machines by their origin, never by
+each machine's ID. The directory lists a space ID under the first machine
+that reported it: another machine's copy is left out, routed nothing, and
+alerts the user, and takes the ID once the first's space ends, while an
+import claims the ID, so a move hands it over without a conflict; a restore
+asks the hub first and refuses a space another
+machine runs, going on while the hub cannot be asked. Browser sessions and
+routing requests between machines are later steps.
 The minimum Rust version follows current stable so the code can use its newest
 features; the manifest and CI toolchain advance together, with locked dependencies.
 The daemon raises its open file limit at startup and accepts every connection,

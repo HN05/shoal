@@ -783,6 +783,33 @@ which is told to join as a machine of its own; and one of another protocol
 version, recording an alert that names the machine, its version and the
 upgrade to run. A refused machine keeps working on its own.
 
+Each machine keeps its spaces and reports a summary of each to the hub as it
+changes, all of them again whenever its link opens: its number and name, its
+kind, its repository by origin, the space above it, which may run on another
+machine, its mode, what lists show it doing, its progress, and its open
+questions and approval requests. `shoal list`, `shoal inbox` and
+`shoal status <space>` on any machine of the hub show the other machines'
+spaces as their machines last reported them, and once they do, every row names
+its machine; a space a scoped caller's scope reaches, through the spaces above
+it on any machine, is one it sees. A machine the hub has not heard from since
+keeps its spaces listed, with when the hub last saw it. `shoal status` of
+another machine's space, by its ID or a number no space here has, shows that
+summary; the rest of its status stays on its machine. The `--repo` filter
+matches another machine's spaces by their repository's origin. A hub that
+cannot be reached leaves the other machines out with a warning.
+
+The hub lists a space ID under one machine, the first that reported it. A
+second machine reporting it, as after copying a state directory, is left out
+and raises an alert naming the command that resolves it there: `shoal rm` of
+its copy, or `shoal start --copy` to keep it as a new space first; once the
+first machine's space ends, the copy takes its place. An import, as of
+`shoal move`, claims the ID first, so the machine it moves to takes the ID over
+and the one it moves from keeps a copy without a conflict until it ends the
+space there. `shoal restore` of a space another machine runs is refused, naming
+`shoal move` and a copy; while the hub cannot be asked, the restore goes on,
+and a duplicate shows as a conflict once both machines report it. A revoked
+machine's spaces leave the hub's lists.
+
 ## Workspaces
 
 `shoal branch rename [WORKSPACE] BRANCH` renames a ready workspace's checked-out Git

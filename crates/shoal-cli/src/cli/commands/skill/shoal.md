@@ -205,7 +205,10 @@ lists a space's creation, agent starts and exits, links, PR changes, ready
 marks, completion, questions, approvals, alerts, child spaces and its
 removal, with where a removal failed or stopped, oldest first; a removed
 space is selected by its ID. Outside a space, `status` shows the daemon and
-`log` every space's entries with the daemon's.
+`log` every space's entries with the daemon's. On a machine joined to a hub,
+`list`, `inbox` and `status` also show the other machines' spaces your scope
+reaches, each with its `machine`, as that machine last reported them; acting
+on one happens on its machine.
 Notifications report agent exits, alerts, questions, busy resources, pending
 approvals and cleanup Shoal did on its own; reading them marks them read, and
 scoped callers read them as their `notifications` permission allows.
