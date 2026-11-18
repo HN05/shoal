@@ -3,7 +3,7 @@
 //! as JSON in [`QueueRequest::plan`] until the worker runs; the protocol
 //! calls live in `shoal-client`'s `queue`, the worker in `shoal-workers`'
 //! `queued_starts` and the daemon's runner in `daemon::queued_starts`.
-use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_ids::space_ids::SpaceId;
 use std::{ffi::OsString, path::PathBuf};
 
 use anyhow::Result;
@@ -17,7 +17,7 @@ use crate::{
     },
     terminal::PlaceName,
 };
-use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// What the queue's start of a chat launch runs, which a launch of a new
 /// workspace's plan tells apart by its `chat_start`.
@@ -34,17 +34,7 @@ pub struct ChatPlan {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChatPlanStart {
-    /// The `shoal` arguments that start the chat `name` here, as the
-    /// terminal that queued it built them, run in `home`, its checkout,
-    /// worktree or `root_dir`, of `repository`, or of none.
-    Relaunch {
-        args: Vec<String>,
-        repository: Option<RepositoryId>,
-        home: PathBuf,
-        name: SpaceName,
-    },
-    /// The start the daemon resolved for a client, whose chat it recorded
-    /// when the launch had to wait.
+    /// The resolved start of the chat recorded when the launch had to wait.
     Resolved(Box<ChatStart>),
 }
 

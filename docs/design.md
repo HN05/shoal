@@ -1075,7 +1075,8 @@ The daemon records every new chat, below where it goes and linked to what it
 starts on, before its agent runs anywhere, in one operation whatever runs the
 agent: the caller's terminal, a background place, the queue or an app only
 runs the recorded chat's agent, so a start that names nothing to link sends no
-link request. What linking warns of goes to the agent of the nearest space
+link request. A start whose agent must wait records the chat at once, from any
+caller, and the queue starts it from the start it was recorded with. What linking warns of goes to the agent of the nearest space
 above the chat with one, else to the user's notifications, never only to a
 terminal the agent then takes over, and a chat whose place never starts its
 agent is removed, since nothing ran in it, its failure told the same way.

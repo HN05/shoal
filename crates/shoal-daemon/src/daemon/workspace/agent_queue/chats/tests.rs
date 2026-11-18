@@ -40,7 +40,6 @@ fn chat_launch(repository: Option<&Repository>, mode: &str) -> ChatQueueRequest 
         env: BTreeMap::from([("HERDR_ENV".into(), "1".into())]),
         now: false,
         priority: None,
-        records_when_waiting: false,
     }
 }
 
@@ -68,8 +67,8 @@ async fn a_chats_launch_waits_for_a_slot_by_its_modes_weight() {
     assert_eq!(light.entry.unwrap().state, QueueState::Starting);
 }
 
-/// A waiting chat launch whose caller records its chat stays out of
-/// admission until it takes the chat, even with a slot free, and then
+/// A waiting chat launch stays out of admission until it takes the chat
+/// its caller records, even with a slot free, and then
 /// starts from the queue in that chat, in the place the queuing terminal
 /// names.
 #[tokio::test]
@@ -77,10 +76,7 @@ async fn a_waiting_chat_launch_starts_only_in_its_recorded_chat() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     full_machine(&manager, &repo).await;
-    let launch = ChatQueueRequest {
-        records_when_waiting: true,
-        ..chat_launch(Some(&repo), "pair")
-    };
+    let launch = chat_launch(Some(&repo), "pair");
     let entry = manager.queue_chat_add(launch, None).await;
     let entry = entry.unwrap().entry.unwrap();
     let busy = manager.queue_entries().await.unwrap();

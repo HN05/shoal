@@ -111,7 +111,8 @@ fn reported(ctx: &Context, started: StartedChat) -> Result<Started> {
 pub(super) fn report_queued(ctx: &Context, queued: &QueuedChat) -> Result<()> {
     let entry = &queued.entry;
     let text = format!(
-        "Queued chat {} (position {} of {}); its agent starts {}",
+        "Queued chat {}, {} (position {} of {}); its agent starts {}",
+        queued.chat.number,
         queued.chat.name,
         entry.position.unwrap_or(queued.waiting),
         queued.waiting,

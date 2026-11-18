@@ -1748,6 +1748,28 @@ fn migration_leaves_queued_plans_naming_their_workspace_and_pr_alone() -> Result
 }
 
 #[test]
+fn migration_drops_the_queued_chat_launches_that_run_their_arguments_again() -> Result<()> {
+    let mut db = historical_database(229)?;
+    db.execute_batch(
+        r#"INSERT INTO agent_queue(id,kind,repository_id,name,agent,plan,env,state,created_at)
+            VALUES ('relaunch','launch','repo','talk','claude','{"chat_start":{"relaunch":{"args":[]}}}','{}','queued',1),
+                ('resolved','launch','repo','plan','claude','{"chat_start":{"resolved":{}}}','{}','queued',1);"#,
+    )?;
+    migrate(&mut db)?;
+    let kept: Vec<String> = (db.prepare("SELECT id FROM agent_queue ORDER BY id")?)
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    assert_eq!(kept, ["resolved"]);
+    let told: String = db.query_row(
+        "SELECT message FROM notifications WHERE kind='queue_failed'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert!(told.starts_with("talk did not start"), "{told}");
+    Ok(())
+}
+
+#[test]
 fn migration_makes_the_restores_waiting_wrappers_carry_out_automatic() -> Result<()> {
     let mut db = historical_database(140)?;
     db.execute_batch(

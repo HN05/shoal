@@ -1,26 +1,27 @@
 //! A chat's agent under the heavy slots: the queue admits it before any
-//! place opens, and a launch that waits leaves its chat to the queue's start,
-//! or, for a start without a terminal, has the daemon record the chat at
-//! once.
+//! place opens, and a launch that waits has the daemon record the chat at
+//! once, which the queue's start then starts as the daemon's own launch of
+//! a chat does.
 use anyhow::{Context as _, Result, bail};
 
-use super::{ChatPlace, Launch, Started};
+use super::{Launch, Started};
 use crate::client::queue::{self, Hold};
 use crate::{
     cli::context::Context,
     model::{ChatQueueRequest, QueueEntry},
+    protocol::ChatStart,
     start_plan::{ChatPlan, ChatPlanStart},
 };
 use shoal_protocol::chats::LaunchedChat;
 use shoal_protocol::launches::LaunchSource;
 
 impl Launch {
-    /// Ask the agent queue to admit this chat's agent, unless the launch
-    /// whose slot it takes was admitted already, as for a chat its place
-    /// starts: `None` once it may start, its agent taking the entry's slot,
-    /// otherwise how its start ended while it waits.
+    /// Ask the agent queue to admit this chat's agent, unless its starter
+    /// admitted it already, as for a chat it recorded, or the launch whose
+    /// slot it takes was: `None` once it may start, its agent taking the
+    /// entry's slot, otherwise how its start ended while it waits.
     pub(super) async fn admit(&self, ctx: &Context) -> Result<Option<Started>> {
-        if crate::env::queue_entry().is_some() {
+        if self.options.chat.is_some() || crate::env::queue_entry().is_some() {
             return Ok(None);
         }
         let admission = queue::add_chat(&ctx.paths, self.queue_request()?).await?;
@@ -36,27 +37,16 @@ impl Launch {
         }
     }
 
-    /// The launch of this chat's agent, whose plan starts the chat in a
-    /// place as this terminal's start would.
+    /// The launch of this chat's agent, whose plan starts the chat
+    /// recorded meanwhile in a place of its own.
     fn queue_request(&self) -> Result<ChatQueueRequest> {
         let chat = &self.chat;
-        let repository = chat.repository.registered();
-        let args = (self.relaunch(None).into_iter())
-            .map(|arg| arg.into_string())
-            .collect::<Result<_, _>>()
-            .ok()
-            .context("a chat's agent waits in the agent queue only with UTF-8 arguments")?;
         let plan = ChatPlan {
             parent: chat.parent.clone(),
-            chat_start: ChatPlanStart::Relaunch {
-                args,
-                repository: repository.map(|repository| repository.id.clone()),
-                home: chat.home().path().to_owned(),
-                name: chat.name.clone(),
-            },
+            chat_start: ChatPlanStart::Resolved(Box::new(self.queued_start()?)),
         };
         Ok(ChatQueueRequest {
-            repository: repository.map(|repository| (&repository.id).into()),
+            repository: (chat.repository.registered()).map(|repository| (&repository.id).into()),
             name: chat.name.clone(),
             agent: self.agent.clone(),
             mode: chat.mode.clone(),
@@ -65,32 +55,37 @@ impl Launch {
             env: crate::terminal::start_environment(),
             now: self.options.now,
             priority: chat.priority,
-            records_when_waiting: self.records_when_waiting(),
             // A chat that continues a session restores it rather than
             // launching anything.
             source: (self.options.session.is_none()).then_some(LaunchSource::Manual),
         })
     }
 
-    /// Whether this start records its chat at once when its agent waits: a
-    /// start without a terminal, whose caller addresses the chat, and a
-    /// scoped one, whose chat goes below the caller's space, where the
-    /// queue's later start, which acts as the user, would not put it.
-    fn records_when_waiting(&self) -> bool {
-        self.options.place == ChatPlace::Detached || crate::env::is_scoped()
+    /// The start the queue carries out once it admits this chat's agent:
+    /// the one the chat is recorded from, with what its agent starts on and
+    /// runs with.
+    fn queued_start(&self) -> Result<ChatStart> {
+        let args = (self.options.args.iter())
+            .map(|arg| arg.to_str().map(str::to_owned))
+            .collect::<Option<_>>()
+            .context("a chat's agent waits in the agent queue only with UTF-8 arguments")?;
+        let subject = self.topic.subject.as_ref();
+        Ok(ChatStart {
+            model: self.options.model.clone(),
+            issue: self.topic.relaunch.issue(),
+            prompt: (subject.filter(|subject| subject.issue.is_none()))
+                .map(|subject| subject.text.clone()),
+            args,
+            now: self.options.now,
+            ..self.chat_start()
+        })
     }
 
     /// End the start of this chat, whose agent waits as `entry` behind
-    /// `waiting` entries: from the user's terminal, the queue's start
-    /// records the chat in a place of its own; a start that records it at
-    /// once has the daemon record and link it now, and the queue keeps the
-    /// launch until it takes the chat. A chat that cannot be recorded takes
-    /// its launch out of the queue.
+    /// `waiting` entries: the daemon records and links it now, and the
+    /// queue keeps the launch until it takes the chat. A chat that cannot
+    /// be recorded takes its launch out of the queue.
     async fn wait(&self, ctx: &Context, entry: QueueEntry, waiting: usize) -> Result<Started> {
-        if !self.records_when_waiting() {
-            let code = crate::cli::commands::queued_agents::report_queued(ctx, &entry, waiting)?;
-            return Ok(Started::Exited(code));
-        }
         let launched = self.record_waiting(ctx, &entry).await?;
         let queued = shoal_protocol::chats::QueuedChat {
             chat: launched.chat,

@@ -307,7 +307,6 @@ async fn a_launch_waiting_in_the_agent_queue_overlaps_until_it_ends() {
         env: Default::default(),
         now: false,
         priority: None,
-        records_when_waiting: false,
     };
     let admission = manager.queue_chat_add(request, None).await.unwrap();
     let entry = admission.entry.unwrap().id;

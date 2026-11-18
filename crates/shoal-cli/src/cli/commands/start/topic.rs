@@ -154,6 +154,14 @@ impl Relaunch {
         }
     }
 
+    /// The issue the command starts its chat on, if it names one.
+    pub(super) fn issue(&self) -> Option<crate::forge::items::reference::ItemInput> {
+        match self {
+            Self::Start(start) => start.issue.clone().flatten(),
+            Self::ConfigSetup => None,
+        }
+    }
+
     /// The `shoal` arguments of the command, started with `options`.
     pub(super) fn command_line(&self, options: Options) -> Vec<OsString> {
         match self {

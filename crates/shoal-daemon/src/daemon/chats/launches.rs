@@ -287,7 +287,6 @@ fn launch_request(start: &ChatStart, source: LaunchSource) -> Result<ChatQueueRe
             .unwrap_or_else(|| crate::terminal::detached_start_environment(None)),
         now: start.now,
         priority: start.priority,
-        records_when_waiting: true,
         source: Some(source),
     })
 }

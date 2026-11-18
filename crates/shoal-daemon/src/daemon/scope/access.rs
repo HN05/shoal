@@ -444,9 +444,6 @@ impl Manager {
         request: &mut ChatQueueRequest,
     ) -> Result<()> {
         const REFUSAL: &str = "workspace processes start chats only in their own repository";
-        // Its chat is recorded at once, below the caller, rather than by the
-        // queue's later start, which acts as the user.
-        request.records_when_waiting = true;
         let repository = match &request.repository {
             Some(selector) => {
                 let selector = self.own_repository(caller, selector, REFUSAL).await?;

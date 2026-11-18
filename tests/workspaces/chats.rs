@@ -748,6 +748,55 @@ pub(crate) fn after_temp_dirs<S: AsRef<str>>(args: &[S]) -> &[S] {
     rest
 }
 
+/// A heavy chat started from the user's terminal while no slot is free is
+/// recorded at once with its agent's entry, and its start names its number.
+#[test]
+fn a_waiting_chat_from_a_terminal_is_recorded_at_once() {
+    let fixture = Fixture::with_config(Some(
+        "machine.max_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n\
+         [modes.pair]\nkind = 'chat'\n\
+         [agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+    ));
+    let repo = fixture.repo.to_str().unwrap();
+    let mut first = fixture
+        .command()
+        .args(["start", "--wait", repo, "--branch", "first", "--here"])
+        .args(["--agent", "waiter"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_until("the first agent start", || {
+        fixture.ok(&["queue"]) == serde_json::json!([])
+            && fixture.ok(&["list"])[0]["running"] == true
+    });
+
+    let mut start = fixture.command();
+    start.args(["start", "--mode", "pair", repo, "--agent", "waiter"]);
+    let (output, transcript) = fixture.terminal_command(&mut start, "", true);
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
+    let chats = fixture.ok(&["list", "--chats"]);
+    let chat = chats
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|space| space["kind"] == "chat");
+    let chat = chat.unwrap_or_else(|| panic!("{chats}"));
+    assert!(
+        transcript.contains(&format!("Queued chat {},", chat["number"])),
+        "{transcript}"
+    );
+    let entries = fixture.ok(&["queue"]);
+    assert_eq!(entries[0]["space_id"], chat["id"], "{entries}");
+    fixture.ok(&["stop", &fixture.id("first")]);
+    first.wait().unwrap();
+}
+
 #[test]
 fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     let fixture = Fixture::new();

@@ -12,22 +12,6 @@ use crate::{
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
 
-/// Report the launch `entry`, which waits behind `waiting` entries in
-/// total, or which the daemon already starts in the background.
-pub(super) fn report_queued(ctx: &Context, entry: &QueueEntry, waiting: usize) -> Result<i32> {
-    let text = match entry.state {
-        QueueState::Queued => format!(
-            "Queued {} (position {} of {waiting}); it starts {}",
-            entry.name,
-            entry.position.unwrap_or(waiting),
-            starts_when(entry)
-        ),
-        _ => format!("Starting {} in the background", entry.name),
-    };
-    ctx.emit(&text, entry)?;
-    Ok(0)
-}
-
 /// When the queued `entry` starts: once nothing blocks it and a heavy slot
 /// is free.
 pub(super) fn starts_when(entry: &QueueEntry) -> String {

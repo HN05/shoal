@@ -45,7 +45,6 @@ async fn a_chat_recorded_for_a_scoped_launch_goes_below_its_queuer() {
         env: BTreeMap::new(),
         now: true,
         priority: None,
-        records_when_waiting: false,
     };
     let entry = manager.queue_chat_add(launch, Some(&caller)).await.unwrap();
     let entry = entry.entry.unwrap().id;
@@ -109,7 +108,6 @@ async fn a_scoped_chat_start_now_asks_the_limits_permission() {
         env: BTreeMap::new(),
         now: true,
         priority: None,
-        records_when_waiting: false,
     };
     let confined = manager.confine_chat_launch(&caller, &mut queued).await;
     assert_eq!(limits(confined), Target::Action(PermissionKey::Limits));
@@ -168,14 +166,13 @@ async fn full_machine(manager: &Manager, repo: &crate::model::Repository) -> Cha
         mode: Some("pair".into()),
         ..ChatStart::default()
     };
-    let holding = manager.queue_chat_add(pair_launch(false), None).await;
+    let holding = manager.queue_chat_add(pair_launch(), None).await;
     assert!(holding.unwrap().start);
     start
 }
 
-/// The launch of a heavy chat's agent, recorded at once when it waits
-/// when `records`.
-fn pair_launch(records: bool) -> ChatQueueRequest {
+/// The launch of a heavy chat's agent.
+fn pair_launch() -> ChatQueueRequest {
     ChatQueueRequest {
         source: None,
         repository: None,
@@ -187,7 +184,6 @@ fn pair_launch(records: bool) -> ChatQueueRequest {
         env: BTreeMap::new(),
         now: false,
         priority: None,
-        records_when_waiting: records,
     }
 }
 
@@ -202,10 +198,7 @@ async fn an_unscoped_client_records_the_chat_of_its_waiting_launch() {
         .await
         .unwrap();
     let start = full_machine(&manager, &repo).await;
-    let waiting = manager
-        .queue_chat_add(pair_launch(true), None)
-        .await
-        .unwrap();
+    let waiting = manager.queue_chat_add(pair_launch(), None).await.unwrap();
     let entry = waiting.entry.unwrap();
     assert!(!waiting.start);
 
@@ -232,7 +225,7 @@ async fn a_scoped_chat_start_cannot_take_a_launch_outside_its_scope() {
         .await
         .unwrap();
     let start = full_machine(&manager, &repo).await;
-    let users = manager.queue_chat_add(pair_launch(true), None).await;
+    let users = manager.queue_chat_add(pair_launch(), None).await;
     let entry = users.unwrap().entry.unwrap();
     let starter = chat(&manager, "starter", "chat", Some(&repo), None).await;
     let caller = Caller {

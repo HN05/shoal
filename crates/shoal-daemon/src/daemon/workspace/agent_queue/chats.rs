@@ -18,8 +18,8 @@ impl Manager {
     /// Admit the launch of the new chat `request` describes for `caller`, or
     /// queue it: one that no limit applies to starts untracked, and one admitted here starts in the caller,
     /// which records the chat and attaches the launch to it. One that waits
-    /// starts from the queue, which runs its plan, and when its caller
-    /// records the chat at once, only once the chat is attached.
+    /// has its caller record the chat at once, and starts from the queue,
+    /// which runs its plan, only once the chat is attached.
     pub(in crate::daemon) async fn queue_chat_add(
         &self,
         mut request: ChatQueueRequest,
@@ -41,7 +41,7 @@ impl Manager {
             });
         }
         let id = QueueEntryId::generate();
-        let (now, records) = (request.now, request.records_when_waiting);
+        let now = request.now;
         let launch = Launch {
             id: id.clone(),
             repository,
@@ -60,7 +60,7 @@ impl Manager {
             .await?;
         let admitted = now || self.admit_waiting(Some(&id)).await?;
         // Kept before the gate opens, so no pass admits it unattached.
-        if records && !admitted {
+        if !admitted {
             self.agent_queue.keep_for_attach(&id);
         }
         self.admission_of(&id, admitted).await

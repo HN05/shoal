@@ -1956,10 +1956,10 @@ a slot of the [agent queue](#agent-queue) and whether load and idle stops
 stop it, and a restore of one stopped between turns waits for an
 update, which `shoal attach` and `shoal queue start` skip. Only its agent
 exiting cleanly differs: it sends no notification. A heavy chat's start
-waits in the queue when no slot is free, as a new workspace's does: from a
-terminal it records nothing until its entry starts, while one without a
-terminal or a scoped caller's has the daemon record the chat at once, below
-where it goes, and reports it with its entry; `--now` starts the chat regardless of the
+waits in the queue when no slot is free, as a new workspace's does: the
+daemon records the chat at once, below where it goes, the start reports its
+number with its entry, and the queue starts the recorded chat's agent once a
+slot is free; `--now` starts the chat regardless of the
 limits, a scoped caller's as its space's
 [`limits` permission](#permitted-actions) allows. The
 daemon records each chat under its name, linked to the issue it starts on,
