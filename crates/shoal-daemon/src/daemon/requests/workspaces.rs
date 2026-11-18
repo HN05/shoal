@@ -250,9 +250,13 @@ pub(super) async fn handle(
         WorkspaceMethod::SpaceSessions { space } => {
             Body::SpaceSessions(manager.space_sessions(&space).await?)
         }
-        WorkspaceMethod::FollowSession { space, session } => {
+        WorkspaceMethod::FollowSession {
+            space,
+            session,
+            from,
+        } => {
             // Chosen first, so a space another machine has is followed there.
-            let following = manager.session_to_follow(&space, session).await?;
+            let following = manager.session_to_follow(&space, session, from).await?;
             // Following an agent is the user's interaction with it, as
             // attaching is.
             manager.record_user_interaction(caller, &space).await;

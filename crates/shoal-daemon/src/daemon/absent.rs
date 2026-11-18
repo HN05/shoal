@@ -12,7 +12,8 @@ use shoal_protocol::{
 use tokio::net::UnixStream;
 
 use super::{
-    Server, answer,
+    Server,
+    answer::{self, OperationGuard},
     hub::{Elsewhere, Incoming, Unanswered},
     scope::Caller,
 };
@@ -50,6 +51,16 @@ impl<'a> Routing<'a> {
     }
 }
 
+/// How a request that failed here goes on: its error with the answer it
+/// got here, how it goes to another machine, its caller when its scope
+/// accepted it, and the daemon operation it holds while it is answered.
+pub(super) type Failed<'a> = (
+    (&'a anyhow::Error, Body),
+    Option<Routing<'a>>,
+    Option<Option<Caller>>,
+    OperationGuard,
+);
+
 /// Answer the request `request_id`, which failed with `error`, from the
 /// machine that has the space `error` names when another one does, else
 /// with `refused`, the answer it got here. `caller` is the request's,
@@ -58,9 +69,7 @@ pub(super) async fn answer(
     mut stream: UnixStream,
     server: &Server,
     request_id: u64,
-    (error, refused): (&anyhow::Error, Body),
-    routing: Option<Routing<'_>>,
-    caller: Option<Option<Caller>>,
+    ((error, refused), routing, caller, operation): Failed<'_>,
 ) -> Result<()> {
     let (Some(routing), Some(space)) = (routing, Refusal::absent_space(error)) else {
         return reply(&mut stream, request_id, refused).await;
@@ -81,7 +90,13 @@ pub(super) async fn answer(
             reply(&mut stream, request_id, Body::Queued(queued)).await
         }
         Some(Ok(Elsewhere::Answered(frames))) => relay(&mut stream, request_id, frames).await,
-        Some(Ok(Elsewhere::Streamed(incoming))) => relay_stream(stream, request_id, incoming).await,
+        Some(Ok(Elsewhere::Streamed(incoming))) => {
+            // It goes on, so it holds no operation, which would hold off a
+            // restart meanwhile, but while it writes.
+            drop(operation);
+            let streamed = Streamed { server, request_id };
+            streamed.relay(stream, incoming).await
+        }
     }
 }
 
@@ -115,30 +130,61 @@ async fn relay(
     Ok(())
 }
 
-/// Write the frames another machine's daemon answers with as they come on
-/// `incoming`, as the answer to `request_id`, until it ends or the client
-/// hangs up.
-async fn relay_stream(stream: UnixStream, request_id: u64, mut incoming: Incoming) -> Result<()> {
-    let (mut reader, mut writer) = stream.into_split();
-    let mut frames = Frames::default();
-    loop {
-        let bytes = tokio::select! {
-            bytes = incoming.next() => bytes,
-            () = answer::hangup(&mut reader) => return Ok(()),
-        };
-        let bytes = match bytes {
-            Ok(Some(bytes)) => bytes,
-            Ok(None) => return Ok(()),
-            Err(error) => {
-                let error = error.context("the other machine's answer broke off");
-                return reply(&mut writer, request_id, answer::failure(&error)).await;
+/// A request whose answer another machine streams.
+struct Streamed<'a> {
+    server: &'a Server,
+    request_id: u64,
+}
+
+impl Streamed<'_> {
+    /// Write the frames another machine's daemon answers with as they come
+    /// on `incoming`, until it ends, the client hangs up or a restart
+    /// closes it.
+    async fn relay(&self, stream: UnixStream, mut incoming: Incoming) -> Result<()> {
+        let (mut reader, mut writer) = stream.into_split();
+        let mut frames = Frames::default();
+        loop {
+            let bytes = tokio::select! {
+                bytes = incoming.next() => bytes,
+                () = answer::hangup(&mut reader) => return Ok(()),
+            };
+            let bytes = match bytes {
+                Ok(Some(bytes)) => bytes,
+                Ok(None) => return Ok(()),
+                Err(error) => {
+                    let error = error.context("the other machine's answer broke off");
+                    let failure = body_frame(self.request_id, answer::failure(&error))?;
+                    return self.write(&mut writer, vec![failure]).await.map(drop);
+                }
+            };
+            if !self.write(&mut writer, frames.take(&bytes)?).await? {
+                return Ok(());
             }
-        };
-        for mut frame in frames.take(&bytes)? {
-            frame["id"] = request_id.into();
-            protocol::write(&mut writer, &frame).await?;
         }
     }
+
+    /// Write `frames` as the answer's, under a daemon operation; `false`
+    /// once a restart holds operations off, which closes the answer for
+    /// its client to ask for again.
+    async fn write(
+        &self,
+        writer: &mut (impl tokio::io::AsyncWrite + Unpin),
+        frames: Vec<serde_json::Value>,
+    ) -> Result<bool> {
+        let Some(_operation) = self.server.manager.gates.try_operation() else {
+            return Ok(false);
+        };
+        for mut frame in frames {
+            frame["id"] = self.request_id.into();
+            protocol::write(writer, &frame).await?;
+        }
+        Ok(true)
+    }
+}
+
+/// The frame of `body` in answer to `request_id`.
+fn body_frame(request_id: u64, body: Body) -> Result<serde_json::Value> {
+    Ok(serde_json::to_value(Response::new(request_id, body))?)
 }
 
 /// The frames of an answer as its bytes come, a frame per line.

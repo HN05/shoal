@@ -1,9 +1,12 @@
 //! Following an agent's session on another machine: its machine streams the
 //! bytes of the session's files through the hub as the agent's tool writes
 //! them.
-use std::{fs, path::PathBuf, process::Stdio};
+use std::{fs, io::Write as _, path::PathBuf, process::Stdio};
 
-use shoal_client::transcripts::{Followed, SessionFollow, follow_session};
+use shoal_client::{
+    connection::Daemon,
+    transcripts::{Followed, SessionFollow, follow_session},
+};
 use shoal_protocol::space_names::SpaceSelector;
 
 use super::{
@@ -78,6 +81,17 @@ fn first_turn() -> Vec<u8> {
     format!("{{\"turn\":1,\"text\":\"{}\"}}\n", "x".repeat(100_000)).into_bytes()
 }
 
+/// Append the transcript's second line, as the agent's tool writes it.
+fn second_turn(session: &Session) -> &'static [u8] {
+    let line = b"{\"turn\":2}\n";
+    let mut transcript = fs::OpenOptions::new()
+        .append(true)
+        .open(&session.transcript)
+        .unwrap();
+    transcript.write_all(line).unwrap();
+    line
+}
+
 /// `machine`'s daemon as an app reaches it, as the user.
 fn app(machine: &Base) -> shoal_client::connection::Connector {
     let state = machine.root.path().join("state");
@@ -93,7 +107,11 @@ fn app(machine: &Base) -> shoal_client::connection::Connector {
 
 /// Add the transcript's bytes `follow` brings to `transcript`, until it
 /// ends with `expected`.
-async fn bytes_until(follow: &mut SessionFollow, transcript: &mut Vec<u8>, expected: &[u8]) {
+async fn bytes_until<D: Daemon>(
+    follow: &mut SessionFollow<D>,
+    transcript: &mut Vec<u8>,
+    expected: &[u8],
+) {
     while !transcript.ends_with(expected) {
         match follow.next().await.unwrap() {
             Followed::Bytes {
@@ -109,6 +127,20 @@ async fn bytes_until(follow: &mut SessionFollow, transcript: &mut Vec<u8>, expec
     }
 }
 
+/// The session's ID as a request selects its space.
+fn selected(session: &Session) -> SpaceSelector {
+    SpaceSelector::id(&session.space.as_str().into())
+}
+
+/// Read the session `follow` brings first, which must be the one the agent
+/// reported.
+async fn followed_session<D: Daemon>(follow: &mut SessionFollow<D>) {
+    let Followed::Session(followed) = follow.next().await.unwrap() else {
+        panic!("expected the session first");
+    };
+    assert_eq!(followed.session.session.as_str(), "followed");
+}
+
 #[test]
 fn a_machine_follows_a_session_on_a_third_machine_as_its_tool_writes_it() {
     let hub = machine(true, "app");
@@ -118,25 +150,41 @@ fn a_machine_follows_a_session_on_a_third_machine_as_its_tool_writes_it() {
     listed(&desk, &session.space, &session.laptop_id);
     let runtime = tokio::runtime::Runtime::new().unwrap();
     runtime.block_on(async {
-        let space = SpaceSelector::id(&session.space.as_str().into());
-        let mut follow = follow_session(&app(&desk), space, None).await.unwrap();
-        let Followed::Session(followed) = follow.next().await.unwrap() else {
-            panic!("expected the session first");
-        };
-        assert_eq!(followed.session.session.as_str(), "followed");
+        let mut follow = follow_session(app(&desk), selected(&session), None)
+            .await
+            .unwrap();
+        followed_session(&mut follow).await;
         let mut followed = Vec::new();
         bytes_until(&mut follow, &mut followed, &first_turn()).await;
-        let mut transcript = fs::OpenOptions::new()
-            .append(true)
-            .open(&session.transcript)
-            .unwrap();
-        std::io::Write::write_all(&mut transcript, b"{\"turn\":2}\n").unwrap();
-        bytes_until(&mut follow, &mut followed, b"{\"turn\":2}\n").await;
-        assert_eq!(
-            followed,
-            [first_turn(), b"{\"turn\":2}\n".to_vec()].concat()
-        );
+        let second = second_turn(&session);
+        bytes_until(&mut follow, &mut followed, second).await;
+        assert_eq!(followed, [first_turn(), second.to_vec()].concat());
     });
+}
+
+#[test]
+fn a_follow_goes_on_from_where_it_read_after_a_daemon_restart() {
+    let hub = machine(true, "app");
+    let mut session = laptop_session(&hub);
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let mut follow = runtime.block_on(async {
+        let mut follow = follow_session(app(&session.laptop), selected(&session), None)
+            .await
+            .unwrap();
+        followed_session(&mut follow).await;
+        bytes_until(&mut follow, &mut Vec::new(), &first_turn()).await;
+        follow
+    });
+    session.laptop.restart();
+    let second = second_turn(&session);
+    let next = runtime.block_on(follow.next()).unwrap();
+    let Followed::Bytes { offset, bytes, .. } = next else {
+        panic!("expected only what the transcript gained, got {next:?}");
+    };
+    assert_eq!(
+        (offset, bytes.as_slice()),
+        (first_turn().len() as u64, second)
+    );
 }
 
 #[test]
@@ -150,8 +198,7 @@ fn following_a_session_on_an_offline_machine_fails_at_once_naming_it() {
         (laptop?["connected"] == false).then_some(())
     });
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    let space = SpaceSelector::id(&session.space.as_str().into());
-    let refused = runtime.block_on(follow_session(&app(&hub), space, None));
+    let refused = runtime.block_on(follow_session(app(&hub), selected(&session), None));
     let error = format!("{:#}", refused.err().expect("a refusal"));
     assert!(error.contains("machine laptop is offline"), "{error}");
 }

@@ -7,10 +7,12 @@
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::transcripts::{FollowedSession, SpaceSessions, Transcript, locate};
 
+use std::{collections::BTreeMap, path::PathBuf};
+
 use anyhow::{Context as _, Result};
 use tokio::{io::BufReader, net::UnixStream};
 
-use crate::connection::{Daemon, open_buffered, request};
+use crate::connection::{self, Daemon, open_buffered, request};
 use shoal_protocol::protocol::{Body, Responses, WorkspaceMethod};
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -33,9 +35,18 @@ pub async fn space_transcripts(
 }
 
 /// A follow of an agent's session, on a connection of its own until it is
-/// dropped.
-pub struct SessionFollow {
-    responses: Responses<BufReader<UnixStream>>,
+/// dropped. A daemon restart closes the connection; the follow follows
+/// again on the replacement, from where it read each file to.
+pub struct SessionFollow<D> {
+    daemon: D,
+    space: SpaceSelector,
+    /// The session it was asked for, none for the space's current one.
+    named: Option<AgentSessionId>,
+    responses: Option<Responses<BufReader<UnixStream>>>,
+    /// The session it follows now.
+    session: FollowedSession,
+    /// Where it read each of the session's files to.
+    offsets: BTreeMap<PathBuf, u64>,
     /// The session followed, until [`Self::next`] returns it.
     first: Option<FollowedSession>,
 }
@@ -44,56 +55,130 @@ pub struct SessionFollow {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Followed {
     /// The session whose files' bytes come next: the one followed, and
-    /// once its agent goes on in another, that one.
+    /// once the space goes on in another, that one.
     Session(FollowedSession),
     /// Bytes of the session's file `file`, relative to its tool's session
     /// directory, as its tool wrote them from `offset` on; offset 0 again
     /// for a file its tool wrote anew.
     Bytes {
-        file: std::path::PathBuf,
+        file: PathBuf,
         offset: u64,
         bytes: Vec<u8>,
     },
 }
 
 /// Follow the session `session` of an agent of the workspace or chat
-/// `space`, or else its agent's current one, wherever the space runs:
+/// `space`, or else its current one, wherever the space runs:
 /// [`SessionFollow::next`] brings the session, then its files' bytes,
 /// everything so far and then what its tool appends. Fails at once when
 /// the daemon refuses, as for a space whose machine is offline.
-pub async fn follow_session(
-    daemon: &impl Daemon,
+pub async fn follow_session<D: Daemon>(
+    daemon: D,
     space: SpaceSelector,
     session: Option<AgentSessionId>,
-) -> Result<SessionFollow> {
-    let method = WorkspaceMethod::FollowSession { space, session };
-    let (stream, body) = open_buffered(daemon, method).await?;
-    let session = match body {
-        Body::FollowedSession(session) => session,
-        body => return Err(body.unexpected("FollowedSession")),
-    };
+) -> Result<SessionFollow<D>> {
+    let (responses, followed) = open(&daemon, &space, &session, &BTreeMap::new()).await?;
     Ok(SessionFollow {
-        responses: Responses::new(stream),
-        first: Some(session),
+        daemon,
+        space,
+        named: session,
+        responses: Some(responses),
+        session: followed.clone(),
+        offsets: BTreeMap::new(),
+        first: Some(followed),
     })
 }
 
-impl SessionFollow {
-    /// What comes next, waiting for the session's tool to write more; an
-    /// error once the daemon ends the follow, as a restart does.
+/// Follow `space`'s session `session` on a new connection, from `from`,
+/// and read the session it follows.
+async fn open(
+    daemon: &impl Daemon,
+    space: &SpaceSelector,
+    session: &Option<AgentSessionId>,
+    from: &BTreeMap<PathBuf, u64>,
+) -> Result<(Responses<BufReader<UnixStream>>, FollowedSession)> {
+    let method = WorkspaceMethod::FollowSession {
+        space: space.clone(),
+        session: session.clone(),
+        from: from.clone(),
+    };
+    let (stream, body) = open_buffered(daemon, method).await?;
+    match body {
+        Body::FollowedSession(followed) => Ok((Responses::new(stream), followed)),
+        body => Err(body.unexpected("FollowedSession")),
+    }
+}
+
+impl<D: Daemon> SessionFollow<D> {
+    /// What comes next, waiting for the session's tool to write more, and
+    /// following again once a daemon restart closed the connection.
     pub async fn next(&mut self) -> Result<Followed> {
         if let Some(session) = self.first.take() {
             return Ok(Followed::Session(session));
         }
-        let response = self.responses.next().await?;
-        match response.body.into_result()? {
-            Body::FollowedSession(session) => Ok(Followed::Session(session)),
-            Body::SessionBytes(gained) => Ok(Followed::Bytes {
-                bytes: gained.bytes()?,
-                file: gained.file,
-                offset: gained.offset,
-            }),
+        loop {
+            let Some(responses) = &mut self.responses else {
+                if let Some(session) = self.follow_again().await? {
+                    return Ok(Followed::Session(session));
+                }
+                continue;
+            };
+            let response = match responses.next().await {
+                Ok(response) => response,
+                Err(error) if connection::stream_closed(&error) => {
+                    self.responses = None;
+                    continue;
+                }
+                Err(error) => return Err(error),
+            };
+            return self.take(response.body.into_result()?);
+        }
+    }
+
+    /// Follow again on a new connection, giving a restarting daemon time to
+    /// come back, from where each file was read to; the session it then
+    /// follows when it is another.
+    async fn follow_again(&mut self) -> Result<Option<FollowedSession>> {
+        let (daemon, space, named) = (&self.daemon, &self.space, &self.named);
+        let offsets = &self.offsets;
+        let (responses, followed) =
+            connection::after_restart(|| open(daemon, space, named, offsets)).await?;
+        self.responses = Some(responses);
+        Ok(self.went_on_in(followed))
+    }
+
+    /// What `body`, a frame of the follow, brings, keeping where the bytes
+    /// it carries end.
+    fn take(&mut self, body: Body) -> Result<Followed> {
+        match body {
+            Body::FollowedSession(followed) => {
+                self.offsets.clear();
+                self.session = followed.clone();
+                Ok(Followed::Session(followed))
+            }
+            Body::SessionBytes(gained) => {
+                let bytes = gained.bytes()?;
+                let end = gained.offset + bytes.len() as u64;
+                self.offsets.insert(gained.file.clone(), end);
+                Ok(Followed::Bytes {
+                    file: gained.file,
+                    offset: gained.offset,
+                    bytes,
+                })
+            }
             body => Err(body.unexpected("SessionBytes")),
         }
+    }
+
+    /// `followed`, the session a follow opened again follows, when it is
+    /// another than the one it followed, which its offsets no longer hold
+    /// for.
+    fn went_on_in(&mut self, followed: FollowedSession) -> Option<FollowedSession> {
+        if followed.session.session == self.session.session.session {
+            return None;
+        }
+        self.offsets.clear();
+        self.session = followed.clone();
+        Some(followed)
     }
 }

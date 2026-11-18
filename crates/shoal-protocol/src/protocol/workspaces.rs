@@ -202,11 +202,15 @@ pub enum WorkspaceMethod {
     },
     /// Follow the session `session` of an agent of a workspace or chat, or
     /// else its agent's current one: the session, then the bytes of its
-    /// files as its tool writes them, until the client hangs up.
+    /// files as its tool writes them, each from where `from` says the
+    /// client read it to, as when it follows again after a daemon restart,
+    /// until the client hangs up.
     FollowSession {
         space: SpaceSelector,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         session: Option<shoal_ids::agent_session_ids::AgentSessionId>,
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        from: std::collections::BTreeMap<std::path::PathBuf, u64>,
     },
     /// Write a copy of a workspace or chat, with copies of the spaces below
     /// it that `carrying` carries, for another Shoal to the new file

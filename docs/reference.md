@@ -725,7 +725,9 @@ space's current one, on whichever machine of the hub the space runs: the
 session with the tool whose format its files are in, then the bytes of each of
 its files, everything so far and then what the tool appends, each with its
 path in the tool's session directory and its offset, and the current session
-again whenever the agent goes on in another. Shoal copies the bytes unread, so
+again whenever the space goes on in another, of whichever agent. Across a
+daemon restart the follow follows again from where it read each file to.
+Shoal copies the bytes unread, so
 the app parses each tool's format itself and sends input through the requests
 the protocol has. Following an agent and messaging it are your
 [interaction](#sleep) with it, so an agent you watch and talk to from an app

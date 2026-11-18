@@ -59,7 +59,7 @@ const REQUESTS: &[&str] = &[
     r#"{"space_environment":{"space":"fix"}}"#,
     r#"{"space_status":{"space":"fix"}}"#,
     r#"{"space_sessions":{"space":"fix"}}"#,
-    r#"{"follow_session":{"space":"fix","session":"abc"}}"#,
+    r#"{"follow_session":{"space":"fix","session":"abc","from":{"p/abc.jsonl":12}}}"#,
     r#"{"copy_space":{"space":"fix","checkpoint":3,"file":"/work/fix.shoal","carrying":"subtree"}}"#,
     r#"{"diff_base":{"workspace":"fix"}}"#,
     r#"{"conflicts":{"workspace":"fix","target":null}}"#,

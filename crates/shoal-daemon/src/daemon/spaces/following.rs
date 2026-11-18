@@ -1,9 +1,11 @@
 //! Following a space's agent session: the bytes of its files where its tool
 //! keeps them, everything so far and then what the tool appends, copied
 //! unread as an export copies them. A follow that names no session follows
-//! the space's current one, going on in each new one its agents report.
+//! the space's current one, going on in each new one its agents report. A
+//! client that follows again, as after a daemon restart, says where it read
+//! each file to, and the follow goes on from there.
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     io::{Read as _, Seek as _, SeekFrom},
     path::{Path, PathBuf},
     sync::Arc,
@@ -42,17 +44,20 @@ pub(crate) struct Following {
     session: FollowedSession,
     store: &'static dyn Store,
     environments: Arc<Environments>,
+    /// Where the client read each of its files to.
+    offsets: HashMap<PathBuf, u64>,
 }
 
 impl Manager {
     /// The session `session` of an agent of the space `selector` names, or
-    /// without one its current session, which a follow follows; refused
-    /// for a session its agents never reported, so a follow reads no other
-    /// session's files.
+    /// without one its current session, which a follow follows from where
+    /// `from` says the client read each file to; refused for a session its
+    /// agents never reported, so a follow reads no other session's files.
     pub(crate) async fn session_to_follow(
         &self,
         selector: &SpaceSelector,
         session: Option<AgentSessionId>,
+        from: BTreeMap<PathBuf, u64>,
     ) -> Result<Following> {
         let space = self.space(selector).await?.id;
         let sessions = self.space_sessions(&SpaceSelector::id(&space)).await?;
@@ -86,6 +91,7 @@ impl Manager {
             },
             store,
             environments: Arc::new(Environments::new(&self.paths.home, &sessions.environments)),
+            offsets: from.into_iter().collect(),
         })
     }
 
@@ -99,13 +105,8 @@ impl Manager {
         startup: OperationGuard,
     ) -> Result<()> {
         let (mut reader, mut writer) = stream.into_split();
-        let mut offsets = HashMap::new();
-        send(
-            &mut writer,
-            id,
-            Body::FollowedSession(following.session.clone()),
-        )
-        .await?;
+        let session = Body::FollowedSession(following.session.clone());
+        send(&mut writer, id, session).await?;
         drop(startup);
         loop {
             // A restarting daemon closes the follow, which the client opens
@@ -115,15 +116,10 @@ impl Manager {
             };
             if let Some(next) = self.next_following(&following).await? {
                 following = next;
-                offsets.clear();
-                send(
-                    &mut writer,
-                    id,
-                    Body::FollowedSession(following.session.clone()),
-                )
-                .await?;
+                let session = Body::FollowedSession(following.session.clone());
+                send(&mut writer, id, session).await?;
             }
-            send_gained(&mut writer, id, &following, &mut offsets).await?;
+            send_gained(&mut writer, id, &mut following).await?;
             drop(operation);
             tokio::select! {
                 () = tokio::time::sleep(POLL) => {}
@@ -148,24 +144,26 @@ impl Manager {
             return Ok(None);
         }
         let space = SpaceSelector::id(&following.space);
-        Ok(Some(self.session_to_follow(&space, None).await?))
+        Ok(Some(
+            self.session_to_follow(&space, None, BTreeMap::new())
+                .await?,
+        ))
     }
 }
 
-/// Send what the files of `following`'s session gained since `offsets`,
+/// Send what the files of `following`'s session gained since its offsets,
 /// keeping where each now ends.
 async fn send_gained(
     writer: &mut OwnedWriteHalf,
     id: u64,
-    following: &Following,
-    offsets: &mut HashMap<PathBuf, u64>,
+    following: &mut Following,
 ) -> Result<()> {
     let Some(found) = locate(following).await? else {
         return Ok(());
     };
     for file in found.files.files {
         let path = found.directory.join(&file);
-        send_file_gained(writer, id, &path, file, offsets).await?;
+        send_file_gained(writer, id, &path, file, &mut following.offsets).await?;
     }
     Ok(())
 }
