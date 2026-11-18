@@ -20,7 +20,10 @@ use crate::{
         scope::{Caller, ScopeRefusal},
         workspace::Manager,
     },
-    forge::items::{link::ItemKind, reference::ItemInput},
+    forge::items::{
+        link::ItemKind,
+        reference::{ItemInput, ItemRef},
+    },
     launches,
     model::{Assigner, Chat, ChatHome, QueueAdmission, SpaceKind},
     protocol::operations::{LaunchIssue, QueuedLaunch},
@@ -48,11 +51,13 @@ struct NewChatStart {
     issue: Option<StartIssue>,
 }
 
-/// The issue a new chat starts on: as its launch names it, and as read
-/// open, unless a launch that names the chat could not read it.
+/// The issue a new chat starts on, by its URL, with the title and labels it
+/// was read open with, unless a launch that names the chat could not read
+/// it.
 struct StartIssue {
-    input: ItemInput,
-    open: Option<OpenIssue>,
+    url: ItemRef,
+    title: Option<String>,
+    labels: Vec<String>,
 }
 
 impl Manager {
@@ -145,10 +150,10 @@ impl Manager {
         let mode = shape.mode.clone();
         crate::config::modes::resolve(&settings.modes, &mode, SpaceKind::Chat, in_repository)?;
         let issue = (self.launch_issue(launch, issue, repository.as_ref())).await?;
-        let title = issue.as_ref().and_then(|issue| issue.open.as_ref());
+        let title = issue.as_ref().and_then(|issue| issue.title.as_ref());
         let name = match (&launch.name, title) {
             (Some(name), _) => name.clone(),
-            (None, Some(issue)) => SpaceName::derive(&issue.title, "chat"),
+            (None, Some(title)) => SpaceName::derive(title, "chat"),
             (None, None) => self.home_chat_name(&home, &mode).await?,
         };
         Ok(NewChatStart {
@@ -164,8 +169,9 @@ impl Manager {
 
     /// The issue `input` names, which the chat `launch` starts in
     /// `repository` starts on, read open. A launch that names the chat
-    /// needs no title from it, so an issue it cannot read is linked as
-    /// named, without one.
+    /// needs no title from it, so an issue it cannot read is taken by the
+    /// URL its number has in the repository, which the chat's start reads
+    /// again; one without even that is refused, since nothing could read it.
     async fn launch_issue(
         &self,
         launch: &Launch,
@@ -178,16 +184,22 @@ impl Manager {
         let repository = repository
             .context("a chat without a repository starts on no issue; name its repository")?;
         let checkout = self.repository(repository.clone()).await?.path;
-        let open = match self.read_open_issue(&checkout, input).await {
-            Ok(issue) => Some(issue),
-            Err(error) if launch.name.is_some() => {
-                crate::daemon::log!("chat issue {input} read without its title: {error:#}");
-                None
+        let error = match self.read_open_issue(&checkout, input).await {
+            Ok(OpenIssue { url, title, labels }) => {
+                let title = Some(title);
+                return Ok(Some(StartIssue { url, title, labels }));
             }
+            Err(error) if launch.name.is_some() => error,
             Err(error) => return Err(error),
         };
-        let input = (open.as_ref()).map_or_else(|| input.clone(), |issue| issue.url.clone().into());
-        Ok(Some(StartIssue { input, open }))
+        crate::daemon::log!("chat issue {input} read without its title: {error:#}");
+        let (_, url) = self.issue_forge(&checkout, input).await?;
+        let labels = Vec::new();
+        Ok(Some(StartIssue {
+            url,
+            title: None,
+            labels,
+        }))
     }
 
     /// The name of a new chat in `mode` at `home` that names none.
@@ -281,10 +293,10 @@ impl Manager {
         let Some(issue) = &start.issue else {
             return Vec::new();
         };
-        let (selector, input) = (SpaceSelector::id(&chat.id), &issue.input);
-        let title = (issue.open.as_ref()).map(|open| open.title.clone());
+        let (selector, input) = (SpaceSelector::id(&chat.id), issue.url.clone().into());
+        let title = issue.title.clone();
         let warnings = match self
-            .set_issue(&selector, input, title, Assigner::of(caller))
+            .set_issue(&selector, &input, title, Assigner::of(caller))
             .await
         {
             Ok(warnings) => warnings,
@@ -299,8 +311,7 @@ impl Manager {
     }
 
     /// Queue the agent `launch` starts in the recorded `chat`, as `start`
-    /// resolved it, which `source` made, on the issue it read, else the one
-    /// linking the chat resolved, which its start reads again.
+    /// resolved it, which `source` made, on the issue it starts on.
     async fn queue_chat_agent(
         &self,
         chat: &Chat,
@@ -308,25 +319,11 @@ impl Manager {
         start: &NewChatStart,
         source: LaunchSource,
     ) -> Result<QueueAdmission> {
-        let open = start.issue.as_ref().and_then(|issue| issue.open.as_ref());
-        let linked = || {
-            let linked = chat
-                .links
-                .issues
-                .first()
-                .filter(|_| start.issue.is_some())?;
-            Some(LaunchIssue {
-                url: linked.url.clone(),
-                title: (linked.title.clone()).unwrap_or_else(|| linked.url.to_string()),
-                labels: Vec::new(),
-            })
-        };
-        let issue = (open.map(|issue| LaunchIssue {
+        let issue = (start.issue.as_ref()).map(|issue| LaunchIssue {
             url: issue.url.clone(),
-            title: issue.title.clone(),
+            title: (issue.title.clone()).unwrap_or_else(|| issue.url.to_string()),
             labels: issue.labels.clone(),
-        }))
-        .or_else(linked);
+        });
         let queued = QueuedLaunch {
             prompt: launch.prompt,
             mode: Some(start.mode.clone()),

@@ -197,7 +197,7 @@ impl Manager {
 
     /// The forge of the repository whose origin `checkout` has, with the
     /// number and canonical URL of the issue `input` names there.
-    pub(super) async fn issue_forge(
+    pub(crate) async fn issue_forge(
         &self,
         checkout: &Path,
         input: &ItemInput,

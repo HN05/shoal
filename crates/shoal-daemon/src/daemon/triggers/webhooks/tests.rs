@@ -35,6 +35,17 @@ const LABELLED: &str = "[secrets.HOOK]\ncommand = ['printf', 's3cret']\n\
 
 const ISSUE: &str = r#"{"action":"label_updated","issue":{"number":42,"title":"Crash","labels":[{"name":"agent"}]}}"#;
 
+/// [`with_triggers`] for a repository whose remote is a forge's, which
+/// Shoal never reaches, so the issues its deliveries start chats on
+/// resolve.
+async fn with_forge_triggers(triggers: &str) -> (tempfile::TempDir, Arc<Manager>, Repository) {
+    let (temp, manager, repo) = with_triggers(triggers).await;
+    crate::daemon::test_support::git(&repo.path, &["config", "protocol.allow", "never"]);
+    let origin = ["remote", "add", "origin", "https://github.com/team/repo"];
+    crate::daemon::test_support::git(&repo.path, &origin);
+    (temp, manager, repo)
+}
+
 /// A manager whose repository `repo` has `triggers`, serving webhooks on
 /// a port of its own.
 async fn listening(triggers: &str) -> (tempfile::TempDir, Arc<Manager>, Repository, SocketAddr) {
@@ -46,7 +57,7 @@ async fn listening_with(
     triggers: &str,
     permits: usize,
 ) -> (tempfile::TempDir, Arc<Manager>, Repository, SocketAddr) {
-    let (temp, manager, repo) = with_triggers(triggers).await;
+    let (temp, manager, repo) = with_forge_triggers(triggers).await;
     configure(&manager, "[machine.webhooks]\nlisten = '127.0.0.1:0'\n").await;
     let listener = (manager.bind_webhooks(manager.webhook_address()).await).unwrap();
     let address = listener.local_addr().unwrap();
@@ -255,7 +266,7 @@ async fn without_listen_no_port_opens() {
 
 #[tokio::test]
 async fn a_sample_request_fires_unsigned_and_names_the_condition_that_drops_it() {
-    let (_temp, manager, repo) = with_triggers(LABELLED).await;
+    let (_temp, manager, repo) = with_forge_triggers(LABELLED).await;
     let context = || Some(crate::protocol::ItemContext::Checkout(repo.id.clone()));
     let sample = |body: &str| WebhookRequest {
         headers: vec![("X-Forgejo-Event".into(), "issues".into())],

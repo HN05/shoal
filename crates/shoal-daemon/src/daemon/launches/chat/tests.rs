@@ -126,3 +126,29 @@ async fn a_chat_without_a_repository_links_nothing_and_warns_of_nothing() {
         .unwrap();
     assert!(chat.links.is_empty());
 }
+
+/// A chat a launch names on an issue whose repository has no forge to
+/// resolve it, which nothing could read later either, is refused before
+/// anything is recorded, rather than starting without its issue.
+#[tokio::test]
+async fn a_chat_on_an_issue_nothing_can_resolve_is_refused() {
+    let (temp, manager) = manager().await;
+    manager.publish_config(global_config("[agents.claude]\ncommand = ['sh']\n"));
+    let checkout = repository(temp.path(), "repo");
+    let path = checkout.to_str().unwrap().into();
+    let repo = manager.register_repository(path, None, None).await.unwrap();
+    let launch = Launch {
+        target: Some(StartTarget::Repository(repo.id.to_string())),
+        chat: true,
+        name: Some("planning".into()),
+        agent: Some("claude".into()),
+        issue: Some(IssueChoice::Named("316".parse().unwrap())),
+        ..Launch::default()
+    };
+
+    let refused = manager.launch(launch, LaunchSource::Manual, None).await;
+
+    assert!(refused.is_err());
+    assert!(manager.chats().await.unwrap().is_empty());
+    assert!(manager.queue_entries().await.unwrap().is_empty());
+}
