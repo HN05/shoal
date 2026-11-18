@@ -250,6 +250,17 @@ pub(super) async fn handle(
         WorkspaceMethod::SpaceSessions { space } => {
             Body::SpaceSessions(manager.space_sessions(&space).await?)
         }
+        WorkspaceMethod::FollowSession { space, session } => {
+            // Chosen first, so a space another machine has is followed there.
+            let following = manager.session_to_follow(&space, session).await?;
+            // Following an agent is the user's interaction with it, as
+            // attaching is.
+            manager.record_user_interaction(caller, &space).await;
+            let manager = manager.clone();
+            return Ok(Answer::connection(move |stream, request_id, guard| {
+                manager.follow_session(stream, request_id, following, guard)
+            }));
+        }
         WorkspaceMethod::CopySpace {
             space,
             checkpoint,
@@ -414,6 +425,7 @@ impl Scoped for WorkspaceMethod {
             WorkspaceMethod::RenameSpace { space, .. }
             | WorkspaceMethod::SpaceStatus { space }
             | WorkspaceMethod::SpaceSessions { space }
+            | WorkspaceMethod::FollowSession { space, .. }
             | WorkspaceMethod::PlaceOwnership { space, .. } => Some(space),
             // A token for a space its scope reaches acts for no more than
             // the caller's own.

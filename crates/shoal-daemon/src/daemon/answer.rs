@@ -193,7 +193,7 @@ pub(super) async fn answer_wait(
 
 /// Wait until the client hangs up. A client sends nothing after its request,
 /// so anything readable means it closed the connection.
-pub(super) async fn hangup(stream: &mut UnixStream) {
+pub(crate) async fn hangup(stream: &mut (impl tokio::io::AsyncRead + Unpin)) {
     let mut closed = [0u8; 1];
     let _ = tokio::io::AsyncReadExt::read(stream, &mut closed).await;
 }

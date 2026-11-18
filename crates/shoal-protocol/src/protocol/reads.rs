@@ -103,6 +103,7 @@ impl Operation {
                         | WorkspaceMethod::InspectWorkspace { .. }
                         | WorkspaceMethod::SpaceStatus { .. }
                         | WorkspaceMethod::SpaceSessions { .. }
+                        | WorkspaceMethod::FollowSession { .. }
                         | WorkspaceMethod::DiffBase { .. }
                         | WorkspaceMethod::Conflicts { .. }
                         | WorkspaceMethod::LayeredConfig { .. }

@@ -200,6 +200,14 @@ pub enum WorkspaceMethod {
     SpaceSessions {
         space: SpaceSelector,
     },
+    /// Follow the session `session` of an agent of a workspace or chat, or
+    /// else its agent's current one: the session, then the bytes of its
+    /// files as its tool writes them, until the client hangs up.
+    FollowSession {
+        space: SpaceSelector,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session: Option<shoal_ids::agent_session_ids::AgentSessionId>,
+    },
     /// Write a copy of a workspace or chat, with copies of the spaces below
     /// it that `carrying` carries, for another Shoal to the new file
     /// `file`, leaving them running: a workspace at its checkpoint
@@ -350,7 +358,7 @@ pub struct PullHead {
 impl WorkspaceMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
-            Self::WatchSpaceEvents { .. } => Lifetime::Open,
+            Self::WatchSpaceEvents { .. } | Self::FollowSession { .. } => Lifetime::Open,
             _ => Lifetime::Reply,
         }
     }

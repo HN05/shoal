@@ -62,6 +62,45 @@ pub struct Transcript {
     pub error: Option<String>,
 }
 
+/// The session a client follows, before its files' bytes: the session,
+/// and the tool whose format they are in.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FollowedSession {
+    #[serde(flatten)]
+    pub session: ReportedSession,
+    pub integration: IntegrationKind,
+}
+
+/// Bytes of a followed session's file, as its tool wrote them from
+/// `offset` on. A file that shrank, as one its tool wrote again, comes
+/// again from offset 0.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionBytes {
+    /// The file, relative to its tool's session directory; the
+    /// transcript or another file of the session.
+    pub file: PathBuf,
+    pub offset: u64,
+    /// The bytes, in standard base64.
+    pub data: String,
+}
+
+impl SessionBytes {
+    pub fn new(file: PathBuf, offset: u64, bytes: &[u8]) -> Self {
+        use base64::Engine as _;
+        Self {
+            file,
+            offset,
+            data: base64::engine::general_purpose::STANDARD.encode(bytes),
+        }
+    }
+
+    /// The bytes it carries.
+    pub fn bytes(&self) -> Result<Vec<u8>> {
+        use base64::Engine as _;
+        Ok(base64::engine::general_purpose::STANDARD.decode(&self.data)?)
+    }
+}
+
 /// `sessions` with their files, wherever this process's environment under
 /// `home` or one their agents ran with put them.
 pub fn locate(home: &Path, sessions: &SpaceSessions) -> Vec<Transcript> {

@@ -162,7 +162,10 @@ process's with that space's ID, the reach of its scope and its effective
 permissions, which the owning machine checks through the operation every
 scope check takes, under single-user trust as scope is cooperative; the
 owning machine answers it on its own socket under a token standing for that
-caller, and never forwards a forwarded request again. A request that needs
+caller, and never forwards a forwarded request again. Following a session sends its files' bytes
+where the agent's tool keeps them, everything so far and then what the tool
+appends, unread: apps parse each tool's format, so a tool changing it changes
+only the app. A request that needs
 the space's files or processes stays on its machine and is refused
 elsewhere, naming it. The space tree may span machines, as when a space
 moves without its parent: what a space passes up reaches the nearest space
@@ -446,8 +449,9 @@ would save. The user interacts with an agent by a key it reads in its
 terminal, which its wrapper finds by the terminal's access time (reading a key
 moves it, the agent's output does not), leaving out the keys Shoal types
 itself, which Shoal reports before it types; by a prompt they submit; and by
-`shoal attach`, a restore or restart they start, `shoal start --in` and Enter on
-the sleep screen, which the daemon tells by the unscoped caller. Updates,
+`shoal attach`, following the agent's session, a restore or restart they
+start, `shoal start --in` and Enter on the sleep screen, which the daemon
+tells by the unscoped caller. Updates,
 messages, idle wakes and what Shoal or a coordinator starts are not
 interaction, nor is a terminal showing the agent, since a user may attach and
 walk away. The user is engaged with an agent while they interacted since its

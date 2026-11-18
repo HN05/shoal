@@ -9,10 +9,7 @@ use shoal_protocol::scope_tokens::ScopeToken;
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
-use tokio::net::{
-    UnixStream,
-    unix::{OwnedReadHalf, OwnedWriteHalf},
-};
+use tokio::net::{UnixStream, unix::OwnedWriteHalf};
 
 use super::{
     answer::{self, OperationGuard},
@@ -73,7 +70,7 @@ impl Subscriber {
             tokio::select! {
                 result = stored.changed() => result?,
                 result = agents.changed() => result?,
-                () = hangup(&mut reader) => return Ok(()),
+                () = answer::hangup(&mut reader) => return Ok(()),
             }
             tokio::time::sleep(SETTLE).await;
             stored.borrow_and_update();
@@ -119,13 +116,6 @@ impl Subscriber {
             None => Ok(true),
         }
     }
-}
-
-/// Wait until the client hangs up. It sends nothing on a subscription, so
-/// anything readable means it closed the connection.
-async fn hangup(reader: &mut OwnedReadHalf) {
-    let mut closed = [0u8; 1];
-    let _ = tokio::io::AsyncReadExt::read(reader, &mut closed).await;
 }
 
 /// What changed from `before` to `after`: each new or changed record, then
