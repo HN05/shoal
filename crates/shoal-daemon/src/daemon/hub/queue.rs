@@ -15,7 +15,7 @@ use shoal_protocol::hub::{
 };
 use shoal_protocol::protocol::{Body, Response};
 
-use super::session::{Unanswered, Unsent};
+use super::session::{Calls, Unanswered, Unsent};
 use crate::{
     daemon::{log, workspace::Manager},
     time::UnixTime,
@@ -54,6 +54,8 @@ impl Manager {
         (self.store)
             .write(move |tx| push(tx, &to, &held, now, expires_at))
             .await?;
+        // Its link may have opened since the hub looked.
+        self.hub.deliveries.of(&machine.id).wake.notify_one();
         Ok(Queued {
             machine: machine.id.clone(),
             name: machine.name.clone(),
@@ -62,15 +64,35 @@ impl Manager {
         })
     }
 
-    /// Deliver what the hub holds for `member`, oldest first, now that its
-    /// link is open, until none is left or the link closes. A call that
-    /// never left stays for the next link; one the machine received but
-    /// never answered is not sent again, since it may have run, and its
-    /// sender hears that it went unconfirmed, as of one the machine
-    /// refused.
-    pub(super) async fn deliver_held(self: Arc<Self>, member: MemberId) {
+    /// Deliver what the hub holds for `member` over its link `link`, as it
+    /// comes, until another link replaces it or it closes.
+    pub(super) async fn keep_delivering(self: Arc<Self>, member: MemberId, link: Arc<Calls>) {
         let delivery = self.hub.deliveries.of(&member);
-        let _delivering = delivery.lock().await;
+        loop {
+            self.deliver_held(&member, &delivery).await;
+            // What the hub holds meanwhile wakes it; a lost wake, at worst,
+            // waits for the next look.
+            tokio::select! {
+                () = delivery.wake.notified() => {}
+                () = tokio::time::sleep(SWEEP) => {}
+            }
+            let open = self.hub.links.calls(&member);
+            if !open.is_some_and(|calls| Arc::ptr_eq(&calls, &link)) {
+                return;
+            }
+        }
+    }
+
+    /// Deliver what the hub holds for `member`, oldest first, until none is
+    /// left or the link closes. A call that never left stays for the next
+    /// link; one the machine received but never answered is not sent
+    /// again, since it may have run, and its sender hears that it went
+    /// unconfirmed, as of one the machine refused or that expired first.
+    async fn deliver_held(&self, member: &MemberId, delivery: &Delivery) {
+        let _delivering = delivery.lock.lock().await;
+        if let Err(error) = self.drop_expired().await {
+            return log!("hub: could not drop expired calls: {error:#}");
+        }
         // Sent before the hub stopped, without its machine's answer.
         let to = member.clone();
         match self.store.write(move |tx| take_claimed(tx, &to)).await {
@@ -82,14 +104,14 @@ impl Manager {
             Err(error) => return log!("hub: could not read what it held: {error:#}"),
         }
         loop {
-            let to = member.clone();
-            let next = match self.store.write(move |tx| claim_first(tx, &to)).await {
+            let (to, now) = (member.clone(), UnixTime::now());
+            let next = match self.store.write(move |tx| claim_first(tx, &to, now)).await {
                 Ok(Some(next)) => next,
                 Ok(None) => return,
                 Err(error) => return log!("hub: could not read what it holds: {error:#}"),
             };
             let (seq, lapsed) = next;
-            let Some(calls) = self.hub.links.calls(&member) else {
+            let Some(calls) = self.hub.links.calls(member) else {
                 return self.release_claim(seq).await;
             };
             let outcome = match calls.call(lapsed.held.call.clone()).await {
@@ -215,13 +237,17 @@ fn push(
     Ok(())
 }
 
-/// Claim the oldest call held for `member` that the hub has not sent, with
-/// its place in the queue.
-fn claim_first(tx: &Transaction<'_>, member: &MemberId) -> Result<Option<(i64, Lapsed)>> {
+/// Claim the oldest call held for `member` that the hub has not sent and
+/// that has not expired by `now`, with its place in the queue.
+fn claim_first(
+    tx: &Transaction<'_>,
+    member: &MemberId,
+    now: UnixTime,
+) -> Result<Option<(i64, Lapsed)>> {
     let row = tx
         .query_row(
-            &format!("SELECT {COLUMNS} FROM hub_queue WHERE member_id=?1 AND NOT delivering ORDER BY seq LIMIT 1"),
-            [member],
+            &format!("SELECT {COLUMNS} FROM hub_queue WHERE member_id=?1 AND NOT delivering AND expires_at > ?2 ORDER BY seq LIMIT 1"),
+            params![member, now],
             row,
         )
         .optional()?;
@@ -321,17 +347,22 @@ pub(super) fn forget(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
     Ok(())
 }
 
-/// One lock per machine, which a delivery of what the hub holds for it
-/// takes, so a claim it finds was left by a hub that stopped.
+/// One delivery per machine: a lock a delivery of what the hub holds for
+/// it takes, so a claim it finds was left by a hub that stopped, and what
+/// wakes it when the hub holds something new.
 #[derive(Default)]
-pub(super) struct Deliveries(
-    std::sync::Mutex<std::collections::HashMap<MemberId, Arc<tokio::sync::Mutex<()>>>>,
-);
+pub(super) struct Deliveries(std::sync::Mutex<std::collections::HashMap<MemberId, Arc<Delivery>>>);
+
+#[derive(Default)]
+pub(super) struct Delivery {
+    lock: tokio::sync::Mutex<()>,
+    wake: tokio::sync::Notify,
+}
 
 impl Deliveries {
-    fn of(&self, member: &MemberId) -> Arc<tokio::sync::Mutex<()>> {
-        let mut locks = self.0.lock().unwrap();
-        locks.entry(member.clone()).or_default().clone()
+    fn of(&self, member: &MemberId) -> Arc<Delivery> {
+        let mut deliveries = self.0.lock().unwrap();
+        deliveries.entry(member.clone()).or_default().clone()
     }
 }
 
