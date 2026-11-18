@@ -24,8 +24,8 @@ use crate::{
         run_isolated as git_run,
     },
     model::{
-        MergeConfirmation, MergeOptions, MergePlan, MergePreview, MergePush, PulledBranch,
-        Repository, Workspace,
+        MergeConfirmation, MergeOptions, MergePath, MergePlan, MergePreview, MergePush,
+        PulledBranch, Repository, Workspace,
     },
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -137,6 +137,7 @@ impl Manager {
     ) -> Result<MergeSource> {
         let workspace = self.workspace(selector).await?;
         self.ensure_merging_enabled(&workspace).await?;
+        self.ensure_merges_locally(&workspace).await?;
         let repo = self.repository(workspace.repository()).await?;
         ensure!(
             off_runtime::is_dir(&workspace.path).await?,
@@ -182,6 +183,19 @@ impl Manager {
             self.workspace_settings(workspace).await?.merge.enabled,
             "local merges are turned off for this repository ([merge] enabled = false); open a PR with shoal pr open, then merge it with shoal merge"
         );
+        Ok(())
+    }
+
+    /// Refuse a local merge of a workspace whose work merges through its
+    /// open PR, which the merge would bypass, however the request came.
+    async fn ensure_merges_locally(&self, workspace: &Workspace) -> Result<()> {
+        let path = self.merge_path(&SpaceSelector::id(&workspace.id)).await?;
+        if let MergePath::Pr { pr } = path {
+            bail!(
+                "{pr} is open, so shoal merge merges it on the forge; close it to merge workspace {} locally",
+                workspace.name
+            );
+        }
         Ok(())
     }
 

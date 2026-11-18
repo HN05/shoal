@@ -63,7 +63,10 @@ impl Fixture {
 
     /// Link the PR at `url` to the workspace as assigned.
     async fn link(&self, url: &str) {
-        let (id, record) = (self.workspace.id.clone(), format!(r#"{{"urls":["{url}"]}}"#));
+        let (id, record) = (
+            self.workspace.id.clone(),
+            format!(r#"{{"urls":["{url}"]}}"#),
+        );
         let link = move |tx: &rusqlite::Transaction<'_>| {
             tx.execute(
                 "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
@@ -78,6 +81,23 @@ impl Fixture {
         let selector = SpaceSelector::id(&self.workspace.id);
         self.manager.merge_path(&selector).await
     }
+}
+
+#[tokio::test]
+async fn an_open_linked_pr_takes_the_merge_and_refuses_a_local_one() {
+    let f = Fixture::new("open").await;
+    let Ok(MergePath::Pr { pr }) = f.path().await else {
+        panic!("the open PR does not take the merge");
+    };
+    assert_eq!(
+        pr.to_string(),
+        format!("http://{}/team/repo/pulls/1", f.host)
+    );
+    // A local merge asked of the daemon directly is refused too.
+    let selector = SpaceSelector::id(&f.workspace.id);
+    let refused = f.manager.preview_merge(&selector, false, None).await;
+    let refused = refused.unwrap_err().to_string();
+    assert!(refused.contains("is open"), "{refused}");
 }
 
 #[tokio::test]
