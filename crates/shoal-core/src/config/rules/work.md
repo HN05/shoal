@@ -3,3 +3,4 @@ Ask the user with `shoal questions ask`.
 Resolve local review findings with `shoal review resolve`.
 Set your status line with `shoal progress` at each milestone and when you are blocked.
 Give separate work its own space.
+Open an issue you fix in your own space with `shoal issue open --link`, and link one you take on later with `shoal link issue <number> assigned`.
