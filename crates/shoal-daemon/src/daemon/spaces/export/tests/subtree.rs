@@ -155,6 +155,15 @@ async fn a_removed_workspace_exports_with_the_spaces_its_removal_took() {
 async fn a_copied_subtree_opens_as_copies_below_the_copies() {
     let (source, manager, repo, _origin) = exporter().await;
     let [worker, child, notes] = tree(&manager, &repo).await;
+    let reading = manager
+        .start_chat_in_workspace(
+            &SpaceSelector::id(&child),
+            "reading".into(),
+            "claude".into(),
+            None,
+        )
+        .await
+        .unwrap();
     let file = source.path().join("copy.shoal");
     let selector = SpaceSelector::id(&worker);
 
@@ -163,7 +172,14 @@ async fn a_copied_subtree_opens_as_copies_below_the_copies() {
         .unwrap();
     let opened = import_package(&manager, &repo, &fs::read(file).unwrap()).await;
 
-    let [worker_copy, child_copy, notes_copy] = opened.try_into().unwrap();
+    let [worker_copy, child_copy, notes_copy, reading_copy] = opened.try_into().unwrap();
+    let reading_copy = manager.chat_by_id(&reading_copy).await.unwrap().unwrap();
+    assert_ne!(reading_copy.id, reading.id);
+    let ran_in = reading_copy
+        .workdir
+        .workspace()
+        .map(|workspace| &workspace.id);
+    assert_eq!(ran_in, Some(&child_copy));
     for (original, copy) in [
         (&worker, &worker_copy),
         (&child, &child_copy),

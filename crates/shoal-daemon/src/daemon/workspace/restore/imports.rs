@@ -10,7 +10,7 @@ use crate::daemon::workspace::Manager;
 use crate::refusal::{Reason, Refusal};
 use crate::{
     git,
-    model::{Head, RemovedKind, RemovedSpace, Repository, RestoredSpace},
+    model::{Head, RemovedKind, RemovedSpace, Repository, RestoredSpace, SpaceRef, WorkspaceRef},
     time::UnixTime,
     transfer::{CarriedSessionFile, ImportTarget, SpaceImport},
 };
@@ -158,31 +158,48 @@ impl Manager {
         Some(warning)
     }
 
-    /// The packaged `removed` below the copy among `copies` of the space it
-    /// was below, which this import opened before it, and for a workspace
-    /// that builds on that space's branch, building on the copy's branch.
+    /// The packaged `removed` with the copies among `copies`, which this
+    /// import opened before it, in place of the originals it names: below
+    /// the copy of the space it was below, for a workspace that builds on
+    /// that space's branch building on the copy's branch, and for a chat in
+    /// the worktree of the copy of the workspace it ran in.
     async fn below_copies(
         &self,
         mut removed: RemovedSpace,
         copies: &BTreeMap<SpaceId, SpaceId>,
     ) -> Result<RemovedSpace> {
-        let Some(parent) = &removed.parent else {
-            return Ok(removed);
-        };
-        let Some(copy) = copies.get(&parent.id) else {
-            return Ok(removed);
+        if let Some(parent) = removed.parent.clone()
+            && let Some(copy) = self.copy_among(copies, &parent.id).await?
+        {
+            on_copied_base(&mut removed, &parent, &copy);
+            removed.parent = Some(copy);
+        }
+        if let RemovedKind::Chat { chat } = &mut removed.kind
+            && let Some(workspace) = &chat.workspace
+            && let Some(copy) = self.copy_among(copies, &workspace.id).await?
+        {
+            chat.workspace = Some(WorkspaceRef {
+                branch: copy.branch().cloned(),
+                id: copy.id,
+                name: copy.name,
+            });
+        }
+        Ok(removed)
+    }
+
+    /// The copy among `copies` of the space `id`, when this import opened
+    /// one.
+    async fn copy_among(
+        &self,
+        copies: &BTreeMap<SpaceId, SpaceId>,
+        id: &SpaceId,
+    ) -> Result<Option<SpaceRef>> {
+        let Some(copy) = copies.get(id) else {
+            return Ok(None);
         };
         let copy = (self.find_space(copy).await?)
-            .with_context(|| format!("the copy of {} is no longer here", parent.name))?
-            .space_ref();
-        if let RemovedKind::Workspace(kept) = &mut removed.kind
-            && let (Some(original), Some(branch)) = (parent.branch(), copy.branch())
-            && kept.base_ref.as_deref() == Some(git::local_ref(original).as_str())
-        {
-            kept.base_ref = Some(git::local_ref(branch));
-        }
-        removed.parent = Some(copy);
-        Ok(removed)
+            .with_context(|| format!("the copy of {id} is no longer here"))?;
+        Ok(Some(copy.space_ref()))
     }
 
     /// Fetch the default branch when the repository lacks `commit`, which
@@ -319,6 +336,17 @@ impl Manager {
             return Err(error);
         }
         Ok(removed)
+    }
+}
+
+/// Make the workspace `removed` records, which builds on the branch of its
+/// `parent`, build on the branch of the parent's `copy` instead.
+fn on_copied_base(removed: &mut RemovedSpace, parent: &SpaceRef, copy: &SpaceRef) {
+    if let RemovedKind::Workspace(kept) = &mut removed.kind
+        && let (Some(original), Some(branch)) = (parent.branch(), copy.branch())
+        && kept.base_ref.as_deref() == Some(git::local_ref(original).as_str())
+    {
+        kept.base_ref = Some(git::local_ref(branch));
     }
 }
 
