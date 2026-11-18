@@ -51,8 +51,16 @@ async fn merge_work(ctx: &Context, args: &MergeArgs) -> Result<i32> {
             pull::merge(ctx, target, Some(pr.into()), args).await
         }
         MergePath::Local => {
-            args.ensure_local_flags(&format!("space {space}"))?;
+            args.ensure_local_flags(&named_space(args))?;
             local::merge(ctx, space, args.push(), args.confirmation.yes).await
         }
+    }
+}
+
+/// The space a refusal names: the one `--space` gave, else this one.
+fn named_space(args: &MergeArgs) -> String {
+    match &args.space {
+        Some(space) => format!("space {space}"),
+        None => "this space".to_owned(),
     }
 }
