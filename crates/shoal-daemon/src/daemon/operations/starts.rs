@@ -117,10 +117,11 @@ impl Preparing<LaunchRequest> {
             (None, None) => None,
             (agent, waiting) => {
                 let settings = settings().await?;
+                let place = (crate::model::SpaceKind::Workspace, true);
                 if let Some(waiting) = waiting {
-                    check_queued_launch(waiting, &settings)?;
+                    check_queued_launch(waiting, &settings, place)?;
                 }
-                let resolved = agent.map(|agent| resolve_launch(*agent, &settings));
+                let resolved = agent.map(|agent| resolve_launch(*agent, &settings, place));
                 resolved.transpose()?.map(Box::new)
             }
         };

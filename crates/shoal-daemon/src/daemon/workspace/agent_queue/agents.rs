@@ -28,7 +28,8 @@ impl Manager {
     ) -> Result<QueueEntry> {
         let workspace = self.workspace(workspace).await?;
         let settings = self.workspace_settings_with_templates(&workspace).await?;
-        let mut launch = resolve_launch(launch, &settings)?;
+        let place = (crate::model::SpaceKind::Workspace, true);
+        let mut launch = resolve_launch(launch, &settings, place)?;
         if let Some(issue) = assigned_issue(&workspace) {
             launch.default_issue(issue);
         }

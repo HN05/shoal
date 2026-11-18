@@ -94,12 +94,17 @@ pub fn check_model(settings: &Effective, name: &Agent, model: &ModelChoice) -> R
     }
 }
 
-/// Refuse `launch` when it cannot run under `settings`: an agent that is
-/// off or missing, a fork it cannot start from, or a model its launch
-/// cannot pass on.
-pub fn check_queued_launch(launch: &QueuedLaunch, settings: &Effective) -> Result<()> {
+/// Refuse `launch` when it cannot run under `settings` in a space of
+/// `kind`, with a repository or without as `in_repository` says: a mode
+/// that does not start there, an agent that is off or missing, a fork it
+/// cannot start from, or a model its launch cannot pass on.
+pub fn check_queued_launch(
+    launch: &QueuedLaunch,
+    settings: &Effective,
+    (kind, in_repository): (SpaceKind, bool),
+) -> Result<()> {
     let mode = (launch.mode.clone()).unwrap_or(crate::config::modes::ModeName::DEFAULT);
-    crate::config::modes::resolve(&settings.modes, &mode, SpaceKind::Workspace, true)?;
+    crate::config::modes::resolve(&settings.modes, &mode, kind, in_repository)?;
     let agent = &launch.agent;
     ensure_available(agent, settings)?;
     if launch.fork.is_some() {
@@ -146,13 +151,17 @@ pub fn checked_agent(
     Ok(agent)
 }
 
-/// The launch `request` asks for under `settings`: run by the agent it
-/// names, else `agent.default`, refused as [`check_queued_launch`] refuses
-/// it.
-pub fn resolve_launch(request: LaunchRequest, settings: &Effective) -> Result<QueuedLaunch> {
+/// The launch `request` asks for under `settings` in a space of the kind
+/// `place` says: run by the agent it names, else `agent.default`, refused
+/// as [`check_queued_launch`] refuses it.
+pub fn resolve_launch(
+    request: LaunchRequest,
+    settings: &Effective,
+    place: (SpaceKind, bool),
+) -> Result<QueuedLaunch> {
     let agent = named_or_default(settings, request.agent.clone()).context(NO_AGENT)?;
     let launch = request.run_by(agent);
-    check_queued_launch(&launch, settings)?;
+    check_queued_launch(&launch, settings, place)?;
     Ok(launch)
 }
 
