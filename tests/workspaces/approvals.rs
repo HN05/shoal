@@ -380,7 +380,7 @@ fn approval_list_shortcuts_find_requests_of_workspaces_below_the_caller() {
     let fixture = Fixture::new();
     set_repository_toml(&fixture, "[ports.web]\nrequires_approval=true\n");
     fixture.add("parent");
-    let split = scoped_command(&fixture, "parent", &["split", "child"]);
+    let split = scoped_command(&fixture, "parent", &["create", "--branch", "child"]);
     assert!(split.status.success(), "{}", printed(&split));
     let pending = pending_approval(scoped_command(
         &fixture,

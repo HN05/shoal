@@ -211,9 +211,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   its own. A chat's agent follows the workspace-agent rules below, without what
   needs a worktree; it renames its own chat. A chat in a workspace's worktree
   also reads that workspace, with requests that only read state, and changes
-  nothing there. `shoal start` and `shoal split` run inside a space create a
-  child of that space, or of a space its scope reaches that `start --parent`
-  names, in its repository, `split` from a workspace's branch; scoped callers create only
+  nothing there. `shoal start` and `shoal create` run inside a space create a
+  child of that space, or of a space its scope reaches that `--parent`
+  names, in its repository; scoped callers create only
   children, run chats only in worktrees of their tree, never take over a workspace outside their scope, and start chats in
   a background place the agent queue opens, unless `start --here` runs it in the caller's terminal, and the user's terminal creates top-level spaces. Enforce own-worktree resource access
   in the daemon and deny workspace allocation/removal/recovery other than creating a child of their own space, removing a space below it and restoring a removed space below its recorded parent where their scope reaches that parent, and administering Shoal and the other actions a permission key governs only as that key allows. For the spaces their scope reaches but their own, scoped callers may hold them, queue

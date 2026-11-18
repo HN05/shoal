@@ -347,7 +347,7 @@ async fn fork_pull_workspace(
     let env = crate::env::without_secrets();
     let preparing = preparation::create(&ctx.paths, new, env).await?;
     // Reopening runs no hooks; only a new workspace is prepared.
-    let Some(workspace) = super::super::split::set_up(ctx, preparing).await? else {
+    let Some(workspace) = super::super::create::set_up(ctx, preparing).await? else {
         bail!("PR #{}'s workspace could not be set up", pull.number);
     };
     eprintln!(

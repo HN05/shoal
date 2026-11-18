@@ -696,13 +696,13 @@ fn branch_removal_deletes_branches_main_or_a_remote_has() {
 }
 
 #[test]
-fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
+fn a_parent_removes_a_child_an_interrupted_create_left_preparing() {
     let fixture = Fixture::new();
     fixture.add("parent");
     fixture.add("other");
-    let split = scoped_command(&fixture, "parent", &["split", "child"]);
+    let split = scoped_command(&fixture, "parent", &["create", "--branch", "child"]);
     assert!(split.status.success(), "{}", printed(&split));
-    // The split was interrupted before the child's setup started.
+    // The creation was interrupted before the child's setup started.
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute(
         "UPDATE workspaces SET state='preparing' WHERE id IN (SELECT id FROM spaces WHERE name='child')",
@@ -719,7 +719,7 @@ fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
     }
     // A held child asks for the user_holds permission: a batch naming it
     // removes none.
-    let held = scoped_command(&fixture, "parent", &["split", "held"]);
+    let held = scoped_command(&fixture, "parent", &["create", "--branch", "held"]);
     assert!(held.status.success(), "{}", printed(&held));
     fixture.ok(&[
         "acquire",
@@ -751,7 +751,7 @@ fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
         &["rm", "--wait", &fixture.id("child"), "--yes"],
     );
     assert!(removed.status.success(), "{}", printed(&removed));
-    let again = scoped_command(&fixture, "parent", &["split", "child"]);
+    let again = scoped_command(&fixture, "parent", &["create", "--branch", "child"]);
     assert!(again.status.success(), "{}", printed(&again));
     assert_eq!(
         fixture.ok(&["status", &fixture.id("child")])["workspace"]["parent"]["name"],
@@ -1203,7 +1203,13 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
 fn removing_a_parent_lists_and_removes_its_children() {
     let fixture = Fixture::new();
     fixture.add("parent");
-    let child = fixture.ok(&["split", "child", "--space", &fixture.id("parent")]);
+    let child = fixture.ok(&[
+        "create",
+        "--branch",
+        "child",
+        "--parent",
+        &fixture.id("parent"),
+    ]);
     let child_path = Path::new(child["path"].as_str().unwrap()).to_owned();
     // A clean parent still asks, naming the children it takes.
     let piped = fixture.run(&["rm", "--wait", &fixture.id("parent")]);
@@ -1223,7 +1229,13 @@ fn removing_a_parent_lists_and_removes_its_children() {
     );
 
     fixture.add("parent");
-    fixture.ok(&["split", "child", "--space", &fixture.id("parent")]);
+    fixture.ok(&[
+        "create",
+        "--branch",
+        "child",
+        "--parent",
+        &fixture.id("parent"),
+    ]);
     let removed = fixture.ok(&["rm", "--wait", &fixture.id("parent"), "--yes"]);
     assert_eq!(
         removed["children"],
@@ -1242,7 +1254,7 @@ fn a_named_child_its_failed_parent_took_is_not_removed_again() {
     commit_resource_config(&fixture.repo, "");
     fixture.add("parent");
     let parent = fixture.id("parent");
-    let child = fixture.ok(&["split", "child", "--space", &parent]);
+    let child = fixture.ok(&["create", "--branch", "child", "--parent", &parent]);
     let child_id = child["id"].as_str().unwrap();
     let output = fixture.run(&["--json", "rm", "--wait", child_id, &parent, "--yes"]);
     assert!(!output.status.success());
@@ -1276,9 +1288,9 @@ fn a_disposable_workspace_goes_whatever_it_holds_without_a_checkpoint() {
     git_with_identity(&path, &["commit", "-qam", "unpushed"]);
     fs::write(path.join("untracked"), "draft\n").unwrap();
     let child = fixture.ok(&[
-        "split",
+        "create",
         "--no-branch",
-        "--space",
+        "--parent",
         &fixture.id("scratch"),
         "--disposable",
     ]);
@@ -1325,7 +1337,13 @@ fn a_disposable_workspace_goes_whatever_it_holds_without_a_checkpoint() {
 fn removing_a_parent_does_not_skip_another_target_its_child_shares_a_name_with() {
     let fixture = Fixture::new();
     fixture.add("parent");
-    let child = fixture.ok(&["split", "child", "--space", &fixture.id("parent")]);
+    let child = fixture.ok(&[
+        "create",
+        "--branch",
+        "child",
+        "--parent",
+        &fixture.id("parent"),
+    ]);
     let other = fixture.add("other");
     let (child, other) = (child["id"].as_str().unwrap(), other["id"].as_str().unwrap());
     for id in [child, other] {

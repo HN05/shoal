@@ -402,7 +402,7 @@ fn a_parent_forgets_only_the_stopped_work_of_its_children() {
     let fixture = Fixture::new();
     fixture.add("parent");
     fixture.add("other");
-    let split = scoped_command(&fixture, "parent", &["split", "child"]);
+    let split = scoped_command(&fixture, "parent", &["create", "--branch", "child"]);
     assert!(split.status.success(), "{}", printed(&split));
     let save_agent = |name: &str| {
         let id = fixture.ok(&["status", &fixture.id(name)])["workspace"]["id"]
@@ -474,7 +474,7 @@ fn a_parent_forgets_only_the_stopped_work_of_its_children() {
 fn a_parents_stop_with_yes_acknowledges_nothing_the_daemon_proves() {
     let fixture = Fixture::new();
     fixture.add("parent");
-    let split = scoped_command(&fixture, "parent", &["split", "child"]);
+    let split = scoped_command(&fixture, "parent", &["create", "--branch", "child"]);
     assert!(split.status.success(), "{}", printed(&split));
     let child = fixture.id("child");
     let output = scoped_command(&fixture, "parent", &["stop", &child, "--yes"]);
@@ -492,9 +492,9 @@ fn a_parent_stops_its_children_and_resumes_them_whoever_stopped_them() {
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     fixture.add("parent");
     fixture.add("other");
-    let split = scoped_command(&fixture, "parent", &["split", "child"]);
+    let split = scoped_command(&fixture, "parent", &["create", "--branch", "child"]);
     assert!(split.status.success(), "{}", printed(&split));
-    let split = scoped_command(&fixture, "child", &["split", "grandchild"]);
+    let split = scoped_command(&fixture, "child", &["create", "--branch", "grandchild"]);
     assert!(split.status.success(), "{}", printed(&split));
     let paths = ["child", "grandchild"].map(|name| {
         let workspace = fixture.ok(&["status", &fixture.id(name)])["workspace"].clone();
@@ -563,7 +563,7 @@ fn stopping_a_workspace_stops_the_workspaces_below_it() {
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     fixture.add("parent");
-    let split = scoped_command(&fixture, "parent", &["split", "child"]);
+    let split = scoped_command(&fixture, "parent", &["create", "--branch", "child"]);
     assert!(split.status.success(), "{}", printed(&split));
     // Only the child has an agent, stopped so its restore queues.
     let child = fixture.ok(&["status", &fixture.id("child")])["workspace"].clone();

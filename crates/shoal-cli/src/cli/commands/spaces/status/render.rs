@@ -3,7 +3,7 @@
 use super::StatusView;
 use crate::{
     cli::{
-        commands::{base, ci, links, progress, resources, split},
+        commands::{base, ci, create, links, progress, resources},
         list_status::{ListStatus, ListStatusStyle},
         output::{Palette, Style},
         ui,
@@ -52,7 +52,7 @@ fn render_workspace(status: &WorktreeStatus, palette: Palette) {
         outln!("Copied from:   {}", copy_source(copied));
     }
     base::render(workspace);
-    split::render(&workspace.parent, &workspace.children);
+    create::render(&workspace.parent, &workspace.children);
     if !status.chats.is_empty() {
         let chats: Vec<_> = status.chats.iter().map(|chat| chat.name.as_str()).collect();
         outln!("Chats:         {}", chats.join(", "));
@@ -159,7 +159,7 @@ fn render_chat(chat: &Chat, palette: Palette) {
     }
     render_sleep(chat.sleep, chat.wake_at);
     render_asleep(chat.asleep.as_ref(), chat.number);
-    split::render(&chat.parent, &chat.children);
+    create::render(&chat.parent, &chat.children);
     render_holds(&chat.holds);
 }
 

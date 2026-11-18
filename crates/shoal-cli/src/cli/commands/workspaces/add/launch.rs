@@ -234,6 +234,27 @@ fn without_agent(launch: &mut Launch) -> Result<()> {
     Ok(())
 }
 
+/// Pick on a terminal what the new workspace `launch` starts from when it
+/// names nothing its branch comes from, as a start's source picker offers
+/// it; without a terminal, refuse it, naming what names one.
+pub(in crate::cli::commands) async fn pick_start_source(
+    ctx: &Context,
+    launch: &mut Launch,
+) -> Result<()> {
+    if !begins_as_chat(launch) {
+        return Ok(());
+    }
+    anyhow::ensure!(
+        ctx.interactive(),
+        "name the workspace's branch with --branch, --issue or an issue, PR or branch link"
+    );
+    let resolved = resolve(ctx, launch).await?;
+    let mut creation = Creation::default();
+    let picked = pick_add_source(ctx, &resolved.target, &mut creation).await?;
+    picked_source(launch, creation, picked);
+    Ok(())
+}
+
 /// Whether `launch` names nothing a new workspace starts from: no branch,
 /// issue, link, base or copy.
 fn names_nothing(launch: &Launch) -> bool {

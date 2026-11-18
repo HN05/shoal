@@ -1,6 +1,6 @@
 ---
 name: shoal
-description: What Shoal's commands do, for agents in a Shoal workspace or chat and for sessions outside one — start and coordinate agents, open, change, watch and review issues and PRs, mark work ready, ask the user, hand back files, finish with `shoal done`, sync the default branch, split child workspaces, and reserve ports, simulators, containers, resource permits and secrets.
+description: What Shoal's commands do, for agents in a Shoal workspace or chat and for sessions outside one — start and coordinate agents, open, change, watch and review issues and PRs, mark work ready, ask the user, hand back files, finish with `shoal done`, sync the default branch, create workspaces without an agent, and reserve ports, simulators, containers, resource permits and secrets.
 ---
 
 # Shoal
@@ -107,16 +107,17 @@ its first message cannot reach the session, such as without a Happy login.
 ## Child workspaces
 
 ```sh
-shoal split fix-typo                  # New branch from the default branch
-shoal split --issue 42                # Named after the issue, which it links
-shoal split api-part --base <branch>  # Stacked on the given branch
-shoal split --no-branch [--base <ref>]  # A workspace at a commit, no branch
-shoal split --copy                    # A copy of this workspace's files
+shoal create --branch fix-typo           # New branch from the default branch
+shoal create --issue 42                  # Named after the issue, which it links
+shoal create --branch api-part --base <branch>  # Stacked on the given branch
+shoal create --no-branch [--base <ref>]  # A workspace at a commit, no branch
+shoal create --copy                      # A copy of this workspace's files
 ```
 
-`split` creates a child of the current space, a workspace or a chat, or of the
-one `--space` names, with its own worktree, branch and setup, without an
-agent, and returns its `path`. Shoal commands run in the
+`create` creates a workspace without an agent from what `shoal start` takes
+for one, such as a branch, an issue or a PR or branch link, as a child of the
+current space, a workspace or a chat, or of the one `--parent` names, with its
+own worktree, branch and setup, and returns its `path`. Shoal commands run in the
 child's directory act on the child. The child's issue and PR activity reaches
 the parent's agent, each update naming the child. `--no-branch` has no branch
 or PR of its own; an agent `shoal start --in` starts there cannot push. `--copy` gives the child the committed, uncommitted,
@@ -124,7 +125,7 @@ untracked and ignored files, and `--checkpoint <number>` one of the
 checkpoints' files instead; an untouched copy goes with cleanup. `shoal start
 --copy [--fork] -- "<task>"` starts an agent in such a copy, and
 `shoal start --copy <workspace>` copies another workspace, live or removed.
-`shoal rm <child>` removes a child, including one a split left `preparing`;
+`shoal rm <child>` removes a child, including one a create left `preparing`;
 one the user holds, or with such a space below it, as the space's
 `user_holds` permission allows.
 
@@ -137,8 +138,8 @@ shoal convert chat                    # This workspace becomes a chat in the che
 ```
 
 `convert` keeps the space, with its number, name, parent, children, links,
-questions, files and progress. `convert workspace` takes `split`'s branch
-arguments: an existing local or remote branch of that name, or a new one from
+questions, files and progress. `convert workspace` takes a branch, `--issue`
+and `--base`: an existing local or remote branch of that name, or a new one from
 the default branch or `--base`; without a branch, `--issue` or the chat's
 linked issue names it. It returns once the worktree is set up. `convert chat`
 removes the worktree as `shoal rm` does, keeping a checkpoint and the branch,

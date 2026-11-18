@@ -58,6 +58,7 @@ mod resources;
 mod restart;
 pub(crate) mod restore;
 
+mod create;
 mod review;
 mod secrets;
 mod service;
@@ -66,7 +67,6 @@ mod simulators;
 mod skill;
 mod sleep;
 mod spaces;
-mod split;
 mod start;
 mod stop;
 mod subagents;

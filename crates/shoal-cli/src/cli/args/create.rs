@@ -34,32 +34,15 @@ pub enum CreateCommand {
     /// and pushes your branches to the fork. Once nothing of it is left, it
     /// removes the clone.
     Contribute(ContributeArgs),
-    /// Create a child workspace on a new branch for work in its own PR.
+    /// Create a workspace without starting an agent there.
     ///
-    /// The child goes below the current space, a workspace or a chat, whose
-    /// agent works on it and receives its issue and PR activity; the
-    /// parent's cleanup waits until its children are removed. `shoal start`
-    /// starts an agent of the child's own.
-    Split {
-        #[command(flatten)]
-        branch: BranchArgs,
-        /// Create a workspace at a commit, with no branch of its own, for
-        /// comparisons and research: at --base, a tag or commit, or the default
-        /// branch. Without a parent space, the user owns it.
-        #[arg(long, conflicts_with_all = ["branch", "issue"])]
-        no_branch: bool,
-        /// Parent space, a workspace or a chat, by number or ID; defaults to
-        /// the current space or a picker, or with --no-branch to none
-        /// outside a space.
-        #[arg(short = 's', long)]
-        space: Option<SpaceSelector>,
-        #[command(flatten)]
-        copy: CopyArgs,
-        /// Nothing in it is worth keeping: every removal deletes it whatever it
-        /// holds, without asking or keeping a checkpoint, and deletes its branch.
-        #[arg(long)]
-        disposable: bool,
-    },
+    /// It starts from what shoal start takes for a workspace: a
+    /// repository, an issue, PR or branch URL, --branch, --issue or a copy.
+    /// Inside a space it goes below that space, or below the one --parent
+    /// names, whose agent works on it and receives its issue and PR
+    /// activity; outside one it is a top-level workspace. shoal start
+    /// starts an agent of its own there.
+    Create(Box<CreateArgs>),
     /// Turn a chat into a workspace, or a workspace into a chat.
     ///
     /// The space stays the same: it keeps its number, name, parent,
@@ -112,8 +95,8 @@ pub enum ConvertCommand {
     },
 }
 
-// The branch a new workspace works on, which `shoal split` and `shoal
-// convert workspace` take. A doc comment here would replace the description
+// The branch a new workspace works on, which `shoal convert workspace`
+// takes. A doc comment here would replace the description
 // of every command that flattens it.
 #[derive(Debug, Default, Clone, Args)]
 pub struct BranchArgs {
@@ -133,6 +116,84 @@ pub struct BranchArgs {
     /// and the removal hooks; `shoal setup` runs the setup later.
     #[arg(long)]
     pub skip_setup: bool,
+}
+
+// Arguments of `shoal create`, `shoal start`'s that choose what a new
+// workspace starts from and where it goes.
+#[derive(Debug, Default, Clone, Args)]
+pub struct CreateArgs {
+    /// Registered repository, or an issue, PR or branch URL; defaults to the
+    /// current checkout or workspace, else a picker.
+    #[arg(value_parser = start_target)]
+    pub repository: Option<StartTarget>,
+    /// Repository for an issue number or a pasted link.
+    #[arg(short = 'r', long = "repo")]
+    pub repository_override: Option<String>,
+    /// The branch to create it on, as git switch takes it: an existing local
+    /// branch or remote/branch opens, in its workspace when one has it; any
+    /// other name is a new branch, never suffixed.
+    #[arg(long, value_name = "NAME")]
+    pub branch: Option<String>,
+    /// The forge issue number or URL it links; its branch and name derive
+    /// from it.
+    #[arg(short = 'i', long, value_parser = issue_input)]
+    pub issue: Option<crate::forge::items::reference::ItemInput>,
+    /// Create a workspace at a commit, with no branch of its own, for
+    /// comparisons and research: at --base, a tag or commit, or the default
+    /// branch.
+    #[arg(long, conflicts_with_all = ["branch", "issue", "repository", "path", "git_profile"])]
+    pub no_branch: bool,
+    /// Create this worktree at an exact new directory instead of the repository default.
+    #[arg(long)]
+    pub path: Option<PathBuf>,
+    /// Starting Git ref of a new branch (defaults to the repository's default
+    /// branch, refreshed from its upstream); a parent's branch stacks the
+    /// workspace on it.
+    #[arg(long, value_name = "REF")]
+    pub base: Option<String>,
+    /// Apply a named Git profile to the new worktree, overriding repository defaults.
+    #[arg(long)]
+    pub git_profile: Option<String>,
+    /// The space it goes below, by number or ID; defaults to the space this
+    /// runs in, else none.
+    #[arg(long, value_name = "SPACE")]
+    pub parent: Option<SpaceSelector>,
+    /// Its name, free text of at most 40 characters; defaults to the linked
+    /// issue's or PR's title, else its branch.
+    #[arg(long)]
+    pub name: Option<shoal_protocol::space_names::SpaceName>,
+    /// Its priority: low, normal (the default), urgent, or a number from 0
+    /// to 100. A space's agent gives at most its own space's.
+    #[arg(long)]
+    pub priority: Option<shoal_schedule::priority::Priority>,
+    #[command(flatten)]
+    pub copy: CopyArgs,
+    #[command(flatten)]
+    pub creation: CreationArgs,
+}
+
+impl CreateArgs {
+    /// The start of a workspace without an agent these ask for, below
+    /// `parent`, apart from where it is made.
+    pub(in crate::cli) fn launch(&self, parent: Option<SpaceSelector>) -> Launch {
+        Launch {
+            target: self.repository.clone(),
+            repository: self.repository_override.clone(),
+            branch: self.branch.clone(),
+            path: self.path.clone(),
+            base: self.base.clone(),
+            git_profile: self.git_profile.clone(),
+            issue: self.issue.clone().map(IssueChoice::Named),
+            copy: self.copy.copy.clone().map(SpaceChoice::from),
+            checkpoint: self.copy.checkpoint,
+            skip_setup: self.creation.skip_setup,
+            disposable: self.creation.disposable,
+            name: self.name.clone(),
+            priority: self.priority,
+            parent,
+            ..Launch::default()
+        }
+    }
 }
 
 // Arguments of `shoal start`.

@@ -170,15 +170,23 @@ impl NewChild {
     }
 }
 
-/// A workspace to create: a new one, or a child of a space.
+/// A workspace to create: a new one, a child of a space, or the one a
+/// start without an agent describes, which the daemon places as a launch's.
 pub enum Creation {
     Workspace(NewWorkspace),
     Child(NewChild),
+    Placed(Box<shoal_protocol::launches::Launch>),
 }
 
 impl From<NewWorkspace> for Creation {
     fn from(new: NewWorkspace) -> Self {
         Self::Workspace(new)
+    }
+}
+
+impl From<shoal_protocol::launches::Launch> for Creation {
+    fn from(launch: shoal_protocol::launches::Launch) -> Self {
+        Self::Placed(Box::new(launch))
     }
 }
 
@@ -210,6 +218,10 @@ pub async fn start<D: Daemon>(
     let method = match creation.into() {
         Creation::Workspace(new) => new.method(env),
         Creation::Child(child) => child.method(env),
+        Creation::Placed(launch) => OperationMethod::StartCreation {
+            launch,
+            env: Some(env),
+        },
     };
     connection::request(daemon, method).await
 }

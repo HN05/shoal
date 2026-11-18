@@ -1454,7 +1454,13 @@ fn the_sessions_of_a_profile_only_the_workspace_defines_move_with_it() {
 fn a_carried_space_finds_its_sessions_with_a_profile_only_its_config_defines() {
     let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
     fixture.add("lead");
-    let child = fixture.ok(&["split", "profiled", "--space", &fixture.id("lead")]);
+    let child = fixture.ok(&[
+        "create",
+        "--branch",
+        "profiled",
+        "--parent",
+        &fixture.id("lead"),
+    ]);
     let path = Path::new(child["path"].as_str().unwrap());
     // Only the child's own config names the profile.
     fs::write(
@@ -1604,7 +1610,13 @@ fn restore_with_user_files(fixture: &Fixture, workspace: &str) {
 fn exporting_a_parent_takes_its_children_which_import_opens_below_it() {
     let fixture = Fixture::new();
     let parent = PathBuf::from(fixture.add("parent")["path"].as_str().unwrap());
-    let child = fixture.ok(&["split", "child", "--space", &fixture.id("parent")]);
+    let child = fixture.ok(&[
+        "create",
+        "--branch",
+        "child",
+        "--parent",
+        &fixture.id("parent"),
+    ]);
     let child = PathBuf::from(child["path"].as_str().unwrap());
     fs::write(child.join("notes"), "draft\n").unwrap();
     let ids = ["parent", "child"].map(|name| fixture.id(name));
@@ -1648,7 +1660,13 @@ fn an_import_whose_carried_space_fails_to_open_fails() {
     );
     commit_resource_config(&fixture.repo, "hooks.post_setup = 'post-setup.sh'\n");
     fixture.add("parent");
-    fixture.ok(&["split", "child", "--space", &fixture.id("parent")]);
+    fixture.ok(&[
+        "create",
+        "--branch",
+        "child",
+        "--parent",
+        &fixture.id("parent"),
+    ]);
     let file = fixture.root.path().join("parent.shoal");
     let file = file.to_str().unwrap();
     fixture.ok(&["move", "export", &fixture.id("parent"), "-o", file, "--yes"]);
@@ -1667,7 +1685,7 @@ fn a_batch_writes_a_file_per_tree_unless_children_stay() {
     let fixture = Fixture::new();
     let split = |parent: &str, name: &str| {
         fixture.add(parent);
-        let child = fixture.ok(&["split", name, "--space", &fixture.id(parent)]);
+        let child = fixture.ok(&["create", "--branch", name, "--parent", &fixture.id(parent)]);
         PathBuf::from(child["path"].as_str().unwrap())
     };
     let child = split("parent", "child");

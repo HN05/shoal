@@ -17,7 +17,7 @@ use crate::{
     cli::{
         args::changes::{RevertArgs, RevertedPr},
         client,
-        commands::split,
+        commands::create,
         context::Context,
         ui,
     },
@@ -155,7 +155,7 @@ async fn revert_workspace(
                 base,
                 ..NewChild::new(SpaceSelector::id(&workspace.id), Some(name))
             };
-            split::start_child(ctx, start).await?
+            create::start_child(ctx, start).await?
         }
         Reverting::Workspace(workspace) => {
             let repository = workspace.repository().clone();
@@ -167,7 +167,7 @@ async fn revert_workspace(
             start_workspace(ctx, repository, name, base, Some(chat.id.clone())).await?
         }
     };
-    split::set_up(ctx, preparing).await
+    create::set_up(ctx, preparing).await
 }
 
 /// Start a new workspace `name` of `repository` on `base`, opened by

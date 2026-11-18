@@ -59,7 +59,7 @@ pub(super) async fn to_workspace(
     let env = crate::env::without_secrets();
     let started = crate::client::conversions::to_workspace(&ctx.paths, new, env).await?;
     let preparing = Preparing::follow(&ctx.paths, started).await?;
-    let Some(workspace) = super::split::set_up(ctx, preparing).await? else {
+    let Some(workspace) = super::create::set_up(ctx, preparing).await? else {
         return Ok(1);
     };
     let text = format!(

@@ -1188,7 +1188,7 @@ fn worker_rules_resolve_per_launch_and_reach_native_instruction_options() {
 fn a_starting_subagent_learns_which_workspace_it_works_in() {
     let fixture = Fixture::new();
     let parent = fixture.add("parent");
-    let split = scoped_command(&fixture, "parent", &["split", "child"]);
+    let split = scoped_command(&fixture, "parent", &["create", "--branch", "child"]);
     assert!(split.status.success(), "{}", printed(&split));
     let child: Value = serde_json::from_slice(&split.stdout).unwrap();
     let brief = |cwd: &Value| {

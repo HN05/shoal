@@ -122,7 +122,7 @@ pub enum InternalCommand {
         #[arg(long)]
         space: Option<SpaceSelector>,
     },
-    /// Split a child workspace for the worktree Claude Code creates and print
+    /// Create a child workspace for the worktree Claude Code creates and print
     /// its path; Shoal's Claude Code `WorktreeCreate` hook runs it.
     WorktreeCreate,
     /// Mark the child workspace at the worktree Claude Code removes done;

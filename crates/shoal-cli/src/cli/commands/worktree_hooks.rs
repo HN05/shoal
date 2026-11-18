@@ -1,6 +1,6 @@
 //! Claude Code's `WorktreeCreate` and `WorktreeRemove` hooks. A worktree it
 //! creates, as for a subagent with `isolation: "worktree"`, is a child
-//! workspace split from the workspace it runs in: the subagent works there as
+//! workspace of the workspace it runs in: the subagent works there as
 //! the child, the child's activity reaches the agent, and Shoal's cleanup
 //! removes it.
 use std::path::{Path, PathBuf};
@@ -38,8 +38,8 @@ pub(super) async fn create(ctx: &Context) -> Result<i32> {
     let parent = enclosing(&workspaces, &input.cwd)?.id.clone();
     let start =
         crate::client::preparation::NewChild::new(SpaceSelector::id(&parent), Some(input.name));
-    let preparing = super::split::start_child(ctx, start).await?;
-    let Some(child) = super::split::set_up(ctx, preparing).await? else {
+    let preparing = super::create::start_child(ctx, start).await?;
+    let Some(child) = super::create::set_up(ctx, preparing).await? else {
         return Ok(1);
     };
     outln!("{}", child.path.display());

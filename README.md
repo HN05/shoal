@@ -85,7 +85,8 @@ Use `shoal start my-project` to pick a new or existing branch, an open issue or 
 shoal start my-project --branch fix-api --base feature/api  # Branch from feature/api
 shoal start my-project --branch fix-api --base origin/feature/api  # Fetch the pushed branch first
 shoal branch base set feature-api --workspace 4        # Record that workspace 4 builds on feature-api
-shoal split fix-typo --space 4               # Create a child workspace for work in its own PR
+shoal create --branch fix-typo --parent 4    # A child workspace for work in its own PR, without an agent
+shoal create my-project --branch scratch     # A top-level workspace to work in yourself
 shoal start --copy 4 --fork                  # Try another approach from workspace 4's current files
 shoal start --copy 4 --checkpoint 3          # Start from workspace 4's checkpoint 3, live or removed
 shoal refresh 4                              # Bring workspace 4 up to date with what it was made from

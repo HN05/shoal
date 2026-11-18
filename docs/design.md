@@ -99,7 +99,7 @@ another release with `protocol_mismatch` naming both versions, and an app
 updates with Shoal. An app is the user unless it gives a scope token, which
 only the `shoal` command reads from its environment; with one, it is that
 workspace's agent, under the scope checks and approvals of its `shoal`
-commands. Creating or splitting a workspace, opening a PR and merging start
+commands. Creating a workspace, opening a PR and merging start
 operations, below, whose ID a client follows for typed progress, then a result
 or a typed failure. A subscription sends a snapshot of the records of its
 topics, then each record that changed or was removed, comparing again after
@@ -233,12 +233,12 @@ environment without the secrets an agent launch exported, and runs the same trac
 the same checks; what it and its processes write becomes the operation's output,
 and it reports typed steps and its end. The CLI starts an operation and follows
 it through `shoal_client`, as an app does, showing its output where it showed
-it before, so the CLI and apps cannot drift. `shoal start`, `split` and apps open a
-workspace and start its preparation through one request, `StartWorkspace` or
-`StartSplit`, which take the steps every new space's start takes, whatever
+it before, so the CLI and apps cannot drift. `shoal start`, `create` and apps open a
+workspace and start its preparation through one request, `StartWorkspace`,
+`StartCreation` or `StartChild`, which take the steps every new space's start takes, whatever
 its kind: it refuses an agent that cannot run, an issue that is not open or
 a branch that is not a literal Git branch name before creating anything, records
-a new workspace, `preparing` without its worktree, or creates a split's with
+a new workspace, `preparing` without its worktree, or creates a child's with
 it, or reopens the one on the branch, PR head or record
 it names, assigns the issue, removing a new space it cannot assign, queues
 the detached agent the request asks for, with its mode, model, arguments,
@@ -1050,22 +1050,22 @@ and cleanup paths; that agent's opening says the workspace has no branch, so it
 cannot push or open a PR from there. Without an agent, whoever created it runs
 things in it: a CI job, a reviewer, the parent's agent or the user's shell, with
 `shoal run` and `shoal demo`. Everything else goes through the workspace paths: the seed clone, executions, leases, scope tokens, children, holds,
-checkpoints and removal. `split --no-branch` creates one, below the caller's
+checkpoints and removal. `create --no-branch` creates one, below the caller's
 space or as the user's top-level one, and a fork PR's head opens in one, placed
 the same way, that is reused per PR and moved to its new head while it has nothing of its own. Its
 starting commit counts as kept on removal, since a fork's head or a local commit is
 on no remote, while commits made on top count as unsaved work; restore reopens it
 without a branch, and branch-only commands refuse it. `--skip-setup` and
-`--disposable` are general creation options of `start` and `split`, not special cases
+`--disposable` are general creation options of `start` and `create`, not special cases
 for a runner: one skips what gates readiness, with the removal hooks that tear it
 down, and the other makes every removal delete the workspace without inspecting it,
 asking or keeping a checkpoint.
 
 A workspace can start from a copy of another's current files or from one of its
-checkpoints, with `--copy` and `--checkpoint` on `start` and `split`: two flags,
+checkpoints, with `--copy` and `--checkpoint` on `start` and `create`: two flags,
 since spaces are also named by number, and neither combines with `--base`, which
 keeps meaning a Git ref and so committed work only. A copy is an ordinary
-workspace on a new branch, or at a commit with `split --no-branch`, with one
+workspace on a new branch, or at a commit with `create --no-branch`, with one
 editing agent of its own, a fresh one or with `--fork` one forked from the
 source's. Copies are built on checkpoints. A copy of current files gets a linked
 worktree created without checkout, the source's index and cloned files, ignored
@@ -1121,11 +1121,16 @@ branch begins as a chat in its mode, whose agent converts it once it knows the
 work, instead of a workspace on a placeholder branch whose directory would keep
 a meaningless name.
 
-A child workspace is split from a parent with `shoal split`, so an agent whose
-work needs another PR gets another branch and worktree instead of switching
-branches or creating worktrees Shoal does not own. The parent is a workspace
-or a chat of a repository, as for any child. Splitting creates a new
-branch in the parent's repository, from the default branch or a `--base` that
+`shoal create` makes a workspace as `shoal start` makes one, from the same
+arguments that choose what it starts from and where it goes, and starts no
+agent there: `create` is the way to a workspace without one, at the top from
+the user's terminal or as a child
+inside a space, so an agent whose work needs another PR gets another branch
+and worktree instead of switching branches or creating worktrees Shoal does
+not own. The daemon places it as a launch's new workspace and records it
+through the steps every new space's start takes, with nothing to queue. The
+parent is a workspace or a chat of a repository, as for any child. A child goes
+in its parent's repository on a new branch from the default branch or a `--base` that
 stacks it as usual, records the parent, and links an `--issue`. Any space opens
 a child of either kind the same way: `shoal start` run inside a space puts the
 new workspace or chat below it, or below a space its scope reaches that
@@ -1168,7 +1173,7 @@ environment, which a shell left there would keep. A chat run in the caller's ter
 chat's own execution, as a workspace's agent is, which the caller's stops
 leave running; places drop the marks and scope token of the space
 that opened them, so what runs there is the new chat's. Spaces form one tree through one parent link,
-`space_parents`, which records a workspace split from another and one a chat
+`space_parents`, which records a workspace created below another and one a chat
 opened alike: every space has at most one parent, a ready workspace or a chat
 of its own repository, or a chat without a repository, never one below it, and
 any other child in another repository is refused: spaces across repositories
@@ -1207,7 +1212,7 @@ below them, keeps them; a child's own `done` follows the usual rules. The parent
 children, so its processes may remove and hold them, except that the user's
 holds anywhere below refuse the removal. `list` shows children below their
 parent, and `status` names the parent and children of either kind. `shoal start`
-is the only command that starts an agent, so `split` creates worktrees alone: a
+is the only command that starts an agent, so `create` creates worktrees alone: a
 `start` run in a space, a workspace or a chat, gives a child an agent of its own
 through the agent queue, and `start --fork` gives it the parent's agent
 from a fork of its session, the one the caller's agent or else the parent's only
@@ -2819,7 +2824,7 @@ every forge has them and a label would need one per repository. The agent
 account is assigned while an agent works the issue: a space linking it as
 assigned has an agent of its own that runs, is queued, restarts or is asleep, or
 an agent made the link and no agent of the space's own has ended since, as for a
-child a coordinator splits for its subagents, and the space's work is not done. It comes off an open issue once none does, at
+child a coordinator creates for its subagents, and the space's work is not done. It comes off an open issue once none does, at
 `shoal done`, a stop that waits for `shoal restore`, an exit, an unlink or a
 removal, and goes back on when an agent starts or is restored or `done --undo`
 withdraws the completion. Every Shoal acting as the same account shares that
@@ -3023,7 +3028,7 @@ shared namespace, so its picker, `--all` and a list of names act on chats as on
 workspaces, and `--forget` forgets a chat's stopped work as a workspace's.
 Starts, renames and removals are journal events, and its agent's starts and
 stops are logged as a workspace agent's. A workspace a chat opens is its child in the one tree of
-spaces, unless it was split from a workspace, below which it stays; reopening
+spaces, unless it was created below a workspace, where it stays; reopening
 it outside a chat for its issue or a picked branch returns it to the user, so
 Shoal knows which chat coordinates which workers, while a start of its own
 agent, with `--in` or the `--branch` it has, leaves it where it is. Removing the chat first removes the spaces below it through the

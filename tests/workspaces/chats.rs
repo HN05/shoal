@@ -1123,7 +1123,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
 fn removing_a_chat_removes_the_workspaces_below_it_and_stops_its_agent() {
     let fixture = Fixture::new();
     let (mut agent, chat) = start_test_chat(&fixture, "planning");
-    // The chat's agent opens a workspace, and a child is split from it.
+    // The chat's agent opens a workspace, and creates a child below it.
     let output = fixture
         .command()
         .args([
@@ -1139,7 +1139,13 @@ fn removing_a_chat_removes_the_workspaces_below_it_and_stops_its_agent() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", printed(&output));
-    fixture.ok(&["split", "below", "--space", &fixture.id("opened")]);
+    fixture.ok(&[
+        "create",
+        "--branch",
+        "below",
+        "--parent",
+        &fixture.id("opened"),
+    ]);
     // Another chat runs in the opened workspace's worktree.
     let opened = fixture.id("opened");
     let (mut resident, _) = fixture.run_chat("reading", &["--in", &opened]);
@@ -1196,7 +1202,13 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
     };
     let output = add(&fixture.repo, "opened");
     assert!(output.status.success(), "{}", printed(&output));
-    fixture.ok(&["split", "below", "--space", &fixture.id("opened")]);
+    fixture.ok(&[
+        "create",
+        "--branch",
+        "below",
+        "--parent",
+        &fixture.id("opened"),
+    ]);
 
     // One parent link names the chat or the workspace above, of either kind.
     let opened = fixture.ok(&["status", &fixture.id("opened")]);
@@ -1262,12 +1274,12 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
     agent.wait().unwrap();
 }
 
-/// Run `shoal split` with `args` as the agent of the chat `chat` would, in
+/// Run `shoal create` with `args` as the agent of the chat `chat` would, in
 /// `dir`, and return the child it created.
-fn split_in_chat(fixture: &Fixture, chat: &str, dir: &Path, args: &[&str]) -> Value {
+fn create_in_chat(fixture: &Fixture, chat: &str, dir: &Path, args: &[&str]) -> Value {
     let output = fixture
         .command()
-        .args(["--json", "split"])
+        .args(["--json", "create"])
         .args(args)
         .env("SHOAL_SPACE", chat)
         .env("SHOAL_SCOPE_TOKEN", fixture.chat_scope(chat))
@@ -1280,15 +1292,15 @@ fn split_in_chat(fixture: &Fixture, chat: &str, dir: &Path, args: &[&str]) -> Va
 }
 
 #[test]
-fn a_chat_splits_child_workspaces_below_itself() {
+fn a_chat_creates_child_workspaces_below_itself() {
     let fixture = Fixture::new();
     let (mut agent, chat) = start_test_chat(&fixture, "planning");
-    let child = split_in_chat(&fixture, &chat, &fixture.repo, &["child"]);
+    let child = create_in_chat(&fixture, &chat, &fixture.repo, &["--branch", "child"]);
     assert_eq!(child["parent"]["id"], chat.as_str(), "{child}");
     assert_eq!(child["branch"], "child", "{child}");
     // The user names the chat for a workspace at a commit.
     let planning = fixture.id("planning");
-    let at_commit = fixture.ok(&["split", "--no-branch", "--space", &planning]);
+    let at_commit = fixture.ok(&["create", "--no-branch", "--parent", &planning]);
     assert_eq!(at_commit["parent"]["id"], chat.as_str(), "{at_commit}");
     assert_eq!(at_commit["branch"], Value::Null, "{at_commit}");
     // Neither queues an agent of its own.
@@ -1298,12 +1310,12 @@ fn a_chat_splits_child_workspaces_below_itself() {
 }
 
 #[test]
-fn a_chat_in_a_workspaces_worktree_splits_below_the_chat() {
+fn a_chat_in_a_workspaces_worktree_creates_below_the_chat() {
     let fixture = Fixture::new();
     let opened = fixture.add("opened");
     let path = PathBuf::from(opened["path"].as_str().unwrap());
     let (mut agent, chat) = fixture.run_chat("reading", &["--in", &fixture.id("opened")]);
-    let child = split_in_chat(&fixture, &chat, &path, &["child"]);
+    let child = create_in_chat(&fixture, &chat, &path, &["--branch", "child"]);
     assert_eq!(child["parent"]["id"], chat.as_str(), "{child}");
     agent.kill().unwrap();
     agent.wait().unwrap();

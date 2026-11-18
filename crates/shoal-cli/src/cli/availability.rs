@@ -72,7 +72,7 @@ impl Need {
             ["release", "hold"] => Self::Holds,
             ["link" | "unlink"] | ["issue", "open"] => Self::Links,
             [
-                "run" | "edit" | "open" | "start" | "merge" | "unmerge" | "split" | "done"
+                "run" | "edit" | "open" | "start" | "merge" | "unmerge" | "create" | "done"
                 | "watch" | "ready" | "acquire" | "release" | "refresh",
                 ..,
             ]

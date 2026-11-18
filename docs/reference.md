@@ -1036,7 +1036,7 @@ work is stopped, `working`, `ready`, the other [agent states](#agent-state),
 `process running` while an agent without a reported state or a command runs,
 `parent working` while no agent of its own has ever started there and the
 agent of the nearest space above with one works, as when that agent's
-subagents work in a child it split, or `inactive`.
+subagents work in a child it created, or `inactive`.
 `shoal list` and its picker order spaces by status, then number: working
 agents and processes first, then what needs you, failures, changes under
 way, queued agents, and quiet spaces last.
@@ -1876,7 +1876,7 @@ environment it runs with sets that variable; a lifetime in
 directories, so a sandbox or a setting such as Claude Code's
 `blockReadsOutsideWorkingDirectories` lets it work there: each `agent.dirs`
 entry for every agent and chat, for a workspace's agent the repository's
-workspaces directory, where `shoal split` puts children, its [temporary
+workspaces directory, where `shoal create` puts children, its [temporary
 directory](#temporary-directories) and the local config lie, and for a chat its temporary
 directory, plus the global config's directory for a [setup](#set-up-config) chat.
 Claude Code's [`review`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools) prints its JSON result with Claude's
@@ -2137,7 +2137,7 @@ cannot rename chats.
 `shoal list` shows the chat by name with the spaces below it, and
 [space events](#space-events) report its start, renames, stops,
 restores and removal. A workspace the chat's agent opens with `shoal start` is
-below the chat, unless it was split from a workspace, below which it stays: its `parent` field and `shoal status` name the chat until the
+below the chat, unless it was created below a workspace, where it stays: its `parent` field and `shoal status` name the chat until the
 workspace is reopened outside a chat for its issue or a picked branch, which
 returns it to you; a start of its own agent, with `--in` or the `--branch` it
 has, leaves it where it is. The chat opens
@@ -2171,13 +2171,13 @@ files, progress and `TMPDIR`, and the [journal](#space-events) records a
 `converted` event instead of a new space. Unread messages go to the agent in
 the new place. Converting a space into the kind it already is, is refused.
 
-`convert workspace` takes `shoal split`'s branch arguments. With `BRANCH`, the
+`convert workspace` takes a branch, `--issue` and `--base`. With `BRANCH`, the
 workspace uses the local or remote branch of that name, which no workspace may
 hold, or creates it from the default branch or `--base`; without one, the issue
 `--issue` names, which it links, or else the chat's linked issue names the
 branch as [`shoal start --issue`](#workspaces) derives it, and a chat without
 either is refused. The worktree, its directory and setup are a new
-workspace's: the command follows setup as `shoal split` does and returns once the
+workspace's: the command follows setup as `shoal create` does and returns once the
 workspace is ready, or with its setup failure, after which the agent runs on in
 the chat's place until [`shoal setup`](#workspace-setup-and-hooks) repairs the
 setup. A worktree that cannot be made gives the chat back. The workspace's mode and permissions are `--mode`'s,
@@ -2826,7 +2826,7 @@ agent's mode; a space below another has, for each key, the narrower of its
 mode's and its parent's effective value, so a child gets no more than its
 parent on its own. A key the `--permission` given to its agent sets takes that
 value instead, narrower or wider. A space whose agent has not started, such as
-one `shoal split` created, has `[permissions]` and the keys' defaults, capped
+one `shoal create` created, has `[permissions]` and the keys' defaults, capped
 by its parent the same way.
 A chat without a repository resolves its mode's keys in the config of the
 repository the action is in, and in the global config otherwise. Shoal
@@ -3035,30 +3035,39 @@ failed request is reported in the update.
 ### Child workspaces
 
 ```sh
-shoal split fix-typo                 # A child of the current space, from the default branch
-shoal split --issue 42               # Branch named after the issue, which it links
-shoal split part-two --base fix-api  # Stacked on the parent's branch
-shoal split fix-typo --space 3
+shoal create --branch fix-typo               # Inside a space, a child of it, from the default branch
+shoal create --issue 42                      # Branch named after the issue, which it links
+shoal create --branch part-two --base fix-api  # Stacked on the parent's branch
+shoal create --branch fix-typo --parent 3
+shoal create my-project --branch fix-typo    # Outside a space, a top-level workspace
+shoal create https://github.com/owner/repo/issues/34
 shoal start --issue 43 --agent claude                  # Inside a workspace: a child with an agent of its own
 shoal start my-project --branch api-part --agent codex -- "Move the API client into its own crate"
 shoal start my-project --branch api-part --fork -- "Implement the API part of the plan"  # Forks the parent agent's session
-shoal split --no-branch                # A child at the default branch, with no branch of its own
-shoal split --no-branch --base v1.4.0  # At a tag or commit
+shoal create --no-branch                # A child at the default branch, with no branch of its own
+shoal create --no-branch --base v1.4.0  # At a tag or commit
 ```
 
-`shoal split` creates a workspace on a new branch in the parent's repository,
-runs its setup, and records the parent, so work that needs its own PR gets its
-own branch and worktree. The parent is the space `--space` names, else the
-current one, a workspace or a chat: in a chat, the workspace below it that
+`shoal create` creates a workspace as `shoal start` creates one, from the same
+arguments that choose what it starts from and where it goes, a repository, an
+issue, PR or branch URL, `--branch`, `--issue`, `--base`, `--copy` and the
+creation options, and starts no agent there; `shoal start` starts one later.
+It runs the workspace's setup and returns it with its `path`, and from your own
+terminal enters it. Inside a space it creates a child, recording the parent, so
+work that needs its own PR gets its own branch and worktree; outside one it
+creates a top-level workspace. The parent is the space `--parent` names, else
+the current one, a workspace or a chat: in a chat, the workspace below it that
 contains the current directory, else the chat, so a chat in a workspace's
-worktree splits below itself. A workspace parent must be ready, and a chat
-without a repository splits only a `--copy`, in the copied workspace's
-repository. `--base` works as for
-`shoal start`; naming the parent's branch also [stacks](#stacked-workspaces) the
-child on it. Children can be split from children. A space's processes may split
-from their own space, act on every space below it and `shoal rm` one, or
-one the user holds or holds a workspace below, as their space's
-[`user_holds` permission](#permitted-actions) allows. A split never starts an agent.
+worktree creates below itself. A child goes in its parent's repository unless
+the start names another. A workspace parent must be ready, and a chat without
+a repository creates only a `--copy`, in the copied workspace's repository, or
+a workspace in the repository it names. `--base` works as for `shoal start`;
+naming the parent's branch also [stacks](#stacked-workspaces) the child on it.
+Children can have children. A create that names nothing a branch comes from
+opens the source picker on a terminal and is refused without one. A space's
+processes may create children of their own space, act on every space below it
+and `shoal rm` one, or one the user holds or holds a workspace below, as their
+space's [`user_holds` permission](#permitted-actions) allows.
 Run inside a workspace or a chat, `shoal start` likewise creates a child of
 that space, or of a space below it that `--parent` names, in its repository,
 and a chat an agent starts opens in the background; that is the only creation
@@ -3079,11 +3088,11 @@ commit without stacking it. It is named after the branch at its short commit
 `main-3f2a9c1` with the usual suffix when taken, and
 `shoal diff` compares with its starting commit, which
 [`shoal refresh`](#refresh) moves to a PR's new head or a branch's new tip. Run by a workspace's or a chat's
-process it is a child of the caller's space, or of `--space` when that names
-one below it; run by the user it is a child of `--space`
-or the current space, and outside one a top-level workspace of the current
-repository that the user owns. It does not take a branch name, `--issue`,
-`--agent` or `--fork`, as `split` starts no agent: its owner, a CI job, a
+process it is a child of the caller's space, or of `--parent` when that names
+one below it; run by the user it is a child of `--parent`
+or the current space, and outside one a top-level workspace of `--repo` or the
+current repository that the user owns. It does not take `--branch`, `--issue`,
+`--agent` or `--fork`, as `create` starts no agent: its owner, a CI job, a
 reviewer or the user runs things in it with `shoal run`, `shoal demo` or a
 shell, and `shoal start --in` starts an agent of its own there, whose opening
 says that without a branch it cannot push or open a PR.
@@ -3152,7 +3161,7 @@ reaches but their own.
 Claude Code launched in a workspace runs `shoal internal worktree-create` and
 `worktree-remove` as its `WorktreeCreate` and `WorktreeRemove` hooks, so a
 worktree it creates, such as one for a subagent with `isolation: "worktree"`,
-is a child split from the workspace containing its directory, on a branch named
+is a child of the workspace containing its directory, on a branch named
 after the worktree, which it enters once setup finishes. The subagent then works
 as that child without an agent of its own, so the child's activity reaches the
 agent that started it. Removing the worktree marks the child done; Claude Code
@@ -3183,12 +3192,12 @@ coordinator answers a question asked below it with
 ```sh
 shoal start --copy                       # A copy of the current workspace, with an agent of its own
 shoal start --copy 7 --fork -- "Try a queue instead of polling"
-shoal split --copy 7                     # A child copy without an agent
-shoal split --no-branch --copy 7         # A copy at 7's HEAD, without a branch
+shoal create --copy 7                    # A child copy without an agent
+shoal create --no-branch --copy 7        # A copy at 7's HEAD, without a branch
 shoal start --copy 7 --checkpoint 3      # From 7's checkpoint 3, live or removed
 ```
 
-`--copy [WORKSPACE]` on `shoal start` and `shoal split` starts a workspace from
+`--copy [WORKSPACE]` on `shoal start` and `shoal create` starts a workspace from
 a copy of a workspace's current files: its HEAD with its staged, unstaged,
 untracked and ignored files. Without a value it copies the current workspace,
 else one picked. `--checkpoint <NUMBER>` starts from that checkpoint of the
@@ -3202,7 +3211,7 @@ state to a second agent.
 
 A copy goes on a new branch at the copied HEAD: the branch given, else the
 copied branch's name, or for a workspace at a commit its short HEAD, with `-copy` added,
-suffixed as usual when taken. `shoal split --no-branch` makes it a workspace at
+suffixed as usual when taken. `shoal create --no-branch` makes it a workspace at
 a commit instead. A copy of current files is a linked worktree that Git creates
 without checking anything out; Shoal copies the source's index and worktree Git
 config into it and clones its files (APFS clones on macOS, reflinks on Linux,
@@ -3783,7 +3792,7 @@ shoal setup 3 --skip                  # Accept the failure after ownership check
 shoal rm 3 --yes                            # Delete this workspace
 ```
 
-`--skip-setup` on `shoal start` and `shoal split` creates a workspace without
+`--skip-setup` on `shoal start` and `shoal create` creates a workspace without
 setup, for one that only needs a checkout, such as one a CI job or a reviewer
 reads: no `hooks.pre_setup`, ignored-file copy, `setup.command` or
 `hooks.post_setup`, and since they tear down what setup made, no
@@ -4179,7 +4188,7 @@ created at never keeps it from cleanup; commits made on top of it and uncommitte
 changes are unsaved work as on a detached HEAD. `shoal restore` reopens it
 without a branch at the checkpoint's HEAD.
 
-`--disposable` on `shoal start` and `shoal split` creates a workspace that holds
+`--disposable` on `shoal start` and `shoal create` creates a workspace that holds
 nothing worth keeping, such as one a CI job runs in: every removal, `shoal rm`,
 its parent's removal and idle or other cleanup, deletes it without inspecting its
 unsaved work or asking, keeps no checkpoint, and deletes its branch whatever
@@ -5854,7 +5863,7 @@ saved there, directory users (including shells), dirty/unpushed work,
 simulator leases, permits, holds, open [questions](#questions), pending PR proposals and push requests, the CI runs of a merge the space follows, and failed checks block cleanup.
 So does the running agent of the nearest space above with one, in any turn
 state, while no agent of the space's own works there: none has ever started in
-the workspace, as in a child it split for its subagents, or the chat's agent
+the workspace, as in a child it created for its subagents, or the chat's agent
 stopped; once that agent stops, the timer starts over.
 Pushed means reachable from locally known remote branches, merged into the
 default branch as removal decides, or with its changes on the branch the

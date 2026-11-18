@@ -17,7 +17,7 @@ mod waiting;
 pub(in crate::cli::commands) use detached::leaves_caller;
 pub(in crate::cli::commands) use existing::start_worker;
 pub(in crate::cli) use finish::execute_add;
-pub(in crate::cli::commands) use launch::{launch_workspace, open_here};
+pub(in crate::cli::commands) use launch::{launch_workspace, open_here, pick_start_source};
 pub(in crate::cli::commands) use plan::launch_args;
 pub(in crate::cli::commands) use reads::DaemonReads;
 use shoal_protocol::space_names::SpaceSelector;

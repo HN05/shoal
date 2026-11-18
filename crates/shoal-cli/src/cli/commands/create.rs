@@ -1,7 +1,8 @@
-//! `shoal split`: a child workspace on a new branch, which the agent of the
-//! parent space, a workspace or a chat, works on and receives the activity
-//! of, or a workspace at a commit, with no branch of its own. Neither gets an
-//! agent of its own; `shoal start` starts one.
+//! `shoal create`: a workspace without an agent, made as `shoal start`
+//! makes one, below the current space or the one `--parent` names, whose
+//! agent works on it and receives its activity, or outside a space at the
+//! top; or a workspace at a commit, with no branch of its own. `shoal
+//! start` starts an agent of its own there.
 use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
 
@@ -11,88 +12,71 @@ use crate::client::{
 };
 use crate::{
     cli::{
-        args::create::CopyArgs,
+        args::create::{CopyArgs, CreateArgs},
         context::Context,
         output::{Palette, Style},
         shell, terminal,
         ui::{self, Fallback},
     },
     client::connection::CommandPaths,
-    forge::items::reference::ItemInput,
     model::{SpaceRef, Workspace},
     protocol::{
-        CommitStart, CreationOptions, ItemContext,
+        CommitStart, CreationOptions,
         operations::{Prepared, QueuedLaunch},
     },
     refusal::{Reason, Refusal},
     state::WorkspaceState,
 };
-use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+use shoal_protocol::space_names::SpaceSelector;
 
-use super::issues::Issue;
-
-/// What `shoal split` asks for besides the parent.
-pub(super) struct Split {
-    pub branch: Option<String>,
-    pub issue: Option<ItemInput>,
-    pub base: Option<String>,
-    pub copy: CopyArgs,
-    pub options: CreationOptions,
-}
-
-pub(super) async fn run(ctx: &Context, space: Option<SpaceSelector>, split: Split) -> Result<i32> {
-    // A supplied branch fails before the parent picker opens.
-    if let Some(branch) = &split.branch {
-        shoal_core::git::check_branch_name(branch)?;
+/// Create the workspace `args` describe, below the space they or the
+/// current directory name, or at the top outside one, follow its
+/// preparation and report it.
+pub(super) async fn run(ctx: &Context, args: CreateArgs) -> Result<i32> {
+    let parent = parent_space(ctx, args.parent.clone()).await?;
+    if args.no_branch {
+        let options = args.creation.clone().into();
+        return at_commit(ctx, parent, args.base.clone(), args.copy.clone(), options).await;
     }
-    // A named copy fails before the parent picker too.
-    let copy = super::copies::source(ctx, split.copy).await?;
-    let parent = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    let copied = copy.as_ref().map(|copy| copy.repository.clone());
-    let issue = match &split.issue {
-        Some(input) => Some(load_issue(ctx, &parent, copied, input).await?),
-        None => None,
-    };
-    let name = match (split.branch, &issue) {
-        (Some(branch), _) => Some(branch),
-        (None, Some(issue)) => Some(issue.branch_name()),
-        (None, None) if copy.is_some() => None,
-        (None, None) => anyhow::bail!("name the child's branch or pass --issue"),
-    };
-    // The child takes the issue's title as its name.
-    let mut options = split.options;
-    if let Some(issue) = &issue {
-        options.name = Some(SpaceName::derive(&issue.title, "workspace"));
-    }
-    let start = NewChild {
-        copy: copy.map(|copy| copy.source),
-        base: split.base,
-        options,
-        issue: issue.map(|issue| issue.url.into()),
-        ..NewChild::new(parent.clone(), name)
-    };
-    let preparing = start_child(ctx, start).await?;
-    let Some(child) = set_up(ctx, preparing).await? else {
+    let mut launch = args.launch(parent);
+    launch.directory = ui::current_directory()?;
+    super::workspaces::pick_start_source(ctx, &mut launch).await?;
+    let env = crate::env::without_secrets();
+    let preparing = preparation::create(&ctx.paths, launch, env).await?;
+    let Some(created) = set_up(ctx, preparing).await? else {
         return Ok(1);
     };
-    report(ctx, &child)?;
+    report(ctx, &created)?;
     Ok(0)
 }
 
-/// Create a workspace without a branch at `base`, or at the default branch,
-/// or a copy of the workspace `copy` names: a child of the named or current
-/// space, or outside one a top-level workspace in the current repository, or
-/// the copied one's.
-pub(super) async fn at_commit(
+/// The space a new workspace goes below: the one `named`, else the
+/// current one, else none.
+async fn parent_space(
     ctx: &Context,
-    space: Option<SpaceSelector>,
+    named: Option<SpaceSelector>,
+) -> Result<Option<SpaceSelector>> {
+    match ui::select_space(ctx, named, Fallback::CurrentDirectoryOnly).await {
+        Ok(parent) => Ok(Some(parent)),
+        Err(error) if error.is::<ui::NoCurrentWorkspace>() => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+/// Create a workspace without a branch at `base`, or at the default branch,
+/// or a copy of the workspace `copy` names: a child of `parent`, or without
+/// one a top-level workspace in the current repository, or the copied
+/// one's.
+async fn at_commit(
+    ctx: &Context,
+    parent: Option<SpaceSelector>,
     base: Option<String>,
     copy: CopyArgs,
     options: CreationOptions,
 ) -> Result<i32> {
     let copy = super::copies::source(ctx, copy).await?;
     let copied = copy.as_ref().map(|copy| copy.repository.clone());
-    let (repository, parent) = commit_owner(ctx, space, copied).await?;
+    let repository = commit_repository(ctx, parent.as_ref(), copied).await?;
     let start = match copy {
         Some(copy) => CommitStart::Copy(copy.source),
         None => CommitStart::Revision(base),
@@ -107,20 +91,15 @@ pub(super) async fn at_commit(
     Ok(0)
 }
 
-/// The repository and parent of a workspace at a commit: the named or
-/// current space and its repository, or the `copied` repository or else the
-/// current one for a parent without one, or outside every space none.
-async fn commit_owner(
+/// The repository of a workspace at a commit: that of its `parent`, or the
+/// `copied` repository or else the current one for a parent without one or
+/// none.
+async fn commit_repository(
     ctx: &Context,
-    space: Option<SpaceSelector>,
+    parent: Option<&SpaceSelector>,
     copied: Option<RepositoryId>,
-) -> Result<(crate::repository::Selector, Option<SpaceSelector>)> {
-    let parent = match ui::select_space(ctx, space, Fallback::CurrentDirectoryOnly).await {
-        Ok(parent) => Some(parent),
-        Err(error) if error.is::<ui::NoCurrentWorkspace>() => None,
-        Err(error) => return Err(error),
-    };
-    let own = match &parent {
+) -> Result<crate::repository::Selector> {
+    let own = match parent {
         Some(parent) => space_repository(ctx, parent).await?,
         None => None,
     };
@@ -128,7 +107,7 @@ async fn commit_owner(
         Some(repository) => repository,
         None => current_repository(ctx).await?,
     };
-    Ok((repository.into(), parent))
+    Ok(repository.into())
 }
 
 /// The repository of the space `selector` names; none for a chat without
@@ -144,17 +123,17 @@ async fn space_repository(ctx: &Context, selector: &SpaceSelector) -> Result<Opt
 /// The registered repository of the current directory.
 async fn current_repository(ctx: &Context) -> Result<RepositoryId> {
     let repositories = crate::client::repositories::list(&ctx.paths).await?;
-    let hint = "pass --space or run it in a registered checkout";
+    let hint = "pass --parent or run it in a registered checkout";
     super::issues::current_repository(ctx, repositories, hint).await
 }
 
-/// Split the child `split` describes and follow its preparation.
+/// Create the child `child` describes and follow its preparation.
 pub(super) async fn start_child(
     ctx: &Context,
-    split: NewChild,
+    child: NewChild,
 ) -> Result<Preparing<'_, CommandPaths>> {
     let env = crate::env::without_secrets();
-    preparation::create(&ctx.paths, split, env).await
+    preparation::create(&ctx.paths, child, env).await
 }
 
 /// Run the child's setup and post-setup hook; `None` when setup failed.
@@ -212,21 +191,6 @@ fn report(ctx: &Context, child: &Workspace) -> Result<()> {
         shell::navigate(ctx, &child.path)?;
     }
     Ok(())
-}
-
-/// The issue `input` names in the child's repository: the `copied`
-/// workspace's, else the parent space's own.
-async fn load_issue(
-    ctx: &Context,
-    parent: &SpaceSelector,
-    copied: Option<RepositoryId>,
-    input: &ItemInput,
-) -> Result<Issue> {
-    let context = ItemContext::Space {
-        space: parent.clone(),
-        repository: copied,
-    };
-    super::issues::load(ctx, context, input.clone()).await
 }
 
 /// The parent and child spaces of a space, when it has any.

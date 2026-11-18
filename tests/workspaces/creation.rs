@@ -1,4 +1,4 @@
-//! Creating workspaces: `shoal add` and `split`, their bases and issues, and
+//! Creating workspaces: `shoal start` and `create`, their bases and issues, and
 //! setup and its interruptions.
 use super::forge::{forge_origin, github_issue, github_open_items, install_api_curl, script_api};
 use super::recovery::recovery_report;
@@ -132,7 +132,7 @@ fn add_issue_takes_the_repository_of_the_current_checkout_or_workspace() {
 /// An agent copies its own workspace into a child, on a new branch or at
 /// its commit, and no workspace outside its tree.
 #[test]
-fn an_agent_splits_copies_of_its_own_workspace_only() {
+fn an_agent_creates_copies_of_its_own_workspace_only() {
     let fixture = Fixture::new();
     fixture.add("parent");
     fixture.add("other");
@@ -140,9 +140,9 @@ fn an_agent_splits_copies_of_its_own_workspace_only() {
     let path = PathBuf::from(parent["path"].as_str().unwrap());
     fs::write(path.join("untracked"), "work in progress\n").unwrap();
     for (args, branch) in [
-        (&["split", "--copy"][..], Some("parent-copy")),
+        (&["create", "--copy"][..], Some("parent-copy")),
         (
-            &["split", "--no-branch", "--copy", &fixture.id("parent")],
+            &["create", "--no-branch", "--copy", &fixture.id("parent")],
             None,
         ),
     ] {
@@ -161,7 +161,7 @@ fn an_agent_splits_copies_of_its_own_workspace_only() {
     let refused = scoped_command(
         &fixture,
         "parent",
-        &["split", "--copy", &fixture.id("other")],
+        &["create", "--copy", &fixture.id("other")],
     );
     assert!(!refused.status.success(), "{}", printed(&refused));
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 4);
@@ -2456,7 +2456,7 @@ fn an_app_follows_the_setup_of_a_workspace_it_creates() {
 }
 
 #[test]
-fn split_without_a_branch_creates_a_workspace_at_a_commit() {
+fn create_without_a_branch_makes_a_workspace_at_a_commit() {
     let fixture = Fixture::new();
     fixture.add("parent");
     let main = git(&fixture.repo, &["rev-parse", "HEAD"]);
@@ -2465,7 +2465,7 @@ fn split_without_a_branch_creates_a_workspace_at_a_commit() {
     let top = fixture
         .command()
         .current_dir(&fixture.repo)
-        .args(["--json", "split", "--no-branch"])
+        .args(["--json", "create", "--no-branch"])
         .output()
         .unwrap();
     assert!(top.status.success(), "{}", printed(&top));
@@ -2480,7 +2480,7 @@ fn split_without_a_branch_creates_a_workspace_at_a_commit() {
         git(Path::new(path), &["branch", "--show-current"]).trim(),
         ""
     );
-    let child = fixture.ok(&["split", "--no-branch", "--space", &fixture.id("parent")]);
+    let child = fixture.ok(&["create", "--no-branch", "--parent", &fixture.id("parent")]);
     assert_eq!(child["parent"]["name"], "parent");
     assert_eq!(child["name"], format!("main at {short}"));
     assert!(
@@ -2490,8 +2490,8 @@ fn split_without_a_branch_creates_a_workspace_at_a_commit() {
             .ends_with(&format!("main-{short}-2"))
     );
     for args in [
-        &["split", "--no-branch", "child"][..],
-        &["split", "--no-branch", "--issue", "4"],
+        &["create", "--no-branch", "--branch", "child"][..],
+        &["create", "--no-branch", "--issue", "4"],
     ] {
         assert!(!fixture.run(args).status.success(), "{args:?}");
     }
@@ -2528,9 +2528,9 @@ fn a_workspace_created_without_setup_skips_its_hooks_until_setup_runs() {
     assert_eq!(skipped["state"], "ready");
     assert_eq!(skipped["setup_skipped"], true);
     let at_commit = fixture.ok(&[
-        "split",
+        "create",
         "--no-branch",
-        "--space",
+        "--parent",
         &fixture.id("skipped"),
         "--skip-setup",
     ]);
@@ -2576,7 +2576,7 @@ fn a_workspace_created_without_setup_skips_its_hooks_until_setup_runs() {
 fn branch_only_commands_refuse_a_workspace_at_a_commit() {
     let fixture = Fixture::new();
     fixture.add("parent");
-    let created = fixture.ok(&["split", "--no-branch", "--space", &fixture.id("parent")]);
+    let created = fixture.ok(&["create", "--no-branch", "--parent", &fixture.id("parent")]);
     let name = created["name"].as_str().unwrap().to_owned();
     let path = PathBuf::from(created["path"].as_str().unwrap());
     let run = |args: &[&str]| {
@@ -2621,7 +2621,7 @@ fn a_workspace_at_a_commit_runs_its_own_agent_whose_commits_keep_it() {
     let created = fixture
         .command()
         .current_dir(&fixture.repo)
-        .args(["--json", "split", "--no-branch"])
+        .args(["--json", "create", "--no-branch"])
         .output()
         .unwrap();
     assert!(created.status.success(), "{}", printed(&created));
@@ -2644,4 +2644,30 @@ fn a_workspace_at_a_commit_runs_its_own_agent_whose_commits_keep_it() {
     assert_eq!(preview["removed"], serde_json::json!([]), "{preview}");
     let kept = &preview["kept"][0];
     assert_eq!(kept["reason"]["reason"], "unpushed", "{preview}");
+}
+
+/// From the user's terminal outside a space, `shoal create` makes a
+/// top-level workspace without an agent: on a branch it names, or on an
+/// issue URL, which it links and names the workspace after.
+#[test]
+fn create_outside_a_space_makes_top_level_workspaces_without_an_agent() {
+    let fixture = Fixture::with_config(Some(
+        "[agent]\ndefault = 'claude'\n[machine.overload.disk]\nenabled = false\n",
+    ));
+    fixture.add_github_origin();
+    fixture.script_github(&github_issue(12, "Clarify retries", "Retry twice."));
+    let repo = fixture.repo.to_str().unwrap();
+    let url = "https://github.com/team/project/issues/12";
+
+    let on_branch = fixture.ok(&["create", repo, "--branch", "scratch"]);
+    let on_issue = fixture.ok(&["create", url, "--repo", repo]);
+
+    for created in [&on_branch, &on_issue] {
+        assert_eq!(created["parent"], Value::Null, "{created}");
+        assert_eq!(created["running"], false, "{created}");
+    }
+    assert_eq!(on_branch["branch"], "scratch");
+    assert_eq!(on_issue["name"], "Clarify retries");
+    assert_eq!(on_issue["links"]["issues"][0]["url"], url);
+    assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
 }
