@@ -31,6 +31,11 @@ pub struct RemovalCheck {
     /// A checkpoint would keep the unsaved files, when requested with them.
     #[serde(default)]
     pub unsaved_files_archived: bool,
+    /// Git no longer knows the worktree: removal deletes what is left of
+    /// it, whose unsaved files are those that differ from its branch's
+    /// commit.
+    #[serde(default)]
+    pub disowned: bool,
     /// Commits reachable from neither a remote-tracking branch nor the local
     /// default branch, so removing the worktree could lose them; zero when the
     /// default branch already has HEAD's changes.

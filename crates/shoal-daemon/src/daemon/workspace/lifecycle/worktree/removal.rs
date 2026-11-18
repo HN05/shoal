@@ -43,8 +43,8 @@ struct PostRemoveHook {
 enum Registration {
     /// Git lists it, so Git removes it.
     Listed,
-    /// Its directory stays though Git no longer lists it, and the workspace
-    /// is disposable, so removal deletes what is left.
+    /// Its directory stays though Git no longer lists it, so removal
+    /// deletes what is left once a checkpoint keeps what is worth keeping.
     Disowned,
     /// Git no longer lists it, and its directory is gone.
     Unlisted,
@@ -152,7 +152,8 @@ impl Manager {
             .await?)
             .check;
         if include_changes && check.dirty {
-            removal::load_changed_files(&mut check).await?;
+            let repo = self.repository(workspace.repository()).await?;
+            removal::load_changed_files(&mut check, &repo.path).await?;
             check.unsaved_files_archived = self
                 .checkpoint_keeps_unsaved_files(&check.workspace, CheckpointCause::Removal)
                 .await?;

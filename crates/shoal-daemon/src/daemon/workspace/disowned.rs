@@ -1,9 +1,14 @@
-//! What Git left of a disposable workspace's worktree it disowned: whether
-//! the directory at its path is that leftover, which a removal deletes
-//! without Git, and the identity of the directory a removal began deleting
-//! that proves a leftover whose `.git` link went too.
+//! What Git left of a workspace's worktree it disowned: whether the
+//! directory at its path is that leftover, which a removal deletes without
+//! Git, the identity of the directory a removal began deleting that proves a
+//! leftover whose `.git` link went too, and the files left there.
 use super::{Manager, identity::directory_identity};
-use crate::{fsutil::off_runtime, git::worktree::Leftover, model::Workspace, removal};
+use crate::{
+    fsutil::off_runtime,
+    git::worktree::{Leftover, left::LeftFiles},
+    model::Workspace,
+    removal,
+};
 use anyhow::Result;
 use rusqlite::{OptionalExtension as _, params};
 use std::path::Path;
@@ -21,16 +26,27 @@ impl Manager {
         })
     }
 
+    /// The files left of the worktree of `workspace` once Git disowned it,
+    /// as [`Self::disowned`] proves, read against its branch's commit;
+    /// `None` while Git knows it.
+    pub(in crate::daemon::workspace) async fn left_files(
+        &self,
+        workspace: &Workspace,
+    ) -> Result<Option<LeftFiles>> {
+        let repo = self.repository(workspace.repository()).await?;
+        if !self.disowned(workspace, &repo.path).await? {
+            return Ok(None);
+        }
+        removal::read_left(workspace, &repo.path).await.map(Some)
+    }
+
     /// Record the identity of the directory of `workspace`, whose ownership
-    /// the removal verified, before Git begins deleting it, when the
-    /// workspace is disposable and so may be deleted without Git later.
+    /// the removal verified, before Git begins deleting it, so that a later
+    /// removal may delete what is left without Git.
     pub(in crate::daemon::workspace) async fn record_removal_directory(
         &self,
         workspace: &Workspace,
     ) -> Result<()> {
-        if !workspace.disposable {
-            return Ok(());
-        }
         let path = workspace.path.clone();
         let identity = off_runtime::run(move || directory_identity(&path)).await?;
         let id = workspace.id.clone();

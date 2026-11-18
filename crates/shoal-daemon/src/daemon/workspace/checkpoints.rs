@@ -120,7 +120,9 @@ impl Manager {
                 .checkpoint_keeps_unsaved_files(workspace, cause)
                 .await?;
         let message = format!("Shoal checkpoint of {}", workspace.name);
-        let snapshot = git::checkpoint::snapshot(&workspace.path, &message, !files_omitted).await?;
+        let snapshot = self
+            .snapshot_files(workspace, &message, !files_omitted)
+            .await?;
         let created_at = UnixTime::now();
         Ok(Checkpoint {
             workspace_id: workspace.id.clone(),
@@ -137,6 +139,29 @@ impl Manager {
         })
     }
 
+    /// A commit with HEAD and, with `files`, the unsaved files of
+    /// `workspace`: those of the worktree Git knows, or those left of one it
+    /// disowned laid over its branch's commit.
+    async fn snapshot_files(
+        &self,
+        workspace: &Workspace,
+        message: &str,
+        files: bool,
+    ) -> Result<git::checkpoint::Snapshot> {
+        let Some(left) = self.left_files(workspace).await? else {
+            return git::checkpoint::snapshot(&workspace.path, message, files).await;
+        };
+        let commit = match files {
+            true => left.snapshot(message).await?,
+            false => left.head().clone(),
+        };
+        Ok(git::checkpoint::Snapshot {
+            branch: workspace.branch().cloned(),
+            head: left.head().clone(),
+            commit,
+        })
+    }
+
     /// Whether `workspace` still has the branch, HEAD and unsaved files
     /// `checkpoint` keeps.
     pub(crate) async fn unchanged_since(
@@ -145,13 +170,13 @@ impl Manager {
         checkpoint: &Checkpoint,
     ) -> Result<bool> {
         // A repository move holds this gate; the workspace may have moved.
-        let (_repo, _git) = self.lock_repository(workspace.repository()).await?;
+        let (repo, _git) = self.lock_repository(workspace.repository()).await?;
         let workspace = self.workspace_by_id(&workspace.id).await?;
         self.verify_worktree(&workspace).await?;
         let now = self
             .snapshot(&workspace, CheckpointCause::Manual, None)
             .await?;
-        keeps_same(&workspace.path, checkpoint, &now).await
+        keeps_same(&repo.path, checkpoint, &now).await
     }
 
     /// Point the commit's ref at it, then record the snapshot under the
@@ -182,7 +207,8 @@ impl Manager {
         let Some(mut latest) = self.store.run(move |db| latest(db, &id)).await? else {
             return Ok(None);
         };
-        if !keeps_same(&workspace.path, &latest, next).await? {
+        let repo = self.repository(workspace.repository()).await?;
+        if !keeps_same(&repo.path, &latest, next).await? {
             return Ok(None);
         }
         latest.expires_at = latest.expires_at.max(next.expires_at);
@@ -481,15 +507,15 @@ async fn current_branch(path: &std::path::Path) -> Result<Option<BranchName>> {
     Ok((!branch.is_empty()).then(|| branch.into()))
 }
 
-/// Whether the checkpoints `kept` and `next` of the workspace at `path`
-/// keep the same branch, HEAD and unsaved files.
-async fn keeps_same(path: &std::path::Path, kept: &Checkpoint, next: &Checkpoint) -> Result<bool> {
+/// Whether checkpoints `kept` and `next` of a workspace of the repository
+/// checked out at `repo` keep the same branch, HEAD and files.
+async fn keeps_same(repo: &std::path::Path, kept: &Checkpoint, next: &Checkpoint) -> Result<bool> {
     if (&kept.branch, &kept.head, kept.files_omitted)
         != (&next.branch, &next.head, next.files_omitted)
     {
         return Ok(false);
     }
-    git::checkpoint::same_files(path, kept.commit.as_str(), next.commit.as_str()).await
+    git::checkpoint::same_files(repo, kept.commit.as_str(), next.commit.as_str()).await
 }
 
 fn branch_label(branch: Option<&BranchName>) -> String {

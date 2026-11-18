@@ -70,6 +70,11 @@ impl LeftFiles {
             .map(drop)
     }
 
+    /// The commit the files are read against.
+    pub fn head(&self) -> &CommitId {
+        &self.head
+    }
+
     /// The files that differ from the commit's, as `git status --porcelain`
     /// lists them, paths quoted as Git quotes them: a changed one with its
     /// status letter, an untracked one with `??`.

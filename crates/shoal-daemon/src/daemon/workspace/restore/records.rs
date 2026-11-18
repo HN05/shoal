@@ -167,19 +167,23 @@ impl Manager {
     }
 
     /// Whether a checkpoint taken for `cause` would keep all of the
-    /// workspace's unsaved files: none is a nested repository or a changed
-    /// submodule, and a capped checkpoint's are within the archive limit; or
-    /// they are a copy's starting files, which its starting checkpoint
-    /// already holds.
+    /// workspace's unsaved files, or those left of a worktree Git disowned:
+    /// none is a nested repository or a changed submodule, and a capped
+    /// checkpoint's are within the archive limit; or they are a copy's
+    /// starting files, which its starting checkpoint already holds.
     pub(crate) async fn checkpoint_keeps_unsaved_files(
         &self,
         workspace: &Workspace,
         cause: CheckpointCause,
     ) -> Result<bool> {
-        if crate::removal::holds_starting_files(workspace).await? {
-            return Ok(true);
-        }
-        let Some(bytes) = git::checkpoint::unsaved_bytes(&workspace.path).await? else {
+        let bytes = match self.left_files(workspace).await? {
+            Some(left) => left.unsaved_bytes().await?,
+            None => match crate::removal::holds_starting_files(workspace).await? {
+                true => return Ok(true),
+                false => git::checkpoint::unsaved_bytes(&workspace.path).await?,
+            },
+        };
+        let Some(bytes) = bytes else {
             return Ok(false);
         };
         if !cause.capped() {

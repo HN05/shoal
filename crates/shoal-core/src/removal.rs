@@ -1,12 +1,16 @@
 //! Inspecting what removing a workspace would discard.
-use anyhow::Result;
+use anyhow::{Context, Result};
 use shoal_ids::execution_ids::ExecutionId;
-use shoal_refs::BranchName;
+use shoal_refs::{BranchName, CommitId};
 
 use crate::{
     fsutil::off_runtime,
-    git::{self, default_branch::DefaultBranch, worktree::Leftover},
-    model::Workspace,
+    git::{
+        self,
+        default_branch::DefaultBranch,
+        worktree::{Leftover, left::LeftFiles},
+    },
+    model::{Head, Workspace},
     process,
 };
 pub use shoal_protocol::removal::{
@@ -68,9 +72,13 @@ impl Inspection {
     }
 }
 
-/// Fill in the changed files `check` lists.
-pub async fn load_changed_files(check: &mut RemovalCheck) -> Result<()> {
-    let status = git::status::changed_files(&check.workspace.path).await?;
+/// Fill in the changed files `check` lists; `repo` is the checkout of the
+/// workspace's repository.
+pub async fn load_changed_files(check: &mut RemovalCheck, repo: &Path) -> Result<()> {
+    let status = match check.disowned {
+        true => read_left(&check.workspace, repo).await?.status().await?,
+        false => git::status::changed_files(&check.workspace.path).await?,
+    };
     (check.changed_files, check.changed_files_omitted) = changed_files_preview(&status);
     Ok(())
 }
@@ -134,6 +142,7 @@ pub async fn inspect(
             changed_files: vec![],
             changed_files_omitted: 0,
             unsaved_files_archived: false,
+            disowned: false,
             unpushed_commits: 0,
             branch: None,
             head: None,
@@ -155,21 +164,42 @@ pub async fn inspect(
     Ok(inspection)
 }
 
-/// Fill in what Git says removing the existing worktree would discard.
-/// Nothing in a disposable workspace is worth keeping, so nothing is
-/// inspected for unsaved work; which branch it is on, which removal may
-/// delete, still is, unless Git disowned it.
+/// Fill in what removing the existing worktree would discard. Nothing in a
+/// disposable workspace is worth keeping, so nothing is inspected for
+/// unsaved work; which branch it is on, which removal may delete, still is,
+/// unless Git disowned it.
 async fn inspect_git(
     check: &mut RemovalCheck,
     repo: &Path,
     default_branch: Option<&DefaultBranch>,
 ) -> Result<()> {
+    check.disowned = disowned(&check.workspace, repo).await?.is_some();
     if check.workspace.disposable {
-        if disowned(&check.workspace, repo).await?.is_none() {
+        if !check.disowned {
             check.branch = git::checked_out_branch(&check.workspace.path).await?;
         }
         return Ok(());
     }
+    match check.disowned {
+        true => inspect_left(check, repo).await,
+        false => inspect_worktree(check, default_branch).await,
+    }
+}
+
+/// Fill in what removing the files left of a worktree Git disowned would
+/// discard: those that differ from the commit it was read against. Git
+/// keeps no HEAD there to read a branch or commits of.
+async fn inspect_left(check: &mut RemovalCheck, repo: &Path) -> Result<()> {
+    let left = read_left(&check.workspace, repo).await?;
+    check.dirty = !left.status().await?.is_empty();
+    Ok(())
+}
+
+/// Fill in what Git says removing the worktree it knows would discard.
+async fn inspect_worktree(
+    check: &mut RemovalCheck,
+    default_branch: Option<&DefaultBranch>,
+) -> Result<()> {
     let path = &check.workspace.path;
     let git::HeadState {
         commit,
@@ -204,25 +234,41 @@ async fn inspect_git(
     Ok(())
 }
 
-/// What is left of the worktree of `workspace` when Git disowned it and the
-/// workspace is disposable, so that removal deletes it without Git,
-/// whatever it holds: as a removal Git could not finish leaves it, or, when
-/// its checkout never succeeded and so recorded no admin directory, as a
-/// checkout that failed leaves it. Nothing was at a workspace's path when
-/// Shoal recorded it, so a `.git` link there naming an admin directory of
-/// its repository, checked out at `repo`, is Git's for this workspace; a
-/// directory without one is only once its identity proves it.
+/// What is left of the worktree of `workspace` when Git disowned it, so
+/// that removal deletes it without Git, once a checkpoint keeps what is
+/// worth keeping: as a removal Git could not finish leaves it, or, for a
+/// disposable workspace whose checkout never succeeded and so recorded no
+/// admin directory, as a checkout that failed leaves it. Nothing was at a
+/// workspace's path when Shoal recorded it but the worktree it adopted, so
+/// a `.git` link there naming an admin directory of its repository, checked
+/// out at `repo`, is Git's for this workspace; a directory without one is
+/// only once its identity proves it.
 pub async fn disowned(workspace: &Workspace, repo: &Path) -> Result<Option<Leftover>> {
-    if !workspace.disposable {
-        return Ok(None);
-    }
     match &workspace.git_dir {
         Some(admin_dir) => git::worktree::disowned(&workspace.path, admin_dir).await,
-        None => Ok(
-            (git::worktree::left_by_failed_add(&workspace.path, repo).await?)
-                .then_some(Leftover::Linked),
-        ),
+        None if workspace.disposable => {
+            Ok(
+                (git::worktree::left_by_failed_add(&workspace.path, repo).await?)
+                    .then_some(Leftover::Linked),
+            )
+        }
+        None => Ok(None),
     }
+}
+
+/// The files left of the worktree of `workspace`, which Git disowned, read
+/// against the commit its branch is at, or for a workspace at a commit, the
+/// one it started at: Git no longer records which the worktree had.
+pub async fn read_left(workspace: &Workspace, repo: &Path) -> Result<LeftFiles> {
+    let head: CommitId = match &workspace.head {
+        Head::Branch(branch) => git::resolve_commit(repo, &git::local_ref(branch), git::run)
+            .await
+            .with_context(|| {
+                format!("Git no longer knows the worktree, and its branch {branch} is gone")
+            })?,
+        Head::Commit(at) => at.commit.clone(),
+    };
+    LeftFiles::read(repo, &workspace.path, &head).await
 }
 
 /// Whether the workspace is a copy still at its starting HEAD with the

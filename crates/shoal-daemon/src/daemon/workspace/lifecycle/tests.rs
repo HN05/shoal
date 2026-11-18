@@ -1602,27 +1602,47 @@ async fn removal_deletes_a_disposable_worktree_git_disowned() {
     assert!(!removed.branch_outcome.is_deleted(), "{removed:?}");
 }
 
-/// Git can no longer read what the worktree holds, so nothing proves it
-/// holds nothing worth keeping.
-#[tokio::test]
-async fn removal_retains_a_kept_worktree_git_disowned() {
-    let (_root, manager, workspace) = disowned_workspace(false).await;
-    manager
-        .remove_selected(
-            &SpaceSelector::id(&workspace.id),
-            UnsavedWork::All,
-            InspectionPolicy::GitOnly,
-        )
+/// Remove what is left of the kept `workspace`'s worktree Git disowned,
+/// with an untracked file: Git no longer reads what the worktree holds, so
+/// removal reads the files left against its branch's commit, deleting one
+/// that differs needs consent, and the checkpoint keeps it.
+async fn remove_kept_leftover(manager: &Manager, workspace: &Workspace) {
+    fs::write(workspace.path.join("notes.md"), "notes\n").unwrap();
+    let selector = SpaceSelector::id(&workspace.id);
+    let check = manager.check_manual_removal(&selector, true).await.unwrap();
+    let worktree = check.worktree.as_ref().unwrap();
+    assert!(worktree.disowned && worktree.unsaved_files_archived);
+    assert_eq!(worktree.changed_files, ["?? notes.md"]);
+    (manager.remove_selected(&selector, NOTHING.clone(), InspectionPolicy::GitOnly))
         .await
         .unwrap_err();
     assert!(workspace.path.exists());
-    assert!(
-        manager
-            .find_workspace(&workspace.id)
-            .await
-            .unwrap()
-            .is_some()
-    );
+    let unsaved = UnsavedWork::confirming(&check);
+    (manager.remove_selected(&selector, unsaved, InspectionPolicy::GitOnly))
+        .await
+        .unwrap();
+    assert!(!workspace.path.exists());
+    let removed = manager.removed_space(&selector).await.unwrap();
+    let commit = &removed.workspace().unwrap().checkpoint.commit;
+    let repo = manager.repository(workspace.repository()).await.unwrap();
+    let kept = git(&repo.path, &["show", &format!("{commit}:notes.md")]);
+    assert_eq!(kept, "notes\n");
+}
+
+#[tokio::test]
+async fn removal_checkpoints_what_is_left_of_a_kept_worktree_git_disowned() {
+    let (_root, manager, workspace) = disowned_workspace(false).await;
+    remove_kept_leftover(&manager, &workspace).await;
+}
+
+/// Without its `.git` link, the directory a removal of it began deleting
+/// proves what is left the kept workspace's, as it does a disposable one's.
+#[tokio::test]
+async fn removal_checkpoints_what_is_left_of_a_kept_worktree_without_its_link() {
+    let (_root, manager, workspace) = disowned_workspace(false).await;
+    manager.record_removal_directory(&workspace).await.unwrap();
+    fs::remove_file(workspace.path.join(".git")).unwrap();
+    remove_kept_leftover(&manager, &workspace).await;
 }
 
 /// A workspace as a removal that stopped partway leaves it when it cannot
