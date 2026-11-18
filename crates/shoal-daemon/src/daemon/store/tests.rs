@@ -714,7 +714,7 @@ pub(super) const V0_17_0: i64 = 178;
 const DROPS_UPGRADE_STATE: i64 = 180;
 
 /// The migration that drops queued launches that create their workspace.
-const DROPS_CREATING_LAUNCHES: i64 = 226;
+const DROPS_CREATING_LAUNCHES: i64 = 227;
 
 /// Upgrade `db` as v0.17.0 does when its daemon starts: migrate it to that
 /// release's version, then consume the upgrade state the next migration
