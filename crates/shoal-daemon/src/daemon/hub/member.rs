@@ -255,7 +255,8 @@ impl Manager {
     }
 
     /// Serve the open link on `transport` until it ends or `stop`
-    /// resolves, offering its calls meanwhile.
+    /// resolves, offering its calls and reporting this machine's spaces
+    /// meanwhile.
     async fn serve_hub(
         &self,
         mut transport: Transport,
@@ -269,7 +270,12 @@ impl Manager {
             let message = "this machine answers no calls of the hub".into();
             (Reply::Failed { message }, ())
         };
-        let problem = match session::serve(channel, &calls, answer, stop).await {
+        let serving = session::serve(channel, &calls, answer, stop);
+        let end = tokio::select! {
+            end = serving => end,
+            never = self.keep_reporting(&calls) => match never {},
+        };
+        let problem = match end {
             End::Stopped => return Kept::Stopped,
             End::Closed => format!("the hub at {route} closed the link"),
             End::Lost(error) => format!("lost the link to the hub at {route}: {error:#}"),

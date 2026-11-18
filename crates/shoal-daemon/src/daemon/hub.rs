@@ -22,6 +22,7 @@ mod member;
 mod members;
 mod membership;
 mod pairing;
+mod reports;
 mod sealing;
 mod session;
 mod transport;
@@ -46,10 +47,15 @@ pub(crate) struct Hub {
     member: member::Link,
 }
 
-/// Serve the hub's listener while this daemon is the hub, and keep a link
-/// to the hub while it is a member of one, until the daemon stops.
+/// Serve the hub's listener and keep its own machine's spaces in its
+/// directory while this daemon is the hub, and keep a link to the hub while
+/// it is a member of one, until the daemon stops.
 pub(crate) async fn run(manager: Arc<Manager>) {
-    tokio::join!(listener::run(manager.clone()), member::run(manager));
+    tokio::join!(
+        listener::run(manager.clone()),
+        manager.report_own_spaces(),
+        member::run(manager.clone()),
+    );
 }
 
 /// The most of what the other side of a link sent that the daemon keeps or
