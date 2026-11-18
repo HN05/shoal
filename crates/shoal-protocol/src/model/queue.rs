@@ -43,6 +43,9 @@ pub struct QueueEntry {
     pub created_at: crate::time::UnixTime,
     /// The space a starting launch opened, or a restore's own.
     pub space_id: Option<SpaceId>,
+    /// The number of the space it starts in, while that space exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub number: Option<shoal_ids::space_ids::SpaceNumber>,
     /// The stopped execution a restore restores.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution: Option<ExecutionId>,

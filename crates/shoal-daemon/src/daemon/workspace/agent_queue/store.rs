@@ -410,6 +410,7 @@ pub(super) fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
         position: None,
         created_at: row.get("created_at")?,
         space_id: row.get("space_id")?,
+        number: None,
         execution: row.get("execution_id")?,
         opens: row.get("opens_workspace_id")?,
         queued_by: row.get("scope_space_id")?,

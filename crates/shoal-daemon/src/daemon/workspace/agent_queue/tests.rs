@@ -159,12 +159,14 @@ async fn a_full_machine_queues_until_a_start_ends() {
 }
 
 #[tokio::test]
-async fn a_memory_hold_numbers_the_spaces_that_reserve_it_while_they_exist() {
+async fn the_queue_numbers_each_entrys_space_and_those_that_reserve_its_memory() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 1);
     add(&manager, &repo, "first").await;
-    let waiting = add(&manager, &repo, "second").await.entry.unwrap();
+    let workspace = create(&manager, &repo, "waiting").await;
+    let waiting = manager.queue_add(launch_in(&workspace, false));
+    let waiting = waiting.await.unwrap().entry.unwrap();
     let reserving = preparing(&manager, &repo, "reserving").await;
     let reservation = |space: &SpaceId| MemoryReservation {
         by: Reserver::Job,
@@ -186,6 +188,7 @@ async fn a_memory_hold_numbers_the_spaces_that_reserve_it_while_they_exist() {
     manager.agent_queue.record_held_back(holds, &unstarted, now);
     let entries = manager.queue_entries().await.unwrap();
     let entry = entries.iter().find(|entry| entry.id == waiting.id).unwrap();
+    assert_eq!(entry.number, Some(workspace.number));
     let Some(HeldBy::Memory { reserved, .. }) = &entry.held_by else {
         panic!("not held for memory: {:?}", entry.held_by);
     };

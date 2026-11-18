@@ -192,27 +192,25 @@ impl Manager {
                 entry.blockers = blocked_by;
             }
         }
-        self.number_reserving_spaces(&mut entries).await?;
+        self.number_spaces(&mut entries).await?;
         Ok(entries)
     }
 
-    /// Give each space that reserves the memory a hold of `entries` names
-    /// its number, while it exists.
-    async fn number_reserving_spaces(&self, entries: &mut [QueueEntry]) -> Result<()> {
-        let mut reserved: Vec<_> = (entries.iter_mut())
-            .filter_map(|entry| match &mut entry.held_by {
-                Some(HeldBy::Memory { reserved, .. }) => Some(reserved),
-                _ => None,
-            })
-            .flatten()
-            .collect();
-        if reserved.is_empty() {
+    /// Give each of `entries`, and each space that reserves the memory a
+    /// hold of them names, the number of its space, while it exists.
+    async fn number_spaces(&self, entries: &mut [QueueEntry]) -> Result<()> {
+        if entries.is_empty() {
             return Ok(());
         }
         let numbers = self.store.read(|tx| store::space_numbers(tx)).await?;
-        for reservation in &mut reserved {
-            let space = reservation.space_id.as_ref();
-            reservation.number = space.and_then(|id| numbers.get(id).copied());
+        let number = |space: Option<&SpaceId>| space.and_then(|id| numbers.get(id).copied());
+        for entry in entries {
+            entry.number = number(entry.space());
+            if let Some(HeldBy::Memory { reserved, .. }) = &mut entry.held_by {
+                for reservation in reserved {
+                    reservation.number = number(reservation.space_id.as_ref());
+                }
+            }
         }
         Ok(())
     }
