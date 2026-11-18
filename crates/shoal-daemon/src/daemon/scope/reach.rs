@@ -78,16 +78,21 @@ impl Manager {
         Ok(())
     }
 
-    /// The IDs of the spaces `caller`'s scope reaches; none when it
-    /// reaches every space.
+    /// The IDs of this machine's spaces `caller`'s scope reaches, through
+    /// spaces on other machines too; none when it reaches every space.
     pub(in crate::daemon) async fn reached_spaces(
         &self,
         caller: Option<&Caller>,
     ) -> Result<Option<Vec<SpaceId>>> {
-        match self.reach_root(caller).await? {
-            Some(root) => Ok(Some(self.subtree(&root).await?)),
-            None => Ok(None),
+        let Some(root) = self.reach_root(caller).await? else {
+            return Ok(None);
+        };
+        let mut reached = self.subtree(&root).await?;
+        // This machine's spaces below it through spaces elsewhere.
+        for below in self.reached_through_elsewhere(&root).await {
+            reached.extend(self.subtree(&below).await?);
         }
+        Ok(Some(reached))
     }
 }
 
