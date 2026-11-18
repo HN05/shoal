@@ -3,8 +3,8 @@
 //! state goes to the space's machine, which decides it as its own caller's;
 //! one that needs the space's files or processes stays on that machine.
 use super::{
-    AgentMethod, ApprovalMethod, AssignmentMethod, CiMethod, ExecutionMethod, HoldMethod,
-    ItemMethod, Operation, QuestionMethod, QueueMethod, RemovalMethod, WorkspaceMethod,
+    AgentMethod, ApprovalMethod, AssignmentMethod, CiMethod, HoldMethod, ItemMethod, Operation,
+    QuestionMethod, QueueMethod, RemovalMethod, WorkspaceMethod,
 };
 
 /// What a daemon does with a request for another machine's space.
@@ -79,7 +79,6 @@ impl Operation {
                     | RemovalMethod::RemoveSpace { .. }
                     | RemovalMethod::StartRemoval { .. }
             ) | Self::Queue(QueueMethod::SetPriority { .. } | QueueMethod::QueueRestore { .. })
-                | Self::Execution(ExecutionMethod::RestartAgent { .. })
                 | Self::Hold(
                     HoldMethod::HoldAcquire { .. }
                         | HoldMethod::HoldRelease { .. }

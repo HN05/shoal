@@ -2,7 +2,7 @@
 //! daemon asks it for through the hub, without the sessions and transcripts
 //! that stay there, or, while that machine is offline, what it last
 //! reported to the hub.
-use anyhow::{Result, bail};
+use anyhow::Result;
 use shoal_protocol::{
     hub::directory::{HubView, Listed},
     space_names::SpaceSelector,
@@ -11,37 +11,12 @@ use shoal_protocol::{
 use super::{StatusView, render::render_status};
 
 use crate::cli::{
-    commands::{machines, progress},
+    commands::progress,
     context::Context,
     list_status::ListStatusStyle,
     output::{Palette, Style},
     ui,
 };
-
-/// The other machine's space `selector` names when no space of this
-/// machine has it: by its ID, or by a number only one other machine's
-/// space has, with the hub's view that names its machine.
-pub(super) async fn find(
-    ctx: &Context,
-    selector: &SpaceSelector,
-) -> Result<Option<(Listed, HubView)>> {
-    let spaces = crate::client::spaces::list(&ctx.paths).await?;
-    if spaces.find(selector).is_some() {
-        return Ok(None);
-    }
-    let Some(view) = machines::view(ctx).await else {
-        return Ok(None);
-    };
-    let mut found = (view.directory.spaces.iter())
-        .filter(|remote| selector.selects(&remote.space.id, remote.space.number));
-    match (found.next().cloned(), found.next()) {
-        (Some(remote), None) => Ok(Some((remote, view))),
-        (Some(_), Some(_)) => bail!(
-            "several other machines have a space {selector}; name it by the ID shoal list --json shows"
-        ),
-        (None, _) => Ok(None),
-    }
-}
 
 /// Show the status of `remote`, whose machine `view` names: that
 /// machine's while it is connected, else what it last reported.

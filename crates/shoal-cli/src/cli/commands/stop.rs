@@ -15,6 +15,7 @@ use crate::{
 use shoal_protocol::space_names::SpaceSelector;
 
 mod batch;
+mod elsewhere;
 mod processes;
 mod targets;
 
@@ -40,6 +41,9 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
         return Ok(code);
     }
     let selected = ui::select_spaces(ctx, targets.space, false).await?;
+    if let Some(code) = elsewhere::stop(ctx, &selected, skip_children, yes).await? {
+        return Ok(code);
+    }
     let selected = resolve(ctx, selected, !skip_children).await?;
     if crate::env::inherits_scope(&ctx.paths.state) {
         ensure_below(&selected)?;

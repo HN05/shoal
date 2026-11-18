@@ -835,10 +835,10 @@ commands go as yours; a space's processes' go with that space's scope and
 permissions, which its machine vouches for, so an agent acts on the spaces
 below its own on every machine and is refused the rest, and a device's go as
 yours. This covers `status`, `log`, `questions`, `approvals`, `messages send`,
-`stop`, `stop --interrupt`, `restart`, `resume`, `rename`, `done`, `rm`,
-`priority`, `progress`, `sleep`, holds, and the issue, PR and CI commands that
-act on a space. Commands that need the space's files or
-processes, such as `diff`, `conflicts`, `setup`, leases, demos,
+`stop`, `stop --interrupt`, `resume`, `rename`, `done`, `rm`, `priority`,
+`progress`, `sleep`, holds, and the issue, PR and CI commands that act on a
+space. `restart` acts on the agents of its own machine. Commands that need the
+space's files or processes, such as `diff`, `conflicts`, `setup`, leases, demos,
 `stop --leftovers` and `--processes`, `files` and an agent's hooks, run only
 on its machine and are refused elsewhere, naming it, as is a command that
 attaches files, which that machine cannot read.
@@ -853,7 +853,12 @@ offline machine's space fails at once, naming the machine and when the hub
 last saw it.
 
 The tree of spaces may span machines: a space that moves to another machine
-without the space above it stays below it there. What a space passes up the
+without the space above it stays below it there, once what the hub lists of
+that space takes it as a parent here would, and its permissions stay no wider
+than that space's, as its machine last reported them. Removing a space
+removes the spaces below it on other machines first, through their own
+machines; one that cannot go, or a removal that confirmed only the spaces it
+saw here, keeps it. What a space passes up the
 tree, its agent's messages, questions, approval requests, completion, ready
 marks and exits, reaches the nearest space above with an agent wherever it
 runs, and that

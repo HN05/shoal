@@ -9,7 +9,7 @@ use self::render::render_status;
 use crate::client::{output::status::StatusView, transcripts};
 use crate::{
     cli::{
-        commands::service,
+        commands::{machines, service},
         context::Context,
         terminal::{self, Recorded},
         ui,
@@ -28,7 +28,7 @@ pub(in crate::cli::commands) async fn status(
     let Some(target) = status_target(space.as_deref(), item)? else {
         let space = space.as_deref().map(SpaceSelector::parse).transpose()?;
         if let Some(selector) = &space
-            && let Some((remote, view)) = elsewhere::find(ctx, selector).await?
+            && let Some((remote, view)) = machines::space_elsewhere(ctx, selector).await?
         {
             elsewhere::show(ctx, &remote, &view).await?;
             return Ok(0);
