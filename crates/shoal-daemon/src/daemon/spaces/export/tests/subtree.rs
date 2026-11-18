@@ -372,3 +372,32 @@ async fn a_selection_moves_nothing_while_a_removal_holds_the_space_above() {
     assert!(manager.find_space(&worker.id).await.unwrap().is_some());
     assert_eq!(placed(&manager, &child.id).await.1, Some(worker.id));
 }
+
+#[tokio::test]
+async fn a_copy_carries_a_disposable_workspace_below_it() {
+    let (source, manager, repo, _origin) = exporter().await;
+    let worker = manager
+        .create_workspace(&repo.id, "worker".into(), None, None, None)
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&worker.id);
+    let options = crate::protocol::CreationOptions {
+        disposable: true,
+        ..Default::default()
+    };
+    let scratch = (manager.split_workspace(&selector, "scratch".into(), None, options))
+        .await
+        .unwrap();
+    let file = source.path().join("copy.shoal");
+
+    (manager.copy_space(&selector, None, file.clone(), &Carrying::Subtree))
+        .await
+        .unwrap();
+
+    let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
+    let carried: Vec<&SpaceId> = (import.manifest.carried.iter())
+        .map(|carried| &carried.space.record.space_id)
+        .collect();
+    assert_eq!(carried, [&scratch.id]);
+    assert!(manager.find_space(&scratch.id).await.unwrap().is_some());
+}

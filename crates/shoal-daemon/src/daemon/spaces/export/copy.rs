@@ -4,7 +4,7 @@
 //! opens as new spaces whose agents start from forks.
 use anyhow::Result;
 
-use super::{Prepared, carried};
+use super::Prepared;
 use crate::{
     daemon::{events::EventCause, workspace::Manager},
     execution::recovery::{self, Copied, Record, StoppedAgent},
@@ -69,7 +69,6 @@ impl Manager {
         carrying: &Carrying,
     ) -> Result<Prepared> {
         let carried = self.carried_by(&space.id, carrying).await?;
-        carried::ensure_packable(&space, &carried)?;
         let copied = self.copy_record_of(&space, number).await?;
         let mut records = Vec::new();
         for below in &carried {
