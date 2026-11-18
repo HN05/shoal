@@ -122,3 +122,39 @@ async fn bytes_past_a_stream_s_credit_fail_the_link() {
     };
     assert!(link.opener.streams().take(&past).is_err());
 }
+
+/// The data frame of `bytes` on the stream `stream`.
+fn data(stream: u64, bytes: &[u8]) -> Frame {
+    Frame::Data {
+        stream,
+        data: base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, bytes),
+    }
+}
+
+#[tokio::test]
+async fn a_read_cancelled_while_the_link_is_saturated_loses_nothing() {
+    let (ours, mut theirs) = tokio::io::duplex(64);
+    let (read, write) = tokio::io::split(ours);
+    let channel = Channel::lines(BufReader::new(read), write);
+    let streams = super::Streams::new(channel.sender());
+    let mut incoming = streams.open();
+    let first = vec![1; STREAM_WINDOW as usize / 2];
+    streams.take(&data(incoming.number(), &first)).unwrap();
+    assert_eq!(incoming.next().await.unwrap().unwrap(), first);
+    let second = vec![2; 10];
+    streams.take(&data(incoming.number(), &second)).unwrap();
+    // The other side reads nothing, so the link's send queue fills, and
+    // the read owes credit it cannot send yet; cancelled, it keeps both.
+    // Its writer takes a frame and blocks on the pipe before the queue
+    // fills behind it.
+    channel.sender().send(&"x".repeat(4096)).await.unwrap();
+    tokio::task::yield_now().await;
+    while channel.sender().try_send(&"x".repeat(4096)).is_ok() {}
+    tokio::select! {
+        biased;
+        read = incoming.next() => panic!("read past a full queue: {read:?}"),
+        () = tokio::task::yield_now() => {}
+    }
+    tokio::spawn(async move { tokio::io::copy(&mut theirs, &mut tokio::io::sink()).await });
+    assert_eq!(incoming.next().await.unwrap().unwrap(), second);
+}

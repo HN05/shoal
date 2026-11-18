@@ -102,6 +102,7 @@ impl Streams {
             state: self.state.clone(),
             sender: self.sender.clone(),
             taken: 0,
+            allowed_owed: false,
             ended: false,
         }
     }
@@ -205,6 +206,9 @@ pub(crate) struct Incoming {
     sender: Sender,
     /// The bytes taken since this side last granted credit.
     taken: u64,
+    /// Whether the bytes it owes credit for already count as allowed,
+    /// while their credit waits to be sent.
+    allowed_owed: bool,
     ended: bool,
 }
 
@@ -215,11 +219,15 @@ impl Incoming {
     }
 
     /// The stream's next bytes, none once it ended; an error once its
-    /// writer ended it with one or the link closed.
+    /// writer ended it with one or the link closed. Cancelling it, as
+    /// `tokio::select!` does, loses nothing: it grants the credit the bytes
+    /// it returned last earned before it waits for more, and holds them
+    /// back from no one.
     pub(crate) async fn next(&mut self) -> Result<Option<Vec<u8>>> {
         if self.ended {
             return Ok(None);
         }
+        self.grant().await?;
         let received = self.bytes.recv().await;
         let bytes = match received {
             Some(Received::Bytes(bytes)) => bytes,
@@ -236,29 +244,32 @@ impl Incoming {
                 bail!("the link closed");
             }
         };
-        self.grant(bytes.len() as u64).await?;
+        self.taken += bytes.len() as u64;
         Ok(Some(bytes))
     }
 
-    /// Count `bytes` taken, and grant the writer that much again once it
-    /// comes to half the window, so it never waits for a reader that keeps
-    /// up.
-    async fn grant(&mut self, bytes: u64) -> Result<()> {
-        self.taken += bytes;
+    /// Grant the writer the bytes taken again once they come to half the
+    /// window, so it never waits for a reader that keeps up. A cancelled
+    /// grant keeps what it owes for the next.
+    async fn grant(&mut self) -> Result<()> {
         if self.taken < STREAM_WINDOW / 2 {
             return Ok(());
         }
-        let bytes = std::mem::take(&mut self.taken);
         // Allowed first, so bytes the credit lets through never count as
         // past it.
-        if let Some(reading) = lock(&self.state).reading.get_mut(&self.stream) {
-            reading.allowed += bytes;
+        if !self.allowed_owed {
+            if let Some(reading) = lock(&self.state).reading.get_mut(&self.stream) {
+                reading.allowed += self.taken;
+            }
+            self.allowed_owed = true;
         }
         let credit = Frame::Credit {
             stream: self.stream,
-            bytes,
+            bytes: self.taken,
         };
-        self.sender.send(&credit).await
+        self.sender.send(&credit).await?;
+        (self.taken, self.allowed_owed) = (0, false);
+        Ok(())
     }
 }
 
