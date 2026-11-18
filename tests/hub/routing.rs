@@ -4,7 +4,7 @@
 use serde_json::{Value, json};
 
 use super::{
-    directory::{join, listed, machine, reach, workspace},
+    directory::{hub_machine, join, listed, machine, reach, workspace},
     numbers::reroute,
     support::{
         daemon_client,
@@ -53,6 +53,7 @@ fn tree_below_hub_config(extra: &str) -> Tree {
     let laptop_id = join(&laptop, &hub, "laptop");
     reach(&hub, &laptop);
     let coordinator = workspace(&hub, "coordinator");
+    ready_at(&laptop, &coordinator, &hub_machine(&hub));
     let repo = hub.repo.to_str().unwrap().to_owned();
     hub.ok(&[
         "start",
@@ -82,6 +83,14 @@ fn tree_below_hub_config(extra: &str) -> Tree {
         coordinator,
         child,
     }
+}
+
+/// Wait until `machine` lists the space `id` of the machine `of` as past
+/// its preparation, as a parent the hub lists must be to take a child.
+fn ready_at(machine: &Base, id: &str, of: &str) {
+    wait_for("the space ready at the hub", || {
+        (listed(machine, id, of)["status"] != "preparing").then_some(())
+    });
 }
 
 /// The scope token of a process of `machine`'s space `id`.
@@ -236,6 +245,7 @@ fn a_question_for_an_offline_coordinator_goes_on_to_the_user() {
     let laptop_id = join(&laptop, &hub, "laptop");
     reach(&desk, &laptop);
     let coordinator = workspace(&desk, "coordinator");
+    ready_at(&laptop, &coordinator, &desk_id);
     let repo = desk.repo.to_str().unwrap().to_owned();
     desk.ok(&[
         "start",
