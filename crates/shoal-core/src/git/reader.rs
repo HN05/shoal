@@ -56,11 +56,21 @@ pub(crate) async fn read<T: Send + 'static>(
     in_process: impl FnOnce(&gix::Repository) -> Result<T> + Send + 'static,
     cli: impl AsyncFnOnce(&Path) -> Result<T>,
 ) -> Result<T> {
+    read_unless_deferred(path, |repo| in_process(repo).map(Some), cli).await
+}
+
+/// As [`read`], where `in_process` may also leave the read to `cli` by
+/// answering `None`, for an input whose meaning depends on the repository.
+pub(crate) async fn read_unless_deferred<T: Send + 'static>(
+    path: &Path,
+    in_process: impl FnOnce(&gix::Repository) -> Result<Option<T>> + Send + 'static,
+    cli: impl AsyncFnOnce(&Path) -> Result<T>,
+) -> Result<T> {
     let at = path.to_owned();
-    let read = off_runtime::run(move || Ok(open(&at).map(|repo| in_process(&repo)))).await?;
-    match read {
-        Some(answer) => answer,
-        None => cli(path).await,
+    let read = off_runtime::run(move || open(&at).map(|repo| in_process(&repo)).transpose());
+    match read.await? {
+        Some(Some(answer)) => Ok(answer),
+        _ => cli(path).await,
     }
 }
 

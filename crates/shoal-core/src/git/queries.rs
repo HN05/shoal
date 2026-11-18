@@ -33,18 +33,14 @@ async fn named_object(
     rev: &str,
     git: impl AsyncFnOnce(&Path) -> Result<String>,
 ) -> Result<String> {
-    if !refs::names_ref_or_object(rev) {
-        return git(repo).await;
-    }
-    let owned = rev.to_owned();
-    let in_process = move |repo: &gix::Repository| {
-        let object = refs::named_object(repo, &owned)?;
+    let in_process = |repo: &gix::Repository, rev: &str| {
+        let object = refs::named_object(repo, rev)?;
         Ok(format!(
             "{}\n",
-            object.with_context(|| format!("{owned} names nothing"))?
+            object.with_context(|| format!("{rev} names nothing"))?
         ))
     };
-    reader::read(repo, in_process, git).await
+    refs::read_revision(repo, rev, in_process, git).await
 }
 
 pub async fn symbolic_revision(

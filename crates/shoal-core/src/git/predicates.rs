@@ -45,16 +45,10 @@ pub async fn ref_exists(repo: &Path, reference: &str) -> Result<bool> {
 
 /// Whether the repository has the commit `rev` names.
 pub async fn has_commit(repo: &Path, rev: &str) -> Result<bool> {
-    if refs::names_ref_or_object(rev) {
-        let owned = rev.to_owned();
-        let in_process =
-            move |repo: &gix::Repository| Ok(refs::peeled_commit(repo, &owned)?.is_some());
-        return reader::read(repo, in_process, async |repo| {
-            has_commit_by_git(repo, rev).await
-        })
-        .await;
-    }
-    has_commit_by_git(repo, rev).await
+    let in_process =
+        |repo: &gix::Repository, rev: &str| Ok(refs::peeled_commit(repo, rev)?.is_some());
+    let git = async |repo: &Path| has_commit_by_git(repo, rev).await;
+    refs::read_revision(repo, rev, in_process, git).await
 }
 
 /// Whether Git finds the commit `rev` names in `repo`.

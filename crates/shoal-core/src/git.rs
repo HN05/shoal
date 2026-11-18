@@ -527,15 +527,11 @@ pub async fn resolve_commit(
     rev: &str,
     run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
 ) -> Result<CommitId> {
-    if !refs::names_ref_or_object(rev) {
-        return resolve_commit_by_git(repo, rev, run).await;
-    }
-    let owned = rev.to_owned();
-    let in_process = move |repo: &gix::Repository| {
-        refs::peeled_commit(repo, &owned)?.with_context(|| format!("{owned} names no commit"))
+    let in_process = |repo: &gix::Repository, rev: &str| {
+        refs::peeled_commit(repo, rev)?.with_context(|| format!("{rev} names no commit"))
     };
     let git = async |repo: &Path| resolve_commit_by_git(repo, rev, run).await;
-    reader::read(repo, in_process, git).await
+    refs::read_revision(repo, rev, in_process, git).await
 }
 
 /// The commit Git peels `rev` to in `repo`.
@@ -565,15 +561,11 @@ pub async fn resolve_named_commit(
     // Without `--verify`, which takes one revision, Git would print an
     // option-like argument back instead of resolving it.
     ensure!(!rev.starts_with('-'), "{rev} is not a revision");
-    if refs::names_ref_or_object(rev) {
-        let owned = rev.to_owned();
-        let in_process = move |repo: &gix::Repository| {
-            refs::named_commit(repo, &owned)?.with_context(|| format!("{owned} names no commit"))
-        };
-        let git = async |repo: &Path| resolve_named_commit_by_git(repo, rev, run).await;
-        return reader::read(repo, in_process, git).await;
-    }
-    resolve_named_commit_by_git(repo, rev, run).await
+    let in_process = |repo: &gix::Repository, rev: &str| {
+        refs::named_commit(repo, rev)?.with_context(|| format!("{rev} names no commit"))
+    };
+    let git = async |repo: &Path| resolve_named_commit_by_git(repo, rev, run).await;
+    refs::read_revision(repo, rev, in_process, git).await
 }
 
 /// The commit and ref name Git reads for `rev` in `repo`.

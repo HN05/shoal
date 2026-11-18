@@ -183,3 +183,38 @@ async fn a_tree_a_partial_clone_lacks_is_fetched_as_git_fetches_it() {
         .unwrap();
     assert_eq!(read, tree);
 }
+
+#[tokio::test]
+async fn a_sha1_length_prefix_of_a_sha256_id_resolves_as_git_resolves_it() {
+    let root = tempfile::tempdir().unwrap();
+    let init = ["init", "-q", "-b", "main", "--object-format=sha256", "repo"];
+    git(root.path(), &init);
+    let repo = root.path().join("repo");
+    let identity = [
+        "-c",
+        "user.name=Shoal",
+        "-c",
+        "user.email=shoal@example.com",
+    ];
+    git(
+        &repo,
+        &[
+            &identity[..],
+            &["commit", "-q", "--allow-empty", "-m", "first"],
+        ]
+        .concat(),
+    );
+    let commit = git(&repo, &["rev-parse", "HEAD"]).trim().to_owned();
+    assert_eq!(commit.len(), 64);
+    // Forty hex digits abbreviate a SHA-256 ID rather than name one.
+    let prefix = &commit[..40];
+    assert_eq!(
+        resolve_commit(&repo, prefix, run).await.unwrap(),
+        commit.as_str()
+    );
+    assert!(has_commit(&repo, prefix).await.unwrap());
+    assert_eq!(
+        resolve_commit(&repo, &commit, run).await.unwrap(),
+        commit.as_str()
+    );
+}

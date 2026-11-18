@@ -192,14 +192,38 @@ pub(crate) fn followed(repo: &gix::Repository, name: &str) -> Result<Followed> {
     anyhow::bail!("{name} leads through more than {MAX_SYMBOLIC_DEPTH} symbolic refs")
 }
 
-/// Whether gix reads `rev` as Git does: `HEAD`, a full ref name or a full
-/// object ID, peeled at most once to a commit or tree, with no other
-/// revision syntax to interpret.
-pub(crate) fn names_ref_or_object(rev: &str) -> bool {
-    simple(rev).is_some()
+/// `in_process`'s answer for the revision `rev` in the repository Git finds
+/// from `path`, where gix reads `rev` as Git does: `HEAD`, a full ref name
+/// or an object ID of the repository's full length, peeled at most once to
+/// a commit or tree. `git`'s answer for any other revision, such as one
+/// with syntax Git must interpret or an abbreviated object ID.
+pub(crate) async fn read_revision<T: Send + 'static>(
+    path: &Path,
+    rev: &str,
+    in_process: impl FnOnce(&gix::Repository, &str) -> Result<T> + Send + 'static,
+    git: impl AsyncFnOnce(&Path) -> Result<T>,
+) -> Result<T> {
+    if simple(rev).is_none() {
+        return git(path).await;
+    }
+    let owned = rev.to_owned();
+    let in_process = move |repo: &gix::Repository| {
+        let alike = reads_alike(repo, &owned);
+        alike.then(|| in_process(repo, &owned)).transpose()
+    };
+    reader::read_unless_deferred(path, in_process, git).await
 }
 
-/// The object `rev`, which [`names_ref_or_object`], names in `repo`, as
+/// Whether gix reads the simple revision `rev` in `repo` as Git does: an
+/// object ID only at the length of the repository's object format, since a
+/// SHA-1 length abbreviates a SHA-256 ID.
+fn reads_alike(repo: &gix::Repository, rev: &str) -> bool {
+    simple(rev).is_some_and(|(name, _)| {
+        name == "HEAD" || name.starts_with("refs/") || name.len() == repo.object_hash().len_in_hex()
+    })
+}
+
+/// The object `rev`, which [`read_revision`] reads in process, names in `repo`, as
 /// `git rev-parse` gives it: unpeeled unless it asks for a peel, and a full
 /// object ID as it is, whether or not the repository has it. `None` when
 /// it names no ref or no object of the kind it peels to, or HEAD names no
@@ -237,7 +261,7 @@ fn unpeeled(repo: &gix::Repository, name: &str) -> Result<Option<gix::ObjectId>>
     }
 }
 
-/// The commit `rev`, which [`names_ref_or_object`], peels to in `repo`;
+/// The commit `rev`, which [`read_revision`] reads in process, peels to in `repo`;
 /// `None` when it names nothing or no commit.
 pub(crate) fn peeled_commit(repo: &gix::Repository, rev: &str) -> Result<Option<CommitId>> {
     let object = named_object(repo, rev)?.map(|id| repo.try_find_object(id));
@@ -250,7 +274,7 @@ pub(crate) fn peeled_commit(repo: &gix::Repository, rev: &str) -> Result<Option<
         .map(|commit| commit.id.to_string().into()))
 }
 
-/// The commit `rev`, which [`names_ref_or_object`], peels to and the full
+/// The commit `rev`, which [`read_revision`] reads in process, peels to and the full
 /// name of the ref it names, as `git rev-parse --symbolic-full-name` gives
 /// it: `HEAD` for a detached HEAD, empty for an object ID; `None` when `rev`
 /// peels to no commit.
