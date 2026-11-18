@@ -917,11 +917,14 @@ those processes dominated the daemon's background load. Each read opens the
 repository afresh, so a moved or replaced worktree is caught as before, sees
 the user's and system config as Git does and none of the repository variables
 Shoal's Git commands drop, and runs on the blocking pool. A repository `gix`
-would not read as Git does, such as one whose refs are in a reftable or that
-enables an extension `gix` lacks, and a process whose environment points Git
+would not read as Git does, such as one whose refs are in a reftable, a partial
+clone, whose missing objects Git fetches, or one that enables an extension
+`gix` lacks, and a process whose environment points Git
 at another repository read through Git. Writes, network access, `status`,
 `ls-files` and `diff`, whose ignore and fsmonitor behaviour must match Git
-exactly, revisions a caller supplies, and the ancestry, `rev-list` and
+exactly, revision syntax Git interprets, such as a caller's `--base HEAD~2`,
+beyond HEAD, a full ref name or a full object ID peeled at most once, which mean
+the same to both, and the ancestry, `rev-list` and
 `cherry` checks behind removal and cleanup decisions stay with Git, where a
 difference could cost work. Branch names are checked in Rust by Git's rules.
 

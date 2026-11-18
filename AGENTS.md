@@ -87,8 +87,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   location, HEAD, refs, remotes and config, opening it afresh for each read on
   the blocking pool, and reads through Git where it would not read the
   repository as Git does. Writes, network access, `status`, `ls-files` and
-  `diff`, revisions a caller supplies and the checks behind removal and
-  cleanup decisions run Git.
+  `diff`, revision syntax Git interprets, such as a caller's `--base HEAD~2`,
+  and the checks behind removal and cleanup decisions run Git; HEAD, a full
+  ref name or a full object ID, peeled at most once, means the same to both.
 - Interactive input lives in `cli::ui`, whose module doc lists what it offers:
   commands prompt and pick through its operations, never through fzf or the
   terminal directly, and a new kind of prompt or picker goes there, built on
