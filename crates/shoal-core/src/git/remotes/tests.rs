@@ -149,3 +149,21 @@ async fn a_remote_named_in_a_remotes_file_is_read_as_git_reads_it() {
     let listed: Vec<String> = git(&repo, &["remote"]).lines().map(String::from).collect();
     assert_eq!(remote_names(&repo).await.unwrap(), listed);
 }
+
+#[tokio::test]
+async fn equally_long_rewrites_go_to_the_base_configured_first() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    let config = repo.join(".git/config");
+    let mut text = std::fs::read_to_string(&config).unwrap();
+    for (base, prefix) in [("a", "foo:"), ("b", "bar:"), ("a", "bar:")] {
+        text.push_str(&format!(
+            "[url \"https://{base}.example/\"]\n\tinsteadOf = {prefix}\n"
+        ));
+    }
+    text.push_str("[remote \"origin\"]\n\turl = bar:repo\n");
+    std::fs::write(&config, text).unwrap();
+    let expected = git(&repo, &["remote", "get-url", "origin"]);
+    let url = configured_remote_url(&repo, "origin").await.unwrap();
+    assert_eq!(url.as_deref(), Some(expected.trim()));
+}

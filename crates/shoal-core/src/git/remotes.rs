@@ -134,16 +134,13 @@ fn fetch_url(repo: &gix::Repository, name: &str) -> Option<String> {
 }
 
 /// `url` with the longest `url.<base>.insteadOf` prefix it starts with
-/// replaced by that base, as Git rewrites a fetch URL; the first of equally
-/// long prefixes wins.
+/// replaced by that base, as Git rewrites a fetch URL. Of equally long
+/// prefixes, that of the base configured first wins, wherever the prefix
+/// itself appears, since Git gathers each base's prefixes together.
 fn rewritten(config: &gix::config::File, url: &str) -> String {
     let mut best: Option<(usize, String)> = None;
-    for section in config.sections_by_name("url").into_iter().flatten() {
-        let Some(base) = section.header().subsection_name() else {
-            continue;
-        };
-        for prefix in section.values("insteadOf") {
-            let prefix = prefix.to_string();
+    for (base, prefixes) in rewrites(config) {
+        for prefix in prefixes {
             let longer = best
                 .as_ref()
                 .is_none_or(|(length, _)| prefix.len() > *length);
@@ -153,6 +150,27 @@ fn rewritten(config: &gix::config::File, url: &str) -> String {
         }
     }
     best.map_or_else(|| url.to_owned(), |(_, url)| url)
+}
+
+/// Each `url.<base>` of `config` with its `insteadOf` prefixes, in the order
+/// each base first appears.
+fn rewrites(config: &gix::config::File) -> Vec<(String, Vec<String>)> {
+    let mut rewrites: Vec<(String, Vec<String>)> = Vec::new();
+    for section in config.sections_by_name("url").into_iter().flatten() {
+        let Some(base) = section.header().subsection_name() else {
+            continue;
+        };
+        let base = base.to_string();
+        let prefixes = section
+            .values("insteadOf")
+            .into_iter()
+            .map(|prefix| prefix.to_string());
+        match rewrites.iter_mut().find(|(known, _)| *known == base) {
+            Some((_, known)) => known.extend(prefixes),
+            None => rewrites.push((base, prefixes.collect())),
+        }
+    }
+    rewrites
 }
 
 /// The remote a push of `branch` goes to: `branch.<name>.pushRemote`, else
