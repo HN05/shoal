@@ -39,6 +39,9 @@ pub(super) enum Answer {
     Wait(BoxFuture<'static, Result<Body>>),
     /// A request that keeps the connection, such as an execution or a watch.
     Connection(Connection),
+    /// A listing that failed, whose error a request for a space another
+    /// machine has goes on with.
+    Failed(anyhow::Error),
 }
 
 impl Answer {
@@ -52,7 +55,7 @@ impl Answer {
             Ok(items) => Self::Pages(
                 protocol::frame_pages(items).map(|pages| pages.into_iter().map(page).collect()),
             ),
-            Err(error) => Self::failed(&error),
+            Err(error) => Self::Failed(error),
         }
     }
 
@@ -68,11 +71,6 @@ impl Answer {
         Self::Connection(Box::new(move |stream, request_id, guard| {
             keep(stream, request_id, guard).boxed()
         }))
-    }
-
-    /// The reply to an operation that failed.
-    pub(super) fn failed(error: &anyhow::Error) -> Self {
-        Self::Body(failure(error))
     }
 
     /// Send the answer to `request_id`. The guard is held until the reply is
@@ -94,6 +92,7 @@ impl Answer {
                 answer_wait(stream, request_id, manager, wait).await
             }
             Self::Connection(keep) => keep(stream, request_id, guard).await,
+            Self::Failed(error) => reply(&mut stream, request_id, failure(&error)).await,
         }
     }
 }

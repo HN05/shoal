@@ -594,11 +594,11 @@ async fn serve_request(
         return Ok(());
     };
     match answer {
-        Ok(answer) => (answer.send(stream, request.id, &server.manager, operation_guard)).await,
-        Err(error) => {
+        Ok(answer::Answer::Failed(error)) | Err(error) => {
             let failed = (&error, answer::failure(&error));
             absent::answer(stream, &server, request.id, failed, routing, Some(caller)).await
         }
+        Ok(answer) => (answer.send(stream, request.id, &server.manager, operation_guard)).await,
     }
 }
 
