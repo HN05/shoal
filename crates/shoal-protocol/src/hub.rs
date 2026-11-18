@@ -14,6 +14,7 @@ use shoal_states::{states, text_key};
 
 use crate::time::UnixTime;
 
+pub mod directory;
 pub mod link;
 pub mod pairing;
 

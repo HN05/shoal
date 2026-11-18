@@ -696,11 +696,6 @@ CREATE TABLE waiting_preparations (
     waits TEXT NOT NULL
 );
 
-CREATE TABLE removal_directories (
-    workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
-    identity TEXT NOT NULL
-);
-
 CREATE TABLE hub_identity (
     id INTEGER PRIMARY KEY CHECK(id = 1),
     private_key BLOB NOT NULL
@@ -728,6 +723,26 @@ CREATE TABLE hub_membership (
     joined_at INTEGER NOT NULL,
     revoked INTEGER NOT NULL DEFAULT 0 CHECK(revoked IN (0,1)),
     CHECK((url IS NULL) <> (connect IS NULL))
+);
+
+CREATE TABLE removal_directories (
+    workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+    identity TEXT NOT NULL
+);
+
+CREATE TABLE hub_spaces (
+    space_id TEXT PRIMARY KEY,
+    member_id TEXT NOT NULL REFERENCES hub_members(id),
+    summary TEXT NOT NULL,
+    reported_at INTEGER NOT NULL
+);
+
+CREATE TABLE hub_space_copies (
+    space_id TEXT NOT NULL,
+    member_id TEXT NOT NULL REFERENCES hub_members(id),
+    summary TEXT NOT NULL,
+    since INTEGER NOT NULL,
+    PRIMARY KEY(space_id, member_id)
 );
 
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
@@ -810,6 +825,8 @@ CREATE INDEX trigger_runs_by_trigger ON trigger_runs(scope, name, id);
 CREATE INDEX workspaces_base ON workspaces(base_workspace_id);
 
 CREATE INDEX reply_times_space ON reply_times(space_id, id);
+
+CREATE INDEX hub_spaces_member ON hub_spaces(member_id);
 
 CREATE VIEW space_refs AS
     SELECT spaces.id, CASE spaces.kind

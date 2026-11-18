@@ -1,9 +1,9 @@
 //! What the hub answers, to its members' calls and to the requests of its
-//! own machine's callers alike: pairing codes, its listener and members, and
-//! revoking credentials.
+//! own machine's callers alike: pairing codes, its listener and members,
+//! revoking credentials, and its directory of the machines' spaces.
 use anyhow::{Result, anyhow};
 use shoal_protocol::hub::{
-    Member, Overview,
+    Member, MemberKind, Overview,
     link::{Call, Reply},
     pairing::Pairing,
 };
@@ -13,7 +13,7 @@ use std::sync::Arc;
 use shoal_ids::member_ids::MemberId;
 use tokio::sync::OwnedRwLockReadGuard;
 
-use super::members;
+use super::{directory, members};
 use crate::{
     daemon::workspace::Manager,
     refusal::{Reason, Refusal},
@@ -80,6 +80,16 @@ impl Manager {
                 self.release_member(&member.id).await?;
                 Reply::Left
             }
+            Call::Report(report) => {
+                anyhow::ensure!(
+                    member.kind == MemberKind::Machine,
+                    "only a machine reports spaces to the hub"
+                );
+                self.record_report(&member.id, report).await?;
+                Reply::Reported
+            }
+            Call::Directory => Reply::Directory(self.local_directory().await?),
+            Call::Owner { space } => Reply::Owner(self.local_space_owner(&space).await?),
         })
     }
 
@@ -143,6 +153,7 @@ impl Manager {
                     .into());
                 }
                 members::revoke(tx, &member.id)?;
+                directory::forget(tx, &member.id)?;
                 Ok(member)
             })
             .await?;
@@ -158,7 +169,10 @@ impl Manager {
         let member = member.clone();
         let _admission = self.hub.admissions.lock().await;
         self.store
-            .write(move |tx| members::revoke(tx, &member))
+            .write(move |tx| {
+                members::revoke(tx, &member)?;
+                directory::forget(tx, &member)
+            })
             .await
     }
 

@@ -105,6 +105,9 @@ states!(NotificationKind {
     /// The hub refused a machine or device, such as for another version,
     /// or this machine's link to the hub.
     HubRefused => "hub_refused",
+    /// A second joined machine reported a space under an ID another
+    /// machine's space has.
+    SpaceConflict => "space_conflict",
 });
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

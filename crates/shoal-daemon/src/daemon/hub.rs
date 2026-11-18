@@ -14,6 +14,7 @@ use super::workspace::Manager;
 
 mod accept;
 pub(crate) mod answers;
+mod directory;
 mod identity;
 mod links;
 mod listener;

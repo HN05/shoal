@@ -21,11 +21,13 @@
 //! replay one unnoticed; only a refusal the hub sends before it can seal
 //! comes as it is, and the member takes no such refusal as final.
 use serde::{Deserialize, Serialize};
-use shoal_ids::member_ids::MemberId;
+use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
 use shoal_states::states;
 
 use super::{
-    ExchangeKey, Mac, MemberKind, Nonce, Overview, PublicKey, Signature, pairing::Pairing,
+    ExchangeKey, Mac, MemberKind, Nonce, Overview, PublicKey, Signature,
+    directory::{Directory, Report},
+    pairing::Pairing,
 };
 
 /// The info that derives the key of frames the member sends.
@@ -198,6 +200,15 @@ pub enum Call {
     Revoke { member: String },
     /// Revoke the caller's own credential. Answered with [`Reply::Left`].
     Leave,
+    /// A machine's report of its spaces. Answered with
+    /// [`Reply::Reported`].
+    Report(Report),
+    /// The directory of every machine's spaces. Answered with
+    /// [`Reply::Directory`].
+    Directory,
+    /// The machine that owns the space `space`, if any. Answered with
+    /// [`Reply::Owner`].
+    Owner { space: SpaceId },
 }
 
 /// The answer to a [`Call`].
@@ -208,6 +219,9 @@ pub enum Reply {
     Members(Overview),
     Revoked(super::Member),
     Left,
+    Reported,
+    Directory(Directory),
+    Owner(Option<super::Member>),
     Failed { message: String },
 }
 
