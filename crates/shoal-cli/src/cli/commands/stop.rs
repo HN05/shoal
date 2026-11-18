@@ -41,6 +41,10 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
         return Ok(code);
     }
     let selected = ui::select_spaces(ctx, targets.space, false).await?;
+    // A process of a space that cleared its token is still that space's.
+    if crate::env::inherits_scope(&ctx.paths.state) {
+        targets::ensure_scoped()?;
+    }
     if let Some(code) = elsewhere::stop(ctx, &selected, skip_children, yes).await? {
         return Ok(code);
     }

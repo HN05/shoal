@@ -35,13 +35,21 @@ pub(in crate::cli::commands) async fn resolve(
 /// below the caller's, which needs the scope token; refusing its own here,
 /// before any stops, keeps the stop from taking the spaces below it alone.
 pub(in crate::cli::commands) fn ensure_below(selected: &[Space]) -> Result<()> {
-    const REFUSAL: &str =
-        "scoped processes stop only the spaces below theirs; finish their own with shoal done";
-    let own = crate::env::own_space().context(REFUSAL)?;
-    ensure!(crate::env::is_scoped(), "{REFUSAL}");
+    let own = ensure_scoped()?;
     ensure!(selected.iter().all(|space| space.id != own), "{REFUSAL}");
     Ok(())
 }
+
+/// Refuse a stop in a process of a space that cleared its scope token,
+/// which the daemon would take for the user's, returning its space.
+pub(super) fn ensure_scoped() -> Result<shoal_ids::space_ids::SpaceId> {
+    let own = crate::env::own_space().context(REFUSAL)?;
+    ensure!(crate::env::is_scoped(), "{REFUSAL}");
+    Ok(own)
+}
+
+const REFUSAL: &str =
+    "scoped processes stop only the spaces below theirs; finish their own with shoal done";
 
 /// Refuse `spaces` all before any stops when stopping one would be refused
 /// now, as while another lifecycle operation or a resource hook runs in a
