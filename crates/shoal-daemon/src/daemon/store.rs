@@ -313,10 +313,10 @@ pub fn repository_has_spaces(db: &Connection, repository_id: &RepositoryId) -> R
     exists(db, REPOSITORY_SPACES_QUERY, [repository_id])
 }
 
-/// The IDs of the repository's spaces, workspaces and chats.
+/// The IDs of the repository's spaces, workspaces and chats, by name.
 pub fn repository_spaces(db: &Connection, repository_id: &RepositoryId) -> Result<Vec<SpaceId>> {
     Ok(db
-        .prepare("SELECT id FROM spaces WHERE repository_id=?1 ORDER BY id")?
+        .prepare("SELECT id FROM spaces WHERE repository_id=?1 ORDER BY name, id")?
         .query_map([repository_id], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }
