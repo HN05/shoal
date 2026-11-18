@@ -79,12 +79,9 @@ impl Manager {
         launches::ensure_fits(&launch, &[], shape.kind, Some(&shape.mode))?;
         self.authorize_repository_setup(&launch, caller).await?;
         match shape.kind {
-            SpaceKind::Chat => (self.launch_in_chat(launch, shape, source, caller))
-                .await
-                .map(Launched::Chat),
+            SpaceKind::Chat => self.launch_in_chat(launch, shape, source, caller).await,
             SpaceKind::Workspace if launch.in_workspace.is_some() => {
-                let worker = self.launch_worker(launch, shape, source, caller).await?;
-                Ok(Launched::Worker(Box::new(worker)))
+                self.launch_worker(launch, shape, source, caller).await
             }
             SpaceKind::Workspace => self.launch_workspace(launch, shape, source, caller).await,
         }

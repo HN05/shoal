@@ -34,9 +34,7 @@ use crate::{
     start_plan::{Creation, ResolvedAddAgent},
     state::QueueState,
 };
-use shoal_protocol::launches::{
-    IssueChoice, Launch, Launched, QueuedWorker, SpaceChoice, StartTarget,
-};
+use shoal_protocol::launches::{IssueChoice, Launch, Launched, SpaceChoice, StartTarget, Started};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Have the daemon start `agent` as the worker of `workspace`, in `mode`,
@@ -154,13 +152,17 @@ fn place_agent(
 /// it.
 pub(in crate::cli::commands) async fn open_here(ctx: &Context, mut launch: Launch) -> Result<i32> {
     launch.here = true;
-    match crate::client::launches::launch(&ctx.paths, launch).await? {
-        Launched::Workspace(started) if started.operation.is_some() => {
-            Box::pin(attach::run(ctx, *started)).await
+    let launched = crate::client::launches::launch(&ctx.paths, launch).await?;
+    match &launched.start {
+        Started::Preparing {
+            operation: None, ..
+        } => report_workspace(ctx, attach::workspace_start(launched)?),
+        Started::Preparing { .. } | Started::Worker => {
+            Box::pin(attach::run(ctx, attach::workspace_start(launched)?)).await
         }
-        Launched::Workspace(started) => report_workspace(ctx, *started),
-        Launched::Worker(worker) => Box::pin(attach::run(ctx, attach::of_worker(*worker))).await,
-        Launched::Chat(started) => start::report_started(ctx, started),
+        Started::Queued { .. } | Started::Background { .. } | Started::Detached(_) => {
+            start::report_started(ctx, launched)
+        }
     }
 }
 
@@ -319,20 +321,15 @@ async fn send(
     if let Some(attach) = attach {
         return attached(ctx, launched, attach).await;
     }
-    match launched {
-        Launched::Chat(started) => start::report_started(ctx, started),
-        Launched::Worker(worker) => {
-            let QueuedWorker { workspace, entry } = *worker;
-            ctx.show(&workspace, |_| ())?;
-            match entry {
-                Some(entry) => report_queued_in(ctx, &workspace, &entry),
-                None => Ok(0),
-            }
+    match &launched.start {
+        Started::Queued { .. } | Started::Background { .. } | Started::Detached(_) => {
+            start::report_started(ctx, launched)
         }
-        Launched::Workspace(started) if wait && started.operation.is_some() => {
-            follow_workspace(ctx, *started, agent).await
-        }
-        Launched::Workspace(started) => report_workspace(ctx, *started),
+        Started::Worker => report_worker(ctx, attach::workspace_start(launched)?),
+        Started::Preparing {
+            operation: Some(_), ..
+        } if wait => follow_workspace(ctx, attach::workspace_start(launched)?, agent).await,
+        Started::Preparing { .. } => report_workspace(ctx, attach::workspace_start(launched)?),
     }
 }
 
@@ -343,17 +340,20 @@ async fn attached(
     launched: Launched,
     (attach, settings): (Attach, &Effective),
 ) -> Result<i32> {
-    let started = match launched {
-        Launched::Chat(started) => return start::report_started(ctx, started),
-        Launched::Worker(worker) => attach::of_worker(*worker),
+    let started = match &launched.start {
+        Started::Queued { .. } | Started::Background { .. } | Started::Detached(_) => {
+            return start::report_started(ctx, launched);
+        }
+        Started::Worker => attach::workspace_start(launched)?,
         // A preparation that waits for other work or disk space leaves the
         // agent to the queue's start once it is done.
-        Launched::Workspace(started) if started.operation.is_none() => {
-            return report_workspace(ctx, *started);
-        }
-        Launched::Workspace(started) => {
+        Started::Preparing {
+            operation: None, ..
+        } => return report_workspace(ctx, attach::workspace_start(launched)?),
+        Started::Preparing { .. } => {
+            let started = attach::workspace_start(launched)?;
             links::print_warnings(&started.warnings);
-            *started
+            started
         }
     };
     match attach {
@@ -399,6 +399,19 @@ async fn follow_workspace(
         },
     };
     report_queued_in(ctx, &workspace, &entry)
+}
+
+/// Report the existing workspace whose worker the daemon `started`, and
+/// the entry of its agent, if it queued one.
+fn report_worker(ctx: &Context, started: StartedWorkspace) -> Result<i32> {
+    let StartedWorkspace {
+        workspace, entry, ..
+    } = started;
+    ctx.show(&*workspace, |_| ())?;
+    match entry {
+        Some(entry) => report_queued_in(ctx, &workspace, &entry),
+        None => Ok(0),
+    }
 }
 
 /// Report the workspace the daemon `started`, whose preparation goes on

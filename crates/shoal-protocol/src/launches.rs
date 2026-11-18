@@ -4,15 +4,18 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use shoal_ids::{agent_session_ids::AgentSessionId, checkpoint_numbers::CheckpointNumber};
+use shoal_ids::{
+    agent_session_ids::AgentSessionId, checkpoint_numbers::CheckpointNumber,
+    execution_ids::ExecutionId,
+};
 use shoal_schedule::priority::Priority;
 
 use crate::{
     agent::{Agent, ModelChoice},
-    chats::StartedChat,
+    agents::Delivery,
     config::{modes::ModeName, permissions::PermissionsConfig},
     forge::items::reference::ItemInput,
-    model::{QueueEntry, Workspace},
+    model::{QueueEntry, Space},
     protocol::operations::StartedWorkspace,
     space_names::{SpaceName, SpaceSelector},
 };
@@ -133,27 +136,78 @@ pub struct Launch {
     pub unplaceable: Option<String>,
 }
 
-/// Where a launch started its agent.
+/// The space a launch started its agent in, a workspace or a chat, and how
+/// that agent started.
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Launched {
-    /// In a new chat.
-    Chat(StartedChat),
-    /// As the worker of an existing workspace.
-    Worker(Box<QueuedWorker>),
-    /// In a new or reopened workspace, which the operation it names
-    /// prepares, or will once what it waits for allows, with the agent
-    /// waiting in the queue for the preparation.
-    Workspace(Box<StartedWorkspace>),
+pub struct Launched {
+    /// The space's record as the launch created or found it, before its
+    /// agent runs.
+    pub space: Box<Space>,
+    /// Its agent's entry in the agent queue while the agent waits there;
+    /// none once it runs, or when the launch starts no agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry: Option<Box<QueueEntry>>,
+    /// What recording, linking or assigning its issue warned of, which its
+    /// starter receives.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
+    pub start: Started,
 }
 
-/// The worker of an existing workspace a launch queued.
+/// How a launch started its agent, with what only that kind of start
+/// reports.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct QueuedWorker {
-    pub workspace: Workspace,
-    /// Its entry in the agent queue; none when no agent is named or
-    /// configured, so the launch starts none.
-    pub entry: Option<QueueEntry>,
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Started {
+    /// In a new or, when `reused`, reopened workspace, which the operation
+    /// it names prepares, or will once what it waits for allows, with the
+    /// agent waiting in the queue for the preparation.
+    Preparing {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        operation: Option<String>,
+        #[serde(default)]
+        reused: bool,
+    },
+    /// As the worker of an existing workspace.
+    Worker,
+    /// In a new chat whose agent waits in the queue behind `waiting`
+    /// entries, this one included.
+    Queued { waiting: usize },
+    /// In a new chat whose agent runs in a background place: where it runs
+    /// and how to reach it, as the host that runs it says.
+    Background { place: String },
+    /// In a new chat whose agent an app runs detached.
+    Detached(DetachedRun),
+}
+
+/// An agent session an app runs detached: its execution, process and log,
+/// and how its first message reached it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DetachedRun {
+    pub execution_id: ExecutionId,
+    pub pid: u32,
+    pub log: PathBuf,
+    #[serde(flatten)]
+    pub delivery: Delivery,
+}
+
+impl From<StartedWorkspace> for Launched {
+    /// The launch of the workspace a request `started`, which prepares it.
+    fn from(started: StartedWorkspace) -> Self {
+        let StartedWorkspace {
+            operation,
+            workspace,
+            reused,
+            entry,
+            warnings,
+        } = started;
+        Self {
+            space: Box::new(Space::from(*workspace)),
+            entry,
+            warnings,
+            start: Started::Preparing { operation, reused },
+        }
+    }
 }
 
 /// What made a launch, which the journal records with its agent's start.

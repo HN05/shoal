@@ -3,8 +3,7 @@
 //! repository in `root_dir`.
 use anyhow::{Context as _, Result, ensure};
 use shoal_ids::repository_ids::RepositoryId;
-use shoal_protocol::chats::StartedChat;
-use shoal_protocol::launches::{IssueChoice, Launch, LaunchSource, SpaceChoice};
+use shoal_protocol::launches::{IssueChoice, Launch, LaunchSource, Launched, SpaceChoice};
 
 use super::shape::Shape;
 use crate::{
@@ -27,7 +26,7 @@ impl Manager {
         shape: Shape,
         source: LaunchSource,
         caller: Option<&Caller>,
-    ) -> Result<StartedChat> {
+    ) -> Result<Launched> {
         ensure!(
             !launch.here,
             "a launch runs no chat's agent in its caller; start the chat here with `shoal start --here`"

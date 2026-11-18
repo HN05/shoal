@@ -12,7 +12,7 @@ use crate::{
     protocol::ChatStart,
     state::QueueState,
 };
-use shoal_protocol::{chats::StartedChat, space_names::SpaceSelector};
+use shoal_protocol::{launches::Started, space_names::SpaceSelector};
 
 /// A machine of one heavy slot with a heavy chat mode `pair` and a light
 /// one `chat`, and the workspace launch `busy` holding the slot. Its
@@ -128,13 +128,18 @@ async fn a_clients_chat_whose_agent_waits_is_recorded_with_its_entry() {
         .await
         .unwrap();
 
-    let StartedChat::Queued(queued) = started else {
+    let Started::Queued { waiting } = started.start else {
         panic!("expected a queued chat: {started:?}");
     };
-    assert_eq!(queued.entry.state, QueueState::Queued);
+    assert_eq!(waiting, 1);
+    let queued = started.entry.expect("the answer names its agent's entry");
+    assert_eq!(queued.state, QueueState::Queued);
     let entries = manager.queue_entries().await.unwrap();
-    let entry = entries.iter().find(|entry| entry.id == queued.entry.id);
-    assert_eq!(entry.unwrap().space_id.as_ref(), Some(&queued.chat.id));
+    let entry = entries.iter().find(|entry| entry.id == queued.id);
+    assert_eq!(entry.unwrap().space_id.as_ref(), Some(&started.space.id));
+    let chats = manager.chats().await.unwrap();
+    let chat = chats.iter().find(|chat| chat.id == started.space.id);
+    assert_eq!(chat.unwrap().name, "queued talk");
     let launched = crate::daemon::chats::launches::fake::STARTED.lock();
     let names: Vec<_> = (launched.unwrap().iter())
         .filter_map(|(start, _)| start.name.clone())
@@ -163,7 +168,10 @@ async fn a_clients_chat_started_now_runs_past_the_limits() {
         .await
         .unwrap();
 
-    assert!(!matches!(started, StartedChat::Queued(_)), "{started:?}");
+    assert!(
+        !matches!(started.start, Started::Queued { .. }),
+        "{started:?}"
+    );
     let entries = manager.queue_entries().await.unwrap();
     let entry = entries.iter().find(|entry| entry.name == "urgent talk");
     assert_eq!(entry.unwrap().state, QueueState::Starting);

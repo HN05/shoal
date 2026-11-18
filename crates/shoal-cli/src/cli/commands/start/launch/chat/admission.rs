@@ -16,7 +16,7 @@ use crate::{
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::chats::LaunchedChat;
-use shoal_protocol::launches::LaunchSource;
+use shoal_protocol::launches::{LaunchSource, Launched};
 
 impl Launch {
     /// Ask the agent queue to admit this chat's agent, unless its starter
@@ -90,14 +90,12 @@ impl Launch {
     /// be recorded takes its launch out of the queue.
     async fn wait(&self, ctx: &Context, entry: QueueEntry, waiting: usize) -> Result<Started> {
         let launched = self.record_waiting(ctx, &entry).await?;
-        let queued = shoal_protocol::chats::QueuedChat {
-            chat: launched.chat,
-            entry,
-            waiting,
+        Ok(Started::Launched(Box::new(Launched {
+            space: Box::new(launched.chat.into()),
+            entry: Some(Box::new(entry)),
             warnings: launched.warnings,
-        };
-        super::detached::report_queued(ctx, &queued)?;
-        Ok(Started::Exited(0))
+            start: shoal_protocol::launches::Started::Queued { waiting },
+        })))
     }
 
     /// Have the daemon record this chat, linked, with its waiting launch

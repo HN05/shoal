@@ -17,8 +17,8 @@ use crate::{
 use shoal_core::chat_handoff::HandedStart;
 use shoal_core::start_plan::{ChatPlan, ChatPlanStart};
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
-use shoal_protocol::chats::{LaunchedChat, QueuedChat, StartedChat};
-use shoal_protocol::launches::LaunchSource;
+use shoal_protocol::chats::LaunchedChat;
+use shoal_protocol::launches::{LaunchSource, Launched, Started};
 use shoal_protocol::{scope_tokens::ScopeToken, space_names::SpaceName};
 
 impl Manager {
@@ -33,7 +33,7 @@ impl Manager {
         start: ChatStart,
         source: LaunchSource,
         caller: Option<&Caller>,
-    ) -> Result<StartedChat> {
+    ) -> Result<Launched> {
         let start = self.resolve_chat_start(start, caller).await?;
         let admission = (self.queue_chat_add(launch_request(&start, source)?, caller)).await?;
         let launched = self.record_admitted(&start, &admission, caller).await?;
@@ -54,7 +54,7 @@ impl Manager {
         launched: LaunchedChat,
         entry: Option<QueueEntryId>,
         caller: Option<&Caller>,
-    ) -> Result<StartedChat> {
+    ) -> Result<Launched> {
         let LaunchedChat { chat, warnings } = launched;
         let token = caller.map(|caller| self.operations.issue(caller));
         let handed = HandedStart {
@@ -69,7 +69,12 @@ impl Manager {
             self.fail_chat_start(&chat.name, &chat.id, entry.as_ref(), error)
                 .await;
         }
-        started.map(|started| warned(started, warnings))
+        started.map(|start| Launched {
+            space: Box::new(chat.into()),
+            entry: None,
+            warnings,
+            start,
+        })
     }
 
     /// Record the chat the resolved `start` describes for `caller` below
@@ -307,47 +312,29 @@ fn on_issue(mut start: ChatStart, issue: Option<OpenIssue>) -> ChatStart {
 
 /// The chat `launched` recorded, whose agent waits as the launch
 /// `admission` queued.
-fn queued(launched: LaunchedChat, admission: QueueAdmission) -> Result<StartedChat> {
+fn queued(launched: LaunchedChat, admission: QueueAdmission) -> Result<Launched> {
     let entry = (admission.entry).context("the daemon queued the chat without an entry")?;
-    Ok(StartedChat::Queued(Box::new(QueuedChat {
-        chat: launched.chat,
-        entry,
-        waiting: admission.waiting,
+    Ok(Launched {
+        space: Box::new(launched.chat.into()),
+        entry: Some(Box::new(entry)),
         warnings: launched.warnings,
-    })))
-}
-
-/// The chat the daemon `started`, with what recording and linking it
-/// `warnings` warned of.
-fn warned(started: StartedChat, warnings: Vec<String>) -> StartedChat {
-    match started {
-        StartedChat::Queued(queued) => StartedChat::Queued(Box::new(QueuedChat {
-            warnings,
-            ..*queued
-        })),
-        StartedChat::Background(chat) => {
-            StartedChat::Background(shoal_protocol::chats::BackgroundChat { warnings, ..chat })
-        }
-        StartedChat::Detached(chat) => {
-            StartedChat::Detached(Box::new(shoal_protocol::chats::DetachedChat {
-                warnings,
-                ..*chat
-            }))
-        }
-    }
+        start: Started::Queued {
+            waiting: admission.waiting,
+        },
+    })
 }
 
 /// Run the chat start worker for the resolved start `handed` holds,
 /// detached from the daemon in the environment of the terminal it names,
 /// as the user or, with `token`, with that scope, its agent taking the slot
-/// of the queue `entry`, and return the chat it reports once it runs its
-/// agent.
+/// of the queue `entry`, and return how it reports the chat's agent started
+/// once it runs.
 async fn run_worker(
     paths: &crate::paths::Paths,
     handed: &HandedStart,
     token: Option<&ScopeToken>,
     entry: Option<&shoal_ids::queue_entry_ids::QueueEntryId>,
-) -> Result<StartedChat> {
+) -> Result<Started> {
     use crate::workers::{Worker, detached_command, internal_command};
     use std::process::Stdio;
     use tokio::io::AsyncWriteExt as _;
@@ -388,7 +375,7 @@ async fn run_worker(
         "{}",
         String::from_utf8_lossy(&output.stderr).trim()
     );
-    serde_json::from_slice(&output.stdout).context("read the chat the worker started")
+    serde_json::from_slice(&output.stdout).context("read how the worker started the chat")
 }
 
 #[cfg(any(test, feature = "test-support"))]

@@ -23,7 +23,8 @@ use crate::{
     model::{Chat, ChatHome},
     protocol::ChatStart,
 };
-use shoal_protocol::chats::{BackgroundChat, LaunchedChat};
+use shoal_protocol::chats::LaunchedChat;
+use shoal_protocol::launches::Launched;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 mod admission;
@@ -51,10 +52,7 @@ pub(in crate::cli::commands) async fn begin(
 ) -> Result<i32> {
     match launch(ctx, repo, settings, topic, options).await? {
         Started::Exited(code) => Ok(code),
-        Started::Background(chat) => {
-            ctx.emit(&chat.place, &chat)?;
-            Ok(0)
-        }
+        Started::Launched(launched) => report_started(ctx, *launched),
     }
 }
 
@@ -63,12 +61,13 @@ enum Started {
     /// It ran here, or beside this terminal, or an app that runs it detached
     /// reported it; the exit code.
     Exited(i32),
-    /// It runs in a background place.
-    Background(BackgroundChat),
+    /// Its agent runs in a background place, or waits in the agent queue,
+    /// or the daemon started it, which the caller reports.
+    Launched(Box<Launched>),
 }
 
-/// Start a chat as [`begin`] does, reporting one started in the background
-/// to the caller.
+/// Start a chat as [`begin`] does, leaving the report of one whose agent
+/// runs in no terminal to the caller.
 async fn launch(
     ctx: &Context,
     repo: ChatRepository,
@@ -149,7 +148,8 @@ impl Launch {
             return Ok(waits);
         }
         let launched = self.record(ctx, None).await?;
-        (self.hand_to_background(ctx, launched).await).map(Started::Background)
+        let launched = self.hand_to_background(ctx, launched).await?;
+        Ok(Started::Launched(Box::new(launched)))
     }
 
     /// Run the chat beside this terminal or here once the agent queue admits

@@ -2,9 +2,10 @@
 //! no terminal: it hands the start the daemon resolved, with the chat it
 //! recorded, to a background place, opened where the terminal that asked
 //! would have, whose chat worker runs the chat's agent there, and reports
-//! the chat once that place reports that it runs. An agent that runs its
+//! the place once it reports that the agent runs. An agent that runs its
 //! own way, such as Happy's, which needs no terminal host, starts in a chat
-//! worker of this process instead, which reports the chat itself.
+//! worker of this process instead, whose report of the app's run this one
+//! passes on.
 use std::{path::PathBuf, process::Stdio};
 
 use anyhow::{Context as _, Result};
@@ -19,12 +20,15 @@ use crate::{
     workers::{Worker, internal_command},
 };
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::{chats::BackgroundChat, space_names::SpaceName};
+use shoal_protocol::{
+    launches::{Launched, Started},
+    space_names::SpaceName,
+};
 
 /// Start the chat whose resolved start, with the chat the daemon recorded
-/// for it, the daemon writes to standard input, reporting it on standard
-/// output. Its agent takes the slot of the queue entry the daemon passed
-/// down, if any.
+/// for it, the daemon writes to standard input, reporting how its agent
+/// started on standard output. Its agent takes the slot of the queue entry
+/// the daemon passed down, if any.
 pub async fn run(paths: &CommandPaths) -> Result<i32> {
     let handed: HandedStart =
         serde_json::from_reader(std::io::stdin().lock()).context("read the chat's start")?;
@@ -33,13 +37,13 @@ pub async fn run(paths: &CommandPaths) -> Result<i32> {
     // takes through the handoff.
     let handoff = Handoff::create(crate::env::scope_token().as_ref())?;
     handoff.hand_start(&handed)?;
-    if chat.runs_its_own_way() {
-        return run_worker(paths, &handoff).await;
-    }
-    let chat = chat
-        .start_in_background(paths, handoff, handed.chat)
-        .await?;
-    outln!("{}", crate::client::output::json(&chat)?);
+    let started = match chat.runs_its_own_way() {
+        true => run_worker(paths, &handoff).await?,
+        false => Started::Background {
+            place: chat.start_in_background(paths, handoff).await?,
+        },
+    };
+    outln!("{}", serde_json::to_string(&started)?);
     Ok(0)
 }
 
@@ -52,18 +56,11 @@ pub(crate) async fn start_queued(
 ) -> Result<()> {
     let new = NewChat::resolve(paths, &start).await?;
     let handoff = Handoff::create(None)?;
-    handoff.hand_start(&HandedStart {
-        start,
-        chat: chat.clone(),
-    })?;
-    if new.runs_its_own_way() {
-        let code = run_worker(paths, &handoff).await?;
-        anyhow::ensure!(code == 0, "the chat's start failed ({code})");
-        return Ok(());
+    handoff.hand_start(&HandedStart { start, chat })?;
+    match new.runs_its_own_way() {
+        true => run_worker(paths, &handoff).await.map(drop),
+        false => new.start_in_background(paths, handoff).await.map(drop),
     }
-    new.start_in_background(paths, handoff, chat)
-        .await
-        .map(drop)
 }
 
 /// A chat the daemon resolved, with where it runs and the settings it
@@ -109,15 +106,10 @@ impl NewChat {
         (crate::agents::agent_integration(&self.settings, &self.agent).detached()).is_some()
     }
 
-    /// Open a background place whose chat worker starts this chat, recorded
-    /// as `id`, with the start `handoff` holds, and wait until the place
-    /// reports that the chat runs.
-    async fn start_in_background(
-        self,
-        paths: &CommandPaths,
-        handoff: Handoff,
-        id: SpaceId,
-    ) -> Result<BackgroundChat> {
+    /// Open a background place whose chat worker starts this chat with the
+    /// start `handoff` holds, and wait until the place reports that the
+    /// chat runs, returning where it runs.
+    async fn start_in_background(self, paths: &CommandPaths, handoff: Handoff) -> Result<String> {
         let worker = internal_command(paths, false, chat_worker(&handoff))?;
         let repository = self.repository.as_ref();
         let (home, name) = (&self.home, self.name.as_str());
@@ -132,14 +124,7 @@ impl NewChat {
         )
         .await?;
         handoff.wait().await?;
-        Ok(BackgroundChat {
-            id,
-            repository: self.repository.map(|repository| repository.id),
-            chat: self.name,
-            agent: self.agent,
-            place,
-            warnings: Vec::new(),
-        })
+        Ok(place)
     }
 }
 
@@ -168,21 +153,26 @@ async fn home(paths: &CommandPaths, start: &ChatStart) -> Result<(Option<Reposit
 }
 
 /// Run the chat worker for the start `handoff` holds in no place, as a
-/// process of this one whose report on standard output stands for this
-/// one's, returning its exit status.
-async fn run_worker(paths: &CommandPaths, handoff: &Handoff) -> Result<i32> {
+/// process of this one, and return how it reports the chat's agent
+/// started.
+async fn run_worker(paths: &CommandPaths, handoff: &Handoff) -> Result<Started> {
     let argv = internal_command(paths, true, chat_worker(handoff))?;
     let mut command = tokio::process::Command::new(&argv[0]);
     if let Some(entry) = crate::env::queue_entry() {
         command.env(crate::env::QUEUE_ENTRY, entry.as_str());
     }
-    let status = command
+    let output = command
         .args(&argv[1..])
         .stdin(Stdio::null())
-        .status()
+        .stderr(Stdio::inherit())
+        .output()
         .await
         .context("run the chat worker")?;
-    Ok(shoal_core::execution::exit_code(status))
+    let code = shoal_core::execution::exit_code(output.status);
+    anyhow::ensure!(code == 0, "the chat's start failed ({code})");
+    let launched: Launched =
+        serde_json::from_slice(&output.stdout).context("read the chat the worker started")?;
+    Ok(launched.start)
 }
 
 /// The chat worker that starts the chat whose start `handoff` holds.

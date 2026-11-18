@@ -1936,14 +1936,18 @@ no host serves it runs where `terminal.default_host` puts it, such as a zmx
 session with an opaque name such as `chat-0b9c3a52`, since nothing is built
 from a chat's name, which [`shoal attach <number>`](#agents)
 returns to; in any other place of a host, such as a zmx session, it runs in
-place. `--here` runs it in place in this terminal. A Happy chat
+place. `--here` runs it in place in this terminal. With `--json`, a chat whose
+agent runs outside this terminal is reported with its record as `space` and
+how its agent started as `start`, whose `kind` is `background` with the
+`place` it runs in, `queued` with the entries `waiting` and the agent's queue
+`entry` beside it, or `detached` for an app's session. A Happy chat
 (`happy-claude` or `happy-codex`, see [Agents](#agents)) needs no terminal: it
 starts detached in the checkout as `start --in --agent happy-codex` starts a workspace session, and
 you continue it in the Happy app. Happy's Claude takes the instructions as
 arguments, and Happy's Codex receives them as its first message the way its
 prompts are delivered. Its output is kept at `<state>/chats/<id>.log`, named
-after the chat's ID; `--json` reports the `chat`, `log`, `happy_session_id`
-and `happy_daemon_recorded`. A chat's agent carries a scope of its own, which
+after the chat's ID; `--json` reports the `log`, `pid`, `happy_session_id`
+and `happy_daemon_recorded` in `start`. A chat's agent carries a scope of its own, which
 lasts as long as the chat, across stops and restores, so only your own terminal
 is unscoped. It acts on the chat and the spaces below it as a workspace's agent
 acts on its own, under the [scoped workspace commands](#scoped-workspace-commands)

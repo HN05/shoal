@@ -25,19 +25,35 @@ use crate::{
     state::QueueState,
     terminal::PlaceName,
 };
-use shoal_protocol::launches::QueuedWorker;
+use shoal_protocol::launches::{Launched, Started};
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The existing workspace whose agent a launch this caller runs queued, as
-/// a start's workspace with nothing left to prepare.
-pub(super) fn of_worker(worker: QueuedWorker) -> StartedWorkspace {
-    StartedWorkspace {
-        operation: None,
-        workspace: Box::new(worker.workspace),
-        reused: true,
-        entry: worker.entry.map(Box::new),
-        warnings: Vec::new(),
-    }
+/// The workspace a launch started its agent in, as a start's workspace: a
+/// new or reopened one with its preparation, or an existing one whose
+/// worker it queued, with nothing left to prepare.
+pub(super) fn workspace_start(launched: Launched) -> Result<StartedWorkspace> {
+    let Launched {
+        space,
+        entry,
+        warnings,
+        start,
+    } = launched;
+    let (operation, reused) = match start {
+        Started::Preparing { operation, reused } => (operation, reused),
+        Started::Worker => (None, true),
+        Started::Queued { .. } | Started::Background { .. } | Started::Detached(_) => {
+            anyhow::bail!("the daemon started the agent in no workspace")
+        }
+    };
+    let workspace =
+        (space.into_workspace().ok()).context("the daemon's launch is no workspace's")?;
+    Ok(StartedWorkspace {
+        operation,
+        workspace: Box::new(workspace),
+        reused,
+        entry,
+        warnings,
+    })
 }
 
 /// Run the agent of the workspace the daemon `started` here, once its

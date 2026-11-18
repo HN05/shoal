@@ -722,7 +722,7 @@ done
         record.exists()
     });
     let stopped = Command::new("kill")
-        .arg(started["pid"].to_string())
+        .arg(started["start"]["pid"].to_string())
         .status()
         .unwrap();
     assert!(stopped.success());
@@ -827,7 +827,7 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
 
     // Happy's Claude takes the instructions as arguments and waits.
     let (started, recorded) = chat("happy-claude");
-    let chat_record = &started["chat"];
+    let chat_record = &started["space"];
     assert_eq!(chat_record["agent"], "happy-claude");
     assert_eq!(chat_record.get("origin"), None, "{chat_record}");
     assert_eq!(chat_record["name"], CHAT_NAME);
@@ -855,9 +855,9 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
         claude[6]
     );
     assert_eq!(after_temp_dirs(&claude[7..]), ["--model", "test"]);
-    assert_eq!(started["happy_session_id"], Value::Null);
+    assert_eq!(started["start"]["happy_session_id"], Value::Null);
     // The chat lasts while the session runs, not the command that started it.
-    let pid = started["pid"].as_u64().unwrap();
+    let pid = started["start"]["pid"].as_u64().unwrap();
     // Recorded before its agent registered, it runs once it did.
     let mut running = chat_record.clone();
     running["running"] = true.into();
@@ -865,7 +865,7 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
         fixture.ok(&["list", "--chats"]),
         serde_json::json!([running])
     );
-    let log = PathBuf::from(started["log"].as_str().unwrap());
+    let log = PathBuf::from(started["start"]["log"].as_str().unwrap());
     wait_until("the session's output", || {
         fs::read_to_string(&log).is_ok_and(|output| output.contains("hello from happy"))
     });
@@ -873,7 +873,7 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
     // Happy's Codex takes them as its first message.
     let (started, recorded) = chat("happy-codex");
     // Names may repeat, so the second chat takes the same one.
-    assert_eq!(started["chat"]["name"], CHAT_NAME);
+    assert_eq!(started["space"]["name"], CHAT_NAME);
     assert_eq!(
         args(&recorded),
         [
@@ -886,10 +886,10 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
             "test"
         ]
     );
-    let message = server.first_message(started["happy_session_id"].as_str().unwrap());
+    let message = server.first_message(started["start"]["happy_session_id"].as_str().unwrap());
     assert!(message.contains(checkout.to_str().unwrap()), "{message}");
 
-    for pid in [pid, started["pid"].as_u64().unwrap()] {
+    for pid in [pid, started["start"]["pid"].as_u64().unwrap()] {
         Command::new("kill").arg(pid.to_string()).status().unwrap();
     }
     wait_until("the chats to stop", || {

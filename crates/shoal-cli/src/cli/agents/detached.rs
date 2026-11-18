@@ -25,7 +25,8 @@ use crate::{
     model::{Chat, Repository, Workspace},
     paths::Paths,
 };
-use shoal_protocol::chats::{DetachedChat, LaunchedChat};
+use shoal_protocol::chats::LaunchedChat;
+use shoal_protocol::launches::{DetachedRun, Launched};
 
 /// Start `launch` as a session of `app`, detached from this terminal and
 /// tracked like any other workspace command. The CLI returns once the launch
@@ -424,13 +425,16 @@ fn report_chat(
         warnings,
     } = started;
     let log = &launch.log;
-    let report = DetachedChat {
-        chat: chat.clone(),
-        execution_id: launch.execution_id.clone(),
-        pid: launch.pid,
-        log: log.to_owned(),
-        delivery: delivered.fields,
+    let report = Launched {
+        space: Box::new(chat.clone().into()),
+        entry: None,
         warnings,
+        start: shoal_protocol::launches::Started::Detached(DetachedRun {
+            execution_id: launch.execution_id.clone(),
+            pid: launch.pid,
+            log: log.to_owned(),
+            delivery: delivered.fields,
+        }),
     };
     ctx.emit(
         &format!(

@@ -133,9 +133,7 @@ impl Manager {
             in_workspace: Some(SpaceChoice::Space(SpaceSelector::id(&workspace.id))),
             ..launch
         };
-        (self.launch_worker(worker, shape, source, caller))
-            .await
-            .map(|worker| Launched::Worker(Box::new(worker)))
+        self.launch_worker(worker, shape, source, caller).await
     }
 
     /// Start `launch`'s agent, which names no branch, issue, PR or copy, in
@@ -165,9 +163,7 @@ impl Manager {
             repository: true,
             ..shape
         };
-        (self.launch_in_chat(chat, shape, source, caller))
-            .await
-            .map(Launched::Chat)
+        self.launch_in_chat(chat, shape, source, caller).await
     }
 }
 

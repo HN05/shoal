@@ -5,8 +5,7 @@
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
-use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::launches::{Launch, LaunchSource, Launched};
+use shoal_protocol::launches::{Launch, LaunchSource};
 use shoal_protocol::triggers::{Fired, RunOrigin, RunOutcome, TriggerRun};
 
 use super::{
@@ -219,7 +218,7 @@ impl Manager {
                 .await?;
         }
         Ok(TriggerRun {
-            space_id: launched_space(&launched),
+            space_id: Some(launched.space.id.clone()),
             ..run(firing, RunOutcome::Started, None)
         })
     }
@@ -267,17 +266,5 @@ fn run(firing: &Firing, outcome: RunOutcome, reason: Option<String>) -> TriggerR
         reason,
         space_id: None,
         queue_entry: None,
-    }
-}
-
-/// The space `launched` started, or whose worker it queued.
-fn launched_space(launched: &Launched) -> Option<SpaceId> {
-    use shoal_protocol::chats::StartedChat;
-    match launched {
-        Launched::Chat(StartedChat::Queued(queued)) => Some(queued.chat.id.clone()),
-        Launched::Chat(StartedChat::Background(chat)) => Some(chat.id.clone()),
-        Launched::Chat(StartedChat::Detached(chat)) => Some(chat.chat.id.clone()),
-        Launched::Worker(worker) => Some(worker.workspace.id.clone()),
-        Launched::Workspace(started) => Some(started.workspace.id.clone()),
     }
 }

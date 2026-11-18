@@ -13,7 +13,8 @@ use crate::{
     cli::{context::Context, terminal},
     model::Chat,
 };
-use shoal_protocol::chats::{BackgroundChat, LaunchedChat};
+use shoal_protocol::chats::LaunchedChat;
+use shoal_protocol::launches::{Launched, Started};
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -24,20 +25,18 @@ impl Launch {
         self,
         ctx: &Context,
         launched: LaunchedChat,
-    ) -> Result<BackgroundChat> {
+    ) -> Result<Launched> {
         let LaunchedChat { chat, warnings } = launched;
         let scope = PlaceScope::issue(ctx, &chat).await?;
         let place = self.open_in_background(ctx, &chat, scope.as_ref()).await;
         if let Some(scope) = scope {
             scope.revoke(ctx).await;
         }
-        Ok(BackgroundChat {
-            id: chat.id,
-            repository: chat.repository_id,
-            chat: chat.name,
-            agent: self.agent,
-            place: place?,
+        Ok(Launched {
+            space: Box::new(chat.into()),
+            entry: None,
             warnings,
+            start: Started::Background { place: place? },
         })
     }
 

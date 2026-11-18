@@ -1,7 +1,7 @@
 use crate::connection::{self};
 use crate::test_daemon::{Connect as _, code, queued_plan};
 use shoal_daemon::test_daemon::{TestDaemon, fake};
-use shoal_protocol::launches::{Launch, Launched, SpaceChoice, StartTarget};
+use shoal_protocol::launches::{Launch, Launched, SpaceChoice, StartTarget, Started};
 use shoal_protocol::model::Workspace;
 use shoal_protocol::protocol::{ChatStart, ErrorCode, WorkspaceMethod, operations::OperationSpec};
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
@@ -22,13 +22,13 @@ async fn a_launch_in_a_workspace_queues_its_worker_on_the_launchs_task() {
         task: vec!["Fix the build".into()],
         ..Launch::default()
     };
-    let worker = |launched| match launched {
-        Launched::Worker(worker) => *worker,
-        launched => panic!("expected a worker: {launched:?}"),
+    let worker = |launched: Launched| match launched.start {
+        Started::Worker => launched,
+        _ => panic!("expected a worker: {launched:?}"),
     };
     let send = |connector, launch| async move { crate::launches::launch(connector, launch).await };
     let queued = worker(send(&app, launch(&parent, Some("probe"))).await.unwrap());
-    assert_eq!(queued.workspace.id, parent.id);
+    assert_eq!(queued.space.id, parent.id);
     let entry = queued.entry.unwrap();
     assert_eq!(entry.agent, "probe");
     let plan: shoal_core::start_plan::AddPlan =
@@ -75,17 +75,21 @@ async fn a_launch_opens_a_new_workspace_and_prepares_it() {
         ..workspace_launch(&daemon, "new")
     };
     let launched = crate::launches::launch(&app, launch).await.unwrap();
-    let Launched::Workspace(started) = launched else {
+    let Started::Preparing { operation, .. } = &launched.start else {
         panic!("expected a workspace: {launched:?}");
     };
-    assert_eq!(started.workspace.branch().map(|b| b.as_str()), Some("new"));
-    let worker = fake::take(started.operation.as_deref().unwrap());
+    let workspace = launched
+        .space
+        .to_workspace()
+        .expect("the launch made a workspace");
+    assert_eq!(workspace.branch().map(|b| b.as_str()), Some("new"));
+    let worker = fake::take(operation.as_deref().unwrap());
     // Its agent waits in the queue for the preparation, which queues none.
     let OperationSpec::Prepare { steps, .. } = worker.order.spec.clone() else {
         panic!("expected a preparation: {:?}", worker.order);
     };
     assert!(steps.agent.is_none(), "{steps:?}");
-    let entry = started.entry.expect("the launch queued its agent");
+    let entry = launched.entry.expect("the launch queued its agent");
     assert_eq!(entry.agent, "probe");
     assert_eq!(entry.blockers, ["setup of new".to_owned()]);
     worker.exit(1);
@@ -105,10 +109,10 @@ async fn a_launch_that_starts_now_waits_for_none_of_its_blockers() {
     };
     let app = daemon.connector();
     let launched = crate::launches::launch(&app, launch).await.unwrap();
-    let Launched::Workspace(started) = launched else {
+    let Started::Preparing { operation, .. } = launched.start else {
         panic!("expected a workspace: {launched:?}");
     };
-    fake::take(started.operation.as_deref().unwrap()).exit(1);
+    fake::take(operation.as_deref().unwrap()).exit(1);
 }
 
 #[tokio::test]
@@ -175,7 +179,7 @@ async fn an_app_starts_a_chat_whose_agent_and_mode_the_daemon_resolves() {
         "[agent]\ndefault = \"probe\"\n[agents.probe]\ncommand = [\"true\"]\n",
     )
     .await;
-    (crate::launches::launch(&app, start())).await.unwrap();
+    let started = (crate::launches::launch(&app, start())).await.unwrap();
     let [(launched, scoped)] = launched_chats().try_into().unwrap();
     assert!(!scoped);
     assert_eq!(launched.agent, Some("probe".into()));
@@ -188,6 +192,19 @@ async fn an_app_starts_a_chat_whose_agent_and_mode_the_daemon_resolves() {
     // repository's and its mode's.
     let named = format!("{} chat", shoal_core::repository::name(&daemon.repository));
     assert_eq!(launched.name.as_ref().map(SpaceName::as_str), Some(&*named));
+    // It answers with the chat it recorded, whose agent runs in a
+    // background place.
+    assert!(
+        matches!(started.start, Started::Background { .. }),
+        "{started:?}"
+    );
+    let chat = started
+        .space
+        .into_chat()
+        .expect("the launch started a chat");
+    assert_eq!(chat.name.as_str(), named);
+    let chats = daemon.manager.chats().await.unwrap();
+    assert!(chats.iter().any(|recorded| recorded.id == chat.id));
 }
 
 #[tokio::test]

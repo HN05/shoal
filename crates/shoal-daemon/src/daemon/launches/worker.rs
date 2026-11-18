@@ -1,7 +1,7 @@
 //! A launch that starts the worker of an existing workspace: its own agent,
 //! started as a new workspace's is, with no space created.
 use anyhow::{Context as _, Result};
-use shoal_protocol::launches::{Launch, LaunchSource, QueuedWorker, SpaceChoice};
+use shoal_protocol::launches::{Launch, LaunchSource, Launched, SpaceChoice, Started};
 use shoal_protocol::space_names::SpaceSelector;
 
 use super::shape::Shape;
@@ -26,7 +26,7 @@ impl Manager {
         shape: Shape,
         source: LaunchSource,
         caller: Option<&Caller>,
-    ) -> Result<QueuedWorker> {
+    ) -> Result<Launched> {
         let mut selector = (launch.in_workspace.as_ref())
             .and_then(SpaceChoice::named)
             .cloned()
@@ -34,10 +34,7 @@ impl Manager {
         let workspace = self.workspace(&selector).await?;
         let request = worker_request(launch, shape, source);
         if request.launch.agent.is_none() {
-            return Ok(QueuedWorker {
-                workspace,
-                entry: None,
-            });
+            return Ok(queued(workspace, None));
         }
         if let Some(caller) = caller {
             let allowed = self
@@ -49,10 +46,7 @@ impl Manager {
         let entry = self
             .queue_agent(&selector, request.launch, blockers, None)
             .await?;
-        Ok(QueuedWorker {
-            workspace,
-            entry: Some(entry),
-        })
+        Ok(queued(workspace, Some(entry)))
     }
 
     /// Refuse the scoped `caller` a worker it may not start in the
@@ -92,6 +86,17 @@ impl Manager {
             blockers.extend(self.forge_blockers(repository, &issue, caller).await?);
         }
         Ok(blockers)
+    }
+}
+
+/// The launch of the worker of `workspace`, which waits as its queue
+/// `entry`, if it starts one.
+fn queued(workspace: Workspace, entry: Option<crate::model::QueueEntry>) -> Launched {
+    Launched {
+        space: Box::new(workspace.into()),
+        entry: entry.map(Box::new),
+        warnings: Vec::new(),
+        start: Started::Worker,
     }
 }
 

@@ -57,7 +57,7 @@ impl Manager {
         }
         (self.open_planned(launch, shape, planned, source, reads.caller))
             .await
-            .map(|started| Launched::Workspace(Box::new(started)))
+            .map(Launched::from)
     }
 
     /// Open the `planned` workspace of `launch` and start preparing it,

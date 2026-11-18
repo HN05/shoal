@@ -1,6 +1,6 @@
 use crate::{
     daemon::{
-        chats::launches::fake::FAILING,
+        chats::launches::fake::{DETACHED, FAILING},
         notifications::{Notification, NotificationKind},
         test_support::{git, global_config, manager, repository},
         workspace::Manager,
@@ -8,7 +8,10 @@ use crate::{
     model::{LinkedItem, Repository, SpaceLinks},
     protocol::ChatStart,
 };
-use shoal_protocol::{chats::StartedChat, launches::LaunchSource, space_names::SpaceSelector};
+use shoal_protocol::{
+    launches::{LaunchSource, Started},
+    space_names::SpaceSelector,
+};
 
 const ISSUE: &str = "https://github.com/team/repo/issues/316";
 
@@ -83,10 +86,11 @@ async fn a_launched_chat_is_recorded_with_its_issue_before_its_place_starts() {
     let started = manager.launch_chat(on_issue, LaunchSource::Manual, None);
     let started = started.await.unwrap();
 
-    let StartedChat::Background(background) = started else {
+    let Started::Background { place } = &started.start else {
         panic!("expected a chat in a background place: {started:?}");
     };
-    assert!(background.warnings.is_empty(), "{:?}", background.warnings);
+    assert_eq!(place, "background");
+    assert!(started.warnings.is_empty(), "{:?}", started.warnings);
     let chats = manager.chats().await.unwrap();
     let chat = chats.iter().find(|chat| chat.name == "planning").unwrap();
     let linked: Vec<_> = chat
@@ -96,6 +100,35 @@ async fn a_launched_chat_is_recorded_with_its_issue_before_its_place_starts() {
         .map(|issue| issue.url.url())
         .collect();
     assert_eq!(linked, [ISSUE]);
+    // The answer names the chat as the daemon recorded it, linked.
+    assert_eq!(started.space.id, chat.id);
+    assert_eq!(started.space.links, chat.links);
+    assert_eq!(started.entry, None);
+}
+
+/// A chat whose agent an app runs detached answers with the chat it
+/// recorded and the app's run.
+#[tokio::test]
+async fn a_launched_chat_an_app_runs_answers_with_its_chat_and_run() {
+    let (temp, manager) = manager().await;
+    let repo = machine(&manager, &temp, false).await;
+    DETACHED.lock().unwrap().push("app talk".into());
+
+    let started = manager.launch_chat(
+        start(Some(&repo), "app talk", &[]),
+        LaunchSource::Manual,
+        None,
+    );
+    let started = started.await.unwrap();
+
+    let Started::Detached(run) = &started.start else {
+        panic!("expected a chat an app runs: {started:?}");
+    };
+    assert_eq!(run.log, std::path::Path::new("app talk.log"));
+    let chats = manager.chats().await.unwrap();
+    let chat = chats.iter().find(|chat| chat.name == "app talk").unwrap();
+    assert_eq!(started.space.id, chat.id);
+    assert_eq!(started.space.kind(), crate::model::SpaceKind::Chat);
 }
 
 /// A chat without a repository that starts on nothing links nothing and
@@ -110,11 +143,9 @@ async fn a_chat_without_a_repository_links_nothing_and_warns_of_nothing() {
         LaunchSource::Manual,
         None,
     );
-    let StartedChat::Background(background) = started.await.unwrap() else {
-        panic!("expected a chat in a background place");
-    };
+    let started = started.await.unwrap();
 
-    assert!(background.warnings.is_empty(), "{:?}", background.warnings);
+    assert!(started.warnings.is_empty(), "{:?}", started.warnings);
     assert!(
         notified(&manager, NotificationKind::StartWarned)
             .await
@@ -141,17 +172,15 @@ async fn a_link_that_fails_during_a_start_reaches_the_user() {
         LaunchSource::Manual,
         None,
     );
-    let StartedChat::Background(background) = started.await.unwrap() else {
-        panic!("expected a chat in a background place");
-    };
+    let started = started.await.unwrap();
 
     assert!(
-        background
+        started
             .warnings
             .iter()
             .any(|warning| warning.contains(elsewhere)),
         "{:?}",
-        background.warnings
+        started.warnings
     );
     let warned = notified(&manager, NotificationKind::StartWarned).await;
     assert!(

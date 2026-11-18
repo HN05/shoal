@@ -1,6 +1,6 @@
 //! A new chat that runs detached: the daemon launches it, as it does for
 //! an app, in a background place its worker opens.
-use anyhow::Result;
+use anyhow::{Context as _, Result, bail};
 
 use super::{super::super::Options, Started};
 use crate::{
@@ -10,9 +10,9 @@ use crate::{
         commands::start::{Narrowing, Relaunch, Topic},
         context::Context,
     },
+    model::{QueueEntry, Space},
 };
-use shoal_protocol::chats::{QueuedChat, StartedChat};
-use shoal_protocol::launches::{IssueChoice, Launch, Launched, SpaceChoice};
+use shoal_protocol::launches::{self, IssueChoice, Launch, Launched, SpaceChoice};
 use shoal_protocol::space_names::SpaceName;
 
 /// The launch the daemon carries out for the chat about `topic` with
@@ -64,61 +64,48 @@ pub(super) fn request(
     })
 }
 
-/// Have the daemon launch the chat `launch` describes, reporting one that
-/// runs in a background place to the caller, one an app runs here, and one
-/// whose agent waits in the agent queue.
+/// Have the daemon launch the chat `launch` describes, leaving its report
+/// to the caller.
 pub(super) async fn start(ctx: &Context, launch: Launch) -> Result<Started> {
-    // A launch that asks for a chat starts in one.
-    let Launched::Chat(started) = crate::client::launches::launch(&ctx.paths, launch).await? else {
-        anyhow::bail!("the daemon started the chat's agent in no chat");
+    let launched = crate::client::launches::launch(&ctx.paths, launch).await?;
+    Ok(Started::Launched(Box::new(launched)))
+}
+
+/// Report the chat `launched` started for a start that runs its agent in
+/// no terminal, as a start of it in its place would: where its agent runs
+/// or waits.
+pub(in crate::cli::commands) fn report_started(ctx: &Context, launched: Launched) -> Result<i32> {
+    let space = &launched.space;
+    let text = match &launched.start {
+        launches::Started::Queued { waiting } => {
+            let entry = (launched.entry.as_ref())
+                .context("the daemon queued the chat's agent without an entry")?;
+            queued(space, entry, *waiting)
+        }
+        launches::Started::Background { place } => place.clone(),
+        launches::Started::Detached(run) => format!(
+            "Started chat {}; its output goes to {}",
+            space.name,
+            run.log.display()
+        ),
+        launches::Started::Preparing { .. } | launches::Started::Worker => {
+            bail!("the daemon started the chat's agent in no chat")
+        }
     };
-    reported(ctx, started)
+    ctx.emit(&text, &launched)?;
+    Ok(0)
 }
 
-/// Report the chat the daemon started for a start that runs it in no
-/// terminal, as a start of it in its place would.
-pub(in crate::cli::commands) fn report_started(ctx: &Context, started: StartedChat) -> Result<i32> {
-    match reported(ctx, started)? {
-        Started::Exited(code) => Ok(code),
-        Started::Background(chat) => {
-            ctx.emit(&chat.place, &chat)?;
-            Ok(0)
-        }
-    }
-}
-
-/// How the daemon `started` the chat, once what only the start reports is.
-fn reported(ctx: &Context, started: StartedChat) -> Result<Started> {
-    match started {
-        StartedChat::Queued(queued) => {
-            report_queued(ctx, &queued)?;
-            Ok(Started::Exited(0))
-        }
-        StartedChat::Background(chat) => Ok(Started::Background(chat)),
-        StartedChat::Detached(report) => {
-            let text = format!(
-                "Started chat {}; its output goes to {}",
-                report.chat.name,
-                report.log.display()
-            );
-            ctx.emit(&text, &*report)?;
-            Ok(Started::Exited(0))
-        }
-    }
-}
-
-/// Report the recorded chat of `queued`, whose agent waits in the queue.
-pub(super) fn report_queued(ctx: &Context, queued: &QueuedChat) -> Result<()> {
-    let entry = &queued.entry;
-    let text = format!(
-        "Queued chat {}, {} (position {} of {}); its agent starts {}",
-        queued.chat.number,
-        queued.chat.name,
-        entry.position.unwrap_or(queued.waiting),
-        queued.waiting,
+/// What a start says of the chat `space`, whose agent waits in the queue as
+/// `entry` behind `waiting` entries.
+fn queued(space: &Space, entry: &QueueEntry, waiting: usize) -> String {
+    format!(
+        "Queued chat {}, {} (position {} of {waiting}); its agent starts {}",
+        space.number,
+        space.name,
+        entry.position.unwrap_or(waiting),
         crate::cli::commands::queued_agents::starts_when(entry)
-    );
-    ctx.emit(&text, queued)
+    )
 }
 
 #[cfg(test)]
