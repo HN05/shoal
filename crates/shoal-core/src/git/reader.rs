@@ -67,6 +67,7 @@ fn open(path: &Path) -> Option<gix::Repository> {
         return None;
     }
     let options = gix::open::Options::default()
+        .permissions(permissions())
         .bail_if_untrusted(true)
         .strict_config(true);
     let trust = gix::sec::trust::Mapping {
@@ -77,6 +78,15 @@ fn open(path: &Path) -> Option<gix::Repository> {
     let repo = gix::ThreadSafeRepository::discover_opts(path, discovery, trust).ok()?;
     let repo = repo.to_thread_local();
     readable(&repo).then_some(repo)
+}
+
+/// What gix may read: by default all Git reads, and also the configuration
+/// of the Git installation Shoal's Git commands run, such as Homebrew Git's
+/// system file outside `/etc`, which gix asks that Git for once per process.
+fn permissions() -> gix::open::Permissions {
+    let mut permissions = gix::open::Permissions::default();
+    permissions.config.git_binary = true;
+    permissions
 }
 
 fn environment_diverges() -> bool {
