@@ -118,7 +118,7 @@ impl Manager {
     }
 
     /// Remove the space `id` on `machine`, as the user, as `below` asks:
-    /// with whatever work it has, which its checkpoint keeps, the spaces
+    /// with its unsaved files once its checkpoint keeps them, the spaces
     /// below it that the removal confirmed, and the user's holds where it
     /// leaves them.
     async fn remove_on(
@@ -127,14 +127,13 @@ impl Manager {
         id: &SpaceId,
         below: &BelowElsewhere<'_>,
     ) -> Result<()> {
-        let unsaved = match below.confirmed {
-            None => UnsavedWork::All,
-            Some(confirmed) => UnsavedWork::Confirmed {
-                files: true,
-                detached_head: None,
-                files_restorable: false,
-                children: Some(confirmed.to_vec()),
-            },
+        // Its unsaved files go only once its checkpoint keeps them, as a
+        // child's here do.
+        let unsaved = UnsavedWork::Confirmed {
+            files: true,
+            detached_head: None,
+            files_restorable: true,
+            children: below.confirmed.map(<[SpaceId]>::to_vec),
         };
         let method = Operation::Removal(RemovalMethod::RemoveSpace {
             space: SpaceSelector::id(id),
