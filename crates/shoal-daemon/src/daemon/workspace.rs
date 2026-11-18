@@ -363,45 +363,15 @@ impl Manager {
 
     /// The workspace with the ID `id`, which is never read as a name.
     pub async fn workspace_by_id(&self, id: &SpaceId) -> Result<Workspace> {
-        let id = id.to_owned();
-        self.store
-            .run(move |db| {
-                let mut workspace = db
-                    .query_row(
-                        &format!(
-                            "SELECT {} FROM spaces JOIN workspaces USING(id) WHERE id=?1",
-                            store::WORKSPACE_COLUMNS
-                        ),
-                        [&id],
-                        store::workspace,
-                    )
-                    .optional()?
-                    .ok_or_else(|| {
-                        Refusal::new(Reason::NotFound, format!("unknown workspace: {id}"))
-                    })?;
-                load_details(db, &mut workspace)?;
-                Ok(workspace)
-            })
-            .await
+        let missing = || Refusal::new(Reason::NotFound, format!("unknown workspace: {id}"));
+        Ok(self.find_workspace(id).await?.ok_or_else(missing)?)
     }
 
-    /// The workspace with this ID, unless it was removed.
+    /// The workspace with this ID, unless it was removed, read in one store
+    /// operation, so a removal meanwhile reads as none.
     pub async fn find_workspace(&self, id: &SpaceId) -> Result<Option<Workspace>> {
-        let owned = id.to_owned();
-        let exists = self
-            .store
-            .run(move |db| {
-                store::exists(
-                    db,
-                    "SELECT 1 FROM spaces WHERE id=?1 AND kind='workspace'",
-                    [owned],
-                )
-            })
-            .await?;
-        Ok(match exists {
-            true => Some(self.workspace_by_id(id).await?),
-            false => None,
-        })
+        let id = id.to_owned();
+        self.store.run(move |db| recorded_workspace(db, &id)).await
     }
 
     /// Resolve an optional selector to a workspace ID filter.
@@ -510,6 +480,20 @@ pub(crate) fn workspaces_within(
         load_details(db, workspace)?;
     }
     Ok(workspaces)
+}
+
+/// The workspace `id` with its details, while it exists.
+fn recorded_workspace(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<Workspace>> {
+    let query = format!(
+        "SELECT {} FROM spaces JOIN workspaces USING(id) WHERE id=?1",
+        store::WORKSPACE_COLUMNS
+    );
+    let workspace = db.query_row(&query, [id], store::workspace).optional()?;
+    let Some(mut workspace) = workspace else {
+        return Ok(None);
+    };
+    load_details(db, &mut workspace)?;
+    Ok(Some(workspace))
 }
 
 fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<()> {
