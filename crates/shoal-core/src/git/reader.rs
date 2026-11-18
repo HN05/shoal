@@ -158,7 +158,65 @@ fn readable(repo: &gix::Repository) -> bool {
     format <= READABLE_FORMAT
         && readable_extensions
         && !has_promisor_remote(&config)
+        && !(is_linked_worktree(repo) && includes_differ_by_git_directory(repo, &config))
         && !names_remotes_in_files(repo)
+}
+
+fn is_linked_worktree(repo: &gix::Repository) -> bool {
+    repo.git_dir() != repo.common_dir()
+}
+
+/// Whether a condition of `config` on the Git directory could include a
+/// file for the linked worktree `repo` that it would not for the main
+/// checkout, or the other way round: Git matches it against the worktree's
+/// own Git directory, gix against the common one.
+fn includes_differ_by_git_directory(
+    repo: &gix::Repository,
+    config: &gix::config::Snapshot<'_>,
+) -> bool {
+    let Ok(common) = std::fs::canonicalize(repo.common_dir()) else {
+        return true;
+    };
+    let includes = config.plumbing().sections_by_name("includeIf");
+    includes.into_iter().flatten().any(|section| {
+        let condition = section
+            .header()
+            .subsection_name()
+            .map(|name| name.to_string());
+        condition.is_some_and(|condition| {
+            let lowercase = condition.to_ascii_lowercase();
+            let on_git_directory =
+                lowercase.starts_with("gitdir:") || lowercase.starts_with("gitdir/i:");
+            on_git_directory && !matches_alike(&condition, &common)
+        })
+    })
+}
+
+/// Whether the condition `gitdir:<pattern>` matches a linked worktree's
+/// own Git directory, which lies inside `common`, exactly where it matches
+/// `common`: a directory, ending in `/`, absolute or under `~/`, without
+/// glob characters, that does not lie inside `common`. Any other pattern
+/// might tell them apart.
+fn matches_alike(condition: &str, common: &Path) -> bool {
+    let Some(prefix) = condition
+        .strip_prefix("gitdir:")
+        .and_then(|p| p.strip_suffix('/'))
+    else {
+        return false;
+    };
+    if prefix.contains(['*', '?', '[', '\\']) {
+        return false;
+    }
+    let prefix = match prefix.strip_prefix("~/") {
+        Some(rest) => match gix::path::env::home_dir() {
+            Some(home) => home.join(rest),
+            None => return false,
+        },
+        None if prefix.starts_with('/') => PathBuf::from(prefix),
+        None => return false,
+    };
+    let prefix = std::fs::canonicalize(&prefix).unwrap_or(prefix);
+    !prefix.starts_with(common)
 }
 
 /// Whether a remote of `config` promises objects the repository lacks,

@@ -197,3 +197,65 @@ async fn a_chosen_config_helper() {
     let remote = crate::git::push_remote(&repo, &"topic".into()).await;
     assert_eq!(remote.unwrap(), "chosen");
 }
+
+#[tokio::test]
+async fn a_conditional_include_matches_each_checkouts_own_git_directory() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    let linked = root.path().join("task");
+    git(
+        &repo,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "task",
+            linked.to_str().unwrap(),
+        ],
+    );
+    let common = std::fs::canonicalize(repo.join(".git")).unwrap();
+    // Git matches `gitdir` against a checkout's own Git directory: a linked
+    // worktree's admin directory, the main checkout's common one.
+    for (directory, value) in [
+        (common.join("worktrees/task"), "linked"),
+        (common.clone(), "main"),
+    ] {
+        let config = root.path().join(format!("{value}.gitconfig"));
+        std::fs::write(&config, format!("[shoal]\n\tcheckout = {value}\n")).unwrap();
+        let key = format!("includeIf.gitdir:{}.path", directory.display());
+        git(&repo, &["config", &key, config.to_str().unwrap()]);
+    }
+    for (checkout, value) in [(&linked, "linked"), (&repo, "main")] {
+        let read = crate::git::config_value(checkout, "shoal.checkout")
+            .await
+            .unwrap();
+        assert_eq!(read.as_deref(), Some(value), "{}", checkout.display());
+    }
+}
+
+#[tokio::test]
+async fn a_directory_condition_both_checkouts_match_alike_reads_in_process() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    let linked = root.path().join("task");
+    git(
+        &repo,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "task",
+            linked.to_str().unwrap(),
+        ],
+    );
+    let around = std::fs::canonicalize(root.path()).unwrap();
+    let key = format!("includeIf.gitdir:{}/.path", around.display());
+    git(&repo, &["config", &key, "/dev/null"]);
+    assert_eq!(reader(&linked).await, "gix");
+    let common = std::fs::canonicalize(repo.join(".git")).unwrap();
+    let key = format!("includeIf.gitdir:{}/worktrees/.path", common.display());
+    git(&repo, &["config", &key, "/dev/null"]);
+    assert_eq!(reader(&linked).await, "git");
+}
