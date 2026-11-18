@@ -167,16 +167,26 @@ fn executions(fixture: &Fixture, workspace: &str) -> usize {
 const AGENT: &str = "[agents.pi]\ncommand = ['sh', '-c', 'echo agent ran; exec sleep 600']\n";
 
 /// Wait until `workspace` finished setup with one execution, its agent's.
+/// Setup runs as an execution of its own, and a status that says setup
+/// finished can still list it, while the add worker refreshes the workspace
+/// before its agent starts, keeping it `updating`; only the agent's name
+/// tells the agent's execution apart.
 fn wait_for_agent(fixture: &Fixture, workspace: &str) {
     wait_until("setup to finish with the agent running", || {
-        fixture
+        if !fixture
             .ok(&["list"])
             .as_array()
             .unwrap()
             .iter()
             .any(|listed| listed["name"] == workspace)
-            && executions(fixture, workspace) == 1
-            && fixture.ok(&["status", &fixture.id(workspace)])["setup_finished"] == true
+        {
+            return false;
+        }
+        let status = fixture.ok(&["status", &fixture.id(workspace)]);
+        status["setup_finished"] == true
+            && status["executions"]
+                .as_array()
+                .is_some_and(|runs| runs.len() == 1 && runs[0]["agent"] == "pi")
     });
 }
 
