@@ -62,7 +62,7 @@ pub use notifications::NotificationMethod;
 pub use operations::OperationMethod;
 pub use ports::PortMethod;
 pub use questions::QuestionMethod;
-pub use queue::QueueMethod;
+pub use queue::{QueueMethod, RetryStart};
 pub use recovery::{RecoveryMethod, SavedPiece};
 pub use removal::{QueuedLaunches, RemovalMethod, UntrackedProcesses};
 pub use repositories::RepositoryMethod;

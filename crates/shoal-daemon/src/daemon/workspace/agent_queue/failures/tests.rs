@@ -7,7 +7,7 @@ use crate::{
     removal::{InspectionPolicy, UnsavedWork},
     state::QueueState,
 };
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{protocol::RetryStart, space_names::SpaceSelector};
 
 /// The entries of the queue with their state.
 async fn states(manager: &Manager) -> Vec<(String, QueueState)> {
@@ -77,7 +77,10 @@ async fn a_restored_failed_launch_queues_again_as_it_was() {
     let entry = manager.queue_add(request).await.unwrap().entry.unwrap();
     (manager.fail_queue_entry(&entry.id, "gone")).await.unwrap();
 
-    let retried = manager.retry_failed_launch(&entry.id, false).await.unwrap();
+    let retried = manager
+        .retry_failed_launch(&entry.id, RetryStart::Queued)
+        .await
+        .unwrap();
 
     assert_eq!(retried.id, entry.id);
     assert_eq!(retried.mode, Some("plan".into()));
@@ -166,7 +169,10 @@ async fn a_chats_failed_launch_keeps_the_chat() {
     };
     assert_eq!(failed.space(), Some(&chat.id));
     assert_eq!(failed.state, QueueState::Failed);
-    let retried = manager.retry_failed_launch(&entry.id, false).await.unwrap();
+    let retried = manager
+        .retry_failed_launch(&entry.id, RetryStart::Queued)
+        .await
+        .unwrap();
     assert_eq!(retried.space(), Some(&chat.id));
 }
 
@@ -197,7 +203,10 @@ async fn a_failed_launch_takes_a_permission_change() {
 
     let failed = manager.queue_entries().await.unwrap().remove(0);
     assert_eq!(failed.narrowing, change.set);
-    let retried = manager.retry_failed_launch(&entry.id, false).await.unwrap();
+    let retried = manager
+        .retry_failed_launch(&entry.id, RetryStart::Queued)
+        .await
+        .unwrap();
     assert_eq!(retried.narrowing, change.set);
     let id = retried.id.clone();
     let plan: String = (manager.store)
@@ -209,4 +218,25 @@ async fn a_failed_launch_takes_a_permission_change() {
         .unwrap();
     let start = crate::start_plan::QueuedStart::of(&plan).unwrap();
     assert_eq!(start.launch.narrowing, change.set);
+}
+
+/// A failed launch restored now starts in the same request, past a full
+/// machine, so no admission pass takes it between its requeue and start.
+#[tokio::test]
+async fn a_failed_launch_restored_now_starts_at_once() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let entry = failed_workspace_launch(&manager, &repo, "work").await;
+    add(&manager, &repo, "busy").await;
+
+    let retried = manager
+        .retry_failed_launch(&entry.id, RetryStart::Now)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        (retried.id, retried.state),
+        (entry.id, QueueState::Starting)
+    );
 }

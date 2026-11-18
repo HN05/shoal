@@ -11,6 +11,7 @@ use super::super::{
 };
 use crate::protocol::{Body, QueueMethod};
 use crate::state::QueueKind;
+use shoal_protocol::protocol::RetryStart;
 use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn handle(
@@ -63,11 +64,13 @@ pub(super) async fn handle(
             manager.fail_queue_entry(&entry, &error).await?;
             Body::Ok
         }
-        QueueMethod::QueueRetry { entry, here } => {
-            let entry = manager.retry_failed_launch(&entry, here).await?;
+        QueueMethod::QueueRetry { entry, start } => {
+            let entry = manager.retry_failed_launch(&entry, start).await?;
             // A restore the user runs in their own terminal is their
             // interaction with its agent.
-            if here && let Some(space) = entry.space() {
+            if start == RetryStart::Here
+                && let Some(space) = entry.space()
+            {
                 (manager.record_user_interaction(caller, &SpaceSelector::id(space))).await;
             }
             Body::QueueEntry(entry)
@@ -124,8 +127,12 @@ impl Scoped for QueueMethod {
             }
             // A space's own failed launch restores as its stopped agent
             // does: only from the spaces above it.
-            QueueMethod::QueueRetry { entry, .. } => {
-                manager.ensure_entry_reached(caller, entry).await?;
+            QueueMethod::QueueRetry { entry, start } => {
+                let repository = manager.reached_entry(caller, entry).await?.repository_id;
+                if *start == RetryStart::Now {
+                    let start = format!("start queue entry {entry} now");
+                    (manager.authorize_beyond_limits(caller, start, repository)).await?;
+                }
                 None
             }
             QueueMethod::QueueStart { entry, .. } => {

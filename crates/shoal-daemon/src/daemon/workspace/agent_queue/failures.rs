@@ -6,6 +6,7 @@
 use anyhow::{Context as _, Result};
 use rusqlite::{OptionalExtension, Transaction, params};
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
+use shoal_protocol::protocol::RetryStart;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 use super::store::{Awaits, Launch, LaunchRequest, entry, insert_launch};
@@ -154,25 +155,28 @@ fn failed_launch(row: &rusqlite::Row<'_>) -> rusqlite::Result<Launch> {
 }
 
 impl Manager {
-    /// Queue the failed launch `id` again exactly as it was, kept out of
-    /// admission for a caller that starts it `here` itself, returning its
-    /// entry as it waits.
+    /// Queue the failed launch `id` again exactly as it was and start it as
+    /// `start` says, returning its entry as it waits or starts.
     pub(crate) async fn retry_failed_launch(
         &self,
         id: &QueueEntryId,
-        here: bool,
+        start: RetryStart,
     ) -> Result<QueueEntry> {
         let _gate = self.agent_queue.lock_admission().await;
         let (owned, removing) = (id.to_owned(), self.space_removals.clone());
         let space = (self.store)
             .write(move |tx| requeue(tx, &owned, &removing))
             .await?;
-        // Kept before the gate opens, so no pass starts it in the
-        // background before its caller holds it.
-        if here {
-            self.agent_queue.keep_for_attach(id);
-        }
         self.agent_settles.request(&space);
+        // Under the gate, so no pass admits it before it starts as asked.
+        match start {
+            RetryStart::Queued => {}
+            RetryStart::Now => {
+                let entry = self.waiting_entry(id.as_str(), None, "").await?;
+                return self.start_waiting(entry, false).await;
+            }
+            RetryStart::Here => self.agent_queue.keep_for_attach(id),
+        }
         self.agent_queue.wake();
         let entries = self.queue_entries().await?;
         (entries.into_iter())

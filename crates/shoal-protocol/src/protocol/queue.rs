@@ -75,13 +75,12 @@ pub enum QueueMethod {
         entry: QueueEntryId,
         error: String,
     },
-    /// Queue the failed launch `entry` again exactly as it was, kept out of
-    /// admission for a caller that starts it `here` itself. Answers with
-    /// the entry as it waits.
+    /// Queue the failed launch `entry` again exactly as it was, and start
+    /// it as `start` says. Answers with the entry as it waits or starts.
     QueueRetry {
         entry: QueueEntryId,
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        here: bool,
+        #[serde(default, skip_serializing_if = "RetryStart::is_queued")]
+        start: RetryStart,
     },
     /// Set `priority` on the space, which ranks its queued work; a scoped
     /// caller gives at most its own space's.
@@ -98,6 +97,27 @@ pub enum QueueMethod {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         now: bool,
     },
+}
+
+/// How a failed launch queued again starts.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RetryStart {
+    /// As the queue admits it.
+    #[default]
+    Queued,
+    /// At once, regardless of the limits, which a scoped caller does as its
+    /// `limits` permission allows.
+    Now,
+    /// In the caller, which holds it: the queue keeps it out of admission
+    /// meanwhile.
+    Here,
+}
+
+impl RetryStart {
+    pub fn is_queued(&self) -> bool {
+        *self == Self::Queued
+    }
 }
 
 impl QueueMethod {

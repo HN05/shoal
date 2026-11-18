@@ -12,7 +12,7 @@ use crate::{
     model::{QueueEntry, Space},
     state::QueueState,
 };
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{protocol::RetryStart, space_names::SpaceSelector};
 
 /// Move the selected spaces with a failed launch from `selected`'s spaces
 /// to its failed starts.
@@ -62,11 +62,11 @@ pub(super) async fn retry_each(
 
 /// Queue the failed launch `entry` again, starting it at once when `now`.
 async fn retry(ctx: &Context, entry: &QueueEntry, now: bool) -> Result<QueueEntry> {
-    let retried = crate::client::queue::retry(&ctx.paths, entry.id.clone(), false).await?;
-    match now && retried.state == QueueState::Queued {
-        true => crate::client::queue::start(&ctx.paths, retried.id.to_string()).await,
-        false => Ok(retried),
-    }
+    let start = match now {
+        true => RetryStart::Now,
+        false => RetryStart::Queued,
+    };
+    crate::client::queue::retry(&ctx.paths, entry.id.clone(), start).await
 }
 
 /// Queue the failed launch `failed` again and start its agent in this
@@ -79,7 +79,8 @@ pub(super) async fn retry_here(
 ) -> Result<i32> {
     let launches = (&[][..], std::slice::from_ref(failed));
     permission_change::apply(ctx, &[], launches, change).await?;
-    let retried = crate::client::queue::retry(&ctx.paths, failed.id.clone(), true).await?;
+    let retried =
+        (crate::client::queue::retry(&ctx.paths, failed.id.clone(), RetryStart::Here)).await?;
     let _held = queued_agents::Hold::start(&ctx.paths, &retried.id).await;
     let entry = crate::client::queue::start_here(&ctx.paths, &retried.id).await?;
     match &entry.opens {

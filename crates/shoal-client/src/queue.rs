@@ -102,10 +102,14 @@ pub async fn fail(daemon: &impl Daemon, entry: QueueEntryId, error: String) -> R
     request(daemon, QueueMethod::QueueFail { entry, error }).await
 }
 
-/// Queue the failed launch `entry` again as it was, kept for this caller
-/// when it starts it `here` itself, and return it as it waits.
-pub async fn retry(daemon: &impl Daemon, entry: QueueEntryId, here: bool) -> Result<QueueEntry> {
-    request(daemon, QueueMethod::QueueRetry { entry, here }).await
+/// Queue the failed launch `entry` again as it was, starting it as `start`
+/// says, and return it as it waits or starts.
+pub async fn retry(
+    daemon: &impl Daemon,
+    entry: QueueEntryId,
+    start: shoal_protocol::protocol::RetryStart,
+) -> Result<QueueEntry> {
+    request(daemon, QueueMethod::QueueRetry { entry, start }).await
 }
 
 /// Queue the restore of `execution`'s agent in `workspace`, which starts
