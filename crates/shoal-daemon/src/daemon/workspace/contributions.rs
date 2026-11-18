@@ -142,7 +142,7 @@ async fn fetch_remotes(checkout: &std::path::Path) -> Result<()> {
     if !checkout.is_dir() {
         return Ok(());
     }
-    for remote in git::remotes(checkout, git::run_isolated).await?.lines() {
+    for remote in &git::remote_names(checkout).await? {
         git::fetch::remote(checkout, remote)
             .await
             .with_context(|| format!("could not fetch {remote}"))?;
@@ -178,7 +178,7 @@ fn removal_notice(repo: &Repository, path: &std::path::Path, fork: Option<&str>)
 /// The branches and tags every remote of the checkout advertises now.
 async fn advertised_refs(checkout: &std::path::Path) -> Result<Vec<git::RemoteHead>> {
     let mut advertised = Vec::new();
-    for remote in git::remotes(checkout, git::run_isolated).await?.lines() {
+    for remote in &git::remote_names(checkout).await? {
         let listed = async {
             let mut refs = git::remote_heads(checkout, remote).await?;
             refs.extend(git::remote_tags(checkout, remote).await?);

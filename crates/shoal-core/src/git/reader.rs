@@ -99,7 +99,16 @@ fn readable(repo: &gix::Repository) -> bool {
                         }))
             })
         });
-    format <= READABLE_FORMAT && readable_extensions
+    format <= READABLE_FORMAT && readable_extensions && !names_remotes_in_files(repo)
+}
+
+/// Whether `repo` names remotes in files of its `remotes/` or `branches/`
+/// directory, an old way Git still reads and gix does not.
+fn names_remotes_in_files(repo: &gix::Repository) -> bool {
+    ["remotes", "branches"].iter().any(|directory| {
+        std::fs::read_dir(repo.common_dir().join(directory))
+            .is_ok_and(|mut entries| entries.next().is_some())
+    })
 }
 
 #[cfg(test)]

@@ -16,17 +16,17 @@ mod merge_tree;
 pub(crate) mod predicates;
 pub use predicates::{has_commit, is_ancestor, ref_exists};
 pub(crate) mod queries;
-pub(crate) use queries::{
-    HeadState, RemoteUrls, git_path, head_state, is_bare_with_work_tree, remote_urls,
-};
+pub(crate) use queries::{HeadState, git_path, head_state, is_bare_with_work_tree};
 pub use queries::{
-    checked_out_branch, checkout_dirs, common_dir, configured_remote_url, git_dir, head_and_branch,
-    latest_subject, log_stat, push_remote, remote_names, remote_url, remotes, revision,
-    symbolic_revision, verify_revision, worktree_root,
+    checked_out_branch, checkout_dirs, common_dir, config_value, git_dir, head_and_branch,
+    latest_subject, log_stat, revision, symbolic_revision, verify_revision, worktree_root,
 };
 pub mod checkpoint;
 mod reader;
 pub(crate) mod refs;
+mod remotes;
+pub(crate) use remotes::{RemoteUrls, remote_urls};
+pub use remotes::{configured_remote_url, push_remote, remote_names, remote_url};
 pub mod repo;
 pub mod revert;
 pub mod seed;
@@ -469,13 +469,11 @@ pub fn porcelain_push_args(url: &str, refspecs: &[String], leases: &[(&str, &str
 /// created it there, as `git push --set-upstream` does, unless the branch
 /// has one or the push went to a URL rather than a configured remote.
 pub async fn track_pushed_branch(repo: &Path, branch: &BranchName, remote: &str) -> Result<()> {
-    let remotes = remotes(repo, run_isolated).await?;
-    if !remotes.lines().any(|name| name.trim() == remote) {
+    if !remote_names(repo).await?.iter().any(|name| name == remote) {
         return Ok(());
     }
     let key = format!("branch.{branch}.remote");
-    let current = run_isolated(repo, &["config", "--default", "", "--get", &key]).await?;
-    if !current.trim().is_empty() {
+    if config_value(repo, &key).await?.is_some() {
         return Ok(());
     }
     run_isolated(repo, &["config", &key, remote]).await?;

@@ -1,0 +1,98 @@
+use std::path::{Path, PathBuf};
+
+use super::*;
+use crate::git::config_value;
+use crate::test_support::{git, reftable_repository, repository};
+
+/// The ways a test repository keeps its refs: in files, which gix reads,
+/// and in a reftable, which Git reads for it.
+type Create = fn(&Path, &str) -> PathBuf;
+
+/// Remote, URL and push-remote reads in a repository `create` makes.
+async fn remote_reads(create: Create) {
+    let root = tempfile::tempdir().unwrap();
+    let repo = create(root.path(), "repo");
+    assert!(remote_names(&repo).await.unwrap().is_empty());
+    assert_eq!(configured_remote_url(&repo, "origin").await.unwrap(), None);
+    assert!(remote_url(&repo, "origin").await.is_err());
+
+    git(&repo, &["remote", "add", "zeta", "https://example.com/a/b"]);
+    git(
+        &repo,
+        &["remote", "add", "origin", "git@host.test:team/app.git"],
+    );
+    git(
+        &repo,
+        &["config", "remote.bare.pushurl", "https://push.test/bare"],
+    );
+    let names = remote_names(&repo).await.unwrap();
+    assert_eq!(names, ["bare", "origin", "zeta"]);
+
+    // The longest insteadOf prefix wins; a remote without a URL is its name.
+    git(
+        &repo,
+        &[
+            "config",
+            "url.https://mirror.test/.insteadOf",
+            "https://example.com/",
+        ],
+    );
+    git(
+        &repo,
+        &[
+            "config",
+            "url.https://deep.test/.insteadOf",
+            "https://example.com/a/",
+        ],
+    );
+    let at = repo.as_path();
+    let url = move |name| async move { configured_remote_url(at, name).await.unwrap() };
+    assert_eq!(url("zeta").await.as_deref(), Some("https://deep.test/b"));
+    assert_eq!(
+        url("origin").await.as_deref(),
+        Some("git@host.test:team/app.git")
+    );
+    assert_eq!(url("bare").await.as_deref(), Some("bare"));
+    let urls = remote_urls(&repo).await.unwrap();
+    let configured = ["https://example.com/a/b", "git@host.test:team/app.git"];
+    assert_eq!(urls.fetch, configured);
+    assert_eq!(urls.push, ["https://push.test/bare"]);
+
+    assert_eq!(push_remote(&repo, &"topic".into()).await.unwrap(), "origin");
+    git(&repo, &["config", "remote.pushDefault", "fork"]);
+    assert_eq!(push_remote(&repo, &"topic".into()).await.unwrap(), "fork");
+    git(&repo, &["config", "branch.topic.pushRemote", "mine"]);
+    assert_eq!(push_remote(&repo, &"topic".into()).await.unwrap(), "mine");
+    assert_eq!(push_remote(&repo, &"other".into()).await.unwrap(), "fork");
+    git(&repo, &["config", "branch.dotted.name.pushRemote", "dots"]);
+    let dotted = config_value(&repo, "branch.dotted.name.pushRemote").await;
+    assert_eq!(dotted.unwrap().as_deref(), Some("dots"));
+    // Any other failure stays an error.
+    let missing = root.path().join("missing");
+    configured_remote_url(&missing, "origin").await.unwrap_err();
+}
+
+#[tokio::test]
+async fn remotes_read_in_a_repository_with_its_refs_in_files() {
+    remote_reads(repository).await;
+}
+
+#[tokio::test]
+async fn remotes_read_in_a_reftable_repository() {
+    remote_reads(reftable_repository).await;
+}
+
+#[tokio::test]
+async fn a_remote_named_in_a_remotes_file_is_read_as_git_reads_it() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    std::fs::create_dir(repo.join(".git/remotes")).unwrap();
+    std::fs::write(
+        repo.join(".git/remotes/legacy"),
+        "URL: https://legacy.test/app\n",
+    )
+    .unwrap();
+    // Whether Git still reads such files depends on its version.
+    let listed: Vec<String> = git(&repo, &["remote"]).lines().map(String::from).collect();
+    assert_eq!(remote_names(&repo).await.unwrap(), listed);
+}

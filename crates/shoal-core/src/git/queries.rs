@@ -313,91 +313,21 @@ pub(crate) async fn git_path(repo: &Path, name: &str) -> Result<PathBuf> {
     reader::read(repo, in_process, git).await
 }
 
-pub async fn remotes(
-    repo: &Path,
-    run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
-) -> Result<String> {
-    run(repo, &["remote"]).await
-}
-
-/// The names of the repository's remotes, for an operation that passes
-/// them to each lookup that picks among them.
-pub async fn remote_names(repo: &Path) -> Result<Vec<String>> {
-    let listing = remotes(repo, run).await?;
-    Ok(listing.lines().map(str::to_owned).collect())
-}
-
-/// The URLs the repository's remotes name, as configured, before any
-/// rewriting.
-#[derive(Debug, Default, PartialEq, Eq)]
-pub(crate) struct RemoteUrls {
-    /// Each `remote.<name>.url`, which pushes use unless a push URL is set.
-    pub(crate) fetch: Vec<String>,
-    /// Each `remote.<name>.pushurl`.
-    pub(crate) push: Vec<String>,
-}
-
-pub(crate) async fn remote_urls(repo: &Path) -> Result<RemoteUrls> {
-    let listed = run(repo, &["config", "--null", "--list"]).await?;
-    let mut urls = RemoteUrls::default();
-    for entry in listed.split('\0') {
-        let Some((key, value)) = entry.split_once('\n') else {
-            continue;
-        };
-        let Some(variable) = key
-            .strip_prefix("remote.")
-            .and_then(|rest| rest.rsplit_once('.'))
-            .map(|(_, variable)| variable.to_ascii_lowercase())
-        else {
-            continue;
-        };
-        let list = match variable.as_str() {
-            "url" => &mut urls.fetch,
-            "pushurl" => &mut urls.push,
-            _ => continue,
-        };
-        if !value.is_empty() && !list.iter().any(|url| url == value) {
-            list.push(value.to_owned());
-        }
-    }
-    Ok(urls)
-}
-
-pub async fn remote_url(repo: &Path, remote: &str) -> Result<String> {
-    run(repo, &["remote", "get-url", remote]).await
-}
-
-/// Git's exit status for a remote the repository does not configure.
-const NO_SUCH_REMOTE: i32 = 2;
-
-/// The URL of the remote `remote`, as [`remote_url`] reads it, or `None`
-/// when the repository has no such remote.
-pub async fn configured_remote_url(repo: &Path, remote: &str) -> Result<Option<String>> {
-    let mut command = super::command(repo);
-    command.args(["remote", "get-url", remote]);
-    let output = super::bounded(command).capture().await;
-    if let Ok(output) = &output
-        && output.status.code() == Some(NO_SUCH_REMOTE)
-    {
-        return Ok(None);
-    }
-    let url = crate::subprocess::checked_output("git remote get-url", output)?;
-    Ok(Some(url.trim().to_owned()))
-}
-
-/// The remote a push of `branch` goes to: `branch.<name>.pushRemote`, else
-/// `remote.pushDefault`, else `origin`.
-pub async fn push_remote(repo: &Path, branch: &BranchName) -> Result<String> {
-    for key in [
-        format!("branch.{branch}.pushRemote"),
-        "remote.pushDefault".into(),
-    ] {
-        let value = run(repo, &["config", "--default", "", "--get", &key]).await?;
-        if !value.trim().is_empty() {
-            return Ok(value.trim().to_owned());
-        }
-    }
-    Ok("origin".into())
+/// The value Git gives `key` in the configuration of the repository Git
+/// finds from `repo`, as `git config --get` reads it: the last one set;
+/// `None` when it is unset or empty.
+pub async fn config_value(repo: &Path, key: &str) -> Result<Option<String>> {
+    let owned = key.to_owned();
+    let in_process = move |repo: &gix::Repository| {
+        let value = repo.config_snapshot().plumbing().string(owned.as_str());
+        Ok(value.map(|value| value.to_string()))
+    };
+    let git = async |repo: &Path| {
+        let value = run(repo, &["config", "--default", "", "--get", key]).await?;
+        Ok(Some(value.trim_end_matches('\n').to_owned()))
+    };
+    let value = reader::read(repo, in_process, git).await?;
+    Ok(value.filter(|value| !value.trim().is_empty()))
 }
 
 pub async fn latest_subject(repo: &Path) -> Result<String> {

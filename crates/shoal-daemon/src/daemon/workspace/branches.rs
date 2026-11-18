@@ -191,7 +191,7 @@ impl Manager {
     pub async fn remote_heads(&self, repository_id: &RepositoryId) -> Result<Vec<git::RemoteHead>> {
         let repo = self.repository(repository_id).await?;
         let mut heads = Vec::new();
-        for remote in git::remotes(&repo.path, git::run_isolated).await?.lines() {
+        for remote in &git::remote_names(&repo.path).await? {
             heads.extend(
                 git::remote_heads(&repo.path, remote)
                     .await
@@ -283,7 +283,7 @@ impl Manager {
         let upstream = upstream(repo, &local_ref).await?;
         if matches!(policy, UpstreamPolicy::AllowLocalOnly)
             && upstream.is_none()
-            && git::remotes(&repo.path, git_run).await?.trim().is_empty()
+            && git::remote_names(&repo.path).await?.is_empty()
         {
             return Ok(Refresh::Unchanged(PulledBranch::unchanged(
                 repo,
