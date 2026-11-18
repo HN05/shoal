@@ -6,6 +6,7 @@ use shoal_protocol::{chats::StartedChat, scope_tokens::ScopeToken, space_names::
 use std::sync::Mutex;
 
 use crate::protocol::ChatStart;
+use shoal_core::chat_handoff::HandedStart;
 
 /// The resolved starts the daemon ran its chat start worker for, each with
 /// whether the worker acts with the caller's scope.
@@ -14,7 +15,8 @@ pub static STARTED: Mutex<Vec<(ChatStart, bool)>> = Mutex::new(Vec::new());
 /// The names of chats whose place fails before it starts their agent.
 pub static FAILING: Mutex<Vec<SpaceName>> = Mutex::new(Vec::new());
 
-pub(super) fn start(start: &ChatStart, token: Option<&ScopeToken>) -> Result<StartedChat> {
+pub(super) fn start(handed: &HandedStart, token: Option<&ScopeToken>) -> Result<StartedChat> {
+    let start = &handed.start;
     let scoped = token.is_some();
     STARTED.lock().unwrap().push((start.clone(), scoped));
     let failing = FAILING.lock().unwrap();
@@ -23,7 +25,7 @@ pub(super) fn start(start: &ChatStart, token: Option<&ScopeToken>) -> Result<Sta
     }
     Ok(StartedChat::Background(
         shoal_protocol::chats::BackgroundChat {
-            id: None,
+            id: handed.chat.clone(),
             chat: start.name.clone().unwrap_or_else(|| "chat".into()),
             agent: start.agent.clone().context("the start names no agent")?,
             repository: None,

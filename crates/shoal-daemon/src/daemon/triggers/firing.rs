@@ -275,7 +275,7 @@ fn launched_space(launched: &Launched) -> Option<SpaceId> {
     use shoal_protocol::chats::StartedChat;
     match launched {
         Launched::Chat(StartedChat::Queued(queued)) => Some(queued.chat.id.clone()),
-        Launched::Chat(StartedChat::Background(chat)) => chat.id.clone(),
+        Launched::Chat(StartedChat::Background(chat)) => Some(chat.id.clone()),
         Launched::Chat(StartedChat::Detached(chat)) => Some(chat.chat.id.clone()),
         Launched::Worker(worker) => Some(worker.workspace.id.clone()),
         Launched::Workspace(started) => Some(started.workspace.id.clone()),

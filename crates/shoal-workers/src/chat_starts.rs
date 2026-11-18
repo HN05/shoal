@@ -18,6 +18,7 @@ use crate::{
     protocol::{ChatStart, ConfigTarget},
     workers::{Worker, internal_command},
 };
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{chats::BackgroundChat, space_names::SpaceName};
 
 /// Start the chat whose resolved start, with the chat the daemon recorded
@@ -35,23 +36,34 @@ pub async fn run(paths: &CommandPaths) -> Result<i32> {
     if chat.runs_its_own_way() {
         return run_worker(paths, &handoff).await;
     }
-    let chat = chat.start_in_background(paths, handoff).await?;
+    let chat = chat
+        .start_in_background(paths, handoff, handed.chat)
+        .await?;
     outln!("{}", crate::client::output::json(&chat)?);
     Ok(0)
 }
 
 /// Start the chat of an admitted launch whose resolved `start` waited in
-/// the queue, in the chat the daemon recorded for it, as the user would.
-pub(crate) async fn start_queued(paths: &CommandPaths, start: ChatStart) -> Result<()> {
-    let chat = NewChat::resolve(paths, &start).await?;
+/// the queue, in `chat`, which was recorded for it, as the user would.
+pub(crate) async fn start_queued(
+    paths: &CommandPaths,
+    start: ChatStart,
+    chat: SpaceId,
+) -> Result<()> {
+    let new = NewChat::resolve(paths, &start).await?;
     let handoff = Handoff::create(None)?;
-    handoff.hand_start(&HandedStart { start, chat: None })?;
-    if chat.runs_its_own_way() {
+    handoff.hand_start(&HandedStart {
+        start,
+        chat: chat.clone(),
+    })?;
+    if new.runs_its_own_way() {
         let code = run_worker(paths, &handoff).await?;
         anyhow::ensure!(code == 0, "the chat's start failed ({code})");
         return Ok(());
     }
-    chat.start_in_background(paths, handoff).await.map(drop)
+    new.start_in_background(paths, handoff, chat)
+        .await
+        .map(drop)
 }
 
 /// A chat the daemon resolved, with where it runs and the settings it
@@ -97,13 +109,14 @@ impl NewChat {
         (crate::agents::agent_integration(&self.settings, &self.agent).detached()).is_some()
     }
 
-    /// Open a background place whose chat worker starts this chat with the
-    /// start `handoff` holds, and wait until the place reports that the
-    /// chat runs.
+    /// Open a background place whose chat worker starts this chat, recorded
+    /// as `id`, with the start `handoff` holds, and wait until the place
+    /// reports that the chat runs.
     async fn start_in_background(
         self,
         paths: &CommandPaths,
         handoff: Handoff,
+        id: SpaceId,
     ) -> Result<BackgroundChat> {
         let worker = internal_command(paths, false, chat_worker(&handoff))?;
         let repository = self.repository.as_ref();
@@ -118,7 +131,7 @@ impl NewChat {
             false,
         )
         .await?;
-        let id = handoff.wait().await?;
+        handoff.wait().await?;
         Ok(BackgroundChat {
             id,
             repository: self.repository.map(|repository| repository.id),

@@ -61,7 +61,7 @@ fn options(
         session: args.session,
         fork: false,
         handoff: args.handoff,
-        chat: None,
+        chat: args.chat,
         parent: None,
     }
 }

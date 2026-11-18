@@ -138,7 +138,7 @@ async fn start_resolved(ctx: &Context, handed: HandedStart) -> Result<i32> {
         session: None,
         fork: false,
         handoff: None,
-        chat,
+        chat: Some(chat),
         parent,
         narrowing: Narrowing::Requested(narrowing),
         priority,

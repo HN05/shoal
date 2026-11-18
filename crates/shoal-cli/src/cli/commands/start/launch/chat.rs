@@ -2,10 +2,7 @@
 //! detached, in a background place, beside the caller, or here under the
 //! execution wrapper, as an execution of its chat, once the agent queue
 //! admits it.
-use std::{
-    ffi::OsString,
-    path::{Path, PathBuf},
-};
+use std::{ffi::OsString, path::PathBuf};
 
 use anyhow::{Context as _, Result, ensure};
 
@@ -20,7 +17,7 @@ use crate::{
     cli::{
         agents::{self, ChatLaunch, ChatRepository},
         context::Context,
-        recent, terminal,
+        terminal,
     },
     config::Effective,
     model::{Chat, ChatHome},
@@ -33,6 +30,7 @@ use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 mod admission;
 mod command;
 mod detached;
+mod place;
 
 pub(in crate::cli::commands) use detached::report_started;
 
@@ -135,12 +133,13 @@ impl Launch {
     }
 
     /// Hand the chat to a new background place once the agent queue admits
-    /// its agent.
+    /// its agent, recording it first.
     async fn start_in_background(self, ctx: &Context) -> Result<Started> {
         if let Some(waits) = self.admit(ctx).await? {
             return Ok(waits);
         }
-        (self.hand_to_background(ctx).await).map(Started::Background)
+        let launched = self.record(ctx, None).await?;
+        (self.hand_to_background(ctx, launched).await).map(Started::Background)
     }
 
     /// Run the chat beside this terminal or here once the agent queue admits
@@ -152,100 +151,25 @@ impl Launch {
         self.run_in_terminal(ctx).await.map(Started::Exited)
     }
 
-    /// Hand the chat to a new background place, which runs it here, and
-    /// wait until the place reports that it does.
-    async fn hand_to_background(self, ctx: &Context) -> Result<BackgroundChat> {
-        // Opening the place does not start the chat, so the start waits for
-        // its report. A scoped starter's scope token, with which the place
-        // records the chat, may end with the starter, so it goes along.
-        let handoff = crate::chat_handoff::Handoff::create(crate::env::scope_token().as_ref())?;
-        let relaunch = self.relaunch(Some(handoff.path()));
-        let relaunch = crate::terminal::shoal_command(&ctx.paths, &relaunch)?;
-        let chat = &self.chat;
-        let repository = chat.repository.registered();
-        let place = shoal_workers::places::queued::start_chat(
-            &ctx.paths,
-            &chat.settings,
-            repository,
-            chat.home().path(),
-            &chat.name,
-            relaunch,
-            false,
-        )
-        .await?;
-        let id = handoff.wait().await?;
-        Ok(BackgroundChat {
-            id,
-            repository: repository.map(|repo| repo.id.clone()),
-            chat: self.chat.name,
-            agent: self.agent,
-            place,
-            warnings: Vec::new(),
-        })
-    }
-
-    /// Run the chat in a new place beside this terminal, where a host opens
-    /// one and its place asks for it, otherwise here.
+    /// Run the chat in a new place beside this terminal, recorded first,
+    /// where a host opens one, otherwise here.
     async fn run_in_terminal(self, ctx: &Context) -> Result<i32> {
         ensure!(ctx.on_terminal(), "chat needs a terminal");
         let model_args =
             crate::agents::model_args(&self.chat.settings, &self.agent, &self.chat.model)?;
-        if self.options.place == ChatPlace::Beside && self.start_beside(ctx).await? {
-            return Ok(0);
+        if self.options.place == ChatPlace::Beside
+            && terminal::opens_beside(ctx, &self.chat.settings)
+        {
+            let chat = self.record(ctx, None).await?.chat;
+            return self.start_beside(ctx, &chat).await.map(|()| 0);
         }
         let chat = self.record_here(ctx).await?;
         self.run_here(ctx, &chat, model_args).await
     }
 
-    /// Run the chat in a new tab or session in its checkout or worktree,
-    /// focused or in the background as its mode says, where Shoal starts it
-    /// in place, returning whether it ran there; otherwise it runs here. A
-    /// background start waits for its place to report, as
-    /// [`Launch::hand_to_background`] does, since nothing shows it here.
-    async fn start_beside(&self, ctx: &Context) -> Result<bool> {
-        let chat = &self.chat;
-        let waits_for_user = command::waits_for_user(chat, &self.options);
-        let placement = terminal::Placement::of(&chat.settings, &chat.mode, None, waits_for_user);
-        let handoff = match placement {
-            terminal::Placement::Background => Some(crate::chat_handoff::Handoff::create(None)?),
-            terminal::Placement::Focus => None,
-        };
-        let relaunch = self.relaunch(handoff.as_ref().map(crate::chat_handoff::Handoff::path));
-        let started = terminal::start_chat(
-            ctx,
-            &chat.settings,
-            chat.repository.registered(),
-            chat.home().path(),
-            &chat.name,
-            placement,
-            &relaunch,
-        )
-        .await?;
-        match (started, handoff) {
-            (terminal::ChatStarted::Here, _) => Ok(false),
-            (terminal::ChatStarted::Shown, _) => Ok(true),
-            (terminal::ChatStarted::Background(report), handoff) => {
-                if let Some(handoff) = handoff {
-                    handoff.wait().await?;
-                }
-                if !ctx.json {
-                    outln!("{report}");
-                }
-                Ok(true)
-            }
-        }
-    }
-
-    /// The `shoal` arguments that start this chat in the place where it
-    /// opens, reporting to the `handoff` of the starter that waits on it.
-    fn relaunch(&self, handoff: Option<&Path>) -> Vec<OsString> {
-        let options = (self.options).in_new_place(&self.agent, &self.chat.name, handoff);
-        self.topic.relaunch.command_line(options)
-    }
-
-    /// Have the daemon record the chat, running at `origin` when given, and
-    /// link it to what its topic names, unless it recorded the chat for
-    /// this start already.
+    /// Have the daemon record the chat, running at `origin` when given,
+    /// with the launch its agent takes the slot of attached, and link it to
+    /// what its topic names, unless it was recorded for this start already.
     async fn record(
         &self,
         ctx: &Context,
@@ -282,18 +206,14 @@ impl Launch {
         let launch = &self.chat;
         let (repository, home) = (launch.repository.registered(), launch.home());
         agents::trust_chat(ctx, &launch.settings, &self.agent, repository, home).await;
-        let chat = self.record(ctx, current_origin().await).await?.chat;
-        if crate::env::shown_chat() {
-            recent::record_attach(ctx, &SpaceSelector::id(&chat.id)).await;
-        }
-        Ok(chat)
+        Ok(self.record(ctx, current_origin().await).await?.chat)
     }
 
     /// Run the recorded `chat`'s agent with `model_args` here under the
     /// execution wrapper, labelling this terminal as the chat's.
     async fn run_here(self, ctx: &Context, chat: &Chat, model_args: Vec<OsString>) -> Result<i32> {
         let scope = act_in_chat_scope(ctx, chat).await?;
-        crate::chat_handoff::report_started(&chat.id);
+        crate::chat_handoff::report_started();
         let hold = admission::hold_launch(ctx).await;
         let ran = run_agent(ctx, chat, self.agent, self.chat, model_args, Vec::new()).await;
         drop(hold);

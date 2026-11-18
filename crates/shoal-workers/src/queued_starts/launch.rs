@@ -23,8 +23,9 @@ use shoal_protocol::space_names::SpaceSelector;
 /// worker of the workspace it opens.
 pub(super) async fn start(paths: &CommandPaths, entry: &QueueEntryId) -> Result<()> {
     let queued = queue::plan(paths, entry.clone()).await?;
-    if let Some(chat) = crate::start_plan::ChatPlan::of(&queued.plan) {
-        return super::chat::start(paths, entry, chat).await;
+    if let Some(plan) = crate::start_plan::ChatPlan::of(&queued.plan) {
+        let chat = queued.entry.space_id.clone();
+        return super::chat::start(paths, entry, plan, chat).await;
     }
     let (plan, workspace) = add_plan(paths, entry, &queued).await?;
     start_admitted(paths, plan, &workspace).await

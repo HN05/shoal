@@ -59,7 +59,7 @@ impl Manager {
         let token = caller.map(|caller| self.operations.issue(caller));
         let handed = HandedStart {
             start,
-            chat: Some(chat.id.clone()),
+            chat: chat.id.clone(),
         };
         let started = run_worker(&self.paths, &handed, token.as_ref(), entry.as_ref()).await;
         if let Some(token) = &token {
@@ -354,7 +354,7 @@ async fn run_worker(
 
     #[cfg(any(test, feature = "test-support"))]
     if crate::daemon::fake_workers::faked() {
-        return fake::start(&handed.start, token);
+        return fake::start(handed, token);
     }
 
     let argv = internal_command(paths, true, Worker::ChatStart)?;

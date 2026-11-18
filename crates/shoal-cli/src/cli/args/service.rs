@@ -99,6 +99,9 @@ pub struct ConfigSetupArgs {
     /// Handoff of the starter that waits on this background place.
     #[arg(long, hide = true, requires = "here")]
     pub handoff: Option<PathBuf>,
+    /// The chat its starter recorded, whose agent this place runs.
+    #[arg(long, hide = true, requires = "here")]
+    pub chat: Option<shoal_ids::space_ids::SpaceId>,
     /// Arguments forwarded to the agent.
     #[arg(last = true)]
     pub args: Vec<OsString>,
@@ -114,6 +117,7 @@ impl ConfigSetupArgs {
             name,
             session,
             handoff,
+            chat,
             args,
         } = self;
         let mut line = CommandLine::of::<Self>(&["config", "setup"]);
@@ -124,6 +128,7 @@ impl ConfigSetupArgs {
         line.values("name", name.as_ref().map(|name| name.as_str()));
         line.values("session", session.as_ref().map(|session| session.as_str()));
         line.values("handoff", handoff);
+        line.values("chat", chat.as_ref().map(|chat| chat.as_str()));
         line.trailing("args", args);
         line.into_args()
     }

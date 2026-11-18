@@ -25,9 +25,6 @@ pub const ADD_PLAN: &str = "SHOAL_ADD_PLAN";
 /// The agent queue entry whose slot a launched agent takes over when it
 /// registers; passed to launch workers and removed at startup.
 pub const QUEUE_ENTRY: &str = "SHOAL_QUEUE_ENTRY";
-/// Set on a chat that a focused place beside the caller runs, which records
-/// it in `attach`'s history once it registers; removed at startup.
-pub const SHOWN_CHAT: &str = "SHOAL_SHOWN_CHAT";
 /// Set on a chat that runs in a place Shoal opened for it, which the chat
 /// records as its own so its removal closes the place; removed at startup.
 pub const OPENED_CHAT_PLACE: &str = "SHOAL_OPENED_CHAT_PLACE";

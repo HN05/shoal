@@ -43,6 +43,7 @@ fn setup_args() -> ConfigSetupArgs {
         name: None,
         session: None,
         handoff: None,
+        chat: None,
         args: Vec::new(),
     }
 }

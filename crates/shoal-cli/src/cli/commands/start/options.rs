@@ -45,7 +45,8 @@ pub(in crate::cli::commands) struct Options {
     /// The handoff of a starter that waits on this place to start the chat,
     /// with its scope when it is scoped.
     pub handoff: Option<PathBuf>,
-    /// The chat the daemon recorded for this start, whose agent runs here.
+    /// The chat its starter or the daemon recorded for this start, whose
+    /// agent runs here.
     pub chat: Option<SpaceId>,
     /// The space the chat goes below; the daemon puts a scoped starter's
     /// below its own space without one.
@@ -107,7 +108,7 @@ impl Options {
             session: None,
             fork: false,
             handoff: args.handoff.take(),
-            chat: None,
+            chat: args.chat.take(),
             parent: args.parent.take(),
             narrowing: match args.recorded_narrowing.take() {
                 Some(recorded) => Narrowing::Recorded(recorded),
@@ -121,8 +122,7 @@ impl Options {
     /// `start` with these options, as [`Options::taken_from`] takes them
     /// again, except that a background place is written as beside this
     /// terminal, which an agent's start takes for one, and a session and its
-    /// fork as none: only a chat that runs here continues one, and only one
-    /// that runs here runs in a chat the daemon recorded.
+    /// fork as none: only a chat that runs here continues one.
     pub(super) fn into_start(self, start: StartArgs) -> StartArgs {
         let Self {
             agent,
@@ -133,7 +133,7 @@ impl Options {
             session: _,
             fork: _,
             handoff,
-            chat: _,
+            chat,
             parent,
             narrowing,
             priority,
@@ -147,6 +147,7 @@ impl Options {
             model: ModelArgs { model, effort },
             args,
             handoff,
+            chat,
             parent,
             permissions,
             recorded_narrowing,
@@ -157,11 +158,11 @@ impl Options {
     }
 
     /// These options as the start in the place where a chat opens takes
-    /// them: run there by `agent` under `name`, reporting to the `handoff`
-    /// of the starter that waits on it.
+    /// them: run there by `agent` in the recorded `chat` under `name`,
+    /// reporting to the `handoff` of the starter that waits on it.
     pub(super) fn in_new_place(
         &self,
-        agent: &Agent,
+        (agent, chat): (&Agent, &SpaceId),
         name: &SpaceName,
         handoff: Option<&Path>,
     ) -> Self {
@@ -170,7 +171,7 @@ impl Options {
             place: ChatPlace::Here,
             name: Some(name.clone()),
             handoff: handoff.map(Path::to_owned),
-            chat: None,
+            chat: Some(chat.clone()),
             ..self.clone()
         }
     }
@@ -188,7 +189,7 @@ impl Options {
             session,
             fork: _,
             handoff,
-            chat: _,
+            chat,
             parent: _,
             narrowing: _,
             priority: _,
@@ -201,6 +202,7 @@ impl Options {
             name,
             session,
             handoff,
+            chat,
             args,
         }
     }

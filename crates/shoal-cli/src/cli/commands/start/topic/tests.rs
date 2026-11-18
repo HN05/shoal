@@ -1,4 +1,5 @@
 use clap::Parser as _;
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 use std::{ffi::OsString, path::Path};
 
@@ -57,7 +58,8 @@ fn options(narrowing: Narrowing) -> Options {
 }
 
 #[test]
-fn a_chat_started_elsewhere_parses_back_to_its_options_with_its_name_and_agent_and_no_session() {
+fn a_chat_started_elsewhere_parses_back_to_its_options_with_its_chat_name_and_agent_and_no_session()
+{
     let repo = repository();
     let topic = Topic::repository(&repo, &crate::config::modes::ModeName::CHAT);
     let agent: Agent = "codex".parse().unwrap();
@@ -68,7 +70,8 @@ fn a_chat_started_elsewhere_parses_back_to_its_options_with_its_name_and_agent_a
     ] {
         let options = options(narrowing);
         let handoff = Path::new("/tmp/shoal-chat.1");
-        let named = options.in_new_place(&agent, &"named".into(), Some(handoff));
+        let chat: SpaceId = "4f1d2c3b-6a5e-4d8a-9c1e-2f7b5d3a1e09".into();
+        let named = options.in_new_place((&agent, &chat), &"named".into(), Some(handoff));
         let mut start = parsed_start(topic.relaunch.command_line(named));
         assert!(start.as_chat);
         assert_eq!(start.mode, Some(crate::config::modes::ModeName::CHAT));
@@ -87,7 +90,7 @@ fn a_chat_started_elsewhere_parses_back_to_its_options_with_its_name_and_agent_a
                 place: ChatPlace::Here,
                 name: Some("named".into()),
                 handoff: Some(handoff.to_owned()),
-                chat: None,
+                chat: Some(chat),
                 session: None,
                 fork: false,
                 ..options
@@ -123,7 +126,8 @@ fn a_chat_in_a_workspace_reopens_there() {
         parent: None,
         narrowing: Narrowing::Requested(Default::default()),
     };
-    let named = options.in_new_place(&agent, &"worker-chat".into(), None);
+    let chat = "4f1d2c3b-6a5e-4d8a-9c1e-2f7b5d3a1e09".into();
+    let named = options.in_new_place((&agent, &chat), &"worker-chat".into(), None);
     let start = parsed_start(topic.relaunch.command_line(named));
     assert_eq!(
         start.in_workspace,
@@ -144,7 +148,8 @@ fn the_setup_chat_starts_again_with_config_setup_and_its_options() {
         narrowing: Narrowing::Requested(Default::default()),
         ..options(Narrowing::Requested(Default::default()))
     };
-    let named = options.in_new_place(&agent, &"setup".into(), None);
+    let chat = "4f1d2c3b-6a5e-4d8a-9c1e-2f7b5d3a1e09".into();
+    let named = options.in_new_place((&agent, &chat), &"setup".into(), None);
     let line = std::iter::once(OsString::from("shoal")).chain(topic.relaunch.command_line(named));
     let cli = crate::cli::Cli::try_parse_from(line).unwrap();
     let Some(crate::cli::Command::Service(crate::cli::args::service::ServiceCommand::Config {
@@ -157,6 +162,7 @@ fn the_setup_chat_starts_again_with_config_setup_and_its_options() {
     assert_eq!(setup.agent, Some(agent));
     assert_eq!(setup.name, Some("setup".into()));
     assert_eq!(setup.session, options.session);
+    assert_eq!(setup.chat, Some(chat));
     assert_eq!(setup.args, options.args);
 }
 

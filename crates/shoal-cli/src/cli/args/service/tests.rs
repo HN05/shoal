@@ -14,6 +14,7 @@ fn a_config_setup_parses_back_from_its_command_line() {
         name: Some("setup".into()),
         session: Some("s1".into()),
         handoff: Some("/tmp/shoal-chat.1".into()),
+        chat: Some("0b9c3a52-6f4e-4d8a-9c1e-2f7b5d3a1e09".into()),
         args: vec!["--search".into()],
     };
     let line = std::iter::once(OsString::from("shoal")).chain(setup.command_line());

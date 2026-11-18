@@ -251,6 +251,10 @@ pub struct StartArgs {
     /// shoal start passes.
     #[arg(long, hide = true, requires = "here")]
     pub handoff: Option<PathBuf>,
+    /// The chat its starter recorded, whose agent this place runs, which
+    /// shoal start passes.
+    #[arg(long, hide = true, requires = "here")]
+    pub chat: Option<shoal_ids::space_ids::SpaceId>,
     /// Arguments forwarded to the agent, such as its prompt.
     #[arg(last = true)]
     pub args: Vec<OsString>,
@@ -346,6 +350,7 @@ impl StartArgs {
                 },
             model: ModelArgs { model, effort },
             handoff,
+            chat,
             args,
         } = self;
         let mut line = CommandLine::of::<Self>(&["start"]);
@@ -387,6 +392,7 @@ impl StartArgs {
         line.values("model", model);
         line.values("effort", effort);
         line.values("handoff", handoff);
+        line.values("chat", chat.as_ref().map(|chat| chat.as_str()));
         line.trailing("args", args);
         line.into_args()
     }

@@ -1075,25 +1075,29 @@ The daemon records every new chat, below where it goes and linked to what it
 starts on, before its agent runs anywhere, in one operation whatever runs the
 agent: the caller's terminal, a background place, the queue or an app only
 runs the recorded chat's agent, so a start that names nothing to link sends no
-link request. A start whose agent must wait records the chat at once, from any
-caller, and the queue starts it from the start it was recorded with. What linking warns of goes to the agent of the nearest space
+link request. A start that opens a place for the chat, beside its terminal or
+in the background, records the chat first, with its queue entry attached, and
+passes the place the recorded chat with `--chat`, as the daemon's own launch
+hands its chat worker the chat; only a chat its starting process runs itself
+records itself there. A start whose agent must wait records the chat at once,
+from any caller, and the queue starts it from the start it was recorded with. What linking warns of goes to the agent of the nearest space
 above the chat with one, else to the user's notifications, never only to a
 terminal the agent then takes over, and a chat whose place never starts its
 agent is removed, since nothing ran in it, its failure told the same way.
 A chat an agent starts opens in a background place, since the agent cannot
-hand over its terminal, unless `start --here` runs it in the caller's own, and
-keeps the agent's scope until it runs the chat's agent in the chat's own
-scope. Every start in a background place waits for the place
+hand over its terminal, unless `start --here` runs it in the caller's own; a
+scoped starter's place takes the chat with a scope token issued for the space
+the chat goes below, which the starter revokes once the place reports, and
+runs the chat's agent in the chat's own scope. Every start in a background place waits for the place
 to report that the chat is about to run its agent, or why not, since an open
 place proves neither. The place takes the handoff before anything checks its
 scope, which it may still inherit from the starter's processes, and reports
 any failure after that. The starter waits as long as the place runs once the
 place takes the handoff, which a lock the place holds until it exits shows, and gives up
 only on a place that does not take it within a hang guard or that ends without
-a report; the report and a scoped starter's token go through a
-private directory the place's command names, never the place's environment,
-which a shell left there would keep. The agent waits for that handoff also
-since its scope may end with it. A chat run in the caller's terminal is the
+a report; the report and the token issued for a scoped starter's place go
+through a private directory the place's command names, never the place's
+environment, which a shell left there would keep. A chat run in the caller's terminal is the
 chat's own execution, as a workspace's agent is, which the caller's stops
 leave running; places drop the marks and scope token of the space
 that opened them, so what runs there is the new chat's. Spaces form one tree through one parent link,
@@ -2066,9 +2070,9 @@ scoped callers neither read nor write it. `attach` and every launch that shows a
 workspace's or a chat's agent session here, such as `start` or `claude`, record
 the space in `attach`'s history once the session is shown and still runs: when the terminal
 detaches, or right away for a host that shows it without attaching the terminal. A
-focused `start` that opens a place records the workspace once the place hosts it, and a
-focused `chat` that opens one records the chat once it registers there, since the host
-may show the place before the workspace or chat exists. So `attach -` returns to the
+focused `start` that opens a place records the workspace once the place hosts it,
+since the host may show the place before the workspace exists, and records a chat,
+which it recorded before opening the place, once it shows it. So `attach -` returns to the
 session last detached from, not one another terminal still shows or one that ended.
 Every command records and selects workspaces and chats through the same history,
 passing over removed spaces, and `attach` over chats that no longer run, which
@@ -2983,8 +2987,9 @@ hosts a space, a workspace or a chat, takes a new label only while it still
 shows the label Shoal gave it, since another label is the user's: a chat's its
 old name, a workspace's the label its previous title rendered. A place labelled
 before its workspace's template, issue or branch changed keeps that stale label
-rather than risk overwriting the user's. The process the user runs chooses the name, so the tab or session that
-hosts the chat carries it before the chat is recorded; the chat's record names
+rather than risk overwriting the user's. The process the user runs records the chat
+before it opens the tab or session that hosts it, which carries its name, and a detach
+from its zmx session names its number; the chat's record names
 the session it runs in, so `shoal attach` finds it there, not by a session name
 zmx may have suffixed, and the chat labels the session with its ID, so the
 chat's removal closes a session Shoal created and no workspace's end does. A chat waits for the user to speak first unless it opens on a

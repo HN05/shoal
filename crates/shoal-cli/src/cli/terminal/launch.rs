@@ -1,13 +1,13 @@
 //! Starting Shoal work beside this terminal: additions, restores, tracked
 //! agents and chats, focused or in the background.
 use shoal_ids::space_ids::SpaceNumber;
-use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+use shoal_protocol::space_names::SpaceSelector;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
 };
 
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 
 use super::sessions::{left_open, report_detach};
 use crate::{
@@ -15,7 +15,7 @@ use crate::{
     config::{Effective, modes::ModeName},
     env,
     execution::TrackedAgent,
-    model::{Part, Repository, Space, Workspace},
+    model::{Chat, Part, Repository, Space, Workspace},
     sessions::Origin,
     start_plan::AddPlan,
     terminal::{
@@ -253,76 +253,62 @@ fn agent_worker(
 
 /// Where [`start_chat`] started a chat.
 pub(in crate::cli) enum ChatStarted {
-    /// Nowhere: the chat runs in place.
-    Here,
     /// In a place shown here, or a session this terminal attached to.
     Shown,
     /// In a background place, as the words that report it say.
     Background(String),
 }
 
-/// Run Shoal with `args` for the chat `name` of `repository`, or of none,
-/// in `cwd`, its checkout, worktree or `root_dir`, as `placement` asks: in
-/// a new background place, or focused in a new session this terminal
-/// attaches to, as `run_agent` does for tracked agents, otherwise in a new
-/// focused place, shown here when its host does not serve this terminal.
+/// Run Shoal with `args` for the recorded `chat` of `repository`, or of
+/// none, in `cwd`, its checkout, worktree or `root_dir`, as `placement`
+/// asks: in a new background place, or focused in a new session this
+/// terminal attaches to, as `run_agent` does for tracked agents, otherwise
+/// in a new focused place, shown here when its host does not serve this
+/// terminal. A chat shown here becomes the one `attach -` returns to. Only
+/// a host that [`opens_beside`] this terminal starts one.
 pub(in crate::cli) async fn start_chat(
     ctx: &Context,
     settings: &Effective,
-    repository: Option<&Repository>,
-    cwd: &Path,
-    name: &SpaceName,
+    (repository, cwd): (Option<&Repository>, &Path),
+    chat: &Chat,
     placement: Placement,
     args: &[OsString],
 ) -> Result<ChatStarted> {
     let host = beside(ctx, settings);
-    let Some(places) = host.places() else {
-        return Ok(ChatStarted::Here);
-    };
+    let places = (host.places()).context("no host opens a place beside this terminal")?;
     let repo = groups::Repo::of_chat(repository, cwd);
     let origin = groups::beside(&ctx.paths, &host, &repo, cwd).await?;
     let beside = host.beside(origin.as_ref());
     let focus = placement == Placement::Focus;
-    let attaches = host.host.attaches().filter(|_| focus);
-    let mut env = chat_place_env(&ctx.paths)?;
-    // A chat registers only once the place runs it, so the chat itself
-    // records the place it is shown in for `attach -`.
-    if focus && attaches.is_none() {
-        env.push((env::SHOWN_CHAT, "1".to_owned()));
-    }
     let start = Start {
         state: &ctx.paths.state,
         origin: beside.origin,
         cwd,
-        label: name,
+        label: &chat.name,
         focus,
         split: beside.split,
         argv: &shoal_command(&ctx.paths, args)?,
-        env: &env,
+        env: &chat_place_env(&ctx.paths)?,
     };
-    if let Some(attaches) = attaches {
+    let shown = SpaceSelector::id(&chat.id);
+    if let Some(attaches) = host.host.attaches().filter(|_| focus) {
         let session = attaches.run_chat(&start).await?;
-        let chat =
-            crate::cli::commands::sessions::session_chat(ctx, host.host.name(), &session).await;
-        // Before the chat records its session, `-` is where it returns to.
-        let space = chat.as_ref().map(|chat| chat.number.to_string());
-        let space = space.as_deref().unwrap_or(SpaceSelector::PREVIOUS);
-        if report_detach(attaches, space, &session).await?
-            && let Some(chat) = chat
-        {
-            recent::record_attach(ctx, &SpaceSelector::id(&chat.id)).await;
+        if report_detach(attaches, &chat.number.to_string(), &session).await? {
+            recent::record_attach(ctx, &shown).await;
         }
         return Ok(ChatStarted::Shown);
     }
     let place = places.open(&start).await?;
     match placement {
         Placement::Focus => {
-            show_opened(&host, places, &place, name).await?;
+            show_opened(&host, places, &place, &chat.name).await?;
+            recent::record_attach(ctx, &shown).await;
             Ok(ChatStarted::Shown)
         }
         Placement::Background => Ok(ChatStarted::Background(format!(
-            "Started {name} {}",
-            places.background_place(name)
+            "Started {} {}",
+            chat.name,
+            places.background_place(&chat.name)
         ))),
     }
 }

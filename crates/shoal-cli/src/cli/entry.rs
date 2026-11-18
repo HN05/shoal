@@ -70,8 +70,6 @@ pub fn run(daemon: RunDaemon) {
     unsafe { env::take_queue_entry() };
     // SAFETY: as above; only this process's own launch ends its session.
     unsafe { env::take_session_end() };
-    // SAFETY: as above; only the chat this process starts was shown.
-    unsafe { env::take_shown_chat() };
     // SAFETY: as above; only the chat this process starts runs in the place.
     unsafe { env::take_opened_chat_place() };
     profile::start();
