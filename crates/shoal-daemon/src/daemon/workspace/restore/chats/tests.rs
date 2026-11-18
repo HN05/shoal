@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::*;
 use crate::daemon::test_support::{chat, manager, repository};
-use crate::model::{RestoredSpace, Workspace};
+use crate::model::{RestoredChat, RestoredSpace, Workspace};
 use crate::removal::{InspectionPolicy, UnsavedWork};
 
 /// A manager with a registered repository and a workspace in it.

@@ -1,43 +1,97 @@
-//! Restoring a removed space from its removal record: a workspace opens
-//! again here, a chat in the module below.
+//! Restoring a removed space from its removal record, through one path for
+//! either kind: only opening its place differs, a workspace's worktree in
+//! the module below, a chat's place in another.
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::{Copied, LastSession, StoppedAgent};
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::space_ids::SpaceId;
-use shoal_refs::{BranchName, CommitId};
 use std::collections::HashMap;
-use std::path::Path;
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, bail};
 
 use super::Manager;
-use super::commits::NewRecord;
 use crate::daemon::scope::Caller;
 use crate::{
-    git,
-    model::{
-        Checkpoint, Head, OpenedWorkspace, RemovedSpace, Repository, RestoredSpace,
-        RestoredWorkspace,
-    },
+    model::{OpenedWorkspace, RemovedSpace, RestoredChat, RestoredSpace, RestoredWorkspace},
     transfer::CarriedSessionFile,
 };
 use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
-    /// Open the removed space `selector` names again, as its kind reopens,
-    /// for `caller`, which relinks only what it may link.
+    /// Open the removed space `selector` names again in its place, below
+    /// its recorded parent while that takes it, with its links, which
+    /// `caller` relinks only where it may link, and what its record keeps of
+    /// its agents; the caller links its PRs, puts the session files in place
+    /// and sets a workspace up. The record goes once the space is back.
     pub async fn restore_space(
         &self,
         selector: &SpaceSelector,
         caller: Option<&Caller>,
     ) -> Result<RestoredSpace> {
         let removed = self.claim_removed_space(selector).await?;
-        Ok(match removed.workspace() {
-            Some(_) => RestoredSpace::Workspace(Box::new(
-                self.reopen_removed_workspace(removed, caller).await?,
-            )),
-            None => RestoredSpace::Chat(Box::new(self.reopen_removed_chat(removed, caller).await?)),
+        let mut warnings = Vec::new();
+        let parent = (self.restored_parent(&removed, caller, &mut warnings)).await?;
+        let place = (self.reopen_place(&removed, parent, &mut warnings)).await?;
+        let id = &removed.space_id;
+        warnings.extend(self.relink_space(id, &removed.links, caller).await);
+        let session_files = self.restore_agents(&removed, id, &mut warnings).await;
+        if removed.saved_no_session() {
+            warnings.push(format!(
+                "{} saved no session of its agent, whose restore starts a new one",
+                removed.name
+            ));
+        }
+        self.adopt_removal(&removed).await?;
+        let restored = Restored {
+            removed,
+            session_files,
+            warnings,
+        };
+        self.restored(place, restored).await
+    }
+
+    /// Open the space `removed` records again in its place, below `parent`:
+    /// a workspace's worktree on its branch at the removed HEAD with its
+    /// unsaved files, or a chat recorded, stopped, where it ran.
+    async fn reopen_place(
+        &self,
+        removed: &RemovedSpace,
+        parent: Option<SpaceId>,
+        warnings: &mut Vec<String>,
+    ) -> Result<Place> {
+        match removed.workspace() {
+            Some(_) => (self.reopen_worktree(removed, parent, warnings).await)
+                .map(|opened| Place::Worktree(Box::new(opened))),
+            None => (self.reopen_chat_place(removed, parent).await).map(|()| Place::Workdir),
+        }
+    }
+
+    /// The space `restored` opened again in `place`, with what its restore
+    /// kept for the caller.
+    async fn restored(&self, place: Place, restored: Restored) -> Result<RestoredSpace> {
+        let Restored {
+            removed,
+            session_files,
+            warnings,
+        } = restored;
+        Ok(match place {
+            Place::Worktree(opened) => RestoredSpace::Workspace(Box::new(RestoredWorkspace {
+                opened: *opened,
+                removed,
+                session_files,
+                warnings,
+            })),
+            Place::Workdir => {
+                let chat = (self.chat_by_id(&removed.space_id).await?)
+                    .context("the chat was removed meanwhile")?;
+                RestoredSpace::Chat(Box::new(RestoredChat {
+                    chat,
+                    removed,
+                    session_files,
+                    warnings,
+                }))
+            }
         })
     }
 
@@ -137,49 +191,6 @@ impl Manager {
         Ok(held.err().map(|error| {
             format!("{name} was given permissions this space does not hold: {error:#}")
         }))
-    }
-
-    /// Open the removed workspace `removed` again on its branch at the
-    /// removed HEAD, with its unsaved files, checkpoints, linked issue,
-    /// opened and related items, and stopped agents, for `caller`, which
-    /// relinks only what it may link; the caller sets it up and links its
-    /// PRs. The record goes once the files are back.
-    async fn reopen_removed_workspace(
-        &self,
-        removed: RemovedSpace,
-        caller: Option<&Caller>,
-    ) -> Result<RestoredWorkspace> {
-        let mut warnings = Vec::new();
-        let new = NewRecord {
-            id: Some(removed.space_id.clone()),
-            parent: (self.restored_parent(&removed, caller, &mut warnings)).await?,
-            pending: None,
-        };
-        let kept = removed.kept_workspace()?;
-        let checkpoint = &kept.checkpoint;
-        let files = (checkpoint.commit != checkpoint.head).then(|| RestoredFiles {
-            head: checkpoint.head.to_string().into(),
-            snapshot: checkpoint.commit.to_string().into(),
-        });
-        let opened = match kept.head.clone() {
-            Head::Commit(at) => OpenedWorkspace {
-                workspace: (self.restore_commit_workspace(&removed, new, at, files)).await?,
-                reused: false,
-            },
-            Head::Branch(branch) => {
-                (self.restore_branch_workspace(&removed, branch, new, files, &mut warnings)).await?
-            }
-        };
-        let id = &opened.workspace.id;
-        warnings.extend(self.relink_space(id, &removed.links, caller).await);
-        let session_files = self.restore_agents(&removed, id, &mut warnings).await;
-        self.adopt_removal(&removed).await?;
-        Ok(RestoredWorkspace {
-            opened,
-            removed,
-            session_files,
-            warnings,
-        })
     }
 
     /// Save for the agents of the space `id` that restores `removed` what
@@ -308,130 +319,21 @@ impl Manager {
             }
         }
     }
+}
 
-    /// Open the removed workspace `removed` again as `new` places it, on its
-    /// `branch` at the removed HEAD, with `files` from its checkpoint, adding
-    /// to `warnings` when another branch has to take it.
-    async fn restore_branch_workspace(
-        &self,
-        removed: &RemovedSpace,
-        branch: BranchName,
-        new: NewRecord,
-        files: Option<RestoredFiles>,
-        warnings: &mut Vec<String>,
-    ) -> Result<OpenedWorkspace> {
-        let branch = self.restore_branch(removed, branch, warnings).await?;
-        let base = self.restore_base(removed).await?;
-        let new = super::NewWorkspace {
-            options: crate::protocol::CreationOptions {
-                name: Some(removed.name.clone()),
-                skip_setup: removed.kept_workspace()?.setup_skipped,
-                ..Default::default()
-            },
-            id: new.id,
-            parent: new.parent,
-            ..Default::default()
-        };
-        let opened = self
-            .open_branch_restoring(removed.repository()?, branch.as_str(), base, new, files)
-            .await?;
-        // The branch check released the repository gate, so another request
-        // may have opened the branch meanwhile; that workspace got no files.
-        ensure!(
-            !opened.reused,
-            "workspace {} opened branch {branch} during the restore",
-            opened.workspace.name
-        );
-        Ok(opened)
-    }
+/// Where a restore opened a space again: a workspace's new worktree, or the
+/// place a chat ran in, where it is recorded again.
+enum Place {
+    Worktree(Box<OpenedWorkspace>),
+    Workdir,
+}
 
-    /// The branch to open: the workspace's `branch`, or, when it no longer
-    /// contains the removed HEAD, as when the workspace was removed during a
-    /// rebase, one named after the short commit, with a warning in
-    /// `warnings`.
-    async fn restore_branch(
-        &self,
-        removed: &RemovedSpace,
-        branch: BranchName,
-        warnings: &mut Vec<String>,
-    ) -> Result<BranchName> {
-        let (repo, _guard) = self.lock_repository(removed.repository()?).await?;
-        let checkpoint = &removed.kept_workspace()?.checkpoint;
-        if self.ready_branch(&repo, &branch, checkpoint).await? {
-            return Ok(branch);
-        }
-        let short = BranchName::from(checkpoint.head.abbreviated(7));
-        ensure!(
-            self.ready_branch(&repo, &short, checkpoint).await?,
-            "neither branch {branch} nor {short} contains the removed HEAD {}; point one of them back at it to restore the workspace",
-            checkpoint.head
-        );
-        warnings.push(format!(
-            "branch {branch} no longer contains the removed HEAD, so the workspace reopens on branch {short}"
-        ));
-        Ok(short)
-    }
-
-    /// Ready `branch` to open at `checkpoint`'s HEAD: at it, or at a later
-    /// commit when nothing unsaved has to be applied, created there when it
-    /// does not exist; false when it no longer contains HEAD.
-    async fn ready_branch(
-        &self,
-        repo: &Repository,
-        branch: &BranchName,
-        checkpoint: &Checkpoint,
-    ) -> Result<bool> {
-        let head = checkpoint.head.as_str();
-        if let Some(workspace) = self.list_workspaces().await?.into_iter().find(|workspace| {
-            workspace.repository() == &repo.id && workspace.branch() == Some(branch)
-        }) {
-            bail!("workspace {} already uses branch {branch}", workspace.name);
-        }
-        let local = git::local_ref(branch);
-        if !git::ref_exists(&repo.path, &local, git::isolated_command).await? {
-            git::branch::create(&repo.path, branch, head).await?;
-            return Ok(true);
-        }
-        let tip = git::verify_revision(
-            &repo.path,
-            &format!("{local}^{{commit}}"),
-            git::run_isolated,
-        )
-        .await?;
-        let tip = tip.trim();
-        if !git::is_ancestor(&repo.path, head, tip, git::isolated_command).await? {
-            return Ok(false);
-        }
-        ensure!(
-            tip == checkpoint.head || checkpoint.commit == checkpoint.head,
-            "branch {branch} moved past the removed HEAD; open it with shoal new and apply the unsaved files with git cherry-pick --no-commit {}",
-            checkpoint.commit
-        );
-        Ok(true)
-    }
-
-    /// The recorded base, so diffs and the stack link come back: its ref
-    /// while it exists, otherwise its commit; `None` when neither remains.
-    async fn restore_base(&self, removed: &RemovedSpace) -> Result<Option<String>> {
-        let repo = self.repository(removed.repository()?).await?;
-        let kept = removed.kept_workspace()?;
-        if let Some(reference) = &kept.base_ref
-            && git::ref_exists(&repo.path, reference, git::isolated_command).await?
-        {
-            return Ok(Some(reference.clone()));
-        }
-        let Some(commit) = &kept.base_commit else {
-            return Ok(None);
-        };
-        let exists = git::verify_revision(
-            &repo.path,
-            &format!("{commit}^{{commit}}"),
-            git::run_isolated,
-        )
-        .await
-        .is_ok();
-        Ok((exists.then(|| commit.clone())).map(String::from))
-    }
+/// What the restore of a removed space keeps for its caller: its record,
+/// the session files kept with it and the warnings.
+struct Restored {
+    removed: RemovedSpace,
+    session_files: Vec<CarriedSessionFile>,
+    warnings: Vec<String>,
 }
 
 /// How a restored agent whose session another space holds starts: from a
@@ -447,31 +349,15 @@ fn forked(agent: &crate::agent::Agent, holder: &SpaceName) -> String {
     format!("the {agent} session continues from a fork, since {holder} holds it too")
 }
 
-/// The unsaved files of a removal's checkpoint, written into the new worktree.
-pub(super) struct RestoredFiles {
-    pub head: CommitId,
-    pub snapshot: CommitId,
-}
-
-/// Write a removal checkpoint's files into a new worktree still at the removed
-/// HEAD, before the workspace can be used.
-pub(super) async fn write_files(worktree: &Path, files: &RestoredFiles) -> Result<()> {
-    let head = git::revision(worktree, "HEAD", git::run).await?;
-    ensure!(
-        head.trim() == files.head,
-        "the branch moved during the restore; apply the unsaved files with git cherry-pick --no-commit {}",
-        files.snapshot
-    );
-    git::checkpoint::apply(worktree, files.snapshot.as_str()).await
-}
-
 mod chats;
 mod imports;
 mod records;
+mod worktree;
 
 #[cfg(test)]
 use records::RESTORE_CLAIM;
 pub(super) use records::{rehome_removed_chat, rekey_converted};
+pub(super) use worktree::{RestoredFiles, write_files};
 
 #[cfg(test)]
 pub(super) mod tests;

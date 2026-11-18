@@ -329,7 +329,13 @@ impl RemovedWithAgent {
             .fixture
             .ok(&[&["restore", id.as_str()][..], args].concat());
         let reopened = restored["reopened"][0].clone();
-        assert_eq!(reopened["warnings"], serde_json::json!([]), "{restored}");
+        // Its agent reported no session, which the only warning says of it.
+        let warnings = reopened["warnings"].as_array().unwrap();
+        let named = |warning: &Value| warning.as_str().unwrap().starts_with("removed ");
+        assert!(
+            matches!(&warnings[..], [warning] if named(warning)),
+            "{restored}"
+        );
         assert_eq!(reopened["space"]["path"], self.path.to_str().unwrap());
         (restored, reopened)
     }

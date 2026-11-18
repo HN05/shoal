@@ -1,3 +1,4 @@
+use crate::git;
 use shoal_refs::BranchName;
 use std::fs;
 

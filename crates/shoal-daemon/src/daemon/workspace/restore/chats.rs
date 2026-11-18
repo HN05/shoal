@@ -1,48 +1,26 @@
-//! Restoring a removed chat: recording it again under its ID, stopped, in
-//! the place it ran, with what its removal record keeps of its agent.
+//! A restored chat's place: where it ran, which it does not own, and where
+//! its restore records it again under its ID, stopped.
 use anyhow::{Context, Result, bail, ensure};
 
-use crate::daemon::scope::Caller;
 use crate::daemon::workspace::Manager;
-use crate::model::{Chat, ChatPart, KeptChat, RemovedSpace, RestoredChat, Workdir};
+use crate::model::{Chat, ChatPart, KeptChat, RemovedSpace, Workdir};
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
-    /// Record the removed chat `removed` again, stopped, in the place it
-    /// ran, below its parent while that takes it, with its links, mode,
-    /// permissions and the stopped agents and last sessions it saved, which
-    /// a restore of its agent continues, and the session files an import
-    /// kept for it; `caller` relinks only what it may link. The caller links
-    /// its PRs and puts the session files in place.
-    pub(super) async fn reopen_removed_chat(
+    /// Record the chat `removed` records again, stopped, in the place it
+    /// ran, below `parent`, with its mode and permissions; its restore puts
+    /// back its links and what it saved of its agent.
+    pub(super) async fn reopen_chat_place(
         &self,
-        removed: RemovedSpace,
-        caller: Option<&Caller>,
-    ) -> Result<RestoredChat> {
+        removed: &RemovedSpace,
+        parent: Option<SpaceId>,
+    ) -> Result<()> {
         let kept = (removed.chat()).context("the removal record is not a chat's")?;
-        let workdir = self.restored_workdir(&removed, kept).await?;
-        let mut warnings = Vec::new();
-        let parent = (self.restored_parent(&removed, caller, &mut warnings)).await?;
-        let chat = self
-            .record_restored_chat(restored_record(&removed, kept, workdir), parent)
-            .await?;
-        let id = &chat.id;
-        warnings.extend(self.relink_space(id, &removed.links, caller).await);
-        let session_files = self.restore_agents(&removed, id, &mut warnings).await;
-        if removed.agents.is_empty() && removed.last_sessions.is_empty() {
-            warnings.push(format!(
-                "{} saved no session of its agent, whose restore starts a new one",
-                removed.name
-            ));
-        }
-        self.adopt_removal(&removed).await?;
-        let chat = (self.chat_by_id(id).await?).context("the chat was removed meanwhile")?;
-        Ok(RestoredChat {
-            chat,
-            removed,
-            session_files,
-            warnings,
-        })
+        let workdir = self.restored_workdir(removed, kept).await?;
+        let chat = restored_record(removed, kept, workdir);
+        self.record_restored_chat(chat, parent).await?;
+        Ok(())
     }
 
     /// Where the chat `removed` works once restored: where it ran. Refuses
