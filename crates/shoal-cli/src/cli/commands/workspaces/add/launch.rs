@@ -213,7 +213,7 @@ async fn pick_missing<'a>(ctx: &'a Context, launch: &mut Launch) -> Result<Optio
     }
     let selector = Some(target.selector.clone());
     crate::cli::commands::permissions::ensure_held(ctx, selector, &launch.permissions).await?;
-    check_named_blockers(ctx, &target, launch).await?;
+    check_named_blockers(ctx, &target, &launch.blockers).await?;
     // A branch a workspace has reopens it, under its own settings.
     let reopened = check_launch_creation(ctx, &target, launch).await?;
     let issue_linked =
@@ -282,16 +282,20 @@ fn without_agent(launch: &mut Launch) -> Result<()> {
     Ok(())
 }
 
-/// Refuse the workspaces, queued agents and issues `launch` names as its
+/// Refuse the workspaces, queued agents and issues a start `named` as its
 /// blockers in `target`'s repository when the daemon knows none of them,
 /// before a picker asks anything.
-async fn check_named_blockers(ctx: &Context, target: &AddTarget, launch: &Launch) -> Result<()> {
-    if launch.blockers.is_empty() {
+pub(super) async fn check_named_blockers(
+    ctx: &Context,
+    target: &AddTarget,
+    named: &[String],
+) -> Result<()> {
+    if named.is_empty() {
         return Ok(());
     }
     let repo = target.repository(ctx).await?;
     let mut blockers = Vec::new();
-    for input in &launch.blockers {
+    for input in named {
         blockers.push(match input.parse()? {
             Blocker::Issue(issue) => Blocker::Issue(issues::issue(ctx, repo, &issue).await?.into()),
             blocker => blocker,
@@ -338,10 +342,33 @@ async fn check_launch_creation(
     let reads = DaemonReads(ctx);
     let settle = crate::launches::workspace::settle(&reads, repo, &mut creation);
     if let Some(workspace) = settle.await? {
+        ensure_takes_existing(launch, &creation, &workspace)?;
         return Ok(Some(workspace));
     }
     check_add_creation(ctx, target, &creation, launch.parent.as_ref()).await?;
     Ok(None)
+}
+
+/// Refuse what only a new workspace takes for `launch`, which goes into the
+/// existing `workspace` that has the branch it names, as the daemon refuses
+/// it. The parent of a fork without a copy is the workspace whose agent it
+/// forks, which an existing workspace's start takes too.
+fn ensure_takes_existing(
+    launch: &Launch,
+    creation: &Creation,
+    workspace: &Workspace,
+) -> Result<()> {
+    let forks_parent = launch.fork.is_some() && creation.copy.is_none();
+    let parent = launch.parent.is_some() && !forks_parent;
+    let issue = launch.issue.is_some();
+    let Some(flag) = crate::launches::workspace::new_space_flag(creation, issue, parent) else {
+        return Ok(());
+    };
+    let branch = workspace.branch().map_or("", |branch| branch.as_str());
+    anyhow::bail!(
+        "{flag} applies to a new workspace, and workspace {} already has branch {branch}; the start goes into it as --in does",
+        workspace.number
+    )
 }
 
 /// The registered repository the link `launch` starts on belongs to,

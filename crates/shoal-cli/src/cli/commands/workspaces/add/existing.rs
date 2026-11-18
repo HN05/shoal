@@ -8,8 +8,9 @@ use anyhow::{Result, ensure};
 use super::{
     AddOptions,
     agent::{AddSettings, choose_add_agent, resolve_add_agent},
-    launch::launch_worker,
+    launch::{check_named_blockers, launch_worker},
     mode::choose_add_mode,
+    target::AddTarget,
 };
 use crate::{agent::Agent, cli::context::Context};
 use shoal_protocol::space_names::SpaceSelector;
@@ -36,8 +37,13 @@ pub(in crate::cli::commands) async fn start_worker(
         .await?
         .workspace;
     let settings = AddSettings::workspace(ctx, &workspace.id);
-    let repository = Some(workspace.repository().into());
+    let target = AddTarget {
+        selector: workspace.repository().into(),
+        repositories: tokio::sync::OnceCell::new(),
+    };
+    let repository = Some(target.selector.clone());
     crate::cli::commands::permissions::ensure_held(ctx, repository, &options.narrowing).await?;
+    check_named_blockers(ctx, &target, &options.blockers).await?;
     let mode = choose_add_mode(ctx, &settings, options.mode.take()).await?;
     let agent = choose_add_agent(&settings, agent).await?;
     let agent = resolve_add_agent(ctx, &settings, agent, options.model.clone()).await?;

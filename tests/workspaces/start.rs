@@ -3694,3 +3694,38 @@ fn resume_queues_restores_that_start_as_agent_slots_free() {
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
     assert!(!paths[2].join("restored").exists());
 }
+
+/// An existing workspace's start on a terminal refuses what it cannot take
+/// before a picker asks anything: a blocker the daemon knows nothing of, and
+/// a flag only a new workspace takes on the branch the workspace has. No
+/// agent is named, so a picker would ask for one.
+#[test]
+fn an_existing_workspaces_start_refuses_its_arguments_before_prompting() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("owned");
+    let id = workspace["id"].as_str().unwrap();
+    let repo = fixture.repo.to_str().unwrap();
+    // An installed agent the agent picker would offer, and a picker that
+    // records that it was asked, and cancels.
+    install_test_script(fixture.root.path().join("bin/codex"), "#!/bin/sh\n");
+    let picked = fixture.root.path().join("picked");
+    install_test_script(
+        fixture.root.path().join("bin/fzf"),
+        "#!/bin/sh\ncat > \"$HOME/picked\"\nexit 130\n",
+    );
+    for (args, refusal) in [
+        (
+            vec!["start", "--in", id, "--add-blocker", "missing"],
+            "missing",
+        ),
+        (
+            vec!["start", repo, "--branch", "owned", "--name", "other"],
+            "--name applies to a new workspace",
+        ),
+    ] {
+        let (output, transcript) = fixture.interactive(&args, "");
+        assert!(!output.status.success(), "{args:?}: {transcript}");
+        assert!(transcript.contains(refusal), "{args:?}: {transcript}");
+        assert!(!picked.exists(), "{args:?} asked a picker: {transcript}");
+    }
+}
