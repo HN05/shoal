@@ -49,6 +49,18 @@ pub(crate) struct ClaimedJob {
     pub runner_id: Option<RunnerId>,
 }
 
+/// A job starting or running, as admission counts it.
+struct ActiveJob {
+    /// The ID of its queue entry, which its claim keeps.
+    id: QueueEntryId,
+    repository_id: RepositoryId,
+    /// The workspace it runs in, once claimed.
+    workspace_id: Option<SpaceId>,
+    /// When its runner's execution started.
+    launched_at: Option<crate::time::UnixTime>,
+    job: QueuedJob,
+}
+
 /// What stopped a job's runner, as Shoal's log names it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum JobStop {
@@ -101,15 +113,7 @@ impl Manager {
                             execution_id: row.get(3)?,
                             launched_at: row.get(5)?,
                             runner_id: row.get(6)?,
-                            job: serde_json::from_str(&row.get::<_, String>(4)?).map_err(
-                                |error| {
-                                    rusqlite::Error::FromSqlConversionFailure(
-                                        4,
-                                        rusqlite::types::Type::Text,
-                                        Box::new(error),
-                                    )
-                                },
-                            )?,
+                            job: queued_job(row, 4)?,
                         })
                     })?
                     .collect::<rusqlite::Result<_>>()?)
@@ -434,43 +438,72 @@ impl Manager {
             .await
     }
 
-    /// The load of each admitted or claimed job: what it is expected to
+    /// The load of each job starting or running: what it is expected to
     /// use, what its workspace used at the latest usage sample, and how long
     /// ago its runner started; one whose runner has not started yet has just
-    /// started, so it holds back the next start until it runs.
+    /// started, so it holds back the next start until it runs. A job whose
+    /// runner ended adds nothing, however long its workspace remains.
     pub(crate) async fn job_activities(&self) -> Result<Vec<Activity>> {
-        type Row = (
-            RepositoryId,
-            Option<SpaceId>,
-            Option<crate::time::UnixTime>,
-            String,
-        );
-        let jobs: Vec<Row> = self
-            .store
-            .run(|db| {
-                Ok(db
-                    .prepare(
-                        "SELECT repository_id,NULL,NULL,job FROM agent_queue
-                             WHERE kind=?1 AND state=?2 AND id NOT IN (SELECT id FROM ci_jobs)
-                         UNION ALL SELECT repository_id,workspace_id,launched_at,job FROM ci_jobs",
-                    )?
-                    .query_map(params![QueueKind::Job, QueueState::Starting], |row| {
-                        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
-                    })?
-                    .collect::<rusqlite::Result<_>>()?)
-            })
-            .await?;
         let now = crate::time::UnixTime::now();
         let mut activities = Vec::new();
-        for (repository, workspace, since, job) in jobs {
-            let job: QueuedJob = serde_json::from_str(&job)?;
+        for job in self.starting_or_running_jobs().await? {
             activities.push(Activity::Job {
-                age: now.duration_since(since.unwrap_or(now)),
-                cost: self.job_cost(&repository, &job).await?,
-                memory: (workspace.and_then(|id| self.workspace_usage(&id)))
+                age: now.duration_since(job.launched_at.unwrap_or(now)),
+                cost: self.job_cost(&job.repository_id, &job.job).await?,
+                memory: (job.workspace_id.and_then(|id| self.workspace_usage(&id)))
                     .map(|usage| usage.memory_bytes),
             });
         }
         Ok(activities)
     }
+
+    /// The jobs admitted and not yet claimed, and the claimed jobs whose
+    /// runner's execution is recorded, running or awaiting reattachment, or
+    /// is still to start: under a claim that runs, or, after a restart cut
+    /// one short, once its workspace runs an execution the next pass adopts.
+    async fn starting_or_running_jobs(&self) -> Result<Vec<ActiveJob>> {
+        let rows: Vec<(ActiveJob, bool)> = self
+            .store
+            .run(|db| {
+                Ok(db
+                    .prepare(
+                        "SELECT id,repository_id,NULL,NULL,job,0 FROM agent_queue
+                             WHERE kind=?1 AND state=?2 AND id NOT IN (SELECT id FROM ci_jobs)
+                         UNION ALL SELECT id,repository_id,workspace_id,launched_at,job,
+                                 execution_id IS NULL
+                                 AND workspace_id NOT IN (SELECT space_id FROM executions)
+                             FROM ci_jobs
+                             WHERE execution_id IS NULL
+                                 OR execution_id IN (SELECT id FROM executions)",
+                    )?
+                    .query_map(params![QueueKind::Job, QueueState::Starting], |row| {
+                        let job = ActiveJob {
+                            id: row.get(0)?,
+                            repository_id: row.get(1)?,
+                            workspace_id: row.get(2)?,
+                            launched_at: row.get(3)?,
+                            job: queued_job(row, 4)?,
+                        };
+                        Ok((job, row.get(5)?))
+                    })?
+                    .collect::<rusqlite::Result<_>>()?)
+            })
+            .await?;
+        Ok(rows
+            .into_iter()
+            .filter(|(job, unlaunched)| !unlaunched || self.runners.claiming(&job.id))
+            .map(|(job, _)| job)
+            .collect())
+    }
+}
+
+/// The job a row holds as JSON in its column `index`.
+fn queued_job(row: &rusqlite::Row<'_>, index: usize) -> rusqlite::Result<QueuedJob> {
+    serde_json::from_str(&row.get::<_, String>(index)?).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(
+            index,
+            rusqlite::types::Type::Text,
+            Box::new(error),
+        )
+    })
 }

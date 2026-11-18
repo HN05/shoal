@@ -1568,6 +1568,49 @@ async fn a_job_counts_as_just_started_until_its_runner_starts() {
 }
 
 #[tokio::test]
+async fn a_job_whose_runner_ended_reserves_nothing_while_its_workspace_remains() {
+    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
+    let manager = &fixture.manager;
+    admit_and_claim(manager).await;
+    let claimed = manager.claimed_jobs().await.unwrap();
+    let (_, started) = LAUNCHED
+        .lock()
+        .unwrap()
+        .remove(&claimed[0].workspace_id)
+        .unwrap();
+    let jobs = || async { manager.job_activities().await.unwrap().len() };
+    assert_eq!(jobs().await, 1);
+
+    manager
+        .finish_execution(started.plan.id.clone(), ExecutionKind::Command, Some(0))
+        .await
+        .unwrap();
+    // No pass has removed the workspace, as when its removal fails.
+    assert!(
+        manager
+            .workspace_by_id(&claimed[0].workspace_id)
+            .await
+            .is_ok()
+    );
+    assert_eq!(jobs().await, 0);
+
+    // A claim whose runner is not recorded counts only while it runs.
+    let id = claimed[0].id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute("UPDATE ci_jobs SET execution_id=NULL WHERE id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert_eq!(jobs().await, 0);
+    assert!(manager.runners.begin_claim(&claimed[0].id));
+    assert_eq!(jobs().await, 1);
+    manager.runners.end_claim(&claimed[0].id);
+}
+
+#[tokio::test]
 async fn the_sweep_keeps_the_directory_of_a_recorded_claim() {
     let fixture = fixture(vec![job("h1", 4, 1)], "").await;
     let manager = &fixture.manager;
