@@ -475,7 +475,7 @@ async fn a_launch_in_a_space_without_a_priority_ranks_with_the_highest_its_issue
     };
     let given = labelled("given").await;
     (manager
-        .set_priority(None, &given.workspace, Priority::LOW)
+        .set_priority(None, &given.space, Priority::LOW)
         .await)
         .unwrap();
     manager.queue_add(given).await.unwrap();

@@ -224,12 +224,11 @@ impl std::str::FromStr for Blocker {
     }
 }
 
-/// An agent launch in a recorded workspace to admit or queue. The plan is
-/// JSON in the format of the binary's `start_plan::QueuedStart`, which the
-/// `queue-start` worker reads back.
+/// An agent launch in a recorded space, a workspace or a chat, to admit or
+/// queue. The plan is JSON in the format of the binary's
+/// `start_plan::QueuedStart`, which the `queue-start` worker reads back.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueRequest {
-    pub repository: crate::repository::Selector,
     pub name: SpaceName,
     pub agent: crate::agent::Agent,
     /// The mode the agent starts in; the default mode when omitted.
@@ -250,12 +249,12 @@ pub struct QueueRequest {
     /// Start at once regardless of the limits; the agent still takes a slot.
     /// A scoped caller does as its `limits` permission allows.
     pub now: bool,
-    /// The recorded workspace the launch starts its agent in. The daemon
-    /// starts the entry itself, outside the caller's processes, whether or
-    /// not a limit applies, unless `starts_in_caller`.
-    pub workspace: SpaceSelector,
-    /// The caller starts the launch in `workspace` itself once admitted,
-    /// rather than the daemon.
+    /// The recorded space the launch starts its agent in, in that space's
+    /// repository. The daemon starts the entry itself, outside the caller's
+    /// processes, whether or not a limit applies, unless `starts_in_caller`.
+    pub space: SpaceSelector,
+    /// The caller starts the launch in `space` itself once admitted, rather
+    /// than the daemon.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub starts_in_caller: bool,
     /// What blocks the launch; it always queues while any remains.

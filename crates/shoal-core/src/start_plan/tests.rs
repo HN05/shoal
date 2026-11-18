@@ -59,7 +59,7 @@ fn a_queued_launch_keeps_its_model_arguments_fork_issue_and_place() {
     let request = super::queued_agent_request(&child, launch, None).expect("the launch queues");
     assert_eq!(request.agent, "claude");
     assert_eq!(request.issue_title.as_deref(), Some("Split the API"));
-    assert_eq!(request.workspace, SpaceSelector::id(&child.id));
+    assert_eq!(request.space, SpaceSelector::id(&child.id));
     assert_eq!(request.env["PLACE"], "beside");
     let start = super::QueuedStart::of(&request.plan).expect("the plan parses");
     let plan = super::AddPlan::queued(&child, start, "entry".into()).expect("the plan runs");

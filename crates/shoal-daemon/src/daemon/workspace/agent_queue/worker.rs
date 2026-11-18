@@ -3,42 +3,39 @@
 //! there. Chats in its worktree are not its agents and never count.
 use anyhow::{Result, bail};
 
-use crate::{daemon::workspace::Manager, execution::recovery, model::Workspace};
+use crate::{daemon::workspace::Manager, execution::recovery, model::Space};
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Manager {
-    /// Refuse a launch in `workspace` while it has an agent of its own: a
+    /// Refuse a launch in `space` while it has an agent of its own: a
     /// running one, one in the agent queue, or a stopped one awaiting
     /// `shoal restore`. A last session, whose agent exited on its own, does
     /// not count, since the new agent replaces it, nor does a start whose
     /// setup failed, whose place the agent left waiting takes. Requires the
     /// queue gate, which keeps another launch out until this one is
     /// recorded.
-    pub(super) async fn ensure_takes_worker(&self, workspace: &Workspace) -> Result<()> {
-        let space = workspace.number;
-        if self
-            .running_agent_workspaces()
-            .await
-            .contains(&workspace.id)
-            || self.recorded_agent_spaces().await?.contains(&workspace.id)
+    pub(super) async fn ensure_takes_worker(&self, space: &Space) -> Result<()> {
+        let (number, kind) = (space.number, space.kind());
+        if self.running_agent_workspaces().await.contains(&space.id)
+            || self.recorded_agent_spaces().await?.contains(&space.id)
         {
             bail!(HasAgent(format!(
-                "workspace {space} already has a running agent; attach to it with `shoal attach {space}`, restart it with `shoal restart {space}`, or start a chat beside it with `-m chat`"
+                "{kind} {number} already has a running agent; attach to it with `shoal attach {number}`, restart it with `shoal restart {number}`, or start a chat beside it with `-m chat`"
             )));
         }
-        let id = workspace.id.clone();
+        let id = space.id.clone();
         if self
             .store
             .read(move |tx| super::store::queues_agent_in(tx, &id))
             .await?
         {
             bail!(HasAgent(format!(
-                "workspace {space} already has an agent in the agent queue; `shoal queue` lists it"
+                "{kind} {number} already has an agent in the agent queue; `shoal queue` lists it"
             )));
         }
-        if !recovery::agent_records(&self.paths, &workspace.id)?.is_empty() {
+        if !recovery::agent_records(&self.paths, &space.id)?.is_empty() {
             bail!(HasAgent(format!(
-                "workspace {space} has a stopped agent; restore it with `shoal restore {space}` or forget it with `shoal restore --forget {space}`"
+                "{kind} {number} has a stopped agent; restore it with `shoal restore {number}` or forget it with `shoal restore --forget {number}`"
             )));
         }
         Ok(())

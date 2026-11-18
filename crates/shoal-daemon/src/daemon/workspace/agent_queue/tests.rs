@@ -63,14 +63,13 @@ pub(crate) fn launch_in(workspace: &Workspace, now: bool) -> QueueRequest {
         issue_labels: Vec::new(),
         narrowing: Default::default(),
         mode: None,
-        repository: workspace.repository().into(),
         name: workspace.name.clone(),
         agent: "claude".into(),
         issue_title: None,
         plan: "{}".into(),
         env: BTreeMap::from([("HERDR_ENV".into(), "1".into())]),
         now,
-        workspace: SpaceSelector::id(&workspace.id),
+        space: SpaceSelector::id(&workspace.id),
         starts_in_caller: false,
         blockers: Vec::new(),
     }
@@ -892,7 +891,6 @@ async fn dynamic_admission_restores_beside_a_running_agent() {
 async fn launches_in_an_existing_workspace_start_from_the_daemon() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    let other = register(&manager, &temp, "other").await;
     manager.publish_config(global_config("[machine]\nmax_heavy_agents = 'none'"));
     let parent = manager
         .create_workspace(&repo.id, "parent".into(), None, None, None)
@@ -931,12 +929,6 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
         .queue_attach(&entry.id, &SpaceSelector::id(&child.id))
         .await
         .unwrap();
-
-    let foreign = QueueRequest {
-        repository: (&other.id).into(),
-        ..launch_in(&child, false)
-    };
-    manager.queue_add(foreign).await.unwrap_err();
 }
 
 #[tokio::test]

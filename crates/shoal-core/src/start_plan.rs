@@ -152,12 +152,12 @@ pub struct ResolvedAddAgent {
     pub model: ModelChoice,
 }
 
-/// The queue request of `launch` in `workspace`, which the agent queue
-/// starts detached, beside the caller's terminal when the launch names it
-/// or else in the default host, or leaves to a caller that runs it `here`,
-/// linking `pr` as it starts.
-pub fn queued_agent_request(
-    workspace: &Workspace,
+/// The queue request of `launch` in the recorded `space`, a workspace or a
+/// chat, which the agent queue starts detached, beside the caller's
+/// terminal when the launch names it or else in the default host, or
+/// leaves to a caller that runs it `here`, linking `pr` as it starts.
+pub fn queued_agent_request<P>(
+    space: &crate::model::Space<P>,
     mut launch: QueuedLaunch,
     pr: Option<crate::forge::items::reference::ItemInput>,
 ) -> Result<QueueRequest> {
@@ -170,8 +170,7 @@ pub fn queued_agent_request(
     let source = launch.source.clone();
     let plan = QueuedStart { launch, pr };
     Ok(QueueRequest {
-        repository: workspace.repository().into(),
-        name: workspace.name.clone(),
+        name: space.name.clone(),
         agent,
         mode,
         narrowing,
@@ -180,7 +179,7 @@ pub fn queued_agent_request(
         plan: serde_json::to_string(&plan)?,
         env,
         now,
-        workspace: SpaceSelector::id(&workspace.id),
+        space: SpaceSelector::id(&space.id),
         starts_in_caller: here,
         blockers: Vec::new(),
         source,

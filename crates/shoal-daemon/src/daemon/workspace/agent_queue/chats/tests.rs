@@ -227,3 +227,36 @@ async fn an_unattached_chat_launch_fails_while_other_chats_exist() {
             && notification.message.contains("no place")
     }));
 }
+
+/// A recorded chat's agent queues through the same request as a
+/// workspace's, waiting for a slot as one does, and a second launch there
+/// is refused while it waits.
+#[tokio::test]
+async fn a_recorded_chats_agent_queues_as_a_workspaces_does() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    full_machine(&manager, &repo).await;
+    let chat = crate::daemon::chats::NewChat {
+        name: "talk".into(),
+        agent: "claude".into(),
+        mode: "pair".into(),
+        narrowing: Default::default(),
+        origin: None,
+        parent: None,
+        priority: None,
+    };
+    let chat = manager.start_new_chat(Some((&repo.id).into()), None, chat);
+    let chat = chat.await.unwrap();
+    let launch = crate::protocol::operations::QueuedLaunch {
+        mode: Some("pair".into()),
+        ..crate::protocol::operations::QueuedLaunch::new("claude".into())
+    };
+    let request = crate::start_plan::queued_agent_request(&chat, launch, None).unwrap();
+
+    let admission = manager.queue_add(request.clone()).await.unwrap();
+
+    let entry = admission.entry.unwrap();
+    assert_eq!(entry.state, QueueState::Queued);
+    assert_eq!(entry.space(), Some(&chat.id));
+    assert!(manager.queue_add(request).await.is_err());
+}

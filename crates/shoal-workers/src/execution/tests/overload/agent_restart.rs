@@ -113,7 +113,6 @@ async fn waiting_launch(manager: &Manager, workspace: &crate::model::Workspace) 
         source: None,
         issue_labels: Vec::new(),
         narrowing: Default::default(),
-        repository: (waiting.repository()).into(),
         name: waiting.name.clone(),
         agent: "claude".into(),
         mode: None,
@@ -121,7 +120,7 @@ async fn waiting_launch(manager: &Manager, workspace: &crate::model::Workspace) 
         plan: "{}".into(),
         env: Default::default(),
         now: false,
-        workspace: SpaceSelector::id(&waiting.id),
+        space: SpaceSelector::id(&waiting.id),
         starts_in_caller: false,
         blockers: Vec::new(),
     }

@@ -1,7 +1,6 @@
 //! Operations on one entry: adding a launch, listing entries, and a starting
 //! entry's way from its reservation to the agent that takes its slot or its
 //! failure.
-use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::model::ByKind;
 use std::collections::{HashMap, HashSet};
@@ -16,7 +15,7 @@ use super::{
 };
 use crate::{
     daemon::{notifications::NotificationKind, workspace::Manager},
-    model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan, Workspace},
+    model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan, SpaceKind, Workspace},
     state::{QueueKind, QueueState},
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
@@ -28,15 +27,15 @@ use shoal_protocol::{
 use shoal_schedule::{rank::QueueRank, scheduler::Ranked};
 
 impl Manager {
-    /// Admit `request` to a free slot or queue it, while its workspace has
-    /// no agent of its own. The daemon starts an admitted launch unless its
+    /// Admit `request` to a free slot or queue it, while its space has no
+    /// agent of its own. The daemon starts an admitted launch unless its
     /// caller starts it.
     pub async fn queue_add(&self, request: QueueRequest) -> Result<QueueAdmission> {
         (self.queue_add_awaiting(request, Awaits::FailedSetup)).await
     }
 
     /// [`Self::queue_add`] for a launch that `awaits` what it says in its
-    /// workspace.
+    /// space.
     pub(super) async fn queue_add_awaiting(
         &self,
         request: QueueRequest,
@@ -46,13 +45,14 @@ impl Manager {
             !request.now || request.blockers.is_empty(),
             "a launch that starts now cannot be blocked"
         );
-        let repository = self.repository(&request.repository).await?;
-        let priority = self.launch_priority(&request, &repository.id).await?;
-        let workspace = self
-            .launch_target(&request.workspace, &repository.id)
-            .await?;
+        let space = self.launch_target(&request.space).await?;
+        let repository = space.repository_id.clone();
+        let priority = match &repository {
+            Some(repository) => self.launch_priority(&request, repository).await?,
+            None => None,
+        };
         let _gate = self.agent_queue.lock_admission().await;
-        self.ensure_takes_worker(&workspace).await?;
+        self.ensure_takes_worker(&space).await?;
         let caller_starts = request.starts_in_caller;
         let id = QueueEntryId::generate();
         let state = if request.now {
@@ -65,16 +65,21 @@ impl Manager {
             name: request.name.clone(),
             env: request.env.clone(),
         };
+        // The queue's row names a workspace as the one the launch opens.
+        let (opens, chat) = match space.kind() {
+            SpaceKind::Workspace => (Some(space.id.clone()), None),
+            SpaceKind::Chat => (None, Some(space.id.clone())),
+        };
         let launch = Launch {
             id: id.clone(),
-            repository: Some(repository.id),
+            repository,
             request: LaunchRequest {
                 priority,
                 ..request.into()
             },
             state,
-            chat: None,
-            opens: Some(workspace.id.clone()),
+            chat,
+            opens,
             scope: None,
             awaits,
         };
@@ -83,8 +88,8 @@ impl Manager {
         self.store
             .write(move |tx| insert_launch(tx, &launch, &removing))
             .await?;
-        // Its queued agent works the workspace's issues.
-        self.agent_settles.request(&workspace.id);
+        // Its queued agent works the space's issues.
+        self.agent_settles.request(&space.id);
         let admitted = now || self.admit_waiting(Some(&id)).await?;
         // Kept before the gate opens, so no pass starts it in the background
         // before its caller holds it.
@@ -117,21 +122,15 @@ impl Manager {
         })
     }
 
-    /// The workspace of `repository_id` a launch opens; the insertion
-    /// requires it ready.
-    async fn launch_target(
-        &self,
-        workspace: &SpaceSelector,
-        repository_id: &RepositoryId,
-    ) -> Result<crate::model::Workspace> {
-        let workspace = self.workspace(workspace).await?;
-        Self::ensure_holds_agents(&workspace)?;
-        ensure!(
-            workspace.repository() == repository_id,
-            "workspace {} belongs to another repository",
-            workspace.name
-        );
-        Ok(workspace)
+    /// The recorded space `space` names, which a launch starts its agent
+    /// in: a chat, or a workspace on a branch, which the insertion requires
+    /// ready.
+    async fn launch_target(&self, space: &SpaceSelector) -> Result<crate::model::Space> {
+        let space = self.space(space).await?;
+        if let Ok(workspace) = space.clone().into_workspace() {
+            Self::ensure_holds_agents(&workspace)?;
+        }
+        Ok(space)
     }
 
     /// What blocks the space of the restore `entry` of an agent Shoal
