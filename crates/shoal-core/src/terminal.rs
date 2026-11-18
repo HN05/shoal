@@ -12,6 +12,7 @@ mod herdr;
 mod here;
 mod host;
 pub mod hosts;
+mod labelled;
 mod naming;
 mod opening;
 mod prompts;
@@ -36,6 +37,7 @@ pub use hosts::{
     Beside, Configured, Options, background_place, current, enabled_host, hosts, installed_hosts,
     keeps_agents_in_sessions, named, names_places,
 };
+pub use labelled::labelled_group;
 pub use naming::PlaceName;
 pub use opening::{
     chat_place_env, open_add, open_in_background, place_env, rerun_in_host, shoal_command,

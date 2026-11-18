@@ -8,7 +8,7 @@ use crate::{
     client::connection::CommandPaths,
     model::Repository,
     terminal::{
-        Configured, Places,
+        self, Configured, Places,
         groups::{Group, fallbacks},
     },
 };
@@ -67,10 +67,7 @@ async fn configured(
     };
     let label =
         crate::config::placeholders::render(template, &[("{repo}", &repo.name(paths).await?)]);
-    match host.host.places() {
-        Some(places) => places.group(near, &label, cwd).await,
-        None => Ok(None),
-    }
+    terminal::labelled_group(&paths.state, host, near, &label, cwd).await
 }
 
 /// The place a start beside this terminal joins in `host`: the one `host`
