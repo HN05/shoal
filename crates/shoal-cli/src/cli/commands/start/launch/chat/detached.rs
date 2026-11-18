@@ -7,7 +7,10 @@ use crate::{
     agent::Agent,
     cli::{
         args::create::StartArgs,
-        commands::start::{Narrowing, Relaunch, Topic},
+        commands::{
+            start::{Relaunch, Topic},
+            workspaces,
+        },
         context::Context,
     },
     model::{QueueEntry, Space},
@@ -17,39 +20,28 @@ use shoal_protocol::space_names::SpaceName;
 
 /// The launch the daemon carries out for the chat about `topic` with
 /// `options`, run by `agent` under `name`: the chat its `shoal start` or
-/// `shoal config setup` makes, in the caller's terminal's host. `None` for
-/// one only this process can start, since the request cannot carry it: a
-/// restore, a session the chat continues or forks, an imported chat's
-/// links, or arguments that are not UTF-8.
+/// `shoal config setup` makes, in the caller's terminal's host. Arguments
+/// for the agent that are not UTF-8 are refused, since the request cannot
+/// carry them.
 pub(super) fn request(
     topic: &Topic,
     options: &Options,
     (agent, name): (&Agent, &SpaceName),
-) -> Option<Launch> {
-    let Narrowing::Requested(narrowing) = options.narrowing else {
-        return None;
-    };
-    let carried = options.session.is_none() && options.handoff.is_none() && !topic.tells_resumed;
-    if !carried {
-        return None;
-    }
-    let task = (options.args.iter())
-        .map(|arg| arg.to_str().map(str::to_owned))
-        .collect::<Option<_>>()?;
+) -> Result<Launch> {
     let launch = Launch {
         parent: options.parent.clone(),
         name: Some(name.clone()),
         agent: Some(agent.clone()),
         mode: Some(topic.mode.clone()),
         model: options.model.clone(),
-        permissions: narrowing,
-        task,
+        permissions: options.narrowing.value(),
+        task: workspaces::launch_args(options.args.clone())?,
         priority: options.priority,
         env: Some(crate::terminal::start_environment()),
         now: options.now,
         ..Default::default()
     };
-    Some(match &topic.relaunch {
+    Ok(match &topic.relaunch {
         Relaunch::Start(start) => in_place(start, launch),
         Relaunch::ConfigSetup => Launch {
             setup: Some(Setup::Config),

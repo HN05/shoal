@@ -6,7 +6,7 @@ use shoal_schedule::priority::Priority;
 
 use super::*;
 use crate::{
-    cli::commands::start::{ChatPlace, Topic},
+    cli::commands::start::{ChatPlace, Narrowing, Topic},
     config::{modes::ModeName, permissions::PermissionsConfig},
     model::Repository,
 };
@@ -83,19 +83,16 @@ fn the_config_setup_becomes_the_daemons_setup_of_the_global_config() {
     assert_eq!(launch.task, ["Read the build"]);
 }
 
+#[cfg(unix)]
 #[test]
-fn a_continued_session_starts_here() {
+fn an_argument_that_is_not_utf8_is_refused_by_name() {
+    use std::os::unix::ffi::OsStringExt;
     let topic = Topic::repository(&repository(), &ModeName::CHAT);
-    let session = Options {
-        session: Some("s1".into()),
-        ..options()
-    };
-    let recorded = Options {
-        narrowing: Narrowing::Recorded(PermissionsConfig::default()),
+    let options = Options {
+        args: vec![std::ffi::OsString::from_vec(vec![b'a', 0xff])],
         ..options()
     };
     let (agent, name) = (Agent::from("claude"), SpaceName::from("talk"));
-    for options in [session, recorded] {
-        assert!(request(&topic, &options, (&agent, &name)).is_none());
-    }
+    let error = request(&topic, &options, (&agent, &name)).unwrap_err();
+    assert!(error.to_string().contains(r#""a\xFF""#), "{error:#}");
 }

@@ -1,7 +1,6 @@
 //! Launching a chat's agent: through the daemon, in an app that runs it
-//! detached, in a background place, beside the caller, or here under the
-//! execution wrapper, as an execution of its chat, once the agent queue
-//! admits it.
+//! detached, beside the caller, or here under the execution wrapper, as an
+//! execution of its chat, once the agent queue admits it.
 use std::{ffi::OsString, path::PathBuf, sync::Arc};
 
 use anyhow::{Context as _, Result, ensure};
@@ -61,8 +60,7 @@ enum Started {
     /// It ran here, or beside this terminal, or an app that runs it detached
     /// reported it; the exit code.
     Exited(i32),
-    /// Its agent runs in a background place, or waits in the agent queue,
-    /// or the daemon started it, which the caller reports.
+    /// The daemon started it or queued its agent, which the caller reports.
     Launched(Box<Launched>),
 }
 
@@ -130,25 +128,11 @@ impl Launch {
     }
 
     /// Have the daemon start the chat in a background place, as it does
-    /// for an app, admitting its agent; one the daemon cannot start opens
-    /// its place here as [`Launch::start_in_background`] does.
+    /// for an app, admitting its agent.
     async fn start_detached(self, ctx: &Context) -> Result<Started> {
         let chosen = (&self.agent, &self.chat.name);
-        match detached::request(&self.topic, &self.options, chosen) {
-            Some(start) => detached::start(ctx, start).await,
-            None => self.start_in_background(ctx).await,
-        }
-    }
-
-    /// Hand the chat to a new background place once the agent queue admits
-    /// its agent, recording it first.
-    async fn start_in_background(self, ctx: &Context) -> Result<Started> {
-        if let Some(waits) = self.admit(ctx).await? {
-            return Ok(waits);
-        }
-        let launched = self.record(ctx, None).await?;
-        let launched = self.hand_to_background(ctx, launched).await?;
-        Ok(Started::Launched(Box::new(launched)))
+        let launch = detached::request(&self.topic, &self.options, chosen)?;
+        detached::start(ctx, launch).await
     }
 
     /// Run the chat beside this terminal or here once the agent queue admits
