@@ -12,7 +12,7 @@ use crate::{
     config::{Effective, repo::Requester},
     daemon::{scope::Caller, workspace::Manager},
     model::Workspace,
-    reviews::{Review, ReviewState, ReviewTarget},
+    reviews::{Review, ReviewId, ReviewState, ReviewTarget},
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -29,9 +29,7 @@ pub(crate) enum Gate {
 
 impl Manager {
     /// Refuse `caller`, where the workspace's setting for `gate` holds it,
-    /// unless a finished review covers `head`, the commit it acts on, with
-    /// every finding resolved, saying what is missing; without a review of
-    /// it and with none queued or running, queue one.
+    /// as [`Self::require_reviewed`] does.
     pub(crate) async fn require_review(
         &self,
         workspace: &Workspace,
@@ -43,62 +41,59 @@ impl Manager {
         if !gate.holds(&settings, caller) {
             return Ok(());
         }
+        self.require_reviewed(workspace, gate, head).await
+    }
+
+    /// Refuse unless a finished review of the workspace covers `head`, the
+    /// commit a command acts on, with every finding resolved, saying what is
+    /// missing; without a review of it and with none queued or running,
+    /// queue one.
+    pub(crate) async fn require_reviewed(
+        &self,
+        workspace: &Workspace,
+        gate: Gate,
+        head: &CommitId,
+    ) -> Result<()> {
         let (id, covering) = (workspace.id.clone(), head.to_owned());
         let (reviewed, active) = self
             .store
-            .run(move |db| {
+            .read(move |tx| {
                 Ok((
-                    store::finished_at(db, &id, &covering)?,
-                    store::active(db, &id)?,
+                    store::finished_at(tx, &id, &covering)?,
+                    store::active(tx, &id)?,
                 ))
             })
             .await?;
-        let mut refusal = match &reviewed {
+        let missing = match &reviewed {
             Some(review) if review.unresolved().next().is_none() => return Ok(()),
-            Some(review) => unresolved(review),
+            Some(review) => unresolved(review, head),
             None => format!(
-                "{} needs a finished review of HEAD {} first",
+                "{} needs a finished review of {} first",
                 gate.command(),
                 head.short()
             ),
         };
-        match active {
-            Some((id, state)) => {
-                let state = if state == ReviewState::Queued {
-                    "queued"
-                } else {
-                    "running"
-                };
-                let _ = write!(
-                    refusal,
-                    "; review {id} is {state}, and shoal watch review {id} waits for it"
-                );
-            }
-            None if reviewed.is_none() => {
-                match self
-                    .queue_review(
-                        &SpaceSelector::id(&workspace.id),
-                        ReviewTarget::Workspace,
-                        None,
-                        Default::default(),
-                    )
-                    .await
-                {
-                    Ok(review) => {
-                        let _ = write!(
-                            refusal,
-                            "; queued review {}, whose findings arrive as a message",
-                            review.id
-                        );
-                    }
-                    Err(error) => {
-                        let _ = write!(refusal, "; no review could be queued: {error:#}");
-                    }
-                }
-            }
-            None => {}
+        let next = match active {
+            Some((id, state)) => pending(id, state),
+            None if reviewed.is_none() => self.queue_gate_review(workspace).await,
+            None => String::new(),
+        };
+        bail!("{missing}{next}")
+    }
+
+    /// Queue a review of the workspace for a gate that found none, saying
+    /// how it went.
+    async fn queue_gate_review(&self, workspace: &Workspace) -> String {
+        let selector = SpaceSelector::id(&workspace.id);
+        let queued =
+            self.queue_review(&selector, ReviewTarget::Workspace, None, Default::default());
+        match queued.await {
+            Ok(review) => format!(
+                "; queued review {}, whose findings arrive as a message",
+                review.id
+            ),
+            Err(error) => format!("; no review could be queued: {error:#}"),
         }
-        bail!(refusal)
     }
 }
 
@@ -130,12 +125,22 @@ fn requester(caller: Option<&Caller>) -> Requester {
     }
 }
 
-/// The refusal for a review of HEAD whose findings are not all resolved,
-/// listing them.
-fn unresolved(review: &Review) -> String {
+/// What a refusal adds for review `id`, queued or running in `state`.
+fn pending(id: ReviewId, state: ReviewState) -> String {
+    let state = match state {
+        ReviewState::Queued => "queued",
+        _ => "running",
+    };
+    format!("; review {id} is {state}, and shoal watch review {id} waits for it")
+}
+
+/// The refusal for a review of `head` whose findings are not all
+/// resolved, listing them.
+fn unresolved(review: &Review, head: &CommitId) -> String {
     let mut text = format!(
-        "review {} of HEAD has unresolved findings; resolve each with shoal review resolve:",
-        review.id
+        "review {} of {} has unresolved findings; resolve each with shoal review resolve:",
+        review.id,
+        head.short()
     );
     for finding in review.unresolved() {
         let _ = write!(
