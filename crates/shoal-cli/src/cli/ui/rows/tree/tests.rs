@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use super::*;
-use crate::cli::ui::rows::tests::workspace;
+use crate::cli::ui::rows::tests::{workspace, workspace_tree_rows};
 use crate::state::WorkspaceState;
 
 #[test]
@@ -184,4 +184,43 @@ fn rows_name_the_repository_when_they_span_several() {
         ]
     );
     assert_eq!(rows(Vec::new()), ["○ 1  local  inactive"]);
+}
+
+#[test]
+fn another_machines_space_lists_below_its_parent_naming_its_machine() {
+    let plain = Palette::stdout(true);
+    let parent = workspace("a", "parent", "parent", WorkspaceState::Ready);
+    let view: shoal_protocol::hub::directory::HubView = serde_json::from_value(serde_json::json!({
+        "machine": "desk",
+        "machines": [
+            {"id": "desk", "kind": "machine", "name": "desk", "joined_at": 0,
+             "connected": true, "hub": true},
+            {"id": "laptop", "kind": "machine", "name": "laptop", "joined_at": 0,
+             "last_seen": 0, "connected": false, "hub": false},
+        ],
+        "spaces": [
+            {"machine": "laptop", "id": "remote", "number": 7, "name": "remote child",
+             "kind": "chat", "status": "needs-input", "parent": parent.id,
+             "reported_at": 0},
+        ],
+    }))
+    .unwrap();
+    let listing = Listing {
+        workspaces: std::slice::from_ref(&parent),
+        chats: &[],
+        elsewhere: Some(Elsewhere {
+            spaces: view.directory.spaces.iter().collect(),
+            machines: Machines::new(&view),
+        }),
+    };
+    let rows = space_tree_rows(listing, &Statuses::default(), &[], plain, None);
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert!(
+        rows[0].contains("parent") && rows[0].contains("desk"),
+        "{rows:?}"
+    );
+    assert!(rows[1].contains("└ remote child"), "{rows:?}");
+    // The hub last saw it, and the space shows as its machine reported it.
+    assert!(rows[1].contains("laptop, seen"), "{rows:?}");
+    assert!(rows[1].contains("needs input"), "{rows:?}");
 }

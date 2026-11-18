@@ -6,9 +6,20 @@ use serde::{Deserialize, Serialize};
 
 use crate::output::{batch::Failure, outputs};
 use shoal_protocol::{
-    model::{Completion, SpaceHold, WorkspaceRef},
+    hub::directory::Listed,
+    model::{Completion, Space, SpaceHold, WorkspaceRef},
     removal::RemovalResult,
 };
+
+/// A space `shoal list` prints: this machine's, or another joined
+/// machine's as that machine last reported it, which names it.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+#[allow(clippy::large_enum_variant, reason = "a listing holds a few spaces")]
+pub enum ListedSpace {
+    Elsewhere(Listed),
+    Here(Space),
+}
 
 /// A removed space, or one being removed, and the holds it had.
 #[derive(Debug, Serialize, Deserialize)]
@@ -107,6 +118,7 @@ pub struct StartedBeside {
 }
 
 outputs!(
+    ListedSpace,
     Removed,
     Removals,
     Directory,

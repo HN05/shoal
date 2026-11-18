@@ -3,6 +3,23 @@ use crate::time::UnixTime;
 use crate::{forge::items::link::ItemKind, state::WorkspaceState};
 use shoal_schedule::priority::Priority;
 
+/// The tree rows of this machine's `workspaces` and `chats` alone.
+pub(super) fn workspace_tree_rows(
+    workspaces: &[Workspace],
+    chats: &[Chat],
+    statuses: &Statuses,
+    repositories: &[(String, String)],
+    palette: Palette,
+    width: Option<usize>,
+) -> Vec<String> {
+    let listing = Listing {
+        workspaces,
+        chats,
+        elsewhere: None,
+    };
+    space_tree_rows(listing, statuses, repositories, palette, width)
+}
+
 pub(super) fn workspace(
     repository: &str,
     name: &str,

@@ -6,11 +6,13 @@ use std::{collections::HashSet, path::Path, time::Duration};
 
 use super::Entries;
 
+mod machines;
 mod statuses;
 mod tree;
 
+pub use machines::Machines;
 pub use statuses::Statuses;
-pub use tree::workspace_tree_rows;
+pub use tree::{Elsewhere, Listing, space_tree_rows};
 
 use anyhow::Result;
 use futures_util::future::join_all;

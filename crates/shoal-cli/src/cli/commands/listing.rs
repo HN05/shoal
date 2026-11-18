@@ -1,7 +1,9 @@
-//! Which workspaces, chats and queued agents `shoal list` shows.
+//! Which workspaces, chats and queued agents `shoal list` shows, and which
+//! spaces of the other joined machines.
 use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::hub::directory::Listed;
 
 use crate::{
     cli::{context::Context, list_status::ListStatus, ui},
@@ -12,6 +14,9 @@ use crate::{
 /// statuses keeps every status.
 pub(super) struct ListFilter {
     repository: Option<RepositoryId>,
+    /// The origin of the filter's repository, which tells it on the other
+    /// machines.
+    origin: Option<String>,
     statuses: Vec<ListStatus>,
 }
 
@@ -21,21 +26,23 @@ impl ListFilter {
         repository: Option<String>,
         statuses: Vec<ListStatus>,
     ) -> Result<Self> {
-        let repository = match repository {
+        let (repository, origin) = match repository {
             Some(selector) => {
                 let repos = crate::client::repositories::list(&ctx.paths).await?;
                 let selector = ui::repository_selector(selector)?;
-                Some(
-                    crate::repository::select(&repos, selector)
-                        .await?
-                        .id
-                        .clone(),
-                )
+                let repository = crate::repository::select(&repos, selector).await?;
+                // A checkout whose origin cannot be read matches no other
+                // machine's spaces, as their machines report them.
+                let origin = (crate::repository::identity(&repository.source).await)
+                    .ok()
+                    .flatten();
+                (Some(repository.id.clone()), origin)
             }
-            None => None,
+            None => (None, None),
         };
         Ok(Self {
             repository,
+            origin,
             statuses,
         })
     }
@@ -59,6 +66,17 @@ impl ListFilter {
     pub(super) fn keeps_listed_entry(&self, entry: &QueueEntry, listed: &[Workspace]) -> bool {
         let in_listed = |workspace: &SpaceId| listed.iter().any(|w| &w.id == workspace);
         entry.space().is_some_and(in_listed) || self.keeps_entry(entry)
+    }
+
+    /// Another machine's space, whose repository the filter matches by its
+    /// origin.
+    pub(super) fn keeps_remote(&self, remote: &Listed) -> bool {
+        let origin = (remote.space.repository.as_ref()).and_then(|origin| origin.origin.as_ref());
+        let repository = match &self.repository {
+            Some(_) => origin.is_some() && origin == self.origin.as_ref(),
+            None => true,
+        };
+        repository && self.keeps_status(remote.space.status)
     }
 
     /// A chat without a repository is in none, which a repository filter

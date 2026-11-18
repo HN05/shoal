@@ -1,39 +1,56 @@
 //! Listing spaces, children below their parent, with the agents queued to
-//! start, or only the chats.
+//! start and the other joined machines' spaces, or only the chats.
 use anyhow::Result;
+use shoal_protocol::hub::directory::{HubView, Listed};
 
 use crate::cli::{
-    commands::{listing, queued_agents},
+    commands::{listing, machines, queued_agents},
     context::Context,
     output::{self, Palette},
     ui,
 };
-use crate::model::{Chat, Space, Workspace};
+use crate::client::output::workspaces::ListedSpace;
+use crate::model::{Chat, SpaceKind, Workspace};
 
 /// `shoal list --print`: the spaces and queued agents `filter` keeps, or
-/// with `chats` only the chats it keeps.
+/// with `chats` only the chats it keeps, of this machine and the others.
 pub(in crate::cli::commands) async fn list(
     ctx: &Context,
     filter: &listing::ListFilter,
     chats: bool,
 ) -> Result<i32> {
     let spaces = crate::client::spaces::list(&ctx.paths).await?;
+    let view = machines::view(ctx).await;
     let kept_chats = kept_chats(spaces.chats(), filter);
     let (workspaces, statuses) = match chats {
         true => (Vec::new(), ui::Statuses::default()),
         false => kept_workspaces(ctx, spaces.into_workspaces(), filter).await?,
     };
+    let elsewhere = kept_elsewhere(view.as_ref(), filter, chats);
     let repositories = crate::client::repositories::list(&ctx.paths).await?;
-    let rows = ui::workspace_tree_rows(
-        &workspaces,
-        &kept_chats,
+    let listing = ui::Listing {
+        workspaces: &workspaces,
+        chats: &kept_chats,
+        elsewhere: (view.as_ref()).map(|view| ui::Elsewhere {
+            spaces: elsewhere.clone(),
+            machines: ui::Machines::new(view),
+        }),
+    };
+    let rows = ui::space_tree_rows(
+        listing,
         &statuses,
         &ui::repository_choices(repositories).await,
         Palette::stdout(ctx.json),
         output::stdout_width(ctx.json),
     );
-    let listed: Vec<Space> = (workspaces.into_iter().map(Space::from))
-        .chain(kept_chats.into_iter().map(Space::from))
+    let listed: Vec<ListedSpace> = (workspaces.into_iter())
+        .map(|workspace| ListedSpace::Here(workspace.into()))
+        .chain(
+            kept_chats
+                .into_iter()
+                .map(|chat| ListedSpace::Here(chat.into())),
+        )
+        .chain(elsewhere.into_iter().cloned().map(ListedSpace::Elsewhere))
         .collect();
     ctx.show(&listed, |_| {
         for row in rows {
@@ -47,6 +64,20 @@ pub(in crate::cli::commands) async fn list(
 fn kept_chats(mut chats: Vec<Chat>, filter: &listing::ListFilter) -> Vec<Chat> {
     chats.retain(|chat| filter.keeps_chat(chat));
     chats
+}
+
+/// The other machines' spaces of `view` that `filter` keeps, or with
+/// `chats` only their chats.
+fn kept_elsewhere<'a>(
+    view: Option<&'a HubView>,
+    filter: &listing::ListFilter,
+    chats: bool,
+) -> Vec<&'a Listed> {
+    let spaces = view.into_iter().flat_map(|view| &view.directory.spaces);
+    spaces
+        .filter(|remote| !chats || remote.space.kind == SpaceKind::Chat)
+        .filter(|remote| filter.keeps_remote(remote))
+        .collect()
 }
 
 /// The workspaces among `workspaces` that `filter` keeps by the statuses
