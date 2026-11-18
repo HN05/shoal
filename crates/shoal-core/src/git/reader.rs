@@ -156,6 +156,15 @@ fn environment_diverges() -> bool {
 /// enables are ones gix supports.
 fn readable(repo: &gix::Repository) -> bool {
     let config = repo.config_snapshot();
+    format_readable(&config)
+        && !has_promisor_remote(&config)
+        && includes_alike(repo, &config)
+        && !names_remotes_in_files(repo)
+}
+
+/// Whether gix reads the repository format `config` declares: its version
+/// and every extension it enables in the repository's own config.
+fn format_readable(config: &gix::config::Snapshot<'_>) -> bool {
     let format = config.integer("core.repositoryFormatVersion").unwrap_or(0);
     let local = |section: &gix::config::file::SectionRef<'_>| {
         section.meta().source == gix::config::Source::Local
@@ -166,20 +175,22 @@ fn readable(repo: &gix::Repository) -> bool {
         .flatten()
         .filter(local)
         .all(|section| {
-            section.value_names().all(|name| {
-                let name = name.to_ascii_lowercase();
-                READABLE_EXTENSIONS.contains(&name.as_str())
-                    || (name == "refstorage"
-                        && section.value("refstorage").is_some_and(|storage| {
-                            storage.eq_ignore_ascii_case(READABLE_REF_STORAGE.as_bytes())
-                        }))
-            })
+            section
+                .value_names()
+                .all(|name| extension_readable(&section, &name))
         });
-    format <= READABLE_FORMAT
-        && readable_extensions
-        && !has_promisor_remote(&config)
-        && includes_alike(repo, &config)
-        && !names_remotes_in_files(repo)
+    format <= READABLE_FORMAT && readable_extensions
+}
+
+/// Whether gix reads a repository whose `extensions` section `section` sets
+/// the extension `name`.
+fn extension_readable(section: &gix::config::file::SectionRef<'_>, name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    READABLE_EXTENSIONS.contains(&name.as_str())
+        || (name == "refstorage"
+            && section.value("refstorage").is_some_and(|storage| {
+                storage.eq_ignore_ascii_case(READABLE_REF_STORAGE.as_bytes())
+            }))
 }
 
 /// Whether gix includes for `repo` the files `config` includes, in the
