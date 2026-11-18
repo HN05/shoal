@@ -4,6 +4,7 @@
 //! space's process, whose scope the owning machine checks. A request that
 //! needs the space's files or processes is refused, naming the machine.
 use anyhow::{Result, anyhow};
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     hub::{
         Member,
@@ -44,8 +45,8 @@ impl Manager {
         space: &SpaceSelector,
         request: Unanswered<'_>,
     ) -> Option<Result<Elsewhere>> {
-        let machine = match self.machine_of(space).await {
-            Ok(Some(machine)) => machine,
+        let (machine, id) = match self.machine_of(space).await {
+            Ok(Some(found)) => found,
             Ok(None) => return None,
             // A space several machines have is refused as such.
             Err(error) if Reason::of(&error).is_some() => return Some(Err(error)),
@@ -54,12 +55,15 @@ impl Manager {
                 return None;
             }
         };
-        Some(self.forward(&machine, space, request).await)
+        Some(self.forward(&machine, space, &id, request).await)
     }
 
     /// The other joined machine whose space `selector` names, as the hub's
     /// directory lists it; none on a machine in no hub.
-    pub(super) async fn machine_of(&self, selector: &SpaceSelector) -> Result<Option<Member>> {
+    pub(super) async fn machine_of(
+        &self,
+        selector: &SpaceSelector,
+    ) -> Result<Option<(Member, SpaceId)>> {
         let Some(view) = self.hub_view(None).await? else {
             return Ok(None);
         };
@@ -77,7 +81,8 @@ impl Manager {
                 return Err(Refusal::new(Reason::NotFound, message).into());
             }
         };
-        Ok(directory.machine(&listed.machine).cloned())
+        let machine = directory.machine(&listed.machine).cloned();
+        Ok(machine.map(|machine| (machine, listed.space.id.clone())))
     }
 
     /// Forward `request` for the space `space` to `machine`, unless it
@@ -86,6 +91,7 @@ impl Manager {
         &self,
         machine: &Member,
         space: &SpaceSelector,
+        id: &SpaceId,
         request: Unanswered<'_>,
     ) -> Result<Elsewhere> {
         let Some(method) = request
@@ -102,7 +108,9 @@ impl Manager {
             Forwarding::Queued => Delivery::Queued,
             _ => Delivery::Now,
         };
-        let method = left_caller_machine(method)?;
+        let mut method = left_caller_machine(method)?;
+        // A number another space there may take while it waits, never an ID.
+        bind_space(&mut method, space, id)?;
         let name = shoal_protocol::protocol::name_of(Ok(method.clone()));
         if attaches_files(&method) {
             let message = format!(
@@ -173,6 +181,40 @@ fn left_caller_machine(method: serde_json::Value) -> Result<serde_json::Value> {
     let mut operation: shoal_protocol::protocol::Operation = serde_json::from_value(method)?;
     operation.leave_caller_machine();
     Ok(serde_json::to_value(operation)?)
+}
+
+/// Name the space `selector` names in `method` by its ID `id`, wherever a
+/// space or workspace field selects it.
+fn bind_space(
+    method: &mut serde_json::Value,
+    selector: &SpaceSelector,
+    id: &SpaceId,
+) -> Result<()> {
+    let (named, bound) = (
+        serde_json::to_value(selector)?,
+        serde_json::to_value(SpaceSelector::id(id))?,
+    );
+    bind(method, &named, &bound);
+    Ok(())
+}
+
+fn bind(value: &mut serde_json::Value, named: &serde_json::Value, bound: &serde_json::Value) {
+    match value {
+        serde_json::Value::Object(fields) => {
+            for (key, field) in fields {
+                match (key.as_str(), &*field) {
+                    ("space" | "workspace", selected) if selected == named => {
+                        *field = bound.clone()
+                    }
+                    _ => bind(field, named, bound),
+                }
+            }
+        }
+        serde_json::Value::Array(items) => {
+            items.iter_mut().for_each(|item| bind(item, named, bound))
+        }
+        _ => {}
+    }
 }
 
 /// Whether the request `method` attaches files by their path on this

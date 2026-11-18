@@ -15,3 +15,16 @@ fn a_request_with_files_attached_here_is_one_that_attaches_files() {
         "attachments": [{"path": "/tmp/chart.png"}]}, "link": false}});
     assert!(attaches_files(&issue));
 }
+
+#[test]
+fn a_forwarded_request_names_its_space_by_id() {
+    let selector = SpaceSelector::Number(7.into());
+    let id = SpaceId::from("space-seven".to_owned());
+    let named = serde_json::to_value(&selector).unwrap();
+    let mut method = json!({"send_agent_message": {"space": named, "message": "7"}});
+    bind_space(&mut method, &selector, &id).unwrap();
+    let bound = serde_json::to_value(SpaceSelector::id(&id)).unwrap();
+    assert_eq!(method["send_agent_message"]["space"], bound);
+    // Only what selects a space changes.
+    assert_eq!(method["send_agent_message"]["message"], "7");
+}
