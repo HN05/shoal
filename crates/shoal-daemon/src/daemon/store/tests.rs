@@ -1709,6 +1709,45 @@ fn migration_drops_the_queued_launches_that_create_their_workspace() -> Result<(
 }
 
 #[test]
+fn migration_leaves_queued_plans_naming_their_workspace_and_pr_alone() -> Result<()> {
+    let mut db = historical_database(228)?;
+    db.execute_batch(
+        r#"BEGIN;
+        INSERT INTO workspaces(id,path,branch,state) VALUES ('other','/other','plain','ready');
+        INSERT INTO spaces(id,kind,repository_id,name) VALUES ('other','workspace','repo','plain');
+        COMMIT;
+        INSERT INTO agent_queue(id,kind,repository_id,name,agent,plan,env,state,created_at,opens_workspace_id)
+            VALUES ('waits','launch','repo','worker','claude','{"repository":"repo","creation":{"existing":"worker","pr":"https://forge.example/team/repo/pulls/8","options":{"name":"worker"}},"issue":null,"agent":{"agent":"claude"},"args":[],"chat":null,"parent":null,"workspace":"workspace"}','{}','queued',1,'workspace'),
+                ('plain','launch','repo','plain','claude','{"repository":"repo","creation":{"existing":"plain","pr":null},"agent":{"agent":"claude"},"args":[],"workspace":"other"}','{}','queued',1,'other'),
+                ('chat','launch','repo','talk','claude','{"parent":"space","chat_start":{"resolved":{}}}','{}','queued',1,NULL);"#,
+    )?;
+    migrate(&mut db)?;
+    let plan = |id: &str| -> Result<String> {
+        Ok(
+            db.query_row("SELECT plan FROM agent_queue WHERE id=?1", [id], |row| {
+                row.get(0)
+            })?,
+        )
+    };
+    let waits: crate::start_plan::AddPlan = serde_json::from_str(&plan("waits")?)?;
+    assert_eq!(waits.workspace, "workspace");
+    assert_eq!(
+        waits.pr.map(|pr| pr.to_string()).as_deref(),
+        Some("https://forge.example/team/repo/pulls/8")
+    );
+    // Without a PR, it keeps none of a creation's fields.
+    let plain: serde_json::Value = serde_json::from_str(&plan("plain")?)?;
+    let mut fields: Vec<_> = plain.as_object().unwrap().keys().cloned().collect();
+    fields.sort();
+    assert_eq!(fields, ["agent", "args", "repository", "workspace"]);
+    assert_eq!(
+        plan("chat")?,
+        r#"{"parent":"space","chat_start":{"resolved":{}}}"#
+    );
+    Ok(())
+}
+
+#[test]
 fn migration_makes_the_restores_waiting_wrappers_carry_out_automatic() -> Result<()> {
     let mut db = historical_database(140)?;
     db.execute_batch(

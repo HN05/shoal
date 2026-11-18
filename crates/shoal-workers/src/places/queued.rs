@@ -20,13 +20,13 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Start an admitted queue entry's `plan`, the planned workspace `name`, in
-/// the background where the terminal that queued it would have.
+/// Start an admitted queue entry's `plan` in `workspace`, in the background
+/// where the terminal that queued it would have.
 pub async fn start_add(
     paths: &CommandPaths,
     settings: &Effective,
     plan: &mut AddPlan,
-    name: &str,
+    workspace: &Workspace,
 ) -> Result<()> {
     let origin = queued_origin()?;
     let cwd = std::env::current_dir()?;
@@ -44,7 +44,7 @@ pub async fn start_add(
             let template = host.options.name_template.clone();
             super::naming::name_plan(paths, template, plan, None).await?;
             let beside = Beside::opening(group);
-            open_add(paths, host, places, beside, plan, name, false).await?;
+            open_add(paths, host, places, beside, plan, workspace, false).await?;
             Ok(Some(()))
         },
     )

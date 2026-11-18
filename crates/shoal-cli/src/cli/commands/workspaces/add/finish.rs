@@ -22,12 +22,13 @@ use crate::{
         shell, terminal,
     },
     client::connection::CommandPaths,
+    forge::items::reference::ItemInput,
     model::{QueueEntry, Workspace},
     protocol::{
         ConfigTarget,
-        operations::{Preparation, Prepared, QueuedLaunch},
+        operations::{Preparation, Prepared, QueuedLaunch, WorkspaceStart},
     },
-    start_plan::{AddPlan, Creation, ResolvedAddAgent},
+    start_plan::{AddPlan, ResolvedAddAgent},
     state::QueueState,
 };
 use shoal_ids::{agent_session_ids::AgentSessionId, queue_entry_ids::QueueEntryId};
@@ -36,7 +37,7 @@ use shoal_protocol::space_names::SpaceSelector;
 
 /// Carry out `plan` in this process: follow the preparation it names and
 /// run its agent once the queue lets it, as a focused start's place does,
-/// or else open what it names and launch its agent.
+/// or else open the workspace it names and launch its agent.
 pub(in crate::cli) async fn execute_add(ctx: &Context, plan: AddPlan) -> Result<i32> {
     if plan.handoff.is_some() {
         return Box::pin(super::attach::run_in_place(ctx, plan)).await;
@@ -126,7 +127,8 @@ async fn add_planned(
 ) -> Result<i32> {
     let AddPlan {
         repository: _,
-        creation,
+        workspace,
+        pr,
         place_name,
         issue: _,
         agent,
@@ -136,28 +138,21 @@ async fn add_planned(
         narrowing,
         fork,
         queue_entry,
-        chat,
-        parent,
-        workspace,
         handoff: _,
     } = plan;
-    let pr = creation.pr.clone();
     let told = (&prompt, args.as_slice(), &fork);
     let own = queued_launch(&agent, issue.as_ref(), (&mode, narrowing), told)?;
     // The agent this start runs itself, which its preparation leaves
     // waiting in the queue should setup fail.
     let has_agent = own.is_some();
-    // A start that names its workspace reports only its agent.
-    let named = workspace.is_some();
     let start = AddStart {
-        creation,
-        parent: parent.or(chat.map(SpaceSelector::Id)),
         workspace,
+        pr: pr.clone(),
         queue_entry: queue_entry.clone(),
         waiting: own,
     };
     // The daemon gave the starting entry the workspace before its setup.
-    let preparing = start_add_workspace(ctx, &target, start, issue.as_ref()).await?;
+    let preparing = start_add_workspace(ctx, &target, start).await?;
     let opened = preparing.workspace();
     let (branch, name) = (opened.branch_or_name(), &opened.name);
     let label = match place_name {
@@ -172,7 +167,8 @@ async fn add_planned(
     // Preparation leaves the agent it queues waiting itself.
     let waiting = has_agent.then(|| WaitingAgent::new(queue_entry.clone()));
     let mut rest = AfterSetup { pr, waiting };
-    let finished = finish_add_workspace(ctx, preparing, &mut rest, &agent, named).await?;
+    // The start names its workspace, so it reports only its agent.
+    let finished = finish_add_workspace(ctx, preparing, &mut rest, &agent, true).await?;
     // A failed setup frees the entry's slot, leaving the agent waiting.
     let (queue_entry, waits) = match rest.waiting {
         Some(waiting) => (waiting.starting.clone(), waiting.failed()),
@@ -296,13 +292,10 @@ async fn enters_added(
     Ok(!agents::runs_in_session(chosen, &settings))
 }
 
-/// What the planned workspace opens: the recorded `workspace` a launch
-/// goes to, or else what `creation` makes below `parent`, or for the user
-/// without one.
+/// The recorded `workspace` the planned start opens, linking `pr`.
 struct AddStart {
-    creation: Creation,
-    parent: Option<SpaceSelector>,
-    workspace: Option<SpaceId>,
+    workspace: SpaceId,
+    pr: Option<ItemInput>,
     /// The starting queue entry whose launch opens it.
     queue_entry: Option<QueueEntryId>,
     /// The agent the caller starts itself, which waits should setup fail.
@@ -310,52 +303,33 @@ struct AddStart {
 }
 
 impl AddStart {
-    /// The request that opens it in `target`'s repository, assigned
-    /// `issue` unless it names the workspace, which keeps the issue it has.
-    fn request(self, target: &AddTarget, issue: Option<&issues::Issue>) -> Result<NewWorkspace> {
+    /// The request that opens it in `target`'s repository, which keeps the
+    /// issue it has.
+    fn request(self, target: &AddTarget) -> NewWorkspace {
         let Self {
-            creation,
-            parent,
             workspace,
+            pr,
             queue_entry,
             waiting,
         } = self;
-        let issue = issue.filter(|_| workspace.is_none());
-        let crate::start_plan::Opening {
-            start,
-            base,
-            path,
-            git_profile,
-            options,
+        let start = WorkspaceStart::Workspace(SpaceSelector::Id(workspace));
+        NewWorkspace {
             pr,
-        } = creation.opening(workspace)?;
-        Ok(NewWorkspace {
-            repository: target.selector.clone(),
-            start,
-            base,
-            path,
-            git_profile,
-            parent,
-            options,
-            issue: issue.map(|issue| issue.url.clone().into()),
-            pr,
-            agent: None,
             queue_entry,
             waiting,
-            blockers: Vec::new(),
-        })
+            ..NewWorkspace::new(target.selector.clone(), start)
+        }
     }
 }
 
-/// Open the planned workspace that `start` describes, assigned `issue`
-/// unless the start names the workspace, and follow its preparation.
+/// Open the recorded workspace that `start` names and follow its
+/// preparation.
 async fn start_add_workspace<'c>(
     ctx: &'c Context,
     target: &AddTarget,
     start: AddStart,
-    issue: Option<&issues::Issue>,
 ) -> Result<Preparing<'c, CommandPaths>> {
-    let new = start.request(target, issue)?;
+    let new = start.request(target);
     let env = crate::env::without_secrets();
     let preparing = preparation::create(&ctx.paths, new, env);
     ctx.progress("Opening workspace", preparing).await

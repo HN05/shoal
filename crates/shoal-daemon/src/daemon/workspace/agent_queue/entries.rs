@@ -152,10 +152,10 @@ impl Manager {
         ))
     }
 
-    /// The spaces the launches of new spaces go below, by entry: the
-    /// present one `--parent` names, else the space that queued the launch,
-    /// in whose scope it opens; none for a launch the user queued without a
-    /// parent, which opens a top-level space.
+    /// The spaces the launches of new chats go below, by entry: the present
+    /// one `--parent` names, else the space that queued the launch, in whose
+    /// scope it records the chat; none for a launch the user queued without
+    /// a parent, which records a top-level chat.
     pub(in crate::daemon) async fn launch_parents(
         &self,
         entries: &[QueueEntry],

@@ -30,7 +30,6 @@ struct FailedStart {
     id: QueueEntryId,
     name: SpaceName,
     workspace: SpaceId,
-    branch: Option<String>,
     plan: String,
 }
 
@@ -185,7 +184,7 @@ fn failed_starts(tx: &Transaction<'_>) -> Result<Vec<FailedStart>> {
     ];
     Ok(tx
         .prepare(
-            "SELECT q.id,q.name,w.id,w.branch,q.plan FROM agent_queue q
+            "SELECT q.id,q.name,w.id,q.plan FROM agent_queue q
              JOIN workspaces w ON w.id=COALESCE(q.space_id,q.opens_workspace_id)
              WHERE q.kind=?1 AND q.state=?2 AND w.state=?3 AND NOT w.setup_finished",
         )?
@@ -194,8 +193,7 @@ fn failed_starts(tx: &Transaction<'_>) -> Result<Vec<FailedStart>> {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 workspace: row.get(2)?,
-                branch: row.get(3)?,
-                plan: row.get(4)?,
+                plan: row.get(3)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?)
@@ -203,28 +201,26 @@ fn failed_starts(tx: &Transaction<'_>) -> Result<Vec<FailedStart>> {
 
 /// Replace `start` with a new entry, which no hold on the old one keeps
 /// from admission, waiting for a retried setup to open its workspace; one
-/// that cannot open it ends.
+/// whose plan does not open it ends.
 fn return_start(tx: &Transaction<'_>, start: FailedStart) -> Result<Returned> {
-    let returned = match start.reopening_plan() {
-        Some(plan) => {
+    let returned = match start.opens_workspace() {
+        true => {
             let id = QueueEntryId::generate();
-            copy_launch_waiting(tx, &start.id, &id, &plan, &start.workspace)?;
+            copy_launch_waiting(tx, &start.id, &id, &start.workspace)?;
             blockers::wait_for_setup(tx, &id, &start.workspace)?;
             Returned::Waiting(id, start.workspace)
         }
-        None => Returned::Ended(start.name, start.workspace),
+        false => Returned::Ended(start.name, start.workspace),
     };
     tx.execute("DELETE FROM agent_queue WHERE id=?1", [&start.id])?;
     Ok(returned)
 }
 
 impl FailedStart {
-    /// Its plan opening the workspace instead of creating one, or `None`
-    /// when it cannot, as for a workspace without a branch.
-    fn reopening_plan(&self) -> Option<String> {
-        let mut plan: AddPlan = serde_json::from_str(&self.plan).ok()?;
-        plan.reopen(&self.workspace, self.branch.clone()?);
-        serde_json::to_string(&plan).ok()
+    /// Whether its plan opens its workspace again.
+    fn opens_workspace(&self) -> bool {
+        serde_json::from_str::<AddPlan>(&self.plan)
+            .is_ok_and(|plan| plan.workspace == self.workspace)
     }
 }
 

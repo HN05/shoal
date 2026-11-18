@@ -127,12 +127,12 @@ pub(super) async fn run_beside(
         return Ok(0);
     }
     let mut plan = place_plan(&started, entry);
-    let name = started.workspace.name.to_string();
     let placement = match focused {
         true => terminal::Placement::Focus,
         false => terminal::Placement::Background,
     };
-    if !terminal::start_add(ctx, settings, placement, &mut plan, &name).await? {
+    let workspace = &started.workspace;
+    if !terminal::start_add(ctx, settings, placement, &mut plan, workspace).await? {
         return run(ctx, started).await;
     }
     let shown = StartedBeside {
@@ -147,10 +147,8 @@ pub(super) async fn run_beside(
 /// once the preparation it follows ends and the queue lets it start, or
 /// the workspace's shell without one.
 pub(in crate::cli) async fn run_in_place(ctx: &Context, plan: AddPlan) -> Result<i32> {
-    let workspace = plan
-        .workspace
-        .context("the place's plan names no workspace")?;
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace))
+    let workspace = SpaceSelector::id(&plan.workspace);
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace)
         .await?
         .workspace;
     let entry = match plan.queue_entry {

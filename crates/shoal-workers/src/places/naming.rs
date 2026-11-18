@@ -4,7 +4,7 @@ use anyhow::{Context as _, Result};
 
 use crate::{
     client::connection::CommandPaths,
-    model::{Repository, Workspace},
+    model::Workspace,
     protocol::ItemContext,
     start_plan::AddPlan,
     terminal::{Host, PlaceName, names_places},
@@ -33,7 +33,7 @@ pub async fn name_plan(
         // A name reads only the issue's number and title, so a workspace
         // whose issue has closed keeps them.
         (None, Some(url)) => {
-            let context = plan_context(plan, repo);
+            let context = ItemContext::space(SpaceSelector::id(&plan.workspace));
             let item = url.clone().into();
             Some(crate::client::forge_reads::linked_issue_details(paths, context, item).await?)
         }
@@ -44,15 +44,6 @@ pub async fn name_plan(
         .map(|issue| (issue.number.get(), &*issue.title)));
     plan.place_name = Some(PlaceName::new(Some(template), repo, issue));
     Ok(())
-}
-
-/// Where `plan`'s issue in `repo` is read: from the workspace it opens or
-/// the chat it starts from, else from the checkout.
-fn plan_context(plan: &AddPlan, repo: &Repository) -> ItemContext {
-    match plan.workspace.as_ref().or(plan.chat.as_ref()) {
-        Some(space) => ItemContext::space(SpaceSelector::id(space)),
-        None => ItemContext::Checkout(repo.id.clone()),
-    }
 }
 
 /// The label of the place `host` opens for `workspace`: its name, or its

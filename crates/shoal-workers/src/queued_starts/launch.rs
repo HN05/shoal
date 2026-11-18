@@ -11,13 +11,12 @@ use crate::{
     client::connection::CommandPaths,
     config::Effective,
     env,
-    model::{QueueEntry, QueuedPlan},
+    model::{QueuedPlan, Workspace},
     protocol::ConfigTarget,
     start_plan::AddPlan,
     workers::{Worker, internal_command},
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
-use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Start the admitted launch `entry`: a chat's in its place, else the add
@@ -27,45 +26,42 @@ pub(super) async fn start(paths: &CommandPaths, entry: &QueueEntryId) -> Result<
     if let Some(chat) = crate::start_plan::ChatPlan::of(&queued.plan) {
         return super::chat::start(paths, entry, chat).await;
     }
-    let (queued, plan) = add_plan(paths, entry, queued).await?;
-    let QueueEntry { opens, name, .. } = &queued.entry;
-    let opens = opens
-        .as_ref()
-        .context("the queued launch opens no workspace")?;
-    start_admitted(paths, plan, opens, name).await
+    let (plan, workspace) = add_plan(paths, entry, &queued).await?;
+    start_admitted(paths, plan, &workspace).await
 }
 
-/// Start the add worker for an admitted launch's `plan` in the workspace
-/// `name` it `opens`, in the background where the terminal that queued it
-/// would have, or in no place for an agent that runs its own way, as the
-/// workspace's settings, its worktree's file included, decide.
+/// Start the add worker for an admitted launch's `plan` in `workspace`, in
+/// the background where the terminal that queued it would have, or in no
+/// place for an agent that runs its own way, as the workspace's settings,
+/// its worktree's file included, decide.
 async fn start_admitted(
     paths: &CommandPaths,
     mut plan: AddPlan,
-    opens: &SpaceId,
-    name: &str,
+    workspace: &Workspace,
 ) -> Result<()> {
-    let target = ConfigTarget::Space(SpaceSelector::id(opens));
+    let target = ConfigTarget::Space(SpaceSelector::id(&workspace.id));
     let settings = crate::settings::of(paths, target).await?;
     if runs_its_own_way(&settings, &plan) {
         return run_add_worker(paths, &plan).await;
     }
-    crate::places::queued::start_add(paths, &settings, &mut plan, name).await
+    crate::places::queued::start_add(paths, &settings, &mut plan, workspace).await
 }
 
 /// The plan of the starting launch `entry`, refusing one that no longer
 /// opens the workspace it was queued for.
 pub async fn plan(paths: &CommandPaths, entry: &QueueEntryId) -> Result<(QueuedPlan, AddPlan)> {
     let queued = queue::plan(paths, entry.clone()).await?;
-    add_plan(paths, entry, queued).await
+    let (plan, _) = add_plan(paths, entry, &queued).await?;
+    Ok((queued, plan))
 }
 
-/// [`plan`] of the starting launch `entry` from the plan `queued` with it.
+/// The plan `queued` with the starting launch `entry`, and the workspace
+/// it opens, which must be the one the launch was queued for.
 async fn add_plan(
     paths: &CommandPaths,
     entry: &QueueEntryId,
-    queued: QueuedPlan,
-) -> Result<(QueuedPlan, AddPlan)> {
+    queued: &QueuedPlan,
+) -> Result<(AddPlan, Workspace)> {
     let mut plan: AddPlan = serde_json::from_str(&queued.plan)?;
     plan.queue_entry = Some(entry.clone());
     let opens = (queued.entry.opens.as_ref()).context("the queued launch opens no workspace")?;
@@ -77,7 +73,7 @@ async fn add_plan(
         "the queued launch does not open workspace {}",
         workspace.name
     );
-    Ok((queued, plan))
+    Ok((plan, workspace))
 }
 
 /// Whether `plan`'s agent runs its own way under `settings`, leaving the

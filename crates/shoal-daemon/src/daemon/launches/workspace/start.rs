@@ -84,7 +84,7 @@ impl Manager {
             git_profile,
             options,
             pr,
-        } = creation.opening(None)?;
+        } = creation.opening()?;
         let mut parent = launch.parent.clone();
         if let Some(caller) = caller {
             ScopeRefusal::of(

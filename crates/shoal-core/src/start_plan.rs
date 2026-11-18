@@ -112,10 +112,9 @@ pub struct Opening {
 }
 
 impl Creation {
-    /// What opening this creation starts at: the recorded `workspace` a
-    /// launch goes to, else a PR's head, an existing branch, a copy, or a
-    /// new branch, typed or named.
-    pub fn opening(self, workspace: Option<SpaceId>) -> Result<Opening> {
+    /// What opening this creation starts at: a PR's head, an existing
+    /// branch, a copy, or a new branch, typed or named.
+    pub fn opening(self) -> Result<Opening> {
         let Self {
             path,
             branch,
@@ -128,22 +127,21 @@ impl Creation {
             copy,
             typed,
         } = self;
-        let start = match (workspace, pull_head, existing, copy) {
-            (Some(workspace), ..) => WorkspaceStart::Workspace(SpaceSelector::Id(workspace)),
-            (None, Some(head), ..) => WorkspaceStart::PullHead {
+        let start = match (pull_head, existing, copy) {
+            (Some(head), ..) => WorkspaceStart::PullHead {
                 url: match &pr {
                     Some(crate::forge::items::reference::ItemInput::Url(url)) => url.clone(),
                     _ => anyhow::bail!("a PR head needs its PR's URL"),
                 },
                 head,
             },
-            (None, None, Some(branch), _) => WorkspaceStart::Branch(branch),
-            (None, None, None, Some(copy)) => WorkspaceStart::Copy {
+            (None, Some(branch), _) => WorkspaceStart::Branch(branch),
+            (None, None, Some(copy)) => WorkspaceStart::Copy {
                 source: copy.source,
                 branch,
                 typed,
             },
-            (None, None, None, None) => {
+            (None, None, None) => {
                 let branch = anyhow::Context::context(branch, "a branch name is required")?;
                 match typed {
                     true => WorkspaceStart::Typed(branch),
@@ -188,8 +186,10 @@ pub fn queued_agent_request(
     let issue_labels = (launch.issue.as_ref()).map_or_else(Vec::new, |issue| issue.labels.clone());
     let (agent, now, here) = (launch.agent.clone(), launch.now, launch.here);
     let source = launch.source.take();
-    let mut plan = AddPlan::agent_in(workspace, launch)?;
-    plan.creation.pr = pr;
+    let plan = AddPlan {
+        pr,
+        ..AddPlan::agent_in(workspace, launch)?
+    };
     Ok(QueueRequest {
         repository: workspace.repository().into(),
         name: workspace.name.clone(),
@@ -216,13 +216,18 @@ pub struct PlaceHandoff {
     pub preparation: Option<String>,
 }
 
-/// What an addition creates and the agent it starts there, which a terminal
-/// host or the agent queue's worker carries out.
+/// The agent a start runs in a recorded workspace, or the workspace's shell
+/// without one, which a terminal host or the agent queue's worker carries
+/// out.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct AddPlan {
     pub repository: crate::repository::Selector,
-    pub creation: Creation,
-    /// The name of the place a host opens for the addition.
+    /// The workspace the start opens and runs its agent in.
+    pub workspace: SpaceId,
+    /// The PR it links once the workspace is ready.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pr: Option<crate::forge::items::reference::ItemInput>,
+    /// The name of the place a host opens for the start.
     #[serde(default)]
     pub place_name: Option<PlaceName>,
     /// The found issue's URL; its body can exceed what the environment of
@@ -249,16 +254,6 @@ pub struct AddPlan {
     /// The agent queue entry whose slot this launch uses.
     #[serde(default)]
     pub queue_entry: Option<shoal_ids::queue_entry_ids::QueueEntryId>,
-    /// The chat that planned the addition, which the workspace belongs to
-    /// unless `parent` names another space.
-    #[serde(default)]
-    pub chat: Option<SpaceId>,
-    /// The space the workspace goes below, which `--parent` names.
-    #[serde(default)]
-    pub parent: Option<SpaceSelector>,
-    /// The existing workspace a launch in it reopens; it never creates one.
-    #[serde(default)]
-    pub workspace: Option<SpaceId>,
     /// The recorded launch the place a start opens beside its terminal
     /// carries out: it follows the preparation the handoff names, if any,
     /// then starts the launch's queued agent there, or opens a shell.
@@ -299,19 +294,12 @@ impl AddPlan {
         })
     }
 
-    /// The plan that opens the existing `workspace` under its name without
-    /// an agent.
+    /// The plan that opens the existing `workspace` without an agent.
     pub fn opening(workspace: &Workspace) -> Self {
         Self {
             repository: workspace.repository().into(),
-            creation: Creation {
-                existing: workspace.branch().map(ToString::to_string),
-                options: crate::protocol::CreationOptions {
-                    name: Some(workspace.name.clone()),
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
+            workspace: workspace.id.clone(),
+            pr: None,
             place_name: None,
             issue: None,
             agent: ResolvedAddAgent {
@@ -324,43 +312,14 @@ impl AddPlan {
             narrowing: Default::default(),
             fork: None,
             queue_entry: None,
-            chat: None,
-            parent: None,
-            workspace: Some(workspace.id.clone()),
             handoff: None,
         }
     }
 
-    /// Whether the plan opens `workspace`'s branch in its repository without
-    /// creating anything: the workspace it names, or without one the branch
-    /// it opens, local or as a remote's.
+    /// Whether the plan opens `workspace`, the one it names in its
+    /// repository.
     pub fn opens(&self, workspace: &Workspace) -> bool {
-        let (Some(branch), Some(existing)) = (workspace.branch(), &self.creation.existing) else {
-            return false;
-        };
-        let names_branch = existing == branch
-            || crate::git::strip_local(existing) == Some(branch.as_str())
-            || existing.ends_with(&format!("/{branch}"));
-        self.workspace.as_ref().is_none_or(|id| *id == workspace.id)
-            && self.repository.value() == *workspace.repository()
-            && self.creation.branch.is_none()
-            && self.creation.path.is_none()
-            && names_branch
-    }
-
-    /// Open `workspace` on `branch`, which this plan's start opened, instead
-    /// of what its creation names, keeping the PR it links, as a launch
-    /// waiting for the workspace's retried setup does.
-    pub fn reopen(&mut self, workspace: &SpaceId, branch: String) {
-        self.creation = Creation {
-            existing: Some(branch),
-            pr: self.creation.pr.take(),
-            ..Default::default()
-        };
-        self.workspace = Some(workspace.clone());
-        self.queue_entry = None;
-        self.chat = None;
-        self.parent = None;
+        self.workspace == workspace.id && self.repository.value() == *workspace.repository()
     }
 
     /// The agent's name, when the addition starts one.
@@ -385,17 +344,13 @@ impl AddPlan {
             && (self.issue.is_some() || self.prompt.is_some() || !self.args.is_empty())
     }
 
-    pub fn label(&self) -> String {
-        let branch = self
-            .creation
-            .branch
-            .as_deref()
-            .or(self.creation.existing.as_deref())
-            .unwrap_or("shoal start");
-        let name = (self.creation.options.name.as_ref()).map_or(branch, |name| name.as_str());
-        self.place_name
-            .as_ref()
-            .map_or_else(|| name.to_owned(), |place| place.render(branch, name))
+    /// What the place a host opens for the start in `workspace` shows.
+    pub fn label(&self, workspace: &Workspace) -> String {
+        let name = workspace.name.as_str();
+        (self.place_name.as_ref()).map_or_else(
+            || name.to_owned(),
+            |place| place.render(workspace.branch_or_name(), name),
+        )
     }
 }
 

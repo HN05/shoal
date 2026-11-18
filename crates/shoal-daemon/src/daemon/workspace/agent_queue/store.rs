@@ -205,7 +205,7 @@ fn setup_failed(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Result<b
     )
 }
 
-/// The parents the launches of new spaces name with `--parent`, by entry.
+/// The parents the launches of new chats name with `--parent`, by entry.
 pub(super) fn planned_parents(
     db: &rusqlite::Connection,
 ) -> Result<Vec<(QueueEntryId, shoal_protocol::space_names::SpaceSelector)>> {
@@ -314,20 +314,19 @@ pub(super) fn insert_launch(
     Ok(())
 }
 
-/// Record a launch `id` with `plan`, waiting to open `workspace`, that
-/// keeps what [`insert_launch`] recorded for the launch `from`.
+/// Record a launch `id`, waiting to open `workspace`, that keeps what
+/// [`insert_launch`] recorded for the launch `from`.
 pub(super) fn copy_launch_waiting(
     tx: &rusqlite::Transaction<'_>,
     from: &QueueEntryId,
     id: &QueueEntryId,
-    plan: &str,
     workspace: &SpaceId,
 ) -> Result<()> {
     tx.execute(
         "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,opens_workspace_id,mode,narrowing,scope_space_id,priority,issue_labels,source)
-         SELECT ?2,kind,repository_id,name,agent,issue_title,?3,env,?4,created_at,?5,mode,narrowing,scope_space_id,priority,issue_labels,source
+         SELECT ?2,kind,repository_id,name,agent,issue_title,plan,env,?3,created_at,?4,mode,narrowing,scope_space_id,priority,issue_labels,source
          FROM agent_queue WHERE id=?1",
-        params![from, id, plan, QueueState::Queued, workspace],
+        params![from, id, QueueState::Queued, workspace],
     )?;
     Ok(())
 }

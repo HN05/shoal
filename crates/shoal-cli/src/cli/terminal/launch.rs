@@ -25,16 +25,16 @@ use crate::{
 };
 use shoal_workers::places::{groups, naming::name_plan, queued::start_in_background};
 
-/// Start `plan` beside this terminal as its start placed it, focused or in
-/// the background. Returns whether it left this process; a focused launch
-/// without a new tab stays here, where its agent runs in a session this
-/// terminal attaches to. `name` is the workspace's name.
+/// Start `plan` in `workspace` beside this terminal as its start placed
+/// it, focused or in the background. Returns whether it left this process;
+/// a focused launch without a new tab stays here, where its agent runs in a
+/// session this terminal attaches to.
 pub(in crate::cli) async fn start_add(
     ctx: &Context,
     settings: &Effective,
     placement: Placement,
     plan: &mut AddPlan,
-    name: &str,
+    workspace: &Workspace,
 ) -> Result<bool> {
     ensure!(
         !env::inherits_scope(&ctx.paths.state),
@@ -55,8 +55,9 @@ pub(in crate::cli) async fn start_add(
     let repo = groups::Repo::Selected(plan.repository.clone());
     let origin = groups::beside(&ctx.paths, &host, &repo, &cwd).await?;
     let beside = host.beside(origin.as_ref());
-    open_add(&ctx.paths, &host, places, beside, plan, name, focus).await?;
+    open_add(&ctx.paths, &host, places, beside, plan, workspace, focus).await?;
     if !focus && !ctx.json {
+        let name = workspace.name.as_str();
         outln!("Started {name} {}", places.background_place(name));
     }
     Ok(true)

@@ -20,13 +20,9 @@ fn a_launch_in_a_workspace_opens_only_that_workspace() {
     let child = workspace("repo", "child");
     let plan = super::AddPlan::agent_in(&child, claude()).expect("claude is a built-in agent");
     assert!(plan.opens(&child));
-    // The same branch in another repository, or another branch, is not the target.
+    // Another workspace, even on the same branch, is not the target.
     assert!(!plan.opens(&workspace("other", "child")));
-    assert!(!plan.opens(&workspace("repo", "sibling")));
-    let mut creating =
-        super::AddPlan::agent_in(&child, claude()).expect("claude is a built-in agent");
-    creating.creation.branch = Some("new".into());
-    assert!(!creating.opens(&child));
+    assert!(!plan.opens(&workspace("repo", "child")));
 }
 
 #[test]
@@ -88,15 +84,12 @@ fn a_queued_launch_keeps_its_model_arguments_fork_issue_and_place() {
         .expect("the launch queues");
     let plan: super::AddPlan = serde_json::from_str(&request.plan).expect("the plan parses");
     assert!(plan.opens(&child));
-    assert_eq!(
-        plan.creation.pr.map(|pr| pr.to_string()).as_deref(),
-        Some(pr)
-    );
+    assert_eq!(plan.pr.map(|pr| pr.to_string()).as_deref(), Some(pr));
 }
 
 #[test]
-fn a_plan_queued_by_an_earlier_version_reads_and_writes_back_unchanged() {
-    let queued = r#"{"repository":"repo","creation":{"path":null,"branch":null,"existing":"child","base":null,"git_profile":null,"pr":null,"options":{"skip_setup":false,"disposable":false}},"place_name":null,"issue":"https://forge.example/team/project/issues/7","agent":{"agent":"claude","model":{"model":"opus","effort":"high"}},"args":[{"Unix":[84,97,107,101,32,116,104,101,32,99,104,105,108,100,32,112,97,114,116]}],"prompt":"Split it","mode":"plan","fork":"parent-session","queue_entry":null,"chat":null,"parent":null,"workspace":"19d40cc0-b385-4221-a22c-bc3daa9f5ea7"}"#;
+fn a_queued_plan_reads_and_writes_back_unchanged() {
+    let queued = r#"{"repository":"repo","workspace":"19d40cc0-b385-4221-a22c-bc3daa9f5ea7","pr":"https://forge.example/team/project/pulls/8","place_name":null,"issue":"https://forge.example/team/project/issues/7","agent":{"agent":"claude","model":{"model":"opus","effort":"high"}},"args":[{"Unix":[84,97,107,101,32,116,104,101,32,99,104,105,108,100,32,112,97,114,116]}],"prompt":"Split it","mode":"plan","fork":"parent-session","queue_entry":null}"#;
     let plan: super::AddPlan = serde_json::from_str(queued).expect("the queued plan parses");
     assert_eq!(
         plan.agent_name().as_ref().map(|agent| agent.name()),

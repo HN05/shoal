@@ -7,10 +7,10 @@ use std::{ffi::OsString, path::Path};
 use anyhow::{Context as _, Result};
 
 use super::{Beside, Configured, Host, Places, Start, current_origin, names_places};
-use crate::{env, paths::Paths, sessions::Origin, start_plan::AddPlan};
+use crate::{env, model::Workspace, paths::Paths, sessions::Origin, start_plan::AddPlan};
 
-/// Have `host` run the add worker for `plan`, the planned workspace `name`,
-/// in a new place of its `places` `beside`, `focus`ed or in the background.
+/// Have `host` run the add worker for `plan`, a start in `workspace`, in a
+/// new place of its `places` `beside`, `focus`ed or in the background.
 /// The worker reads the plan from the place's environment, and a place
 /// that keeps a shell gets the directive through which the worker has it
 /// enter the workspace.
@@ -20,7 +20,7 @@ pub async fn open_add(
     places: &dyn Places,
     beside: Beside<'_>,
     plan: &AddPlan,
-    name: &str,
+    workspace: &Workspace,
     focus: bool,
 ) -> Result<()> {
     let worker = add_worker(paths, host, focus)?;
@@ -32,7 +32,7 @@ pub async fn open_add(
         state: &paths.state,
         origin: beside.origin,
         cwd: &std::env::current_dir()?,
-        label: &add_label(host.host, plan, name),
+        label: &add_label(host.host, plan, workspace),
         focus,
         split: beside.split,
         argv: &worker,
@@ -77,13 +77,13 @@ pub async fn show_opened(
     places.show(place, name).await
 }
 
-/// What the place `host` opens for `plan` is called: the plan's label where
-/// the host shows names, otherwise the planned workspace `name`.
-fn add_label(host: &dyn Host, plan: &AddPlan, name: &str) -> String {
+/// What the place `host` opens for `plan` in `workspace` is called: the
+/// plan's label where the host shows names, otherwise the workspace's name.
+fn add_label(host: &dyn Host, plan: &AddPlan, workspace: &Workspace) -> String {
     if names_places(host) {
-        plan.label()
+        plan.label(workspace)
     } else {
-        name.to_owned()
+        workspace.name.to_string()
     }
 }
 
