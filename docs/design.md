@@ -1995,14 +1995,13 @@ pass: memory, with what it needs and what is left, disk, a limit, a full
 permit pool or a critical or missing reading, so a wait never goes
 unexplained; the stagger is too brief to report, and the work an entry waits
 for stays in `waiting_for`.
-The queue stores
-the CLI's launch plan opaquely and creates nothing until a slot frees, so a
-waiting entry costs no worktree and branches from the default branch current
-when it starts. A
-starting entry keeps its slot through setup while the launching CLI holds a
-connection open, with a short grace period for handoffs to the place a host opens and daemon
-restarts, until its agent registers; setup begins once the daemon holds the slot; a dead launch cannot hold a slot, and setup
-time stays unbounded. The daemon starts admitted entries through a detached CLI
+The queue
+holds agents, not workspaces: a new workspace is prepared once its launch is
+recorded, before its agent is admitted, so a waiting agent waits in a
+workspace that exists. A
+starting entry keeps its slot, with a short grace period for handoffs to the
+place a host opens and daemon restarts, until its agent registers; a dead
+start cannot hold a slot. The daemon starts admitted entries through a detached CLI
 worker carrying the queuing terminal's origin, since terminal launch logic
 stays in the CLI: a background place in the group of the place it was queued
 from, such as a Herdr tab in its workspace, otherwise one of
