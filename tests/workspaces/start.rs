@@ -3790,6 +3790,18 @@ fn an_issue_start_refuses_a_workspace_that_cannot_reopen_before_prompting() {
     assert!(!picked.exists(), "asked a picker: {transcript}");
 }
 
+/// A copy's start in a repository named by a number, which beside a branch
+/// names the repository, takes it as the copy's own.
+#[test]
+fn a_copys_start_takes_a_numeric_repository_beside_a_branch() {
+    let fixture = Fixture::new();
+    fixture.ok(&["repo", "rename", fixture.repo.to_str().unwrap(), "007"]);
+    let source = fixture.add("source");
+    let id = source["id"].as_str().unwrap();
+    let copy = fixture.ok(&["start", "--wait", "007", "--copy", id, "--branch", "new"]);
+    assert_eq!(copy["branch"], "new");
+}
+
 /// An existing workspace's start without an agent, run here with `--json`,
 /// reports the workspace it reopens.
 #[test]

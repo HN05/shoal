@@ -46,14 +46,17 @@ pub(in crate::cli::commands::start) fn checked_launch(
 }
 
 /// `launch` copying the workspace `copied` names, which a picker may have
-/// picked, in its repository unless the start names one.
-fn copy_from(launch: &mut Launch, copied: &copies::Copied) {
+/// picked, in its repository unless the start names one, as a number does
+/// beside a branch or issue.
+fn copy_from(launch: &mut Launch, copied: &copies::Copied) -> Result<()> {
     launch.copy = Some(SpaceChoice::Space(copied.source.workspace.clone()));
+    let positional = crate::launches::decided_target(launch)?;
     let names_repository =
-        launch.repository.is_some() || matches!(launch.target, Some(StartTarget::Repository(_)));
+        launch.repository.is_some() || matches!(positional, Some(StartTarget::Repository(_)));
     if !names_repository {
         launch.repository = Some(copied.repository.to_string());
     }
+    Ok(())
 }
 
 /// Have the daemon start the new workspace `args` ask for in `mode`, which
@@ -67,7 +70,7 @@ pub(in crate::cli::commands::start) async fn start(
     let mut launch = checked_launch(args.launch(), args.checked_repository.as_ref());
     let copied = copies::source(ctx, args.copy.clone()).await?;
     if let Some(copied) = &copied {
-        copy_from(&mut launch, copied);
+        copy_from(&mut launch, copied)?;
     }
     if args.fork {
         let copied = copied.map(|copy| copy.source.workspace);
