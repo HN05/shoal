@@ -108,33 +108,8 @@ struct WorkerRequest {
 
 /// The worker `launch` asks for in `shape`, which `source` made.
 fn worker_request(launch: Launch, shape: Shape, source: LaunchSource) -> WorkerRequest {
-    let Launch {
-        agent,
-        model,
-        fork,
-        permissions,
-        now,
-        here,
-        task,
-        prompt,
-        env,
-        blockers,
-        ..
-    } = launch;
     WorkerRequest {
-        launch: LaunchRequest {
-            mode: Some(shape.mode),
-            narrowing: permissions,
-            model,
-            args: task,
-            prompt,
-            fork,
-            env,
-            now,
-            here,
-            source: Some(source),
-            ..LaunchRequest::new(agent)
-        },
-        blockers,
+        launch: super::space::agent_request(&launch, &shape.mode, source),
+        blockers: launch.blockers,
     }
 }

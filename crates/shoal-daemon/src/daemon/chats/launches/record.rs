@@ -4,10 +4,7 @@
 use anyhow::{Context as _, Result};
 
 use crate::{
-    daemon::{
-        chats::NewChat, links::issue::AssignerOf, notifications::NotificationKind, scope::Caller,
-        workspace::Manager,
-    },
+    daemon::{chats::NewChat, links::issue::AssignerOf, scope::Caller, workspace::Manager},
     forge::items::reference::ItemInput,
     model::{Assigner, Chat, Relation, SpaceLinks},
     protocol::ChatStart,
@@ -39,7 +36,8 @@ impl Manager {
                 format!("chat {number} stays without its agent, which `shoal rm {number}` removes")
             })?;
         }
-        self.tell_start_warnings(&chat, &warnings).await;
+        self.tell_start_warnings(&chat.clone().into(), &warnings)
+            .await;
         let linked = (self.chat_by_id(&chat.id).await?).context("the new chat was removed")?;
         let chat = Chat {
             links: linked.links,
@@ -109,17 +107,6 @@ impl Manager {
             }
         }
         warnings
-    }
-
-    /// Tell the starter of the new `chat` what starting it warned of: the
-    /// agent of the nearest space above it with one, else the user.
-    async fn tell_start_warnings(&self, chat: &Chat, warnings: &[String]) {
-        if warnings.is_empty() {
-            return;
-        }
-        let message = format!("starting {} warned: {}", chat.name, warnings.join("; "));
-        let kind = NotificationKind::StartWarned;
-        self.notify_space(&chat.name, &chat.id, kind, message).await;
     }
 }
 

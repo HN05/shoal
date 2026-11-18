@@ -126,8 +126,14 @@ async fn a_start_now_waits_for_its_preparation_then_starts_past_the_limits() {
         ..crate::protocol::operations::QueuedLaunch::new("claude".parse().unwrap())
     };
     let entry = manager
-        .queue_for_preparation((&workspace, false), launch, (None, Vec::new()))
+        .queue_start_agent(
+            (&workspace.clone().into(), true),
+            launch,
+            (None, Vec::new()),
+        )
         .await
+        .unwrap()
+        .entry
         .unwrap();
     assert_eq!(entry.state, QueueState::Queued);
     assert_eq!(entry.blockers, vec!["setup of child".to_owned()]);
@@ -146,8 +152,14 @@ async fn a_queued_start_waits_for_its_preparation_then_for_the_limits() {
     let workspace = preparing(&manager, &repo, "child").await;
     let launch = crate::protocol::operations::QueuedLaunch::new("claude".parse().unwrap());
     let entry = manager
-        .queue_for_preparation((&workspace, false), launch, (None, Vec::new()))
+        .queue_start_agent(
+            (&workspace.clone().into(), true),
+            launch,
+            (None, Vec::new()),
+        )
         .await
+        .unwrap()
+        .entry
         .unwrap();
     manager.release_setup_waits(&workspace.id).await.unwrap();
     let entries = manager.queue_entries().await.unwrap();
@@ -168,8 +180,14 @@ async fn a_new_workspace_ready_at_once_holds_its_agent_until_its_preparation_let
     assert_eq!(workspace.state, WorkspaceState::Ready);
     let launch = crate::protocol::operations::QueuedLaunch::new("claude".parse().unwrap());
     let entry = manager
-        .queue_for_preparation((&workspace, false), launch, (None, Vec::new()))
+        .queue_start_agent(
+            (&workspace.clone().into(), true),
+            launch,
+            (None, Vec::new()),
+        )
         .await
+        .unwrap()
+        .entry
         .unwrap();
     assert_eq!(entry.state, QueueState::Queued);
     assert_eq!(entry.blockers, vec!["setup of child".to_owned()]);
@@ -187,8 +205,14 @@ async fn a_held_start_now_is_left_to_its_holder_when_its_setup_releases_it() {
         ..crate::protocol::operations::QueuedLaunch::new("claude".parse().unwrap())
     };
     let entry = manager
-        .queue_for_preparation((&workspace, false), launch, (None, Vec::new()))
+        .queue_start_agent(
+            (&workspace.clone().into(), true),
+            launch,
+            (None, Vec::new()),
+        )
         .await
+        .unwrap()
+        .entry
         .unwrap();
     manager.agent_queue.hold(&entry.id);
     manager.release_setup_waits(&workspace.id).await.unwrap();

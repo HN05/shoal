@@ -20,8 +20,14 @@ async fn prepared_here(manager: &Manager, repository: &Repository, now: bool) ->
         ..QueuedLaunch::new("claude".parse().unwrap())
     };
     let entry = manager
-        .queue_for_preparation((&workspace, false), launch, (None, Vec::new()))
+        .queue_start_agent(
+            (&workspace.clone().into(), true),
+            launch,
+            (None, Vec::new()),
+        )
         .await
+        .unwrap()
+        .entry
         .unwrap();
     manager.release_setup_waits(&workspace.id).await.unwrap();
     entry

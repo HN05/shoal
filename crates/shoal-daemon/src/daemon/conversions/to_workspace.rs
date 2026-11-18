@@ -13,7 +13,10 @@ use super::Converting;
 use crate::{
     config::modes::ModeName,
     daemon::{
-        links::issue::OpenIssue, operations::starts::Preparing, scope::Caller, workspace::Manager,
+        links::issue::OpenIssue,
+        operations::starts::{Preparing, Recorded},
+        scope::Caller,
+        workspace::Manager,
     },
     model::{Chat, OpenedWorkspace},
     protocol::{CreationOptions, operations::StartedWorkspace},
@@ -88,10 +91,10 @@ impl Manager {
         } = conversion;
         let workspace =
             (self.create_converted_workspace(converting, branch, base, options)).await?;
-        let opened = OpenedWorkspace {
+        let recorded = Recorded::from(OpenedWorkspace {
             workspace,
             reused: false,
-        };
+        });
         let preparing = Preparing {
             issue: None,
             pr: None,
@@ -102,7 +105,8 @@ impl Manager {
             unfollowed: false,
             env,
         };
-        let started = self.prepare_new(opened, None, preparing, caller).await?;
+        let started = self.begin_recorded(recorded, None, preparing, caller);
+        let started = started.await?.into_workspace()?;
         // Its worktree exists, so nothing holds its preparation.
         let operation =
             (started.operation.clone()).context("the conversion's preparation waits")?;

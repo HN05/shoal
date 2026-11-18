@@ -225,11 +225,12 @@ and it reports typed steps and its end. The CLI starts an operation and follows
 it through `shoal_client`, as an app does, showing its output where it showed
 it before, so the CLI and apps cannot drift. `shoal start`, `split` and apps open a
 workspace and start its preparation through one request, `StartWorkspace` or
-`StartSplit`: it refuses an agent that cannot run, an issue that is not open or
+`StartSplit`, which take the steps every new space's start takes, whatever
+its kind: it refuses an agent that cannot run, an issue that is not open or
 a branch that is not a literal Git branch name before creating anything, records
 a new workspace, `preparing` without its worktree, or creates a split's with
 it, or reopens the one on the branch, PR head or record
-it names, assigns the issue, removing a new workspace it cannot assign, queues
+it names, assigns the issue, removing a new space it cannot assign, queues
 the detached agent the request asks for, with its mode, model, arguments,
 fork, issue and caller's place, as a scoped `start --agent` starts its agent,
 which waits in the queue for the preparation, and starts the operation, which
@@ -270,14 +271,16 @@ which the launch names, its issue or link belongs to, or the checkout or
 worktree the start was made in has; and the branch a PR, a branch link, the
 typed name or earlier work on its issue settles. It then queues the worker of
 the workspace `--in` names, or of the one that has the branch, as
-`QueueAgent` does; opens and prepares a new workspace as `StartWorkspace`
-does, its agent and preparation waiting for what blocks it; or starts a
-chat, a launch without a branch or issue included: it resolves the chat's
-agent, mode and name, after its issue's title or where it runs, checks where
-it goes as recording it would, then runs a worker of its own that opens the
-background place, whose chat worker starts the chat there from the handoff it
-waits on, and answers once the chat runs its agent. Every launch answers
-with the space it started in, of either kind, as it created or found it, and
+`QueueAgent` does; or starts a new space, a chat for a launch without a
+branch or issue, through the steps `StartWorkspace` takes: the kind decides
+only where the space goes, a chat's checkout, workspace worktree or
+`root_dir` or a workspace's new worktree, and the daemon reads the issue
+the same way for both, resolves the agent and mode under the settings
+there, names the space as the launch names it, else after its issue's or
+PR's title or where a chat runs, records it, links the issue, queues its
+agent through the queue's one request, waiting for what blocks it, and
+prepares a workspace, the only step that depends on the kind. Every launch
+answers with the space it started in, of either kind, as it created or found it, and
 how it started the agent there, so a caller reads the space without asking
 its kind; a background place's worker reports only where the place runs. The
 queue entry of the
@@ -1119,18 +1122,14 @@ The daemon records every new chat, below where it goes and linked to what it
 starts on, before its agent runs anywhere, in one operation whatever runs the
 agent: the caller's terminal, a background place, the queue or an app only
 runs the recorded chat's agent, so a start that names nothing to link sends no
-link request. The daemon's launch starts chats and workspaces through one
-space launch: it resolves the name, agent, mode and issue from the launch,
-records the space, whose home decides its kind, links what the start names,
-queues the agent with one plan, the space and the launch, and prepares a
-workspace; the queue starts every admitted agent the same way, opening a
+link request. The queue starts every admitted agent the same way, opening a
 place for any recorded space, and every agent start has an entry, admitted at
 once where no limit applies. A start that opens a place for the chat beside
 its terminal records the chat first, with its queue entry attached, and
 passes the place the recorded chat with `--chat`; only a chat its starting
-process runs itself records itself there. What linking warns of goes to the
-agent of the nearest space above the chat with one, else to the user's
-notifications, never only to a terminal the agent then takes over. A space
+process runs itself records itself there. What linking a new space, of
+either kind, warns of goes to the agent of the nearest space above it with
+one, else to the user's notifications, never only to a terminal the agent then takes over. A space
 whose place never starts its agent is kept, whatever its kind, with its
 launch as a failed queue entry, which nothing admits and which keeps no
 space from cleanup; its failure goes to the starter the same way, naming

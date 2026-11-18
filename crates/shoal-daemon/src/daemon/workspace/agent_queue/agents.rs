@@ -1,6 +1,6 @@
 //! Queuing the worker of an existing workspace in one request, as an app
-//! and `shoal start` queue one in a ready workspace, or of a new one with
-//! its record, to start once its preparation lets it.
+//! and `shoal start` queue one in a ready workspace, or the agent of a new
+//! space with its record, to start once its preparation, if any, lets it.
 use anyhow::{Context as _, Result};
 
 use super::store::Awaits;
@@ -8,7 +8,7 @@ use crate::{
     agents::resolve_launch,
     daemon::workspace::Manager,
     forge::items::reference::ItemInput,
-    model::{Blocker, QueueEntry, Workspace},
+    model::{Blocker, QueueAdmission, QueueEntry, Space, Workspace},
     protocol::operations::{LaunchIssue, LaunchRequest, QueuedLaunch},
     start_plan::queued_agent_request,
 };
@@ -41,29 +41,28 @@ impl Manager {
             .context("the daemon queued the agent without an entry")
     }
 
-    /// Queue `launch` in the `workspace` a start opened, linking `pr` as
-    /// it starts, once `blockers` are done. In a new workspace it waits
-    /// until the preparation gets past the post-setup hook, then starts as
-    /// the queue admits it or, for one that starts now, at once regardless
-    /// of the limits; in a `reused` one, which runs no post-setup hook, it
-    /// queues as in any ready one. One its caller runs `here` is left to
-    /// the caller once admitted, and kept for it while it waits.
-    pub(crate) async fn queue_for_preparation(
+    /// Queue `launch` in the `space` a start recorded, linking `pr` as it
+    /// starts, once `blockers` are done. Where it `awaits_preparation`, as
+    /// in a new workspace, it waits until the preparation gets past the
+    /// post-setup hook, then starts as the queue admits it or, for one that
+    /// starts now, at once regardless of the limits; elsewhere it queues as
+    /// in any ready space. One its caller runs `here` is left to the caller
+    /// once admitted, and kept for it while it waits.
+    pub(crate) async fn queue_start_agent(
         &self,
-        (workspace, reused): (&Workspace, bool),
+        (space, awaits_preparation): (&Space, bool),
         mut launch: QueuedLaunch,
         (pr, blockers): (Option<ItemInput>, Vec<Blocker>),
-    ) -> Result<QueueEntry> {
-        let awaits = match reused {
-            true => Awaits::FailedSetup,
-            false => Awaits::Preparation {
+    ) -> Result<QueueAdmission> {
+        let awaits = match awaits_preparation {
+            true => Awaits::Preparation {
                 at_once: std::mem::take(&mut launch.now),
             },
+            false => Awaits::FailedSetup,
         };
-        let mut request = queued_agent_request(workspace, launch, pr)?;
+        let mut request = queued_agent_request(space, launch, pr)?;
         request.blockers = blockers;
-        (self.queue_add_awaiting(request, awaits).await?.entry)
-            .context("the daemon queued the agent without an entry")
+        self.queue_add_awaiting(request, awaits).await
     }
 }
 

@@ -1,6 +1,7 @@
 use super::*;
 use crate::daemon::test_support::{global_config, manager, repository};
-use shoal_protocol::launches::StartTarget;
+use crate::model::SpaceKind;
+use shoal_protocol::launches::{LaunchSource, StartTarget};
 
 /// A launch that starts a chat records it and queues its agent with the
 /// prompt, which the queue's start gives the agent as its first message.

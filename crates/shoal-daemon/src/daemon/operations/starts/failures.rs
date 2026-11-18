@@ -14,22 +14,14 @@ use crate::{
         operations::Entry,
         workspace::Manager,
     },
-    protocol::operations::{Ended, Failure, StartedWorkspace},
+    protocol::operations::{Ended, Failure},
 };
 
 impl Manager {
-    /// Once the preparation of the workspace `started` fails, tell its
-    /// coordinator, the agent of the nearest space above it with one, or
-    /// else the user, naming what retries it and what removes it. One that
-    /// waits is told of once it starts.
-    pub(super) fn report_failed_preparation(self: &Arc<Self>, started: &StartedWorkspace) {
-        if let Some(operation) = &started.operation {
-            self.report_preparation_failure(&started.workspace.id, operation);
-        }
-    }
-
-    /// [`Self::report_failed_preparation`] of the workspace `id`, which
-    /// `operation` prepares.
+    /// Once the preparation of the workspace `id`, which `operation`
+    /// prepares, fails, tell its coordinator, the agent of the nearest
+    /// space above it with one, or else the user, naming what retries it
+    /// and what removes it. One that waits is told of once it starts.
     pub(super) fn report_preparation_failure(self: &Arc<Self>, id: &SpaceId, operation: &str) {
         let Some(entry) = self.operations.get(operation) else {
             return;
