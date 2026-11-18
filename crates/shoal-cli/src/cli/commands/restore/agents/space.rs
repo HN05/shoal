@@ -199,15 +199,22 @@ async fn launch(
         return Ok(code);
     }
     terminal::label_current(&ctx.paths, placed.owner()).await?;
+    let source = restore_source();
     shoal_workers::execution::run_recovery(
         &ctx.paths,
         SpaceSelector::id(&space.id),
         recovery.command,
         agent,
-        (
-            records,
-            Some(shoal_protocol::launches::LaunchSource::Manual),
-        ),
+        (records, source),
     )
     .await
 }
+
+/// What made this restore: the user, who runs it here, unless the queue
+/// started it for an admitted entry, whose interaction its queuing decided.
+fn restore_source() -> Option<shoal_protocol::launches::LaunchSource> {
+    (crate::env::queue_entry().is_none()).then_some(shoal_protocol::launches::LaunchSource::Manual)
+}
+
+#[cfg(test)]
+mod tests;
