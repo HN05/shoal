@@ -240,3 +240,37 @@ async fn a_link_that_fails_during_a_start_reaches_the_starting_agent() {
             .is_empty()
     );
 }
+
+/// A chat recorded for a start whose place its starter could not open is
+/// removed, its failure told, while one whose agent has run is refused.
+#[tokio::test]
+async fn a_starter_removes_only_a_new_chat_whose_agent_never_ran() {
+    let (temp, manager) = manager().await;
+    let repo = machine(&manager, &temp, false).await;
+    let new = crate::daemon::chats::NewChat {
+        name: "unopened".into(),
+        agent: "claude".into(),
+        mode: "chat".into(),
+        narrowing: Default::default(),
+        origin: None,
+        parent: None,
+        priority: None,
+    };
+    let repository = Some((&repo.id).into());
+    let unopened = manager.start_new_chat(repository, None, new).await.unwrap();
+    let ran = crate::daemon::test_support::chat(&manager, "ran", "chat", Some(&repo), None).await;
+
+    let (unopened, ran) = (SpaceSelector::id(&unopened.id), SpaceSelector::id(&ran.id));
+    manager.fail_chat_place(&unopened, "no tab").await.unwrap();
+    let refused = manager.fail_chat_place(&ran, "no tab").await;
+
+    assert!(refused.is_err());
+    let chats = manager.chats().await.unwrap();
+    let names: Vec<_> = chats.iter().map(|chat| chat.name.as_str()).collect();
+    assert_eq!(names, ["ran"]);
+    let told = notified(&manager, NotificationKind::StartFailed).await;
+    assert!(
+        told.iter().any(|told| told.message.contains("unopened")),
+        "{told:?}"
+    );
+}

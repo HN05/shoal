@@ -134,6 +134,7 @@ const REQUESTS: &[&str] = &[
     // Chats.
     r#"{"launch_chat":{"start":{"repository":"app","name":"app-chat","agent":"claude","links":{"issues":[{"kind":"issue","url":"https://forge.example/team/app/issues/4","title":"Fix"}],"prs":[],"opened":[],"related":[]}},"origin":{"host":"tmux","place":"%3"},"queue_entry":"q1"}}"#,
     r#"{"launch":{"launch":{"target":"app","in":{"space":"3"},"mode":"chat","agent":"claude","task":["Read the build"]}}}"#,
+    r#"{"fail_chat_start":{"chat":"9","error":"the tab did not open"}}"#,
     r#"{"check_chat_parent":{"repository":"app","workspace":"fix","parent":"7"}}"#,
     r#""chat_root""#,
     // The agent queue.

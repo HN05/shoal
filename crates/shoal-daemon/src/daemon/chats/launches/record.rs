@@ -143,6 +143,28 @@ impl Manager {
         self.discard_new_chat(name, id).await;
     }
 
+    /// Remove the new chat `chat`, whose place its starter could not open
+    /// with `error`, as [`Self::fail_new_chat`] does; a chat whose agent
+    /// has run is refused, since its removal is the user's.
+    pub(in crate::daemon) async fn fail_chat_place(
+        &self,
+        chat: &SpaceSelector,
+        error: &str,
+    ) -> Result<()> {
+        let chat = self.space(chat).await?;
+        let id = chat.id.clone();
+        let ran = (self.store).read(move |tx| {
+            crate::daemon::store::exists(tx, "SELECT 1 FROM executions WHERE space_id=?1", [&id])
+        });
+        anyhow::ensure!(
+            !ran.await?,
+            "{} has run its agent, so its start cannot have failed",
+            chat.name
+        );
+        self.fail_new_chat(&chat.name, &chat.id, error).await;
+        Ok(())
+    }
+
     /// Remove the new chat `id`, named `name`, which nothing ran in.
     async fn discard_new_chat(&self, name: &SpaceName, id: &SpaceId) {
         let selector = SpaceSelector::id(id);

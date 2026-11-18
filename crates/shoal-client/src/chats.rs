@@ -33,6 +33,12 @@ pub async fn launch(
     request(daemon, method).await
 }
 
+/// Remove the new chat `chat`, recorded for a start whose place failed to
+/// open with `error` before its agent ran.
+pub async fn fail_start(daemon: &impl Daemon, chat: SpaceSelector, error: String) -> Result<()> {
+    request::<()>(daemon, ChatMethod::FailChatStart { chat, error }).await
+}
+
 /// Refuse `parent`, a space a new chat in `repository`, or without one, in
 /// the worktree of `workspace` when given, could not go below.
 pub async fn check_parent(
