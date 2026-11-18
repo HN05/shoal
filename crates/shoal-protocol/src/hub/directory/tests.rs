@@ -22,6 +22,10 @@ fn a_view_larger_than_a_frame_arrives_in_pages_whole() {
             spaces,
             conflicts: Vec::new(),
         },
+        below_elsewhere: vec![(
+            shoal_ids::space_ids::SpaceId::from("here".to_owned()),
+            shoal_ids::space_ids::SpaceId::from("space-1".to_owned()),
+        )],
     };
     let frames = Response::new(1, Body::HubView(view.into_parts()))
         .frames()
@@ -40,6 +44,7 @@ fn a_view_larger_than_a_frame_arrives_in_pages_whole() {
     assert_eq!(view.machine.as_str(), "desk");
     assert_eq!(view.directory.spaces.len(), 2_000);
     assert_eq!(view.directory.spaces[1_999].space.id.as_str(), "space-1999");
+    assert_eq!(view.below_elsewhere[0].1.as_str(), "space-1");
 }
 
 #[test]
@@ -65,6 +70,7 @@ fn a_space_whose_questions_fill_more_than_a_frame_arrives_whole() {
             spaces: vec![listed],
             conflicts: Vec::new(),
         },
+        below_elsewhere: Vec::new(),
     };
     let mut frames = Response::new(1, Body::HubView(view.into_parts()))
         .frames()

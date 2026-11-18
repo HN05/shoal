@@ -287,14 +287,15 @@ fn a_question_for_an_offline_coordinator_goes_on_to_the_user() {
 
 #[test]
 fn a_child_on_another_machine_holds_no_permission_its_parent_lacks() {
-    let Tree { laptop, child, .. } = tree_below_hub_config("[permissions]\npush = \"deny\"\n");
-    // Read once the laptop's link to the hub settles after the move.
-    let push = wait_for("the child's permissions", || {
-        let status = laptop.ok(&["status", &child]);
-        let push = status["permissions"]["push"]["value"].clone();
-        (!push.is_null()).then_some(push)
-    });
-    assert_eq!(push, "deny");
+    // The hub's daemon runs while the test holds it.
+    let Tree {
+        hub: _hub,
+        laptop,
+        child,
+        ..
+    } = tree_below_hub_config("[permissions]\npush = \"deny\"\n");
+    let status = laptop.ok(&["status", &child]);
+    assert_eq!(status["permissions"]["push"]["value"], "deny", "{status}");
 }
 
 #[test]
@@ -331,4 +332,21 @@ fn a_child_restored_on_another_machine_stays_below_its_coordinator() {
         below.is_some(),
         "the restored child is not below its coordinator: {restored}"
     );
+}
+
+#[test]
+fn stopping_a_coordinator_from_its_child_s_machine_stops_the_child_too() {
+    // The hub's daemon runs while the test holds it.
+    let Tree {
+        hub: _hub,
+        laptop,
+        coordinator,
+        child,
+        ..
+    } = tree_across_machines();
+    working(&laptop, &child);
+    let stopped = laptop.run(&["stop", &coordinator, "--json"]);
+    assert!(stopped.status.success(), "{}", printed(&stopped));
+    let reports = String::from_utf8_lossy(&stopped.stdout);
+    assert_eq!(reports.matches("\"stopped\":true").count(), 2, "{reports}");
 }

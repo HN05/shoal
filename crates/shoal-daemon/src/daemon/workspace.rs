@@ -93,9 +93,9 @@ pub(crate) use stack::record_base_changed;
 pub use stopped_work::PermissionTargets;
 
 pub(crate) use tree::{
-    Receiver, Source, TrackedAgents, children, coordinator_of, deciders, delegated, ensure_parent,
-    first_absent_above, parent, parent_id, parent_ids, place_below, receiver_from, receiving_paths,
-    set_parent, spaces_above, subtree, with_agents,
+    Receiver, Source, TrackedAgents, below_elsewhere, children, coordinator_of, deciders,
+    delegated, ensure_parent, first_absent_above, parent, parent_id, parent_ids, place_below,
+    receiver_from, receiving_paths, set_parent, spaces_above, subtree, with_agents,
 };
 
 use crate::{

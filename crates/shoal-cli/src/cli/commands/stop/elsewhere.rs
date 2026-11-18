@@ -1,7 +1,8 @@
 //! Stopping spaces other joined machines run: each stop goes through the
 //! daemon to that machine, for a space elsewhere and, unless skipped, the
-//! spaces below it the hub lists, wherever they run, and for those below a
-//! space here; the hub holds a stop while its machine is offline.
+//! spaces below it the hub lists, wherever they run, this machine's among
+//! them, and for those below a space here; the hub holds a stop while its
+//! machine is offline.
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
@@ -37,8 +38,11 @@ pub(super) async fn stop(
     if !skip_children {
         spaces.extend(below(&view, &remote.space.id));
     }
-    for space in spaces {
-        stop_one(ctx, &space, yes).await?;
+    for space in &spaces {
+        stop_one(ctx, space, yes).await?;
+    }
+    if !skip_children {
+        stop_here_below(ctx, &view, &spaces, yes).await?;
     }
     Ok(Some(0))
 }
@@ -56,6 +60,28 @@ pub(super) async fn stop_below(ctx: &Context, stopped: &[Space], yes: bool) -> R
         }
     }
     Ok(())
+}
+
+/// Stop this machine's spaces below any of `stopped`, spaces elsewhere,
+/// with the spaces below them, here and elsewhere.
+async fn stop_here_below(
+    ctx: &Context,
+    view: &HubView,
+    stopped: &[Listed],
+    yes: bool,
+) -> Result<()> {
+    let here: Vec<SpaceSelector> = (view.below_elsewhere.iter())
+        .filter(|(_, parent)| stopped.iter().any(|space| &space.space.id == parent))
+        .map(|(space, _)| SpaceSelector::id(space))
+        .collect();
+    if here.is_empty() {
+        return Ok(());
+    }
+    let here = super::resolve(ctx, here, true).await?;
+    for space in &here {
+        super::stop_one(ctx, space, yes).await?;
+    }
+    stop_below(ctx, &here, yes).await
 }
 
 /// Stop `space` on its machine, reporting it, or that the hub holds the

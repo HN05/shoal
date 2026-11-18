@@ -162,6 +162,10 @@ pub struct HubView {
     pub machine: MemberId,
     #[serde(flatten)]
     pub directory: Directory,
+    /// This machine's spaces whose parent runs on another machine, each
+    /// with that parent, which the directory's other spaces leave out.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub below_elsewhere: Vec<(SpaceId, SpaceId)>,
 }
 
 /// A piece of a [`HubView`], which a response carries in pages, since the
@@ -180,6 +184,8 @@ pub enum ViewPart {
     Question(Question),
     Approval(ApprovalRequest),
     Conflict(Conflict),
+    /// One of this machine's spaces and its parent on another machine.
+    BelowElsewhere(SpaceId, SpaceId),
 }
 
 impl HubView {
@@ -190,10 +196,12 @@ impl HubView {
             spaces,
             conflicts,
         } = self.directory;
+        let below = self.below_elsewhere.into_iter();
         (std::iter::once(ViewPart::Here(self.machine)))
             .chain(machines.into_iter().map(ViewPart::Machine))
             .chain(spaces.into_iter().flat_map(space_parts))
             .chain(conflicts.into_iter().map(ViewPart::Conflict))
+            .chain(below.map(|(space, parent)| ViewPart::BelowElsewhere(space, parent)))
             .collect()
     }
 
@@ -207,6 +215,7 @@ impl HubView {
             Some(_) => anyhow::bail!("a hub view starts with this machine's ID"),
         };
         let mut directory = Directory::default();
+        let mut below_elsewhere = Vec::new();
         for part in parts {
             match part {
                 ViewPart::Here(_) => anyhow::bail!("a hub view names this machine once"),
@@ -219,9 +228,14 @@ impl HubView {
                     .approvals
                     .push(request),
                 ViewPart::Conflict(conflict) => directory.conflicts.push(conflict),
+                ViewPart::BelowElsewhere(space, parent) => below_elsewhere.push((space, parent)),
             }
         }
-        Ok(Some(Self { machine, directory }))
+        Ok(Some(Self {
+            machine,
+            directory,
+            below_elsewhere,
+        }))
     }
 }
 

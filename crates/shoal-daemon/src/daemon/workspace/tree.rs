@@ -443,6 +443,18 @@ pub(crate) fn parent_ids(db: &Connection) -> Result<HashMap<SpaceId, SpaceId>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// This machine's spaces whose parent it does not have, each with that
+/// parent, which runs on another machine.
+pub(crate) fn below_elsewhere(db: &Connection) -> Result<Vec<(SpaceId, SpaceId)>> {
+    Ok(db
+        .prepare(
+            "SELECT space_id, parent_id FROM space_parents
+                WHERE NOT EXISTS (SELECT 1 FROM spaces WHERE spaces.id=space_parents.parent_id)",
+        )?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 /// The spaces with an agent among `agents`, as [`has_agent`] counts one.
 pub(crate) fn with_agents(db: &Connection, agents: &TrackedAgents) -> Result<HashSet<SpaceId>> {
     Ok(db

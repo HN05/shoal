@@ -1,6 +1,7 @@
 //! What a machine's callers see of the hub's directory: the other machines'
 //! spaces, from the hub itself or through this machine's link, as far as a
-//! scoped caller's scope reaches them.
+//! scoped caller's scope reaches them, and which of this machine's spaces
+//! are below them.
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Result, anyhow};
@@ -26,7 +27,18 @@ impl Manager {
             let reached = reached.into_iter().map(|space| space.id).collect();
             within_reach(&mut directory, &reached);
         }
-        Ok(Some(HubView { machine, directory }))
+        let mut below_elsewhere = (self.store)
+            .run(|db| crate::daemon::workspace::below_elsewhere(db))
+            .await?;
+        // A scoped caller sees those below the other machines' spaces it sees.
+        below_elsewhere.retain(|(_, parent)| {
+            (directory.spaces.iter()).any(|listed| &listed.space.id == parent)
+        });
+        Ok(Some(HubView {
+            machine,
+            directory,
+            below_elsewhere,
+        }))
     }
 
     /// This machine's ID at the hub and the hub's directory, none on a
