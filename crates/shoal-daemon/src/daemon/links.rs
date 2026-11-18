@@ -8,6 +8,7 @@ mod ci;
 pub mod issue;
 mod listing;
 mod memories;
+mod merge_review;
 mod merge_warning;
 pub(in crate::daemon) mod place;
 pub mod pr;

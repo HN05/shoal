@@ -134,15 +134,24 @@ pub(super) async fn handle(
             target,
             kind,
             item,
-            action,
+            mut action,
             confirmed,
-        } => Body::Item(match confirmed {
-            Some(confirmed) => {
-                (manager.confirmed_merge(&target, item, action, &confirmed, caller)).await?
+        } => {
+            // A scoped caller's merge passed its gate in its scope, before
+            // its permission.
+            if caller.is_none() {
+                (manager.gate_pull_merge(&target, item.clone(), &mut action, None)).await?;
             }
-            None => (manager.item_action(&target, kind, item, action, caller)).await?,
-        }),
+            Body::Item(match confirmed {
+                Some(confirmed) => {
+                    (manager.confirmed_merge(&target, item, action, &confirmed, caller)).await?
+                }
+                None => (manager.item_action(&target, kind, item, action, caller)).await?,
+            })
+        }
         ItemMethod::MergeWarning { target, item } => {
+            // Before the question, which a merge its gate refuses never asks.
+            (manager.require_pull_review(&target, item.clone(), None, caller)).await?;
             Body::MergeWarning(manager.merge_warning(&target, item).await?)
         }
         ItemMethod::OpenPull {
@@ -239,7 +248,7 @@ impl Scoped for ItemMethod {
             }
             // Merging a PR and deleting its branch are the `merge`
             // permission's, and the merge then names the head its request
-            // binds.
+            // binds, once its review gate passes for that head.
             ItemMethod::ItemAction {
                 target,
                 item,
@@ -253,7 +262,9 @@ impl Scoped for ItemMethod {
                 let context = own_context(caller, target);
                 let repository = reached_change_context(manager, caller, context).await?;
                 let subject = manager.bind_merge(target, item.clone(), action, caller);
-                let merge = permissions::Action::new(PermissionKey::Merge, subject.await?)
+                let subject = subject.await?;
+                (manager.gate_pull_merge(target, item.clone(), action, Some(caller))).await?;
+                let merge = permissions::Action::new(PermissionKey::Merge, subject)
                     .in_repository(repository);
                 manager.authorize_action(Some(caller), merge).await?;
                 Some(target_selector(target)?)

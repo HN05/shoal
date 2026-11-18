@@ -521,7 +521,7 @@ coordinator as one line. `resolve` records an outcome with its data, and
 repository receive each `false-positive` finding's title, path and reason and
 skip that claim while the reason holds; the next review checks each `fixed`
 finding. When the repository requires a review, `pr open` of a new PR,
-`ready` and `merge` are refused until a finished review covers the commit they
+`ready`, `merge` and `pr merge` are refused until a finished review covers the commit they
 act on with every finding resolved, and the refusal starts one when none
 exists.
 

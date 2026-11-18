@@ -1339,14 +1339,19 @@ With [`[review] require_for_pr`](../crates/shoal-cli/src/cli/commands/configurat
 PR is checked before it pushes, and before a [proposal](#approval-for-agent-issues-and-prs); linking an
 existing PR is not. With `require_for_ready`, `shoal ready` is checked, not
 `ready --undo`. With `require_for_merge`, [`shoal merge`](#merge-into-the-default-branch) is checked for the
-commit of the branch that merges, before the question it asks and before an
-agent's approval request, which a refused merge never makes. Each gate holds agents and the commands they run with `"agents"`,
+commit of the branch that merges, and [`shoal pr merge`](#issue-and-pr-actions), with or without
+`--auto`, for the PR's head, which the merge then names to the forge, against the
+reviews of the workspace that owns the PR's branch; a PR whose branch no
+workspace owns, such as a fork's, is refused, to merge on the forge. A merge is
+checked before the question it asks and before an agent's approval request,
+which a refused merge never makes. Each gate holds agents and the commands they run with `"agents"`,
 and your own commands too with `"all"`. A gate passes once a finished review covers HEAD exactly and every
 one of its findings is resolved, whatever the verdict. Otherwise the command is
 refused, naming what is missing and listing the unresolved findings; without a
 review of HEAD and with none queued or running, it queues one, whose findings
 arrive as a message. A gate's review is a
-workspace review, never posted. A workspace process runs, cancels and answers the reviews of
+workspace review, never posted; `shoal review run <pr-url>` reviews a PR in the
+workspace that owns its branch. A workspace process runs, cancels and answers the reviews of
 its own workspace and those below it. Removing a workspace cancels its review and
 deletes its reviews. Every command takes `--json`.
 
@@ -4784,7 +4789,8 @@ warning that appeared where none was. A scoped process merges, sets or
 withdraws an automatic merge and deletes a PR's branch as the agent account,
 as its space's [`merge` permission](#mode-permissions) allows: the request binds the PR
 at its head commit, which the merge names to the forge, so with `"propose"` a
-later commit needs another approval.
+later commit needs another approval. A merge that its [review gate](#local-reviews)
+refuses goes no further.
 `delete-branch` deletes the branch of a merged or closed PR on the forge, such
 as one merged on the forge's website, never a local branch, with your own
 login or a scoped process's agent account. It refuses an open PR, a branch in a fork,

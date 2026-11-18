@@ -49,9 +49,18 @@ impl Manager {
         branch: &BranchName,
     ) -> Result<Option<SpaceId>> {
         let repository_id = self.workspace_by_id(id).await?.repository().clone();
-        let branch = branch.clone();
+        self.branch_owner_in(&repository_id, branch).await
+    }
+
+    /// The workspace that owns `branch` in the repository `repository_id`.
+    pub(crate) async fn branch_owner_in(
+        &self,
+        repository_id: &RepositoryId,
+        branch: &BranchName,
+    ) -> Result<Option<SpaceId>> {
+        let (repository_id, branch) = (repository_id.clone(), branch.clone());
         (self.store)
-            .run(move |db| owner(db, &repository_id, &branch))
+            .read(move |tx| owner(tx, &repository_id, &branch))
             .await
     }
 

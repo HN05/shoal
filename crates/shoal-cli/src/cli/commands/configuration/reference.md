@@ -1021,7 +1021,7 @@ fallback_agent = "claude"  # Optional; reviews once more after a failure
 post = true                # Post a PR review's findings on the PR
 require_for_pr = "off"     # A new PR needs a finished, resolved review of HEAD
 require_for_ready = "off"  # `shoal ready` needs one too
-require_for_merge = "off"  # `shoal merge` needs one of the commit that merges
+require_for_merge = "off"  # `shoal merge` and `pr merge` need one of what merges
 ```
 
 Each `require_for_` key takes `"off"`, `"agents"`, which holds agents and the
