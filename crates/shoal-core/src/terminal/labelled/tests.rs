@@ -1,6 +1,10 @@
 use super::*;
-use crate::sessions::HostName;
-use std::os::unix::fs::PermissionsExt as _;
+use crate::{
+    sessions::HostName,
+    terminal::{Host, Places, Start},
+};
+use futures_util::future::BoxFuture;
+use std::sync::Mutex;
 use tempfile::TempDir;
 
 /// Whether another process could take the lock at `path` now.
@@ -26,46 +30,83 @@ async fn a_group_is_looked_for_once_at_a_time_per_host_and_label() -> Result<()>
     Ok(())
 }
 
-/// A `herdr` whose slow `workspace list` lets a second start list before
-/// the first creates, unless something keeps them apart.
-const FAKE_HERDR: &str = r#"#!/bin/sh
-dir=$(dirname "$0")
-case "$1 $2" in
-"workspace list")
-    sleep 0.5
-    printf '{"result":{"workspaces":%s}}' "$(cat "$dir/workspaces" 2>/dev/null || echo '[]')" ;;
-"workspace create")
-    echo created >> "$dir/creations"
-    echo '[{"workspace_id":"w1","label":"repo"}]' > "$dir/workspaces"
-    echo '{"result":{"workspace":{"workspace_id":"w1","label":"repo"}}}' ;;
-esac
-"#;
+/// A host that records, as it looks for a group, whether another process
+/// could take the lock at `lock` meanwhile.
+struct Recorder {
+    lock: PathBuf,
+    free_while_looking: Mutex<Vec<bool>>,
+}
+
+impl Host for Recorder {
+    fn name(&self) -> HostName {
+        HostName::Herdr
+    }
+
+    fn serves(&self) -> bool {
+        false
+    }
+
+    fn places(&self) -> Option<&dyn Places> {
+        Some(self)
+    }
+}
+
+impl Places for Recorder {
+    fn open<'a>(&'a self, _start: &'a Start<'a>) -> BoxFuture<'a, Result<Origin>> {
+        Box::pin(async { anyhow::bail!("the recorder opens no places") })
+    }
+
+    fn show<'a>(&'a self, _place: &'a Origin, _name: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { anyhow::bail!("the recorder shows no places") })
+    }
+
+    fn background_places(&self) -> &'static str {
+        "places"
+    }
+
+    fn background_place(&self, _name: &str) -> String {
+        String::new()
+    }
+
+    fn group<'a>(
+        &'a self,
+        _near: Option<&'a Origin>,
+        _label: &'a str,
+        _cwd: &'a Path,
+    ) -> BoxFuture<'a, Result<Option<Origin>>> {
+        Box::pin(async move {
+            self.free_while_looking
+                .lock()
+                .unwrap()
+                .push(free(&self.lock)?);
+            Ok(Some(Origin {
+                place: None,
+                group: Some("w1".into()),
+                ..Origin::created(HostName::Herdr, String::new())
+            }))
+        })
+    }
+}
 
 #[tokio::test]
-async fn starts_looking_for_one_group_together_create_it_once() -> Result<()> {
-    let root = TempDir::new()?;
-    let herdr = root.path().join("herdr");
-    std::fs::write(&herdr, FAKE_HERDR)?;
-    std::fs::set_permissions(&herdr, std::fs::Permissions::from_mode(0o755))?;
-    let near = Origin {
-        data: [(
-            "HERDR_BIN_PATH".into(),
-            herdr.to_string_lossy().into_owned(),
-        )]
-        .into(),
-        ..Origin::created(HostName::Herdr, "w0:p1".into())
-    };
+async fn the_host_looks_for_and_creates_a_group_under_its_lock() -> Result<()> {
+    let state = TempDir::new()?;
+    let lock = lock_path(state.path(), "herdr", "repo");
+    let recorder: &'static Recorder = Box::leak(Box::new(Recorder {
+        lock: lock.clone(),
+        free_while_looking: Mutex::default(),
+    }));
     let settings = crate::config::Config::from_toml("")?
         .resolve(&crate::config::repo::ConfigLayers::default())?;
-    let host = Configured::named(&settings, HostName::Herdr);
-    let state = root.path().join("state");
+    let host = Configured {
+        host: recorder,
+        ..Configured::named(&settings, HostName::Herdr)
+    };
 
-    let look = || labelled_group(&state, &host, Some(&near), "repo", root.path());
-    let (first, second) = tokio::join!(look(), look());
+    let group = labelled_group(state.path(), &host, None, "repo", state.path()).await?;
 
-    let groups = [first?, second?].map(|origin| origin.and_then(|origin| origin.group));
-    assert_eq!(groups, [Some("w1".into()), Some("w1".into())]);
-    let creations = std::fs::read_to_string(root.path().join("creations"))?;
-    assert_eq!(creations.lines().count(), 1);
+    assert_eq!(group.and_then(|origin| origin.group), Some("w1".into()));
+    assert_eq!(*recorder.free_while_looking.lock().unwrap(), [false]);
+    assert!(free(&lock)?);
     Ok(())
 }
