@@ -31,9 +31,9 @@ const READABLE_FORMAT: i64 = 1;
 
 /// Variables that change where Git finds a repository or how it reads one
 /// in ways gix does not follow: the [`super::REPOSITORY_ENV`] that Shoal's
-/// Git commands drop and gix would read, and the one discovery variable gix
-/// leaves out.
-const DIVERGING_ENV: &[&str] = &["GIT_DISCOVERY_ACROSS_FILESYSTEM"];
+/// Git commands drop and gix would read, and those Git reads and gix leaves
+/// out, such as the `-c` settings Git passes on to hooks and aliases.
+const DIVERGING_ENV: &[&str] = &["GIT_CONFIG_PARAMETERS", "GIT_DISCOVERY_ACROSS_FILESYSTEM"];
 
 /// `in_process`'s answer for the repository Git finds from `path`, as `git
 /// -C <path>` finds it, read on the blocking pool; `cli`'s, which runs Git,
