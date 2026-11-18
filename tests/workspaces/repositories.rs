@@ -1169,9 +1169,12 @@ fn repository_removal_serializes_with_workspace_creation() {
         .unwrap();
     fixture.ok(&["repo", "rm", &id, "--yes"]);
     let add = add.wait_with_output().unwrap();
+    // A start after the removal finds no repository; one whose workspace
+    // the removal took learns it went with the repository.
+    let stderr = String::from_utf8_lossy(&add.stderr);
     if !add.status.success() {
         assert!(
-            String::from_utf8_lossy(&add.stderr).contains("repository"),
+            stderr.contains("repository") && stderr.contains(&id),
             "unexpected add failure: {}",
             printed(&add)
         );

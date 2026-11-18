@@ -159,16 +159,7 @@ fn shown(events: Vec<LogEntry>, filter: LogFilter, limit: u32) -> Vec<LogEntry> 
 
 /// The removed space `id`, while the journal keeps its removal.
 fn removed(db: &Connection, id: &SpaceId) -> Result<Option<SpaceId>> {
-    Ok(db
-        .query_row(
-            "SELECT space_id FROM space_events
-             WHERE json_extract(record,'$.kind')=?2 AND space_id=?1
-                 AND space_id NOT IN (SELECT id FROM spaces)
-             ORDER BY id DESC LIMIT 1",
-            params![id, EventKind::Removed],
-            |row| row.get(0),
-        )
-        .optional()?)
+    Ok(super::removal(db, id)?.map(|removal| removal.space_id))
 }
 
 /// The space the removed space `id` was below when it went, as that

@@ -974,7 +974,9 @@ selects it by that number or its ID, so `shoal attach 3` and `--space 3` name
 space 3, and `-` selects the space the command last acted on; other text is
 refused with "a space is selected by its number or ID". A name never selects
 a space, so names may repeat. A removed space has no number and is
-selected by its ID. Without a space, a terminal opens a picker that shows the
+selected by its ID; while its log keeps the removal, a command that needs
+it to exist is refused saying it was removed, and with which repository
+when its repository's removal took it. Without a space, a terminal opens a picker that shows the
 names. `--add-blocker` is the one argument where a bare number names an issue
 instead.
 The header names the keys the list binds, most used first, on as many lines as
@@ -3351,7 +3353,8 @@ shoal repo rm my-project -y
 Permanently deletes the checkout (including in-place local repositories with
 uncommitted or unpushed work), all its workspaces, their ports, simulators, and
 leases, its seed and shared caches, and its local config, stopping managed commands first. A workspace
-still being prepared goes too, once the creation of its worktree under way ends; one whose setup runs
+still being prepared goes too, once the creation of its worktree under way ends, and a
+`shoal start --wait` following its preparation fails naming the repository; one whose setup runs
 refuses the removal until setup ends. Shoal attempts to
 delete workspace branches; a branch whose recorded worktree directory is already
 missing is retained because its contents cannot be inspected.

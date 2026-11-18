@@ -6,7 +6,10 @@ use rusqlite::{Connection, OptionalExtension as _, params};
 use shoal_ids::space_ids::SpaceId;
 
 use crate::{
-    daemon::workspace::Manager,
+    daemon::{
+        events::{self, EventCause, EventDetails},
+        workspace::Manager,
+    },
     model::{Chat, Space, SpaceKind, Workspace},
     refusal::{Reason, Refusal},
 };
@@ -22,7 +25,27 @@ impl Manager {
             Some((SpaceKind::Chat, id)) => self.chat_by_id(&id).await?.map(Space::from),
             None => None,
         };
-        space.ok_or_else(|| Refusal::new(Reason::NotFound, format!("no space {selector}")).into())
+        match space {
+            Some(space) => Ok(space),
+            None => Err(self.missing_space(selector).await),
+        }
+    }
+
+    /// The refusal of a request for the space `selector` names, which does
+    /// not exist: one selected by the ID of a removed space says it was
+    /// removed, with its repository where that took it, while the journal
+    /// keeps the removal.
+    async fn missing_space(&self, selector: &SpaceSelector) -> anyhow::Error {
+        let removal = match selector.given_id().cloned() {
+            Some(id) => self.store.run(move |db| events::removal(db, &id)).await,
+            None => Ok(None),
+        };
+        let message = match removal {
+            Ok(Some(removal)) => removed(&removal),
+            Ok(None) => format!("no space {selector}"),
+            Err(error) => return error,
+        };
+        Refusal::new(Reason::NotFound, message).into()
     }
 
     /// The workspace or chat, running or stopped, with the ID `id`, while
@@ -53,8 +76,10 @@ impl Manager {
 
     /// The workspace or chat, running or stopped, with the ID `id`.
     pub(crate) async fn space_by_id(&self, id: &SpaceId) -> Result<Space> {
-        (self.find_space(id).await?)
-            .ok_or_else(|| Refusal::new(Reason::NotFound, format!("no space {id}")).into())
+        match self.find_space(id).await? {
+            Some(space) => Ok(space),
+            None => Err(self.missing_space(&SpaceSelector::id(id)).await),
+        }
     }
 
     /// Whether a workspace or chat, running or stopped, has the ID `id`.
@@ -89,6 +114,17 @@ fn other_kind(space: &Space, needed: SpaceKind) -> anyhow::Error {
         needed.as_str()
     );
     Refusal::new(Reason::NotFound, message).into()
+}
+
+/// What `removal` of a space did, for a request that names it.
+fn removed(removal: &EventDetails) -> String {
+    let (id, name) = (&removal.space_id, &removal.name);
+    match (removal.cause, &removal.repository_id) {
+        (Some(EventCause::Repository), Some(repository)) => {
+            format!("space {id} ({name}) was removed with its repository {repository}")
+        }
+        _ => format!("space {id} ({name}) was removed"),
+    }
 }
 
 /// The kind and ID of the space `selector` names.

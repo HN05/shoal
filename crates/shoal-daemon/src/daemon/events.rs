@@ -322,6 +322,22 @@ pub(crate) fn agent_stopped_at(db: &Connection, id: &SpaceId) -> Result<Option<U
     )?)
 }
 
+/// The removal of the space `id`, which no space has any longer, while the
+/// journal keeps it.
+pub(crate) fn removal(db: &Connection, id: &SpaceId) -> Result<Option<EventDetails>> {
+    let record: Option<String> = db
+        .query_row(
+            "SELECT record FROM space_events
+             WHERE json_extract(record,'$.kind')=?2 AND space_id=?1
+                 AND space_id NOT IN (SELECT id FROM spaces)
+             ORDER BY id DESC LIMIT 1",
+            params![id, EventKind::Removed],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(record.as_deref().map(serde_json::from_str).transpose()?)
+}
+
 /// Whether the space's newest agent event is the end of `execution`'s agent.
 fn agent_ended(db: &Connection, id: &SpaceId, execution: Option<&ExecutionId>) -> Result<bool> {
     let newest: Option<(EventKind, Option<ExecutionId>)> = db

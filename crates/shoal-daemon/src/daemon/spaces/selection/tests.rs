@@ -93,3 +93,37 @@ async fn a_removed_workspace_keeps_no_number() {
         .await
         .unwrap();
 }
+
+#[tokio::test]
+async fn a_removed_space_s_id_names_the_repository_removed_with_it() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let removed = manager
+        .create_workspace(&repo.id, "removed".into(), None, None, None)
+        .await
+        .unwrap();
+    let taken = manager
+        .create_workspace(&repo.id, "taken".into(), None, None, None)
+        .await
+        .unwrap();
+    let removed = SpaceSelector::id(&removed.id);
+    (manager.remove_selected(&removed, UnsavedWork::default(), InspectionPolicy::GitOnly))
+        .await
+        .unwrap();
+    manager.remove_repository(&repo.id).await.unwrap();
+
+    let refused = manager.space(&removed).await.unwrap_err().to_string();
+    assert!(refused.contains("was removed"), "{refused}");
+    assert!(!refused.contains("repository"), "{refused}");
+    let refused = manager
+        .space_by_id(&taken.id)
+        .await
+        .unwrap_err()
+        .to_string();
+    let repository = format!("removed with its repository {}", repo.id);
+    assert!(refused.contains(&repository), "{refused}");
+}
