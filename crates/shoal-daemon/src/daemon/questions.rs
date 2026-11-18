@@ -181,6 +181,11 @@ fn by_number(db: &Connection, number: ItemNumber) -> Result<Option<Question>> {
     .pop())
 }
 
+/// The question `item` of the space `id`.
+fn by_item(db: &Connection, id: &SpaceId, item: u32) -> Result<Option<Question>> {
+    Ok(query(db, "WHERE q.space_id=?1 AND q.number=?2", params![id, item])?.pop())
+}
+
 /// The question `number`, refusing a number that names none, or that
 /// names an approval request.
 fn known(db: &Connection, number: ItemNumber) -> Result<Question> {
@@ -796,9 +801,10 @@ impl Manager {
     }
 
     /// Return the space's question `item` asking `ask` once it is answered.
-    /// What it asks tells it from a later question reusing the number; a
-    /// later identical question asks the same, so its answer serves the wait
-    /// too.
+    /// The space's ID finds it, since the hub may give the space another
+    /// number meanwhile; what it asks tells it from a later question
+    /// reusing the number, and a later identical question asks the same, so
+    /// its answer serves the wait too.
     pub async fn await_answer(
         &self,
         selector: &SpaceSelector,
@@ -806,22 +812,19 @@ impl Manager {
         ask: &Ask,
     ) -> Result<Question> {
         let space = self.space(selector).await?;
-        let number = ItemNumber {
-            space: space.number,
-            item,
-        };
         // Subscribe before reading, so an answer in between still wakes.
         let mut changed = self.signals.watch_questions();
         loop {
+            let id = space.id.clone();
             let question = self
                 .store
-                .run(move |db| by_number(db, number))
+                .run(move |db| by_item(db, &id, item))
                 .await?
-                .filter(|question| question.space_id == space.id && question.ask == *ask)
+                .filter(|question| question.ask == *ask)
                 .with_context(|| {
                     format!(
-                        "{} has no question {number} awaiting delivery; a delivered answer removes its question",
-                        space.name
+                        "{} has no question {}.{item} awaiting delivery; a delivered answer removes its question",
+                        space.name, space.number
                     )
                 })?;
             if let QuestionStatus::Answered { .. } = question.status {

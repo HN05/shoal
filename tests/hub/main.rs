@@ -1,6 +1,7 @@
 //! Hub integration tests: daemons in temporary homes that take the hub role
 //! or join it through the command transport.
 mod directory;
+mod numbers;
 #[path = "../support/mod.rs"]
 mod support;
 

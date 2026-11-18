@@ -108,6 +108,9 @@ states!(NotificationKind {
     /// A second joined machine reported a space under an ID another
     /// machine's space has.
     SpaceConflict => "space_conflict",
+    /// The hub gave a space a new number, since a space on another of its
+    /// machines held its number first.
+    SpaceRenumbered => "space_renumbered",
 });
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

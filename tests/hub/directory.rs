@@ -12,7 +12,7 @@ use super::support::{
 };
 
 /// A machine with a registered repository, which the hub when `hub`.
-fn machine(hub: bool, repository: &str) -> Base {
+pub(super) fn machine(hub: bool, repository: &str) -> Base {
     start(home(), hub, repository)
 }
 
@@ -27,7 +27,7 @@ fn start(root: tempfile::TempDir, hub: bool, repository: &str) -> Base {
 
 /// Join `machine` to `hub` as `name` through the command transport, and
 /// return its ID at the hub once its link is open.
-fn join(machine: &Base, hub: &Base, name: &str) -> String {
+pub(super) fn join(machine: &Base, hub: &Base, name: &str) -> String {
     let connect = format!(
         "{} --state-dir {} daemon connect",
         shoal_binary(),
@@ -48,14 +48,14 @@ fn hub_machine(hub: &Base) -> String {
 }
 
 /// Start a workspace on the new branch `name` and return its ID.
-fn workspace(machine: &Base, name: &str) -> String {
+pub(super) fn workspace(machine: &Base, name: &str) -> String {
     let repo = machine.repo.to_str().unwrap();
     machine.ok(&["start", "--wait", repo, "--branch", name]);
     machine.id(name)
 }
 
 /// The listed space `id` of the machine `of`, once `machine` lists it.
-fn listed(machine: &Base, id: &str, of: &str) -> Value {
+pub(super) fn listed(machine: &Base, id: &str, of: &str) -> Value {
     wait_for("the other machine's space", || {
         let listed = machine.ok(&["list"]);
         (listed.as_array().unwrap().iter())

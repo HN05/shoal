@@ -1,8 +1,12 @@
-use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::space_names::SpaceName;
+use anyhow::Context as _;
+use shoal_protocol::{questions::Ask, space_names::SpaceSelector};
 
 use super::*;
-use crate::{config::permissions::PermissionsConfig, daemon::spaces, model::SpaceKind};
+use crate::{
+    config::permissions::PermissionsConfig,
+    daemon::{item_numbers::ItemNumber, spaces, test_support, workspace_files::Attacher},
+    model::SpaceKind,
+};
 
 /// Record a chat `id` as a new space is, and its number.
 fn record(tx: &Transaction<'_>, id: &str) -> Result<SpaceNumber> {
@@ -62,5 +66,60 @@ async fn a_machine_that_leaves_its_hub_numbers_on_its_own() -> Result<()> {
         })
         .await?;
     assert_eq!(numbered, (Some(SpaceNumber::new(7)), None));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_renumbered_space_takes_its_questions_and_their_waits_along() -> Result<()> {
+    let (root, manager) = test_support::manager().await;
+    let path = test_support::repository(root.path(), "repo");
+    let repo = (manager.register_repository(path.to_str().unwrap().into(), None, None)).await?;
+    let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
+    let (asker, other) = (create("asker").await?, create("other").await?);
+    let selector = SpaceSelector::id(&asker.id);
+    let ask = Ask {
+        question: "Which database?".into(),
+        recommendation: "SQLite".into(),
+        reason: None,
+        choices: Vec::new(),
+    };
+    let asked = manager.ask_question(&selector, ask.clone(), Vec::new(), &Attacher::User);
+    let item = asked.await?.number.item;
+    let waiter = tokio::spawn({
+        let (manager, selector) = (manager.clone(), selector.clone());
+        async move { manager.await_answer(&selector, item, &ask).await }
+    });
+    let renumbering = |space: &SpaceId| Numbering {
+        spares: Vec::new(),
+        renumbered: vec![Renumbering {
+            space: space.clone(),
+            number: SpaceNumber::new(4),
+        }],
+    };
+    manager.take_numbering(renumbering(&asker.id)).await?;
+    // A number a space here holds is not taken.
+    manager.take_numbering(renumbering(&other.id)).await?;
+    let mut numbers = Vec::new();
+    for id in [&asker.id, &other.id] {
+        numbers.push(manager.space(&SpaceSelector::id(id)).await?.number.get());
+    }
+    assert_eq!(numbers, [4, 2]);
+    let renumbered = ItemNumber {
+        space: SpaceNumber::new(4),
+        item,
+    };
+    manager
+        .answer_question(renumbered, "Postgres".into(), None)
+        .await?;
+    assert_eq!(waiter.await??.status.answer(), Some("Postgres"));
+    let notifications = manager.notifications(false, 50).await?;
+    let notice = (notifications.iter())
+        .find(|notification| notification.kind == NotificationKind::SpaceRenumbered)
+        .context("no notice of the renumbering")?;
+    assert!(
+        notice.message.contains("space 4") && notice.message.contains("not 1"),
+        "{}",
+        notice.message
+    );
     Ok(())
 }

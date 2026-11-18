@@ -798,6 +798,17 @@ summary; the rest of its status stays on its machine. The `--repo` filter
 matches another machine's spaces by their repository's origin. A hub that
 cannot be reached leaves the other machines out with a warning.
 
+The hub's machines number their spaces from one sequence, so a number names
+the same space on every one of them. The hub keeps a few spare numbers for
+each machine, so creating a space never waits for the hub; a machine that
+runs out of spares while it cannot reach the hub numbers above its own
+highest. A space whose number another machine's space or spares held
+first, as after that or when a machine joins with spaces of its own, takes
+the smallest number free on the hub, its questions and approval requests
+follow it as `S.N`, and its machine tells you and the space's agent the old
+and new numbers in a `space_renumbered` alert; the space that held the
+number first keeps it.
+
 The hub lists a space ID under one machine, the first that reported it. A
 second machine reporting it, as after copying a state directory, is left out
 and raises an alert naming the command that resolves it there: `shoal rm` of
@@ -953,8 +964,9 @@ agents and processes first, then what needs you, failures, changes under
 way, queued agents, and quiet spaces last.
 Branches and paths are in `shoal status`.
 Every space, a workspace or a [chat](#chats), has a number no other space
-holds, the smallest free when it is created; it stays through renames and
-stops, and a later space may take it once the space is removed. `shoal status`
+holds, on any machine joined to the same [hub](#hub), the smallest free when
+it is created; it stays through renames and stops, and a later space may
+take it once the space is removed. `shoal status`
 shows it, and `--json` gives it as `number`. Every argument that takes a space
 selects it by that number or its ID, so `shoal attach 3` and `--space 3` name
 space 3, and `-` selects the space the command last acted on; other text is

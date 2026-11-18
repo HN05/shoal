@@ -140,8 +140,16 @@ that reported it: another machine's copy is left out, routed nothing, and
 alerts the user, and takes the ID once the first's space ends, while an
 import claims the ID, so a move hands it over without a conflict; a restore
 asks the hub first and refuses a space another
-machine runs, going on while the hub cannot be asked. Browser sessions and
-routing requests between machines are later steps.
+machine runs, going on while the hub cannot be asked. Space numbers form
+one sequence across the hub's machines, which the hub holds: it answers
+each report with a few spares it keeps for that machine, which numbers a
+new space from them without waiting for the hub, and once none is left, as
+while the hub cannot be reached, above its own highest. A space whose
+number another machine's space or spares held first, as after that or after
+joining with spaces of its own, takes the smallest number none holds, with
+its questions and approval requests, and its machine tells the user and the
+space's agent; the space that held the number first keeps it. Browser
+sessions and routing requests between machines are later steps.
 The minimum Rust version follows current stable so the code can use its newest
 features; the manifest and CI toolchain advance together, with locked dependencies.
 The daemon raises its open file limit at startup and accepts every connection,
@@ -3523,7 +3531,8 @@ period, with the done state shown until `--undo` withdraws it. A workspace or a 
 selects both by number or ID, so what applies to both is named for
 the space, and the flag that selects one is `--space`. Each space also has a
 number, the smallest no other space holds when it is recorded, from one
-sequence across repositories, so it stays short to type and read; it lasts as
+sequence across repositories and a hub's machines, so it stays short to
+type and read; it lasts as
 long as the space, survives renames and stops, and is freed when the space goes.
 Every argument that takes a space selects it by number or ID, through one
 resolver in the daemon and one in the client; a name is a label people read
