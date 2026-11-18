@@ -21,7 +21,8 @@ impl Manager {
         let owned = selector.clone();
         let found = self.store.run(move |db| selected(db, &owned)).await?;
         let space = match found {
-            Some((SpaceKind::Workspace, id)) => Some(Space::from(self.workspace_by_id(&id).await?)),
+            // A removal may delete it once it is selected.
+            Some((SpaceKind::Workspace, id)) => self.find_workspace(&id).await?.map(Space::from),
             Some((SpaceKind::Chat, id)) => self.chat_by_id(&id).await?.map(Space::from),
             None => None,
         };
