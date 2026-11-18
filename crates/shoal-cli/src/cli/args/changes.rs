@@ -78,7 +78,7 @@ pub enum ChangesCommand {
         #[command(subcommand)]
         command: ReviewCommand,
     },
-    /// Open the workspace's PR, or change, comment on, close, reopen or merge a PR.
+    /// Open the workspace's PR, or change, comment on, close or reopen a PR.
     Pr {
         #[command(subcommand)]
         command: PrCommand,
@@ -93,20 +93,19 @@ pub enum ChangesCommand {
         #[command(subcommand)]
         command: crate::cli::args::ci::CiCommand,
     },
-    /// Merge this workspace into the default branch, then optionally push it.
-    Merge {
-        workspace: Option<SpaceSelector>,
-        /// Push the default branch to its upstream after merging, overriding [merge] push.
-        #[arg(long, overrides_with = "no_push")]
-        push: bool,
-        /// Keep the merge local, overriding [merge] push.
-        #[arg(long, overrides_with = "push")]
-        no_push: bool,
-        #[command(flatten)]
-        confirmation: ConfirmationArgs,
+    /// Merge a space's work, through its open PR on the forge or else
+    /// locally into the default branch, or merge a PR by number or URL.
+    ///
+    /// You merge a PR with your own login; a workspace process merges as
+    /// the agent account, as its `merge` permission allows, and pushes a
+    /// local merge as its `push` permission allows.
+    Merge(crate::cli::args::merge::MergeArgs),
+    /// Undo a workspace's latest local merge into the default branch while it is unpushed.
+    Unmerge {
+        /// Workspace whose merge to undo; defaults to the current workspace or a picker.
+        #[arg(short = 's', long)]
+        space: Option<SpaceSelector>,
     },
-    /// Undo this workspace's latest merge into the default branch while it is unpushed.
-    Unmerge { workspace: Option<SpaceSelector> },
 }
 
 #[derive(Debug, Subcommand)]
@@ -306,10 +305,6 @@ pub enum PrCommand {
         #[arg(short = 'X', long, value_enum, default_value = "merge")]
         method: crate::forge::items::action::UpdateMethod,
     },
-    /// Merge a PR with your own login, now or once its checks pass; a
-    /// workspace process merges as the agent account, as its `merge`
-    /// permission allows.
-    Merge(PrMergeArgs),
     /// Delete the branch of a merged or closed PR on the forge with your own
     /// login; a workspace process deletes it as the agent account, as its
     /// `merge` permission allows.
@@ -390,28 +385,6 @@ pub enum IssueCommand {
         #[command(flatten)]
         item: ItemSelector,
     },
-}
-
-// Arguments of `shoal pr merge`.
-#[derive(Debug, Args)]
-pub struct PrMergeArgs {
-    #[command(flatten)]
-    pub item: ItemSelector,
-    /// How to merge; defaults to the repository's default on the forge.
-    #[arg(short = 'X', long, value_enum)]
-    pub method: Option<crate::forge::items::action::MergeMethod>,
-    /// Delete the PR's branch on the forge after merging.
-    #[arg(long)]
-    pub delete_branch: bool,
-    /// Have the forge merge the PR once its required checks and approvals
-    /// pass, or now when they already do.
-    #[arg(long)]
-    pub auto: bool,
-    /// Withdraw the PR's automatic merge.
-    #[arg(long, conflicts_with_all = ["method", "delete_branch", "auto"])]
-    pub cancel_auto: bool,
-    #[command(flatten)]
-    pub confirmation: ConfirmationArgs,
 }
 
 // A reaction to add or remove, and the comment it is on.

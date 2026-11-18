@@ -34,9 +34,13 @@ impl Manager {
     /// The PRs `space` links as assigned or opened in its own repository
     /// that the forge reports open.
     async fn open_own_pulls(&self, space: LinkSpace) -> Result<Vec<ItemRef>> {
-        let forge = self.space_forge(&space).await?;
         let id = space.id.clone();
         let linked = self.store.read(move |db| own_pulls(db, &id)).await?;
+        // Without one, the space needs no forge.
+        if linked.is_empty() {
+            return Ok(linked);
+        }
+        let forge = self.space_forge(&space).await?;
         let account = self.agent_account();
         let mut open = Vec::new();
         for pull in linked

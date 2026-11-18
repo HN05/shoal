@@ -2815,7 +2815,7 @@ fn pr_and_issue_commands_act_on_linked_or_named_items() {
     // A workspace process proposes the merge, bound to the head it reads,
     // and merges nothing.
     let shoal = support::shoal_binary();
-    let merge = ["pr", "merge", "--method", "rebase"];
+    let merge = ["merge", "pr", "--method", "rebase"];
     let scoped = fixture.run(
         &[
             &["run", "--workspace", &fixture.id("topic"), "--", shoal][..],
@@ -3168,7 +3168,6 @@ fn an_unconfirmed_github_merge_fails_and_keeps_the_branch() {
         "DELETE repos/team/project/git/refs/heads/topic": {"status": 204},
     }));
     let output = fixture.run(&[
-        "pr",
         "merge",
         "8",
         "--space",
@@ -3300,7 +3299,7 @@ fn auto_merges_are_scheduled_and_cancelled_with_the_merge_command() {
     fixture.respond(responses(open.clone()));
     let merge = |args: &[&str]| {
         let output =
-            fixture.run(&[&["pr", "merge", "8", "--space", &fixture.id("topic")], args].concat());
+            fixture.run(&[&["merge", "8", "--space", &fixture.id("topic")], args].concat());
         let text = String::from_utf8_lossy(&output.stdout).into_owned();
         (output.status.success(), text)
     };
@@ -3331,13 +3330,50 @@ fn auto_merges_are_scheduled_and_cancelled_with_the_merge_command() {
 
     fixture.requests();
     for refused in [
-        &["--auto"][..],
+        &["--push"][..],
         &["--cancel-auto", "--method", "squash"],
         &["--cancel-auto", "--auto"],
     ] {
         assert!(!merge(refused).0, "{refused:?}");
     }
     assert!(fixture.requests().is_empty());
+}
+
+#[test]
+fn a_space_with_one_open_pr_merges_it_by_the_repositorys_default_style() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let endpoint = "repos/team/project/pulls/8";
+    fixture.respond(json!({
+        format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &[])},
+        "GET repos/team/project": {"body": {"default_branch": "main",
+            "default_merge_style": "rebase-merge"}},
+        format!("POST {endpoint}/merge"): {"body": {}},
+    }));
+    fixture.link_before_discussion(&[
+        "link",
+        "pr",
+        "8",
+        "assigned",
+        "--space",
+        &fixture.id("topic"),
+    ]);
+    // A flag of a local merge is refused once the PR decides the path.
+    let refused = fixture.run(&["merge", "--space", &fixture.id("topic"), "--push"]);
+    assert!(!refused.status.success(), "{}", printed(&refused));
+    fixture.requests();
+    let merged = fixture.run(&["merge", "--space", &fixture.id("topic"), "--yes"]);
+    assert!(merged.status.success(), "{}", printed(&merged));
+    let sent: Vec<_> = (fixture.requests().into_iter())
+        .filter(|request| request[0].as_str().unwrap().starts_with("POST"))
+        .map(|request| json!([request[0], request[1]]))
+        .collect();
+    assert_eq!(
+        sent,
+        [
+            json!([format!("POST {endpoint}/merge"), {"Do": "rebase-merge",
+            "delete_branch_after_merge": false, "head_commit_id": "head"}])
+        ]
+    );
 }
 
 #[test]

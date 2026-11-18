@@ -227,7 +227,7 @@ async fn unmerge_refuses_stacked_conflicting_and_pushed_merges_changing_nothing(
         error.to_string().contains("later merge of stacked")
             && error
                 .to_string()
-                .contains(&format!("shoal unmerge {}", stacked.id)),
+                .contains(&format!("shoal unmerge -s {}", stacked.id)),
         "{error:#}"
     );
     assert_eq!(f.main(), main);

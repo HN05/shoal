@@ -12,6 +12,7 @@ pub mod integration;
 pub mod internal;
 pub mod items;
 pub mod lifecycle;
+pub mod merge;
 pub mod repository;
 pub mod resources;
 pub mod service;

@@ -511,7 +511,7 @@ fn ensure_merge_head(current: &Current, head: Option<&CommitId>) -> Result<()> {
     // shorter than the one read would name more than one commit.
     ensure!(
         head.as_str().starts_with(read),
-        "the head of #{} moved from {head} to {read} since the merge was asked for; run shoal pr merge again",
+        "the head of #{} moved from {head} to {read} since the merge was asked for; run shoal merge again",
         current.item.number
     );
     Ok(())

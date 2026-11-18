@@ -1780,32 +1780,10 @@ async fn scoped_merge_approval_binds_and_describes_its_push() {
         subject.contains(&head) && subject.contains("origin/main"),
         "{subject}"
     );
-    // An open watched PR joins the request's single-line reason.
-    let id = workspace.id.clone();
-    f.manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
-                [
-                    id.as_str(),
-                    r#"{"urls":["https://forge.example/team/app/pulls/12"]}"#,
-                ],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
+    // A new commit needs a new request.
     fs::write(workspace.path.join("three"), "work\n").unwrap();
     commit(&workspace.path, "three");
-    let watched = undecided(begin_merge_as_agent(&f, &workspace, true).await);
-    assert!(
-        watched
-            .reason
-            .contains("https://forge.example/team/app/pulls/12"),
-        "{}",
-        watched.reason
-    );
+    let newer = undecided(begin_merge_as_agent(&f, &workspace, true).await);
     // The local request no longer covers a merge that pushes.
     let requests = f
         .manager
@@ -1818,7 +1796,7 @@ async fn scoped_merge_approval_binds_and_describes_its_push() {
     assert!(replaced.is_none_or(|request| request.status == DecisionStatus::Outdated));
     // An approval covers its destination: another upstream branch needs another.
     f.manager
-        .decide_approval(watched.number, true, None, Default::default(), None)
+        .decide_approval(newer.number, true, None, Default::default(), None)
         .await
         .unwrap();
     git(&f.repo, &["push", "origin", "main:release"]);
@@ -1828,7 +1806,7 @@ async fn scoped_merge_approval_binds_and_describes_its_push() {
         &["branch", "--set-upstream-to=origin/release", "main"],
     );
     let moved = undecided(begin_merge_as_agent(&f, &workspace, true).await);
-    assert_ne!(moved.number, watched.number);
+    assert_ne!(moved.number, newer.number);
     assert_eq!(moved.status, DecisionStatus::Pending);
     assert!(moved.reason.contains("origin/release"), "{}", moved.reason);
 }

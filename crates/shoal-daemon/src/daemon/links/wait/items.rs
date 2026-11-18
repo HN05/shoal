@@ -327,7 +327,7 @@ pub(crate) fn watches_open_pr(db: &rusqlite::Connection, id: &SpaceId) -> Result
 }
 
 /// The PRs the workspace watches that no poll has seen merged or closed.
-pub(crate) fn open_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
+fn open_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
     let mut open = Vec::new();
     for url in linked_items(db, id, Some(ItemKind::Pr))? {
         if observed_item(db, id, url.url())?.is_none_or(|snapshot| !snapshot.concluded()) {

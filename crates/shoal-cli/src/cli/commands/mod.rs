@@ -37,6 +37,7 @@ mod listing;
 mod log;
 mod machines;
 pub(crate) mod menu;
+mod merge;
 mod merge_warning;
 mod messages;
 mod notifications;

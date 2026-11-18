@@ -210,7 +210,7 @@ fn merge_into_main_without_a_remote_needs_approval_in_scoped_processes() {
         "--repo",
         repo.as_str().unwrap(),
     ]);
-    let unpushable = fixture.run(&["merge", &fixture.id("worker")]);
+    let unpushable = fixture.run(&["merge", "-s", &fixture.id("worker")]);
     assert!(!unpushable.status.success());
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
     fixture.ok(&[
@@ -241,7 +241,7 @@ fn merge_into_main_without_a_remote_needs_approval_in_scoped_processes() {
         "from the workspace\n"
     );
     assert_eq!(
-        fixture.ok(&["merge", "--no-push", &fixture.id("worker")])["updated"],
+        fixture.ok(&["merge", "--no-push", "-s", &fixture.id("worker")])["updated"],
         false
     );
     // Merged work is on the default branch, so its branch goes.
@@ -259,7 +259,7 @@ fn unmerge_moves_main_back_after_an_agents_request_is_approved() {
     commit_file(path, "merged", "from the workspace\n");
     let head = git(path, &["rev-parse", "HEAD"]);
     let before = git(&fixture.repo, &["rev-parse", "main"]);
-    fixture.ok(&["merge", "--no-push", &fixture.id("worker")]);
+    fixture.ok(&["merge", "--no-push", "-s", &fixture.id("worker")]);
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), head);
     let binary = support::shoal_binary();
     let worker_id = fixture.id("worker");
@@ -301,7 +301,7 @@ fn unmerge_moves_main_back_after_an_agents_request_is_approved() {
     assert!(!fixture.repo.join("merged").exists());
     assert_eq!(git(&fixture.repo, &["rev-parse", "worker"]), head);
     // The record went with the merge, so nothing is left to undo.
-    let again = fixture.run(&["unmerge", &fixture.id("worker")]);
+    let again = fixture.run(&["unmerge", "-s", &fixture.id("worker")]);
     assert!(!again.status.success());
     assert!(
         String::from_utf8_lossy(&again.stderr).contains("no local merge of worker"),
@@ -310,10 +310,10 @@ fn unmerge_moves_main_back_after_an_agents_request_is_approved() {
     );
 
     // A workspace cleanup removed comes back before its merge is undone.
-    fixture.ok(&["merge", "--no-push", &fixture.id("worker")]);
+    fixture.ok(&["merge", "--no-push", "-s", &fixture.id("worker")]);
     fixture.ok(&["rm", "--wait", &fixture.id("worker"), "--yes"]);
     let worker = fixture.id("worker");
-    let removed = fixture.run(&["unmerge", &worker]);
+    let removed = fixture.run(&["unmerge", "-s", &worker]);
     assert!(!removed.status.success());
     assert!(
         String::from_utf8_lossy(&removed.stderr)
@@ -323,7 +323,7 @@ fn unmerge_moves_main_back_after_an_agents_request_is_approved() {
     );
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), head);
     fixture.ok(&["restore", &fixture.id("worker")]);
-    fixture.ok(&["unmerge", &fixture.id("worker")]);
+    fixture.ok(&["unmerge", "-s", &fixture.id("worker")]);
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
 }
 
@@ -339,33 +339,33 @@ fn a_merge_that_pushes_asks_first_unless_confirmed() {
     commit_file(path, "first", "one\n");
     let (before, upstream) = (main(), pushed());
     // Without a terminal, a merge that pushes is refused before anything changes.
-    let refused = fixture.run(&["merge", "--push", &fixture.id("worker")]);
+    let refused = fixture.run(&["merge", "--push", "-s", &fixture.id("worker")]);
     assert!(!refused.status.success());
     assert_eq!((main(), pushed()), (before.clone(), upstream.clone()));
     let (declined, transcript) =
-        fixture.interactive(&["merge", "--push", &fixture.id("worker")], "n\n");
+        fixture.interactive(&["merge", "--push", "-s", &fixture.id("worker")], "n\n");
     assert!(!declined.status.success(), "{transcript}");
     assert_eq!((main(), pushed()), (before, upstream));
     let (accepted, transcript) =
-        fixture.interactive(&["merge", "--push", &fixture.id("worker")], "y\n");
+        fixture.interactive(&["merge", "--push", "-s", &fixture.id("worker")], "y\n");
     assert!(accepted.status.success(), "{transcript}");
     assert_eq!(pushed(), main());
     // A merge that stays local never asks.
     commit_file(path, "second", "two\n");
     assert_eq!(
-        fixture.ok(&["merge", &fixture.id("worker")])["updated"],
+        fixture.ok(&["merge", "-s", &fixture.id("worker")])["updated"],
         true
     );
     // --yes, or [merge] confirm = false, skips the question.
     commit_file(path, "third", "three\n");
-    let confirmed = fixture.ok(&["merge", "--push", "--yes", &fixture.id("worker")]);
+    let confirmed = fixture.ok(&["merge", "--push", "--yes", "-s", &fixture.id("worker")]);
     assert_eq!(confirmed["pushed_to"], "origin");
     let repo = fixture.ok(&["repo", "ls"])[0]["id"].clone();
     let repo = repo.as_str().unwrap();
     fixture.ok(&["config", "set", "merge.confirm", "false", "--repo", repo]);
     commit_file(path, "fourth", "four\n");
     assert_eq!(
-        fixture.ok(&["merge", "--push", &fixture.id("worker")])["pushed_to"],
+        fixture.ok(&["merge", "--push", "-s", &fixture.id("worker")])["pushed_to"],
         "origin"
     );
     assert_eq!(pushed(), main());
@@ -408,7 +408,7 @@ fn merge_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
         let stderr_path = fixture.root.path().join("merge.stderr");
         let mut merge = fixture
             .command()
-            .args(["merge", &fixture.id("worker")])
+            .args(["merge", "-s", &fixture.id("worker")])
             .stdout(Stdio::null())
             .stderr(fs::File::create(&stderr_path).unwrap())
             .spawn()

@@ -169,7 +169,7 @@ pub struct ItemArgs {
 }
 
 /// clap parser for [`ItemWord`].
-fn item_word(word: &str) -> Result<ItemWord, String> {
+pub(in crate::cli::args) fn item_word(word: &str) -> Result<ItemWord, String> {
     word.parse().map_err(|error| format!("{error:#}"))
 }
 

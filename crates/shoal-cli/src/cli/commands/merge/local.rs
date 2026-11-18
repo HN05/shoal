@@ -1,28 +1,25 @@
-//! `shoal merge`: the operation that merges a workspace's branch.
+//! A local merge: the operation that merges a workspace's branch into the
+//! default branch.
 use anyhow::Result;
 
 use crate::{
-    cli::{
-        commands::operations,
-        context::Context,
-        ui::{self, Fallback},
-    },
+    cli::{commands::operations, context::Context, ui},
     env,
     model::{MergeConfirmation, MergeOptions, MergedBranch},
     protocol::{ConfigTarget, operations::OperationSpec},
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// `push` overrides `[merge] push` when given, and `yes` skips the
-/// confirmation a merge asks for when it pushes or brings the default branch
-/// sensitive files it changed too.
-pub(in crate::cli::commands) async fn merge(
+/// Merge `workspace`'s branch into the default branch. `push` overrides
+/// `[merge] push` when given, and `yes` skips the confirmation a merge asks
+/// for when it pushes or brings the default branch sensitive files it
+/// changed too.
+pub(super) async fn merge(
     ctx: &Context,
-    workspace: Option<SpaceSelector>,
+    workspace: SpaceSelector,
     push: Option<bool>,
     yes: bool,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let settings =
         shoal_workers::settings::of(&ctx.paths, ConfigTarget::Space(workspace.clone())).await?;
     let push = push.unwrap_or(settings.merge.push);

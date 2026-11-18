@@ -5,7 +5,7 @@
 pub(super) use self::activity::{queue_update, record_received_change, record_shoal_change};
 pub(crate) use self::{
     activity::{OwnChange, record_own_change},
-    items::{followed_items, linked_items, open_prs, watches_open_pr},
+    items::{followed_items, linked_items, watches_open_pr},
     merge_runs::PushedMerge,
     start::WatchStarts,
     waits::ActiveWaits,

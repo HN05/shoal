@@ -206,10 +206,6 @@ pub struct MergePreview {
     /// them too, as the last check of the branch's head found them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub warning: Option<MergeWarning>,
-    /// Open PRs the workspace watches, which `shoal pr merge` merges on the
-    /// forge instead.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub open_prs: Vec<crate::forge::items::reference::ItemRef>,
 }
 
 impl MergePreview {
@@ -265,14 +261,9 @@ impl MergePreview {
         }
         merge.push('.');
         let warning = self.warning.iter().map(|warning| format!("{warning}."));
-        let prs = self
-            .open_prs
-            .iter()
-            .map(|url| format!("PR {url} is open; shoal pr merge merges it on the forge instead."));
         std::iter::once(merge)
             .chain(unpushed)
             .chain(warning)
-            .chain(prs)
             .collect()
     }
 }

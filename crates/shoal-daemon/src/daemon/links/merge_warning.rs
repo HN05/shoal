@@ -75,7 +75,7 @@ impl Manager {
         let current = self.merge_warning(target, Some(url.clone().into())).await?;
         ensure!(
             current == confirmed.warning,
-            "the merge warning changed since you confirmed the merge; run shoal pr merge again"
+            "the merge warning changed since you confirmed the merge; run shoal merge again"
         );
         self.item_action(target, ItemKind::Pr, Some(url.into()), action, caller)
             .await

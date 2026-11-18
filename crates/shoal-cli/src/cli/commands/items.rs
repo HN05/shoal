@@ -5,15 +5,11 @@ use anyhow::Result;
 
 use crate::{
     cli::{
-        args::changes::{IssueCommand, ItemSelector, PrCommand, PrMergeArgs},
+        args::changes::{IssueCommand, ItemSelector, PrCommand},
         context::Context,
     },
     forge::items::{
-        action::Action,
-        create::NewIssue,
-        item::{Item, ItemState},
-        link::ItemKind,
-        reference::ItemInput,
+        action::Action, create::NewIssue, item::Item, link::ItemKind, reference::ItemInput,
     },
     protocol::RepoTarget,
 };
@@ -90,10 +86,6 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
         PrCommand::Update { item, method } => {
             (item, Action::Update { method }, "PR branch updated")
         }
-        PrCommand::Merge(args) => {
-            let (action, outcome) = merge(&args);
-            return merge_pr(ctx, args.item, action, outcome, args.confirmation.yes).await;
-        }
         PrCommand::DeleteBranch { item } => (item, Action::DeleteBranch, "PR branch deleted"),
     };
     act(ctx, item, ItemKind::Pr, action, outcome).await
@@ -146,63 +138,6 @@ pub(super) async fn issue(ctx: &Context, command: IssueCommand) -> Result<i32> {
     act(ctx, item, ItemKind::Issue, action, outcome).await
 }
 
-/// The merge `args` ask for, or the withdrawal of an automatic merge.
-fn merge(args: &PrMergeArgs) -> (Action, &'static str) {
-    let (method, delete_branch) = (args.method, args.delete_branch);
-    if args.cancel_auto {
-        return (Action::CancelAutoMerge, "Auto-merge canceled");
-    }
-    match args.auto {
-        true => (
-            Action::AutoMerge {
-                method,
-                delete_branch,
-                head: None,
-            },
-            "Auto-merge enabled",
-        ),
-        false => (
-            Action::Merge {
-                method,
-                delete_branch,
-                head: None,
-            },
-            "PR merged",
-        ),
-    }
-}
-
-/// Carry out `action`, a merge or its withdrawal, on the PR `selector`
-/// names, unless the user declines a merge the daemon warns about; `yes`
-/// merges whatever it warns about.
-async fn merge_pr(
-    ctx: &Context,
-    selector: ItemSelector,
-    action: Action,
-    outcome: &str,
-    yes: bool,
-) -> Result<i32> {
-    // An invalid action fails before a picker asks for its context.
-    action.validate(ItemKind::Pr)?;
-    let target = item_target(ctx, &selector).await?;
-    let item = selector.item;
-    if matches!(action, Action::CancelAutoMerge) {
-        return act_in(ctx, target, item, ItemKind::Pr, action, outcome).await;
-    }
-    let confirmed = match yes {
-        true => None,
-        false => Some(super::merge_warning::confirm_pull(ctx, &target, item.clone()).await?),
-    };
-    let auto_merge = matches!(action, Action::AutoMerge { .. });
-    let item = crate::client::items::merge(&ctx.paths, target, item, action, confirmed).await?;
-    // The forge merges now a PR whose checks already pass.
-    let outcome = match auto_merge && item.state == ItemState::Merged {
-        true => "PR merged",
-        false => outcome,
-    };
-    report(ctx, &item, outcome)
-}
-
 async fn act(
     ctx: &Context,
     selector: ItemSelector,
@@ -224,7 +159,7 @@ async fn item_target(ctx: &Context, selector: &ItemSelector) -> Result<RepoTarge
 /// Carry out `action`, which the caller validated, on `item` in the
 /// `target` repository, or on the space's linked item of `kind`, and report
 /// `outcome`.
-async fn act_in(
+pub(super) async fn act_in(
     ctx: &Context,
     target: RepoTarget,
     item: Option<ItemInput>,
@@ -236,7 +171,7 @@ async fn act_in(
     report(ctx, &item, outcome)
 }
 
-fn report(ctx: &Context, item: &Item, outcome: &str) -> Result<i32> {
+pub(super) fn report(ctx: &Context, item: &Item, outcome: &str) -> Result<i32> {
     ctx.emit(&format!("{outcome}: {}", item.url), item)?;
     Ok(0)
 }

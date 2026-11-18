@@ -156,7 +156,7 @@ async fn ensure_replayable(
     for recorded in later {
         if holds_commits_of(path, recorded.merge.source.as_str(), source, previous).await? {
             bail!(
-                "the later merge of {} contains {branch}'s commits, so replaying it would bring them back; unmerge it first with shoal unmerge {}",
+                "the later merge of {} contains {branch}'s commits, so replaying it would bring them back; unmerge it first with shoal unmerge -s {}",
                 recorded.merge.branch,
                 recorded.merge.workspace_id
             );

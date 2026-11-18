@@ -1749,9 +1749,10 @@ fn merge_asks_before_merging_files_changed_on_both_sides() {
         serde_json::json!(["version"])
     );
 
-    let refused = fixture.run(&["merge", &fixture.id("worker")]);
+    let refused = fixture.run(&["merge", "-s", &fixture.id("worker")]);
     assert!(!refused.status.success());
-    let (declined, transcript) = fixture.interactive(&["merge", &fixture.id("worker")], "n\n");
+    let (declined, transcript) =
+        fixture.interactive(&["merge", "-s", &fixture.id("worker")], "n\n");
     assert!(!declined.status.success(), "{transcript}");
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
     // An agent's --yes leaves the question to whoever approves the merge.
@@ -1774,7 +1775,7 @@ fn merge_asks_before_merging_files_changed_on_both_sides() {
     assert!(reason.ends_with(": version."), "{reason}");
 
     assert_eq!(
-        fixture.ok(&["merge", "--yes", &fixture.id("worker")])["updated"],
+        fixture.ok(&["merge", "--yes", "-s", &fixture.id("worker")])["updated"],
         true
     );
     assert_eq!(

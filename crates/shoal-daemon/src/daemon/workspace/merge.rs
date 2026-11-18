@@ -180,7 +180,7 @@ impl Manager {
     async fn ensure_merging_enabled(&self, workspace: &Workspace) -> Result<()> {
         ensure!(
             self.workspace_settings(workspace).await?.merge.enabled,
-            "shoal merge is turned off for this repository ([merge] enabled = false); merge the workspace's PR with shoal pr merge"
+            "local merges are turned off for this repository ([merge] enabled = false); open a PR with shoal pr open, then merge it with shoal merge"
         );
         Ok(())
     }
@@ -207,8 +207,7 @@ impl Manager {
 
     /// What merging `workspace`'s `branch` at `head` into `default` at
     /// `default_commit` does: its commits, where it pushes, the sensitive
-    /// files it brings to a default branch that changed them too, and the
-    /// open PRs it bypasses.
+    /// files it brings to a default branch that changed them too.
     async fn merge_preview(
         &self,
         workspace: &Workspace,
@@ -218,11 +217,6 @@ impl Manager {
         default_commit: &CommitId,
         push: Option<&MergePush>,
     ) -> Result<MergePreview> {
-        let id = workspace.id.clone();
-        let open_prs = self
-            .store
-            .run(move |db| crate::daemon::links::wait::open_prs(db, &id))
-            .await?;
         let warning = self
             .branch_merge_warning(&SpaceSelector::id(&workspace.id))
             .await?;
@@ -239,7 +233,6 @@ impl Manager {
                 None => 0,
             },
             warning,
-            open_prs,
         })
     }
 

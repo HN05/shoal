@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::cli::{
     args::changes::{BranchCommand, ChangesCommand},
-    commands::{base, ci, items, review, workspaces},
+    commands::{base, ci, items, merge, review, workspaces},
     context::Context,
 };
 
@@ -17,16 +17,8 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ChangesCommand)
             workspaces::conflicts(&ctx, workspace, target).await
         }
         ChangesCommand::Review { command } => review::run(&ctx, command).await,
-        ChangesCommand::Merge {
-            workspace,
-            push,
-            no_push,
-            confirmation,
-        } => {
-            let push = (push || no_push).then_some(push);
-            workspaces::merge(&ctx, workspace, push, confirmation.yes).await
-        }
-        ChangesCommand::Unmerge { workspace } => workspaces::unmerge(&ctx, workspace).await,
+        ChangesCommand::Merge(args) => merge::run(&ctx, args).await,
+        ChangesCommand::Unmerge { space } => workspaces::unmerge(&ctx, space).await,
     }
 }
 

@@ -1056,7 +1056,7 @@ fn daemon_git_predicate_failures_preserve_branches_and_workspaces() {
     let before = git(&fixture.repo, &["rev-parse", "main"]);
     install_failing_git(&fixture);
     for (failure, args) in [
-        ("--is-ancestor", vec!["merge", &fixture.id("worker")]),
+        ("--is-ancestor", vec!["merge", "-s", &fixture.id("worker")]),
         (
             "--is-ancestor",
             vec!["rm", "--wait", &fixture.id("worker"), "--yes"],
