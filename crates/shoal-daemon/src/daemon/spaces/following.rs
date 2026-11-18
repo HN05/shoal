@@ -13,7 +13,7 @@ use std::{
 use anyhow::{Context as _, Result};
 use shoal_ids::{agent_session_ids::AgentSessionId, space_ids::SpaceId};
 use shoal_protocol::{
-    protocol::{self, Body, Response},
+    protocol::{self, Body, MAX_FRAME, Response},
     space_names::SpaceSelector,
     transcripts::{self, Environments, FollowedSession, ReportedSession, SessionBytes, Store},
 };
@@ -30,8 +30,9 @@ use crate::{
 /// How often a follow looks for what its session's files gained.
 const POLL: Duration = Duration::from_millis(500);
 
-/// The most bytes of a file one frame carries.
-const CHUNK: usize = 48 << 10;
+/// The most bytes of a file one frame carries: what fits in a frame in
+/// base64, with room for the rest of the frame and the file's path.
+const CHUNK: usize = (MAX_FRAME - (8 << 10)) / 4 * 3;
 
 /// A session to follow, of a space here.
 pub(crate) struct Following {

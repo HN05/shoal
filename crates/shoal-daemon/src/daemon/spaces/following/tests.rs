@@ -31,3 +31,15 @@ fn a_large_file_comes_a_chunk_at_a_time() {
     let (offset, rest) = read_from(&path, first.len() as u64).unwrap();
     assert_eq!((offset, rest.len()), (super::CHUNK as u64, 1));
 }
+
+#[test]
+fn a_whole_chunk_of_a_file_with_the_longest_path_fits_in_a_frame() {
+    use shoal_protocol::{
+        protocol::{Body, MAX_FRAME, Response},
+        transcripts::SessionBytes,
+    };
+    let path = "p".repeat(4096);
+    let bytes = SessionBytes::new(path.into(), u64::MAX, &[0xff; super::CHUNK]);
+    let frame = Response::new(u64::MAX, Body::SessionBytes(bytes));
+    assert!(serde_json::to_vec(&frame).unwrap().len() < MAX_FRAME);
+}

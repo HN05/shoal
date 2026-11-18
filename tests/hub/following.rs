@@ -62,7 +62,7 @@ fn laptop_session(hub: &Base) -> Session {
         .path()
         .join(".claude/projects/-app/followed.jsonl");
     fs::create_dir_all(transcript.parent().unwrap()).unwrap();
-    fs::write(&transcript, "{\"turn\":1}\n").unwrap();
+    fs::write(&transcript, first_turn()).unwrap();
     listed(hub, &space, &laptop_id);
     Session {
         laptop,
@@ -70,6 +70,12 @@ fn laptop_session(hub: &Base) -> Session {
         space,
         transcript,
     }
+}
+
+/// The transcript's first line, longer than one frame carries, so that it
+/// comes in several.
+fn first_turn() -> Vec<u8> {
+    format!("{{\"turn\":1,\"text\":\"{}\"}}\n", "x".repeat(100_000)).into_bytes()
 }
 
 /// `machine`'s daemon as an app reaches it, as the user.
@@ -119,14 +125,17 @@ fn a_machine_follows_a_session_on_a_third_machine_as_its_tool_writes_it() {
         };
         assert_eq!(followed.session.session.as_str(), "followed");
         let mut followed = Vec::new();
-        bytes_until(&mut follow, &mut followed, b"{\"turn\":1}\n").await;
+        bytes_until(&mut follow, &mut followed, &first_turn()).await;
         let mut transcript = fs::OpenOptions::new()
             .append(true)
             .open(&session.transcript)
             .unwrap();
         std::io::Write::write_all(&mut transcript, b"{\"turn\":2}\n").unwrap();
         bytes_until(&mut follow, &mut followed, b"{\"turn\":2}\n").await;
-        assert_eq!(followed, b"{\"turn\":1}\n{\"turn\":2}\n");
+        assert_eq!(
+            followed,
+            [first_turn(), b"{\"turn\":2}\n".to_vec()].concat()
+        );
     });
 }
 
