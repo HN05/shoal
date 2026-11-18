@@ -41,6 +41,8 @@ pub struct VouchedSpace {
     /// It only reads, as the gate's runs do.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub read_only: bool,
+    /// Its space's priority, the most it gives the spaces below it.
+    pub priority: shoal_schedule::priority::Priority,
     /// For a chat without a repository, whose permissions resolve in the
     /// repository each action is in: its tree's modes, which the owning
     /// machine resolves in the action's repository there.

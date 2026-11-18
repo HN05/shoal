@@ -49,6 +49,12 @@ impl Manager {
         })
     }
 
+    /// The priority of the space `id`.
+    pub(crate) async fn space_priority(&self, id: &SpaceId) -> Result<Priority> {
+        let id = id.clone();
+        self.store.read(move |tx| current(tx, &id)).await
+    }
+
     /// The priority `caller` gives a space it creates or ranks, asking for
     /// `priority`: what it asks, or with none the default. A caller whose
     /// scope has a root of its own gives at most its own space's, as it
@@ -63,7 +69,11 @@ impl Manager {
         let Some(root) = self.reach_root(caller).await? else {
             return Ok(priority);
         };
-        let own = self.store.read(move |tx| current(tx, &root)).await?;
+        // Another machine vouches for its own space's.
+        let own = match self.vouched_space(&root) {
+            Some(vouched) => vouched.priority,
+            None => self.space_priority(&root).await?,
+        };
         match priority {
             Some(priority) => {
                 ensure!(

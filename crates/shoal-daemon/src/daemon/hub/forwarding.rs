@@ -140,12 +140,14 @@ impl Manager {
         let repository = space.repository_id.as_ref();
         let permissions = self.space_permissions(&caller.space_id, repository).await?;
         let chat_modes = self.chat_modes(&space).await?;
+        let priority = self.space_priority(&caller.space_id).await?;
         Ok(Vouched::Space(VouchedSpace {
             space: caller.space_id.clone(),
             everywhere,
             permissions,
             granted: caller.granted,
             read_only: caller.read_only,
+            priority,
             chat_modes,
         }))
     }
