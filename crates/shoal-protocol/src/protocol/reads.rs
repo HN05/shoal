@@ -95,7 +95,6 @@ impl Operation {
                 )
                 | Self::Workspace(
                     WorkspaceMethod::CheckCreation { .. }
-                        | WorkspaceMethod::CheckBranchName { .. }
                         | WorkspaceMethod::CheckBlockers { .. }
                         | WorkspaceMethod::ListSpaces
                         | WorkspaceMethod::UntrackedWorktrees

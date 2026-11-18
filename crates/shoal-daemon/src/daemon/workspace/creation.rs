@@ -82,7 +82,7 @@ impl Manager {
         new: NewWorkspace<'_>,
     ) -> Result<Workspace> {
         let (repo, git) = self.lock_repository(repository).await?;
-        git::check_branch_name(Some(&repo.path), &name).await?;
+        git::check_branch_name(&name)?;
         let branch = self.available_branch(&repo, &name).await?;
         ensure!(
             !new.exact_branch || branch == name,
@@ -115,7 +115,7 @@ impl Manager {
         ensure_disposable_new(options.disposable, existing)?;
         let (name, opened) = match (branch, existing) {
             (Some(name), _) => {
-                git::check_branch_name(Some(&repo.path), name).await?;
+                git::check_branch_name(name)?;
                 (Some(name.to_owned()), None)
             }
             (None, Some(selector)) => match self.open_target(&repo, selector, options).await? {

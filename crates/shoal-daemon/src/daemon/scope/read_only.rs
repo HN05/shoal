@@ -27,9 +27,7 @@ fn takes_more_than_it_reads(operation: &Operation) -> bool {
                 RemovalMethod::CheckRemoval { .. } | RemovalMethod::CheckStop { .. }
             )
             | Operation::Workspace(
-                WorkspaceMethod::CheckCreation { .. }
-                    | WorkspaceMethod::CheckBranchName { .. }
-                    | WorkspaceMethod::CheckBlockers { .. }
+                WorkspaceMethod::CheckCreation { .. } | WorkspaceMethod::CheckBlockers { .. }
             )
     )
 }

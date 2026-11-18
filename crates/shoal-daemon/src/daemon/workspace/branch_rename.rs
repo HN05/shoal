@@ -41,7 +41,7 @@ impl Manager {
             .await?;
         let current = workspace.require_branch("renaming a branch")?.to_owned();
         self.verify_rename_source(&workspace, &repo.path).await?;
-        git::check_branch_name(Some(&repo.path), branch).await?;
+        git::check_branch_name(branch)?;
         ensure!(
             !git::branch::is_reserved_name(branch),
             "branch name is ambiguous as a Git revision: {branch}"

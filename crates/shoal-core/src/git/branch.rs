@@ -1,7 +1,7 @@
 //! Branch names, renaming and checkout fast-forwards.
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use shoal_refs::{BranchName, CommitId};
 
 use crate::{fsutil::off_runtime, git, time::UnixTime};
@@ -71,6 +71,35 @@ async fn branch_refs(repo: &Path) -> Result<String> {
 pub fn is_reserved_name(name: &str) -> bool {
     matches!(name, "HEAD" | "@")
         || (matches!(name.len(), 40 | 64) && name.bytes().all(|c| c.is_ascii_hexdigit()))
+}
+
+/// Refuse `name` unless it is a literal Git branch name, as `git
+/// check-ref-format --branch` checks one, without starting Git. Revision
+/// syntax such as `@{-1}` is refused rather than expanded, and the reserved
+/// `HEAD` is accepted, since a new branch takes its `HEAD-2` conflict
+/// spelling.
+pub fn check_branch_name(name: &str) -> Result<()> {
+    ensure!(
+        name == "HEAD" || is_branch_name(name),
+        "'{name}' is not a valid Git branch name; use a literal branch name"
+    );
+    Ok(())
+}
+
+/// Whether `refs/heads/<name>` is a ref name Git accepts and `name` does not
+/// read as an option.
+fn is_branch_name(name: &str) -> bool {
+    !name.is_empty()
+        && !name.starts_with('-')
+        && !name.ends_with('.')
+        && !name.contains("..")
+        && !name.contains("@{")
+        && !name
+            .bytes()
+            .any(|byte| byte.is_ascii_control() || b" ~^:?*[\\".contains(&byte))
+        && name.split('/').all(|component| {
+            !component.is_empty() && !component.starts_with('.') && !component.ends_with(".lock")
+        })
 }
 
 /// Create a local branch at `rev`; an existing branch is an error.

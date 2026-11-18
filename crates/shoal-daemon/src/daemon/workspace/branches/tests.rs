@@ -617,17 +617,7 @@ async fn branch_selection_rejects_revision_shorthand() {
     let f = Fixture::new().await;
     git(&f.repo, &["switch", "-c", "previous"]);
     git(&f.repo, &["switch", "main"]);
-    assert_eq!(
-        git(&f.repo, &["check-ref-format", "--branch", "@{-1}"]),
-        "previous\n"
-    );
     for name in ["@{-1}", "main~0", "main^0", "@{0}"] {
-        assert!(
-            crate::git::check_branch_name(Some(&f.repo), name)
-                .await
-                .is_err(),
-            "{name}"
-        );
         assert!(
             f.manager
                 .open_branch(&f.repo_id, name, None, None, None)

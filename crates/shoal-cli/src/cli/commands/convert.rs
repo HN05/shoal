@@ -31,7 +31,7 @@ pub(super) async fn to_workspace(
 ) -> Result<i32> {
     // A supplied branch fails before the space picker opens.
     if let Some(branch) = &branch.branch {
-        crate::client::workspaces::check_branch_name(&ctx.paths, branch.clone()).await?;
+        shoal_core::git::check_branch_name(branch)?;
     }
     let chat = ui::select_space(ctx, space, own_space()).await?;
     let issue = match &branch.issue {

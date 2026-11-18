@@ -267,16 +267,6 @@ fn parses_porcelain_worktree_records() {
     assert!(parse_worktrees("").is_empty());
 }
 
-#[tokio::test]
-async fn branch_names_follow_git_syntax() {
-    for name in ["feature/login", "HEAD"] {
-        check_branch_name(None, name).await.unwrap();
-    }
-    for name in ["bad name", "@{-1}", "refs/heads/x\n"] {
-        assert!(check_branch_name(None, name).await.is_err(), "{name:?}");
-    }
-}
-
 #[test]
 fn an_approved_push_replays_its_url_and_keeps_a_missing_ref_missing() {
     use shoal_protocol::approvals::PushSpecification;

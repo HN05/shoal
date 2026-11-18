@@ -373,7 +373,7 @@ impl Manager {
         };
         let head = match place {
             CopyPlace::Branch(_) => {
-                git::check_branch_name(Some(&repo.path), &requested).await?;
+                git::check_branch_name(&requested)?;
                 let branch = self.available_branch(repo, &requested).await?;
                 ensure!(
                     !new.exact_branch || branch == requested,

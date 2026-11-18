@@ -47,7 +47,7 @@ pub(super) async fn run(
 ) -> Result<i32> {
     // A supplied branch fails before the parent picker opens.
     if let Some(branch) = &split.branch {
-        crate::client::workspaces::check_branch_name(&ctx.paths, branch.clone()).await?;
+        shoal_core::git::check_branch_name(branch)?;
     }
     // A named copy fails before the parent picker too.
     let copy = super::copies::source(ctx, split.copy).await?;

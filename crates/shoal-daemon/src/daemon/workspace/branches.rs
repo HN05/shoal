@@ -530,7 +530,7 @@ impl Manager {
             !git::branch::is_reserved_name(name.as_str()),
             "branch name is ambiguous as a Git revision: {name}"
         );
-        git::check_branch_name(Some(&repo.path), name.as_str()).await?;
+        git::check_branch_name(name.as_str())?;
         if let Some(remote) = &branch.remote {
             let local = name.clone();
             let local_exists =

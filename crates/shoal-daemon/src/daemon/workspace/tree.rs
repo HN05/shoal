@@ -37,7 +37,7 @@ impl Manager {
     ) -> Result<Workspace> {
         let parent = self.workspace(parent).await?;
         let (repo, git) = self.lock_repository(parent.repository()).await?;
-        crate::git::check_branch_name(Some(&repo.path), &name).await?;
+        crate::git::check_branch_name(&name)?;
         let branch = self.available_branch(&repo, &name).await?;
         self.create_branch_workspace(
             &repo,

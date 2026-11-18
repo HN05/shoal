@@ -1,5 +1,6 @@
 //! Git invocations shared by workspace creation, removal, branch refreshes, and merging.
 pub mod branch;
+pub use branch::check_branch_name;
 pub mod bundle;
 pub(crate) mod config;
 pub mod conflicts;
@@ -40,7 +41,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Result, bail, ensure};
 use shoal_refs::{BranchName, CommitId};
 use tokio::process::Command;
 
@@ -558,26 +559,6 @@ pub async fn resolve_named_commit(
         "{rev} is not a commit"
     );
     Ok((commit.into(), name.to_owned()))
-}
-
-/// Ask Git whether `name` is acceptable branch syntax, independently of the
-/// derived directory name. `repo` is the directory to ask from; `None` uses
-/// the current one. Previous-checkout syntax such as `@{-1}` is rejected
-/// because `--branch` would silently expand it; the historical `HEAD` name is
-/// checked as its `HEAD-2` conflict spelling.
-pub async fn check_branch_name(repo: Option<&Path>, name: &str) -> Result<()> {
-    let checked = if name == "HEAD" { "HEAD-2" } else { name };
-    let mut command = match repo {
-        Some(repo) => self::command(repo),
-        None => Command::new(Tool::Git.program()),
-    };
-    command.args(["check-ref-format", "--branch", checked]);
-    let validated = output(command).await.context("invalid Git branch name")?;
-    ensure!(
-        validated == format!("{checked}\n"),
-        "use a literal Git branch name, not previous-checkout syntax"
-    );
-    Ok(())
 }
 
 /// One entry of `git worktree list --porcelain`.

@@ -101,7 +101,7 @@ pub fn launch_creation(
 
 /// Open the pushed `branch` a branch link names.
 pub async fn branch_creation(branch: &str, creation: &mut Creation) -> Result<()> {
-    git::check_branch_name(None, branch).await?;
+    git::check_branch_name(branch)?;
     creation.existing = Some(git::remote_ref("origin", branch));
     Ok(())
 }
@@ -195,8 +195,7 @@ pub async fn fetch_pull_branch(
     role: &str,
     branch: &BranchName,
 ) -> Result<String> {
-    git::check_branch_name(None, branch.as_str())
-        .await
+    git::check_branch_name(branch.as_str())
         .with_context(|| format!("PR {role} {branch:?} is not a branch name"))?;
     git::fetch::review_branch(path, branch)
         .await
