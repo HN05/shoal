@@ -610,11 +610,12 @@ those seconds and at most
 which it also waits before you have come back to any agent. You interact with
 an agent by a key it reads in its terminal, which its wrapper finds by the
 terminal's access time, leaving out the keys Shoal types itself; by a prompt you
-submit; and by `shoal attach` to its space, an app following its session,
-`shoal restore`, `shoal restart`, `shoal start --in`, starting its queued
-restore and Enter on its sleep screen.
-The same commands from an agent, such as a coordinator's, are not yours, nor are
-updates, messages and idle wakes, and whether a terminal shows the agent plays
+submit, or a message you send it; and by `shoal attach` to its space, an app
+following its session, `shoal restore`, `shoal restart`, `shoal start --in`,
+starting its queued restore and Enter on its sleep screen, from any machine
+or device of the hub. The same commands from an agent, such as a
+coordinator's, are not yours, nor are updates, Shoal's messages and idle
+wakes, and whether a terminal shows the agent plays
 no part. You are engaged with an agent once you have interacted with it since
 its turn before the last ended, so a turn whose wait passed without you ends
 it. The time you take to come back is the average, over the space's last turns
@@ -726,8 +727,9 @@ its files, everything so far and then what the tool appends, each with its
 path in the tool's session directory and its offset, and the current session
 again whenever the agent goes on in another. Shoal copies the bytes unread, so
 the app parses each tool's format itself and sends input through the requests
-the protocol has. Following an agent is your [interaction](#sleep) with
-it, as attaching to it is.
+the protocol has. Following an agent and messaging it are your
+[interaction](#sleep) with it, so an agent you watch and talk to from an app
+stays awake as one in your terminal does.
 Without a scope token the caller is the user; with one, it is
 that workspace's agent, under the rules of its `shoal` commands. The library
 speaks only its own release's protocol: a daemon of another release refuses

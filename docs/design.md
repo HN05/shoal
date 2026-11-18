@@ -456,10 +456,12 @@ would save. The user interacts with an agent by a key it reads in its
 terminal, which its wrapper finds by the terminal's access time (reading a key
 moves it, the agent's output does not), leaving out the keys Shoal types
 itself, which Shoal reports before it types; by a prompt they submit; and by
-`shoal attach`, following the agent's session, a restore or restart they
-start, `shoal start --in` and Enter on the sleep screen, which the daemon
-tells by the unscoped caller. Updates,
-messages, idle wakes and what Shoal or a coordinator starts are not
+`shoal attach`, following the agent's session, a message they send it, a
+restore or restart they start, `shoal start --in` and Enter on the sleep
+screen, which the daemon tells by the unscoped caller, whatever machine or
+device it came from. Updates,
+Shoal's and a coordinator's messages, idle wakes and what Shoal or a
+coordinator starts are not
 interaction, nor is a terminal showing the agent, since a user may attach and
 walk away. The user is engaged with an agent while they interacted since its
 turn before the last ended, so a turn whose wait passes without them ends it,

@@ -191,6 +191,8 @@ pub(super) async fn handle(
             message,
             attachments,
         } => {
+            // A message the user sends an agent is a prompt they submit.
+            manager.record_user_interaction(caller, &space).await;
             let attacher = manager.attacher(caller).await;
             Body::Reached(
                 manager
