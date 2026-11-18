@@ -54,7 +54,7 @@ impl Fixture {
             push,
             confirmed: None,
         };
-        let plan = self.manager.prepare_merge(&selector, &options).await;
+        let plan = self.manager.prepare_merge(&selector, &options, None).await;
         let plan = plan.unwrap();
         let merged = crate::git::repo::finish_merge(plan.clone()).await;
         (plan, merged.is_ok())

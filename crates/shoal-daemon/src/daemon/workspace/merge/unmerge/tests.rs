@@ -52,7 +52,11 @@ impl Fixture {
         let _guard = self.manager.gates.lock_git(&self.repo_id).await;
         let plan = self
             .manager
-            .prepare_merge(&self.manager.named(name).await, &MergeOptions::default())
+            .prepare_merge(
+                &self.manager.named(name).await,
+                &MergeOptions::default(),
+                None,
+            )
             .await
             .unwrap();
         crate::git::repo::finish_merge(plan.clone()).await.unwrap();

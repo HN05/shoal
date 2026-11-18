@@ -1944,7 +1944,7 @@ async fn unpushed_commits_count_against_a_remapped_upstream() {
     git(&f.repo, &["merge", "--ff-only", "origin/cache-other"]);
     let preview = f
         .manager
-        .preview_merge(&f.manager.named("worker").await, true)
+        .preview_merge(&f.manager.named("worker").await, true, None)
         .await
         .unwrap();
     assert_eq!(preview.unpushed, 1);
@@ -1962,7 +1962,7 @@ async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
         push: true,
         confirmed: Some(
             f.manager
-                .preview_merge(&f.manager.named("worker").await, true)
+                .preview_merge(&f.manager.named("worker").await, true, None)
                 .await
                 .unwrap()
                 .confirmation(),
@@ -1970,7 +1970,7 @@ async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
     };
     let refused = async |options: &crate::model::MergeOptions| {
         f.manager
-            .prepare_merge(&f.manager.named("worker").await, options)
+            .prepare_merge(&f.manager.named("worker").await, options, None)
             .await
             .is_err()
     };
@@ -1994,7 +1994,7 @@ async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
     git(&f.repo, &["pull", "--ff-only"]);
     assert!(
         f.manager
-            .prepare_merge(&f.manager.named("worker").await, &options)
+            .prepare_merge(&f.manager.named("worker").await, &options, None)
             .await
             .is_ok()
     );
@@ -2009,7 +2009,7 @@ async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
     assert!(refused(&options).await);
     let plan = f
         .manager
-        .prepare_merge(&f.manager.named("worker").await, &confirmed().await)
+        .prepare_merge(&f.manager.named("worker").await, &confirmed().await, None)
         .await;
     assert!(plan.unwrap().push.is_some());
 }
@@ -2034,7 +2034,7 @@ async fn a_confirmed_merge_refuses_a_warning_recorded_after_the_question() {
         push: false,
         confirmed: Some(
             f.manager
-                .preview_merge(&f.manager.named("worker").await, false)
+                .preview_merge(&f.manager.named("worker").await, false, None)
                 .await
                 .unwrap()
                 .confirmation(),
@@ -2048,7 +2048,7 @@ async fn a_confirmed_merge_refuses_a_warning_recorded_after_the_question() {
         .await
         .unwrap();
     f.manager
-        .prepare_merge(&f.manager.named("worker").await, &options)
+        .prepare_merge(&f.manager.named("worker").await, &options, None)
         .await
         .unwrap_err();
     // A question that named them lets the merge go ahead.
@@ -2057,7 +2057,7 @@ async fn a_confirmed_merge_refuses_a_warning_recorded_after_the_question() {
     assert_eq!(named.changed_on_both_sides, ["version"]);
     assert!(
         f.manager
-            .prepare_merge(&f.manager.named("worker").await, &options)
+            .prepare_merge(&f.manager.named("worker").await, &options, None)
             .await
             .is_ok()
     );
@@ -2082,6 +2082,47 @@ async fn merge_turned_off_refuses_runs_and_agent_requests() {
             .unwrap()
             .is_empty()
     );
+}
+
+#[tokio::test]
+async fn a_merge_without_a_review_is_refused_before_its_approval() {
+    let f = Fixture::new().await;
+    let workspace = f.add("worker").await;
+    require_merge_review(&workspace, "agents");
+    let head = git(&workspace.path, &["rev-parse", "--short", "HEAD"]);
+    let refused = merge_as_agent(&f, &workspace).await.unwrap_err();
+    let refused = format!("{refused:#}");
+    assert!(refused.contains(head.trim()), "{refused}");
+    assert!(
+        f.manager
+            .approval_requests(Some(&f.manager.named("worker").await))
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    // "agents" leaves the user's own merge alone.
+    f.manager.merge_workspace("worker").await.unwrap();
+}
+
+#[tokio::test]
+async fn all_refuses_the_users_merge_before_asking_about_it() {
+    let f = Fixture::new().await;
+    let workspace = f.add("worker").await;
+    require_merge_review(&workspace, "all");
+    let main = git(&f.repo, &["rev-parse", "main"]);
+    let selector = f.manager.named("worker").await;
+    (f.manager.preview_merge(&selector, false, None))
+        .await
+        .unwrap_err();
+    f.manager.merge_workspace("worker").await.unwrap_err();
+    assert_eq!(git(&f.repo, &["rev-parse", "main"]), main);
+}
+
+/// Commit to `workspace` a config whose `require_for_merge` is `holds`.
+fn require_merge_review(workspace: &crate::model::Workspace, holds: &str) {
+    let config = format!("[review]\nrequire_for_merge = '{holds}'\n");
+    fs::write(workspace.path.join(".shoal.toml"), config).unwrap();
+    commit(&workspace.path, ".shoal.toml");
 }
 
 #[tokio::test]
@@ -2177,7 +2218,7 @@ impl Manager {
             push,
             confirmed: None,
         };
-        crate::git::repo::finish_merge(self.prepare_merge(&selector, &options).await?).await
+        crate::git::repo::finish_merge(self.prepare_merge(&selector, &options, None).await?).await
     }
 }
 

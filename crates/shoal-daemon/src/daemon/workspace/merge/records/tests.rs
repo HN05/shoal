@@ -33,7 +33,11 @@ async fn a_merge_is_recorded_from_what_the_default_branch_holds() {
     let merge = async || {
         let _guard = manager.gates.lock_git(&repo_id).await;
         let plan = manager
-            .prepare_merge(&manager.named("worker").await, &MergeOptions::default())
+            .prepare_merge(
+                &manager.named("worker").await,
+                &MergeOptions::default(),
+                None,
+            )
             .await
             .unwrap();
         crate::git::repo::finish_merge(plan.clone()).await.unwrap();
@@ -93,7 +97,11 @@ async fn a_merge_is_recorded_from_what_the_default_branch_holds() {
         .to_owned();
     let _guard = manager.gates.lock_git(&repo_id).await;
     let plan = manager
-        .prepare_merge(&manager.named("worker").await, &MergeOptions::default())
+        .prepare_merge(
+            &manager.named("worker").await,
+            &MergeOptions::default(),
+            None,
+        )
         .await
         .unwrap();
     crate::git::repo::finish_merge(plan.clone()).await.unwrap();

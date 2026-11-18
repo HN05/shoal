@@ -535,8 +535,9 @@ impl Manager {
         Ok(preparation)
     }
 
-    /// `merge` says how a merge runs; a scoped `caller`'s merge or unmerge
-    /// needs its permission.
+    /// `merge` says how a merge runs, which its review gate may refuse
+    /// `caller` first; a scoped `caller`'s merge or unmerge needs its
+    /// permission.
     async fn prepare_execution_kind(
         &self,
         workspace: &Workspace,
@@ -552,6 +553,7 @@ impl Manager {
                     .prepare_merge(
                         &SpaceSelector::id(&workspace.id),
                         &merge.unwrap_or_default(),
+                        caller,
                     )
                     .await?;
                 if let Some(caller) = caller {

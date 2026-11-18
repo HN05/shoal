@@ -1,6 +1,7 @@
-//! Review gates: with `[review] require_for_pr` or `require_for_ready`
-//! holding the caller, it opens a new PR or marks work ready only once a
-//! finished review covers HEAD and every finding is resolved.
+//! Review gates: with `[review] require_for_pr`, `require_for_ready` or
+//! `require_for_merge` holding the caller, it opens a new PR, marks work
+//! ready or merges only once a finished review covers the commit it acts on
+//! and every finding is resolved.
 use shoal_refs::CommitId;
 use std::fmt::Write as _;
 
@@ -22,6 +23,8 @@ pub(crate) enum Gate {
     Pr,
     /// `shoal ready`.
     Ready,
+    /// `shoal merge`.
+    Merge,
 }
 
 impl Manager {
@@ -105,6 +108,7 @@ impl Gate {
         let required = match self {
             Self::Pr => settings.review.require_for_pr,
             Self::Ready => settings.review.require_for_ready,
+            Self::Merge => settings.review.require_for_merge,
         };
         required.holds(requester(caller))
     }
@@ -113,6 +117,7 @@ impl Gate {
         match self {
             Self::Pr => "opening a PR",
             Self::Ready => "marking work ready",
+            Self::Merge => "merging",
         }
     }
 }

@@ -347,11 +347,12 @@ post = true
 # Agent that reviews once more when the first reviewer fails for a reason other
 # than running longer than 30 minutes (no default).
 # fallback_agent = "claude"
-# Whose shoal pr open of a new PR, and whose shoal ready, need a finished review
-# of HEAD with every finding resolved: "off", "agents" or "all", the user's own
-# commands included. Refused, they start one.
+# Whose shoal pr open of a new PR, shoal ready and shoal merge need a finished
+# review of the commit they act on with every finding resolved: "off", "agents"
+# or "all", the user's own commands included. Refused, they start one.
 require_for_pr = "off"
 require_for_ready = "off"
+require_for_merge = "off"
 
 # Hold agent messages until none has arrived for this many seconds, so a run of
 # them, such as approval decisions, reaches the agent together; 0 delivers each at once.

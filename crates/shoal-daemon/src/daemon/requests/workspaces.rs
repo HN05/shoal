@@ -270,7 +270,7 @@ pub(super) async fn handle(
             Body::Conflicts(manager.check_conflicts(&workspace, target).await?)
         }
         WorkspaceMethod::PreviewMerge { workspace, push } => {
-            Body::MergePreview(manager.preview_merge(&workspace, push).await?)
+            Body::MergePreview(manager.preview_merge(&workspace, push, caller).await?)
         }
         WorkspaceMethod::CloseOwnedPlace { workspace, place } => {
             Body::PlaceClose(manager.close_recorded_place(&workspace, &place).await?)

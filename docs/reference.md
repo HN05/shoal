@@ -1338,7 +1338,9 @@ A finding that needs your decision stays unresolved while the agent asks with
 With [`[review] require_for_pr`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#reviews), a `shoal pr open` that would open a new
 PR is checked before it pushes, and before a [proposal](#approval-for-agent-issues-and-prs); linking an
 existing PR is not. With `require_for_ready`, `shoal ready` is checked, not
-`ready --undo`. Each gate holds agents and the commands they run with `"agents"`,
+`ready --undo`. With `require_for_merge`, [`shoal merge`](#merge-into-the-default-branch) is checked for the
+commit of the branch that merges, before the question it asks and before an
+agent's approval request, which a refused merge never makes. Each gate holds agents and the commands they run with `"agents"`,
 and your own commands too with `"all"`. A gate passes once a finished review covers HEAD exactly and every
 one of its findings is resolved, whatever the verdict. Otherwise the command is
 refused, naming what is missing and listing the unresolved findings; without a
@@ -3487,7 +3489,8 @@ is aborted: merge the default branch into the workspace with Git (`git merge
 main`), resolve the conflicts there, and run `shoal merge` again.
 Merged commits count as pushed for `rm` and automatic cleanup.
 
-An agent's scoped `shoal merge` needs the user's approval for the branch at its
+A merge that its [review gate](#local-reviews) refuses goes no further. An
+agent's scoped `shoal merge` needs the user's approval for the branch at its
 current commit, and for where it pushes, unless its [`merge` permission](#mode-permissions) is `"direct"` and
 its [`push` permission](#approval-for-agent-pushes) is `"direct"` too. The first run records a
 `merge` request in `shoal approvals` and exits 2 with `code: "approval_pending"`;

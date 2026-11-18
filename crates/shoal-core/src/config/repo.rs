@@ -652,6 +652,9 @@ pub struct ReviewConfig {
     /// Whose marking of work ready needs one.
     #[option(default = ReviewRequirement::default())]
     pub require_for_ready: Option<ReviewRequirement>,
+    /// Whose merge needs one of the commit that merges.
+    #[option(default = ReviewRequirement::default())]
+    pub require_for_merge: Option<ReviewRequirement>,
 }
 
 /// Whose commands a review gate holds until a finished review covers the

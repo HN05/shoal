@@ -14,6 +14,7 @@ use shoal_refs::{BranchName, CommitId};
 
 use super::{Manager, branches::UpstreamPolicy};
 use crate::{
+    daemon::{reviews::gate::Gate, scope::Caller},
     fsutil::off_runtime,
     git::{
         self,
@@ -42,15 +43,16 @@ struct MergeSource {
 }
 
 impl Manager {
-    /// What merging the workspace `selector` names does, after the checks the
-    /// merge makes before it changes anything; with `push`, the merge pushes
-    /// the default branch afterwards.
+    /// What merging the workspace `selector` names does, after the checks
+    /// `caller`'s merge makes before it changes anything; with `push`, the
+    /// merge pushes the default branch afterwards.
     pub async fn preview_merge(
         &self,
         selector: &SpaceSelector,
         push: bool,
+        caller: Option<&Caller>,
     ) -> Result<MergePreview> {
-        let merge = self.validate_merge(selector, push).await?;
+        let merge = self.validate_merge(selector, push, caller).await?;
         let default_commit = local_commit(&merge.repo, &merge.default).await?;
         self.merge_preview(
             &merge.workspace,
@@ -63,15 +65,16 @@ impl Manager {
         .await
     }
 
-    /// Validate and refresh a merge that runs as `options` say while the
-    /// caller holds the repository Git gate. The gate must stay held until the
-    /// tracked execution completes.
+    /// Validate and refresh `caller`'s merge, which runs as `options` say
+    /// while it holds the repository Git gate. The gate must stay held until
+    /// the tracked execution completes.
     pub async fn prepare_merge(
         &self,
         selector: &SpaceSelector,
         options: &MergeOptions,
+        caller: Option<&Caller>,
     ) -> Result<MergePlan> {
-        let merge = self.validate_merge(selector, options.push).await?;
+        let merge = self.validate_merge(selector, options.push, caller).await?;
         if let Some(confirmed) = &options.confirmed {
             let warning = self
                 .branch_merge_warning(&SpaceSelector::id(&merge.workspace.id))
@@ -119,9 +122,15 @@ impl Manager {
         .await
     }
 
-    /// The checks a merge makes before it changes anything. A merge that
-    /// pushes needs an upstream for the default branch.
-    async fn validate_merge(&self, selector: &SpaceSelector, push: bool) -> Result<MergeSource> {
+    /// The checks `caller`'s merge makes before it changes anything, its
+    /// review gate last. A merge that pushes needs an upstream for the
+    /// default branch.
+    async fn validate_merge(
+        &self,
+        selector: &SpaceSelector,
+        push: bool,
+        caller: Option<&Caller>,
+    ) -> Result<MergeSource> {
         let workspace = self.workspace(selector).await?;
         self.ensure_merging_enabled(&workspace).await?;
         let repo = self.repository(workspace.repository()).await?;
@@ -150,6 +159,8 @@ impl Manager {
             true => Some(push_target(&repo, &default).await?),
             false => None,
         };
+        self.require_review(&workspace, Gate::Merge, &source, caller)
+            .await?;
         Ok(MergeSource {
             workspace,
             branch,
