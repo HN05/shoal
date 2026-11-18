@@ -152,7 +152,7 @@ impl Manager {
     /// no title from it but for a branch, so an issue it cannot read is
     /// taken by the URL its number has in the repository, which the
     /// agent's start reads again; one without even that is refused, since
-    /// nothing could read it.
+    /// nothing could read it, as is a closed one.
     pub(super) async fn launch_issue(
         &self,
         launch: &Launch,
@@ -166,7 +166,7 @@ impl Manager {
                 let (url, title, labels) = (issue.url, issue.title, issue.labels);
                 return Ok(OpenIssue { url, title, labels }.into());
             }
-            Err(error) if launch.name.is_some() => error,
+            Err(error) if launch.name.is_some() && !closed(&error) => error,
             Err(error) => return Err(error),
         };
         crate::daemon::log!("issue {input} read without its title: {error:#}");
@@ -232,6 +232,11 @@ pub(super) fn agent_request(
     }
 }
 
+/// Whether `error` is the forge's refusal of a closed issue.
+fn closed(error: &anyhow::Error) -> bool {
+    (error.chain()).any(|cause| cause.is::<shoal_forge::items::issue::ClosedIssue>())
+}
+
 /// Refuse `launch` when it starts an agent and its caller's terminal could
 /// place no agent in the background, as the launch says why.
 fn ensure_placeable(launch: &Launch, agent: bool) -> Result<()> {
@@ -240,3 +245,6 @@ fn ensure_placeable(launch: &Launch, agent: bool) -> Result<()> {
         _ => Ok(()),
     }
 }
+
+#[cfg(test)]
+mod tests;

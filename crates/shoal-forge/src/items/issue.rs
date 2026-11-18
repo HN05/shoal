@@ -81,9 +81,19 @@ impl ForgeRepo {
 }
 
 fn require_open(state: ItemState) -> Result<()> {
-    ensure!(
-        state == ItemState::Open,
-        "issue is already closed; reopen it before starting an issue workspace"
-    );
+    ensure!(state == ItemState::Open, ClosedIssue);
     Ok(())
 }
+
+/// The refusal of work on a closed issue, which no fallback that takes an
+/// unread issue by its URL may swallow.
+#[derive(Debug)]
+pub struct ClosedIssue;
+
+impl std::fmt::Display for ClosedIssue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("issue is already closed; reopen it before starting an issue workspace")
+    }
+}
+
+impl std::error::Error for ClosedIssue {}
