@@ -235,6 +235,10 @@ impl Manager {
             Acting::Direct => Ok(Taken::AtOnce),
             Acting::Deny => Err(denied(&action.action, &permissions, action.key)),
             Acting::Propose if caller.granted == Some(action.key) => Ok(Taken::AtOnce),
+            // Its approval requests live on its own machine.
+            Acting::Propose if self.vouched_space(&caller.space_id).is_some() => {
+                Err(proposed_elsewhere(&action.action, &permissions, action.key))
+            }
             Acting::Propose => self.await_action_decision(caller, action, using).await,
         }
     }
@@ -267,6 +271,19 @@ impl Manager {
 fn denied(action: &str, permissions: &Permissions, key: PermissionKey) -> anyhow::Error {
     anyhow::anyhow!(
         "{action}: {}; ask the user to run it",
+        permissions.cited(key)
+    )
+}
+
+/// The refusal of `action` to a space on another machine whose `key`
+/// asks approval for it, which a request from there cannot ask here.
+fn proposed_elsewhere(
+    action: &str,
+    permissions: &Permissions,
+    key: PermissionKey,
+) -> anyhow::Error {
+    anyhow::anyhow!(
+        "{action}: {}, and approval cannot be asked for a space on another machine; ask the user to run it",
         permissions.cited(key)
     )
 }

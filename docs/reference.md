@@ -834,7 +834,8 @@ machine, which decides it as it decides its own callers'. Your terminal's
 commands go as yours; a space's processes' go with that space's scope and
 permissions, which its machine vouches for, so an agent acts on the spaces
 below its own on every machine and is refused the rest, and a device's go as
-yours. This covers `status`, `log`, `questions`, `approvals`, `messages send`,
+yours. An action a space's permission sets to `propose` is refused from another
+machine, since its approval request would belong to that space's machine. This covers `status`, `log`, `questions`, `approvals`, `messages send`,
 `stop`, `resume`, `rename`, `done`, `rm`, `priority`,
 `progress`, `sleep`, holds, and the issue, PR and CI commands that act on a
 space. `restart` acts on the agents of its own machine. Commands that need the
