@@ -883,6 +883,11 @@ CREATE VIEW space_event_records AS
                 'cause',NULL,'error',NULL) END AS record
     FROM spaces LEFT JOIN workspaces ON workspaces.id=spaces.id AND spaces.kind='workspace';
 
+CREATE VIEW hub_held_numbers AS
+    SELECT member_id, number, NULL AS space_id FROM hub_reserved_numbers
+    UNION ALL SELECT member_id, json_extract(summary,'$.number'), space_id
+        FROM hub_space_copies;
+
 INSERT INTO "sqlite_sequence" VALUES ('space_events', 0);
 
 INSERT INTO "sqlite_sequence" VALUES ('review_replies', 0);

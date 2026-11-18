@@ -17,3 +17,11 @@ CREATE TABLE hub_reserved_numbers (
     number INTEGER NOT NULL,
     PRIMARY KEY(member_id, number)
 );
+
+-- The numbers each machine holds without a listed space of its own: those
+-- it reports holding without a space, and those of its copies of spaces
+-- another machine owns, each copy with its space's ID.
+CREATE VIEW hub_held_numbers AS
+    SELECT member_id, number, NULL AS space_id FROM hub_reserved_numbers
+    UNION ALL SELECT member_id, json_extract(summary,'$.number'), space_id
+        FROM hub_space_copies;

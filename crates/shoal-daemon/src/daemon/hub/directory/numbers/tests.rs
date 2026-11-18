@@ -185,6 +185,7 @@ fn what_the_hub_kept_for_a_machine_that_it_holds_without_a_space_is_replaced() {
     let member = MemberId::from("laptop".to_owned());
     let tx = db.transaction().unwrap();
     reserve_held(&tx, &member, &numbers(&[5, 6])).unwrap();
+    replace_held(&tx, &member).unwrap();
     let laptop = kept_for(&tx, &member).unwrap();
     assert_eq!(laptop.renumbered, [renumbering("b", 9)]);
     assert_eq!(laptop.spares, numbers(&[7, 8, 10]));
@@ -207,4 +208,23 @@ fn a_copy_that_takes_its_ids_place_with_a_held_number_is_renumbered() {
     tx.commit().unwrap();
     let laptop = report(&mut db, "laptop", Vec::new());
     assert_eq!(laptop.renumbered, [renumbering("a", 1)]);
+}
+
+#[test]
+fn a_number_a_machine_holds_for_its_copy_goes_to_none_of_its_spaces() {
+    let mut db = database();
+    report(&mut db, "desk", vec![space("a", 1)]);
+    // The laptop's own b, reported first, takes the hub's new number 5
+    // before the laptop's copy of a turns out to hold it.
+    let member = MemberId::from("laptop".to_owned());
+    let tx = db.transaction().unwrap();
+    let changes = Report::Changes {
+        changed: vec![space("b", 1), space("a", 5)],
+        removed: Vec::new(),
+    };
+    super::super::records::apply(&tx, &member, changes).unwrap();
+    replace_held(&tx, &member).unwrap();
+    let laptop = kept_for(&tx, &member).unwrap();
+    assert_eq!(laptop.renumbered, [renumbering("b", 6)]);
+    assert_eq!(laptop.spares, numbers(&[7, 8, 9]));
 }

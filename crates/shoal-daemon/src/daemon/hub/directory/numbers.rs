@@ -1,7 +1,8 @@
 //! The hub's one sequence of space numbers across its machines. A number is
 //! held by the listed space that has it, unless the hub renumbers that
 //! space, by the spares and new numbers the hub keeps for a machine, and by
-//! those a machine holds without a space. A
+//! those a machine holds without a listed space of its own: its reserved
+//! numbers and its copies'. A
 //! space whose number another machine's space or reservation held first
 //! takes the smallest number none holds, which the hub keeps for it until
 //! its machine reports it with that number. A space another machine claims
@@ -83,7 +84,7 @@ pub(super) fn release(tx: &Transaction<'_>, member: &MemberId, id: &SpaceId) -> 
 }
 
 /// Keep `reserved`, every number `member` holds without a space, from
-/// any other space, and replace what the hub kept for `member` among them.
+/// any other space.
 pub(super) fn reserve_held(
     tx: &Transaction<'_>,
     member: &MemberId,
@@ -99,21 +100,21 @@ pub(super) fn reserve_held(
             params![member, number],
         )?;
     }
-    replace_reserved(tx, member)
+    Ok(())
 }
 
 /// Replace what the hub kept for `member` that `member` holds without a
-/// space, as when it numbered a space above its highest with one and
-/// removed it, which kept the number for its issue proposals: a spare goes,
-/// and a space's new number gives way to another.
-fn replace_reserved(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
+/// listed space of its own, as a number it reserves since it numbered a
+/// space above its highest with it and removed it, or a copy's: a spare
+/// goes, and a space's new number gives way to another.
+pub(super) fn replace_held(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
     let mut statement = tx.prepare(
         "SELECT number, space_id FROM hub_numbers WHERE member_id=?1
-            AND number IN (SELECT number FROM hub_reserved_numbers WHERE member_id=?1)",
+            AND number IN (SELECT number FROM hub_held_numbers WHERE member_id=?1)",
     )?;
     let rows = statement.query_map([member], |row| Ok((row.get(0)?, row.get(1)?)));
-    let reserved: Vec<(SpaceNumber, Option<SpaceId>)> = rows?.collect::<rusqlite::Result<_>>()?;
-    for (number, space) in reserved {
+    let held: Vec<(SpaceNumber, Option<SpaceId>)> = rows?.collect::<rusqlite::Result<_>>()?;
+    for (number, space) in held {
         tx.execute("DELETE FROM hub_numbers WHERE number=?1", [number])?;
         if let Some(space) = space {
             let new = smallest_free(tx)?;
@@ -169,7 +170,8 @@ fn of_listed(tx: &Transaction<'_>, id: &SpaceId) -> Result<Option<SpaceNumber>> 
 
 /// Whether `number`, which `member`'s space `id` has, is held by another
 /// machine's listed space that keeps it, by what the hub keeps for another
-/// machine or another space, or by another machine without a space.
+/// machine or another space, or by another machine without a listed space
+/// of its own, but for its copy of this space.
 fn held_elsewhere(
     tx: &Transaction<'_>,
     member: &MemberId,
@@ -183,7 +185,8 @@ fn held_elsewhere(
                         WHERE space_id IS NOT NULL))
             OR EXISTS(SELECT 1 FROM hub_numbers
                 WHERE number=?1 AND (member_id<>?2 OR space_id<>?3))
-            OR EXISTS(SELECT 1 FROM hub_reserved_numbers WHERE number=?1 AND member_id<>?2)",
+            OR EXISTS(SELECT 1 FROM hub_held_numbers WHERE number=?1 AND member_id<>?2
+                AND (space_id IS NULL OR space_id<>?3))",
         params![number, member, id],
         |row| row.get(0),
     )?)
@@ -196,7 +199,7 @@ fn smallest_free(tx: &Transaction<'_>) -> Result<SpaceNumber> {
         "WITH held(number) AS (
             SELECT json_extract(summary,'$.number') FROM hub_spaces
             UNION ALL SELECT number FROM hub_numbers
-            UNION ALL SELECT number FROM hub_reserved_numbers)
+            UNION ALL SELECT number FROM hub_held_numbers)
         SELECT MIN(n) FROM (SELECT 1 AS n UNION ALL SELECT number+1 FROM held)
             WHERE n NOT IN (SELECT number FROM held)",
         [],

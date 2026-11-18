@@ -35,6 +35,7 @@ impl Manager {
             .write(move |tx| {
                 numbers::reserve_held(tx, &member, &reserved)?;
                 let conflicts = records::apply(tx, &member, report)?;
+                numbers::replace_held(tx, &member)?;
                 Ok((conflicts, numbers::kept_for(tx, &member)?))
             })
             .await?;
