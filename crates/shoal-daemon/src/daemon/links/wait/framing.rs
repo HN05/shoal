@@ -23,12 +23,13 @@ impl Manager {
     /// it comes first and does not fit alone; its remainder then moves to a
     /// new delivery and stays pending once the sent part is acknowledged. The
     /// caller holds the PR gates of the workspaces in `batch`.
-    pub(super) async fn fit_response(
-        &self,
-        mut batch: Batch,
-        reserved: usize,
-    ) -> Result<Vec<Update>> {
-        let limit = RESPONSE_LIMIT.saturating_sub(reserved);
+    pub(super) async fn fit_response(&self, batch: Batch, reserved: usize) -> Result<Vec<Update>> {
+        (self.fit_within(batch, RESPONSE_LIMIT.saturating_sub(reserved))).await
+    }
+
+    /// The leading updates of `batch` whose serialized form fits `limit`
+    /// bytes, cut as [`Self::fit_response`] cuts them.
+    pub(super) async fn fit_within(&self, mut batch: Batch, limit: usize) -> Result<Vec<Update>> {
         match frame_cut(&batch, limit) {
             Cut::Between(fitting) => batch.truncate(fitting),
             Cut::Inside(fitting) => {

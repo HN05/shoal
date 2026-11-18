@@ -46,21 +46,27 @@ pub(crate) struct Event<'a> {
 impl Manager {
     /// Pass `event` up to the space `above`, which another machine runs.
     pub(crate) async fn pass_up(&self, above: SpaceId, event: Event<'_>) -> Result<()> {
-        let files = (event.attachments.iter())
-            .filter_map(|path| path.file_name())
-            .map(|name| name.to_string_lossy().into_owned())
-            .collect();
-        let told = Told {
-            above,
-            about: Some(ToldAbout {
-                space: event.space.clone(),
-                name: event.name.clone(),
-            }),
-            kind: event.kind,
-            message: event.message,
-            files,
-        };
-        self.send_told(told).await
+        self.send_told(told_above(above, event)).await
+    }
+
+    /// Pass `event` up to the space `above`, which another machine runs,
+    /// only once the hub takes it, which holds it while that machine is
+    /// offline: an error leaves it with the caller, as while this
+    /// machine's link is down or the hub or that machine refused it.
+    pub(crate) async fn pass_up_now(&self, above: SpaceId, event: Event<'_>) -> Result<()> {
+        let told = told_above(above, event);
+        if self.is_hub() {
+            return (self.route_told(&self.own_member().await?, told).await).map(drop);
+        }
+        let calls =
+            (self.hub.member.calls()).context("this machine is not connected to the hub")?;
+        calls.call(Call::Tell { told }).await.map(drop)
+    }
+
+    /// Whether this machine reaches the hub now: it is the hub, or its
+    /// link to the hub is open.
+    pub(crate) fn reaches_hub(&self) -> bool {
+        self.is_hub() || self.hub.member.calls().is_some()
     }
 
     /// Message the agent of the space `id`, which another machine runs.
@@ -198,6 +204,24 @@ impl Manager {
         }
         self.notify(None, NotificationKind::HubExpired, message)
             .await;
+    }
+}
+
+/// What tells the space `above` of `event`, naming the files it sent.
+fn told_above(above: SpaceId, event: Event<'_>) -> Told {
+    let files = (event.attachments.iter())
+        .filter_map(|path| path.file_name())
+        .map(|name| name.to_string_lossy().into_owned())
+        .collect();
+    Told {
+        above,
+        about: Some(ToldAbout {
+            space: event.space.clone(),
+            name: event.name.clone(),
+        }),
+        kind: event.kind,
+        message: event.message,
+        files,
     }
 }
 

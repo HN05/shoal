@@ -1,12 +1,14 @@
 use anyhow::Result;
+use serde_json::json;
 
 use super::super::{
     activity::queue_update,
-    tests::{CHILD_PR, GRANDCHILD_PR, register_watch},
+    tests::{CHILD_PR, GRANDCHILD_PR},
 };
+use super::{super::tests::register_watch, EVENT_LIMIT};
 use crate::{
     daemon::{
-        test_support::{manager, repository},
+        test_support::{configure, manager, repository},
         workspace::Manager,
     },
     forge::updates::{Update, UpdateKind},
@@ -19,10 +21,14 @@ use shoal_protocol::{
     space_names::SpaceSelector,
 };
 
-/// A workspace below `away`, a space on another machine, and one split
-/// from it, neither with an agent, on a machine joined to a hub it cannot
-/// reach now.
+/// A public key, as the store keeps one.
+const KEY: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+/// A workspace below `away`, a space with an agent on the offline machine
+/// `desk`, and one split from it, neither with an agent, on the hub's own
+/// machine.
 async fn below_elsewhere(manager: &Manager, root: &std::path::Path) -> (Workspace, Workspace) {
+    configure(manager, "[machine.hub]\nenabled = true\n").await;
     let checkout = repository(root, "repo");
     let repo = (manager.register_repository(checkout.to_str().unwrap().into(), None, None))
         .await
@@ -35,14 +41,23 @@ async fn below_elsewhere(manager: &Manager, root: &std::path::Path) -> (Workspac
         (manager.split_workspace(&selector, "grandchild".into(), None, <_>::default()))
             .await
             .unwrap();
+    let away = json!({
+        "id": "away", "number": 90, "name": "away", "kind": "chat",
+        "status": "working", "agent": true,
+    });
     let id = child.id.clone();
     (manager.store)
         .write(move |tx| {
             crate::daemon::workspace::set_parent(tx, &id, Some(&SpaceId::from("away")))?;
             tx.execute(
-                "INSERT INTO hub_membership(id, member_id, name, private_key, hub_key, url, joined_at)
-                    VALUES (1, 'here', 'laptop', x'00', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', 'https://hub.example.com', 0)",
-                [],
+                "INSERT INTO hub_members(id, kind, name, public_key, joined_at)
+                    VALUES ('desk', 'machine', 'desk', ?1, 0)",
+                [KEY],
+            )?;
+            tx.execute(
+                "INSERT INTO hub_spaces(space_id, member_id, summary, reported_at)
+                    VALUES ('away', 'desk', ?1, 0)",
+                [away.to_string()],
             )?;
             Ok(())
         })
@@ -51,14 +66,15 @@ async fn below_elsewhere(manager: &Manager, root: &std::path::Path) -> (Workspac
     (child, grandchild)
 }
 
-/// Queue a review of `url` on the cursor of the space `id`, which watches it.
-async fn queue_review(manager: &Manager, id: &SpaceId, url: &str) {
+/// Queue an update of `url` whose message is `message` on the cursor of
+/// the space `id`, which watches it.
+async fn queue_comment(manager: &Manager, id: &SpaceId, url: &str, message: String) {
     register_watch(manager, id, url).await;
     let update = Update {
         url: url.to_owned(),
         kind: UpdateKind::Comment,
-        message: format!("approved {url}"),
-        delivery: format!("review of {url}"),
+        delivery: format!("{url} {}", message.len()),
+        message,
         check: None,
         workspace: None,
     };
@@ -68,11 +84,12 @@ async fn queue_review(manager: &Manager, id: &SpaceId, url: &str) {
         .unwrap();
 }
 
-/// What the outbox holds to tell, oldest first.
-async fn outbox(manager: &Manager) -> Vec<Told> {
+/// What the hub holds for the offline machine `desk` to tell, oldest first.
+async fn held(manager: &Manager) -> Vec<Told> {
     let calls = (manager.store)
         .run(|db| {
-            let mut statement = db.prepare("SELECT call FROM hub_outbox ORDER BY seq")?;
+            let mut statement =
+                db.prepare("SELECT call FROM hub_queue WHERE member_id='desk' ORDER BY seq")?;
             let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
             Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
         })
@@ -81,37 +98,62 @@ async fn outbox(manager: &Manager) -> Vec<Told> {
     (calls.iter())
         .map(|call| match serde_json::from_str(call).unwrap() {
             Call::Tell { told } => told,
-            call => panic!("the outbox held {call:?}"),
+            call => panic!("the hub held {call:?}"),
         })
         .collect()
 }
 
+/// The space each event in `told` is about.
+fn about(told: &[Told]) -> Vec<SpaceId> {
+    let about = told
+        .iter()
+        .map(|told| told.about.as_ref().unwrap().space.clone());
+    about.collect()
+}
+
 #[tokio::test]
-async fn activity_of_spaces_below_a_coordinator_elsewhere_waits_in_the_outbox() -> Result<()> {
+async fn the_hub_holds_the_activity_of_spaces_below_an_offline_coordinator() -> Result<()> {
     let (root, manager) = manager().await;
     let (child, grandchild) = below_elsewhere(&manager, root.path()).await;
-    queue_review(&manager, &child.id, &CHILD_PR).await;
-    queue_review(&manager, &grandchild.id, &GRANDCHILD_PR).await;
+    queue_comment(&manager, &child.id, &CHILD_PR, "looks good".into()).await;
+    queue_comment(&manager, &grandchild.id, &GRANDCHILD_PR, "one nit".into()).await;
 
     manager.pass_up_delegated_activity().await?;
 
-    let told = outbox(&manager).await;
-    let about = |told: &Told| told.about.as_ref().map(|about| about.space.clone());
-    assert_eq!(
-        told.iter().map(about).collect::<Vec<_>>(),
-        [Some(child.id.clone()), Some(grandchild.id.clone())]
-    );
+    let told = held(&manager).await;
+    assert_eq!(about(&told), [child.id.clone(), grandchild.id.clone()]);
     for (told, url) in told.iter().zip([&*CHILD_PR, &*GRANDCHILD_PR]) {
         assert_eq!(told.above, SpaceId::from("away"));
-        assert!(
-            told.message.contains(&format!("approved {url}")),
-            "{}",
-            told.message
-        );
+        assert!(told.message.contains(url.as_str()), "{}", told.message);
     }
-    // Passed up, they leave the cursors, so the next sweep sends them no more.
+    // Taken by the hub, they leave the cursors, so the next sweep sends
+    // them no more.
     manager.pass_up_delegated_activity().await?;
-    assert_eq!(outbox(&manager).await.len(), 2);
+    assert_eq!(held(&manager).await.len(), 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn activity_too_large_for_one_event_goes_in_several() -> Result<()> {
+    let (root, manager) = manager().await;
+    let (child, _) = below_elsewhere(&manager, root.path()).await;
+    let long = "a".repeat(2 * EVENT_LIMIT);
+    queue_comment(&manager, &child.id, &CHILD_PR, long).await;
+    queue_comment(&manager, &child.id, &CHILD_PR, "short".into()).await;
+
+    manager.pass_up_delegated_activity().await?;
+    let first = held(&manager).await;
+    assert_eq!(first.len(), 1);
+    assert!(
+        first[0].message.len() <= EVENT_LIMIT,
+        "{}",
+        first[0].message.len()
+    );
+
+    manager.pass_up_delegated_activity().await?;
+    let told = held(&manager).await;
+    assert_eq!(told.len(), 2);
+    assert!(told[1].message.ends_with("short"), "{}", told[1].message);
     Ok(())
 }
 
@@ -119,17 +161,54 @@ async fn activity_of_spaces_below_a_coordinator_elsewhere_waits_in_the_outbox() 
 async fn a_space_with_its_own_agent_keeps_its_activity() -> Result<()> {
     let (root, manager) = manager().await;
     let (child, grandchild) = below_elsewhere(&manager, root.path()).await;
-    queue_review(&manager, &grandchild.id, &GRANDCHILD_PR).await;
+    queue_comment(&manager, &grandchild.id, &GRANDCHILD_PR, "mine".into()).await;
     let selector = SpaceSelector::id(&grandchild.id);
     (manager.set_agent_state(&selector, AgentState::Working, None, None)).await?;
-    queue_review(&manager, &child.id, &CHILD_PR).await;
+    queue_comment(&manager, &child.id, &CHILD_PR, "theirs".into()).await;
 
     manager.pass_up_delegated_activity().await?;
 
-    let told = outbox(&manager).await;
-    let about = told
-        .iter()
-        .map(|told| told.about.as_ref().unwrap().space.clone());
-    assert_eq!(about.collect::<Vec<_>>(), [child.id]);
+    assert_eq!(about(&held(&manager).await), [child.id]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn activity_stays_on_the_cursor_while_the_hub_cannot_be_reached() -> Result<()> {
+    let (root, manager) = manager().await;
+    let (child, _) = below_elsewhere(&manager, root.path()).await;
+    // A member whose link is down, rather than the hub.
+    configure(&manager, "").await;
+    (manager.store)
+        .write(|tx| {
+            tx.execute(
+                "INSERT INTO hub_membership(id, member_id, name, private_key, hub_key, url, joined_at)
+                    VALUES (1, 'here', 'laptop', x'00', ?1, 'https://hub.example.com', 0)",
+                [KEY],
+            )?;
+            Ok(())
+        })
+        .await?;
+    queue_comment(&manager, &child.id, &CHILD_PR, "while away".into()).await;
+
+    manager.pass_up_delegated_activity().await?;
+
+    let outbox = (manager.store)
+        .run(|db| {
+            Ok(db.query_row("SELECT COUNT(*) FROM hub_outbox", [], |row| {
+                row.get::<_, i64>(0)
+            })?)
+        })
+        .await?;
+    assert_eq!(outbox, 0_i64);
+    let pending = (manager.store)
+        .run(|db| {
+            Ok(
+                db.query_row("SELECT COUNT(*) FROM pending_updates", [], |row| {
+                    row.get::<_, i64>(0)
+                })?,
+            )
+        })
+        .await?;
+    assert_eq!(pending, 1_i64);
     Ok(())
 }

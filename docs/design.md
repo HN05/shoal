@@ -168,9 +168,10 @@ elsewhere, naming it. The space tree may span machines, as when a space
 moves without its parent: what a space passes up reaches the nearest space
 above with an agent wherever it runs, through the first space above that
 runs elsewhere, whose machine goes on from there; the item activity of a
-space without an agent goes as a message its machine's background poll
-sends while the hub lists an agent above, taking it off the space's
-cursor once sent or kept in the outbox, and approval requests
+space without an agent goes as messages its machine's background poll
+sends while the hub lists an agent above, each fitting a share of the
+coordinator's unread messages, and stays on the space's cursor until the
+hub takes it, and approval requests
 take deciders on the machines above after the local ones. The hub holds
 what can wait for an offline machine, messages, answers, decisions, stops
 and events, in order until it connects, for seven days, after which the
