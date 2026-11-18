@@ -63,8 +63,14 @@ pub(super) async fn handle(
             manager.fail_queue_entry(&entry, &error).await?;
             Body::Ok
         }
-        QueueMethod::QueueRetry { entry } => {
-            Body::QueueEntry(manager.retry_failed_launch(&entry).await?)
+        QueueMethod::QueueRetry { entry, here } => {
+            let entry = manager.retry_failed_launch(&entry, here).await?;
+            // A restore the user runs in their own terminal is their
+            // interaction with its agent.
+            if here && let Some(space) = entry.space() {
+                (manager.record_user_interaction(caller, &SpaceSelector::id(space))).await;
+            }
+            Body::QueueEntry(entry)
         }
         QueueMethod::SetPriority { space, priority } => {
             Body::Prioritized(manager.set_priority(caller, &space, priority).await?)
@@ -118,7 +124,7 @@ impl Scoped for QueueMethod {
             }
             // A space's own failed launch restores as its stopped agent
             // does: only from the spaces above it.
-            QueueMethod::QueueRetry { entry } => {
+            QueueMethod::QueueRetry { entry, .. } => {
                 manager.ensure_entry_reached(caller, entry).await?;
                 None
             }

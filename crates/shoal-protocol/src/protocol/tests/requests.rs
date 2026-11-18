@@ -148,7 +148,7 @@ const REQUESTS: &[&str] = &[
     r#"{"queue_claim":{"entry":"q1"}}"#,
     r#"{"queue_attach":{"entry":"q1","space":"fix"}}"#,
     r#"{"queue_fail":{"entry":"q1","error":"no agent"}}"#,
-    r#"{"queue_retry":{"entry":"q1"}}"#,
+    r#"{"queue_retry":{"entry":"q1","here":true}}"#,
     r#"{"set_priority":{"space":"fix","priority":75}}"#,
     r#"{"queue_restore":{"workspace":"fix","execution":"e1","env":{}}}"#,
     // Demos.

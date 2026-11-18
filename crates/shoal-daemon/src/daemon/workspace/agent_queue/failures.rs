@@ -154,20 +154,65 @@ fn failed_launch(row: &rusqlite::Row<'_>) -> rusqlite::Result<Launch> {
 }
 
 impl Manager {
-    /// Queue the failed launch `id` again exactly as it was, returning its
+    /// Queue the failed launch `id` again exactly as it was, kept out of
+    /// admission for a caller that starts it `here` itself, returning its
     /// entry as it waits.
-    pub(crate) async fn retry_failed_launch(&self, id: &QueueEntryId) -> Result<QueueEntry> {
+    pub(crate) async fn retry_failed_launch(
+        &self,
+        id: &QueueEntryId,
+        here: bool,
+    ) -> Result<QueueEntry> {
         let _gate = self.agent_queue.lock_admission().await;
         let (owned, removing) = (id.to_owned(), self.space_removals.clone());
         let space = (self.store)
             .write(move |tx| requeue(tx, &owned, &removing))
             .await?;
+        // Kept before the gate opens, so no pass starts it in the
+        // background before its caller holds it.
+        if here {
+            self.agent_queue.keep_for_attach(id);
+        }
         self.agent_settles.request(&space);
         self.agent_queue.wake();
         let entries = self.queue_entries().await?;
         (entries.into_iter())
             .find(|entry| entry.id == *id)
             .context("the restored launch left the queue at once")
+    }
+
+    /// The failed launch of the space `space`, if it has one.
+    pub(crate) async fn failed_launch_of(&self, space: &SpaceId) -> Result<Option<QueueEntry>> {
+        let entries = self.store.run(|db| entries(db)).await?;
+        Ok((entries.into_iter()).find(|entry| entry.space() == Some(space)))
+    }
+
+    /// Give each failed launch `given` names the permissions beside it, in
+    /// its plan, which its agent starts under once restored, and in the
+    /// entry the queue shows.
+    pub(crate) async fn give_failed_launches(
+        &self,
+        given: Vec<(QueueEntryId, crate::config::permissions::PermissionsConfig)>,
+    ) -> Result<()> {
+        let given = (given.into_iter())
+            .map(|(id, given)| {
+                let column = crate::daemon::store::narrowing_column(&given)?;
+                Ok((id, column, serde_json::to_string(&given)?))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        self.store
+            .write(move |tx| {
+                for (id, column, planned) in given {
+                    let updated = tx.execute(
+                        "UPDATE failed_launches SET narrowing=?2,
+                            plan=json_set(plan,'$.launch.narrowing',json(?3))
+                         WHERE id=?1 AND json_valid(plan)",
+                        params![id, column, planned],
+                    )?;
+                    anyhow::ensure!(updated == 1, "{id} no longer waits to be restored");
+                }
+                Ok(())
+            })
+            .await
     }
 
     /// Drop the failed launch `id`, returning whether one was there.

@@ -127,29 +127,39 @@ impl Manager {
         // The launches change together, refusing one started or removed
         // since, while the agents' claims keep their restores out.
         let claimed = recovery::ClaimedChange::claim(&changed)?;
-        let given = launches
-            .into_iter()
-            .map(|launch| (launch.id, change.applied_to(launch.narrowing)));
-        self.give_launches_awaiting_setup(given.collect()).await?;
+        let (failed, waiting): (Vec<_>, Vec<_>) = (launches.into_iter())
+            .map(|launch| (launch.state, launch.id, change.applied_to(launch.narrowing)))
+            .partition(|(state, ..)| *state == crate::state::QueueState::Failed);
+        let given = |launches: Vec<_>| (launches.into_iter()).map(|(_, id, given)| (id, given));
+        self.give_launches_awaiting_setup(given(waiting).collect())
+            .await?;
+        self.give_failed_launches(given(failed).collect()).await?;
         claimed.make(change)
     }
 
     /// The launch waiting for the failed setup of the workspace `selector`
-    /// names, refusing a workspace without one and `change` where `giver`
-    /// does not hold what it gives, as [`Manager::ensure_change_held`]
-    /// refuses it.
+    /// names, else the space's failed launch, refusing a space without
+    /// either and `change` where `giver` does not hold what it gives, as
+    /// [`Manager::ensure_change_held`] refuses it.
     async fn changeable_launch(
         &self,
         selector: &SpaceSelector,
         change: &crate::config::permissions::PermissionChange,
         giver: Option<&SpaceId>,
     ) -> Result<crate::model::QueueEntry> {
-        let workspace = self.workspace(selector).await?;
-        let repository = workspace.repository_id.clone();
-        let space = crate::model::Space::from(workspace.clone());
+        let space = self.space(selector).await?;
+        let repository = space.repository_id.clone();
         (self.ensure_change_held(giver, &space, change, repository.as_ref())).await?;
-        let launch = self.launch_awaiting_setup(&workspace.id).await?;
-        launch.with_context(|| format!("no agent waits for the setup of {}", workspace.name))
+        if let Some(launch) = self.launch_awaiting_setup(&space.id).await? {
+            return Ok(launch);
+        }
+        let failed = self.failed_launch_of(&space.id).await?;
+        failed.with_context(|| {
+            format!(
+                "no agent of {} waits for its setup or a restore of its failed start",
+                space.name
+            )
+        })
     }
 
     /// What the stopped `agent` saved, refusing one that saved nothing and

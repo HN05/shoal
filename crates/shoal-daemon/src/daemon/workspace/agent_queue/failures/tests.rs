@@ -77,7 +77,7 @@ async fn a_restored_failed_launch_queues_again_as_it_was() {
     let entry = manager.queue_add(request).await.unwrap().entry.unwrap();
     (manager.fail_queue_entry(&entry.id, "gone")).await.unwrap();
 
-    let retried = manager.retry_failed_launch(&entry.id).await.unwrap();
+    let retried = manager.retry_failed_launch(&entry.id, false).await.unwrap();
 
     assert_eq!(retried.id, entry.id);
     assert_eq!(retried.mode, Some("plan".into()));
@@ -166,6 +166,47 @@ async fn a_chats_failed_launch_keeps_the_chat() {
     };
     assert_eq!(failed.space(), Some(&chat.id));
     assert_eq!(failed.state, QueueState::Failed);
-    let retried = manager.retry_failed_launch(&entry.id).await.unwrap();
+    let retried = manager.retry_failed_launch(&entry.id, false).await.unwrap();
     assert_eq!(retried.space(), Some(&chat.id));
+}
+
+/// A permission change a restore makes reaches a failed launch: the entry
+/// the queue lists and the plan its agent starts under once restored.
+#[tokio::test]
+async fn a_failed_launch_takes_a_permission_change() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let workspace = create(&manager, &repo, "work").await;
+    let request = crate::model::QueueRequest {
+        plan: r#"{"launch":{"agent":"claude"}}"#.into(),
+        ..launch_in(&workspace, false)
+    };
+    let entry = manager.queue_add(request).await.unwrap().entry.unwrap();
+    (manager.fail_queue_entry(&entry.id, "gone")).await.unwrap();
+    let change = crate::config::permissions::PermissionChange::assigned("merge=direct").unwrap();
+    let launches = [SpaceSelector::id(entry.space().unwrap())];
+    let targets = crate::daemon::workspace::PermissionTargets {
+        agents: &[],
+        launches: &launches,
+    };
+
+    (manager.change_stopped_permissions(targets, &change, None))
+        .await
+        .unwrap();
+
+    let failed = manager.queue_entries().await.unwrap().remove(0);
+    assert_eq!(failed.narrowing, change.set);
+    let retried = manager.retry_failed_launch(&entry.id, false).await.unwrap();
+    assert_eq!(retried.narrowing, change.set);
+    let id = retried.id.clone();
+    let plan: String = (manager.store)
+        .read(move |tx| {
+            let plan = "SELECT plan FROM agent_queue WHERE id=?1";
+            Ok(tx.query_row(plan, [id], |row| row.get(0))?)
+        })
+        .await
+        .unwrap();
+    let start = crate::start_plan::QueuedStart::of(&plan).unwrap();
+    assert_eq!(start.launch.narrowing, change.set);
 }

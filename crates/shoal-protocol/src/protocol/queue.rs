@@ -75,10 +75,13 @@ pub enum QueueMethod {
         entry: QueueEntryId,
         error: String,
     },
-    /// Queue the failed launch `entry` again exactly as it was. Answers
-    /// with the entry as it waits.
+    /// Queue the failed launch `entry` again exactly as it was, kept out of
+    /// admission for a caller that starts it `here` itself. Answers with
+    /// the entry as it waits.
     QueueRetry {
         entry: QueueEntryId,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        here: bool,
     },
     /// Set `priority` on the space, which ranks its queued work; a scoped
     /// caller gives at most its own space's.
