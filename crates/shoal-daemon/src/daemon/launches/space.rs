@@ -17,7 +17,9 @@ use crate::{
     config::modes::ModeName,
     daemon::{
         links::issue::OpenIssue,
-        operations::starts::{Home, NewSpace, Opening, Preparing, SpaceStart, StartIssue},
+        operations::starts::{
+            Home, NewSpace, Opening, Preparing, SpaceStart, StartIssue, StartedSpace,
+        },
         scope::{Caller, ScopeRefusal},
         workspace::{Manager, NewWorkspace},
     },
@@ -41,6 +43,14 @@ pub(super) struct Placement {
 pub(super) enum PlacedHome {
     Chat(Home<'static>),
     Workspace(RepositoryId, crate::start_plan::Opening),
+}
+
+/// What follows a placed space's recording: the agent it queues, if any,
+/// and whether nothing follows its preparation, which may then wait for
+/// disk space.
+pub(super) struct Follows {
+    pub agent: Option<LaunchRequest>,
+    pub unfollowed: bool,
 }
 
 /// What a launch of a new space starts as, once its place is known.
@@ -77,30 +87,48 @@ impl Manager {
             }
         };
         ensure_placeable(&launch, placement.agent)?;
+        let agent = (placement.agent).then(|| agent_request(&launch, &shape.mode, source));
+        let follows = Follows {
+            agent,
+            unfollowed: true,
+        };
+        let started = self.start_placed(launch, placement, follows, caller);
+        Ok(started.await?.launched())
+    }
+
+    /// Record the new space `launch` places as `placement` says for
+    /// `caller`, in its tree, and begin it with what `follows` it.
+    pub(super) async fn start_placed(
+        self: &Arc<Self>,
+        launch: Launch,
+        placement: Placement,
+        follows: Follows,
+        caller: Option<&Caller>,
+    ) -> Result<StartedSpace> {
         let mut profile = None;
-        let start = self.launch_start(launch, placement, (&shape, source), &mut profile);
+        let start = self.launch_start(launch, placement, follows, &mut profile);
         let mut start = start.await?;
         if let Some(caller) = caller {
             ScopeRefusal::of(self.confine_launch(caller, &mut start).await)?;
         }
         self.gates.admit()?;
-        Ok(self.start_space(start, caller).await?.launched())
+        self.start_space(start, caller).await
     }
 
-    /// The start of the new space `launch` places as `placement` says, in
-    /// `shape`, which `source` made, its workspace's Git profile kept in
-    /// `profile`: named as it names it, below the parent it names, with
-    /// the agent it asks for and its priority.
+    /// The start of the new space `launch` places as `placement` says, its
+    /// workspace's Git profile kept in `profile`: named as it names it,
+    /// below the parent it names, with its priority, and what `follows` its
+    /// recording.
     async fn launch_start<'a>(
         &self,
         launch: Launch,
         Placement {
             home,
             issue,
-            agent,
             mut blockers,
+            ..
         }: Placement,
-        (shape, source): (&Shape, LaunchSource),
+        Follows { agent, unfollowed }: Follows,
         profile: &'a mut Option<String>,
     ) -> Result<SpaceStart<'a>> {
         let (home, pr, name) = placed_home(home, launch.name.clone(), profile);
@@ -113,15 +141,14 @@ impl Manager {
             parent: self.space_id(launch.parent.as_ref()).await?,
             priority: launch.priority,
         };
-        let request = agent_request(&launch, &shape.mode, source);
         let preparing = Preparing {
             issue: None,
             pr,
-            agent: agent.then(|| Box::new(request)),
+            agent: agent.map(Box::new),
             waiting: None,
             queue_entry: None,
             blockers,
-            unfollowed: true,
+            unfollowed,
             env: launch.setup_env,
         };
         Ok(SpaceStart {

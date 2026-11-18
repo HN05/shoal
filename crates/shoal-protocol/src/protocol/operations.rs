@@ -83,6 +83,18 @@ pub enum OperationMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         queue_entry: Option<shoal_ids::queue_entry_ids::QueueEntryId>,
     },
+    /// Create the workspace `launch` describes, as `shoal create` does,
+    /// starting no agent there: placed as a launch's new workspace is, from
+    /// the repository, issue, PR or branch link, branch or copy it names,
+    /// or the existing workspace that has the branch it names, reopened,
+    /// then prepared with `env` as [`Self::StartWorkspace`] prepares it.
+    /// A launch that names an agent, a mode or anything else only an agent
+    /// takes is refused. Answers with [`super::Body::WorkspaceStarted`].
+    StartCreation {
+        launch: Box<crate::launches::Launch>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        env: Option<BTreeMap<String, String>>,
+    },
     /// Create a child of the space `parent`, a workspace or a chat, and
     /// start preparing it, as revert's workspace and an agent's worktree
     /// hook do, with the checks of [`Self::StartWorkspace`]: on the new

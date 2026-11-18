@@ -25,6 +25,7 @@ fn starts_work(method: &OperationMethod) -> bool {
     match method {
         OperationMethod::StartOperation { .. }
         | OperationMethod::StartWorkspace { .. }
+        | OperationMethod::StartCreation { .. }
         | OperationMethod::StartChild { .. }
         | OperationMethod::ConvertToWorkspace { .. } => true,
         OperationMethod::FollowOperation { .. }
@@ -102,6 +103,11 @@ pub(super) async fn handle(
                     .await?,
             )
         }
+        OperationMethod::StartCreation { launch, env } => Body::WorkspaceStarted(
+            manager
+                .create_placed_workspace(*launch, env, caller)
+                .await?,
+        ),
         OperationMethod::StartChild {
             parent,
             name,
@@ -182,6 +188,12 @@ impl Scoped for OperationMethod {
                     manager.copy_within(caller, copy).await?;
                 }
                 Some(parent)
+            }
+            // A creation confines what it places to the caller's tree, as a
+            // launch does.
+            OperationMethod::StartCreation { launch, .. } => {
+                manager.select_launch_spaces(launch).await?;
+                None
             }
             OperationMethod::StartWorkspace {
                 parent,

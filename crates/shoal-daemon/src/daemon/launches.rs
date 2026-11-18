@@ -17,6 +17,7 @@ use crate::{
 
 mod blockers;
 mod chat;
+mod create;
 mod setup;
 mod shape;
 mod space;
