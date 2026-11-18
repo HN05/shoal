@@ -3812,17 +3812,15 @@ setup. Otherwise moved recovery records drop their session, place and wrapper,
 and `shoal restore` starts them through the fresh-agent launch, with its trust
 setup and guidance, told the space moved. Moving a chat removes it here,
 stopping its agent, since a session that kept growing here would fork from the one that
-continues there, and the user attends a chat, so export asks first. A space whose agent reported no
+continues there. Export asks first, whatever the space's kind, exactly when it
+ends spaces besides the one named or releases holds. A space whose agent reported no
 session moves with a warning, whatever its kind, its agent starting as a new one
-there, told the space moved; a space of either kind with a workspace below it
-that does not move with it refuses before stopping anything, since its removal
-would take that workspace. Export, copy, move and restore each run one path for
+there, told the space moved. Export, copy, move and restore each run one path for
 a space of either kind, and only a workspace's worktree step, its checkpoint and
-branch, differs. The chats in a moving workspace's worktree and those
-below a moving space, through chats, move with it in its package as their
-removal records, which the import records and restores, so they keep their IDs,
-their parents and their worktrees wherever those are there; a chat below a
-workspace below it moves with that workspace. Import starts the chat through the chat launch, in its mode, in the worktree
+branch, differs. The spaces below a moving space and the chats in each moving
+worktree move with it in its package as their removal records, which the import
+records and restores, so they keep their IDs, their parents and their worktrees
+wherever those are there. Import starts the chat through the chat launch, in its mode, in the worktree
 of the workspace it ran in where that workspace is there and ready, since
 workspaces keep their IDs across moves, else in the repository's checkout or,
 for a chat without one, the importing machine's `root_dir`, with the agent's resume arguments, under a free name since its own may be taken there, in the background
@@ -3830,7 +3828,7 @@ when no terminal attends the import, as queued agents start. Export and import
 move work through any byte stream, where the user runs both halves and chooses
 their order. `move ssh` runs both over SSH after checking Shoal answers there,
 and ends a space here only once its import there succeeded, since a chat keeps
-no record once it ends: it stops the agents of the space and of the chats that
+no record once it ends: it stops the agents of the space and of the spaces that
 go with it, saving their sessions, exports it while they stay, and queues their restores here, keeping no file,
 once the import there failed before recording anything; an import that may have
 recorded the space there leaves them stopped, so its agents never run on both
