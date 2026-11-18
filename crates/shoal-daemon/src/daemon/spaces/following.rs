@@ -1,7 +1,7 @@
 //! Following a space's agent session: the bytes of its files where its tool
 //! keeps them, everything so far and then what the tool appends, copied
 //! unread as an export copies them. A follow that names no session follows
-//! the space's current one, going on in each new one its agent reports.
+//! the space's current one, going on in each new one its agents report.
 use std::{
     collections::HashMap,
     io::{Read as _, Seek as _, SeekFrom},
@@ -15,7 +15,7 @@ use shoal_ids::{agent_session_ids::AgentSessionId, space_ids::SpaceId};
 use shoal_protocol::{
     protocol::{self, Body, MAX_FRAME, Response},
     space_names::SpaceSelector,
-    transcripts::{self, Environments, FollowedSession, ReportedSession, SessionBytes, Store},
+    transcripts::{self, Environments, FollowedSession, SessionBytes, Store},
 };
 use tokio::net::{UnixStream, unix::OwnedWriteHalf};
 
@@ -113,8 +113,8 @@ impl Manager {
             let Some(operation) = self.gates.try_operation() else {
                 return Ok(());
             };
-            if let Some(next) = self.next_session(&following).await? {
-                following.session.session = next;
+            if let Some(next) = self.next_following(&following).await? {
+                following = next;
                 offsets.clear();
                 send(
                     &mut writer,
@@ -132,18 +132,23 @@ impl Manager {
         }
     }
 
-    /// The space's current session where a follow that named none goes on
-    /// in it, once it is another than the one it follows.
-    async fn next_session(&self, following: &Following) -> Result<Option<ReportedSession>> {
+    /// The space's current session, of whichever of its agents, where a
+    /// follow that named none goes on in it, once it is another than the
+    /// one it follows.
+    async fn next_following(&self, following: &Following) -> Result<Option<Following>> {
         if following.named {
             return Ok(None);
         }
         let current = self.reported_sessions(&following.space).await?;
-        let current = current.into_iter().next();
-        Ok(current.filter(|current| {
-            current.session != following.session.session.session
-                && current.agent == following.session.session.agent
-        }))
+        let followed = &following.session.session.session;
+        if current
+            .first()
+            .is_none_or(|current| &current.session == followed)
+        {
+            return Ok(None);
+        }
+        let space = SpaceSelector::id(&following.space);
+        Ok(Some(self.session_to_follow(&space, None).await?))
     }
 }
 
