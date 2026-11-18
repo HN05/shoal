@@ -66,11 +66,9 @@ pub(super) async fn handle(
         }
         QueueMethod::QueueRetry { entry, start } => {
             let entry = manager.retry_failed_launch(&entry, start).await?;
-            // A restore the user runs in their own terminal is their
-            // interaction with its agent.
-            if start == RetryStart::Here
-                && let Some(space) = entry.space()
-            {
+            // A restore the user makes is their interaction with its agent,
+            // as a stopped agent's is.
+            if let Some(space) = entry.space() {
                 (manager.record_user_interaction(caller, &SpaceSelector::id(space))).await;
             }
             Body::QueueEntry(entry)
@@ -162,3 +160,6 @@ impl Scoped for QueueMethod {
         })
     }
 }
+
+#[cfg(test)]
+mod tests;
