@@ -150,15 +150,17 @@ async fn a_remote_named_in_a_remotes_file_is_read_as_git_reads_it() {
     assert_eq!(remote_names(&repo).await.unwrap(), listed);
 }
 
-#[tokio::test]
-async fn equally_long_rewrites_go_to_the_base_configured_first() {
+/// The URL `origin`, configured as `bar:repo`, has under the rewrite
+/// sections `sections`, each a base and its key and prefix, compared with
+/// the URL Git gives it.
+async fn rewritten_as_git_rewrites(sections: &[(&str, &str, &str)]) {
     let root = tempfile::tempdir().unwrap();
     let repo = repository(root.path(), "repo");
     let config = repo.join(".git/config");
     let mut text = std::fs::read_to_string(&config).unwrap();
-    for (base, prefix) in [("a", "foo:"), ("b", "bar:"), ("a", "bar:")] {
+    for (base, key, prefix) in sections {
         text.push_str(&format!(
-            "[url \"https://{base}.example/\"]\n\tinsteadOf = {prefix}\n"
+            "[url \"https://{base}.example/\"]\n\t{key} = {prefix}\n"
         ));
     }
     text.push_str("[remote \"origin\"]\n\turl = bar:repo\n");
@@ -166,4 +168,24 @@ async fn equally_long_rewrites_go_to_the_base_configured_first() {
     let expected = git(&repo, &["remote", "get-url", "origin"]);
     let url = configured_remote_url(&repo, "origin").await.unwrap();
     assert_eq!(url.as_deref(), Some(expected.trim()));
+}
+
+#[tokio::test]
+async fn equally_long_rewrites_go_to_the_base_configured_first() {
+    let sections = [
+        ("a", "insteadOf", "foo:"),
+        ("b", "insteadOf", "bar:"),
+        ("a", "insteadOf", "bar:"),
+    ];
+    rewritten_as_git_rewrites(&sections).await;
+}
+
+#[tokio::test]
+async fn a_push_rewrite_places_no_base_among_fetch_rewrites() {
+    let sections = [
+        ("a", "pushInsteadOf", "foo:"),
+        ("b", "insteadOf", "bar:"),
+        ("a", "insteadOf", "bar:"),
+    ];
+    rewritten_as_git_rewrites(&sections).await;
 }

@@ -153,7 +153,8 @@ fn rewritten(config: &gix::config::File, url: &str) -> String {
 }
 
 /// Each `url.<base>` of `config` with its `insteadOf` prefixes, in the order
-/// each base first appears.
+/// Git meets each base's first such prefix: a section with none, such as
+/// one with only `pushInsteadOf`, places nothing.
 fn rewrites(config: &gix::config::File) -> Vec<(String, Vec<String>)> {
     let mut rewrites: Vec<(String, Vec<String>)> = Vec::new();
     for section in config.sections_by_name("url").into_iter().flatten() {
@@ -161,13 +162,15 @@ fn rewrites(config: &gix::config::File) -> Vec<(String, Vec<String>)> {
             continue;
         };
         let base = base.to_string();
-        let prefixes = section
-            .values("insteadOf")
-            .into_iter()
-            .map(|prefix| prefix.to_string());
+        let prefixes: Vec<String> = (section.values("insteadOf").into_iter())
+            .map(|prefix| prefix.to_string())
+            .collect();
+        if prefixes.is_empty() {
+            continue;
+        }
         match rewrites.iter_mut().find(|(known, _)| *known == base) {
             Some((_, known)) => known.extend(prefixes),
-            None => rewrites.push((base, prefixes.collect())),
+            None => rewrites.push((base, prefixes)),
         }
     }
     rewrites
