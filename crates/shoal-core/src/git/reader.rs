@@ -5,11 +5,15 @@
 //! points Git at another repository, the read starts Git instead, so either
 //! way it gives Git's answer. Each read opens the repository afresh and
 //! keeps nothing, so it sees a moved or replaced worktree as Git would.
-use std::path::Path;
+use std::{
+    path::{Path, PathBuf},
+    process::Stdio,
+    sync::LazyLock,
+};
 
 use anyhow::Result;
 
-use crate::fsutil::off_runtime;
+use crate::{fsutil::off_runtime, tools::Tool};
 
 /// The repository-format extensions with which gix reads a repository's
 /// location, refs and config as Git does, lowercase as Git compares them. A
@@ -68,10 +72,16 @@ fn open(path: &Path) -> Option<gix::Repository> {
     if environment_diverges() {
         return None;
     }
-    let options = gix::open::Options::default()
+    let mut options = gix::open::Options::default()
         .permissions(permissions())
         .bail_if_untrusted(true)
         .strict_config(true);
+    // gix applies GIT_CONFIG_SYSTEM itself, unless given a path.
+    if std::env::var_os("GIT_CONFIG_SYSTEM").is_none()
+        && let Some(system) = system_config()
+    {
+        options = options.system_config_path(system);
+    }
     let trust = gix::sec::trust::Mapping {
         full: options.clone(),
         reduced: options,
@@ -89,6 +99,33 @@ fn permissions() -> gix::open::Permissions {
     let mut permissions = gix::open::Permissions::default();
     permissions.config.git_binary = true;
     permissions
+}
+
+/// The system config file of the Git on `PATH`, the one Shoal's Git
+/// commands run, as `git var GIT_CONFIG_SYSTEM` names it: `/etc/gitconfig`
+/// for most, a file under its prefix for one such as Homebrew's, which
+/// reads no other. Asked once per process; `None` where that Git cannot
+/// say, which leaves gix its own default.
+fn system_config() -> Option<&'static Path> {
+    static SYSTEM: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
+        let mut command = std::process::Command::new(Tool::Git.program());
+        command
+            .args(["--no-optional-locks", "var", "GIT_CONFIG_SYSTEM"])
+            .env_remove("GIT_CONFIG_SYSTEM")
+            .stdin(Stdio::null())
+            .stderr(Stdio::null());
+        for name in super::REPOSITORY_ENV {
+            command.env_remove(name);
+        }
+        let output = command
+            .output()
+            .ok()
+            .filter(|output| output.status.success())?;
+        let path = String::from_utf8(output.stdout).ok()?;
+        let path = path.trim_end_matches('\n');
+        (!path.is_empty()).then(|| PathBuf::from(path))
+    });
+    SYSTEM.as_deref()
 }
 
 fn environment_diverges() -> bool {

@@ -72,9 +72,10 @@ async fn a_directory_outside_any_repository_reads_through_git() {
 /// The variable that names the repository a helper reads.
 const HELPER_REPOSITORY: &str = "SHOAL_TEST_HELPER_REPOSITORY";
 
-/// The variable that names the installation config
-/// [`an_installation_config_helper`] reads.
+/// The variables that name the installation and system config files
+/// [`a_config_files_helper`] reads.
 const HELPER_INSTALLATION: &str = "SHOAL_TEST_INSTALLATION_CONFIG";
+const HELPER_SYSTEM: &str = "SHOAL_TEST_SYSTEM_CONFIG";
 
 /// Run this binary's ignored test `helper` in a process of its own, which
 /// reads `repo` in the environment `environment` gives it, apart from the
@@ -124,35 +125,39 @@ async fn a_namespaced_read_helper() {
 }
 
 #[test]
-fn the_installation_config_of_the_git_shoal_runs_is_read() {
+fn the_config_files_of_the_git_shoal_runs_are_read() {
     let root = tempfile::tempdir().unwrap();
     let repo = repository(root.path(), "repo");
-    let config = root.path().join("installation.gitconfig");
-    std::fs::write(&config, "[remote]\n\tpushDefault = fork\n").unwrap();
+    let installation = root.path().join("installation.gitconfig");
+    std::fs::write(&installation, "[shoal]\n\tinstallation = yes\n").unwrap();
+    let system = root.path().join("system.gitconfig");
+    std::fs::write(&system, "[shoal]\n\tsystem = yes\n").unwrap();
     let path = std::env::var_os("PATH").unwrap();
-    let bin = installation_reporting_git(root.path(), &path);
+    let bin = config_reporting_git(root.path(), &path);
     let search = std::env::join_paths([bin].into_iter().chain(std::env::split_paths(&path)));
-    run_helper("an_installation_config_helper", &repo, |command| {
+    run_helper("a_config_files_helper", &repo, |command| {
         command
             .env("PATH", search.unwrap())
             .env_remove("GIT_CONFIG_NOSYSTEM")
             .env_remove("GIT_CONFIG_SYSTEM")
-            .env(HELPER_INSTALLATION, &config)
+            .env(HELPER_INSTALLATION, &installation)
+            .env(HELPER_SYSTEM, &system)
     });
 }
 
-/// A directory in `root` holding a Git whose installation config lies where
-/// gix would not look on its own, as Homebrew Git's does: it names the file
-/// [`HELPER_INSTALLATION`] names when asked, as Git does, and runs the Git
-/// `path` finds for everything else.
-fn installation_reporting_git(root: &Path, path: &std::ffi::OsStr) -> std::path::PathBuf {
+/// A directory in `root` holding a Git whose config files lie where gix
+/// would not look on its own, as Homebrew Git's do: asked as Git is, it
+/// names the files [`HELPER_INSTALLATION`] and [`HELPER_SYSTEM`] name, and
+/// it runs the Git `path` finds for everything else.
+fn config_reporting_git(root: &Path, path: &std::ffi::OsStr) -> std::path::PathBuf {
     let real = crate::fsutil::executables::find_executable("git".as_ref(), path).unwrap();
     let bin = root.join("bin");
     std::fs::create_dir(&bin).unwrap();
-    let report =
-        format!("printf 'system\\0file:%s\\0remote.pushdefault\\0' \"${HELPER_INSTALLATION}\"");
+    let installation =
+        format!("printf 'system\\0file:%s\\0shoal.installation\\0' \"${HELPER_INSTALLATION}\"");
+    let system = format!("printf '%s\\n' \"${HELPER_SYSTEM}\"");
     let script = format!(
-        "#!/bin/sh\ncase \"$*\" in *--show-origin*) {report}; exit 0;; esac\nexec '{}' \"$@\"\n",
+        "#!/bin/sh\ncase \"$*\" in\n*--show-origin*) {installation}; exit 0;;\n*'var GIT_CONFIG_SYSTEM') {system}; exit 0;;\nesac\nexec '{}' \"$@\"\n",
         real.display()
     );
     let wrapper = bin.join("git");
@@ -162,13 +167,15 @@ fn installation_reporting_git(root: &Path, path: &std::ffi::OsStr) -> std::path:
     bin
 }
 
-/// Read a push remote that only the installation config sets.
+/// Read values that only the installation and system config files set.
 #[tokio::test]
-#[ignore = "run by the_installation_config_of_the_git_shoal_runs_is_read"]
-async fn an_installation_config_helper() {
+#[ignore = "run by the_config_files_of_the_git_shoal_runs_are_read"]
+async fn a_config_files_helper() {
     let repo = helper_repository();
-    let remote = crate::git::push_remote(&repo, &"topic".into()).await;
-    assert_eq!(remote.unwrap(), "fork");
+    for key in ["shoal.installation", "shoal.system"] {
+        let value = crate::git::config_value(&repo, key).await.unwrap();
+        assert_eq!(value.as_deref(), Some("yes"), "{key}");
+    }
 }
 
 #[test]
