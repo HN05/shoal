@@ -30,41 +30,20 @@ fn launch_on_issue(repo: &crate::model::Repository, branch: Option<&str>) -> Lau
     }
 }
 
-/// A workspace a launch names and gives its branch, on an issue it cannot
-/// read, takes the issue by its URL as a chat does: it is recorded linked
-/// to it, with its agent queued there.
+/// A workspace on an issue its launch cannot read is refused before
+/// anything is recorded, even one the launch names and gives its branch,
+/// which needs no title from the issue.
 #[tokio::test]
-async fn a_named_workspace_on_its_branch_takes_an_unread_issue_by_its_url() {
+async fn a_workspace_on_an_unread_issue_is_refused() {
     let (temp, manager) = manager().await;
     let repo = offline_machine(&manager, &temp).await;
 
-    let launched = (manager.launch(
-        launch_on_issue(&repo, Some("fix-316")),
-        LaunchSource::Manual,
-        None,
-    ))
-    .await
-    .unwrap();
+    for branch in [Some("fix-316"), None] {
+        let launch = launch_on_issue(&repo, branch);
+        let refused = (manager.launch(launch, LaunchSource::Manual, None)).await;
 
-    let workspace = manager.workspace_by_id(&launched.space.id).await.unwrap();
-    let linked: Vec<_> = (workspace.links.issues.iter())
-        .map(|issue| issue.url.url())
-        .collect();
-    assert_eq!(linked, ["https://github.com/team/repo/issues/316"]);
-    let entry = launched.entry.unwrap();
-    assert_eq!(entry.space(), Some(&workspace.id));
-}
-
-/// A workspace whose branch an issue it cannot read would name is refused
-/// before anything is recorded.
-#[tokio::test]
-async fn a_workspace_whose_unread_issue_names_its_branch_is_refused() {
-    let (temp, manager) = manager().await;
-    let repo = offline_machine(&manager, &temp).await;
-
-    let refused = (manager.launch(launch_on_issue(&repo, None), LaunchSource::Manual, None)).await;
-
-    assert!(refused.is_err());
+        assert!(refused.is_err());
+    }
     assert!(manager.list_workspaces().await.unwrap().is_empty());
     assert!(manager.queue_entries().await.unwrap().is_empty());
 }

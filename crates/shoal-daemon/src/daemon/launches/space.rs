@@ -147,17 +147,17 @@ impl Manager {
         Ok(())
     }
 
-    /// The open issue `input` names in `repository`, which `launch` starts
-    /// on, read as `caller` reads it. A launch that names its space needs
-    /// no title from it but for a branch, so an issue it cannot read is
-    /// taken by the URL its number has in the repository, which the
-    /// agent's start reads again; one without even that is refused, since
-    /// nothing could read it, as is a closed one.
+    /// The open issue `input` names in `repository`, which a launch starts
+    /// on, read as `caller` reads it. Where the place takes an unread issue
+    /// `by_url`, as a chat its launch names does, which needs no title from
+    /// it, an issue it cannot read is taken by the URL its number has in
+    /// the repository, which the agent's start reads again; one without
+    /// even that is refused, since nothing could read it, as is a closed
+    /// one.
     pub(super) async fn launch_issue(
         &self,
-        launch: &Launch,
         input: &ItemInput,
-        repository: &RepositoryId,
+        (repository, by_url): (&RepositoryId, bool),
         caller: Option<&Caller>,
     ) -> Result<StartIssue> {
         let context = self.launch_read_context(repository, caller).await?;
@@ -166,7 +166,7 @@ impl Manager {
                 let (url, title, labels) = (issue.url, issue.title, issue.labels);
                 return Ok(OpenIssue { url, title, labels }.into());
             }
-            Err(error) if launch.name.is_some() && !closed(&error) => error,
+            Err(error) if by_url && !closed(&error) => error,
             Err(error) => return Err(error),
         };
         crate::daemon::log!("issue {input} read without its title: {error:#}");

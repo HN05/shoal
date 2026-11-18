@@ -46,10 +46,10 @@ impl Manager {
                 let repository = (self.home_repository(&home).await?).context(
                     "a chat without a repository starts on no issue; name its repository",
                 )?;
-                Some(
-                    self.launch_issue(launch, &issue, &repository, caller)
-                        .await?,
-                )
+                // A chat its launch names needs no title from its issue.
+                let by_url = launch.name.is_some();
+                let read = self.launch_issue(&issue, (&repository, by_url), caller);
+                Some(read.await?)
             }
             None => None,
         };

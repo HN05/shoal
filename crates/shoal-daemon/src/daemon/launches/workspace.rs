@@ -7,7 +7,7 @@
 use shoal_protocol::launches::{Launch, SpaceChoice};
 use shoal_protocol::space_names::SpaceSelector;
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 
 use super::{
     ManagerReads,
@@ -48,10 +48,10 @@ impl Manager {
         let mut blockers = (self.named_blockers(&target.repo.id, &launch.blockers, caller)).await?;
         let agent = self.planned_agent(launch, &target, &creation).await?;
         let issue = match &target.issue {
-            Some(issue) => Some(
-                self.launch_issue(launch, issue, &target.repo.id, caller)
-                    .await?,
-            ),
+            Some(issue) => {
+                let read = self.launch_issue(issue, (&target.repo.id, false), caller);
+                Some(read.await?)
+            }
             None => None,
         };
         if issue.is_none() && creation.unsettled() {
@@ -77,8 +77,8 @@ impl Manager {
         }))
     }
 
-    /// `creation` on the branch `issue` settles in `repo` when nothing else
-    /// names one, which needs the issue's title.
+    /// `creation` on the branch `issue`, read with its title, settles in
+    /// `repo` when nothing else names one.
     async fn issue_creation(
         &self,
         reads: &ManagerReads<'_>,
@@ -87,10 +87,6 @@ impl Manager {
         issue: Option<&StartIssue>,
     ) -> Result<Creation> {
         let titled = issue.and_then(|issue| Some((&issue.url, issue.title.as_deref()?)));
-        ensure!(
-            titled.is_some() || issue.is_none() || !creation.unsettled(),
-            "the issue could not be read to name its branch; name the branch with --branch"
-        );
         fits::workspace::issue_settled(reads, repo, creation, titled).await
     }
 
