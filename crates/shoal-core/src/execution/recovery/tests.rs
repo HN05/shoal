@@ -579,28 +579,6 @@ fn copied_records_keep_their_mark_where_they_move() {
 }
 
 #[test]
-fn copied_agents_are_told_the_workspace_is_a_copy() {
-    let forked = copied_prompt(Copied::default(), true, Some("handoff"));
-    assert!(forked.contains("copied this workspace"), "{forked}");
-    assert!(forked.contains("a fork of its agent's"), "{forked}");
-    assert!(!forked.contains("earlier checkpoint"), "{forked}");
-    assert!(forked.ends_with("\n\nhandoff"), "{forked}");
-    let earlier = copied_prompt(
-        Copied {
-            earlier_files: true,
-            held_elsewhere: false,
-        },
-        false,
-        None,
-    );
-    assert!(
-        earlier.contains("session is not available here"),
-        "{earlier}"
-    );
-    assert!(earlier.contains("earlier checkpoint"), "{earlier}");
-}
-
-#[test]
 fn a_permission_change_reaches_each_saved_agent_and_keeps_the_rest() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
@@ -666,35 +644,4 @@ fn a_permission_change_reaches_each_saved_agent_and_keeps_the_rest() {
     assert_eq!(last[0].narrowing, replacement);
     let other_last = LastSession::all(&paths, &other).unwrap();
     assert_eq!(other_last[0].narrowing, agent.narrowing);
-}
-
-#[test]
-fn a_converted_workspaces_agent_is_told_its_place_and_the_stopped_commands() {
-    let mut workspace = Workspace::new_record(
-        "repo".into(),
-        "talk".into(),
-        "/work/fix-login".into(),
-        crate::model::Head::Branch("fix-login".into()),
-        crate::state::WorkspaceState::Ready,
-    );
-    let url = "https://forge.example/team/repo/issues/7";
-    workspace.links.issues = vec![crate::model::LinkedItem {
-        url: url.parse().unwrap(),
-        title: Some("Fix the login".into()),
-    }];
-
-    let told = converted_subject(&workspace, true, Some("handoff"));
-
-    let text = &told.text;
-    assert!(
-        text.contains("/work/fix-login") && text.contains("fix-login"),
-        "{text}"
-    );
-    assert!(text.ends_with("\n\nhandoff"), "{text}");
-    // Its mode's instructions name the issue it was linked to as a chat.
-    let issue = told.issue.expect("the linked issue's fields");
-    assert_eq!(
-        (issue.number, issue.title.as_str(), issue.url.as_str()),
-        (7, "Fix the login", url)
-    );
 }

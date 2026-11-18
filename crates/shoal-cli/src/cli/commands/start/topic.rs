@@ -92,50 +92,11 @@ impl Topic {
         }
     }
 
-    /// The topic of a chat whose agent starts from a fork of its session:
-    /// in a workspace that became the chat at `home` when `converted`,
-    /// otherwise once restored while another space holds the session, as
-    /// `copied` says.
-    pub(in crate::cli::commands) fn changed(
-        self,
-        converted: bool,
-        copied: Option<crate::execution::recovery::Copied>,
-        home: &std::path::Path,
-    ) -> Self {
-        match copied {
-            Some(copied) if !converted => self.forked(copied),
-            _ => self.converted(home),
-        }
-    }
-
-    /// The topic of a restored chat whose agent starts from a fork of its
-    /// session, which another space holds, told so as `copied` says.
-    fn forked(self, copied: crate::execution::recovery::Copied) -> Self {
-        let told = templates::Subject {
-            text: crate::execution::recovery::copied_prompt(copied, true, None),
-            issue: self.linked_issue.clone(),
-        };
+    /// This topic for a chat whose space changed since its agent stopped,
+    /// told `subject` even as it continues its session.
+    pub(in crate::cli::commands) fn changed(self, subject: templates::Subject) -> Self {
         Self {
-            subject: Some(told),
-            tells_resumed: true,
-            ..self
-        }
-    }
-
-    /// This topic for a chat that was a workspace, whose session, which it
-    /// continues in `home`, is told so, with the fields of the issue it is
-    /// linked to for its mode's instructions.
-    pub(in crate::cli::commands) fn converted(self, home: &std::path::Path) -> Self {
-        let text = format!(
-            "Shoal converted this workspace into a chat. You now work in the repository's checkout at {}. The workspace's worktree is gone; its branch stays, and shoal restore brings its files back from the checkpoint Shoal kept.",
-            home.display()
-        );
-        let told = templates::Subject {
-            text,
-            issue: self.linked_issue.clone(),
-        };
-        Self {
-            subject: Some(told),
+            subject: Some(subject),
             tells_resumed: true,
             ..self
         }

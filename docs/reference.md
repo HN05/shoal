@@ -4210,7 +4210,8 @@ opens a workspace copy as a new workspace on the nearest free `-2`, `-3`, ...
 variant of its branch, linked to its issues but not its PRs or CI runs, where
 `shoal restore` starts its agents from forks of their sessions, as `shoal start
 --fork` does, or as new agents told the workspace is a copy; a chat copy opens
-as a new chat whose agent `shoal restore` starts from a fork of its session.
+as a new chat whose agent `shoal restore` starts from a fork of its session,
+or as a new agent told the chat is a copy.
 A copy of either kind opens under an ID of its own. Forks get session IDs of their own, so
 the original conversations never change. A copy of an earlier checkpoint warns at
 export and import that the agents' conversations describe work its files lack,

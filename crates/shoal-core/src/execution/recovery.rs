@@ -3,7 +3,6 @@ use crate::config::permissions::PermissionChange;
 use crate::paths::StateFiles;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::{agent_session_ids::AgentSessionId, space_ids::SpaceId};
-use shoal_refs::BranchName;
 use std::{
     collections::BTreeMap,
     ffi::OsString,
@@ -13,6 +12,7 @@ use std::{
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 
+pub mod changes;
 pub mod claim;
 
 pub use claim::{RecoveryClaim, claim, claim_last_session, claim_record, forget_saved};
@@ -20,7 +20,6 @@ pub use claim::{RecoveryClaim, claim, claim_last_session, claim_record, forget_s
 use crate::{
     agent::{Agent, ModelChoice},
     fsutil::atomic::{Permissions, ReplaceOptions},
-    model::Workspace,
     paths::Paths,
     process::identity::{self, Identity},
     sessions::Origin,
@@ -96,74 +95,6 @@ pub fn resumed_prompt(stop: Option<&Stop>, handoff: Option<&str>) -> String {
         prompt.push_str(handoff);
     }
     prompt
-}
-
-/// What a new agent of a workspace that moved where its earlier session is
-/// not available is told, followed by `handoff`.
-pub fn moved_prompt(handoff: Option<&str>) -> String {
-    let mut prompt = String::from(
-        "Shoal moved this workspace, and your earlier session is not available here. Continue working on the unfinished assignment: read its linked issue and PRs, its commits and its uncommitted changes to see where it stands.",
-    );
-    if let Some(handoff) = handoff {
-        prompt.push_str("\n\n");
-        prompt.push_str(handoff);
-    }
-    prompt
-}
-
-/// What an agent of a workspace copied from another is told, from a fork
-/// of its session there when `forked`, followed by `handoff`; `copied` says
-/// whether the files are older than the conversation.
-pub fn copied_prompt(copied: Copied, forked: bool, handoff: Option<&str>) -> String {
-    let mut prompt = String::from(match copied.held_elsewhere {
-        true => "Shoal restored this space while another space holds its agent's session.",
-        false => {
-            "Shoal copied this workspace from another onto a branch of its own; the original keeps running with its branch and PRs."
-        }
-    });
-    prompt.push_str(if forked {
-        " This conversation is a fork of its agent's, which continues there separately."
-    } else {
-        " Its agent's session is not available here."
-    });
-    if copied.earlier_files {
-        prompt.push_str(" The files come from an earlier checkpoint than the conversation, which describes work they do not contain: check them before you act on what you remember.");
-    }
-    prompt.push_str(" Continue working on the unfinished assignment: read its linked issue, its commits and its uncommitted changes to see where it stands.");
-    if let Some(handoff) = handoff {
-        prompt.push_str("\n\n");
-        prompt.push_str(handoff);
-    }
-    prompt
-}
-
-/// What the agent of a chat that became `workspace` is told, carrying on
-/// from a fork of the chat's session when `forked`, followed by `handoff`,
-/// before its mode's instructions, which take the fields of the issue the
-/// workspace is linked to.
-pub fn converted_subject(
-    workspace: &Workspace,
-    forked: bool,
-    handoff: Option<&str>,
-) -> crate::config::templates::Subject {
-    let mut prompt = format!(
-        "Shoal converted this chat into a workspace. You now work in its worktree at {} on branch {}.",
-        workspace.path.display(),
-        workspace.branch().map(BranchName::as_str).unwrap_or("-"),
-    );
-    prompt.push_str(if forked {
-        " This conversation continues the chat's."
-    } else {
-        " The chat's session is not available here: read the space's linked issue to see where the work stands."
-    });
-    if let Some(handoff) = handoff {
-        prompt.push_str("\n\n");
-        prompt.push_str(handoff);
-    }
-    crate::config::templates::Subject {
-        text: prompt,
-        issue: crate::config::templates::IssueFields::linked(&workspace.links),
-    }
 }
 
 impl Recovery {

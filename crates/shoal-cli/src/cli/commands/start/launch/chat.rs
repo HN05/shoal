@@ -10,6 +10,8 @@ use super::super::{
     ChatPlace, Options, Topic,
     agent::{chat_agent, check_model},
 };
+use crate::cli::commands::restore::agents::changed::ChangedStart;
+use crate::execution::recovery::changes::Change;
 use crate::{
     agent::Agent,
     cli::{
@@ -388,26 +390,29 @@ async fn run_agent(
     }
 }
 
-/// Start the agent of `chat`, which a workspace became, or whose session
-/// another space holds since its restore, in this terminal as its `session`
-/// saved it: from a fork of that session, told what its space is now or
-/// that it was restored, with the rules of its mode and the fields of the
-/// issue the chat links; it consumes `records` once it runs.
+/// Start the agent `start` describes of `chat`, which changed since it
+/// stopped, in this terminal in the place it works now, with the rules of
+/// its mode and the fields of the issue the chat links.
 pub(in crate::cli::commands) async fn start_changed(
     ctx: &Context,
     chat: &Chat,
-    session: &crate::execution::recovery::LastSession,
-    records: Vec<std::path::PathBuf>,
+    start: ChangedStart,
 ) -> Result<i32> {
+    let ChangedStart {
+        session,
+        change,
+        fork,
+        told,
+        records,
+    } = start;
     let repo = repository_of(ctx, chat).await?;
     let settings = shoal_workers::settings::of(&ctx.paths, repo.config()).await?;
-    let topic = place_topic(ctx, chat, &repo, session).await?;
-    let home = topic.home(&repo).path().to_owned();
+    let topic = place_topic(ctx, chat, &repo, &session, change).await?;
     let topic = Topic {
         linked_issue: crate::config::templates::IssueFields::linked(&chat.links),
         ..topic
     }
-    .changed(session.converted, session.copied, &home);
+    .changed(told);
     let agent: Agent = session.agent.name().parse()?;
     let options = Options {
         now: false,
@@ -416,7 +421,7 @@ pub(in crate::cli::commands) async fn start_changed(
         name: Some(chat.name.clone()),
         model: session.model.clone(),
         args: Vec::new(),
-        session: session.session.clone(),
+        session: fork,
         fork: true,
         handoff: None,
         chat: None,
@@ -429,17 +434,19 @@ pub(in crate::cli::commands) async fn start_changed(
     run_agent(ctx, chat, agent, launch, model_args, records).await
 }
 
-/// The topic of the place the agent of `chat` starts in from `session`: the
-/// worktree of the workspace it runs in, unless it continues a workspace
-/// that became it, which leaves it the checkout, or else the checkout or
-/// the `root_dir` of `repo`.
+/// The topic of the place the agent of `chat` starts in from `session`,
+/// which changed as `change` says: the worktree of the workspace it runs
+/// in, unless it continues a workspace that became it, which leaves it the
+/// checkout, or else the checkout or the `root_dir` of `repo`.
 async fn place_topic(
     ctx: &Context,
     chat: &Chat,
     repo: &ChatRepository,
     session: &crate::execution::recovery::LastSession,
+    change: Change,
 ) -> Result<Topic> {
-    if let Some(workspace) = chat.workdir.workspace().filter(|_| !session.converted) {
+    let converted = change == Change::Converted;
+    if let Some(workspace) = chat.workdir.workspace().filter(|_| !converted) {
         let selector = SpaceSelector::id(&workspace.id);
         let workspace = crate::client::workspaces::inspect(&ctx.paths, selector).await?;
         return Ok(Topic::workspace(workspace.workspace, &session.mode));

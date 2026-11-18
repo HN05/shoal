@@ -406,6 +406,7 @@ async fn present_space(ctx: &Context, selector: &SpaceSelector) -> Result<Space>
     space.with_context(|| format!("no space {selector}"))
 }
 
+pub(in crate::cli::commands) mod changed;
 mod commands;
 mod forget;
 pub(in crate::cli::commands) mod permission_change;

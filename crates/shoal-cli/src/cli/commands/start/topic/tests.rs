@@ -160,55 +160,6 @@ fn the_setup_chat_starts_again_with_config_setup_and_its_options() {
     assert_eq!(setup.args, options.args);
 }
 
-#[test]
-fn a_chat_that_was_a_workspace_is_told_so_in_the_place_it_opens() {
-    let repo = repository();
-    let links: crate::model::SpaceLinks = serde_json::from_value(serde_json::json!({
-        "issues": [{"kind": "issue", "url": "https://forge.example/team/repo/issues/7",
-            "title": "Fix the login"}],
-        "prs": [],
-        "opened": [],
-        "related": [],
-    }))
-    .unwrap();
-    let topic = Topic {
-        linked_issue: crate::config::templates::IssueFields::linked(&links),
-        ..Topic::repository(&repo, &"chat".into())
-    };
-    let plain = Topic::repository(&repo, &"chat".into());
-
-    let converted = topic.converted(&repo.path);
-
-    assert!(converted.tells_resumed);
-    assert!(!plain.tells_resumed && plain.subject.is_none());
-    // Its mode's instructions name the issue it was linked to as a workspace.
-    let issue = converted.subject.and_then(|subject| subject.issue);
-    assert_eq!(issue.map(|issue| issue.number), Some(7));
-}
-
-#[test]
-fn a_chat_restored_beside_a_session_another_space_holds_is_told_it_was_restored() {
-    let repo = repository();
-    let topic = || Topic::repository(&repo, &"chat".into());
-    let held = crate::execution::recovery::Copied {
-        earlier_files: false,
-        held_elsewhere: true,
-    };
-    let told = |topic: Topic| {
-        topic
-            .subject
-            .map(|subject| subject.text)
-            .unwrap_or_default()
-    };
-
-    let restored = told(topic().changed(false, Some(held), &repo.path));
-    assert!(restored.contains("restored"), "{restored}");
-    assert!(!restored.contains("converted"), "{restored}");
-    // A workspace that became the chat is told so, whatever else it is.
-    let converted = told(topic().changed(true, Some(held), &repo.path));
-    assert!(converted.contains("converted"), "{converted}");
-}
-
 /// A chat's prompt becomes what its agent starts on, unless its issue
 /// already gives it a subject.
 #[test]

@@ -3733,7 +3733,7 @@ machine's terminal places and waiting wrappers, and every reopen trusts the
 workspace's path for those agents, since resuming skips the launch's trust
 setup. Otherwise moved recovery records drop their session, place and wrapper,
 and `shoal restore` starts them through the fresh-agent launch, with its trust
-setup and guidance, told the workspace moved. Moving a chat removes it here,
+setup and guidance, told the space moved. Moving a chat removes it here,
 stopping its agent, since a session that kept growing here would fork from the one that
 continues there, and the user attends a chat, so export asks first. A space whose agent reported no
 session moves with a warning, whatever its kind, its agent starting as a new one

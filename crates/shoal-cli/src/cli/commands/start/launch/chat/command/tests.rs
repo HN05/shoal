@@ -82,7 +82,7 @@ fn a_converted_chat_is_told_what_its_space_is_while_it_continues_its_session() {
     let repo = repository();
     let topic = Topic::repository(&repo, &crate::config::modes::ModeName::CHAT);
     let converted =
-        Topic::repository(&repo, &crate::config::modes::ModeName::CHAT).converted(&repo.path);
+        Topic::repository(&repo, &crate::config::modes::ModeName::CHAT).changed(moved_to(&repo));
     let repo = ChatRepository::Registered(repo);
 
     let resumed = brief(&settings, &agent, &repo, &topic, true).unwrap();
@@ -133,7 +133,7 @@ fn a_converted_chat_whose_agent_takes_rules_in_its_prompt_gets_its_new_rules() {
     let repo = repository();
     let topic = Topic::repository(&repo, &crate::config::modes::ModeName::CHAT);
     let converted =
-        Topic::repository(&repo, &crate::config::modes::ModeName::CHAT).converted(&repo.path);
+        Topic::repository(&repo, &crate::config::modes::ModeName::CHAT).changed(moved_to(&repo));
     let repo = ChatRepository::Registered(repo);
 
     let resumed = brief(&settings, &agent, &repo, &topic, true).unwrap();
@@ -175,4 +175,9 @@ fn a_chat_with_forwarded_arguments_does_not_wait_for_the_user() {
         ..bare
     };
     assert!(!waits_for_user(&launch(&forwarded), &forwarded));
+}
+
+/// What a chat whose space now works in the checkout of `repo` is told.
+fn moved_to(repo: &crate::model::Repository) -> crate::config::templates::Subject {
+    crate::config::templates::Subject::told(format!("You now work at {}.", repo.path.display()))
 }

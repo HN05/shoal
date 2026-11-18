@@ -1,19 +1,19 @@
 //! Resuming one space's stopped agent or last session, a workspace's or a
 //! chat's, in this terminal or where it stopped or in the background.
-use anyhow::{Context as _, Result, ensure};
-use shoal_protocol::model::ByKind;
+use anyhow::{Result, ensure};
 use std::path::PathBuf;
 
-use super::{commands, permission_change, picker, queue, reports, sessions, stale};
+use super::{changed, commands, permission_change, picker, queue, reports, sessions, stale};
 use crate::client::output::restore::StartedRestores;
 use crate::execution::recovery::RecordExt;
 use crate::{
     cli::{context::Context, terminal},
     config::permissions::PermissionChange,
     execution::recovery::{
-        Copied, LastSession, Recovery, Saved, SavedCommand, claim_last_session, claim_record,
+        LastSession, Recovery, Saved, SavedCommand, changes::Change, claim_last_session,
+        claim_record,
     },
-    model::{Space, Workspace},
+    model::Space,
     protocol::ConfigTarget,
 };
 use shoal_ids::execution_ids::ExecutionId;
@@ -139,19 +139,10 @@ async fn restore(
 ) -> Result<i32> {
     let handoff = commands::handoff(&commands);
     let mut records = vec![path];
-    let changed = session.converted || session.copied.is_some() || session.moved;
-    if changed {
+    if let Some(change) = Change::of(&session) {
         records.extend(commands.into_iter().map(|command| command.path));
-        return match space.clone().by_kind() {
-            ByKind::Workspace(workspace) => {
-                start_changed(ctx, &workspace, session, handoff.as_deref(), records).await
-            }
-            // A chat changes by a workspace becoming it, or by its restore
-            // while another space holds its session.
-            ByKind::Chat(chat) => {
-                crate::cli::commands::start::start_changed(ctx, &chat, &session, records).await
-            }
-        };
+        let handoff = handoff.as_deref();
+        return changed::start_changed(ctx, space, session, change, handoff, records).await;
     }
     let selector = SpaceSelector::id(&space.id);
     let home = shoal_workers::homes::records(&ctx.paths, &selector).await?;
@@ -175,137 +166,6 @@ async fn restore(
     }
     records.extend(commands.into_iter().map(|command| command.path));
     launch(ctx, space, recovery, records).await
-}
-
-/// Start the agent of `session` in `workspace`, which changed since it
-/// stopped: converted from a chat, copied from another workspace or moved,
-/// told so; it consumes `records` once it has started.
-async fn start_changed(
-    ctx: &Context,
-    workspace: &Workspace,
-    session: LastSession,
-    handoff: Option<&str>,
-    records: Vec<PathBuf>,
-) -> Result<i32> {
-    if session.converted {
-        return start_converted(ctx, workspace, &session, handoff, records).await;
-    }
-    if let Some(copied) = session.copied {
-        return start_copied(ctx, workspace, &session, copied, handoff, records).await;
-    }
-    start_moved(ctx, workspace, &session, handoff, records).await
-}
-
-/// Start the agent of `session` as a new agent is started, with the model
-/// and effort it ran with, since its session is not available where the
-/// workspace moved, telling it the workspace moved; it consumes `records`
-/// once it has started.
-async fn start_moved(
-    ctx: &Context,
-    workspace: &Workspace,
-    session: &LastSession,
-    handoff: Option<&str>,
-    records: Vec<PathBuf>,
-) -> Result<i32> {
-    reports::starting_moved(&session.agent);
-    let message = crate::execution::recovery::moved_prompt(handoff);
-    start_told(ctx, workspace, session, None, message, records).await
-}
-
-/// Start the agent of `session` in a workspace copied from another: from a
-/// fork of the session it reported there, which stays the original's, or as
-/// a new agent when it reported none or cannot start from a fork, telling it
-/// the workspace is a copy; it consumes `records` once it has started.
-async fn start_copied(
-    ctx: &Context,
-    workspace: &Workspace,
-    session: &LastSession,
-    copied: Copied,
-    handoff: Option<&str>,
-    records: Vec<PathBuf>,
-) -> Result<i32> {
-    let agent = &session.agent;
-    let settings = shoal_workers::settings::of(
-        &ctx.paths,
-        ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
-    )
-    .await?;
-    let fork = session
-        .session
-        .clone()
-        .filter(|_| crate::agents::ensure_forks(&settings, agent).is_ok());
-    reports::starting_copied(agent, fork.is_some());
-    let message = crate::execution::recovery::copied_prompt(copied, fork.is_some(), handoff);
-    start_told(ctx, workspace, session, fork, message, records).await
-}
-
-/// Start the agent of `session` in a workspace that was a chat: from a fork
-/// of the session it reported there, or as a new agent when it reported none
-/// or cannot start from a fork, told what the space is now and its mode's
-/// instructions, and about the stopped commands `handoff` describes; it
-/// consumes `records` once it has started.
-async fn start_converted(
-    ctx: &Context,
-    workspace: &Workspace,
-    session: &LastSession,
-    handoff: Option<&str>,
-    records: Vec<PathBuf>,
-) -> Result<i32> {
-    let agent = &session.agent;
-    let launch: crate::agent::Agent = agent
-        .name()
-        .parse()
-        .with_context(|| format!("cannot start agent {agent} of {}", workspace.name))?;
-    let settings = shoal_workers::settings::of(
-        &ctx.paths,
-        ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
-    )
-    .await?;
-    let fork = session
-        .session
-        .clone()
-        .filter(|_| crate::agents::ensure_forks(&settings, agent).is_ok());
-    let subject = crate::execution::recovery::converted_subject(workspace, fork.is_some(), handoff);
-    let options = crate::cli::agents::LaunchOptions {
-        replaces: records,
-        fork,
-        model: crate::cli::agents::ModelRequest::Kept(session.model.clone()),
-        narrowing: session.narrowing,
-    };
-    let opening = crate::cli::agents::Opening::New {
-        mode: session.mode.clone(),
-        subject: Some(subject),
-    };
-    crate::cli::agents::launch_agent(ctx, launch, workspace.clone(), opening, vec![], options).await
-}
-
-/// Start the agent of `session` as a new agent is started, from a fork of
-/// `fork` when given, with the model and effort it ran with, told `message`;
-/// it consumes `records` once it has started.
-async fn start_told(
-    ctx: &Context,
-    workspace: &Workspace,
-    session: &LastSession,
-    fork: Option<shoal_ids::agent_session_ids::AgentSessionId>,
-    message: String,
-    records: Vec<PathBuf>,
-) -> Result<i32> {
-    let agent = &session.agent;
-    let launch: crate::agent::Agent = agent
-        .name()
-        .parse()
-        .with_context(|| format!("cannot start agent {agent} of {}", workspace.name))?;
-    let options = crate::cli::agents::LaunchOptions {
-        replaces: records,
-        fork,
-        model: crate::cli::agents::ModelRequest::Kept(session.model.clone()),
-        narrowing: session.narrowing,
-    };
-    let opening = crate::cli::agents::Opening::Told {
-        mode: session.mode.clone(),
-        message,
-    };
-    crate::cli::agents::launch_agent(ctx, launch, workspace.clone(), opening, vec![], options).await
 }
 
 /// Start the restore command in `space`, consuming `records` once the agent

@@ -1,5 +1,6 @@
 //! What `shoal restore` tells the user: the report of each outcome, and the
 //! notices a restore in this terminal prints before its agent starts.
+use crate::execution::recovery::changes::Change;
 use anyhow::Result;
 use std::fmt::Display;
 
@@ -189,17 +190,27 @@ pub(super) fn continuing(agent: impl Display) {
     eprintln!("shoal: continuing the last {agent} session");
 }
 
-/// Tell the user `agent` starts a new session in a moved workspace.
-pub(super) fn starting_moved(agent: impl Display) {
-    eprintln!("shoal: starting a new {agent} session in the moved workspace");
-}
-
-/// Tell the user how `agent` starts in a copied workspace: from a fork of
-/// its session when `forked`, otherwise as a new session.
-pub(super) fn starting_copied(agent: impl Display, forked: bool) {
-    match forked {
-        true => eprintln!("shoal: starting {agent} from a fork of its session in the copy"),
-        false => eprintln!("shoal: starting a new {agent} session in the copy"),
+/// Tell the user how `agent` starts in a space of `kind` that changed as
+/// `change` says: from a fork of its session when `forked`, otherwise as a
+/// new session. The user converted a converted space, so its agent's start
+/// needs no notice.
+pub(super) fn starting_changed(
+    agent: impl Display,
+    kind: crate::model::SpaceKind,
+    change: Change,
+    forked: bool,
+) {
+    match (change, forked) {
+        (Change::Converted, _) => {}
+        (Change::Copied(_), true) => {
+            eprintln!("shoal: starting {agent} from a fork of its session in the copy")
+        }
+        (Change::Copied(_), false) => {
+            eprintln!("shoal: starting a new {agent} session in the copy")
+        }
+        (Change::Moved, _) => {
+            eprintln!("shoal: starting a new {agent} session in the moved {kind}")
+        }
     }
 }
 
