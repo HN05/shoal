@@ -49,13 +49,13 @@ async fn only_a_chat_without_a_repository_watches_runs_beyond_its_own_repository
         .unwrap();
     git(
         &path,
-        &["remote", "add", "origin", "https://codeberg.org/team/repo"],
+        &["remote", "add", "origin", "https://github.com/team/repo"],
     );
     let master = chat(&manager, "master", "orchestrate", None, None).await;
     let run = Selection {
         kind: Some(LinkKind::Ci),
         input: Some(
-            "https://codeberg.org/team/other/actions/runs/7"
+            "https://github.com/team/other/actions/runs/7"
                 .parse()
                 .unwrap(),
         ),
