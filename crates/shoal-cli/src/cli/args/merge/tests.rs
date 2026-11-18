@@ -108,3 +108,16 @@ fn push_flags_override_the_configured_push() -> Result<()> {
     assert_eq!(parsed(&["--push", "--no-push"])?.push(), Some(false));
     Ok(())
 }
+
+#[test]
+fn flags_of_both_paths_are_refused_before_a_space_is_chosen() -> Result<()> {
+    for flags in [
+        &["--auto", "--push"][..],
+        &["--delete-branch", "--no-push"],
+        &["-X", "squash", "--push"],
+    ] {
+        assert!(merged(flags).is_err(), "{flags:?}");
+    }
+    assert_eq!(merged(&["-X", "merge", "--push"])?, Merged::Work);
+    Ok(())
+}

@@ -67,6 +67,7 @@ impl MergeArgs {
     /// What the arguments merge: a PR its item names, or the space's work
     /// without one.
     pub fn merged(&self) -> Result<Merged> {
+        self.ensure_one_path()?;
         let Some(word) = &self.kind_or_url else {
             ensure!(
                 self.repo.name.is_none(),
@@ -91,6 +92,25 @@ impl MergeArgs {
     /// Whether `--push` or `--no-push` overrides `[merge] push`, and how.
     pub fn push(&self) -> Option<bool> {
         (self.push || self.no_push).then_some(self.push)
+    }
+
+    /// Refuse flags of both paths together, which no merge takes, before
+    /// anything asks which space merges.
+    fn ensure_one_path(&self) -> Result<()> {
+        let Some(local) = self.local_flag() else {
+            return Ok(());
+        };
+        if let Some(pull) = self.pull_flag() {
+            bail!(
+                "{pull} applies to a PR merge and {local} to a local merge; pass the flags of one"
+            );
+        }
+        if let Some(method @ (MergeMethod::Squash | MergeMethod::Rebase)) = self.method {
+            bail!(
+                "-X {method} merges only a PR and {local} applies to a local merge; pass the flags of one"
+            );
+        }
+        Ok(())
     }
 
     /// Refuse the flags of a local merge for a merge through `pr`.
