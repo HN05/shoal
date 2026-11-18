@@ -305,11 +305,13 @@ pub enum PrCommand {
         #[arg(short = 'X', long, value_enum, default_value = "merge")]
         method: crate::forge::items::action::UpdateMethod,
     },
-    /// Merge a PR with your own login, now or once its checks pass;
-    /// workspace processes cannot merge.
+    /// Merge a PR with your own login, now or once its checks pass; a
+    /// workspace process merges as the agent account, as its `merge`
+    /// permission allows.
     Merge(PrMergeArgs),
     /// Delete the branch of a merged or closed PR on the forge with your own
-    /// login; workspace processes cannot delete branches.
+    /// login; a workspace process deletes it as the agent account, as its
+    /// `merge` permission allows.
     DeleteBranch {
         #[command(flatten)]
         item: ItemSelector,
