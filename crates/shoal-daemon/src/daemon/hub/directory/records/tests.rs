@@ -9,6 +9,8 @@ fn database() -> Connection {
         .unwrap();
     db.execute_batch(include_str!("../../../store/hub_directory.sql"))
         .unwrap();
+    db.execute_batch(include_str!("../../../store/hub_numbers.sql"))
+        .unwrap();
     db.execute_batch(
         "INSERT INTO hub_members(id, kind, name, public_key, joined_at)
          VALUES ('desk','machine','desk','k1',0), ('laptop','machine','laptop','k2',0);",

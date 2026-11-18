@@ -29,6 +29,7 @@ use shoal_states::states;
 use super::{
     ExchangeKey, Mac, MemberKind, Nonce, Overview, PublicKey, Signature,
     directory::{Directory, Report},
+    numbering::Numbering,
     pairing::Pairing,
 };
 
@@ -211,7 +212,7 @@ pub enum Call {
     /// Revoke the caller's own credential. Answered with [`Reply::Left`].
     Leave,
     /// A machine's report of its spaces. Answered with
-    /// [`Reply::Reported`].
+    /// [`Reply::Reported`] and the numbers the hub keeps for the machine.
     Report(Report),
     /// The directory of every machine's spaces. Answered with
     /// [`Reply::Directory`].
@@ -233,7 +234,7 @@ pub enum Reply {
     Members(Overview),
     Revoked(super::Member),
     Left,
-    Reported,
+    Reported(Numbering),
     Directory(Directory),
     Owner(Option<super::Member>),
     Claimed,

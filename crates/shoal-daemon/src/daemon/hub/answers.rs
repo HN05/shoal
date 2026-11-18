@@ -82,8 +82,7 @@ impl Manager {
             }
             Call::Report(report) => {
                 ensure_machine(member)?;
-                self.record_report(&member.id, report).await?;
-                Reply::Reported
+                Reply::Reported(self.record_report(&member.id, report).await?)
             }
             Call::Claim { space } => {
                 ensure_machine(member)?;

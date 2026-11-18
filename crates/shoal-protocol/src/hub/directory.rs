@@ -19,7 +19,7 @@ use crate::{
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpaceSummary {
     pub id: SpaceId,
-    /// Its number on its machine.
+    /// Its number, from the hub's one sequence across its machines.
     pub number: SpaceNumber,
     pub name: SpaceName,
     pub kind: SpaceKind,

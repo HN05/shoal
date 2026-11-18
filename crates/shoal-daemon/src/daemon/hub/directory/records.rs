@@ -7,7 +7,7 @@ use rusqlite::{OptionalExtension as _, Transaction, params};
 use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
 use shoal_protocol::hub::directory::{Conflict, Listed, Report, SpaceSummary};
 
-use super::super::members;
+use super::{super::members, numbers};
 use crate::time::UnixTime;
 
 /// Apply `member`'s `report`, and the conflicts it newly raised: the space
@@ -44,6 +44,7 @@ pub(super) fn apply(
 /// machine's copy takes the place of each it owned.
 pub(in crate::daemon::hub) fn forget(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
     tx.execute("DELETE FROM hub_space_claims WHERE member_id=?1", [member])?;
+    numbers::forget(tx, member)?;
     for space in held(tx, member)? {
         release(tx, member, &space)?;
     }
@@ -150,7 +151,7 @@ fn keep_copy(
 }
 
 /// Record `member` as the owner of the space `id`, with its `summary`, in
-/// place of any copy of it `member` kept.
+/// place of any copy of it `member` kept, and settle the number it lists.
 fn own(
     tx: &Transaction<'_>,
     member: &MemberId,
@@ -166,7 +167,7 @@ fn own(
             summary=excluded.summary, reported_at=excluded.reported_at",
         params![id, member, summary, now],
     )?;
-    Ok(())
+    numbers::settle(tx, member, id)
 }
 
 /// Record that `member` claims the space `id`, which it imports, unless the
@@ -236,6 +237,7 @@ fn has_copy(tx: &Transaction<'_>, id: &SpaceId, member: &MemberId) -> Result<boo
 /// Drop `member`'s space `id`, owned or a copy; the earliest copy of one it
 /// owned takes its place.
 fn release(tx: &Transaction<'_>, member: &MemberId, id: &SpaceId) -> Result<()> {
+    numbers::release(tx, member, id)?;
     drop_copy(tx, member, id)?;
     if disown(tx, member, id)? {
         promote_earliest_copy(tx, id)?;

@@ -750,6 +750,12 @@ CREATE TABLE hub_space_claims (
     member_id TEXT NOT NULL REFERENCES hub_members(id)
 );
 
+CREATE TABLE hub_numbers (
+    number INTEGER PRIMARY KEY,
+    member_id TEXT NOT NULL REFERENCES hub_members(id),
+    space_id TEXT UNIQUE
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
@@ -832,6 +838,8 @@ CREATE INDEX workspaces_base ON workspaces(base_workspace_id);
 CREATE INDEX reply_times_space ON reply_times(space_id, id);
 
 CREATE INDEX hub_spaces_member ON hub_spaces(member_id);
+
+CREATE INDEX hub_numbers_member ON hub_numbers(member_id);
 
 CREATE VIEW space_refs AS
     SELECT spaces.id, CASE spaces.kind

@@ -106,9 +106,9 @@ impl Manager {
 
     async fn report(&self, sink: &Sink<'_>, report: Report) -> Result<()> {
         match sink {
-            Sink::Hub(own) => self.record_report(own, report).await,
+            Sink::Hub(own) => self.record_report(own, report).await.map(drop),
             Sink::Link(calls) => match calls.call(Call::Report(report)).await? {
-                Reply::Reported => Ok(()),
+                Reply::Reported(_) => Ok(()),
                 reply => Err(anyhow!("the hub answered with an unexpected {reply:?}")),
             },
         }

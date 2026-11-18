@@ -1,27 +1,43 @@
 //! The hub's directory of every joined machine's spaces: the reports each
-//! machine sends of its own, the view the hub serves from them, and the
-//! machine that owns each space ID.
+//! machine sends of its own, the view the hub serves from them, the
+//! machine that owns each space ID, and the one sequence of their numbers.
 use anyhow::Result;
 use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
 use shoal_protocol::hub::{
     Member, MemberKind,
     directory::{Conflict, Directory, Report},
+    numbering::Numbering,
 };
 
 use crate::daemon::{notifications::NotificationKind, workspace::Manager};
 
+mod numbers;
 mod records;
 
 pub(super) use records::forget;
 
 impl Manager {
     /// Record the machine `member`'s `report` of its spaces, alerting the
-    /// user to each space ID it reported that another machine owns.
-    pub(super) async fn record_report(&self, member: &MemberId, report: Report) -> Result<()> {
+    /// user to each space ID it reported that another machine owns, and
+    /// return the numbers the hub keeps for the machine.
+    pub(super) async fn record_report(
+        &self,
+        member: &MemberId,
+        report: Report,
+    ) -> Result<Numbering> {
         let member = member.clone();
-        let conflicts = (self.store)
-            .write(move |tx| records::apply(tx, &member, report))
+        let (conflicts, numbering) = (self.store)
+            .write(move |tx| {
+                let conflicts = records::apply(tx, &member, report)?;
+                Ok((conflicts, numbers::kept_for(tx, &member)?))
+            })
             .await?;
+        self.alert_conflicts(conflicts).await?;
+        Ok(numbering)
+    }
+
+    /// Alert the user to each of `conflicts`, which a report raised.
+    async fn alert_conflicts(&self, conflicts: Vec<Conflict>) -> Result<()> {
         if conflicts.is_empty() {
             return Ok(());
         }
