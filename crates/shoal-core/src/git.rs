@@ -16,10 +16,10 @@ mod merge_tree;
 pub(crate) mod predicates;
 pub use predicates::{has_commit, is_ancestor, ref_exists};
 pub(crate) mod queries;
-pub(crate) use queries::{HeadState, git_path, head_state, is_bare_with_work_tree};
+pub(crate) use queries::{HeadState, config_value, git_path, head_state, is_bare_with_work_tree};
 pub use queries::{
-    checked_out_branch, checkout_dirs, common_dir, config_value, git_dir, head_and_branch,
-    latest_subject, log_stat, revision, symbolic_revision, verify_revision, worktree_root,
+    checked_out_branch, checkout_dirs, common_dir, git_dir, head_and_branch, latest_subject,
+    log_stat, revision, symbolic_revision, verify_revision, worktree_root,
 };
 pub mod checkpoint;
 mod reader;

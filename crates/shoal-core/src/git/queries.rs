@@ -336,7 +336,7 @@ pub(crate) async fn git_path(repo: &Path, name: &str) -> Result<PathBuf> {
 /// The value Git gives `key` in the configuration of the repository Git
 /// finds from `repo`, as `git config --get` reads it: the last one set;
 /// `None` when it is unset or empty.
-pub async fn config_value(repo: &Path, key: &str) -> Result<Option<String>> {
+pub(crate) async fn config_value(repo: &Path, key: &str) -> Result<Option<String>> {
     let owned = key.to_owned();
     let in_process = move |repo: &gix::Repository| {
         let value = repo.config_snapshot().plumbing().string(owned.as_str());
