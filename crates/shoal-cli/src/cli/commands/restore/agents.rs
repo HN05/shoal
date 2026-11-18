@@ -62,6 +62,10 @@ pub(super) async fn restore(
     let whole = named && !options.forget && options.execution.is_none();
     if whole {
         setups::take_failed(ctx, &mut selected).await?;
+    }
+    // A failed launch restores whether the command line named its space or
+    // a picker chose it.
+    if !options.forget && options.execution.is_none() {
         failed_starts::take(ctx, &mut selected).await?;
     }
     let turns = match whole && !options.no_agents {

@@ -2779,3 +2779,23 @@ fn a_chats_failed_launch_restores_only_with_its_agent() {
         .collect();
     assert_eq!(queued, [chat.as_str()], "{restored}");
 }
+
+/// A failed chat launch the restore picker chooses queues again, as one
+/// the command line names does.
+#[test]
+fn a_failed_chat_launch_picked_to_restore_queues_again() {
+    let (fixture, mut tab) = chat_with_an_open_tab();
+    let output = tab.stdin(Stdio::null()).output().unwrap();
+    assert!(!output.status.success(), "{}", printed(&output));
+
+    // The picker takes the first restorable space, the failed chat.
+    let fzf = fixture.root.path().join("bin/fzf");
+    install_test_script(fzf, "#!/bin/sh\nhead -n 1\n");
+    let mut restore = fixture.command();
+    restore.arg("restore");
+    let (output, transcript) = fixture.interactive_command(&mut restore, "");
+
+    assert!(output.status.success(), "{} {transcript}", printed(&output));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Queued 1 agent"), "{}", printed(&output));
+}
