@@ -391,7 +391,19 @@ async fn a_chat_without_a_repository_splits_a_copy_in_the_copied_repository() {
         workspace: SpaceSelector::id(&copied.id),
         checkpoint: None,
     };
-    let started = (manager.start_split(&selector, split(Some(copy)), without_agent(), None))
+    // Its agent's mode resolves in the copied repository, which defines it.
+    let config = "[modes.local]\nkind = 'workspace'\n";
+    (manager.write_local_config(&repository.id, Some(config.into())))
+        .await
+        .unwrap();
+    let preparing = Preparing {
+        agent: Some(Box::new(LaunchRequest {
+            mode: Some("local".into()),
+            ..LaunchRequest::new(Some("claude".parse().unwrap()))
+        })),
+        ..without_agent()
+    };
+    let started = (manager.start_split(&selector, split(Some(copy)), preparing, None))
         .await
         .unwrap();
     let _worker = fake::take(started.operation.as_deref().unwrap());

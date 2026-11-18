@@ -282,8 +282,10 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<StartedWorkspace> {
         let (parent, repo) = self.split_parent(parent, split.copy.as_ref()).await?;
-        let mut preparing = (preparing
-            .resolved(async || self.space_settings_with_templates(&parent).await))
+        let mut preparing = (preparing.resolved(async || {
+            self.space_settings_with_templates(&parent, Some(&repo.id))
+                .await
+        }))
         .await?;
         let issue = match &preparing.issue {
             Some(issue) => Some(self.read_open_issue(&repo.path, issue).await?),

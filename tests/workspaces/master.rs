@@ -225,3 +225,52 @@ fn a_root_move_takes_a_master_session_with_it() {
     );
     assert!(resumed.tmp_dir.starts_with(&moved));
 }
+
+#[test]
+fn a_master_session_splits_a_copy_for_an_issue_of_the_copied_repository() {
+    let fixture = Fixture::with_config(Some("[machine.overload.disk]\nenabled = false\n"));
+    fixture.add_github_origin();
+    fixture.script_github(&super::forge::github_issue(
+        12,
+        "Clarify retries",
+        "Retry twice.",
+    ));
+    let copied = fixture.add("copied");
+    let home = fixture.root.path();
+    install_test_script(home.join("bin/zmx"), PASSTHROUGH_ZMX);
+    // The master session has no repository; the copied workspace names the
+    // one the issue and the child are in.
+    install_test_script(
+        home.join("bin/claude"),
+        format!(
+            "#!/bin/sh\n'{}' --json split --copy {} --issue 12 > \"$HOME/split.json\" 2> \"$HOME/split.err\"\n",
+            support::shoal_binary(),
+            copied["id"].as_str().unwrap(),
+        ),
+    );
+    let (output, transcript) = fixture.terminal_command(
+        fixture.command().current_dir(home).args([
+            "start",
+            "--mode",
+            "orchestrate",
+            "--agent",
+            "claude",
+            "--name",
+            "master",
+        ]),
+        "",
+        true,
+    );
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
+    let split = fs::read_to_string(home.join("split.json")).unwrap();
+    let error = fs::read_to_string(home.join("split.err")).unwrap();
+    let child: Value = serde_json::from_str(split.lines().next().unwrap_or_default())
+        .unwrap_or_else(|_| panic!("{split}\n{error}"));
+    assert_eq!(child["name"], "Clarify retries", "{child}");
+    assert_eq!(child["branch"], "12-clarify-retries", "{child}");
+    assert_eq!(child["parent"]["name"], "master", "{child}");
+}

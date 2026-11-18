@@ -48,8 +48,9 @@ pub(super) async fn run(ctx: &Context, space: Option<SpaceSelector>, split: Spli
     // A named copy fails before the parent picker too.
     let copy = super::copies::source(ctx, split.copy).await?;
     let parent = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
+    let copied = copy.as_ref().map(|copy| copy.repository.clone());
     let issue = match &split.issue {
-        Some(input) => Some(load_issue(ctx, &parent, input).await?),
+        Some(input) => Some(load_issue(ctx, &parent, copied, input).await?),
         None => None,
     };
     let name = match (split.branch, &issue) {
@@ -213,9 +214,18 @@ fn report(ctx: &Context, child: &Workspace) -> Result<()> {
     Ok(())
 }
 
-/// The issue `input` names in the parent workspace's repository.
-async fn load_issue(ctx: &Context, parent: &SpaceSelector, input: &ItemInput) -> Result<Issue> {
-    let context = ItemContext::space(parent.clone());
+/// The issue `input` names in the child's repository: the `copied`
+/// workspace's, else the parent space's own.
+async fn load_issue(
+    ctx: &Context,
+    parent: &SpaceSelector,
+    copied: Option<RepositoryId>,
+    input: &ItemInput,
+) -> Result<Issue> {
+    let context = ItemContext::Space {
+        space: parent.clone(),
+        repository: copied,
+    };
     super::issues::load(ctx, context, input.clone()).await
 }
 

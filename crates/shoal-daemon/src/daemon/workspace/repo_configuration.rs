@@ -221,9 +221,14 @@ impl Manager {
     }
 
     /// [`Self::space_settings`] with the mode and rule files beside the
-    /// global config, which a launch's mode may come from.
-    pub(crate) async fn space_settings_with_templates(&self, space: &Space) -> Result<Effective> {
-        let layers = self.space_layers(space, None).await?;
+    /// global config, which a launch's mode may come from; `repository` is
+    /// the one an action is in.
+    pub(crate) async fn space_settings_with_templates(
+        &self,
+        space: &Space,
+        repository: Option<&RepositoryId>,
+    ) -> Result<Effective> {
+        let layers = self.space_layers(space, repository).await?;
         self.config()
             .resolve_with_template_files(&layers, &self.paths)
     }
