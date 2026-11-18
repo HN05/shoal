@@ -75,11 +75,11 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<(Creation, Option<Repository>)> {
         let Some(copied) = self.launch_copy(launch, caller).await? else {
-            return Ok((new_creation(launch, None), None));
+            return Ok((fits::workspace::launch_creation(launch, None), None));
         };
         let repository = self.repository(copied.repository.clone()).await?;
         Ok((
-            new_creation(launch, Some(&copied.creation)),
+            fits::workspace::launch_creation(launch, Some(copied.creation)),
             Some(repository),
         ))
     }
@@ -176,27 +176,5 @@ fn ensure_placeable(launch: &Launch, agent: &plan::PlannedAgent) -> Result<()> {
     match (&agent.agent, &launch.unplaceable) {
         (Some(_), Some(refusal)) => anyhow::bail!("{refusal}"),
         _ => Ok(()),
-    }
-}
-
-/// What `launch` creates as it names it, a copy of `copied` when it copies
-/// one, before its target settles the rest.
-fn new_creation(launch: &Launch, copied: Option<&crate::start_plan::CopyCreation>) -> Creation {
-    Creation {
-        path: launch.path.clone(),
-        branch: launch.branch.clone(),
-        base: launch.base.clone(),
-        git_profile: launch.git_profile.clone(),
-        options: crate::protocol::CreationOptions {
-            name: launch.name.clone(),
-            priority: launch.priority,
-            skip_setup: launch.skip_setup,
-            disposable: launch.disposable,
-        },
-        copy: copied.map(|copy| crate::start_plan::CopyCreation {
-            source: copy.source.clone(),
-            name: copy.name.clone(),
-        }),
-        ..Creation::default()
     }
 }

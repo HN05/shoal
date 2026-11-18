@@ -175,20 +175,7 @@ async fn check_launch_creation(
     target: &AddTarget,
     launch: &Launch,
 ) -> Result<Option<Workspace>> {
-    let mut creation = Creation {
-        path: launch.path.clone(),
-        branch: launch.branch.clone(),
-        base: launch.base.clone(),
-        git_profile: launch.git_profile.clone(),
-        options: crate::protocol::CreationOptions {
-            name: launch.name.clone(),
-            priority: launch.priority,
-            skip_setup: launch.skip_setup,
-            disposable: launch.disposable,
-        },
-        copy: launch_copy(launch),
-        ..Creation::default()
-    };
+    let mut creation = crate::launches::workspace::launch_creation(launch, launch_copy(launch));
     let repo = (&target.selector, target.repository(ctx).await?);
     let reads = DaemonReads(ctx);
     let settle = crate::launches::workspace::settle(&reads, repo, &mut creation);

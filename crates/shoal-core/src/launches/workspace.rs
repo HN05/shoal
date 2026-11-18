@@ -13,7 +13,7 @@ use crate::{
     git,
     model::{Repository, Workspace},
     protocol::PullHead,
-    start_plan::Creation,
+    start_plan::{CopyCreation, Creation},
     state::WorkspaceState,
 };
 
@@ -72,6 +72,28 @@ pub async fn ensure_link_in(repo: &Repository, linked: Option<&ForgeRepo>) -> Re
         "link belongs to a different repository"
     );
     Ok(())
+}
+
+/// What `launch` creates as it names it, a copy of `copy` when it copies
+/// one, before its target settles the rest.
+pub fn launch_creation(
+    launch: &shoal_protocol::launches::Launch,
+    copy: Option<CopyCreation>,
+) -> Creation {
+    Creation {
+        path: launch.path.clone(),
+        branch: launch.branch.clone(),
+        base: launch.base.clone(),
+        git_profile: launch.git_profile.clone(),
+        options: crate::protocol::CreationOptions {
+            name: launch.name.clone(),
+            priority: launch.priority,
+            skip_setup: launch.skip_setup,
+            disposable: launch.disposable,
+        },
+        copy,
+        ..Creation::default()
+    }
 }
 
 /// Open the pushed `branch` a branch link names.
