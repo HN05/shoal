@@ -103,7 +103,7 @@ pub(super) async fn handle(
             )
         }
         OperationMethod::StartSplit {
-            workspace,
+            parent,
             name,
             copy,
             base,
@@ -130,7 +130,7 @@ pub(super) async fn handle(
             };
             Body::WorkspaceStarted(
                 manager
-                    .start_split(&workspace, split, preparing, caller)
+                    .start_split(&parent, split, preparing, caller)
                     .await?,
             )
         }
@@ -177,13 +177,11 @@ impl Scoped for OperationMethod {
     ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             OperationMethod::StartOperation { spec, .. } => Some(spec.workspace_mut()),
-            OperationMethod::StartSplit {
-                workspace, copy, ..
-            } => {
+            OperationMethod::StartSplit { parent, copy, .. } => {
                 if let Some(copy) = copy {
                     manager.copy_within(caller, copy).await?;
                 }
-                Some(workspace)
+                Some(parent)
             }
             OperationMethod::StartWorkspace {
                 parent,

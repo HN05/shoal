@@ -311,7 +311,7 @@ async fn an_app_queues_an_agent_once_it_can_run() {
     // and regardless of the limits as its limits permission allows.
     let parent = daemon.workspace("parent").await;
     let split = WorkspaceMethod::SplitWorkspace {
-        workspace: SpaceSelector::id(&parent.id),
+        parent: SpaceSelector::id(&parent.id),
         name: "child".into(),
         base: Some("HEAD".into()),
         options: Default::default(),
@@ -507,7 +507,7 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
     // A workspace's agent starts workspaces below its own.
     let parent = daemon.workspace("parent").await;
     let split = |agent| OperationMethod::StartSplit {
-        workspace: SpaceSelector::id(&parent.id),
+        parent: SpaceSelector::id(&parent.id),
         name: Some("child".into()),
         copy: None,
         base: Some("HEAD".into()),
@@ -729,7 +729,7 @@ async fn a_workspaces_agent_renames_the_spaces_its_scope_reaches() {
     let parent = daemon.workspace("parent").await;
     let outside = daemon.workspace("outside").await;
     let split = WorkspaceMethod::SplitWorkspace {
-        workspace: SpaceSelector::id(&parent.id),
+        parent: SpaceSelector::id(&parent.id),
         name: "child".into(),
         base: Some("HEAD".into()),
         options: Default::default(),

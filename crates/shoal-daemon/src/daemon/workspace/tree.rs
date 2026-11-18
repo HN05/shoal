@@ -13,7 +13,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::Manager;
 use crate::{
     daemon::notifications::NotificationKind,
-    model::{RefPart, SpaceKind, SpaceRef, Workspace},
+    model::{RefPart, Repository, Space, SpaceKind, SpaceRef, Workspace},
     state::WorkspaceState,
 };
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
@@ -25,9 +25,9 @@ const TAKEN_FIRST: &str = "(SELECT space_id,parent_id FROM space_parents
     UNION ALL SELECT id,workspace_id FROM chats WHERE workspace_id IS NOT NULL)";
 
 impl Manager {
-    /// Create a workspace on a new branch named `name` in `parent`'s
-    /// repository, leaving out what `options` say, and record `parent` as
-    /// its parent.
+    /// Create a workspace on a new branch named `name` in the repository of
+    /// the space `parent`, a workspace or a chat, leaving out what `options`
+    /// say, and record `parent` as its parent.
     pub async fn split_workspace(
         &self,
         parent: &SpaceSelector,
@@ -35,8 +35,8 @@ impl Manager {
         base: Option<String>,
         options: crate::protocol::CreationOptions,
     ) -> Result<Workspace> {
-        let parent = self.workspace(parent).await?;
-        let (repo, git) = self.lock_repository(parent.repository()).await?;
+        let (parent, repo) = self.split_parent(parent).await?;
+        let (repo, git) = self.lock_repository(&repo.id).await?;
         crate::git::check_branch_name(&name)?;
         let branch = self.available_branch(&repo, &name).await?;
         self.create_branch_workspace(
@@ -54,6 +54,25 @@ impl Manager {
             git,
         )
         .await
+    }
+
+    /// The space `selector` names, a workspace or a chat, as the parent of
+    /// a workspace split from it, with the repository the child goes in,
+    /// its own: a chat without a repository names none.
+    pub(crate) async fn split_parent(
+        &self,
+        selector: &SpaceSelector,
+    ) -> Result<(Space, Repository)> {
+        let parent = self.space(selector).await?;
+        let Some(repository) = parent.repository_id.clone() else {
+            bail!(
+                "{} belongs to no repository to split a workspace in; split from a space \
+                 of the child's repository",
+                parent.label()
+            );
+        };
+        let repository = self.repository(repository).await?;
+        Ok((parent, repository))
     }
 
     /// Whether `id` is `ancestor` or a space below it.

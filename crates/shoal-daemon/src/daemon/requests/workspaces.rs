@@ -131,13 +131,13 @@ pub(super) async fn handle(
             Body::OpenedWorkspace(manager.reopen_workspace(&workspace).await?)
         }
         WorkspaceMethod::SplitWorkspace {
-            workspace,
+            parent,
             name,
             base,
             options,
         } => Body::Workspace(
             manager
-                .split_workspace(&workspace, name, base, options)
+                .split_workspace(&parent, name, base, options)
                 .await?,
         ),
         WorkspaceMethod::CheckCreation {
@@ -384,7 +384,9 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::SpacePlaces { space: workspace }
             | WorkspaceMethod::RenameBranch { workspace, .. }
             | WorkspaceMethod::ConvertToChat { workspace, .. }
-            | WorkspaceMethod::SplitWorkspace { workspace, .. }
+            | WorkspaceMethod::SplitWorkspace {
+                parent: workspace, ..
+            }
             | WorkspaceMethod::CreateCommitWorkspace {
                 parent: Some(workspace),
                 ..

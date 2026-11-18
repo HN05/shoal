@@ -332,6 +332,35 @@ async fn a_split_reports_its_failed_preparation_too() {
 }
 
 #[tokio::test]
+async fn a_chat_splits_a_child_workspace_below_itself() {
+    let (root, manager) = manager().await;
+    let repository = registered(root.path(), &manager).await;
+    let chat = (manager.start_chat(
+        repository.id.clone().into(),
+        "talk".into(),
+        "claude".into(),
+        None,
+    ))
+    .await
+    .unwrap();
+    let split = Split {
+        name: Some("child".into()),
+        copy: None,
+        base: Some("HEAD".into()),
+        options: Default::default(),
+    };
+    let selector = SpaceSelector::id(&chat.id);
+    let started = (manager.start_split(&selector, split, without_agent(), None))
+        .await
+        .unwrap();
+    let _worker = fake::take(started.operation.as_deref().unwrap());
+    assert_eq!(started.workspace.repository(), &repository.id);
+    let parent = started.workspace.parent.as_ref().map(|parent| &parent.id);
+    assert_eq!(parent, Some(&chat.id));
+    assert!(started.entry.is_none(), "a split queues no agent");
+}
+
+#[tokio::test]
 async fn a_failed_post_setup_hook_is_retried_by_setup() {
     let message = "hook exited with status 3".to_owned();
     let (notification, number) = reported(Failure::HookFailed { message }).await;

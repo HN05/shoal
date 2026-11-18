@@ -114,8 +114,8 @@ impl NewWorkspace {
 
 /// A child workspace for the daemon to split and prepare in an operation.
 pub struct NewSplit {
-    /// The workspace it is split from.
-    pub workspace: SpaceSelector,
+    /// The space it is split from, a workspace or a chat.
+    pub parent: SpaceSelector,
     /// Its new branch; a copy's defaults to one named after the copied
     /// workspace's.
     pub name: Option<String>,
@@ -127,16 +127,16 @@ pub struct NewSplit {
     /// The issue to link, by number or URL.
     pub issue: Option<ItemInput>,
     /// The agent its preparation queues, which the daemon resolves under
-    /// the workspace's settings.
+    /// the parent's settings.
     pub agent: Option<Box<LaunchRequest>>,
 }
 
 impl NewSplit {
-    /// A child of `workspace` on a new branch `name`, with defaults for
-    /// everything else.
-    pub fn new(workspace: SpaceSelector, name: Option<String>) -> Self {
+    /// A child of the space `parent` on a new branch `name`, with defaults
+    /// for everything else.
+    pub fn new(parent: SpaceSelector, name: Option<String>) -> Self {
         Self {
-            workspace,
+            parent,
             name,
             copy: None,
             base: None,
@@ -149,7 +149,7 @@ impl NewSplit {
     /// The request that splits it and starts preparing it with `env`.
     fn method(self, env: BTreeMap<String, String>) -> OperationMethod {
         let Self {
-            workspace,
+            parent,
             name,
             copy,
             base,
@@ -158,7 +158,7 @@ impl NewSplit {
             agent,
         } = self;
         OperationMethod::StartSplit {
-            workspace,
+            parent,
             name,
             copy,
             base,

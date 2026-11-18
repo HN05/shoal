@@ -222,8 +222,8 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
             },
         )
         .await;
-    let split = |workspace: &str| WorkspaceMethod::SplitWorkspace {
-        workspace: workspace.into(),
+    let split = |parent: &str| WorkspaceMethod::SplitWorkspace {
+        parent: parent.into(),
         name: "grandchild".into(),
         base: None,
         options: Default::default(),

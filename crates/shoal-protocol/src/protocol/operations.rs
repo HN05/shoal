@@ -83,12 +83,13 @@ pub enum OperationMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         queue_entry: Option<shoal_ids::queue_entry_ids::QueueEntryId>,
     },
-    /// Split a child from `workspace` and start preparing it, as `shoal
-    /// split` does, with the checks of [`Self::StartWorkspace`]: on the new
-    /// branch `name`, or with `copy` on a copy of that workspace, on `name`
-    /// or else a branch named after the copied one.
+    /// Split a child from the space `parent`, a workspace or a chat, and
+    /// start preparing it, as `shoal split` does, with the checks of
+    /// [`Self::StartWorkspace`]: on the new branch `name`, or with `copy` on
+    /// a copy of that workspace, on `name` or else a branch named after the
+    /// copied one.
     StartSplit {
-        workspace: SpaceSelector,
+        parent: SpaceSelector,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         name: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]

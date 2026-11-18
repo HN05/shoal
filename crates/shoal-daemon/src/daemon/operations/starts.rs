@@ -271,8 +271,9 @@ impl Manager {
         }
     }
 
-    /// Split child `name` from workspace `parent`, on `base` or a copy of
-    /// `copy`, leaving out what `options` say, and start preparing it.
+    /// Split child `name` from the space `parent`, a workspace or a chat, on
+    /// `base` or a copy of `copy`, leaving out what `options` say, and start
+    /// preparing it.
     pub(crate) async fn start_split(
         self: &Arc<Self>,
         parent: &SpaceSelector,
@@ -280,19 +281,19 @@ impl Manager {
         preparing: Preparing<LaunchRequest>,
         caller: Option<&Caller>,
     ) -> Result<StartedWorkspace> {
-        let parent = self.workspace(parent).await?;
+        let (parent, repo) = self.split_parent(parent).await?;
         let mut preparing = (preparing
-            .resolved(async || self.workspace_settings_with_templates(&parent).await))
+            .resolved(async || self.space_settings_with_templates(&parent).await))
         .await?;
         let issue = match &preparing.issue {
-            Some(issue) => Some(self.read_open_issue(&parent.path, issue).await?),
+            Some(issue) => Some(self.read_open_issue(&repo.path, issue).await?),
             None => None,
         };
         preparing.work_on(issue.as_ref());
         name_after_issue(&mut split.options, issue.as_ref());
-        (self.authorize_start_agent(caller, &preparing, parent.repository())).await?;
+        (self.authorize_start_agent(caller, &preparing, &repo.id)).await?;
         let priority = (self.given_priority(caller, split.options.priority)).await?;
-        let child = self.create_child(&parent, split).await?;
+        let child = self.create_child(&parent.id, &repo.id, split).await?;
         self.give_priority(&child.id, priority).await?;
         let opened = OpenedWorkspace {
             workspace: child,
@@ -303,10 +304,12 @@ impl Manager {
         Ok(started)
     }
 
-    /// Create the child `split` describes below `parent`.
+    /// Create the child `split` describes below the space `parent`, in
+    /// `repository`.
     async fn create_child(
         &self,
-        parent: &Workspace,
+        parent: &SpaceId,
+        repository: &RepositoryId,
         Split {
             name,
             copy,
@@ -317,16 +320,16 @@ impl Manager {
         let Some(copy) = copy else {
             let name = name.context("name the child's branch")?;
             return self
-                .split_workspace(&SpaceSelector::id(&parent.id), name, base, options)
+                .split_workspace(&SpaceSelector::id(parent), name, base, options)
                 .await;
         };
         ensure!(base.is_none(), "a copy starts from its source, not a base");
         let new = NewWorkspace {
             options,
-            parent: Some(parent.id.clone()),
+            parent: Some(parent.clone()),
             ..Default::default()
         };
-        let repository = Selector::from(parent.repository().clone());
+        let repository = Selector::from(repository.clone());
         (self.create_copy(repository, &copy, CopyPlace::Branch(name), new)).await
     }
 

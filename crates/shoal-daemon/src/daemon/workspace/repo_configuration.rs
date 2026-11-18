@@ -220,6 +220,14 @@ impl Manager {
         self.space_settings_from(&self.config(), space, None).await
     }
 
+    /// [`Self::space_settings`] with the mode and rule files beside the
+    /// global config, which a launch's mode may come from.
+    pub(crate) async fn space_settings_with_templates(&self, space: &Space) -> Result<Effective> {
+        let layers = self.space_layers(space, None).await?;
+        self.config()
+            .resolve_with_template_files(&layers, &self.paths)
+    }
+
     /// The settings of `space` after every layer of [`Self::space_layers`],
     /// over a global snapshot the caller also reads, so one operation never
     /// combines two versions; `repository` is the one an action is in.

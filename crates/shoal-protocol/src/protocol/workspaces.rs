@@ -41,10 +41,10 @@ pub enum WorkspaceMethod {
     ReopenWorkspace {
         workspace: SpaceSelector,
     },
-    /// Create a workspace on a new branch in `workspace`'s repository, split
-    /// from it as its child.
+    /// Create a workspace on a new branch in the repository of the space
+    /// `parent`, a workspace or a chat, split from it as its child.
     SplitWorkspace {
-        workspace: SpaceSelector,
+        parent: SpaceSelector,
         name: String,
         base: Option<String>,
         #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
