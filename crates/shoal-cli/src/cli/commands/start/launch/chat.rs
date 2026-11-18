@@ -2,11 +2,7 @@
 //! detached, in a background place, beside the caller, or here under the
 //! execution wrapper, as an execution of its chat, once the agent queue
 //! admits it.
-use std::{
-    ffi::OsString,
-    path::PathBuf,
-    sync::{Arc, OnceLock},
-};
+use std::{ffi::OsString, path::PathBuf, sync::Arc};
 
 use anyhow::{Context as _, Result, ensure};
 
@@ -27,15 +23,16 @@ use crate::{
     model::{Chat, ChatHome},
     protocol::ChatStart,
 };
-use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::chats::{BackgroundChat, LaunchedChat};
-use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 mod admission;
 mod command;
 mod detached;
 mod place;
+mod recorded;
+
+use recorded::Recorded;
 
 pub(in crate::cli::commands) use admission::ending_failed;
 pub(in crate::cli::commands) use detached::report_started;
@@ -82,17 +79,19 @@ async fn launch(
     let launch = Launch::prepare(ctx, repo, settings, topic, options).await?;
     let recorded = Arc::clone(&launch.recorded);
     let started = launch.start(ctx).await;
-    admission::ending_failed(ctx, recorded.get(), started).await
+    let started = admission::ending_failed(ctx, recorded.chat(), started).await;
+    recorded.leave_chat_scope(ctx).await;
+    started
 }
 
 /// A chat ready to start: its agent, what it passes on to the agent, its
-/// topic, the options its start was given and, once recorded, the chat.
+/// topic, the options its start was given and what its start recorded.
 struct Launch {
     agent: Agent,
     chat: ChatLaunch,
     topic: Topic,
     options: Options,
-    recorded: Arc<OnceLock<SpaceId>>,
+    recorded: Arc<Recorded>,
 }
 
 impl Launch {
@@ -189,7 +188,7 @@ impl Launch {
         let start = self.chat_start();
         let (chat, entry) = (self.options.chat.as_ref(), crate::env::queue_entry());
         let launched = crate::client::chats::launch(&ctx.paths, start, chat, origin, entry).await?;
-        let _ = self.recorded.set(launched.chat.id.clone());
+        self.recorded.record(&launched.chat.id);
         Ok(launched)
     }
 
@@ -225,14 +224,11 @@ impl Launch {
     /// Run the recorded `chat`'s agent with `model_args` here under the
     /// execution wrapper, labelling this terminal as the chat's.
     async fn run_here(self, ctx: &Context, chat: &Chat, model_args: Vec<OsString>) -> Result<i32> {
-        let scope = act_in_chat_scope(ctx, chat).await?;
+        self.recorded.act_in_chat_scope(ctx, chat).await?;
         crate::chat_handoff::report_started();
         let hold = admission::hold_launch(ctx).await;
         let ran = run_agent(ctx, chat, self.agent, self.chat, model_args, Vec::new()).await;
         drop(hold);
-        if let Some(token) = scope {
-            revoke_chat_scope(ctx, chat, token).await;
-        }
         ran
     }
 }
@@ -244,27 +240,6 @@ async fn current_origin() -> Option<crate::sessions::Origin> {
         owned: crate::env::opened_chat_place(),
         ..place
     })
-}
-
-/// Make a scoped process, which starts `chat`, act in a scope it issues for
-/// the chat before its starter, whose scope it may hold, learns that it
-/// runs and exits, returning that scope's token.
-async fn act_in_chat_scope(ctx: &Context, chat: &Chat) -> Result<Option<ScopeToken>> {
-    if !crate::env::is_scoped() {
-        return Ok(None);
-    }
-    let space = SpaceSelector::id(&chat.id);
-    let token = crate::client::spaces::issue_scope(&ctx.paths, space).await?;
-    crate::env::act_in_chat_scope(token.clone());
-    Ok(Some(token))
-}
-
-/// Revoke `token`, the scope this process issued for `chat`, once the
-/// chat's agent exited. A token it cannot revoke goes with the chat, as
-/// when the chat's removal ended its agent.
-async fn revoke_chat_scope(ctx: &Context, chat: &Chat, token: ScopeToken) {
-    let space = SpaceSelector::id(&chat.id);
-    let _ = crate::client::spaces::revoke_scope(&ctx.paths, space, token).await;
 }
 
 /// Run the agent of the recorded `chat` as `launch` says, with

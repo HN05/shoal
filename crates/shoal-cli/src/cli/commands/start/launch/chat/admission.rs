@@ -2,6 +2,8 @@
 //! place opens, and a launch that waits has the daemon record the chat at
 //! once, which the queue's start then starts as the daemon's own launch of
 //! a chat does.
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use anyhow::{Context as _, Result, bail};
 
 use super::{Launch, Started};
@@ -119,14 +121,19 @@ impl Launch {
 /// daemon remove the recorded `chat`, when given, as it removes a chat its
 /// own launch could not start. The daemon keeps a chat whose agent
 /// started, and one the other side of its start removed is gone already.
+/// Only this process's first ending counts, since the start ends once.
 pub(in crate::cli::commands) async fn ending_failed<T>(
     ctx: &Context,
     chat: Option<&SpaceId>,
     started: Result<T>,
 ) -> Result<T> {
+    static ENDED: AtomicBool = AtomicBool::new(false);
     let Err(error) = &started else {
         return started;
     };
+    if ENDED.swap(true, Ordering::SeqCst) {
+        return started;
+    }
     let error = format!("{error:#}");
     match (crate::env::queue_entry(), chat) {
         // An agent that took the slot over ended the entry; nothing is left.

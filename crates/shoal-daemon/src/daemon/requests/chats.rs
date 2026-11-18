@@ -145,14 +145,12 @@ impl Scoped for ChatMethod {
                 manager.parent_below(caller, &mut start.parent).await?;
                 start.workspace.as_mut()
             }
-            // A scoped caller ends the start only of a chat below it, while
-            // the chat exists.
+            // A scoped caller ends the start only of a chat its scope
+            // reaches while the chat exists, its own too: the process that
+            // runs a chat's agent acts in the chat's scope, and a chat
+            // whose agent started stays.
             ChatMethod::FailChatStart { chat, .. } => {
                 if let Some(space) = manager.find_space(chat).await? {
-                    anyhow::ensure!(
-                        space.id != caller.space_id,
-                        "scoped processes start only chats below their own space"
-                    );
                     manager.ensure_reaches(caller, &space).await?;
                 }
                 None
