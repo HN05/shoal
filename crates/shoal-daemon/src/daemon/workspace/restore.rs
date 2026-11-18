@@ -163,7 +163,17 @@ impl Manager {
                 "{name} was at the top level, so restoring it is the user's"
             )));
         };
-        let refusal = match self.find_space(&parent.id).await? {
+        let here = self.find_space(&parent.id).await?;
+        if here.is_none() && self.runs_elsewhere(&parent.id).await {
+            return match self.reaches_elsewhere(caller, &parent.id).await? {
+                true => self.scoped_chat_refusal(removed, caller).await,
+                false => Ok(Some(format!(
+                    "{name} was below {}, outside this space's scope, so restoring it is the user's",
+                    parent.name
+                ))),
+            };
+        }
+        let refusal = match here {
             None => format!(
                 "{name} was below {}, which is gone, so restoring it is the user's",
                 parent.name

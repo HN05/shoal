@@ -39,7 +39,9 @@ impl Manager {
     /// Whether the agent of the coordinator that does the work of the space
     /// `id` runs, in any turn state, since its subagents may work on past
     /// its turn: one here, or above it on another machine with an agent,
-    /// whatever that machine's link, as the hub last listed it.
+    /// whatever that machine's link, as the hub lists it; while the hub
+    /// cannot be asked, a space with a parent elsewhere counts as worked
+    /// on, so cleanup never takes it unknowing.
     pub(super) async fn coordinator_runs(&self, id: &SpaceId) -> Result<bool> {
         let agents = self.tracked_agents().await;
         let owned = id.to_owned();
@@ -57,7 +59,7 @@ impl Manager {
             .await?;
         match working {
             Some(runs) => Ok(runs),
-            None => Ok(!self.deciders_elsewhere(id, false).await.is_empty()),
+            None => Ok(self.coordinator_elsewhere(id).await),
         }
     }
 }

@@ -16,7 +16,7 @@ use shoal_protocol::{
     space_names::SpaceName,
 };
 
-use crate::daemon::{log, workspace::Manager};
+use crate::daemon::{log, scope::Caller, workspace::Manager};
 
 impl Manager {
     /// The spaces above the space `id` from the first one this machine
@@ -74,6 +74,33 @@ impl Manager {
                 false
             }
         }
+    }
+
+    /// Whether a space above the space `id` on another machine has an
+    /// agent, which may work in it; true while the hub cannot be asked
+    /// whether one does, as when this machine is offline.
+    pub(crate) async fn coordinator_elsewhere(&self, id: &SpaceId) -> bool {
+        match self.chain_above(id).await {
+            Ok(Some((chain, directory))) => !with_agents(chain, &directory, false).is_empty(),
+            Ok(None) => false,
+            Err(error) => {
+                log!("hub: taking space {id} as worked on from elsewhere: {error:#}");
+                true
+            }
+        }
+    }
+
+    /// Whether `caller`'s scope reaches the space `id`, which another
+    /// machine runs: it is below the scope's space, or is it, as the hub
+    /// lists the tree.
+    pub(crate) async fn reaches_elsewhere(&self, caller: &Caller, id: &SpaceId) -> Result<bool> {
+        let Some(root) = self.reach_root(Some(caller)).await? else {
+            return Ok(true);
+        };
+        let Some((_, directory)) = self.directory_or_known().await? else {
+            return Ok(false);
+        };
+        Ok(chain_from(&directory, id.clone()).contains(&root))
     }
 
     /// The spaces with an agent above the space `id` on other machines,
