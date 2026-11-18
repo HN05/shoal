@@ -292,7 +292,7 @@ impl StartArgs {
             here: false,
             task: Vec::new(),
             prompt: None,
-            repository_setup: false,
+            setup: None,
             directory: None,
             env: None,
             setup_env: None,

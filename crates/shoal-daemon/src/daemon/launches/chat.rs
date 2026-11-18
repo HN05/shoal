@@ -3,7 +3,7 @@
 //! repository in `root_dir`.
 use anyhow::{Context as _, Result, ensure};
 use shoal_ids::repository_ids::RepositoryId;
-use shoal_protocol::launches::{IssueChoice, Launch, LaunchSource, Launched, SpaceChoice};
+use shoal_protocol::launches::{IssueChoice, Launch, LaunchSource, Launched, Setup, SpaceChoice};
 
 use super::shape::Shape;
 use crate::{
@@ -146,7 +146,7 @@ impl Manager {
 /// setup, which works on its setup branch.
 fn ensure_chat_takes(launch: &Launch) -> Result<()> {
     ensure!(
-        !launch.repository_setup,
+        launch.setup != Some(Setup::Repository),
         "a repository's setup starts in a workspace on its setup branch"
     );
     Ok(())

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use super::*;
 use crate::{
-    config::permissions::PermissionKey,
+    config::{modes::ModeName, permissions::PermissionKey},
     daemon::{
         approvals::{Target, Undecided},
         test_support::{chat, global_config, manager, repository},
@@ -232,4 +232,40 @@ async fn a_chats_own_scope_ends_its_failed_start_but_no_other() {
         format!("{refused:#}").contains("outside this space's scope"),
         "{refused:#}"
     );
+}
+
+/// A scoped caller that runs the global config's setup chat itself queues
+/// its agent only as its `admin` permission allows without a repository.
+#[tokio::test]
+async fn a_scoped_setup_chat_it_runs_itself_asks_the_admin_permission() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let starter = chat(&manager, "starter", "chat", Some(&repo), None).await;
+    let caller = Caller {
+        space_id: starter.id.clone(),
+        execution: None,
+        granted: None,
+        read_only: false,
+    };
+    let mut queued = ChatQueueRequest {
+        source: None,
+        repository: None,
+        name: "setup".into(),
+        agent: "claude".into(),
+        mode: ModeName::SETUP,
+        narrowing: Default::default(),
+        plan: "{}".into(),
+        env: BTreeMap::new(),
+        now: false,
+        priority: None,
+    };
+    let confined = manager.confine_chat_launch(&caller, &mut queued).await;
+    match confined.unwrap_err().downcast::<Undecided>() {
+        Ok(Undecided(request)) => assert_eq!(request.target, Target::Action(PermissionKey::Admin)),
+        Err(error) => panic!("expected an approval request: {error:#}"),
+    }
 }

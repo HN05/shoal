@@ -77,7 +77,7 @@ impl Manager {
         self.select_launch_spaces(&mut launch).await?;
         let shape = self.launch_shape(&launch, caller).await?;
         launches::ensure_fits(&launch, &[], shape.kind, Some(&shape.mode))?;
-        self.authorize_repository_setup(&launch, caller).await?;
+        self.authorize_setup(&launch, caller).await?;
         match shape.kind {
             SpaceKind::Chat => self.launch_in_chat(launch, shape, source, caller).await,
             SpaceKind::Workspace if launch.in_workspace.is_some() => {

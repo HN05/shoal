@@ -113,10 +113,10 @@ pub struct Launch {
     /// subject `shoal repo setup` gives its agent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt: Option<String>,
-    /// The setup of the repository the launch starts in, whose agent alone
-    /// starts in the setup mode.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub repository_setup: bool,
+    /// The setup the launch starts, whose agent alone starts in the setup
+    /// mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub setup: Option<Setup>,
     /// The directory the start is made in, whose checkout or worktree names
     /// the repository or workspace the start leaves out.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -134,6 +134,18 @@ pub struct Launch {
     /// anything.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unplaceable: Option<String>,
+}
+
+/// What a setup launch sets up, which decides the space its agent starts in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Setup {
+    /// The config of the repository the launch names, in a workspace on its
+    /// setup branch, as `shoal repo setup` starts it.
+    Repository,
+    /// The global config, in a chat without a repository, as `shoal config
+    /// setup` starts it.
+    Config,
 }
 
 /// The space a launch started its agent in, a workspace or a chat, and how

@@ -437,7 +437,8 @@ impl Manager {
     /// Confine the launch of a new chat's agent that `caller` queues: it
     /// starts in the caller's own repository, with permissions the caller
     /// holds, regardless of the limits as its `limits` permission allows,
-    /// and its chat is recorded at once.
+    /// as the global config's setup as its `admin` permission allows, and
+    /// its chat is recorded at once.
     pub(in crate::daemon) async fn confine_chat_launch(
         &self,
         caller: &Caller,
@@ -455,6 +456,9 @@ impl Manager {
         };
         let giver = Some(&caller.space_id);
         (self.ensure_caller_holds(giver, &request.narrowing, repository.as_ref())).await?;
+        if request.mode == crate::config::modes::ModeName::SETUP {
+            self.authorize_config_setup(caller).await?;
+        }
         if request.now {
             let start = format!("start the agent of new chat {} now", request.name);
             (self.authorize_beyond_limits(caller, start, repository)).await?;

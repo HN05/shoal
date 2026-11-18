@@ -1,7 +1,8 @@
-//! A repository's setup, as `shoal repo setup` launches it: the one launch
-//! whose agent starts in the setup mode, which administers the repository.
+//! Setups, as `shoal repo setup` and `shoal config setup` launch them: the
+//! launches whose agent starts in the setup mode, which administers a
+//! repository's config or the global config.
 use anyhow::{Context as _, Result};
-use shoal_protocol::launches::Launch;
+use shoal_protocol::launches::{Launch, Setup};
 
 use super::ManagerReads;
 use crate::{
@@ -11,17 +12,38 @@ use crate::{
 };
 
 impl Manager {
-    /// Let the scoped `caller` start the setup `launch` asks for in its
-    /// repository as its `admin` permission allows; any other launch, and
-    /// the user's, needs nothing here.
-    pub(super) async fn authorize_repository_setup(
+    /// Let the scoped `caller` start the setup `launch` asks for as its
+    /// `admin` permission allows, in the repository it sets up or without
+    /// one for the global config; any other launch, and the user's, needs
+    /// nothing here.
+    pub(super) async fn authorize_setup(
         &self,
         launch: &Launch,
         caller: Option<&Caller>,
     ) -> Result<()> {
-        let (true, Some(caller)) = (launch.repository_setup, caller) else {
+        let (Some(setup), Some(caller)) = (launch.setup, caller) else {
             return Ok(());
         };
+        match setup {
+            Setup::Repository => {
+                let action = self.repository_setup(launch, caller).await?;
+                self.authorize_action(Some(caller), action).await
+            }
+            Setup::Config => self.authorize_config_setup(caller).await,
+        }
+    }
+
+    /// Let the scoped `caller` start the global config's setup as its
+    /// `admin` permission allows without a repository, whether a launch
+    /// starts it or the caller queues the agent it runs itself.
+    pub(crate) async fn authorize_config_setup(&self, caller: &Caller) -> Result<()> {
+        let action = Action::new(PermissionKey::Admin, "shoal config setup");
+        self.authorize_action(Some(caller), action).await
+    }
+
+    /// The action of the repository setup `launch` asks for, in the
+    /// repository it names.
+    async fn repository_setup(&self, launch: &Launch, caller: &Caller) -> Result<Action> {
         let reads = ManagerReads::new(self, Some(caller));
         let repo = (launches::shape::launch_repository(&reads, launch).await?)
             .context("a repository's setup names its repository")?;
@@ -29,7 +51,7 @@ impl Manager {
             PermissionKey::Admin,
             format!("shoal repo setup {}", repo.id),
         );
-        (self.authorize_action(Some(caller), action.in_repository(repo.id))).await
+        Ok(action.in_repository(repo.id))
     }
 }
 

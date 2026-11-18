@@ -40,13 +40,18 @@ pub fn ensure_fits(
 }
 
 /// Refuse what a start in the existing workspace `--in` names takes in no
-/// role, before its picker opens: a mode no start takes, a repository,
-/// which is the workspace's, or what the worker mode, which always starts
-/// the workspace's own agent, takes only for a new space.
+/// role, before its picker opens: a setup, which starts in a space of its
+/// own, a mode no start takes, a repository, which is the workspace's, or
+/// what the worker mode, which always starts the workspace's own agent,
+/// takes only for a new space.
 pub fn ensure_in_fits(launch: &Launch) -> Result<()> {
     if launch.in_workspace.is_none() {
         return Ok(());
     }
+    ensure!(
+        launch.setup.is_none(),
+        "a setup starts in a space of its own, not in the workspace --in names"
+    );
     if let Some(mode) = &launch.mode {
         config::modes::ensure_startable(mode)?;
     }
@@ -146,11 +151,11 @@ pub fn decided_target(launch: &Launch) -> Result<Option<StartTarget>> {
         .transpose()
 }
 
-/// The mode without one named: setup for a repository's setup, chat for a
-/// start that asks for a chat, whose agent the worker mode would not tell
-/// it is one, else the worker.
+/// The mode without one named: setup for a setup, chat for a start that
+/// asks for a chat, whose agent the worker mode would not tell it is one,
+/// else the worker.
 pub fn default_mode(launch: &Launch) -> ModeName {
-    if launch.repository_setup {
+    if launch.setup.is_some() {
         return ModeName::SETUP;
     }
     match launch.chat {
@@ -160,14 +165,14 @@ pub fn default_mode(launch: &Launch) -> ModeName {
 }
 
 /// Refuse `mode` for `launch` where it cannot start in it: the setup mode
-/// outside a repository's setup, which starts in no other.
+/// outside a setup, which starts in no other.
 pub fn ensure_mode_fits(launch: &Launch, mode: &ModeName) -> Result<()> {
-    if !launch.repository_setup {
+    if launch.setup.is_none() {
         return config::modes::ensure_startable(mode);
     }
     ensure!(
         *mode == ModeName::SETUP,
-        "a repository's setup starts in mode {}",
+        "a setup starts in mode {}",
         ModeName::SETUP
     );
     Ok(())

@@ -1,5 +1,5 @@
 use super::*;
-use shoal_protocol::launches::SpaceChoice;
+use shoal_protocol::launches::{Setup, SpaceChoice};
 
 /// A launch with `target` as its positional argument, as `change` sets the rest.
 fn launch(target: Option<&str>, change: impl FnOnce(&mut Launch)) -> Launch {
@@ -139,8 +139,9 @@ fn a_start_in_a_workspace_refuses_what_no_role_takes_before_its_picker() {
     // The worker mode starts the workspace's own agent, so what only a new
     // space takes is refused before the picker too.
     ensure_in_fits(&current(|launch| launch.mode = Some(ModeName::DEFAULT))).unwrap();
-    let refused: [fn(&mut Launch); 5] = [
+    let refused: [fn(&mut Launch); 6] = [
         |launch| launch.mode = Some(ModeName::SETUP),
+        |launch| launch.setup = Some(Setup::Config),
         |launch| launch.target = Some("repo".parse().unwrap()),
         |launch| launch.repository = Some("repo".into()),
         |launch| {
@@ -322,11 +323,13 @@ fn a_numeric_positional_may_name_the_repository_whose_modes_apply() {
 }
 
 #[test]
-fn only_a_repository_setup_starts_in_the_setup_mode() {
-    let setup = launch(Some("repo"), |launch| launch.repository_setup = true);
-    assert_eq!(default_mode(&setup), ModeName::SETUP);
-    ensure_mode_fits(&setup, &ModeName::SETUP).unwrap();
-    ensure_mode_fits(&setup, &ModeName::DEFAULT).unwrap_err();
+fn only_a_setup_starts_in_the_setup_mode() {
+    for kind in [Setup::Repository, Setup::Config] {
+        let setup = launch(Some("repo"), |launch| launch.setup = Some(kind));
+        assert_eq!(default_mode(&setup), ModeName::SETUP);
+        ensure_mode_fits(&setup, &ModeName::SETUP).unwrap();
+        ensure_mode_fits(&setup, &ModeName::DEFAULT).unwrap_err();
+    }
     let start = launch(Some("repo"), |_| ());
     ensure_mode_fits(&start, &ModeName::SETUP).unwrap_err();
     ensure_mode_fits(&start, &ModeName::PLAN).unwrap();

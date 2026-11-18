@@ -7,7 +7,10 @@ use std::{
 };
 
 use anyhow::{Context as _, Result};
-use shoal_protocol::{launches::Launch, space_names::SpaceSelector};
+use shoal_protocol::{
+    launches::{Launch, Setup},
+    space_names::SpaceSelector,
+};
 
 use super::{repositories, workspaces};
 use crate::{
@@ -104,7 +107,7 @@ fn setup_launch(
     Ok(Launch {
         repository: Some(repo.id.to_string()),
         branch: Some(BRANCH.to_owned()),
-        repository_setup: true,
+        setup: Some(Setup::Repository),
         agent: Some(agent),
         model: options.model,
         prompt: Some(prompt),

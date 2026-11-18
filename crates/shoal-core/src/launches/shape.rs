@@ -3,7 +3,7 @@
 //! define, which the CLI's start and the daemon's launch decide alike.
 use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
-use shoal_protocol::launches::{Launch, SpaceChoice};
+use shoal_protocol::launches::{Launch, Setup, SpaceChoice};
 use shoal_protocol::space_names::SpaceSelector;
 
 use super::{LaunchReads, linked_items, positional_repository, workspace::owning_workspace};
@@ -15,21 +15,24 @@ use crate::{
 
 /// The kind of space `launch` creates in `mode`, which must exist unless
 /// the launch asks for a chat, and whether `mode` starts it in a
-/// repository. The default mode always exists and always starts in a
-/// workspace, as a repository's setup does, so neither reads settings. In
-/// the existing workspace the launch
-/// names, the mode's kind decides whether the agent is the workspace's
-/// worker or a chat in its worktree.
+/// repository. A setup starts where [`setup_kind`] says, and the default
+/// mode always exists and always starts in a workspace, so neither reads
+/// settings. In the existing workspace the launch names, the mode's kind
+/// decides whether the agent is the workspace's worker or a chat in its
+/// worktree.
 pub async fn launch_kind(
     reads: &impl LaunchReads,
     launch: &Launch,
     mode: &ModeName,
 ) -> Result<(SpaceKind, bool)> {
+    if let Some(setup) = launch.setup {
+        return Ok(setup_kind(setup));
+    }
     if let Some(workspace) = launch_workspace(launch) {
         let kind = kind_in_workspace(reads, launch, workspace, mode).await?;
         return Ok((kind, true));
     }
-    if (*mode == ModeName::DEFAULT && !launch.chat) || launch.repository_setup {
+    if *mode == ModeName::DEFAULT && !launch.chat {
         return Ok((SpaceKind::Workspace, true));
     }
     let settings = launch_settings(reads, launch).await?;
@@ -39,6 +42,16 @@ pub async fn launch_kind(
     }
     let found = found?;
     Ok((found.kind, found.repository))
+}
+
+/// The kind of space `setup` starts in, and whether it has a repository: a
+/// repository's setup works in a workspace on its setup branch, and the
+/// global config's in a chat without a repository.
+fn setup_kind(setup: Setup) -> (SpaceKind, bool) {
+    match setup {
+        Setup::Repository => (SpaceKind::Workspace, true),
+        Setup::Config => (SpaceKind::Chat, false),
+    }
 }
 
 /// The role of the agent `launch` starts in `mode` in `workspace`: its
