@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use shoal_ids::execution_ids::ExecutionId;
 
 use super::Lifetime;
 use crate::space_names::SpaceSelector;
@@ -9,6 +8,10 @@ use crate::{executions::ExecutionKind, processes::Identity};
 /// or a workspace's or a chat's agent.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "a request, sent and read once, as large as its operation"
+)]
 pub enum ExecutionMethod {
     /// Long-lived: the connection stays open for the execution's lifetime.
     /// `agent` names the agent the command runs, whose exit the user is told about.
@@ -64,23 +67,6 @@ pub enum ExecutionMethod {
     CheckUnmerge,
     /// Connected agents, and executions whose wrapper is gone, which may run one.
     ListAgents,
-    /// Stop the agent of `execution` and start its session again in a new
-    /// wrapper, or in its own terminal when `in_place`, answering once the
-    /// restarted agent runs with the place of the wrapper that runs it. With `join`, only wait for that restart the run
-    /// selected, which may have ended already, as it was asked. `run` names
-    /// the `shoal restart` run that asks. `change` changes the permissions the
-    /// agent was given, which only a new wrapper starts it under.
-    RestartAgent {
-        execution: ExecutionId,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        join: Option<crate::model::PendingRestart>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        run: Option<String>,
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        in_place: bool,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        change: Option<crate::config::permissions::PermissionChange>,
-    },
     /// `signal` ends the session of the caller's execution, whose wrapper
     /// stops its command once the daemon answers, after the daemon ended
     /// what the command runs elsewhere, such as a CI job's run on its forge.
@@ -109,8 +95,6 @@ impl ExecutionMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
             Self::Execute { .. } => Lifetime::Open,
-            // A restart waits for requests of the wrapper it restores.
-            Self::RestartAgent { .. } => Lifetime::Open,
             Self::CheckMerge
             | Self::CheckUnmerge
             | Self::ListAgents

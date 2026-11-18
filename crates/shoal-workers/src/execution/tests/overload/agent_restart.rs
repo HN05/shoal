@@ -29,7 +29,7 @@ async fn restart_in_place_restores_the_agent_in_its_wrapper_without_waiting_for_
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
     let execution = agent_execution(&manager, &workspace).await;
-    bounded(manager.restart_agent(&execution, None, true, None, None))
+    bounded(manager.restart_agent(&execution, true, None))
         .await
         .unwrap();
     // The same wrapper ran the restore command, which exits at once.
@@ -50,7 +50,7 @@ async fn restart_in_place_restores_the_agent_under_the_permissions_given() {
     wait_started(&manager, &workspace).await;
     let execution = agent_execution(&manager, &workspace).await;
     let change = crate::config::permissions::PermissionChange::assigned("push=propose").unwrap();
-    let restart = manager.restart_agent(&execution, None, true, None, Some(change.clone()));
+    let restart = manager.restart_agent(&execution, true, Some(change.clone()));
     bounded(restart).await.unwrap();
     assert_eq!(bounded(launched).await.unwrap().unwrap(), 0);
     assert!(workspace.path.join("restored").is_file());
@@ -68,7 +68,7 @@ async fn a_restart_in_place_that_cannot_start_the_agent_leaves_it_for_shoal_resu
     wait_started(&manager, &workspace).await;
     let execution = agent_execution(&manager, &workspace).await;
     fs::remove_file(workspace.path.join("resume.sh")).unwrap();
-    let restarted = bounded(manager.restart_agent(&execution, None, true, None, None)).await;
+    let restarted = bounded(manager.restart_agent(&execution, true, None)).await;
     assert!(restarted.is_err());
     bounded(launched).await.unwrap().unwrap();
     assert!(shoal_core::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
@@ -94,7 +94,7 @@ async fn a_restart_resumes_only_in_a_ready_recorded_workspace() {
         })
         .await
         .unwrap();
-    let restarted = bounded(manager.restart_agent(&execution, None, false, None, None)).await;
+    let restarted = bounded(manager.restart_agent(&execution, false, None)).await;
     assert!(restarted.is_err());
     bounded(launched).await.unwrap().unwrap();
     assert!(!workspace.path.join("restored").exists());
@@ -157,11 +157,7 @@ async fn restart_starts_the_agent_in_a_new_wrapper_in_the_slot_it_kept() {
     fs::remove_file(workspace.path.join("resume.sh")).unwrap();
     let restarted = tokio::spawn({
         let (manager, execution) = (manager.clone(), execution.clone());
-        async move {
-            manager
-                .restart_agent(&execution, None, false, None, None)
-                .await
-        }
+        async move { manager.restart_agent(&execution, false, None).await }
     });
     // The old wrapper finishes with the agent's record. Dispatch, which
     // ends restarts whose start left the queue, waits while the restore is
@@ -238,11 +234,7 @@ async fn a_restart_whose_new_wrapper_fails_to_start_leaves_the_agent_for_shoal_r
     let execution = agent_execution(&manager, &workspace).await;
     let restarted = tokio::spawn({
         let (manager, execution) = (manager.clone(), execution.clone());
-        async move {
-            manager
-                .restart_agent(&execution, None, false, None, None)
-                .await
-        }
+        async move { manager.restart_agent(&execution, false, None).await }
     });
     bounded(launched).await.unwrap().unwrap();
     let restore = starting_restore(&manager, execution.as_str()).await;
@@ -260,8 +252,9 @@ async fn a_restart_whose_new_wrapper_fails_to_start_leaves_the_agent_for_shoal_r
     serving.abort();
 }
 
-/// A run that selects the agent while no wrapper runs it, or once the new
-/// wrapper does, finds it and joins its restart by the execution it ran as.
+/// A request for the agent while no wrapper runs it finds it by the
+/// execution it ran as and joins its restart, and the agent the new wrapper
+/// runs is listed as having run as it.
 #[tokio::test]
 async fn a_restart_in_a_new_wrapper_is_joined_by_the_execution_the_agent_ran_as() {
     let (_root, manager, workspace, serving) = fixture().await;
@@ -270,11 +263,7 @@ async fn a_restart_in_a_new_wrapper_is_joined_by_the_execution_the_agent_ran_as(
     let execution = agent_execution(&manager, &workspace).await;
     let restarted = tokio::spawn({
         let (manager, execution) = (manager.clone(), execution.clone());
-        async move {
-            manager
-                .restart_agent(&execution, Some("first".into()), false, None, None)
-                .await
-        }
+        async move { manager.restart_agent(&execution, false, None).await }
     });
     bounded(launched).await.unwrap().unwrap();
     let restore = starting_restore(&manager, execution.as_str()).await;
@@ -283,21 +272,9 @@ async fn a_restart_in_a_new_wrapper_is_joined_by_the_execution_the_agent_ran_as(
         panic!("expected the restarting agent: {agents:?}");
     };
     assert_eq!(agent.execution, execution);
-    assert_eq!(
-        agent
-            .restart
-            .as_ref()
-            .and_then(|restart| restart.run.as_deref()),
-        Some("first")
-    );
     let joined = tokio::spawn({
         let (manager, execution) = (manager.clone(), execution.clone());
-        async move {
-            let first = Some("first".into());
-            manager
-                .join_restart(&execution, first, Some("second".into()))
-                .await
-        }
+        async move { manager.restart_agent(&execution, false, None).await }
     });
     let mut renewed = child_command(
         &manager,
@@ -313,12 +290,6 @@ async fn a_restart_in_a_new_wrapper_is_joined_by_the_execution_the_agent_ran_as(
         panic!("expected the restarted agent: {agents:?}");
     };
     assert_eq!(agent.restarted_from, std::slice::from_ref(&execution));
-    assert_eq!(agent.restarted_by, ["first", "second"]);
-    assert_eq!(agent.restart, None);
-    let first = Some("first".into());
-    bounded(manager.join_restart(&execution, first, Some("third".into())))
-        .await
-        .unwrap();
     bounded(manager.stop_space(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
         .await
         .unwrap();
@@ -344,11 +315,7 @@ async fn a_restart_in_a_new_wrapper_keeps_a_done_workspaces_completion() {
         .unwrap();
     let restarted = tokio::spawn({
         let (manager, execution) = (manager.clone(), execution.clone());
-        async move {
-            manager
-                .restart_agent(&execution, None, false, None, None)
-                .await
-        }
+        async move { manager.restart_agent(&execution, false, None).await }
     });
     bounded(launched).await.unwrap().unwrap();
     let restore = starting_restore(&manager, execution.as_str()).await;

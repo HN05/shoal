@@ -9,10 +9,8 @@ use crate::connection::{Daemon, request};
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
-    config::permissions::PermissionChange,
-    model::{AgentSession, AgentStatus, PendingRestart, RunningAgent},
+    model::{AgentRestart, AgentSession, AgentStatus, RestartOutcome, RunningAgent},
     protocol::{AgentMethod, ExecutionMethod, SubagentChange, TurnEnd, WakeEnd, WokenTurn},
-    sessions::Origin,
     state::{AgentState, TurnFailure},
 };
 
@@ -119,30 +117,14 @@ pub async fn all(daemon: &impl Daemon) -> Result<Vec<RunningAgent>> {
     request(daemon, ExecutionMethod::ListAgents).await
 }
 
-/// Restart the agent of `execution` in a new wrapper, or `in_place`, as
-/// part of the restart `run`, or join the restart `join` already pending,
-/// making `change` to the permissions it was given. Returns the
-/// place of the wrapper that runs the agent again, when that runs in a
-/// terminal host.
+/// Restart the agent of `space` as `restart` says, answering with what the
+/// daemon did: restarted it, took the restart for later or skipped it.
 pub async fn restart(
     daemon: &impl Daemon,
-    execution: ExecutionId,
-    join: Option<PendingRestart>,
-    run: Option<String>,
-    in_place: bool,
-    change: Option<PermissionChange>,
-) -> Result<Option<Origin>> {
-    request(
-        daemon,
-        ExecutionMethod::RestartAgent {
-            execution,
-            join,
-            run,
-            in_place,
-            change,
-        },
-    )
-    .await
+    space: SpaceSelector,
+    restart: AgentRestart,
+) -> Result<RestartOutcome> {
+    request(daemon, AgentMethod::RestartAgent { space, restart }).await
 }
 
 /// The agents connected in `space`, a workspace or a running chat.

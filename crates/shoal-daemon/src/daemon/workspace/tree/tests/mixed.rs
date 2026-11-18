@@ -556,9 +556,6 @@ async fn a_scoped_process_restarts_only_the_chats_below_its_space() {
         .await
         .unwrap();
     let (root, chat, worker, _process) = mixed_tree(&manager, &repo.id).await;
-    let execution = manager.workspace_executions(&chat.id).await.unwrap()[0]
-        .id
-        .clone();
     for (caller, allowed) in [(&root.id, true), (&chat.id, false), (&worker.id, false)] {
         let token = shoal_protocol::scope_tokens::ScopeToken::from(caller.as_str());
         let space_id = caller.clone();
@@ -569,12 +566,9 @@ async fn a_scoped_process_restarts_only_the_chats_below_its_space() {
             read_only: false,
         };
         manager.executions.issue_scope(token.clone(), scope).await;
-        let mut restart = crate::protocol::ExecutionMethod::RestartAgent {
-            execution: execution.clone(),
-            join: None,
-            run: None,
-            in_place: false,
-            change: None,
+        let mut restart = crate::protocol::AgentMethod::RestartAgent {
+            space: shoal_protocol::space_names::SpaceSelector::id(&chat.id),
+            restart: Default::default(),
         };
         let authorized = crate::daemon::scope::authorize(&manager, Some(&token), &mut restart);
         assert_eq!(authorized.await.is_ok(), allowed, "{caller}");

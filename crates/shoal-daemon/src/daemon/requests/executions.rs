@@ -76,25 +76,6 @@ pub(super) async fn handle(
             let agents = manager.running_agents().await?;
             Body::RunningAgents(manager.visible_agents(caller, agents).await?)
         }
-        ExecutionMethod::RestartAgent {
-            execution,
-            join,
-            run,
-            in_place,
-            change,
-        } => Body::RestartedPlace(match join {
-            Some(joined) => manager.join_restart(&execution, joined.run, run).await?,
-            None => {
-                // The user's restart is their interaction with the agent.
-                if caller.is_none() {
-                    manager.record_agent_interaction(&execution).await;
-                }
-                let giver = caller.map(|caller| &caller.space_id);
-                manager
-                    .restart_agent(&execution, run, in_place, giver, change)
-                    .await?
-            }
-        }),
         ExecutionMethod::SessionSignalled { signal } => {
             manager.cancel_job_for_signal(caller, signal).await?;
             Body::Ok
@@ -105,17 +86,13 @@ pub(super) async fn handle(
 impl Scoped for ExecutionMethod {
     async fn scope(
         &mut self,
-        manager: &Manager,
+        _manager: &Manager,
         caller: &Caller,
     ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             // The handler narrows the list to the agents below the caller's
-            // space, the ones it may restart.
+            // space.
             ExecutionMethod::ListAgents => None,
-            ExecutionMethod::RestartAgent { execution, .. } => {
-                manager.ensure_agent_below(caller, execution).await?;
-                None
-            }
             ExecutionMethod::CheckMerge => {
                 require_kind(
                     Some(caller),

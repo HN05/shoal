@@ -176,12 +176,9 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
 #[test]
 fn a_pending_restart_leaves_request_capacity_to_the_wrappers_it_restores() {
     let capacity = Capacity::new(1, 1);
-    let restart = crate::protocol::ExecutionMethod::RestartAgent {
-        execution: "agent".into(),
-        join: None,
-        run: None,
-        in_place: false,
-        change: None,
+    let restart = crate::protocol::AgentMethod::RestartAgent {
+        space: shoal_protocol::space_names::SpaceSelector::id(&"agent".into()),
+        restart: Default::default(),
     };
     let _restart = capacity.admit(&restart.into()).unwrap();
     // The restored wrapper's own requests still find a slot.

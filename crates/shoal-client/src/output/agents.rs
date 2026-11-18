@@ -80,18 +80,19 @@ pub struct Continued {
     pub failed: Vec<Failure>,
 }
 
-/// The agents a restart restarted, and those it left out.
+/// The agents a restart restarted, those whose restart the daemon took for
+/// later, and those it left out.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Restarted {
     pub restarted: Vec<RestartedAgent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pending: Vec<PendingAgent>,
     pub failed: Vec<Failure>,
     pub skipped: Vec<Skipped>,
-    /// Whether the run was interrupted before every restart ended.
+    /// Whether the command was interrupted before the daemon answered for
+    /// every agent, which it restarts all the same.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub interrupted: bool,
-    /// The spaces whose restart goes on without an interrupted run.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub pending: Vec<SpaceName>,
 }
 
 /// An agent a restart restarted, by the name of its space, a workspace or a
@@ -103,6 +104,15 @@ pub struct RestartedAgent {
     /// Where it runs now, when its wrapper runs in a terminal host.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub place: Option<shoal_protocol::sessions::Origin>,
+}
+
+/// An agent whose restart the daemon took for later, by its space's name,
+/// with what the restart waits for.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingAgent {
+    pub space: SpaceName,
+    pub agent: shoal_protocol::agent::Agent,
+    pub waits: shoal_protocol::model::RestartWait,
 }
 
 /// An agent a restart leaves out, by its space's name, and why.

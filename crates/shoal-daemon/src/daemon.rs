@@ -56,6 +56,7 @@ mod releases;
 mod requests;
 pub mod resources;
 mod restart_recovery;
+mod restarts;
 pub(crate) mod reviews;
 pub(crate) mod runner;
 pub mod scope;

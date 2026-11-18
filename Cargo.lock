@@ -2436,7 +2436,6 @@ name = "shoal-client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "futures-util",
  "serde",
  "serde_json",
  "shoal-core",

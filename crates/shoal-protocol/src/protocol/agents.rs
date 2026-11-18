@@ -155,6 +155,12 @@ pub enum AgentMethod {
         space: SpaceSelector,
         execution: ExecutionId,
     },
+    /// Restart the agent of `space` as `restart` says, answering once the
+    /// daemon restarted it, recorded the restart for later or skipped it.
+    RestartAgent {
+        space: SpaceSelector,
+        restart: crate::model::AgentRestart,
+    },
     /// The session of the space's agent that a fork starts from: the
     /// caller's own agent there, else its only one.
     AgentSession {
@@ -276,6 +282,8 @@ impl AgentMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
             Self::AwaitAgentWake { .. } | Self::WaitAgentUpdates { .. } => Lifetime::Resumed,
+            // A restart waits for requests of the wrapper it restores.
+            Self::RestartAgent { .. } => Lifetime::Open,
             _ => Lifetime::Reply,
         }
     }

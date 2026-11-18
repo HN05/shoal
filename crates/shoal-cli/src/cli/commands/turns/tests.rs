@@ -12,8 +12,6 @@ fn agent(origin: Option<Origin>) -> RunningAgent {
         state: Some(AgentState::Working),
         interrupted: false,
         origin,
-        restarted_by: Vec::new(),
-        restart: None,
         stopped: None,
         restarted_from: Vec::new(),
     }

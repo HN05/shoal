@@ -124,13 +124,13 @@ const REQUESTS: &[&str] = &[
     r#"{"await_agent_wake":{"workspace":"fix","due":true,"hooked":"e1"}}"#,
     r#"{"space_agents":{"space":"fix"}}"#,
     r#"{"interrupt_turn":{"space":"fix","execution":"e1"}}"#,
+    r#"{"restart_agent":{"space":"3","restart":{"wait":true,"change":{"set":{"push":"direct"}}}}}"#,
     // Executions.
     r#"{"execute":{"space":"fix","wrapper":{"pid":2,"birth":"b"},"kind":"command","agent":null,"recover":false,"reattach":false,"queue_entry":null}}"#,
     r#"{"reattach":{"execution":"e1","wrapper":{"pid":2,"birth":"b"},"child":null,"group_id":2,"scope_token":"t1","agent":null,"recover":false,"running_ms":0}}"#,
     r#""check_merge""#,
     r#""check_unmerge""#,
     r#""list_agents""#,
-    r#"{"restart_agent":{"execution":"e1"}}"#,
     r#"{"session_signalled":{"signal":"terminate"}}"#,
     // Chats.
     r#"{"launch_chat":{"start":{"repository":"app","name":"app-chat","agent":"claude","links":{"issues":[{"kind":"issue","url":"https://forge.example/team/app/issues/4","title":"Fix"}],"prs":[],"opened":[],"related":[]}},"origin":{"host":"tmux","place":"%3"},"queue_entry":"q1"}}"#,

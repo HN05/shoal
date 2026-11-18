@@ -60,10 +60,7 @@ async fn a_protection_stop_is_recorded_until_the_agent_runs_again() {
     assert_eq!(stop.reason, "memory pressure");
     assert_eq!(manager.agent_overload(id).await, Some(stop));
     // The recorded stop refuses another.
-    let restart = manager
-        .restart_agent(id, None, true, None, None)
-        .await
-        .unwrap_err();
+    let restart = manager.restart_agent(id, true, None).await.unwrap_err();
     assert!(restart.to_string().contains("is stopped"), "{restart:#}");
 
     assert!(manager.resume_agent_execution(id, None).await.unwrap());
@@ -161,7 +158,7 @@ async fn a_stop_recorded_beside_a_restart_leaves_the_restart_its_stop() {
     // record before its delivery finds the restart.
     (manager.executions)
         .with_agent(id, |agent| {
-            agent.restarts.current = Some(super::restart::Restart::unanswered(None, false));
+            agent.restarts.current = Some(super::restart::Restart::new(false, None));
         })
         .await;
     let protection = Protection::load("memory pressure");

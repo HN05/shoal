@@ -123,8 +123,6 @@ pub(super) fn refusal(error: &anyhow::Error) -> Body {
 fn error_code(error: &anyhow::Error) -> ErrorCode {
     if error.downcast_ref::<workspace::UnprovenStop>().is_some() {
         ErrorCode::UnprovenStop
-    } else if error.downcast_ref::<workspace::RestartWaits>().is_some() {
-        ErrorCode::RestartWaits
     } else if let Some(exiting) = error.downcast_ref::<workspace::Exiting>() {
         exiting.code()
     } else if error.downcast_ref::<super::scope::ScopeRefusal>().is_some() {

@@ -55,13 +55,6 @@ pub struct RunningAgent {
     /// Where it runs in a terminal host, when its wrapper runs in one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<crate::sessions::Origin>,
-    /// The `shoal restart` runs a restart started it again for, including
-    /// runs that joined another's restart, while this daemon runs.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub restarted_by: Vec<String>,
-    /// The `shoal restart` of it in progress.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub restart: Option<PendingRestart>,
     /// Why Shoal stopped it, while its wrapper waits to restore it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stopped: Option<Protection>,
@@ -77,17 +70,6 @@ impl RunningAgent {
     pub fn ran_as(&self, execution: &ExecutionId) -> bool {
         self.execution == *execution || self.restarted_from.contains(execution)
     }
-}
-
-/// A `shoal restart` that has not started its agent again yet.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PendingRestart {
-    /// The run that asked for it, unless a daemon before this one took it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub run: Option<String>,
-    /// The other runs whose requests joined it.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub joined: Vec<String>,
 }
 
 /// The session a workspace's agent reported last, which a new agent can

@@ -3,9 +3,8 @@
 //! slot: in a new wrapper, which the agent queue starts once the old one
 //! finished, or in place, where the old wrapper starts it.
 use crate::daemon::workspace::agents::ProtectionExt;
-use anyhow::{Context, Result, anyhow, ensure};
+use anyhow::{Context, Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
-use shoal_ids::space_ids::SpaceId;
 use tokio::sync::oneshot;
 
 use super::{Agent, Manager, stops};
@@ -60,10 +59,6 @@ impl Manager {
                             state: agent.and(reported.get(&execution.id).map(|turn| turn.0)),
                             interrupted: agent.is_some()
                                 && reported.get(&execution.id).is_some_and(|turn| turn.1),
-                            restarted_by: agent
-                                .map(|agent| agent.restarts.restarted_by())
-                                .unwrap_or_default(),
-                            restart: agent.and_then(|agent| agent.restarts.pending()),
                             stopped: agent.and(stops.get(&execution.id).cloned()),
                             restarted_from: renewal::earlier(renewals, &execution.id),
                             execution: execution.id,
@@ -80,77 +75,16 @@ impl Manager {
 
     /// Restart the agent of `execution`, `in_place` or in a new wrapper,
     /// returning once it runs again, with the place of the wrapper that runs
-    /// it when that runs in a terminal host. `run` names the `shoal restart`
-    /// run that asks for it, which the process of the space `giver` runs
-    /// when given. The agent starts again with `change` made to the
-    /// permissions it was given, which that process must hold.
+    /// it when that runs in a terminal host. The agent starts again with
+    /// `change` made to the permissions it was given.
     pub async fn restart_agent(
         &self,
         execution: &ExecutionId,
-        run: Option<String>,
         in_place: bool,
-        giver: Option<&SpaceId>,
         change: Option<PermissionChange>,
     ) -> Result<Option<Origin>> {
-        if let Some(change) = &change {
-            self.ensure_restart_held(execution, change, giver).await?;
-        }
-        let answer = (self.request_restart(execution, run, in_place, change)).await?;
+        let answer = (self.request_restart(execution, in_place, change)).await?;
         restarted(answer).await
-    }
-
-    /// Refuse `change` from the scoped process of the space `giver` where it
-    /// gives the agent of `execution` what that process does not hold, as
-    /// [`Manager::ensure_change_held`] refuses it.
-    async fn ensure_restart_held(
-        &self,
-        execution: &ExecutionId,
-        change: &PermissionChange,
-        giver: Option<&SpaceId>,
-    ) -> Result<()> {
-        if giver.is_none() {
-            return Ok(());
-        }
-        let agents = self.running_agents().await?;
-        let agent = (agents.iter().find(|agent| agent.ran_as(execution)))
-            .with_context(|| format!("no connected agent runs execution {execution}"))?;
-        let workspace = self.workspace_by_id(&agent.space_id).await?;
-        let repository = workspace.repository().clone();
-        let space = crate::model::Space::from(workspace);
-        (self.ensure_change_held(giver, &space, change, Some(&repository))).await
-    }
-
-    /// Wait for the restart of `execution` that `of_run` asked for as
-    /// [`Self::restart_agent`] does, or answer as it did if it ended, even
-    /// when another run restarts the agent now; it restarts the agent for
-    /// `run` too. A restart whose run a daemon before this one forgot
-    /// matches whichever is in progress.
-    pub async fn join_restart(
-        &self,
-        execution: &ExecutionId,
-        of_run: Option<String>,
-        run: Option<String>,
-    ) -> Result<Option<Origin>> {
-        let joined = self
-            .executions
-            .with_restarts(|agents, renewals| {
-                let id = renewal::current(renewals, execution);
-                let (name, restarts) = match renewals.get_mut(&id) {
-                    Some(Renewal::Starting(handover)) => (&handover.name, &mut handover.restarts),
-                    _ => {
-                        let agent = agents.get_mut(&id).with_context(|| {
-                            format!("no connected agent runs execution {execution}")
-                        })?;
-                        (&agent.name, &mut agent.restarts)
-                    }
-                };
-                anyhow::Ok(restarts.join(name.name(), &of_run, run))
-            })
-            .await?;
-        match joined {
-            Ok(answer) => restarted(answer).await,
-            Err(ended) => ended.map_err(|reason| anyhow!(reason)),
-        }
     }
 
     /// Ask the agent's wrapper to stop it for a restart, or join the
@@ -159,7 +93,6 @@ impl Manager {
     async fn request_restart(
         &self,
         id: &ExecutionId,
-        run: Option<String>,
         in_place: bool,
         change: Option<PermissionChange>,
     ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
@@ -172,7 +105,7 @@ impl Manager {
             .with_restarts(|agents, renewals| {
                 let id = renewal::current(renewals, id);
                 if let Some(Renewal::Starting(handover)) = renewals.get_mut(&id) {
-                    return handover.answer_changing(run, change.as_ref());
+                    return handover.answer_changing(change.as_ref());
                 }
                 // A stop of an agent that runs again meanwhile shows only on
                 // its stop channel, and its turn is unknown.
@@ -181,7 +114,7 @@ impl Manager {
                     false => (None, None),
                 };
                 let agent = agents.get_mut(&id).map(|agent| (agent, stopped, turn));
-                self.stop_for_restart(&id, agent, run, in_place, change)
+                self.stop_for_restart(&id, agent, in_place, change)
             })
             .await
     }
@@ -195,22 +128,14 @@ impl Manager {
         &self,
         id: &ExecutionId,
         agent: Option<(&mut Agent, Option<Protection>, Option<AgentState>)>,
-        run: Option<String>,
         in_place: bool,
         change: Option<PermissionChange>,
     ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
         let (agent, stopped, turn) =
             agent.with_context(|| format!("no connected agent runs execution {id}"))?;
-        // Another command continuing the same run restarted it already,
-        // even if another run restarts it since.
-        if let Some(place) = agent.restarts.restarted_for(&run) {
-            let (done, answer) = oneshot::channel();
-            let _ = done.send(Ok(place));
-            return Ok(answer);
-        }
         if let Some(restart) = &mut agent.restarts.current {
             restart.ensure_changes(agent.name.name(), change.as_ref())?;
-            return Ok(restart.answer(run));
+            return Ok(restart.answer());
         }
         ensure!(
             agent.recover,
@@ -229,8 +154,8 @@ impl Manager {
             turn,
         )
         .context("save the agent's recovery record")?;
-        let mut restart = Restart::unanswered(run, in_place).changing(change);
-        let answer = restart.answer(None);
+        let mut restart = Restart::new(in_place, change);
+        let answer = restart.answer();
         agent.restarts.current = Some(restart);
         if agent.stop.send(true).is_err() {
             agent.restarts.current = None;
@@ -388,24 +313,18 @@ impl Manager {
     /// requests are answered with that now, and later ones at once, while the
     /// restart continues.
     pub(crate) async fn restart_waits(&self, id: &ExecutionId, issue: &str) {
-        let answered = self
+        let answers = self
             .executions
             .with_agent(id, |agent| {
                 let restart = agent.restarts.current.as_mut()?;
-                let waits = format!(
-                    "{} restarts once its remaining processes exit: {issue}; shoal stop {} cancels the restart",
-                    agent.name, agent.workspace_id
-                );
-                restart.waits = Some(waits.clone());
-                Some((std::mem::take(&mut restart.answers), waits))
+                restart.waits = Some(issue.to_owned());
+                Some(std::mem::take(&mut restart.answers))
             })
             .await
             .flatten();
-        if let Some((answers, waits)) = answered {
-            for done in answers {
-                // The request may have gone with its client.
-                let _ = done.send(Err(RestartWaits(waits.clone()).into()));
-            }
+        for done in answers.into_iter().flatten() {
+            // The request may have gone with its client.
+            let _ = done.send(Err(RestartWaits(issue.to_owned()).into()));
         }
     }
 
@@ -423,7 +342,8 @@ impl Manager {
 }
 
 /// A restart that continues after its request was answered, once the
-/// stopped agent's remaining processes exit.
+/// stopped agent's remaining processes exit, which the issue it holds keeps
+/// from being proven.
 #[derive(Debug)]
 pub struct RestartWaits(pub String);
 

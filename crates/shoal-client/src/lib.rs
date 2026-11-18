@@ -32,7 +32,6 @@ pub mod queue;
 pub mod recovery;
 pub mod removal;
 pub mod repositories;
-pub mod restarts;
 pub mod reviews;
 pub mod saved;
 pub mod sleep;

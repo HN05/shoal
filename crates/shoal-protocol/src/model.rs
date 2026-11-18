@@ -14,12 +14,13 @@ mod queue;
 mod ready;
 mod removal;
 mod repositories;
+mod restarts;
 mod spaces;
 mod status;
 mod sync;
 mod workspaces;
 
-pub use agents::{AgentSession, AgentStatus, Asleep, PendingRestart, Protection, RunningAgent};
+pub use agents::{AgentSession, AgentStatus, Asleep, Protection, RunningAgent};
 pub use chats::{Chat, ChatHome, ChatPart, chat_mode};
 pub use checkpoints::{Checkpoint, CheckpointCause, RestoredCheckpoint};
 pub use cleanup::CleanupReason;
@@ -49,6 +50,7 @@ pub use removal::{
 pub use repositories::{
     LocalConfigEdit, MovedRepository, Repository, RepositoryMoves, RepositoryRemoval,
 };
+pub use restarts::{AgentRestart, RestartOutcome, RestartWait};
 pub use spaces::{
     ByKind, Part, RefPart, RenamedSpace, Space, SpaceKind, SpacePart, SpaceRef, SpaceTarget,
     Spaces, Workdir,

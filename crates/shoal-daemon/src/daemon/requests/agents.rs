@@ -181,6 +181,9 @@ pub(super) async fn handle(
             manager.record_user_interaction(caller, &space).await;
             Body::Ok
         }
+        AgentMethod::RestartAgent { space, restart } => {
+            Body::Restart(manager.restart_space(caller, &space, restart).await?)
+        }
         AgentMethod::AgentSession { space } => Body::AgentSession(
             manager
                 .agent_session(&space, caller.and_then(Caller::execution_id))
@@ -314,6 +317,15 @@ impl Scoped for AgentMethod {
                         caller,
                         space,
                         "scoped processes interrupt and continue only the agents of the spaces below theirs",
+                    )
+                    .await?,
+            ),
+            AgentMethod::RestartAgent { space, .. } => Some(
+                manager
+                    .workspace_below(
+                        caller,
+                        space,
+                        "scoped processes restart only the agents of the spaces below their own",
                     )
                     .await?,
             ),

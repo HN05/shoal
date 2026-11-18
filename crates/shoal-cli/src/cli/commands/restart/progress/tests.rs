@@ -1,56 +1,41 @@
 use super::*;
-use crate::client::restarts::Progress as _;
 use crate::{
     cli::context::Context,
-    model::{Space, Workspace},
+    model::Workspace,
     paths::Paths,
     sessions::{HostName, Origin},
     state::WorkspaceState,
 };
 
-fn restart(name: &str) -> Restart {
-    let workspace = Workspace::new_record(
+fn space(name: &str) -> Space {
+    Space::from(Workspace::new_record(
         "repository".into(),
         name.into(),
         name.into(),
         crate::model::Head::Branch(name.into()),
         WorkspaceState::Ready,
-    );
-    Restart {
-        agent: RunningAgent {
-            execution: format!("{name}-execution").into(),
-            space_id: workspace.id.clone(),
-            agent: Some("claude".into()),
-            restorable: true,
-            state: None,
-            interrupted: false,
-            origin: None,
-            restarted_by: Vec::new(),
-            restart: None,
-            stopped: None,
-            restarted_from: Vec::new(),
-        },
-        space: Space::from(workspace),
-        joins: None,
-    }
+    ))
 }
 
 #[test]
-fn every_agent_takes_a_place_among_all_the_run_selected() {
+fn every_agent_takes_a_place_among_all_the_command_selected() {
     let ctx = Context::new(Paths::for_test(std::path::Path::new("state")), true);
-    let api = restart("api");
-    let mut progress = Progress::new(&ctx, std::slice::from_ref(&api), 2);
+    let mut progress = Progress::new(&ctx, 4, HashMap::new());
     progress.skipped(Skipped {
         space: "gone".into(),
         agent: None,
         reason: "no agent runs there".into(),
     });
-    restarts::Progress::ended(
-        &mut progress,
-        &api,
-        Err(anyhow::anyhow!("claude disconnected")),
-    );
-    assert_eq!(progress.next(), "(3/3)");
+    progress.ended(&space("api"), Err(anyhow::anyhow!("claude disconnected")));
+    let waits = RestartOutcome::Waits {
+        agent: "claude".into(),
+        waits: RestartWait::Turn,
+    };
+    progress.ended(&space("web"), Ok(waits));
+    assert_eq!(progress.next(), "(4/4)");
+    // A restart the daemon took for later is no failure.
+    assert_eq!(progress.report.counts().1, 1);
+    assert_eq!(progress.pending.len(), 1);
 }
 
 #[test]
@@ -63,19 +48,4 @@ fn a_restart_names_the_place_its_agent_moved_to() {
     let kept = restarted("api", "(1/2)", Some(&session), Some(&session));
     assert_eq!(kept, "Restarted api (1/2)");
     assert_eq!(restarted("api", "(1/2)", None, None), kept);
-}
-
-#[test]
-fn an_interruption_names_the_restarts_that_go_on() {
-    assert!(!interruption(&[], None).contains("shoal restart"));
-    let pending = [(1.into(), "api".into()), (4.into(), "web".into())];
-    let plain = interruption(&pending, None);
-    assert!(plain.contains("of 1 api, 4 web go on"), "{plain}");
-    assert!(plain.contains("shoal restart 1 4 "), "{plain}");
-    // The command keeps to the agents the run selected.
-    let selected = interruption(&pending, Some(&"codex".into()));
-    assert!(
-        selected.contains("shoal restart 1 4 --agent codex "),
-        "{selected}"
-    );
 }

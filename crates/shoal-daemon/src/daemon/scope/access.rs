@@ -1,7 +1,6 @@
 //! The named checks and views that confine a scoped caller to what its
 //! scope allows.
 use anyhow::{Context, Result, ensure};
-use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use std::collections::HashMap;
@@ -254,23 +253,6 @@ impl Manager {
             space != &caller.space_id
                 && (reached.as_ref()).is_none_or(|reached| reached.contains(space))
         })
-    }
-
-    /// Refuse `caller` the restart of the workspace agent that runs, or ran
-    /// before a restart, as `execution`, unless it runs in a workspace below
-    /// the caller's space.
-    pub(in crate::daemon) async fn ensure_agent_below(
-        &self,
-        caller: &Caller,
-        execution: &ExecutionId,
-    ) -> Result<()> {
-        let agents = self.running_agents().await?;
-        let agents = self.visible_agents(Some(caller), agents).await?;
-        ensure!(
-            agents.iter().any(|agent| agent.ran_as(execution)),
-            "scoped processes restart only the agents of the spaces below their own"
-        );
-        Ok(())
     }
 
     /// The agent queue every caller sees: all of it, since positions,

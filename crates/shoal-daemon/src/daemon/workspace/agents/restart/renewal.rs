@@ -42,8 +42,7 @@ pub(crate) struct Handover {
 pub(crate) type Renewals = HashMap<ExecutionId, Renewal>;
 
 impl Agent {
-    /// Hand its restart in progress, resumed, over to a new wrapper with
-    /// the outcomes of those that ended.
+    /// Hand its restart in progress, resumed, over to a new wrapper.
     pub(super) fn hand_over(&mut self) -> Option<Renewal> {
         self.restarts.current.as_mut()?.resume();
         Some(Renewal::Starting(Box::new(Handover {
@@ -62,26 +61,22 @@ pub(super) fn starting(renewals: &Renewals, id: &ExecutionId) -> bool {
 }
 
 impl Handover {
-    /// Answer one more request, of `run`, for the restart in progress,
-    /// refusing one making another `change` than it makes.
+    /// Answer one more request for the restart in progress, refusing one
+    /// making another `change` than it makes.
     pub(super) fn answer_changing(
         &mut self,
-        run: Option<String>,
         change: Option<&PermissionChange>,
     ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
         if let Some(restart) = &self.restarts.current {
             restart.ensure_changes(self.name.name(), change)?;
         }
-        Ok(self.answer(run))
+        Ok(self.answer())
     }
 
-    /// Answer one more request, of `run`, for the restart in progress.
-    pub(super) fn answer(
-        &mut self,
-        run: Option<String>,
-    ) -> oneshot::Receiver<Result<Option<Origin>>> {
+    /// Answer one more request for the restart in progress.
+    pub(super) fn answer(&mut self) -> oneshot::Receiver<Result<Option<Origin>>> {
         match &mut self.restarts.current {
-            Some(restart) => restart.answer(run),
+            Some(restart) => restart.answer(),
             None => {
                 let (done, answer) = oneshot::channel();
                 let _ = done.send(Err(anyhow!("the restart was cancelled")));
@@ -106,8 +101,6 @@ pub(super) fn handed_over(renewals: &Renewals) -> impl Iterator<Item = RunningAg
             state: None,
             interrupted: false,
             origin: None,
-            restarted_by: handover.restarts.restarted_by(),
-            restart: handover.restarts.pending(),
             stopped: None,
             restarted_from: earlier(renewals, execution),
         })

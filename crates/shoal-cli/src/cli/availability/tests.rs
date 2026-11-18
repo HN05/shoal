@@ -117,8 +117,6 @@ fn agent_places_count_stopped_agents_as_connected() {
         state: None,
         interrupted: false,
         origin: origin.cloned(),
-        restarted_by: Vec::new(),
-        restart: None,
         stopped: None,
         restarted_from: Vec::new(),
     };

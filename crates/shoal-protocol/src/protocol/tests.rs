@@ -42,7 +42,6 @@ fn daemon_error_codes_preserve_wire_spellings() {
         (ErrorCode::OperationFailed, "operation_failed"),
         (ErrorCode::ExecutionFailed, "execution_failed"),
         (ErrorCode::UnprovenStop, "unproven_stop"),
-        (ErrorCode::RestartWaits, "restart_waits"),
         (ErrorCode::Exiting, "exiting"),
         (ErrorCode::Starting, "starting"),
         (ErrorCode::NotFound, "not_found"),

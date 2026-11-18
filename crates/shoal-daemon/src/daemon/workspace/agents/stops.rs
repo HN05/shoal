@@ -316,7 +316,7 @@ impl Manager {
         if protection.is_restart() {
             self.executions
                 .with_agent(id, |agent| {
-                    agent.restarts.current = Some(restart::Restart::unanswered(None, false));
+                    agent.restarts.current = Some(restart::Restart::new(false, None));
                 })
                 .await;
             return;

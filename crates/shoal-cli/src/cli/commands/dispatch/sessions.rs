@@ -63,13 +63,13 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             in_place,
             permissions,
         } => {
-            let options = crate::client::restarts::Options {
+            let restart = crate::model::AgentRestart {
                 wait,
                 sequential,
                 in_place,
                 change: change(&permissions),
             };
-            restart::run(&ctx, targets, agent, options).await
+            restart::run(&ctx, targets, agent, restart).await
         }
         SessionsCommand::Queue {
             command,
