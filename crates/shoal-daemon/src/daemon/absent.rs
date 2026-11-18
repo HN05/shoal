@@ -161,9 +161,7 @@ impl Streamed<'_> {
                     if self.server.manager.still_scoped(self.scope).await? {
                         continue;
                     }
-                    let body = Body::error(ErrorCode::ScopeDenied, "expired or unknown workspace scope");
-                    let refusal = vec![body_frame(self.request_id, body)?];
-                    return self.write(&mut writer, refusal).await.map(drop);
+                    return self.refuse_scope(&mut writer).await;
                 }
                 () = answer::hangup(&mut reader) => return Ok(()),
             };
@@ -177,10 +175,22 @@ impl Streamed<'_> {
                     return self.write(&mut writer, vec![failure]).await.map(drop);
                 }
             };
+            // Its client gets nothing more once its scope token stops
+            // acting, as while it paused reading.
+            if !self.server.manager.still_scoped(self.scope).await? {
+                return self.refuse_scope(&mut writer).await;
+            }
             if !self.write(&mut writer, frames.take(&bytes)?).await? {
                 return Ok(());
             }
         }
+    }
+
+    /// End the answer, whose scope token no longer acts for a caller.
+    async fn refuse_scope(&self, writer: &mut (impl tokio::io::AsyncWrite + Unpin)) -> Result<()> {
+        let body = Body::error(ErrorCode::ScopeDenied, "expired or unknown workspace scope");
+        let refusal = vec![body_frame(self.request_id, body)?];
+        self.write(writer, refusal).await.map(drop)
     }
 
     /// Write `frames` as the answer's, under a daemon operation; `false`

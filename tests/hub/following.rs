@@ -234,16 +234,28 @@ fn a_follow_through_the_hub_goes_on_once_the_hub_is_back() {
     reading.goes_on(&session);
 }
 
+/// A token of the laptop's space, as its process holds one.
+fn issued_token(session: &Session) -> String {
+    let issued = session
+        .laptop
+        .request(serde_json::json!({"issue_scope": {"space": session.space}}));
+    issued["data"].as_str().unwrap().to_owned()
+}
+
+/// Revoke `token`, which `session`'s space issued.
+fn revoke(session: &Session, token: &str) {
+    let revoke = serde_json::json!({"revoke_scope": {"space": session.space, "token": token}});
+    let revoked = session.laptop.request(revoke);
+    assert_ne!(revoked["type"], "error", "{revoked}");
+}
+
 #[test]
 fn a_follow_ends_once_its_scope_token_is_revoked() {
     let hub = machine(true, "app");
     let session = laptop_session(&hub);
-    let issued = session
-        .laptop
-        .request(serde_json::json!({"issue_scope": {"space": session.space}}));
-    let token = issued["data"].as_str().unwrap().to_owned();
+    let token = issued_token(&session);
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    let scoped = app(&session.laptop).scope(token.clone().into());
+    let scoped = app(&session.laptop).scope(token.as_str().into());
     let mut follow = runtime.block_on(async {
         let mut follow = follow_session(scoped, selected(&session), None)
             .await
@@ -252,11 +264,44 @@ fn a_follow_ends_once_its_scope_token_is_revoked() {
         bytes_until(&mut follow, &mut Vec::new(), &first_turn()).await;
         follow
     });
-    let revoke = serde_json::json!({"revoke_scope": {"space": session.space, "token": token}});
-    let revoked = session.laptop.request(revoke);
-    assert_ne!(revoked["type"], "error", "{revoked}");
+    revoke(&session, &token);
     let error = runtime.block_on(follow.next()).unwrap_err().to_string();
     assert!(error.contains("scope"), "{error}");
+}
+
+#[test]
+fn a_paused_follow_reads_nothing_more_once_its_token_is_revoked() {
+    let hub = machine(true, "app");
+    let session = laptop_session(&hub);
+    // More than the connection holds while its client reads nothing.
+    let long = "y".repeat(8 << 20);
+    let mut transcript = fs::OpenOptions::new()
+        .append(true)
+        .open(&session.transcript)
+        .unwrap();
+    transcript.write_all(long.as_bytes()).unwrap();
+    let whole = first_turn().len() + long.len();
+    let token = issued_token(&session);
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let scoped = app(&session.laptop).scope(token.as_str().into());
+    let mut follow = runtime
+        .block_on(follow_session(scoped, selected(&session), None))
+        .unwrap();
+    runtime.block_on(followed_session(&mut follow));
+    revoke(&session, &token);
+    let mut read = 0;
+    let error = loop {
+        match runtime.block_on(follow.next()) {
+            Ok(Followed::Bytes { bytes, .. }) => read += bytes.len(),
+            Ok(followed) => panic!("expected the transcript's bytes, got {followed:?}"),
+            Err(error) => break error.to_string(),
+        }
+    };
+    assert!(error.contains("scope"), "{error}");
+    assert!(
+        read < whole,
+        "read the whole transcript after the revocation"
+    );
 }
 
 #[test]

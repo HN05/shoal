@@ -99,6 +99,8 @@ impl Manager {
     /// Send `following`'s session, then its files' bytes as they grow,
     /// until the client hangs up, the scope token it came with, `scope`,
     /// stops acting for a caller, or a daemon restart closes the follow.
+    /// It reads nothing more once the token stops acting, so a client that
+    /// paused reading gets no byte read after that.
     pub(crate) async fn follow_session(
         self: Arc<Self>,
         stream: UnixStream,
@@ -106,9 +108,16 @@ impl Manager {
         (mut following, scope): (Following, Option<ScopeToken>),
         startup: OperationGuard,
     ) -> Result<()> {
-        let (mut reader, mut writer) = stream.into_split();
-        let session = Body::FollowedSession(following.session.clone());
-        send(&mut writer, id, session).await?;
+        let (mut reader, writer) = stream.into_split();
+        let mut client = Client {
+            manager: &self,
+            writer,
+            id,
+            scope,
+        };
+        client
+            .send(Body::FollowedSession(following.session.clone()))
+            .await?;
         drop(startup);
         loop {
             // A restarting daemon closes the follow, which the client opens
@@ -116,17 +125,18 @@ impl Manager {
             let Some(operation) = self.gates.try_operation() else {
                 return Ok(());
             };
-            if !self.still_scoped(scope.as_ref()).await? {
-                let body =
-                    Body::error(ErrorCode::ScopeDenied, "expired or unknown workspace scope");
-                return send(&mut writer, id, body).await;
+            if !client.scoped().await? {
+                return client.refuse_scope().await;
             }
             if let Some(next) = self.next_following(&following).await? {
                 following = next;
-                let session = Body::FollowedSession(following.session.clone());
-                send(&mut writer, id, session).await?;
+                client
+                    .send(Body::FollowedSession(following.session.clone()))
+                    .await?;
             }
-            send_gained(&mut writer, id, &mut following).await?;
+            if !send_gained(&mut client, &mut following).await? {
+                return client.refuse_scope().await;
+            }
             drop(operation);
             tokio::select! {
                 () = tokio::time::sleep(POLL) => {}
@@ -158,21 +168,47 @@ impl Manager {
     }
 }
 
-/// Send what the files of `following`'s session gained since its offsets,
-/// keeping where each now ends.
-async fn send_gained(
-    writer: &mut OwnedWriteHalf,
+/// Where a follow writes: its client's connection, for the scope token
+/// the follow came with.
+struct Client<'a> {
+    manager: &'a Manager,
+    writer: OwnedWriteHalf,
     id: u64,
-    following: &mut Following,
-) -> Result<()> {
+    scope: Option<ScopeToken>,
+}
+
+impl Client<'_> {
+    async fn send(&mut self, body: Body) -> Result<()> {
+        protocol::write(&mut self.writer, &Response::new(self.id, body)).await
+    }
+
+    /// Whether the follow's scope token still acts for a caller, so that
+    /// the follow reads more for it.
+    async fn scoped(&self) -> Result<bool> {
+        self.manager.still_scoped(self.scope.as_ref()).await
+    }
+
+    /// End the follow, whose scope token no longer acts for a caller.
+    async fn refuse_scope(&mut self) -> Result<()> {
+        let body = Body::error(ErrorCode::ScopeDenied, "expired or unknown workspace scope");
+        self.send(body).await
+    }
+}
+
+/// Send what the files of `following`'s session gained since its offsets,
+/// keeping where each now ends; `false` once the follow's scope token
+/// stopped acting for a caller, before a read.
+async fn send_gained(client: &mut Client<'_>, following: &mut Following) -> Result<bool> {
     let Some(found) = locate(following).await? else {
-        return Ok(());
+        return Ok(true);
     };
     for file in found.files.files {
         let path = found.directory.join(&file);
-        send_file_gained(writer, id, &path, file, &mut following.offsets).await?;
+        if !send_file_gained(client, &path, file, &mut following.offsets).await? {
+            return Ok(false);
+        }
     }
-    Ok(())
+    Ok(true)
 }
 
 /// Where the files of `following`'s session are now, none while its tool
@@ -188,28 +224,31 @@ async fn locate(following: &Following) -> Result<Option<transcripts::Found>> {
 }
 
 /// Send what the session's file `file`, at `path`, gained since its offset
-/// in `offsets`, keeping where it now ends.
+/// in `offsets`, keeping where it now ends; `false` once the follow's scope
+/// token stopped acting for a caller, which it checks before each read.
 async fn send_file_gained(
-    writer: &mut OwnedWriteHalf,
-    id: u64,
+    client: &mut Client<'_>,
     path: &Path,
     file: PathBuf,
     offsets: &mut HashMap<PathBuf, u64>,
-) -> Result<()> {
+) -> Result<bool> {
     loop {
+        if !client.scoped().await? {
+            return Ok(false);
+        }
         let offset = offsets.get(&file).copied().unwrap_or(0);
         let path = path.to_owned();
         let read = tokio::task::spawn_blocking(move || read_from(&path, offset));
         // Gone, as a file its tool replaced, which may come back.
         let Ok((offset, bytes)) = read.await.context("read a session file")? else {
-            return Ok(());
+            return Ok(true);
         };
         offsets.insert(file.clone(), offset + bytes.len() as u64);
         if bytes.is_empty() {
-            return Ok(());
+            return Ok(true);
         }
         let gained = SessionBytes::new(file.clone(), offset, &bytes);
-        send(writer, id, Body::SessionBytes(gained)).await?;
+        client.send(Body::SessionBytes(gained)).await?;
     }
 }
 
@@ -226,10 +265,6 @@ fn read_from(path: &Path, offset: u64) -> std::io::Result<(u64, Vec<u8>)> {
     let mut bytes = Vec::with_capacity(CHUNK);
     file.take(CHUNK as u64).read_to_end(&mut bytes)?;
     Ok((offset, bytes))
-}
-
-async fn send(writer: &mut OwnedWriteHalf, id: u64, body: Body) -> Result<()> {
-    protocol::write(writer, &Response::new(id, body)).await
 }
 
 #[cfg(test)]
