@@ -98,3 +98,15 @@ fn the_hub_drops_only_what_expired_with_whom_it_was_for() {
     forget(&tx, &laptop).unwrap();
     assert!(claim_first(&tx, &laptop).unwrap().is_none());
 }
+
+#[test]
+fn a_held_request_the_machine_answered_with_an_error_was_refused() {
+    use shoal_protocol::protocol::{Body, ErrorCode, Response};
+    let answered = |body: Body| {
+        let frames = vec![serde_json::to_value(Response::new(1, body)).unwrap()];
+        Reply::Answered(shoal_protocol::hub::routing::Answered { frames })
+    };
+    let refused = answered(Body::error(ErrorCode::UnprovenStop, "it may still run"));
+    assert_eq!(refusal(&refused).as_deref(), Some("it may still run"));
+    assert_eq!(refusal(&answered(Body::Ok)), None);
+}

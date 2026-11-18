@@ -10,9 +10,10 @@ use rusqlite::{OptionalExtension as _, Transaction, params};
 use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
 use shoal_protocol::hub::{
     Member,
-    link::Call,
-    routing::{Expired, Queued},
+    link::{Call, Reply},
+    routing::{Expired, HeldOutcome, Queued},
 };
+use shoal_protocol::protocol::{Body, Response};
 
 use super::session::{Unanswered, Unsent};
 use crate::{
@@ -65,7 +66,8 @@ impl Manager {
     /// link is open, until none is left or the link closes. A call that
     /// never left stays for the next link; one the machine received but
     /// never answered is not sent again, since it may have run, and its
-    /// sender hears that it went unconfirmed.
+    /// sender hears that it went unconfirmed, as of one the machine
+    /// refused.
     pub(super) async fn deliver_held(self: Arc<Self>, member: MemberId) {
         let delivery = self.hub.deliveries.of(&member);
         let _delivering = delivery.lock().await;
@@ -74,7 +76,7 @@ impl Manager {
         match self.store.write(move |tx| take_claimed(tx, &to)).await {
             Ok(uncertain) => {
                 for lapsed in uncertain {
-                    self.tell_sender(lapsed, true).await;
+                    self.tell_sender(lapsed, HeldOutcome::Unconfirmed).await;
                 }
             }
             Err(error) => return log!("hub: could not read what it held: {error:#}"),
@@ -90,14 +92,16 @@ impl Manager {
             let Some(calls) = self.hub.links.calls(&member) else {
                 return self.release_claim(seq).await;
             };
-            match calls.call(lapsed.held.call.clone()).await {
-                Ok(_) => {}
+            let outcome = match calls.call(lapsed.held.call.clone()).await {
+                Ok(reply) => refusal(&reply).map(|reason| HeldOutcome::Refused { reason }),
                 Err(error) if error.is::<Unsent>() => return self.release_claim(seq).await,
-                Err(error) if error.is::<Unanswered>() => {
-                    log!("hub: a held call went unanswered: {error:#}");
-                    self.tell_sender(lapsed, true).await;
-                }
-                Err(error) => log!("hub: a held call failed at its machine: {error:#}"),
+                Err(error) if error.is::<Unanswered>() => Some(HeldOutcome::Unconfirmed),
+                Err(error) => Some(HeldOutcome::Refused {
+                    reason: format!("{error:#}"),
+                }),
+            };
+            if let Some(outcome) = outcome {
+                self.tell_sender(lapsed, outcome).await;
             }
             if let Err(error) = self.store.write(move |tx| remove(tx, seq)).await {
                 return log!("hub: could not drop a delivered call: {error:#}");
@@ -135,17 +139,30 @@ impl Manager {
             return Ok(());
         }
         for lapsed in lapsed {
-            self.tell_sender(lapsed, false).await;
+            self.tell_sender(lapsed, HeldOutcome::Expired).await;
         }
         Ok(())
     }
 }
 
+/// Why the machine refused what `reply` answers, a forwarded request whose
+/// response is an error.
+fn refusal(reply: &Reply) -> Option<String> {
+    let Reply::Answered(answered) = reply else {
+        return None;
+    };
+    let mut responses = (answered.frames.iter())
+        .filter_map(|frame| serde_json::from_value::<Response>(frame.clone()).ok());
+    responses.find_map(|response| match response.body {
+        Body::Error { message, .. } => Some(message),
+        _ => None,
+    })
+}
+
 impl Manager {
-    /// Tell the sender of `lapsed` that the hub dropped it, once it expired
-    /// or went `unconfirmed`; what tells a sender of that is not reported in
-    /// turn.
-    async fn tell_sender(&self, lapsed: Lapsed, unconfirmed: bool) {
+    /// Tell the sender of `lapsed` its `outcome`; what tells a sender of
+    /// one is not reported in turn.
+    async fn tell_sender(&self, lapsed: Lapsed, outcome: HeldOutcome) {
         let Lapsed {
             machine,
             held,
@@ -166,7 +183,7 @@ impl Manager {
             machine: name,
             summary: held.summary,
             queued_at,
-            unconfirmed,
+            outcome,
         };
         if let Err(error) = self.send_expired(&held.sender, expired).await {
             log!("hub: could not tell a sender what became of its call: {error:#}");

@@ -13,7 +13,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     hub::{
         link::Call,
-        routing::{Expired, Told, ToldAbout},
+        routing::{Expired, HeldOutcome, Told, ToldAbout},
     },
     notifications::NotificationKind,
     space_names::SpaceName,
@@ -160,12 +160,15 @@ impl Manager {
     pub(super) async fn hear_expired(&self, expired: Expired) {
         let (summary, machine) = (&expired.summary, &expired.machine);
         let queued = expired.queued_at.local_minutes();
-        let message = match expired.unconfirmed {
-            false => format!(
+        let message = match &expired.outcome {
+            HeldOutcome::Expired => format!(
                 "The hub dropped {summary}, which waited for machine {machine} from {queued} and expired before that machine connected"
             ),
-            true => format!(
+            HeldOutcome::Unconfirmed => format!(
                 "The hub delivered {summary}, which waited for machine {machine} from {queued}, but the link closed before {machine} confirmed it ran; check there before sending it again"
+            ),
+            HeldOutcome::Refused { reason } => format!(
+                "Machine {machine} refused {summary}, which waited for it from {queued}: {reason}"
             ),
         };
         if let Some(space) = &expired.from

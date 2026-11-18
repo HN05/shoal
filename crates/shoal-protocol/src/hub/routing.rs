@@ -127,8 +127,9 @@ pub struct ToldAbout {
     pub name: SpaceName,
 }
 
-/// What the hub tells a machine whose queued request or event it dropped
-/// once it expired, or delivered without hearing whether it ran.
+/// What the hub tells a machine whose queued request or event did not go
+/// through: it expired, reached its machine without word that it ran, or
+/// was refused there.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Expired {
     /// The space whose process sent it, which hears of it, or none for the
@@ -140,10 +141,21 @@ pub struct Expired {
     /// What it was.
     pub summary: String,
     pub queued_at: UnixTime,
+    pub outcome: HeldOutcome,
+}
+
+/// What became of a request or event the hub held for an offline machine,
+/// which its sender hears of.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HeldOutcome {
+    /// It expired before the machine connected.
+    Expired,
     /// It reached the machine once it connected, which never confirmed
-    /// that it ran, rather than expired.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub unconfirmed: bool,
+    /// that it ran.
+    Unconfirmed,
+    /// The machine refused it, for `reason`.
+    Refused { reason: String },
 }
 
 impl std::fmt::Display for Queued {
