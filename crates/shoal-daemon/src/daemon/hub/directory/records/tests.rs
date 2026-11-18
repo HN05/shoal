@@ -146,6 +146,27 @@ fn a_machine_that_claims_a_space_sees_no_other_owner() {
 }
 
 #[test]
+fn a_claim_is_spent_when_its_space_ended_at_the_source_first() {
+    let mut db = database();
+    let (desk, laptop) = (
+        MemberId::from("desk".to_owned()),
+        MemberId::from("laptop".to_owned()),
+    );
+    let id = SpaceId::from("a".to_owned());
+    report(&mut db, "desk", Report::Whole(vec![space("a", "moving")]));
+    let tx = db.transaction().unwrap();
+    claim(&tx, &laptop, &id).unwrap();
+    tx.commit().unwrap();
+    report(&mut db, "desk", Report::Whole(Vec::new()));
+    report(&mut db, "laptop", Report::Whole(vec![space("a", "moving")]));
+    // It moves back; the claim it spent no longer hides desk as its owner.
+    report(&mut db, "laptop", Report::Whole(Vec::new()));
+    report(&mut db, "desk", Report::Whole(vec![space("a", "back")]));
+    let tx = db.transaction().unwrap();
+    assert_eq!(owner_seen_by(&tx, &id, &laptop).unwrap(), Some(desk));
+}
+
+#[test]
 fn a_revoked_machine_records_nothing() {
     let mut db = database();
     db.execute("UPDATE hub_members SET revoked_at=1 WHERE id='desk'", [])

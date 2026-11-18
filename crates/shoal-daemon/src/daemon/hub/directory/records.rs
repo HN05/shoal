@@ -121,7 +121,10 @@ fn record(
                 since: now,
             }))
         }
+        // A claim is spent once its machine owns the space, however it
+        // came to: the machine it moved from may have ended it first.
         _ => {
+            take_claim(tx, &space.id, member)?;
             own(tx, member, &space.id, &summary, now)?;
             Ok(None)
         }
