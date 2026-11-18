@@ -134,11 +134,16 @@ impl Manager {
                 (kept_chat(&space), expires_at)
             }
         };
+        // A parent on another machine stays, so a move or restore keeps it.
+        let parent = match space.parent.clone() {
+            Some(parent) => Some(parent),
+            None => self.parent_elsewhere(&space.id).await?,
+        };
         Ok(RemovedSpace {
             space_id: space.id,
             repository_id: space.repository_id,
             name: space.name,
-            parent: space.parent,
+            parent,
             links: space.links,
             agents,
             last_sessions,

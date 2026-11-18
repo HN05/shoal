@@ -119,7 +119,11 @@ impl Manager {
         if space.repository_id.is_some() || space.kind() != SpaceKind::Chat {
             return Ok(Vec::new());
         }
-        let mut chain = Vec::new();
+        // Above the top here, the chain goes on on another machine.
+        let mut chain = match self.reported_above(&space.id).await? {
+            Some((_, above)) => above,
+            None => Vec::new(),
+        };
         for above in self.ancestors(&space.id).await?.into_iter().rev() {
             let above = self.space_by_id(&above.id).await?;
             chain.push(chained(&above));

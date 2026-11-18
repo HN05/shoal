@@ -12,8 +12,8 @@ use shoal_protocol::{
         routing::ChainedMode,
     },
     list_status::ListStatus,
-    model::SpaceKind,
-    space_names::SpaceSelector,
+    model::{RefPart, SpaceKind, SpaceRef},
+    space_names::{SpaceName, SpaceSelector},
 };
 
 use crate::daemon::{log, workspace::Manager};
@@ -64,6 +64,35 @@ impl Manager {
                 Vec::new()
             }
         }
+    }
+
+    /// The space above the space `id` when it runs on another machine, as a
+    /// record of `id` names it, so a move or restore keeps it; its name as
+    /// the hub last listed it, or its ID while it cannot be asked.
+    pub(crate) async fn parent_elsewhere(&self, id: &SpaceId) -> Result<Option<SpaceRef>> {
+        let owned = id.clone();
+        let parent = (self.store)
+            .run(move |db| crate::daemon::workspace::parent_id(db, &owned))
+            .await?;
+        let Some(parent) = parent else {
+            return Ok(None);
+        };
+        if self.find_space(&parent).await?.is_some() {
+            return Ok(None);
+        }
+        let listed = match self.hub_directory().await {
+            Ok(Some((_, directory))) => directory.spaces.into_iter().find(|l| l.space.id == parent),
+            _ => None,
+        };
+        let (name, part) = match listed {
+            Some(listed) => (listed.space.name, part_of(listed.space.kind)),
+            None => (SpaceName::derive(parent.as_str(), "parent"), RefPart::Chat),
+        };
+        Ok(Some(SpaceRef {
+            id: parent,
+            name,
+            part,
+        }))
     }
 
     /// Refuse the space `parent`, which runs on another machine, as the
@@ -125,6 +154,24 @@ impl Manager {
         id: &SpaceId,
         repository: Option<&RepositoryId>,
     ) -> Result<Option<Permissions>> {
+        let Some((permissions, chain)) = self.reported_above(id).await? else {
+            return Ok(None);
+        };
+        match (repository, permissions) {
+            (Some(repository), _) if !chain.is_empty() => {
+                self.chained_permissions(&chain, repository).await.map(Some)
+            }
+            (_, Some(permissions)) => Ok(Some(permissions)),
+            (_, None) => bail!("the hub has no permissions of the space above {id}"),
+        }
+    }
+
+    /// What the machine of the first space above the space `id` that runs
+    /// elsewhere reports of that space's permissions; none when every space
+    /// above it is here or that space is gone. While the hub cannot be
+    /// asked, what it last reported stands; a machine that never read it
+    /// refuses.
+    pub(crate) async fn reported_above(&self, id: &SpaceId) -> Result<Option<Reported>> {
         let owned = id.clone();
         let first = (self.store)
             .run(move |db| crate::daemon::workspace::first_absent_above(db, &owned))
@@ -143,8 +190,7 @@ impl Manager {
                     return Ok(None);
                 };
                 let reported = (listed.space.permissions, listed.space.chat_modes);
-                (self.hub.parent_permissions.lock().unwrap())
-                    .insert(first.clone(), reported.clone());
+                (self.hub.parent_permissions.lock().unwrap()).insert(first, reported.clone());
                 reported
             }
             Err(error) => {
@@ -160,13 +206,7 @@ impl Manager {
                 })?
             }
         };
-        match (reported, repository) {
-            ((_, chain), Some(repository)) if !chain.is_empty() => {
-                self.chained_permissions(&chain, repository).await.map(Some)
-            }
-            ((Some(permissions), _), _) => Ok(Some(permissions)),
-            ((None, _), _) => bail!("the hub has no permissions of space {first}, above {id}"),
-        }
+        Ok(Some(reported))
     }
 
     /// The origin other machines know the registered repository `id` by.
@@ -266,6 +306,14 @@ fn takes_children(status: ListStatus) -> bool {
             | ListStatus::Updating
             | ListStatus::Failed
     )
+}
+
+/// What a record of a space of `kind` names of its kind.
+fn part_of(kind: SpaceKind) -> RefPart {
+    match kind {
+        SpaceKind::Workspace => RefPart::Workspace { branch: None },
+        SpaceKind::Chat => RefPart::Chat,
+    }
 }
 
 #[cfg(test)]

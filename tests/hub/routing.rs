@@ -311,3 +311,20 @@ fn removing_a_coordinator_removes_its_child_on_another_machine_first() {
     let gone = laptop.run(&["status", &child, "--json"]);
     assert!(!gone.status.success(), "{}", printed(&gone));
 }
+
+#[test]
+fn a_child_restored_on_another_machine_stays_below_its_coordinator() {
+    let Tree {
+        hub,
+        laptop,
+        laptop_id,
+        coordinator,
+        child,
+    } = tree_across_machines();
+    laptop.ok(&["rm", &child, "--wait", "--yes"]);
+    laptop.ok(&["restore", &child]);
+    wait_for("the restored child below its coordinator", || {
+        let listed = listed(&hub, &child, &laptop_id);
+        (listed["parent"] == coordinator.as_str()).then_some(())
+    });
+}
