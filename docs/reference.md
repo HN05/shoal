@@ -5147,8 +5147,8 @@ nothing. A warning names the `edit` command that fixes it, and one whose lookup
 fails is left out.
 
 The daemon sends each change through the forge's REST API as the workspace's
-[agent account](#agent-accounts), except that `delete-branch` run by you uses
-your login. Each change records an
+[agent account](#agent-accounts), except that a [merge](#merge-into-the-default-branch)
+of a PR, its automatic merge and `delete-branch` run by you use your login. Each change records an
 `item_changed` [space event](#space-events). `--json` returns the item
 as the forge then reports it: `kind`, `number`, `url`, `title`, `state` (`open`,
 `closed` or `merged`), `labels`, and for a PR, `pr` with `head`, `base` and
