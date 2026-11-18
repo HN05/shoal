@@ -20,19 +20,22 @@ use crate::{
 };
 
 impl Manager {
-    /// Whether another workspace records the branch of `workspace` as the
-    /// branch it builds on, whatever base workspace it links.
+    /// Whether another workspace of its repository records the branch of
+    /// `workspace` as the branch it builds on, whatever base workspace it
+    /// links.
     pub(crate) async fn branch_built_on(&self, workspace: &Workspace) -> Result<bool> {
         let Some(branch) = workspace.branch() else {
             return Ok(false);
         };
-        let (reference, id) = (git::local_ref(branch), workspace.id.clone());
+        let reference = git::local_ref(branch);
+        let (id, repository) = (workspace.id.clone(), workspace.repository().clone());
         self.store
             .read(move |tx| {
                 store::exists(
                     tx,
-                    "SELECT 1 FROM workspaces WHERE base_ref=?1 AND id<>?2",
-                    params![reference, id],
+                    "SELECT 1 FROM workspaces JOIN spaces USING(id)
+                        WHERE workspaces.base_ref=?1 AND id<>?2 AND spaces.repository_id=?3",
+                    params![reference, id, repository],
                 )
             })
             .await
