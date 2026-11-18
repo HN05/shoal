@@ -202,7 +202,6 @@ impl Issue {
     }
 }
 
-/// Fits a zmx session name, which keeps the first 32 characters.
 /// Where a command reads from the forge of `repo`: the workspace or chat
 /// this runs in, whose scope reads only there, when it is of `repo`, else
 /// the repository's registered checkout.
