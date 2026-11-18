@@ -22,15 +22,12 @@ use crate::{
     protocol::{QueuedLaunches, UntrackedProcesses},
 };
 
-/// Stop the spaces among `selected` that other machines run, and the
-/// spaces below them unless `skip_children`, returning the selectors that
-/// name spaces here, which the caller stops, and whether any was elsewhere.
-pub(super) async fn stop(
+/// The selectors among `selected` that name spaces here, and the spaces
+/// elsewhere the others name, each with the hub's view that lists it.
+pub(super) async fn partition(
     ctx: &Context,
     selected: Vec<SpaceSelector>,
-    skip_children: bool,
-    yes: bool,
-) -> Result<(Vec<SpaceSelector>, bool)> {
+) -> Result<(Vec<SpaceSelector>, Vec<(Listed, HubView)>)> {
     let mut here = Vec::new();
     let mut elsewhere = Vec::new();
     for selector in selected {
@@ -39,8 +36,18 @@ pub(super) async fn stop(
             None => here.push(selector),
         }
     }
-    let any = !elsewhere.is_empty();
-    for (remote, view) in elsewhere {
+    Ok((here, elsewhere))
+}
+
+/// Stop `spaces`, which other machines run, and the spaces below them
+/// unless `skip_children`.
+pub(super) async fn stop(
+    ctx: &Context,
+    spaces: Vec<(Listed, HubView)>,
+    skip_children: bool,
+    yes: bool,
+) -> Result<()> {
+    for (remote, view) in spaces {
         stop_one(ctx, &remote, yes).await?;
         if !skip_children {
             let stopped = Stopped {
@@ -50,7 +57,7 @@ pub(super) async fn stop(
             stop_across(ctx, &view, stopped, yes).await?;
         }
     }
-    Ok((here, any))
+    Ok(())
 }
 
 /// Stop the spaces below each of `stopped`, spaces of this machine that

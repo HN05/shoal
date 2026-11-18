@@ -45,20 +45,23 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
     if crate::env::inherits_scope(&ctx.paths.state) {
         targets::ensure_scoped()?;
     }
-    let (selected, elsewhere) = elsewhere::stop(ctx, selected, skip_children, yes).await?;
-    if elsewhere && selected.is_empty() {
-        return Ok(0);
-    }
-    let selected = resolve(ctx, selected, !skip_children).await?;
+    // Every target is resolved, and those here checked, before any stops.
+    let (here, elsewhere) = elsewhere::partition(ctx, selected).await?;
+    let selected = match here.is_empty() {
+        true => Vec::new(),
+        false => resolve(ctx, here, !skip_children).await?,
+    };
     if crate::env::inherits_scope(&ctx.paths.state) {
         ensure_below(&selected)?;
     }
+    if selected.len() + elsewhere.len() > 1 {
+        check_each(ctx, &selected).await?;
+    }
+    elsewhere::stop(ctx, elsewhere, skip_children, yes).await?;
     let code = match selected.as_slice() {
+        [] => return Ok(0),
         [space] => stop_one(ctx, space, yes).await?,
-        spaces => {
-            check_each(ctx, spaces).await?;
-            stop_each(ctx, spaces, "", yes).await?
-        }
+        spaces => stop_each(ctx, spaces, "", yes).await?,
     };
     if !skip_children {
         elsewhere::stop_below(ctx, &selected, yes).await?;
