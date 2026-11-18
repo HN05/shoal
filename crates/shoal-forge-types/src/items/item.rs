@@ -5,7 +5,10 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use shoal_refs::{BranchName, CommitId};
 
-use crate::{ForgeRepo, items::link::ItemKind};
+use crate::{
+    ForgeRepo,
+    items::{action::MergeMethod, link::ItemKind},
+};
 use shoal_states::states;
 
 states!(ItemState {
@@ -90,6 +93,9 @@ pub struct Current {
     /// The ID the forge takes for the milestone an edit sets, looked up
     /// before the edit is planned.
     pub milestone_id: Option<u64>,
+    /// How the repository merges a PR whose merge names no method, where
+    /// the forge needs one named, read before such a merge is planned.
+    pub merge_style: Option<String>,
     /// The item's labels that a Forgejo edit's added exclusive labels
     /// replace, as the only one an item may have of their scope.
     pub replaced_labels: Vec<String>,
@@ -110,6 +116,16 @@ impl Current {
             .as_ref()
             .map(CommitId::as_str)
             .context("the forge did not report the PR's head commit")
+    }
+
+    /// The method a merge by `method` names: it, else the one the
+    /// repository merges by, as read into [`Self::merge_style`].
+    pub fn merge_style(&self, method: Option<MergeMethod>) -> Result<&str> {
+        match method {
+            Some(method) => Ok(method.as_str()),
+            None => (self.merge_style.as_deref())
+                .context("the forge did not report how the repository merges PRs; pass --method"),
+        }
     }
 }
 

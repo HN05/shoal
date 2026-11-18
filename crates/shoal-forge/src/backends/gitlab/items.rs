@@ -111,6 +111,7 @@ impl Items for GitLab {
             reviewers: reviewers.iter().map(|(name, _)| name.clone()).collect(),
             user_ids: reviewers.into_iter().chain(assignees).collect(),
             milestone_id: None,
+            merge_style: None,
             replaced_labels: Vec::new(),
         })
     }

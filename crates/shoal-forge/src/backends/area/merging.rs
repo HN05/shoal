@@ -49,22 +49,36 @@ pub(crate) trait Merging: Backend {
         Ok(None)
     }
 
-    /// The requests that merge the open PR `current`.
+    /// Read into `current` what a merge that names no method needs: the
+    /// method the repository merges by, where the forge needs one named.
+    /// Elsewhere the request leaves the method out, so the repository's own
+    /// setting applies.
+    async fn prepare_merge(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _current: &mut Current,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    /// The requests that merge the open PR `current` by `method`, or by the
+    /// repository's default without one.
     fn merge(
         &self,
         repo: &ForgeRepo,
         current: &Current,
-        method: MergeMethod,
+        method: Option<MergeMethod>,
         delete_branch: bool,
     ) -> Result<Vec<Request>>;
 
     /// The requests that have the forge merge the open PR `current` once its
-    /// required checks and approvals pass.
+    /// required checks and approvals pass, by `method` as a merge takes it.
     fn auto_merge(
         &self,
         repo: &ForgeRepo,
         current: &Current,
-        method: MergeMethod,
+        method: Option<MergeMethod>,
         delete_branch: bool,
     ) -> Result<Vec<Request>>;
 

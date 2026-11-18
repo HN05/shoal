@@ -354,6 +354,12 @@ impl ForgeRepo {
                     .await?;
                 self.plan(&current, action)
             }
+            Action::Merge { method: None, .. } | Action::AutoMerge { method: None, .. } => {
+                self.kind()
+                    .prepare_merge(self, account, &mut current)
+                    .await?;
+                self.plan(&current, action)
+            }
             Action::DeleteBranch => {
                 let requests = self.plan(&current, action)?;
                 self.ensure_branch_unmoved(account, &current).await?;

@@ -25,7 +25,7 @@ impl Merging for Bitbucket {
         &self,
         repo: &ForgeRepo,
         current: &Current,
-        method: MergeMethod,
+        method: Option<MergeMethod>,
         delete_branch: bool,
     ) -> Result<Vec<Request>> {
         let endpoint = repo.item_endpoint(ItemKind::Pr, current.item.number);
@@ -40,7 +40,7 @@ impl Merging for Bitbucket {
         &self,
         _repo: &ForgeRepo,
         _current: &Current,
-        _method: MergeMethod,
+        _method: Option<MergeMethod>,
         _delete_branch: bool,
     ) -> Result<Vec<Request>> {
         Err(capability::unsupported(self, Capability::AutoMerge))
@@ -65,18 +65,18 @@ impl Merging for Bitbucket {
     }
 }
 
-/// Bitbucket's strategy for each merge method; rebasing fast-forwards.
-fn merge_request(endpoint: String, method: MergeMethod, delete_branch: bool) -> Request {
-    let strategy = match method {
-        MergeMethod::Merge => "merge_commit",
-        MergeMethod::Squash => "squash",
-        MergeMethod::Rebase => "rebase_fast_forward",
-    };
-    Request::new(
-        HttpMethod::Post,
-        endpoint,
-        Some(json!({ "merge_strategy": strategy, "close_source_branch": delete_branch })),
-    )
+/// Bitbucket's strategy for each merge method, where rebasing
+/// fast-forwards, or without one the repository's default strategy.
+fn merge_request(endpoint: String, method: Option<MergeMethod>, delete_branch: bool) -> Request {
+    let mut body = json!({ "close_source_branch": delete_branch });
+    if let Some(method) = method {
+        body["merge_strategy"] = json!(match method {
+            MergeMethod::Merge => "merge_commit",
+            MergeMethod::Squash => "squash",
+            MergeMethod::Rebase => "rebase_fast_forward",
+        });
+    }
+    Request::new(HttpMethod::Post, endpoint, Some(body))
 }
 
 #[cfg(test)]

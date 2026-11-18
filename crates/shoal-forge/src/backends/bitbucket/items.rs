@@ -99,6 +99,7 @@ impl Items for Bitbucket {
                 .collect(),
             user_ids: Default::default(),
             milestone_id: None,
+            merge_style: None,
             replaced_labels: Vec::new(),
         })
     }

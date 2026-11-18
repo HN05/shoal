@@ -33,9 +33,11 @@ pub enum Action {
     Reopen,
     /// `head` is the commit the merge is for, such as one an approval bound,
     /// and else the head the PR has when read before merging; the forge
-    /// refuses to merge a head that moved from it.
+    /// refuses to merge a head that moved from it. Without a method the PR
+    /// merges by the repository's default.
     Merge {
-        method: MergeMethod,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        method: Option<MergeMethod>,
         delete_branch: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         head: Option<CommitId>,
@@ -43,7 +45,8 @@ pub enum Action {
     /// Have the forge merge the PR once its required checks and approvals
     /// pass, or now when they already do, at `head` as a merge takes it.
     AutoMerge {
-        method: MergeMethod,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        method: Option<MergeMethod>,
         delete_branch: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         head: Option<CommitId>,
@@ -260,10 +263,10 @@ impl Action {
                     .collect()
             }
             Self::Reopen if kind == ItemKind::Pr => vec![Capability::ReopenPrs],
-            Self::Merge { method, .. } => vec![Capability::merge(*method)],
-            Self::AutoMerge { method, .. } => {
-                vec![Capability::AutoMerge, Capability::merge(*method)]
-            }
+            Self::Merge { method, .. } => method.map(Capability::merge).into_iter().collect(),
+            Self::AutoMerge { method, .. } => std::iter::once(Capability::AutoMerge)
+                .chain(method.map(Capability::merge))
+                .collect(),
             Self::CancelAutoMerge => vec![Capability::AutoMerge],
             Self::Update { method } => vec![Capability::update(*method)],
             Self::Thread(change) if change.resolve.is_some() => vec![Capability::ResolveThreads],

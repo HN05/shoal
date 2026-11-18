@@ -37,17 +37,31 @@ impl Merging for GitHub {
         github_rest::behind(repo, account, number, compare, "behind_by").await
     }
 
+    /// GitHub has no default merge method, so a merge without one takes
+    /// the first of merge, squash and rebase that the repository allows.
+    async fn prepare_merge(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        current: &mut Current,
+    ) -> Result<()> {
+        let repository = repo.read_repository(account).await?;
+        current.merge_style = allowed_merge(&repository).map(|method| method.as_str().into());
+        Ok(())
+    }
+
     fn merge(
         &self,
         repo: &ForgeRepo,
         current: &Current,
-        method: MergeMethod,
+        method: Option<MergeMethod>,
         delete_branch: bool,
     ) -> Result<Vec<Request>> {
         let item = &current.item;
         let pr = item.pr.as_ref().context("only PRs merge")?;
         let merge = format!("{}/merge", repo.item_endpoint(ItemKind::Pr, item.number));
-        let body = json!({ "merge_method": method.as_str(), "sha": current.read_head()? });
+        let body =
+            json!({ "merge_method": current.merge_style(method)?, "sha": current.read_head()? });
         // GitHub can answer success without merging.
         let mut requests =
             vec![Request::new(HttpMethod::Put, merge, Some(body)).confirming("merged")];
@@ -64,7 +78,7 @@ impl Merging for GitHub {
         &self,
         repo: &ForgeRepo,
         current: &Current,
-        method: MergeMethod,
+        method: Option<MergeMethod>,
         delete_branch: bool,
     ) -> Result<Vec<Request>> {
         ensure!(
@@ -74,6 +88,7 @@ impl Merging for GitHub {
         if current.merges_now {
             return self.merge(repo, current, method, false);
         }
+        let method = current.merge_style(method)?;
         Ok(vec![auto_merge_request(current, Some(method))?])
     }
 
@@ -128,9 +143,20 @@ impl Merging for GitHub {
     }
 }
 
+/// The first of merge, squash and rebase that `repository` allows.
+fn allowed_merge(repository: &Value) -> Option<MergeMethod> {
+    [
+        ("allow_merge_commit", MergeMethod::Merge),
+        ("allow_squash_merge", MergeMethod::Squash),
+        ("allow_rebase_merge", MergeMethod::Rebase),
+    ]
+    .into_iter()
+    .find_map(|(allowed, method)| (repository[allowed] == true).then_some(method))
+}
+
 /// The GraphQL request that has GitHub merge the PR `current` with `method`
 /// once it can, at the head it had when read, or withdraws that without one.
-fn auto_merge_request(current: &Current, method: Option<MergeMethod>) -> Result<Request> {
+fn auto_merge_request(current: &Current, method: Option<&str>) -> Result<Request> {
     let id = current
         .node_id
         .as_deref()
@@ -140,7 +166,7 @@ fn auto_merge_request(current: &Current, method: Option<MergeMethod>) -> Result<
             "mutation($id: ID!, $method: PullRequestMergeMethod!, $head: GitObjectID!) { enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: $method, expectedHeadOid: $head}) { clientMutationId } }",
             json!({
                 "id": id,
-                "method": method.as_str().to_ascii_uppercase(),
+                "method": method.to_ascii_uppercase(),
                 "head": current.read_head()?,
             }),
         ),

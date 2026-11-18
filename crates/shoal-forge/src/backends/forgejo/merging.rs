@@ -36,11 +36,24 @@ impl Merging for Forgejo {
         github_rest::behind(repo, account, number, compare, "total_commits").await
     }
 
+    /// Forgejo merges only by a named style, so a merge without one takes
+    /// the repository's default.
+    async fn prepare_merge(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        current: &mut Current,
+    ) -> Result<()> {
+        let repository = repo.read_repository(account).await?;
+        current.merge_style = repository["default_merge_style"].as_str().map(Into::into);
+        Ok(())
+    }
+
     fn merge(
         &self,
         repo: &ForgeRepo,
         current: &Current,
-        method: MergeMethod,
+        method: Option<MergeMethod>,
         delete_branch: bool,
     ) -> Result<Vec<Request>> {
         Ok(vec![merge_request(
@@ -57,7 +70,7 @@ impl Merging for Forgejo {
         &self,
         repo: &ForgeRepo,
         current: &Current,
-        method: MergeMethod,
+        method: Option<MergeMethod>,
         delete_branch: bool,
     ) -> Result<Vec<Request>> {
         Ok(vec![merge_request(
@@ -109,12 +122,12 @@ fn merge_endpoint(repo: &ForgeRepo, current: &Current) -> String {
 fn merge_request(
     repo: &ForgeRepo,
     current: &Current,
-    method: MergeMethod,
+    method: Option<MergeMethod>,
     delete_branch: bool,
     when_checks_succeed: bool,
 ) -> Result<Request> {
     let mut body = json!({
-        "Do": method.as_str(),
+        "Do": current.merge_style(method)?,
         "delete_branch_after_merge": delete_branch,
         "head_commit_id": current.read_head()?,
     });

@@ -3,12 +3,8 @@
 use anyhow::{Context, Result, ensure};
 
 use crate::{
-    RepoRequests,
-    account::Account,
-    backends::Backend,
-    ci::run::workflow_segment,
-    hosts::HostTypes,
-    transport::api::{Request, TransportRequests},
+    RepoRequests, account::Account, backends::Backend, ci::run::workflow_segment, hosts::HostTypes,
+    transport::api::TransportRequests,
 };
 use shoal_forge_types::{ForgeRepo, IssueInput, items::link::decode_branch};
 
@@ -108,9 +104,7 @@ impl ForgeRepo {
 
     /// The repository's default branch.
     pub async fn default_branch(&self, account: &Account) -> Result<String> {
-        let endpoint = self.repo_endpoint("");
-        let read = Request::get(endpoint.trim_end_matches('/').into());
-        let value = self.send(account, &read).await?;
+        let value = self.read_repository(account).await?;
         let branch = self.kind().default_branch(&value);
         branch
             .map(Into::into)

@@ -32,6 +32,7 @@ fn the_diff_runs_from_the_merge_base_to_the_head() -> Result<()> {
         reviewers: Vec::new(),
         user_ids: Default::default(),
         milestone_id: None,
+        merge_style: None,
         replaced_labels: Vec::new(),
     };
     assert_eq!(

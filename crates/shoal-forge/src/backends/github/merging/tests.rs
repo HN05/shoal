@@ -28,6 +28,7 @@ fn reverts_go_through_graphql_and_report_the_new_branch() {
         reviewers: Vec::new(),
         user_ids: Default::default(),
         milestone_id: None,
+        merge_style: None,
         replaced_labels: Vec::new(),
     };
     let revert = NewRevert {
@@ -56,4 +57,20 @@ fn reverts_go_through_graphql_and_report_the_new_branch() {
         (PullNumber::new(9), "revert-7-topic".into())
     );
     assert!(reverted(&json!({"data": {"revertPullRequest": null}})).is_err());
+}
+
+#[test]
+fn a_merge_without_a_method_takes_the_first_one_the_repository_allows() {
+    let allowed = |merge, squash, rebase| {
+        allowed_merge(&json!({
+            "allow_merge_commit": merge,
+            "allow_squash_merge": squash,
+            "allow_rebase_merge": rebase,
+        }))
+    };
+    assert_eq!(allowed(true, true, true), Some(MergeMethod::Merge));
+    assert_eq!(allowed(false, true, true), Some(MergeMethod::Squash));
+    assert_eq!(allowed(false, false, true), Some(MergeMethod::Rebase));
+    // An account that cannot see the settings reads none of them.
+    assert_eq!(allowed_merge(&json!({})), None);
 }

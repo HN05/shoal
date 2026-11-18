@@ -14,7 +14,7 @@ fn actions_refuse_what_the_item_cannot_take() {
     assert!(base.validate(ItemKind::Issue).is_err());
     assert!(base.validate(ItemKind::Pr).is_ok());
     let merge = Action::Merge {
-        method: MergeMethod::Merge,
+        method: Some(MergeMethod::Merge),
         delete_branch: false,
         head: None,
     };
@@ -48,20 +48,22 @@ fn actions_refuse_what_the_item_cannot_take() {
 #[test]
 fn actions_need_the_capabilities_they_use() {
     let rebase = Action::Merge {
-        method: MergeMethod::Rebase,
+        method: Some(MergeMethod::Rebase),
         delete_branch: false,
         head: None,
     };
     assert_eq!(rebase.needs(ItemKind::Pr), [Capability::RebaseMerge]);
-    let auto = Action::AutoMerge {
-        method: MergeMethod::Rebase,
+    let auto = |method| Action::AutoMerge {
+        method,
         delete_branch: false,
         head: None,
     };
     assert_eq!(
-        auto.needs(ItemKind::Pr),
+        auto(Some(MergeMethod::Rebase)).needs(ItemKind::Pr),
         [Capability::AutoMerge, Capability::RebaseMerge]
     );
+    // The repository's default is a method the forge has.
+    assert_eq!(auto(None).needs(ItemKind::Pr), [Capability::AutoMerge]);
     assert!(Action::CancelAutoMerge.validate(ItemKind::Issue).is_err());
     assert_eq!(Action::Reopen.needs(ItemKind::Pr), [Capability::ReopenPrs]);
     assert!(Action::Reopen.needs(ItemKind::Issue).is_empty());

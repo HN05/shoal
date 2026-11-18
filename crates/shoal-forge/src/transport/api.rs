@@ -164,6 +164,13 @@ impl ForgeRepo {
         self.kind().repo_endpoint(self, path)
     }
 
+    /// The repository as the forge reports it.
+    pub(crate) async fn read_repository(&self, account: &Account) -> Result<Value> {
+        let endpoint = self.repo_endpoint("");
+        let read = Request::get(endpoint.trim_end_matches('/').into());
+        self.send(account, &read).await
+    }
+
     /// The response body, or null for an empty one.
     pub(crate) async fn send(&self, account: &Account, request: &Request) -> Result<Value> {
         async {

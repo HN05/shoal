@@ -42,6 +42,7 @@ fn pr(forge: &ForgeRepo, draft: bool, labels: &[&str]) -> Current {
         reviewers: Vec::new(),
         user_ids: Default::default(),
         milestone_id: None,
+        merge_style: None,
         replaced_labels: Vec::new(),
     }
 }
@@ -230,7 +231,7 @@ fn comments_state_changes_and_merges_use_each_forges_endpoints() {
         assert!(forge.plan(&open, &Action::Reopen).is_err());
     }
     let merge = Action::Merge {
-        method: MergeMethod::Squash,
+        method: Some(MergeMethod::Squash),
         delete_branch: true,
         head: None,
     };
@@ -262,7 +263,7 @@ fn comments_state_changes_and_merges_use_each_forges_endpoints() {
     assert!(github.plan(&unread, &merge).is_err());
     // A merge bound to a head refuses a PR whose head moved from it.
     let bound = |head: &str| Action::AutoMerge {
-        method: MergeMethod::Squash,
+        method: Some(MergeMethod::Squash),
         delete_branch: false,
         head: Some(head.into()),
     };
@@ -280,6 +281,40 @@ fn comments_state_changes_and_merges_use_each_forges_endpoints() {
             json!({"Do": "squash", "delete_branch_after_merge": true,
                     "head_commit_id": "c0ffee"})
         )]
+    );
+}
+
+#[test]
+fn merges_without_a_method_name_the_style_the_repository_merges_by() {
+    let [github, forgejo] = forges();
+    let merge = Action::Merge {
+        method: None,
+        delete_branch: false,
+        head: None,
+    };
+    let mut open = pr(&forgejo, false, &[]);
+    // Without the repository's style read, the merge has none to name.
+    assert!(forgejo.plan(&open, &merge).is_err());
+    open.merge_style = Some("rebase-merge".into());
+    assert_eq!(
+        requests(&forgejo, &open, merge.clone())[0].2,
+        json!({"Do": "rebase-merge", "delete_branch_after_merge": false,
+                "head_commit_id": "c0ffee"})
+    );
+    let mut open = pr(&github, false, &[]);
+    open.merge_style = Some("squash".into());
+    assert_eq!(
+        requests(&github, &open, merge)[0].2,
+        json!({"merge_method": "squash", "sha": "c0ffee"})
+    );
+    let auto = Action::AutoMerge {
+        method: None,
+        delete_branch: false,
+        head: None,
+    };
+    assert_eq!(
+        requests(&github, &open, auto)[0].2["variables"]["method"],
+        "SQUASH"
     );
 }
 
@@ -448,14 +483,23 @@ fn gitlab_changes_merge_requests_in_one_update_by_user_id() {
         head: None,
     };
     assert_eq!(
-        requests(&gitlab, &open, merge(MergeMethod::Squash)),
+        requests(&gitlab, &open, merge(Some(MergeMethod::Squash))),
         [(
             "PUT".into(),
             "projects/group%2Fsub%2Frepo/merge_requests/7/merge".into(),
             json!({"squash": true, "should_remove_source_branch": true, "sha": "c0ffee"})
         )]
     );
-    assert!(gitlab.plan(&open, &merge(MergeMethod::Rebase)).is_err());
+    // Without a method the project's squash setting applies.
+    assert_eq!(
+        requests(&gitlab, &open, merge(None))[0].2,
+        json!({"should_remove_source_branch": true, "sha": "c0ffee"})
+    );
+    assert!(
+        gitlab
+            .plan(&open, &merge(Some(MergeMethod::Rebase)))
+            .is_err()
+    );
 }
 
 #[test]
@@ -463,7 +507,7 @@ fn automatic_merges_use_each_forges_requests() {
     let [github, forgejo] = forges();
     let gitlab = ForgeRepo::parse("git@gitlab.com:group/repo.git").unwrap();
     let auto = |delete_branch| Action::AutoMerge {
-        method: MergeMethod::Squash,
+        method: Some(MergeMethod::Squash),
         delete_branch,
         head: None,
     };

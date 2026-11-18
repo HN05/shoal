@@ -223,6 +223,7 @@ pub(crate) fn current(
         reviewers: Vec::new(),
         user_ids: Default::default(),
         milestone_id: None,
+        merge_style: None,
         replaced_labels: Vec::new(),
     })
 }

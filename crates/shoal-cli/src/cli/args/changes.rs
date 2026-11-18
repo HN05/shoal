@@ -397,8 +397,8 @@ pub enum IssueCommand {
 pub struct PrMergeArgs {
     #[command(flatten)]
     pub item: ItemSelector,
-    /// How to merge.
-    #[arg(short = 'X', long, value_enum, required_unless_present = "cancel_auto")]
+    /// How to merge; defaults to the repository's default on the forge.
+    #[arg(short = 'X', long, value_enum)]
     pub method: Option<crate::forge::items::action::MergeMethod>,
     /// Delete the PR's branch on the forge after merging.
     #[arg(long)]

@@ -146,13 +146,14 @@ pub(super) async fn issue(ctx: &Context, command: IssueCommand) -> Result<i32> {
     act(ctx, item, ItemKind::Issue, action, outcome).await
 }
 
-/// The merge `args` ask for: without a method, which only `--cancel-auto`
-/// leaves out, withdrawing an automatic merge.
+/// The merge `args` ask for, or the withdrawal of an automatic merge.
 fn merge(args: &PrMergeArgs) -> (Action, &'static str) {
-    let delete_branch = args.delete_branch;
-    match args.method {
-        None => (Action::CancelAutoMerge, "Auto-merge canceled"),
-        Some(method) if args.auto => (
+    let (method, delete_branch) = (args.method, args.delete_branch);
+    if args.cancel_auto {
+        return (Action::CancelAutoMerge, "Auto-merge canceled");
+    }
+    match args.auto {
+        true => (
             Action::AutoMerge {
                 method,
                 delete_branch,
@@ -160,7 +161,7 @@ fn merge(args: &PrMergeArgs) -> (Action, &'static str) {
             },
             "Auto-merge enabled",
         ),
-        Some(method) => (
+        false => (
             Action::Merge {
                 method,
                 delete_branch,
