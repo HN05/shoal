@@ -173,7 +173,9 @@ async fn all_holds_the_users_pr_merge_and_binds_it_to_the_reviewed_head() {
     let context = f.context();
     let pull = || Some("1".parse().unwrap());
     // The warning the question shows comes after the gate too.
-    let warning = f.manager.require_pull_review(&context, pull(), None, None);
+    let warning = f
+        .manager
+        .require_pull_review(&context, pull(), None, None, None);
     warning.await.unwrap_err();
     f.gate(None, None).await.unwrap_err();
     f.reviewed().await;
@@ -229,6 +231,27 @@ async fn a_caller_outside_the_owners_tree_queues_no_review_there() {
 }
 
 #[tokio::test]
+async fn a_held_auto_merge_needs_a_forge_that_keeps_it_at_the_reviewed_head() {
+    let f = Fixture::new("agents", "topic").await;
+    f.reviewed().await;
+    let mut auto = Action::AutoMerge {
+        method: MergeMethod::Merge,
+        delete_branch: false,
+        head: None,
+    };
+    let (context, agent) = (f.context(), f.agent());
+    let pull = || Some("1".parse().unwrap());
+    let gated = f
+        .manager
+        .gate_pull_merge(&context, pull(), &mut auto, Some(&agent));
+    // Forgejo's automatic merge merges whatever head the PR has later.
+    gated.await.unwrap_err();
+    // The user's, which the gate does not hold, goes ahead.
+    let gated = f.manager.gate_pull_merge(&context, pull(), &mut auto, None);
+    gated.await.unwrap();
+}
+
+#[tokio::test]
 async fn the_global_config_holds_a_pr_of_an_unregistered_repository() {
     let f = Fixture::new("all", "topic").await;
     let host = &f._server.host;
@@ -236,7 +259,7 @@ async fn the_global_config_holds_a_pr_of_an_unregistered_repository() {
     let context = f.context();
     let gated = f
         .manager
-        .require_pull_review(&context, Some(elsewhere), None, None);
+        .require_pull_review(&context, Some(elsewhere), None, None, None);
     let refused = gated.await.unwrap_err().to_string();
     assert!(refused.contains("no workspace owns"), "{refused}");
 }

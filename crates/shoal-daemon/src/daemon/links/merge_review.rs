@@ -14,6 +14,7 @@ use crate::{
     },
     forge::{
         PullRequest,
+        capability::Capability,
         items::{
             action::Action,
             link::ItemKind,
@@ -23,7 +24,7 @@ use crate::{
     model::Workspace,
     protocol::RepoTarget,
 };
-use shoal_forge::RepoRequests;
+use shoal_forge::{RepoRequests, capability::CapabilityRequests};
 
 impl Manager {
     /// Hold a merge in `action` of the PR `input` names, or of `target`'s
@@ -40,7 +41,8 @@ impl Manager {
             return Ok(());
         }
         let head = action.merge_head().cloned();
-        let reviewed = self.require_pull_review(target, input, head, caller);
+        let binding = Some(binding(action));
+        let reviewed = self.require_pull_review(target, input, head, binding, caller);
         if let Some(head) = reviewed.await? {
             action.bind_merge_head(head);
         }
@@ -52,13 +54,15 @@ impl Manager {
     /// require_for_merge` of its repository, or of the global config for an
     /// unregistered one, holds `caller`, unless a finished review of the
     /// workspace that owns its head branch covers that head with every
-    /// finding resolved. Returns the head checked, which the merge must name, or
+    /// finding resolved, and the forge has `binding`, which keeps the merge
+    /// at that head. Returns the head checked, which the merge must name, or
     /// none where the gate does not hold `caller`.
     pub(crate) async fn require_pull_review(
         &self,
         target: &RepoTarget,
         input: Option<ItemInput>,
         head: Option<CommitId>,
+        binding: Option<Capability>,
         caller: Option<&Caller>,
     ) -> Result<Option<CommitId>> {
         let pull = self.target_item(target, input, ItemKind::Pr, Access::Read, caller);
@@ -69,6 +73,9 @@ impl Manager {
             return Ok(None);
         }
         let forge = target.forge()?;
+        if let Some(binding) = binding {
+            forge.require(binding).context(UNBOUND)?;
+        }
         let account = self.target_account(&target, Access::Read, caller);
         let pull = forge.pull_request(&account, &url).await?;
         let owner = self.pull_owner(repository.as_ref(), &pull).await?;
@@ -147,6 +154,9 @@ impl Manager {
     }
 }
 
+/// Why a merge the gate holds needs the forge to keep it at its head.
+const UNBOUND: &str = "[review] require_for_merge merges only the reviewed head, which this forge cannot hold the merge to";
+
 /// The refusal of a merge of `pull`, which no workspace owns, so no review
 /// covers it.
 fn unowned(pull: &PullRequest) -> String {
@@ -154,6 +164,14 @@ fn unowned(pull: &PullRequest) -> String {
         "merging needs a review by the workspace that owns the branch of {}, and no workspace owns {}; merge it on the forge",
         pull.url, pull.head
     )
+}
+
+/// The capability that keeps `action`, a merge, at the head it names.
+fn binding(action: &Action) -> Capability {
+    match action {
+        Action::AutoMerge { .. } => Capability::AutoMergeAtHead,
+        _ => Capability::MergeAtHead,
+    }
 }
 
 #[cfg(test)]

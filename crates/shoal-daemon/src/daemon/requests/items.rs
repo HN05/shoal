@@ -151,7 +151,7 @@ pub(super) async fn handle(
         }
         ItemMethod::MergeWarning { target, item } => {
             // Before the question, which a merge its gate refuses never asks.
-            (manager.require_pull_review(&target, item.clone(), None, caller)).await?;
+            (manager.require_pull_review(&target, item.clone(), None, None, caller)).await?;
             Body::MergeWarning(manager.merge_warning(&target, item).await?)
         }
         ItemMethod::OpenPull {
