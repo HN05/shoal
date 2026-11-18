@@ -864,8 +864,8 @@ removes the spaces below it on other machines first, through their own
 machines; one that cannot go, or a removal that confirmed only the spaces it
 saw here, keeps it. What a space passes up the
 tree, its agent's messages, questions, approval requests, completion, ready
-marks and exits, reaches the nearest space above with an agent wherever it
-runs, and that
+marks and exits, and the issue and PR activity of a space without an agent,
+reaches the nearest space above with an agent wherever it runs, and that
 space decides the space's approval requests, answers its questions and
 messages it from its own machine. A machine whose link to the hub is down
 keeps what its spaces pass up and sends it once the link opens. A question or

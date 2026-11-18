@@ -455,6 +455,41 @@ pub(crate) fn below_elsewhere(db: &Connection) -> Result<Vec<(SpaceId, SpaceId)>
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// This machine's spaces whose activity goes to a coordinator on another
+/// machine, by the space above them there: each space without an agent
+/// whose parent runs elsewhere, then those below it whose activity it
+/// would receive, as [`delegated`] walks them.
+pub(crate) fn delegated_elsewhere(
+    db: &Connection,
+    agents: &TrackedAgents,
+) -> Result<Vec<(SpaceId, Vec<SpaceRef>)>> {
+    let with_agents = with_agents(db, agents)?;
+    let mut groups = Vec::new();
+    for (space, above) in below_elsewhere(db)? {
+        if with_agents.contains(&space) {
+            continue;
+        }
+        let Some(own) = space_ref_of(db, &space)? else {
+            continue;
+        };
+        let spaces = [own].into_iter().chain(delegated(db, &space, agents)?);
+        groups.push((above, spaces.collect()));
+    }
+    Ok(groups)
+}
+
+/// The space `id`, if this machine has it.
+fn space_ref_of(db: &Connection, id: &SpaceId) -> Result<Option<SpaceRef>> {
+    Ok(db
+        .query_row(
+            "SELECT spaces.id,spaces.name,spaces.kind,workspaces.branch FROM spaces
+                LEFT JOIN workspaces ON workspaces.id=spaces.id WHERE spaces.id=?1",
+            [id],
+            space_ref,
+        )
+        .optional()?)
+}
+
 /// The spaces with an agent among `agents`, as [`has_agent`] counts one.
 pub(crate) fn with_agents(db: &Connection, agents: &TrackedAgents) -> Result<HashSet<SpaceId>> {
     Ok(db

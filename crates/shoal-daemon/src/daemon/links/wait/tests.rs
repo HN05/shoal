@@ -113,8 +113,8 @@ fn item_url(path: &str) -> String {
 
 static PR: LazyLock<String> = LazyLock::new(|| item_url("pulls/1"));
 static WORKER_PR: LazyLock<String> = LazyLock::new(|| item_url("pulls/2"));
-static CHILD_PR: LazyLock<String> = LazyLock::new(|| item_url("pulls/3"));
-static GRANDCHILD_PR: LazyLock<String> = LazyLock::new(|| item_url("pulls/4"));
+pub(super) static CHILD_PR: LazyLock<String> = LazyLock::new(|| item_url("pulls/3"));
+pub(super) static GRANDCHILD_PR: LazyLock<String> = LazyLock::new(|| item_url("pulls/4"));
 static PARENT_PR: LazyLock<String> = LazyLock::new(|| item_url("pulls/5"));
 static ANOTHER_PR: LazyLock<String> = LazyLock::new(|| item_url("pulls/6"));
 static ISSUE: LazyLock<String> = LazyLock::new(|| item_url("issues/9"));

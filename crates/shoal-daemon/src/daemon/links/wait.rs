@@ -19,6 +19,7 @@ mod background;
 mod branch_report;
 mod cursor;
 mod delivery;
+mod elsewhere;
 mod framing;
 mod items;
 mod merge_runs;

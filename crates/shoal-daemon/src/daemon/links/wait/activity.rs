@@ -306,7 +306,7 @@ pub(in crate::daemon::links) fn queue_update(
 
 /// Remove `deliveries` from the pending updates of the workspaces `ids`;
 /// updates queued after them stay pending.
-fn acknowledge_deliveries(
+pub(super) fn acknowledge_deliveries(
     db: &rusqlite::Connection,
     ids: &[SpaceId],
     deliveries: &[String],
