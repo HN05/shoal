@@ -61,7 +61,9 @@ impl Manager {
                         .context("the restore started without admission");
                 }
                 Some(QueueState::Queued) => changed.changed().await?,
-                None => bail!("the restore is no longer in the agent queue"),
+                Some(QueueState::Failed) | None => {
+                    bail!("the restore is no longer in the agent queue")
+                }
             }
         }
     }

@@ -339,8 +339,12 @@ fn queue_status_cell(entry: &QueueEntry) -> Cell {
 }
 
 /// What a queue entry waits for besides its place, each after a comma:
-/// `, blocked by api`, `, after an update` or `, held by low disk space`.
+/// `, blocked by api`, `, after an update` or `, held by low disk space`,
+/// or why a failed launch did not start.
 fn waiting_reasons(entry: &QueueEntry) -> String {
+    if let Some(error) = &entry.error {
+        return format!(": {error}");
+    }
     let mut text = String::new();
     if !entry.blockers.is_empty() {
         text += &format!(", blocked by {}", entry.blockers.join(", "));

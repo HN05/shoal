@@ -53,6 +53,7 @@ impl Agents {
                 state: match entry.state {
                     QueueState::Queued => ActivityState::Queued,
                     QueueState::Starting => ActivityState::Starting,
+                    QueueState::Failed => ActivityState::Failed,
                 },
                 agent: Some(entry.agent.clone()),
                 since: Some(entry.created_at),

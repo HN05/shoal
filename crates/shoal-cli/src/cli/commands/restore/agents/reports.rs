@@ -69,6 +69,7 @@ fn set_up(set_up: &[SetUp]) {
                 outln!("Set up {name}; its agent starts from the agent queue")
             }
             Some(QueueState::Starting) => outln!("Set up {name}; starting its agent"),
+            Some(QueueState::Failed) => outln!("Set up {name}; its agent did not start"),
         }
     }
 }

@@ -139,6 +139,7 @@ impl ListStatus {
         match entry.state {
             QueueState::Queued => Self::Queued,
             QueueState::Starting => Self::Starting,
+            QueueState::Failed => Self::Failed,
         }
     }
 

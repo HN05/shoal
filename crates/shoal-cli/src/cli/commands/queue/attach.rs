@@ -63,6 +63,7 @@ async fn resume_restore(ctx: &Context, restores: impl Fn(&QueueEntry) -> bool) -
     let entry = match restore.state {
         QueueState::Queued => queue::start(&ctx.paths, restore.id.to_string()).await?,
         QueueState::Starting => restore,
+        QueueState::Failed => anyhow::bail!("the restore of {} failed", restore.name),
     };
     ctx.emit(&format!("Resuming {}", entry.name), &entry)?;
     agent_terminal_session(ctx, &entry, entry.execution.as_ref()).await?;

@@ -55,6 +55,11 @@ impl Manager {
     ) -> Result<QueueEntry> {
         let entry = self.selected_entry(selector, caller).await?;
         ensure!(
+            entry.state != QueueState::Failed,
+            "the start of {} failed; `shoal restore` queues it again",
+            entry.name
+        );
+        ensure!(
             entry.state == QueueState::Queued,
             "{} is already starting{starting}",
             entry.name
@@ -168,15 +173,21 @@ impl Manager {
         Ok(())
     }
 
-    /// Cancel the waiting entry `selector` names. A cancelled restore leaves
-    /// its agent stopped for `shoal restore`; a waiting wrapper is stopped as
-    /// `shoal stop` stops it.
+    /// Cancel the waiting entry `selector` names, or drop a failed launch.
+    /// A cancelled restore leaves its agent stopped for `shoal restore`; a
+    /// waiting wrapper is stopped as `shoal stop` stops it.
     pub async fn queue_remove(
         &self,
         selector: &str,
         caller: Option<&Caller>,
     ) -> Result<QueueEntry> {
         let _gate = self.agent_queue.lock_admission().await;
+        let selected = self.selected_entry(selector, caller).await?;
+        if selected.state == QueueState::Failed {
+            let dropped = self.drop_failed_launch(&selected.id).await?;
+            ensure!(dropped, "{} is no longer in the agent queue", selected.name);
+            return Ok(selected);
+        }
         let entry = self
             .waiting_entry(selector, caller, "; remove its workspace instead")
             .await?;

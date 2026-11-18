@@ -62,6 +62,7 @@ fn queue_status_names_the_work_a_launch_waits_for() {
         job: None,
         held_by: None,
         rank: None,
+        error: None,
     };
     assert_eq!(queue_status_cell(&entry).0, "queued, position 2");
     entry.blockers = vec!["api".into(), "https://forge.example/o/r/issues/7".into()];
@@ -70,6 +71,16 @@ fn queue_status_names_the_work_a_launch_waits_for() {
         "queued, position 2, blocked by api, https://forge.example/o/r/issues/7"
     );
     entry.blockers.clear();
+    entry.state = crate::state::QueueState::Failed;
+    entry.position = None;
+    entry.error = Some("the place did not open".into());
+    assert_eq!(
+        queue_status_cell(&entry).0,
+        "failed: the place did not open"
+    );
+    entry.state = crate::state::QueueState::Queued;
+    entry.position = Some(2);
+    entry.error = None;
     entry.mode = Some("review".into());
     let plain = Palette::stdout(true);
     assert_eq!(
@@ -164,6 +175,7 @@ fn queue_status_names_a_restore_that_waits_for_an_update() {
         job: None,
         held_by: None,
         rank: None,
+        error: None,
     };
     assert_eq!(
         queue_status_cell(&entry).0,

@@ -64,6 +64,9 @@ pub(super) async fn handle(
             manager.fail_queue_entry(&entry, &error).await?;
             Body::Ok
         }
+        QueueMethod::QueueRetry { entry } => {
+            Body::QueueEntry(manager.retry_failed_launch(&entry).await?)
+        }
         QueueMethod::SetPriority { space, priority } => {
             Body::Prioritized(manager.set_priority(caller, &space, priority).await?)
         }
@@ -113,6 +116,12 @@ impl Scoped for QueueMethod {
                     (manager.authorize_start_beyond_limits(caller, "restore", target)).await?;
                 }
                 Some(target)
+            }
+            // A space's own failed launch restores as its stopped agent
+            // does: only from the spaces above it.
+            QueueMethod::QueueRetry { entry } => {
+                manager.ensure_entry_reached(caller, entry).await?;
+                None
             }
             QueueMethod::QueueStart { entry, .. } => {
                 let id = entry.clone().into();

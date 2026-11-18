@@ -74,6 +74,9 @@ pub struct QueueEntry {
     /// Where a waiting entry ranks, which decides what starts first.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rank: Option<QueueRank>,
+    /// Why a failed launch did not start.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 /// What keeps a waiting entry from starting, besides the work it waits for.

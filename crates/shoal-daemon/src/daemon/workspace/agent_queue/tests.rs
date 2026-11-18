@@ -139,12 +139,12 @@ async fn a_full_machine_queues_until_a_start_ends() {
         .unwrap();
     manager.dispatch_queue().await.unwrap();
     assert!(started(&second.id));
-    let entries = manager.queue_entries().await.unwrap();
+    let entries = live(&manager).await;
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].state, QueueState::Starting);
     let failure = manager.notifications(true, 10).await.unwrap();
     assert!(failure.iter().any(|notification| {
-        notification.kind == NotificationKind::QueueFailed
+        notification.kind == NotificationKind::StartFailed
             && notification.message.contains("setup failed")
     }));
     assert!(
@@ -249,11 +249,7 @@ async fn abandoned_starts_expire_after_the_grace_period_unless_held() {
         .unwrap();
 
     manager.dispatch_queue().await.unwrap();
-    let remaining: Vec<_> = manager
-        .queue_entries()
-        .await
-        .unwrap()
-        .into_iter()
+    let remaining: Vec<_> = (live(&manager).await.into_iter())
         .map(|entry| entry.id)
         .collect();
     assert_eq!(remaining, std::slice::from_ref(&held.id));
@@ -264,7 +260,7 @@ async fn abandoned_starts_expire_after_the_grace_period_unless_held() {
             .unwrap()
             .iter()
             .any(
-                |notification| notification.kind == NotificationKind::QueueFailed
+                |notification| notification.kind == NotificationKind::StartFailed
                     && notification.message.contains("abandoned")
             )
     );
@@ -293,7 +289,7 @@ async fn failing_an_ended_entry_frees_nothing_and_says_nothing() {
     assert_eq!(
         failures
             .iter()
-            .filter(|notification| notification.kind == NotificationKind::QueueFailed)
+            .filter(|notification| notification.kind == NotificationKind::StartFailed)
             .count(),
         1
     );
@@ -594,15 +590,21 @@ fn publish_recovery(manager: &Manager) {
     manager.overload_recovery.publish(Some(epoch));
 }
 
-/// Each entry's name, kind and state in queue order.
+/// Each entry's name, kind and state in queue order, without the failed
+/// launches, which wait for nothing.
 pub(super) async fn queue(manager: &Manager) -> Vec<(String, QueueKind, QueueState)> {
-    manager
-        .queue_entries()
+    live(manager)
         .await
-        .unwrap()
         .into_iter()
         .map(|entry| (entry.name.into(), entry.kind, entry.state))
         .collect()
+}
+
+/// The entries that wait or start, without the failed launches.
+pub(super) async fn live(manager: &Manager) -> Vec<crate::model::QueueEntry> {
+    let mut entries = manager.queue_entries().await.unwrap();
+    entries.retain(|entry| entry.state != QueueState::Failed);
+    entries
 }
 
 /// Forget a stopped agent as `shoal restore --forget` does once its wrapper ended.
@@ -1119,11 +1121,11 @@ async fn an_expired_launch_in_an_existing_workspace_reports_its_failure() {
         .await
         .unwrap();
     manager.dispatch_queue().await.unwrap();
-    assert!(manager.queue_entries().await.unwrap().is_empty());
+    assert!(live(&manager).await.is_empty());
     let notifications = manager.notifications(true, 10).await.unwrap();
     assert!(
         notifications.iter().any(|notification| {
-            notification.kind == NotificationKind::QueueFailed
+            notification.kind == NotificationKind::StartFailed
                 && notification.message.contains(entry.name.as_str())
         }),
         "{notifications:?}"

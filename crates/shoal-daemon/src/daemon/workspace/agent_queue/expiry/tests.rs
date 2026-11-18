@@ -51,8 +51,13 @@ async fn expiry_commits_deletions_and_returns_only_reportable_failures() -> Resu
             )?;
             let held = HashSet::from(["held".into()]);
             let failures = expire_starts(tx, &held, UnixTime::from_seconds(100))?;
-            assert_eq!(failures.len(), 2);
+            assert_eq!(failures.len(), 3);
             assert!(failures.contains(&FailedStart::UnopenedLaunch("launch".into())));
+            // A launch in a recorded space stays there as failed.
+            assert!(failures.contains(&FailedStart::KeptLaunch("workspace".into())));
+            let kept: String =
+                tx.query_row("SELECT id FROM failed_launches", [], |row| row.get(0))?;
+            assert_eq!(kept, "opened");
             assert!(failures.contains(&FailedStart::UnstartedRestore(
                 "restore".into(),
                 "workspace".into()
@@ -93,7 +98,7 @@ async fn a_failed_deletion_rolls_back_the_whole_expiry() -> Result<()> {
     let failures = store
         .write(|tx| expire_starts(tx, &HashSet::new(), UnixTime::from_seconds(100)))
         .await?;
-    assert_eq!(failures.len(), 2);
+    assert_eq!(failures.len(), 3);
     store
         .run(|db| {
             assert!(remaining(db)?.is_empty());

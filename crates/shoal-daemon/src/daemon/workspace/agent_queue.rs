@@ -10,6 +10,7 @@ mod claims;
 mod dispatch;
 mod entries;
 mod expiry;
+mod failures;
 mod limits;
 mod ranking;
 mod restores;

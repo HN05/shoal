@@ -477,8 +477,8 @@ impl Manager {
     }
 
     /// End starting launches and restores the daemon started whose holder has
-    /// been gone for the grace period. A launch that never opened a workspace,
-    /// like a restore whose agent never registered, failed to start, so say so.
+    /// been gone for the grace period, whose agent failed to start, so say
+    /// so; a launch stays on its space as failed.
     async fn expire_starting_entries(&self) -> Result<()> {
         let held = self.agent_queue.held();
         let cutoff = UnixTime::now() - START_GRACE;
@@ -492,12 +492,15 @@ impl Manager {
         Ok(())
     }
 
-    /// Tell the user about `failure`, by the workspace's identity for a
-    /// restore and by name alone for a launch that opened none, which no
-    /// workspace's name identifies since names repeat.
+    /// Tell of `failure`: a failed launch to its space's starter, a restore
+    /// by its space's identity and a launch that recorded no space by name
+    /// alone, which no space's name identifies since names repeat.
     async fn report_expired_start(&self, failure: expiry::FailedStart) {
         let kind = NotificationKind::QueueFailed;
         match failure {
+            expiry::FailedStart::KeptLaunch(space) => {
+                self.tell_launch_failed(&space, expiry::ENDED).await;
+            }
             expiry::FailedStart::UnopenedLaunch(name) => {
                 let reason = "its launch ended without opening the workspace";
                 let message = format!("{name} did not start from the agent queue: {reason}");

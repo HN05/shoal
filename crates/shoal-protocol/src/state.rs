@@ -44,6 +44,10 @@ states!(QueueState {
     Queued => "queued",
     /// Admitted to a slot; its agent has not registered yet.
     Starting => "starting",
+    /// A launch whose start failed, kept on its space until `shoal
+    /// restore` queues it again, a new launch there replaces it or the
+    /// space goes; nothing admits it.
+    Failed => "failed",
 });
 states!(QueueKind {
     /// A new agent that `shoal start` plans.

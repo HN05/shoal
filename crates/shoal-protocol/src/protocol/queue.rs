@@ -69,10 +69,16 @@ pub enum QueueMethod {
         entry: QueueEntryId,
         space: SpaceSelector,
     },
-    /// End a starting entry that could not start its agent.
+    /// End a starting entry that could not start its agent; a launch in a
+    /// recorded space stays there as a failed entry.
     QueueFail {
         entry: QueueEntryId,
         error: String,
+    },
+    /// Queue the failed launch `entry` again exactly as it was. Answers
+    /// with the entry as it waits.
+    QueueRetry {
+        entry: QueueEntryId,
     },
     /// Set `priority` on the space, which ranks its queued work; a scoped
     /// caller gives at most its own space's.

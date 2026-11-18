@@ -2260,30 +2260,44 @@ fn chat_with_an_open_tab() -> (Fixture, Command) {
 }
 
 /// A chat whose focused tab opens, but whose start there fails before its
-/// agent runs, goes, as the start recorded it before the tab opened.
+/// agent runs, stays with its failed launch, as a workspace's would, for
+/// `shoal restore` to start again.
 #[test]
-fn a_chat_whose_tab_fails_to_start_its_agent_goes() {
+fn a_chat_whose_tab_fails_to_start_its_agent_stays_with_its_failed_launch() {
     let (fixture, mut tab) = chat_with_an_open_tab();
     fs::remove_file(fixture.root.path().join("bin/codex")).unwrap();
 
     let (output, transcript) = fixture.interactive_command(&mut tab, "");
 
     assert!(!output.status.success(), "{transcript}");
+    assert_failed_launch_kept(&fixture, &transcript);
+}
+
+/// Check that `fixture`'s one chat stays with its failed launch in the
+/// queue, which `context` explains.
+fn assert_failed_launch_kept(fixture: &Fixture, context: &str) {
     let chats = fixture.ok(&["list", "--chats"]);
-    assert_eq!(chats, serde_json::json!([]), "{transcript}");
+    let [chat] = chats.as_array().unwrap().as_slice() else {
+        panic!("{chats} {context}");
+    };
+    let queue = fixture.ok(&["queue"]);
+    let failed: Vec<_> = (queue.as_array().unwrap().iter())
+        .filter(|entry| entry["state"] == "failed")
+        .map(|entry| entry["space_id"].clone())
+        .collect();
+    assert_eq!(failed, [chat["id"].clone()], "{context}");
 }
 
 /// A chat whose tab's start fails before it takes the recorded chat, as one
-/// without a terminal does, goes too.
+/// without a terminal does, stays with its failed launch too.
 #[test]
-fn a_chat_whose_tab_fails_before_taking_it_goes() {
+fn a_chat_whose_tab_fails_before_taking_it_stays_with_its_failed_launch() {
     let (fixture, mut tab) = chat_with_an_open_tab();
 
     let output = tab.stdin(Stdio::null()).output().unwrap();
 
     assert!(!output.status.success(), "{}", printed(&output));
-    let chats = fixture.ok(&["list", "--chats"]);
-    assert_eq!(chats, serde_json::json!([]), "{}", printed(&output));
+    assert_failed_launch_kept(&fixture, &printed(&output).to_string());
 }
 
 #[test]

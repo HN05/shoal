@@ -71,6 +71,9 @@ pub(super) struct Launch {
     /// The workspace a workspace's launch starts its agent in; none for a
     /// chat's.
     pub opens: Option<SpaceId>,
+    /// The recorded chat a chat's launch starts its agent in; none for a
+    /// workspace's, or a chat's its caller records once admitted.
+    pub chat: Option<SpaceId>,
     /// The space whose scoped process queued a chat's launch, in whose
     /// scope the launch records the chat.
     pub scope: Option<SpaceId>,
@@ -244,6 +247,15 @@ pub(super) fn insert_launch(
         (removing.require_taking_work(tx, space))
             .context("the space that queued the launch is being removed")?;
     }
+    if let Some(chat) = &launch.chat {
+        ensure!(
+            !queues_launch_in(tx, chat)?,
+            "chat {chat} has an agent waiting in the agent queue"
+        );
+    }
+    for space in [&launch.opens, &launch.chat].into_iter().flatten() {
+        super::failures::replace(tx, space)?;
+    }
     let request = &launch.request;
     ensure!(
         !crate::daemon::store::exists(
@@ -257,8 +269,8 @@ pub(super) fn insert_launch(
     );
     let now = UnixTime::now();
     tx.execute(
-        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,opens_workspace_id,mode,narrowing,scope_space_id,priority,issue_labels,source,starts_at_once)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)",
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,opens_workspace_id,mode,narrowing,scope_space_id,priority,issue_labels,source,starts_at_once,space_id)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20)",
         params![
             launch.id,
             QueueKind::Launch,
@@ -279,6 +291,7 @@ pub(super) fn insert_launch(
             serde_json::to_string(&request.issue_labels)?,
             (request.source.as_ref()).map(serde_json::to_string).transpose()?,
             at_once,
+            launch.chat,
         ],
     )?;
     if let Some(repository) = &launch.repository {
@@ -386,5 +399,6 @@ pub(super) fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
         job: crate::daemon::store::json_column(row, "job")?,
         held_by: None,
         rank: None,
+        error: None,
     })
 }

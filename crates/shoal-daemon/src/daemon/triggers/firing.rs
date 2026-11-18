@@ -14,6 +14,8 @@ use super::{
 };
 use crate::{
     daemon::workspace::Manager,
+    model::QueueEntry,
+    state::QueueState,
     time::UnixTime,
     triggers::{Overlap, filter, input::Input},
 };
@@ -181,7 +183,12 @@ impl Manager {
             Started::Space(space) => space.clone(),
             Started::Entry(entry) => {
                 let entries = self.queue_entries().await?;
-                if entries.iter().any(|queued| queued.id == *entry) {
+                let live = |queued: &&QueueEntry| queued.state != QueueState::Failed;
+                if entries
+                    .iter()
+                    .filter(live)
+                    .any(|queued| queued.id == *entry)
+                {
                     return Ok(true);
                 }
                 match self.started_launch(entry).await? {

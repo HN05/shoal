@@ -9,18 +9,23 @@ use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceName;
 
-/// A start that expired without completing its handoff: a launch that
-/// opened no workspace, by its name alone, or a restore with its
-/// workspace's ID.
+/// Why a launch that expired failed.
+pub(super) const ENDED: &str = "its launch ended before its agent started";
+
+/// A start that expired without completing its handoff: a launch that its
+/// recorded space keeps as failed, one that recorded none, by its name
+/// alone, or a restore with its space's ID.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum FailedStart {
+    KeptLaunch(SpaceId),
     UnopenedLaunch(SpaceName),
     UnstartedRestore(SpaceName, SpaceId),
 }
 
-/// Delete unheld, daemon-started entries older than `cutoff`. Opened launches
-/// expire silently. Return reportable failures, which the caller reports
-/// only once its transaction commits.
+/// End unheld, daemon-started entries older than `cutoff`: a launch stays
+/// on its recorded space as failed, and anything else goes. Return
+/// reportable failures, which the caller reports only once its transaction
+/// commits.
 pub(super) fn expire_starts(
     tx: &rusqlite::Transaction<'_>,
     held: &HashSet<QueueEntryId>,
@@ -37,22 +42,30 @@ pub(super) fn expire_starts(
         .collect::<rusqlite::Result<Vec<(QueueEntryId, SpaceName, QueueKind, Option<SpaceId>)>>>(
         )?;
     let mut failures = Vec::new();
-    for (id, name, kind, workspace) in stale {
+    for (id, name, kind, space) in stale {
         if held.contains(&id) {
             continue;
         }
-        tx.execute("DELETE FROM agent_queue WHERE id=?1", [&id])?;
-        let failure = match (kind, workspace) {
-            (QueueKind::Launch, None) => FailedStart::UnopenedLaunch(name),
-            // Opened launches expire silently; jobs carry no start environment.
-            (QueueKind::Launch | QueueKind::Job, _) => continue,
-            (QueueKind::Restore, Some(workspace)) => FailedStart::UnstartedRestore(name, workspace),
-            // A restore is always of a workspace's agent.
-            (QueueKind::Restore, None) => continue,
+        let failure = match (kind, space) {
+            (QueueKind::Launch, _) => expire_launch(tx, &id)?,
+            (QueueKind::Restore, Some(space)) => Some(FailedStart::UnstartedRestore(name, space)),
+            // Jobs carry no start environment, and a restore is always of a
+            // space's agent.
+            (QueueKind::Job | QueueKind::Restore, _) => None,
         };
-        failures.push(failure);
+        tx.execute("DELETE FROM agent_queue WHERE id=?1", [&id])?;
+        failures.extend(failure);
     }
     Ok(failures)
+}
+
+/// End the expired launch `id`, which its recorded space keeps as failed.
+fn expire_launch(tx: &rusqlite::Transaction<'_>, id: &QueueEntryId) -> Result<Option<FailedStart>> {
+    let failed = super::failures::end_start(tx, id, ENDED)?;
+    Ok(failed.map(|failed| match (failed.space, failed.kept) {
+        (Some(space), true) => FailedStart::KeptLaunch(space),
+        _ => FailedStart::UnopenedLaunch(failed.name),
+    }))
 }
 
 #[cfg(test)]

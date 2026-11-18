@@ -16,7 +16,7 @@ use super::{
 };
 use crate::{
     daemon::{notifications::NotificationKind, workspace::Manager},
-    model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan, SpaceKind, Workspace},
+    model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan, Workspace},
     state::{QueueKind, QueueState},
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
@@ -73,6 +73,7 @@ impl Manager {
                 ..request.into()
             },
             state,
+            chat: None,
             opens: Some(workspace.id.clone()),
             scope: None,
             awaits,
@@ -189,12 +190,17 @@ impl Manager {
     }
 
     /// Entries, the starting ones first and then the waiting ones in rank
-    /// order, each waiting one numbered and with its rank. One that arrived
-    /// since the rank was read goes last.
+    /// order, each waiting one numbered and with its rank, then the failed
+    /// launches. One that arrived since the rank was read goes last among
+    /// those waiting.
     async fn ranked_entries(&self) -> Result<Vec<QueueEntry>> {
         let ranked = self.ranked_queue().await?;
-        let entries = self.store.run(|db| all_entries(db)).await?;
-        Ok(in_rank_order(entries, ranked))
+        let (entries, failed) = (self.store)
+            .run(|db| Ok((all_entries(db)?, super::failures::entries(db)?)))
+            .await?;
+        let mut entries = in_rank_order(entries, ranked);
+        entries.extend(failed);
+        Ok(entries)
     }
 
     pub async fn queued_plan(&self, id: &QueueEntryId) -> Result<QueuedPlan> {
@@ -381,49 +387,27 @@ impl Manager {
             .await
     }
 
-    /// End a starting entry that cannot start its agent and say why. An entry
-    /// that already ended, such as with its removed workspace, has no slot
-    /// left to free; a new chat its launch recorded, which nothing ran in,
-    /// goes with it.
+    /// End a starting entry that cannot start its agent and say why: a
+    /// launch in a recorded space stays there as a failed entry, whatever
+    /// its kind, which `shoal restore` queues again. An entry that already
+    /// ended, such as with its removed space, has no slot left to free.
     pub async fn fail_queue_entry(&self, id: &QueueEntryId, error: &str) -> Result<()> {
-        let entry_id = id.to_owned();
-        let entry = self
-            .store
-            .write(move |tx| {
-                let entry: Option<(SpaceName, bool, Option<SpaceId>, bool)> = tx
-                    .query_row(
-                        "SELECT name, state=?2, COALESCE(space_id,opens_workspace_id),
-                            kind=?3 AND EXISTS (SELECT 1 FROM spaces
-                                WHERE spaces.id=agent_queue.space_id AND spaces.kind=?4)
-                            FROM agent_queue WHERE id=?1",
-                        params![
-                            entry_id,
-                            QueueState::Starting,
-                            QueueKind::Launch,
-                            SpaceKind::Chat
-                        ],
-                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-                    )
-                    .optional()?;
-                tx.execute(
-                    "DELETE FROM agent_queue WHERE id=?1 AND state=?2",
-                    params![entry_id, QueueState::Starting],
-                )?;
-                Ok(entry)
-            })
+        let (entry, text) = (id.to_owned(), error.to_owned());
+        let failed = (self.store)
+            .write(move |tx| super::failures::end_start(tx, &entry, &text))
             .await?;
-        let (name, space, new_chat) = match entry {
-            None => return Ok(()),
-            Some((_, false, ..)) => bail!("queue entry is no longer starting"),
-            Some((name, true, space, new_chat)) => (name, space, new_chat),
+        let Some(failed) = failed else {
+            return Ok(());
         };
         self.fail_renewal_started_by(id, error).await;
-        if let Some(space) = &space {
+        if let Some(space) = &failed.space {
             self.agent_settles.request(space);
         }
-        match (space, new_chat) {
-            (Some(chat), true) => self.fail_new_chat(&name, &chat, error).await,
-            (space, _) => self.tell_queue_failed(&name, space.as_ref(), error).await,
+        match (&failed.space, failed.kept) {
+            (Some(space), true) => self.tell_launch_failed(space, error).await,
+            (space, _) => {
+                (self.tell_queue_failed(&failed.name, space.as_ref(), error)).await;
+            }
         }
         self.agent_queue.wake();
         Ok(())

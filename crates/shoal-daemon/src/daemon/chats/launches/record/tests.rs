@@ -191,13 +191,16 @@ async fn a_link_that_fails_during_a_start_reaches_the_user() {
     );
 }
 
-/// Start a chat named `name` in `repo` whose place fails, and check that
-/// the daemon removed it and told the user why.
-async fn check_failed_place_removes_the_chat(manager: &Manager, repo: &Repository, name: &str) {
-    fake::fail(&manager.paths, name.into());
+/// A chat whose place fails stays with its failed launch, whose failure
+/// its starter, here the user, hears of, as a workspace's would.
+#[tokio::test]
+async fn a_chat_whose_place_fails_stays_with_its_failed_launch() {
+    let (temp, manager) = manager().await;
+    let repo = machine(&manager, &temp, true).await;
+    fake::fail(&manager.paths, "failing".into());
 
     let started = manager.launch_chat(
-        start(Some(repo), name, &[ISSUE]),
+        start(Some(&repo), "failing", &[ISSUE]),
         LaunchSource::Manual,
         None,
     );
@@ -208,33 +211,19 @@ async fn check_failed_place_removes_the_chat(manager: &Manager, repo: &Repositor
         "{error:#}"
     );
     let chats = manager.chats().await.unwrap();
-    assert!(chats.iter().all(|chat| chat.name != name));
-    let failed = notified(manager, NotificationKind::StartFailed).await;
+    let chat = chats.iter().find(|chat| chat.name == "failing").unwrap();
+    let entries = manager.queue_entries().await.unwrap();
+    let [failed] = entries.as_slice() else {
+        panic!("{entries:?}");
+    };
+    assert_eq!(failed.space(), Some(&chat.id));
+    assert_eq!(failed.state, crate::state::QueueState::Failed);
+    let told = notified(&manager, NotificationKind::StartFailed).await;
     assert!(
-        failed
-            .iter()
-            .any(|notification| notification.message.contains(name)),
-        "{failed:?}"
+        told.iter()
+            .any(|notification| notification.message.contains("failing")),
+        "{told:?}"
     );
-}
-
-/// A chat whose place fails is removed, its failure told, where no heavy
-/// slot tracks its agent.
-#[tokio::test]
-async fn an_untracked_chat_whose_place_fails_is_removed() {
-    let (temp, manager) = manager().await;
-    let repo = machine(&manager, &temp, false).await;
-    check_failed_place_removes_the_chat(&manager, &repo, "untracked").await;
-}
-
-/// A chat whose place fails is removed with the entry that held its
-/// agent's slot, which frees the slot.
-#[tokio::test]
-async fn a_chat_whose_place_fails_is_removed_with_its_slot() {
-    let (temp, manager) = manager().await;
-    let repo = machine(&manager, &temp, true).await;
-    check_failed_place_removes_the_chat(&manager, &repo, "tracked").await;
-    assert!(manager.queue_entries().await.unwrap().is_empty());
 }
 
 /// What starting a chat below a space whose agent runs warns of reaches

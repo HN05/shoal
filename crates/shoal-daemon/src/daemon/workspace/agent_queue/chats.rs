@@ -43,6 +43,7 @@ impl Manager {
                 true => QueueState::Starting,
                 false => QueueState::Queued,
             },
+            chat: None,
             opens: None,
             scope: caller.map(|caller| caller.space_id.clone()),
             awaits: Default::default(),
@@ -97,6 +98,7 @@ impl Manager {
                 )?;
                 if attached == 1 {
                     blockers::replace_launch(tx, &id, &chat)?;
+                    super::failures::replace(tx, &chat)?;
                 }
                 Ok(attached)
             })
