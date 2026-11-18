@@ -1,4 +1,4 @@
-//! What `shoal status` prints.
+//! What `shoal status` prints, of this machine's space or another's.
 use serde::{Deserialize, Serialize};
 use shoal_protocol::sessions::TerminalSession;
 
@@ -20,6 +20,10 @@ pub struct StatusView {
     /// Why transcripts could not be listed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transcripts_error: Option<String>,
+    /// The other joined machine that owns the space, which keeps its
+    /// sessions and transcripts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine: Option<shoal_ids::member_ids::MemberId>,
 }
 
 outputs!(StatusView);

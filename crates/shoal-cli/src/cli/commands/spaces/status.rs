@@ -1,5 +1,5 @@
 //! A space's status: what the daemon reports and the sessions the CLI finds,
-//! or what another joined machine reported of its space.
+//! or another joined machine's status of its space.
 mod elsewhere;
 mod render;
 
@@ -30,8 +30,7 @@ pub(in crate::cli::commands) async fn status(
         if let Some(selector) = &space
             && let Some((remote, view)) = elsewhere::find(ctx, selector).await?
         {
-            let palette = crate::cli::output::Palette::stdout(ctx.json);
-            ctx.show(&remote, |remote| elsewhere::render(remote, &view, palette))?;
+            elsewhere::show(ctx, &remote, &view).await?;
             return Ok(0);
         }
         let space = match space {
@@ -95,6 +94,7 @@ async fn status_view(ctx: &Context, space: SpaceSelector) -> Result<StatusView> 
         sessions_error,
         transcripts,
         transcripts_error,
+        machine: None,
     })
 }
 

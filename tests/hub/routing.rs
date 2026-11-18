@@ -104,8 +104,9 @@ fn laptop_space() -> (Base, Base, String) {
 fn the_user_s_terminal_renames_and_removes_a_space_on_another_machine() {
     let (hub, laptop, there) = laptop_space();
     hub.ok(&["rename", &there, "Renamed there"]);
-    let status = laptop.ok(&["status", &there]);
+    let status = hub.ok(&["status", &there]);
     assert_eq!(status["workspace"]["name"], "Renamed there", "{status}");
+    assert!(status["machine"].is_string(), "{status}");
     hub.ok(&["rm", &there, "--wait", "--yes"]);
     let gone = laptop.run(&["status", &there, "--json"]);
     assert!(!gone.status.success(), "{}", printed(&gone));
