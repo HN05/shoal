@@ -32,11 +32,19 @@ impl<'a> Owner<'a> {
         }
     }
 
-    pub(crate) fn id(self) -> &'a SpaceId {
+    pub fn id(self) -> &'a SpaceId {
         match self {
             Self::Workspace(id) | Self::Chat(id) => id,
         }
     }
+}
+
+/// The name of a session the chat `chat` runs in. A chat's name is a label
+/// nothing is built from, so the session takes an opaque one, and
+/// `shoal attach` finds the chat by the session's label.
+pub fn chat_session_name(chat: &SpaceId) -> String {
+    let id: String = chat.as_str().chars().take(8).collect();
+    format!("chat-{id}")
 }
 
 /// A terminal host's session that `shoal attach` can reach, with the agent

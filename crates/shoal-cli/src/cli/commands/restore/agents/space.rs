@@ -196,7 +196,8 @@ async fn launch(
             let target = ConfigTarget::Space(SpaceSelector::id(&workspace.id));
             let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
             let command = &recovery.command;
-            let ran = terminal::run_agent(ctx, &settings, &workspace, &agent, &records, command);
+            let placed = terminal::AgentSpace::of(&workspace);
+            let ran = terminal::run_agent(ctx, &settings, &placed, &agent, &records, command);
             if let Some(code) = ran.await? {
                 return Ok(code);
             }

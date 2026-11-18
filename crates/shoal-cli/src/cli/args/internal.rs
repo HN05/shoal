@@ -222,7 +222,7 @@ pub enum InternalCommand {
     /// Tracked agent inside a new place; consumes recovery records once started.
     #[command(name = workers::SESSION)]
     Session {
-        workspace: SpaceId,
+        space: SpaceId,
         #[arg(value_parser = agent)]
         agent: crate::agent::Agent,
         #[command(flatten)]

@@ -168,7 +168,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             .await
         }
         InternalCommand::Session {
-            workspace,
+            space,
             agent,
             model,
             mode,
@@ -180,9 +180,9 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             close_in,
         } => {
             // `host` opened this place for the agent.
-            terminal::record_owned_here(&ctx, host, &workspace).await;
+            terminal::record_owned_here(&ctx, host, &space).await;
             if let Some(host) = close_in {
-                terminal::close_here_when_done(&ctx, host, &workspace).await;
+                terminal::close_here_when_done(&ctx, host, &space).await;
             }
             let agent = TrackedAgent {
                 name: agent,
@@ -191,7 +191,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
                 narrowing,
                 new_session,
             };
-            run_session(&ctx, workspace, agent, records, command).await
+            run_session(&ctx, space, agent, records, command).await
         }
     }
 }
@@ -199,7 +199,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
 /// Run a session's tracked agent, consuming `records` once it starts.
 async fn run_session(
     ctx: &Context,
-    workspace: SpaceId,
+    space: SpaceId,
     agent: TrackedAgent,
     records: Vec<std::path::PathBuf>,
     command: Vec<std::ffi::OsString>,
@@ -207,7 +207,7 @@ async fn run_session(
     if records.is_empty() {
         return shoal_workers::execution::run(
             &ctx.paths,
-            SpaceSelector::Id(workspace),
+            SpaceSelector::Id(space),
             command,
             Some(agent),
         )
@@ -215,7 +215,7 @@ async fn run_session(
     }
     shoal_workers::execution::run_recovery(
         &ctx.paths,
-        SpaceSelector::Id(workspace),
+        SpaceSelector::Id(space),
         command,
         agent,
         records,

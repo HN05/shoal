@@ -30,22 +30,22 @@ pub(in crate::cli) async fn closes_with(
     }
 }
 
-/// Record `place`, one Shoal created for `workspace`, so the daemon closes
-/// it once the workspace is removed. Without the record the place stays
-/// open, so a failure only warns.
-pub(super) async fn record_owned(ctx: &Context, workspace: &SpaceId, place: Origin) {
+/// Record `place`, one Shoal created for `space`, a workspace or a chat,
+/// so the daemon closes it once the space is removed. Without the record
+/// the place stays open, so a failure only warns.
+pub(super) async fn record_owned(ctx: &Context, space: &SpaceId, place: Origin) {
     if let Err(error) =
-        crate::client::workspaces::record_owned_place(&ctx.paths, workspace, place).await
+        crate::client::workspaces::record_owned_place(&ctx.paths, space, place).await
     {
         eprintln!("warning: cannot record the place Shoal opened: {error:#}");
     }
 }
 
 /// Record the place this process runs in, one the host named `host`
-/// created for `workspace`, as [`record_owned`] does.
-pub(in crate::cli) async fn record_owned_here(ctx: &Context, host: HostName, workspace: &SpaceId) {
+/// created for `space`, as [`record_owned`] does.
+pub(in crate::cli) async fn record_owned_here(ctx: &Context, host: HostName, space: &SpaceId) {
     if let Some(place) = created_here(named(host)).await {
-        record_owned(ctx, workspace, place).await;
+        record_owned(ctx, space, place).await;
     }
 }
 

@@ -82,11 +82,12 @@ pub enum Worker<'a> {
     /// Git's credential helper for an agent's Git over HTTPS; Git appends
     /// the operation.
     GitCredential,
-    /// A tracked agent inside a new place a host opened; `records` are
-    /// recovery records the launch consumes once it starts. With `close_in`,
-    /// the place of that host closes once the workspace is done.
+    /// A tracked agent of a workspace or a chat inside a new place a host
+    /// opened; `records` are recovery records the launch consumes once it
+    /// starts. With `close_in`, the place of that host closes once the
+    /// workspace is done.
     Session {
-        workspace: &'a SpaceId,
+        space: &'a SpaceId,
         agent: &'a TrackedAgent,
         records: &'a [PathBuf],
         command: &'a [OsString],
@@ -318,7 +319,7 @@ pub(crate) fn internal_command_for(
         Worker::PushGate => args.push(PUSH_GATE.into()),
         Worker::GitCredential => args.push(GIT_CREDENTIAL.into()),
         Worker::Session {
-            workspace,
+            space,
             agent,
             records,
             command,
@@ -327,7 +328,7 @@ pub(crate) fn internal_command_for(
         } => {
             args.extend([
                 SESSION.into(),
-                workspace.as_str().into(),
+                space.as_str().into(),
                 agent.name.name().into(),
             ]);
             args.extend(model_args(&agent.model));

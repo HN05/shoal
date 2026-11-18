@@ -346,7 +346,7 @@ fn session_round_trips_records_and_literal_arguments() {
         ),
     ] {
         let InternalCommand::Session {
-            workspace,
+            space,
             agent,
             model: parsed_model,
             mode,
@@ -358,7 +358,7 @@ fn session_round_trips_records_and_literal_arguments() {
             close_in: parsed_close_in,
         } = parse(
             Worker::Session {
-                workspace: &SpaceId::from("workspace-id"),
+                space: &SpaceId::from("space-id"),
                 agent: &crate::execution::TrackedAgent {
                     narrowing: Default::default(),
                     mode: "chat".into(),
@@ -376,7 +376,7 @@ fn session_round_trips_records_and_literal_arguments() {
         else {
             panic!("expected session worker");
         };
-        assert_eq!(workspace, "workspace-id");
+        assert_eq!(space, "space-id");
         assert_eq!(agent, "claude");
         assert_eq!(mode, "chat");
         assert!(narrowing.is_empty());

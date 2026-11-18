@@ -45,5 +45,5 @@ pub use prompts::PromptSession;
 pub(crate) use prompts::agents_can_be_prompted;
 pub use prompts::{WAKE_PROMPT, send_keys, submit_prompt};
 pub(crate) use sessions::OwnerKind;
-pub use sessions::{Owner, Session};
+pub use sessions::{Owner, Session, chat_session_name};
 pub use typed::run as run_launch;

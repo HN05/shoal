@@ -46,12 +46,13 @@ pub(super) async fn tracked(
         narrowing,
         new_session,
     };
+    let space = terminal::AgentSpace::of(&workspace);
     if let Some(code) =
-        terminal::run_agent(ctx, &settings, &workspace, &agent, &replaces, &command).await?
+        terminal::run_agent(ctx, &settings, &space, &agent, &replaces, &command).await?
     {
         return Ok(code);
     }
-    terminal::label_current(&ctx.paths, crate::terminal::Owner::Workspace(&workspace.id)).await?;
+    terminal::label_current(&ctx.paths, space.owner()).await?;
     if replaces.is_empty() {
         return shoal_workers::execution::run(
             &ctx.paths,

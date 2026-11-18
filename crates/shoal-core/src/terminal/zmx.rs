@@ -17,7 +17,7 @@ use futures_util::future::BoxFuture;
 use tokio::process::Command;
 
 use super::{
-    Demo, Host, Owner, OwnerKind, PlaceState, Session, Start, Watched,
+    Demo, Host, Owner, OwnerKind, PlaceState, Session, Start, Watched, chat_session_name,
     host::{Attaches, Closes, Demos, Places, Sessions, Types, Watches},
 };
 use crate::{
@@ -257,11 +257,10 @@ async fn run(start: &Start<'_>, owner: Owner<'_>, agent: &crate::agent::Agent) -
 /// becomes its agent, as it would in place. Returns the session's name.
 async fn run_chat(start: &Start<'_>) -> Result<String> {
     ensure_zmx("chat").await?;
-    // A chat's name is a label nothing is built from, and the chat records
-    // itself only once its session runs, so the session takes an opaque
-    // name, which `shoal attach` finds the chat by.
+    // The chat records itself only once its session runs, so its session
+    // is named after an ID of its own.
     let id = shoal_ids::space_ids::SpaceId::generate();
-    let name = unused_name(&format!("chat-{}", &id.as_str()[..8])).await?;
+    let name = unused_name(&chat_session_name(&id)).await?;
     let mut zmx = Command::new(Tool::Zmx.program());
     zmx.args(["attach", "--labels", CREATED]);
     attach_new(&mut zmx, &name, start);

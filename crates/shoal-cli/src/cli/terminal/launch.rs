@@ -1,5 +1,6 @@
 //! Starting Shoal work beside this terminal: additions, restores, tracked
 //! agents and chats, focused or in the background.
+use shoal_ids::space_ids::SpaceNumber;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use std::{
     ffi::OsString,
@@ -14,12 +15,12 @@ use crate::{
     config::{Effective, modes::ModeName},
     env,
     execution::TrackedAgent,
-    model::{Repository, Workspace},
+    model::{Part, Repository, Space, Workspace},
     sessions::Origin,
     start_plan::AddPlan,
     terminal::{
-        Attaches, Configured, Owner, Places, Start, chat_place_env, current, open_add, place_env,
-        rerun_in_host, shoal_command, show_opened,
+        Attaches, Configured, Owner, Places, Start, chat_place_env, chat_session_name, current,
+        open_add, place_env, rerun_in_host, shoal_command, show_opened,
     },
 };
 use shoal_workers::places::{groups, naming::name_plan, queued::start_in_background};
@@ -118,14 +119,63 @@ impl AgentRun {
     }
 }
 
-/// Run a tracked agent's `command` apart from this process, where the host
-/// for this terminal runs agents so, and show it here. `None` means the
-/// agent runs in place in this process. `records` are recovery records the
-/// launch consumes once it starts.
+/// The space a tracked agent runs for, as a host places the agent: beside
+/// the spaces of its repository, in its directory, under its name.
+pub(in crate::cli) struct AgentSpace<'a> {
+    /// The repository whose spaces its place opens beside, or the
+    /// `root_dir` of a chat without one.
+    repo: groups::Repo<'a>,
+    /// Where the agent works.
+    directory: &'a Path,
+    /// The name its place shows.
+    label: &'a str,
+    /// The name of a session it runs in, which never changes.
+    session: String,
+    /// The number `shoal attach` takes it by.
+    number: SpaceNumber,
+    owner: Owner<'a>,
+}
+
+impl<'a> AgentSpace<'a> {
+    /// What a host reads of `space`, a workspace or a chat. A workspace's
+    /// session is named after its worktree directory.
+    pub(in crate::cli) fn of<P: Part>(space: &'a Space<P>) -> Self {
+        let directory = space.workdir.path();
+        let repo = match &space.repository_id {
+            Some(id) => groups::Repo::Id(id.as_str()),
+            None => groups::Repo::Root(directory),
+        };
+        let (owner, session) = match space.worktree() {
+            Some(worktree) => (
+                Owner::Workspace(&space.id),
+                worktree.directory_name().to_owned(),
+            ),
+            None => (Owner::Chat(&space.id), chat_session_name(&space.id)),
+        };
+        Self {
+            repo,
+            directory,
+            label: &space.name,
+            session,
+            number: space.number,
+            owner,
+        }
+    }
+
+    /// Whom the agent's session or place is for.
+    pub(in crate::cli) fn owner(&self) -> Owner<'a> {
+        self.owner
+    }
+}
+
+/// Run a tracked agent's `command` for `space` apart from this process,
+/// where the host for this terminal runs agents so, and show it here.
+/// `None` means the agent runs in place in this process. `records` are
+/// recovery records the launch consumes once it starts.
 pub(in crate::cli) async fn run_agent(
     ctx: &Context,
     settings: &Effective,
-    workspace: &Workspace,
+    space: &AgentSpace<'_>,
     agent: &TrackedAgent,
     records: &[PathBuf],
     command: &[OsString],
@@ -134,10 +184,9 @@ pub(in crate::cli) async fn run_agent(
     let Some(run) = AgentRun::of(&current) else {
         return Ok(None);
     };
-    let repo = groups::Repo::Id(workspace.repository().as_str());
-    let origin = groups::beside(&ctx.paths, &current, &repo, &workspace.path).await?;
+    let origin = groups::beside(&ctx.paths, &current, &space.repo, space.directory).await?;
     let beside = current.beside(origin.as_ref());
-    let worker = agent_worker(ctx, &current, workspace, agent, records, command)?;
+    let worker = agent_worker(ctx, &current, space.owner, agent, records, command)?;
     let mut env = place_env(&ctx.paths)?;
     if let Some(entry) = env::queue_entry() {
         env.push((env::QUEUE_ENTRY, entry.to_string()));
@@ -145,8 +194,8 @@ pub(in crate::cli) async fn run_agent(
     let start = Start {
         state: &ctx.paths.state,
         origin: beside.origin,
-        cwd: &workspace.path,
-        label: &workspace.name,
+        cwd: space.directory,
+        label: space.label,
         focus: true,
         split: beside.split,
         argv: &worker,
@@ -154,48 +203,49 @@ pub(in crate::cli) async fn run_agent(
     };
     let left_running = match run {
         AgentRun::Session(attaches) => {
-            let owner = Owner::Workspace(&workspace.id);
-            // A session is named after the directory, which never changes.
             let start = Start {
-                label: workspace.directory_name(),
+                label: &space.session,
                 ..start
             };
-            let session = attaches.run_agent(&start, owner, &agent.name).await?;
-            report_detach(attaches, &workspace.number.to_string(), &session).await?
+            let session = attaches.run_agent(&start, space.owner, &agent.name).await?;
+            report_detach(attaches, &space.number.to_string(), &session).await?
         }
         AgentRun::Place(places) => {
             let place = places.open(&start).await?;
-            places.show(&place, &workspace.name).await?;
+            places.show(&place, space.label).await?;
             left_open(&place).await
         }
     };
     if left_running {
-        recent::record_attach(ctx, &SpaceSelector::id(&workspace.id)).await;
+        let id = space.owner.id();
+        recent::record_attach(ctx, &SpaceSelector::id(id)).await;
     }
     Ok(Some(0))
 }
 
-/// The worker that runs `agent`'s tracked `command` for `workspace` in a
-/// place `host` opens, closing it with the workspace when config says so.
+/// The worker that runs `agent`'s tracked `command` for `owner` in a place
+/// `host` opens, closing a workspace's with the workspace when config says
+/// so; a chat's goes with the chat's removal.
 fn agent_worker(
     ctx: &Context,
     host: &Configured,
-    workspace: &Workspace,
+    owner: Owner<'_>,
     agent: &TrackedAgent,
     records: &[PathBuf],
     command: &[OsString],
 ) -> Result<Vec<OsString>> {
     let name = host.host.name();
+    let closes = host.closes_when_done && matches!(owner, Owner::Workspace(_));
     crate::workers::internal_command(
         &ctx.paths,
         false,
         crate::workers::Worker::Session {
-            workspace: &workspace.id,
+            space: owner.id(),
             agent,
             records,
             command,
             host: name,
-            close_in: host.closes_when_done.then_some(name),
+            close_in: closes.then_some(name),
         },
     )
 }
