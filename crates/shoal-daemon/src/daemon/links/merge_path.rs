@@ -31,8 +31,9 @@ impl Manager {
         choose(workspace, &name, open)
     }
 
-    /// The PRs `space` links as assigned or opened in its own repository
-    /// that the forge reports open.
+    /// The PRs `space` links as assigned or opened that the forge reports
+    /// open; one outside its repository, as after its `origin` changed, is
+    /// refused, since its state there says nothing of the PR.
     async fn open_own_pulls(&self, space: LinkSpace) -> Result<Vec<ItemRef>> {
         let id = space.id.clone();
         let linked = self.store.read(move |db| own_pulls(db, &id)).await?;
@@ -43,10 +44,8 @@ impl Manager {
         let forge = self.space_forge(&space).await?;
         let account = self.agent_account();
         let mut open = Vec::new();
-        for pull in linked
-            .into_iter()
-            .filter(|pull| pull.belongs_to(&forge).is_ok())
-        {
+        for pull in linked {
+            pull.belongs_to(&forge)?;
             let current = forge
                 .read(&account, ItemKind::Pr, pull.pull()?.get())
                 .await?;
