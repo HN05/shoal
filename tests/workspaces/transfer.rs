@@ -1451,6 +1451,47 @@ fn the_sessions_of_a_profile_only_the_workspace_defines_move_with_it() {
 }
 
 #[test]
+fn a_carried_space_finds_its_sessions_with_a_profile_only_its_config_defines() {
+    let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
+    fixture.add("lead");
+    let child = fixture.ok(&["split", "profiled", "--workspace", &fixture.id("lead")]);
+    let path = Path::new(child["path"].as_str().unwrap());
+    // Only the child's own config names the profile.
+    fs::write(
+        path.join(".shoal.toml"),
+        "[agents.claude-moving]\nbase = 'claude'\n",
+    )
+    .unwrap();
+    fs::write(
+        path.join("agent.sh"),
+        format!(
+            "printf '{{\"session_id\":\"profiled-session\"}}' | '{}' internal agent-state idle >/dev/null || exit 3\n",
+            support::shoal_binary()
+        ),
+    )
+    .unwrap();
+    let id = fixture.id("profiled");
+    let args = ["start", "--in", &id, "--here", "--agent", "claude-moving"];
+    let output = (fixture.command().args(args))
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", printed(&output));
+    let project = fixture.root.path().join(".claude/projects/-elsewhere");
+    fs::create_dir_all(&project).unwrap();
+    fs::write(project.join("profiled-session.jsonl"), "{}\n").unwrap();
+
+    let file = fixture.root.path().join("lead.shoal");
+    let file = file.to_str().unwrap();
+    let exported = fixture.ok(&["move", "export", &fixture.id("lead"), "-o", file, "--yes"]);
+
+    assert_eq!(
+        exported["manifest"]["session_files"][0]["path"], "-elsewhere/profiled-session.jsonl",
+        "{exported}"
+    );
+}
+
+#[test]
 fn a_restore_that_places_no_session_files_keeps_them_for_the_next() {
     let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("unplaced");

@@ -103,5 +103,8 @@ fn a_carried_space_keeps_its_session_only_where_its_agent_continues_it() {
     let s1: AgentSessionId = "s1".into();
     assert_eq!(session("m1"), Some(s1));
     assert_eq!(session("m2"), None);
-    assert_eq!(manifest.every_session().reported().count(), 1);
+    let counts: Vec<usize> = (manifest.each_space_sessions())
+        .map(|sessions| sessions.reported().count())
+        .collect();
+    assert_eq!(counts, [0, 1]);
 }

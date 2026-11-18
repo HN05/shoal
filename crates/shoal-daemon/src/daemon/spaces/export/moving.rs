@@ -70,8 +70,10 @@ impl Manager {
     async fn prepare_moving(&self, space: Space, carrying: &Carrying) -> Result<Prepared> {
         let carried = self.carried_by(&space.id, carrying).await?;
         carried::ensure_packable(&space, &carried)?;
-        // Its own config may describe its agents, and goes with it.
-        let settings = self.space_settings(&space).await;
+        // Each one's own config may describe its agents, and goes with it.
+        let settings = self
+            .agent_settings_of(std::iter::once(&space).chain(&carried))
+            .await;
         // Every agent stops before a checkpoint, since a chat may work in a
         // workspace's worktree.
         for moving in std::iter::once(&space).chain(&carried) {

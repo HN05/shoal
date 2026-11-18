@@ -239,9 +239,9 @@ pub trait ManifestExt: Sized {
         keep_sessions: Option<bool>,
     ) -> Sessions;
 
-    /// The agents of the space and of the spaces it carries, with their
-    /// sessions, whose files go in the package.
-    fn every_session(&self) -> Sessions;
+    /// The agents of the space, then those of each space it carries, with
+    /// their sessions, whose files go in the package.
+    fn each_space_sessions(&self) -> impl Iterator<Item = Sessions>;
 
     /// Every space it packages, its own first, then those it carries in
     /// order.
@@ -288,13 +288,10 @@ impl ManifestExt for Manifest {
         continued_on(self, &carried.sessions, machine, keep_sessions)
     }
 
-    fn every_session(&self) -> Sessions {
-        let mut every = self.sessions.clone().unwrap_or_default();
-        for carried in &self.carried {
-            every.agents.extend(carried.sessions.agents.iter().cloned());
-            (every.last_sessions).extend(carried.sessions.last_sessions.iter().cloned());
-        }
-        every
+    fn each_space_sessions(&self) -> impl Iterator<Item = Sessions> {
+        let own = self.sessions.clone().unwrap_or_default();
+        let carried = self.carried.iter().map(|carried| carried.sessions.clone());
+        std::iter::once(own).chain(carried)
     }
 
     fn packaged(&self) -> impl Iterator<Item = &PackagedSpace> {

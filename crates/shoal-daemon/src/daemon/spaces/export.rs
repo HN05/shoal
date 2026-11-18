@@ -33,20 +33,20 @@ struct Prepared {
     repos: Vec<Repository>,
     manifest: Manifest,
     removal: Option<RemovalResult>,
-    settings: Result<Effective>,
+    settings: Vec<Result<Effective>>,
     kept_sessions: Vec<SessionSource>,
     warnings: Vec<String>,
 }
 
 impl Prepared {
     /// The package of the space `record` records and the spaces `carried`
-    /// records, whose agents `settings` describes, with the session files
-    /// an import kept for them.
+    /// records, whose agents `settings` describes, one for each in that
+    /// order, with the session files an import kept for them.
     async fn of(
         manager: &Manager,
         record: RemovedSpace,
         carried: Vec<RemovedSpace>,
-        settings: Result<Effective>,
+        settings: Vec<Result<Effective>>,
     ) -> Result<Self> {
         let records: Vec<&RemovedSpace> = std::iter::once(&record).chain(&carried).collect();
         let warnings = records.iter().copied().filter_map(no_session).collect();
@@ -105,8 +105,10 @@ impl Manager {
     ) -> Result<Prepared> {
         let carried = self.carried_by(&space.id, carrying).await?;
         carried::ensure_packable(&space, &carried)?;
-        // Its own config may describe its agents, and goes with it.
-        let settings = self.space_settings(&space).await;
+        // Each one's own config may describe its agents, and goes with it.
+        let settings = self
+            .agent_settings_of(std::iter::once(&space).chain(&carried))
+            .await;
         self.leave_uncarried(&space, &carried, carrying).await?;
         let removal = (self.remove_packaged(&space, &carried, unsaved, inspection)).await?;
         let removed = self.removal_record(&space.id).await?;
@@ -130,18 +132,21 @@ impl Manager {
             .with_context(|| format!("no space or restorable space {selector}"))?
             .clone();
         let carried = carried::taken_by_removal(&records, &removed.space_id, carrying);
-        let settings = self.space_settings_in(removed.repository_id.as_ref()).await;
+        let mut settings = Vec::new();
+        for record in std::iter::once(&removed).chain(&carried) {
+            settings.push(self.space_settings_in(record.repository_id.as_ref()).await);
+        }
         self.prepare_removed(removed, carried, settings).await
     }
 
     /// Prepare the package of the space `removed` records with the spaces
     /// `carried` records, as their removal kept them, whose agents
-    /// `settings` describes.
+    /// `settings` describes, one for each.
     async fn prepare_removed(
         &self,
         removed: RemovedSpace,
         carried: Vec<RemovedSpace>,
-        settings: Result<Effective>,
+        settings: Vec<Result<Effective>>,
     ) -> Result<Prepared> {
         for record in std::iter::once(&removed).chain(&carried) {
             worktree::ensure_files_kept(record)?;
@@ -231,14 +236,14 @@ impl Manager {
     }
 
     /// Write `manifest`'s package, spaces of `repos` or of none, whose
-    /// agents `settings` describes, with their session files to the new
-    /// file `file`, those of a session in `kept` from there, and the
-    /// warnings for what it left out.
+    /// agents `settings` describes, one for each space it packages, with
+    /// their session files to the new file `file`, those of a session in
+    /// `kept` from there, and the warnings for what it left out.
     async fn write_package(
         &self,
         repos: &[Repository],
         manifest: Manifest,
-        settings: Result<Effective>,
+        settings: Vec<Result<Effective>>,
         kept: Vec<SessionSource>,
         file: std::path::PathBuf,
     ) -> Result<(Manifest, Vec<String>)> {
@@ -251,26 +256,49 @@ impl Manager {
     }
 
     /// The files of the sessions the agents of the package `manifest`, of
-    /// `repos` or of none, reported, as `settings` describes the agents,
-    /// wherever they ran, with a warning for each session left out, which
-    /// then starts over on the importing machine.
+    /// `repos` or of none, reported, as `settings` describes the agents of
+    /// each space it packages, wherever they ran, with a warning for each
+    /// session left out, which then starts over on the importing machine.
     async fn session_sources(
         &self,
         repos: &[Repository],
-        settings: Result<Effective>,
+        settings: Vec<Result<Effective>>,
         manifest: &Manifest,
     ) -> (Vec<SessionSource>, Vec<String>) {
-        let settings = match settings {
-            Ok(settings) => settings,
-            Err(error) => {
-                return (
-                    Vec::new(),
-                    vec![format!(
+        let (environments, mut warnings) = self.package_environments(repos).await;
+        let environments = std::sync::Arc::new(environments);
+        let mut sources = Vec::new();
+        for (sessions, settings) in manifest.each_space_sessions().zip(settings) {
+            let settings = match settings {
+                Ok(settings) => settings,
+                Err(error) => {
+                    warnings.push(format!(
                         "cannot export the agents' session files: {error:#}"
-                    )],
-                );
+                    ));
+                    continue;
+                }
+            };
+            let environments = environments.clone();
+            let found = tokio::task::spawn_blocking(move || {
+                crate::transfer::session_sources(&settings, &environments, &sessions)
+            })
+            .await;
+            match found {
+                Ok((found, more)) => {
+                    sources.extend(found);
+                    warnings.extend(more);
+                }
+                Err(error) => {
+                    warnings.push(format!("cannot export the agents' session files: {error}"))
+                }
             }
-        };
+        }
+        (sources, warnings)
+    }
+
+    /// The environments the agents of `repos` ran in, where their session
+    /// files are, with a warning when one cannot be read.
+    async fn package_environments(&self, repos: &[Repository]) -> (Environments, Vec<String>) {
         let mut warnings = Vec::new();
         // Only a repository records the environments its agents ran in.
         let mut environments = Vec::new();
@@ -282,22 +310,7 @@ impl Manager {
                 )),
             }
         }
-        let environments = Environments::new(&self.paths.home, &environments);
-        let sessions = manifest.every_session();
-        let found = tokio::task::spawn_blocking(move || {
-            crate::transfer::session_sources(&settings, &environments, &sessions)
-        })
-        .await;
-        match found {
-            Ok((sessions, more)) => {
-                warnings.extend(more);
-                (sessions, warnings)
-            }
-            Err(error) => {
-                warnings.push(format!("cannot export the agents' session files: {error}"));
-                (Vec::new(), warnings)
-            }
-        }
+        (Environments::new(&self.paths.home, &environments), warnings)
     }
 }
 

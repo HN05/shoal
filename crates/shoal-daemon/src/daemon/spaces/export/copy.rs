@@ -75,7 +75,10 @@ impl Manager {
         for below in &carried {
             records.push(self.copy_record_of(below, None).await?);
         }
-        let settings = self.space_settings(&space).await;
+        // Each one's own config may describe its agents, and goes with it.
+        let settings = self
+            .agent_settings_of(std::iter::once(&space).chain(&carried))
+            .await;
         let mut prepared = Prepared::of(self, copied, records, settings).await?;
         prepared.manifest.copy = Some(Copied {
             earlier_files: number.is_some(),

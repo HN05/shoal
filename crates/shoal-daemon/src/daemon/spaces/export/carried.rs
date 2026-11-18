@@ -22,6 +22,19 @@ impl Manager {
             .collect())
     }
 
+    /// The settings describing the agents of each of `spaces`, read while
+    /// they exist, since each one's own config may describe its agents.
+    pub(super) async fn agent_settings_of(
+        &self,
+        spaces: impl Iterator<Item = &Space>,
+    ) -> Vec<Result<crate::config::Effective>> {
+        let mut settings = Vec::new();
+        for space in spaces {
+            settings.push(self.space_settings(space).await);
+        }
+        settings
+    }
+
     /// The records the removals of the spaces `carried` saved.
     pub(super) async fn removal_records(&self, carried: &[Space]) -> Result<Vec<RemovedSpace>> {
         let mut records = Vec::new();
