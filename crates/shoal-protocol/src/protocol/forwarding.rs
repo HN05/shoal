@@ -37,6 +37,23 @@ impl Operation {
     /// passes on as `questions` and `approvals` hold it, where the caller
     /// named it by number alone, so that a later item reusing its number,
     /// as while its machine is offline, is refused instead.
+    /// Whether the request answers, decides or passes on an item it names
+    /// by number alone, which another item may take while it waits.
+    pub fn names_unpinned_item(&self) -> bool {
+        match self {
+            Self::Question(
+                QuestionMethod::AnswerQuestion { shown, .. }
+                | QuestionMethod::AcceptQuestionRecommendation { shown, .. }
+                | QuestionMethod::WithdrawQuestion { shown, .. },
+            ) => shown.is_none(),
+            Self::Approval(
+                ApprovalMethod::DecideApproval { shown, .. }
+                | ApprovalMethod::EscalateApproval { shown, .. },
+            ) => shown.is_none(),
+            _ => false,
+        }
+    }
+
     pub fn pin_item(&mut self, questions: &[Question], approvals: &[ApprovalRequest]) {
         let question =
             |number: &ItemNumber| questions.iter().find(|q| &q.number == number).cloned();

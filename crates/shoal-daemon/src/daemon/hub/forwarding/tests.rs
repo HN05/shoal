@@ -28,3 +28,16 @@ fn a_forwarded_request_names_its_space_by_id() {
     // Only what selects a space changes.
     assert_eq!(method["send_agent_message"]["message"], "7");
 }
+
+#[test]
+fn binding_a_space_leaves_what_a_request_carries_alone() {
+    let selector = SpaceSelector::Number(7.into());
+    let id = SpaceId::from("space-seven".to_owned());
+    let named = serde_json::to_value(&selector).unwrap();
+    let mut method = json!({"start_ci_run": {"space": named.clone(), "workflow": "ci.yml",
+        "inputs": {"space": named.clone()}}});
+    bind_space(&mut method, &selector, &id).unwrap();
+    let bound = serde_json::to_value(SpaceSelector::id(&id)).unwrap();
+    assert_eq!(method["start_ci_run"]["space"], bound);
+    assert_eq!(method["start_ci_run"]["inputs"]["space"], named);
+}

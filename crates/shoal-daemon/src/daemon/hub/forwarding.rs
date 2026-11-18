@@ -109,7 +109,13 @@ impl Manager {
             Forwarding::Queued => Delivery::Queued,
             _ => Delivery::Now,
         };
-        let mut method = prepared(method, listed)?;
+        let (mut method, pinned) = prepared(method, listed)?;
+        // An item named by number alone goes only while its machine is
+        // there to read the number as it is meant now.
+        let delivery = match pinned {
+            true => delivery,
+            false => Delivery::Now,
+        };
         // A number another space there may take while it waits, never an ID.
         bind_space(&mut method, space, &listed.space.id)?;
         let name = shoal_protocol::protocol::name_of(Ok(method.clone()));
@@ -179,46 +185,38 @@ impl Manager {
 /// The request `method` as it goes to the machine of `listed`: without
 /// what belongs to this machine, such as an environment, which that
 /// machine has its own of, and naming the item it acts on as the hub lists
-/// it, where the caller named it by number alone.
-fn prepared(method: serde_json::Value, listed: &Listed) -> Result<serde_json::Value> {
+/// it, where the caller named it by number alone; and whether it names
+/// every item it acts on so.
+fn prepared(method: serde_json::Value, listed: &Listed) -> Result<(serde_json::Value, bool)> {
     let mut operation: shoal_protocol::protocol::Operation = serde_json::from_value(method)?;
     operation.leave_caller_machine();
     operation.pin_item(&listed.space.questions, &listed.space.approvals);
-    Ok(serde_json::to_value(operation)?)
+    let pinned = !operation.names_unpinned_item();
+    Ok((serde_json::to_value(operation)?, pinned))
 }
 
-/// Name the space `selector` names in `method` by its ID `id`, wherever a
-/// space or workspace field selects it.
+/// Name the space `selector` names in `method` by its ID `id`, in the
+/// request's own space or workspace field, never in what it carries, such
+/// as a workflow's inputs.
 fn bind_space(
     method: &mut serde_json::Value,
     selector: &SpaceSelector,
     id: &SpaceId,
 ) -> Result<()> {
-    let (named, bound) = (
-        serde_json::to_value(selector)?,
-        serde_json::to_value(SpaceSelector::id(id))?,
-    );
-    bind(method, &named, &bound);
-    Ok(())
-}
-
-fn bind(value: &mut serde_json::Value, named: &serde_json::Value, bound: &serde_json::Value) {
-    match value {
-        serde_json::Value::Object(fields) => {
-            for (key, field) in fields {
-                match (key.as_str(), &*field) {
-                    ("space" | "workspace", selected) if selected == named => {
-                        *field = bound.clone()
-                    }
-                    _ => bind(field, named, bound),
-                }
+    let named = serde_json::to_value(selector)?;
+    let bound = serde_json::to_value(SpaceSelector::id(id))?;
+    let requests = method
+        .as_object_mut()
+        .into_iter()
+        .flat_map(|request| request.values_mut());
+    for fields in requests.filter_map(serde_json::Value::as_object_mut) {
+        for key in ["space", "workspace"] {
+            if fields.get(key) == Some(&named) {
+                fields.insert(key.to_owned(), bound.clone());
             }
         }
-        serde_json::Value::Array(items) => {
-            items.iter_mut().for_each(|item| bind(item, named, bound))
-        }
-        _ => {}
     }
+    Ok(())
 }
 
 /// Whether the request `method` attaches files by their path on this

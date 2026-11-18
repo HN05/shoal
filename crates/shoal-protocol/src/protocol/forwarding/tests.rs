@@ -44,11 +44,14 @@ fn shown(operation: &Operation) -> Option<&Question> {
 fn an_answer_by_number_names_the_question_its_space_lists() {
     let listed = [question(1), question(2)];
     let mut by_number = answer(2);
+    assert!(by_number.names_unpinned_item());
     by_number.pin_item(&listed, &[]);
     assert_eq!(shown(&by_number), Some(&listed[1]));
+    assert!(!by_number.names_unpinned_item());
     // One the space no longer lists stays by number, which its machine
     // refuses as unknown.
     let mut gone = answer(3);
     gone.pin_item(&listed, &[]);
     assert_eq!(shown(&gone), None);
+    assert!(gone.names_unpinned_item());
 }
