@@ -348,3 +348,28 @@ async fn blockers_name_existing_work_other_than_the_launch() {
         .await
         .unwrap_err();
 }
+
+#[test]
+fn the_setup_of_an_entrys_workspace_shows_once_its_other_blockers_are_done() {
+    let waiting = |label: &str| Progress::Waiting(label.into());
+    let labels = |progress: Vec<(BlockerKind, Progress)>| -> Vec<String> {
+        (setup_last(progress).into_iter())
+            .filter_map(|progress| match progress {
+                Progress::Waiting(label) => Some(label),
+                _ => None,
+            })
+            .collect()
+    };
+    let setup = || (BlockerKind::Setup, waiting("setup of docs"));
+    // Its setup waits for the space it is blocked by, so only that shows.
+    assert_eq!(
+        labels(vec![(BlockerKind::Space, waiting("fix-login")), setup()]),
+        ["fix-login"]
+    );
+    // Once that is done, the setup is what it waits for.
+    assert_eq!(
+        labels(vec![(BlockerKind::Space, Progress::Complete), setup()]),
+        ["setup of docs"]
+    );
+    assert_eq!(labels(vec![setup()]), ["setup of docs"]);
+}

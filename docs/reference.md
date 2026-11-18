@@ -2380,7 +2380,7 @@ stagger between starts is too brief to show. A restore shows its
 agent; `shoal list` shows the entries after the workspaces. `queue --json` gives the entries with their `kind`,
 `launch`, `restore` or `job`, a restore's stopped `execution`, a job's `job`
 with its run, `blockers` while any remain, the setup of the workspace it opens
-among them,
+among them once nothing else blocks it,
 `waits_for_update` for a restore of an idle agent, `held_by` with its `reason`
 (`memory` with `needed` and `left` bytes and, in `reserved`, each warming
 agent or one-shot run and each job the room went to, `by` `agent` or `job`,

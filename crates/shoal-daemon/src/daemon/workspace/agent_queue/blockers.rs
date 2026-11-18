@@ -196,7 +196,7 @@ impl Manager {
         let recorded = self.store.run(waiting_blockers).await?;
         let mut readiness = HashMap::new();
         for (entry, progress) in self.entry_progress(recorded).await? {
-            readiness.insert(entry, readiness_of(progress).await?);
+            readiness.insert(entry, readiness_of(setup_last(progress)).await?);
         }
         Ok(readiness)
     }
@@ -238,14 +238,16 @@ impl Manager {
         Ok(())
     }
 
-    /// The progress of each entry's blockers, looking each one up once.
+    /// The progress of each entry's blockers, by kind, looking each one up
+    /// once.
     async fn entry_progress(
         &self,
         recorded: Vec<(QueueEntryId, Recorded)>,
-    ) -> Result<HashMap<QueueEntryId, Vec<Progress>>> {
+    ) -> Result<HashMap<QueueEntryId, Vec<(BlockerKind, Progress)>>> {
         let mut known = HashMap::new();
-        let mut entries: HashMap<QueueEntryId, Vec<Progress>> = HashMap::new();
+        let mut entries: HashMap<QueueEntryId, Vec<(BlockerKind, Progress)>> = HashMap::new();
         for (entry, blocker) in recorded {
+            let kind = blocker.kind;
             let progress = match known.get(&blocker) {
                 Some(progress) => progress,
                 None => {
@@ -253,7 +255,10 @@ impl Manager {
                     known.entry(blocker).or_insert(found)
                 }
             };
-            entries.entry(entry).or_default().push(progress.clone());
+            entries
+                .entry(entry)
+                .or_default()
+                .push((kind, progress.clone()));
         }
         Ok(entries)
     }
@@ -522,6 +527,19 @@ fn forget_blockers(db: &mut Connection, cleared: &[blockers::Target]) -> Result<
 /// Ready when nothing blocks, on the branch of the done blocker whose HEAD
 /// contains every other's; done blockers on separate branches wait
 /// until all but one have merged and gone.
+/// An entry's blockers without the setup of the workspace it opens while
+/// another one waits: that setup waits for the others first, so it holds
+/// the entry back only once they are done.
+fn setup_last(progress: Vec<(BlockerKind, Progress)>) -> Vec<Progress> {
+    let others_wait = (progress.iter()).any(|(kind, progress)| {
+        *kind != BlockerKind::Setup && matches!(progress, Progress::Waiting(_))
+    });
+    (progress.into_iter())
+        .filter(|(kind, _)| !(others_wait && *kind == BlockerKind::Setup))
+        .map(|(_, progress)| progress)
+        .collect()
+}
+
 async fn readiness_of(progress: Vec<Progress>) -> Result<Readiness> {
     let mut waiting = Vec::new();
     let mut done = Vec::new();
