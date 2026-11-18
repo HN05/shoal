@@ -138,8 +138,18 @@ fn system_config() -> Option<&'static Path> {
     SYSTEM.as_deref()
 }
 
+/// Variables that name config files, which Git, run as `git -C <path>`,
+/// resolves from `path` where relative, and gix from this process's working
+/// directory.
+const CONFIG_FILE_ENV: &[&str] = &["GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM"];
+
 fn environment_diverges() -> bool {
-    (super::REPOSITORY_ENV.iter().chain(DIVERGING_ENV)).any(|name| std::env::var_os(name).is_some())
+    let set = (super::REPOSITORY_ENV.iter().chain(DIVERGING_ENV))
+        .any(|name| std::env::var_os(name).is_some());
+    let relative = CONFIG_FILE_ENV
+        .iter()
+        .any(|name| std::env::var_os(name).is_some_and(|path| Path::new(&path).is_relative()));
+    set || relative
 }
 
 /// Whether gix reads `repo` as Git does: its format and every extension it

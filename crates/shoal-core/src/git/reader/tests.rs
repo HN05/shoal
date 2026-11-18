@@ -448,3 +448,23 @@ async fn an_inherited_remote_helper() {
         .unwrap();
     assert_eq!(url.as_deref(), Some("https://example.com/global"));
 }
+
+#[test]
+fn a_relative_config_file_is_found_where_git_finds_it() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    std::fs::write(
+        repo.join("relative.gitconfig"),
+        "[remote]\n\tpushDefault = fork\n",
+    )
+    .unwrap();
+    let elsewhere = root.path().join("elsewhere");
+    std::fs::create_dir(&elsewhere).unwrap();
+    // Git, run in the repository, finds the file there; this process runs
+    // elsewhere.
+    run_helper("a_push_remote_fork_helper", &repo, |command| {
+        command
+            .current_dir(&elsewhere)
+            .env("GIT_CONFIG_GLOBAL", "relative.gitconfig")
+    });
+}
