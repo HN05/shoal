@@ -14,6 +14,7 @@ use shoal_protocol::hub::{
     directory::{Report, SpaceSummary},
     link::{Call, Reply},
 };
+use tokio::time::Instant;
 
 use super::session::Calls;
 use crate::daemon::{log, workspace::Manager};
@@ -22,6 +23,11 @@ mod summaries;
 
 /// Lets a burst of changes settle into one report.
 const SETTLE: Duration = Duration::from_millis(500);
+
+/// How long a machine goes without a report before it reports that nothing
+/// changed, to hear of numbers the hub changed on its own, as when another
+/// machine ending a space makes this machine's copy of it the one listed.
+const QUIET: Duration = Duration::from_secs(5 * 60);
 
 /// How long a machine waits to report all its spaces again after a report
 /// failed.
@@ -40,7 +46,7 @@ type Sent = HashMap<SpaceId, (SpaceSummary, String)>;
 
 impl Manager {
     /// Report this machine's spaces to `sink` until a report fails: all of
-    /// them, then each change.
+    /// them, then each change, and at least every [`QUIET`].
     async fn report_spaces(&self, sink: Sink<'_>) -> Result<()> {
         // Watch before reading, so a change in between still reports.
         let mut stored = self.store.watch_changes();
@@ -51,10 +57,14 @@ impl Manager {
         let whole = sent.values().map(|(summary, _)| summary.clone()).collect();
         self.report(&sink, Report::Whole(whole), reserved.clone())
             .await?;
+        // Counted from the last report, so changes that report nothing do
+        // not put the next one off.
+        let mut reported = Instant::now();
         loop {
             tokio::select! {
                 changed = stored.changed() => changed?,
                 changed = agents.changed() => changed?,
+                () = tokio::time::sleep_until(reported + QUIET) => {}
             }
             tokio::time::sleep(SETTLE).await;
             stored.borrow_and_update();
@@ -62,12 +72,13 @@ impl Manager {
             let current = comparable(self.space_summaries(&mut origins).await?)?;
             let held = self.reserved_numbers().await?;
             let changes = changes(&sent, &current);
-            if changes.is_some() || held != reserved {
+            if reported.elapsed() >= QUIET || changes.is_some() || held != reserved {
                 let changes = changes.unwrap_or_else(|| Report::Changes {
                     changed: Vec::new(),
                     removed: Vec::new(),
                 });
                 self.report(&sink, changes, held.clone()).await?;
+                reported = Instant::now();
             }
             (sent, reserved) = (current, held);
         }

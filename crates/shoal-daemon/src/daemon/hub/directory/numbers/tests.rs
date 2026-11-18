@@ -189,3 +189,22 @@ fn what_the_hub_kept_for_a_machine_that_it_holds_without_a_space_is_replaced() {
     assert_eq!(laptop.renumbered, [renumbering("b", 9)]);
     assert_eq!(laptop.spares, numbers(&[7, 8, 10]));
 }
+
+#[test]
+fn a_copy_that_takes_its_ids_place_with_a_held_number_is_renumbered() {
+    let mut db = database();
+    report(&mut db, "desk", vec![space("a", 1)]);
+    // The desk's spares are 2 to 4, and the laptop's copy of a has 2.
+    let laptop = report(&mut db, "laptop", vec![space("a", 2)]);
+    assert_eq!(laptop.renumbered, []);
+    let tx = db.transaction().unwrap();
+    let removed = Report::Changes {
+        changed: Vec::new(),
+        removed: vec![SpaceId::from("a")],
+    };
+    let desk = MemberId::from("desk".to_owned());
+    super::super::records::apply(&tx, &desk, removed).unwrap();
+    tx.commit().unwrap();
+    let laptop = report(&mut db, "laptop", Vec::new());
+    assert_eq!(laptop.renumbered, [renumbering("a", 1)]);
+}
