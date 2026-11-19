@@ -342,6 +342,24 @@ async fn a_demo_whose_execution_is_completing_starts_no_viewer() {
 }
 
 #[tokio::test]
+async fn forgetting_a_demo_s_execution_stops_its_viewer() {
+    let (temp, manager) = manager().await;
+    let (_, demo) = running(&manager, temp.path(), Some(ECHO_VIEWER)).await;
+    manager.open_viewer(&demo, None).await.unwrap();
+    let process = viewer_process(&manager, &demo).await;
+    // As a stop of a demo whose wrapper is away ends it.
+    manager.forget_execution(&demo.execution_id).await.unwrap();
+    let stopped = async {
+        while runs(&process) {
+            tokio::time::sleep(START_POLL).await;
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(60), stopped)
+        .await
+        .unwrap_or_else(|_| panic!("viewer {} still runs", process.pid));
+}
+
+#[tokio::test]
 async fn a_viewer_that_exits_fails_the_open_with_what_it_printed() {
     let (temp, manager) = manager().await;
     let viewer = ["sh", "-c", "echo 'no device {udid}' >&2; exit 3"];

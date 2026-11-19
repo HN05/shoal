@@ -107,8 +107,9 @@ impl Manager {
             }
             return Ok(port);
         }
-        let place = self.viewer_place(demo).await?;
+        // Reserved first, so the environment exports it.
         let port = self.reserve_viewer_port(demo, caller).await?;
+        let place = self.viewer_place(demo).await?;
         let starting = self.spawn_recorded_viewer(demo, port, &place).await?;
         let process = starting.process.clone();
         if let Err(error) = starting.serve(port).await {
@@ -264,7 +265,7 @@ impl Manager {
 }
 
 /// The viewer recorded for the demo `execution` runs.
-fn recorded(db: &Connection, execution: &ExecutionId) -> Result<Option<Viewer>> {
+pub(crate) fn recorded(db: &Connection, execution: &ExecutionId) -> Result<Option<Viewer>> {
     let row: Option<(u16, String, bool)> = db
         .query_row(
             "SELECT port,process,serving FROM demo_viewers WHERE execution_id=?1",
@@ -295,6 +296,20 @@ fn scope_token(db: &Connection, execution: &ExecutionId) -> Result<ScopeToken> {
         .optional()?
         .flatten();
     token.context("the demo's execution has no scope token")
+}
+
+/// Stop the viewer `process` and its process group, which it leads while
+/// its identity verifies.
+pub(crate) async fn stop_recorded(process: &Identity) {
+    if runs(process) {
+        // SAFETY: the group the live, verified viewer leads.
+        unsafe {
+            libc::kill(-(process.pid as i32), libc::SIGTERM);
+        }
+    }
+    if let Err(error) = process::stop_verified(std::slice::from_ref(process)).await {
+        log!("viewer {} not stopped: {error:#}", process.pid);
+    }
 }
 
 /// Whether `process` runs: alive under its recorded identity and not
@@ -385,7 +400,7 @@ impl Starting {
     }
 
     async fn stop(mut self) {
-        stop(&mut self.child).await;
+        stop_unreaped(&mut self.child).await;
     }
 }
 
@@ -418,7 +433,7 @@ async fn await_port(
 
 /// Stop the process group `child` leads. Only while it is unreaped does
 /// its PID still name that group.
-async fn stop(child: &mut Child) {
+async fn stop_unreaped(child: &mut Child) {
     if let (Ok(None), Some(pid)) = (child.try_wait(), child.id()) {
         // SAFETY: the group of the unreaped child this daemon started.
         unsafe {
