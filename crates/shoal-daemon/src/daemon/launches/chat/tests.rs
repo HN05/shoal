@@ -81,7 +81,10 @@ async fn a_chat_run_here_leaves_its_starting_agent_to_its_caller() {
 
 /// A registered repository whose remote is a forge's, which Shoal never
 /// reaches, and agents and modes that start chats with and without one.
-async fn offline_machine(manager: &Manager, temp: &tempfile::TempDir) -> crate::model::Repository {
+pub(super) async fn offline_machine(
+    manager: &Manager,
+    temp: &tempfile::TempDir,
+) -> crate::model::Repository {
     manager.publish_config(global_config(
         "[machine]\nmax_heavy_agents = 'none'\n[machine.overload.disk]\nenabled = false\n\
          [modes.solo]\nkind = 'chat'\nrepository = false\n\

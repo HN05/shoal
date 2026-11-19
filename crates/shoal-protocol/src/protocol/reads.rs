@@ -2,11 +2,11 @@
 //! hangs up. Cancelling one that changes state could leave it half done, so
 //! those finish instead, including reads that first finish or record work.
 use super::{
-    AgentMethod, AppMethod, ApprovalMethod, BranchMethod, ChatMethod, CiMethod, ContainerMethod,
-    DaemonMethod, DemoMethod, ExecutionMethod, FileMethod, HoldMethod, HubMethod, ItemMethod,
-    LaunchMethod, NotificationMethod, Operation, PortMethod, QuestionMethod, QueueMethod,
-    RecoveryMethod, RemovalMethod, RepositoryMethod, ResourceMethod, SecretMethod, SimulatorMethod,
-    TriggerMethod, WorkspaceMethod,
+    AgentMethod, AppMethod, ApprovalMethod, BranchMethod, CiMethod, ContainerMethod, DaemonMethod,
+    DemoMethod, ExecutionMethod, FileMethod, HoldMethod, HubMethod, ItemMethod, LaunchMethod,
+    NotificationMethod, Operation, PortMethod, QuestionMethod, QueueMethod, RecoveryMethod,
+    RemovalMethod, RepositoryMethod, ResourceMethod, SecretMethod, SimulatorMethod, TriggerMethod,
+    WorkspaceMethod,
 };
 
 impl Operation {
@@ -23,7 +23,6 @@ impl Operation {
                 | Self::Approval(
                     ApprovalMethod::ListApprovals { .. } | ApprovalMethod::ShowApproval { .. }
                 )
-                | Self::Chat(ChatMethod::CheckChatParent { .. })
                 | Self::Launch(LaunchMethod::CheckLaunch { .. })
                 | Self::Ci(
                     CiMethod::CheckLog { .. }

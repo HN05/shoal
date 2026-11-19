@@ -48,6 +48,32 @@ impl Manager {
         Ok(queued(workspace, entry))
     }
 
+    /// Refuse what starting the worker `launch` names in `shape` for
+    /// `caller` would refuse, as [`Self::launch_worker`] starts it, short
+    /// of queuing it: a workspace outside a scoped caller's tree,
+    /// permissions it does not hold, and blockers no one knows; returns
+    /// the workspace.
+    pub(super) async fn check_worker(
+        &self,
+        launch: &Launch,
+        shape: &Shape,
+        caller: Option<&Caller>,
+    ) -> Result<Workspace> {
+        let mut selector = (launch.in_workspace.as_ref())
+            .and_then(SpaceChoice::named)
+            .cloned()
+            .context("the launch names no workspace")?;
+        if let Some(caller) = caller {
+            let (mode, given) = (Some(&shape.mode), &launch.permissions);
+            self.worker_target(caller, &mut selector, mode, given)
+                .await?;
+        }
+        let workspace = self.workspace(&selector).await?;
+        let repository = workspace.repository();
+        (self.named_blockers(repository, &launch.blockers, caller)).await?;
+        Ok(workspace)
+    }
+
     /// Refuse the scoped `caller` a worker it may not start in the
     /// workspace `selector` names, or start regardless of the limits.
     async fn ensure_worker_allowed(

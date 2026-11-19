@@ -28,13 +28,13 @@ async fn a_check_answers_the_workspace_that_has_the_branch() {
         ..launch_on_branch(&repo, Some("fix"))
     };
 
-    let checked = manager.check_workspace_launch(launch_on_branch(&repo, Some("fix")), None);
+    let checked = manager.check_launch(launch_on_branch(&repo, Some("fix")), None);
 
     assert_eq!(
         checked.await.unwrap().map(|workspace| workspace.id),
         Some(fix.id)
     );
-    assert!(manager.check_workspace_launch(named, None).await.is_err());
+    assert!(manager.check_launch(named, None).await.is_err());
 }
 
 /// A check refuses a blocker the daemon knows nothing of, whether its
@@ -53,7 +53,7 @@ async fn a_check_refuses_an_unknown_blocker_on_either_branch() {
     };
 
     for branch in ["fix", "new"] {
-        let checked = manager.check_workspace_launch(blocked(branch), None).await;
+        let checked = manager.check_launch(blocked(branch), None).await;
         let error = format!("{:#}", checked.unwrap_err());
         assert!(error.contains("missing"), "{branch}: {error}");
     }
@@ -70,7 +70,7 @@ async fn a_check_refuses_what_creation_would_and_creates_nothing() {
         ..launch_on_branch(&repo, Some("fix"))
     };
 
-    assert!(manager.check_workspace_launch(launch, None).await.is_err());
+    assert!(manager.check_launch(launch, None).await.is_err());
     assert!(manager.list_workspaces().await.unwrap().is_empty());
 }
 
@@ -87,7 +87,7 @@ async fn a_check_leaves_the_branch_to_a_picker() {
         ..launch_on_branch(&repo, None)
     };
 
-    let checked = manager.check_workspace_launch(launch.clone(), None).await;
+    let checked = manager.check_launch(launch.clone(), None).await;
 
     assert!(checked.unwrap().is_none());
     let started = manager.launch(launch, LaunchSource::Manual, None).await;

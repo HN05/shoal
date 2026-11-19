@@ -4,7 +4,6 @@
 //! open, then what creating it would refuse, without creating anything.
 use anyhow::Result;
 use shoal_protocol::launches::Launch;
-use shoal_protocol::space_names::SpaceSelector;
 
 use super::{Settled, Settling};
 use crate::{
@@ -26,47 +25,30 @@ impl Manager {
     ) -> Result<Option<Workspace>> {
         match self.settle_workspace(launch, false, caller).await? {
             Settling::New(settled) => {
-                let parent = launch.parent.clone();
-                (self.check_settled(*settled, parent, caller).await).map(|()| None)
+                (self.check_settled(launch, *settled, caller).await).map(|()| None)
             }
             Settling::Existing(workspace) => Ok(Some(*workspace)),
         }
     }
 
-    /// Refuse what creating the workspace `settled` describes would refuse
-    /// below `parent`, else, for a scoped `caller`, below the space its
-    /// start goes below, confined to its scope as the start confines it.
+    /// Refuse what creating the workspace `settled` describes for `launch`
+    /// would refuse below the parent it goes below, a scoped `caller`'s
+    /// copy confined to its scope as the start confines it.
     async fn check_settled(
         &self,
+        launch: &Launch,
         Settled {
             repo, mut creation, ..
         }: Settled,
-        mut parent: Option<SpaceSelector>,
         caller: Option<&Caller>,
     ) -> Result<()> {
-        if let Some(caller) = caller {
-            (self.confine_checked(caller, &mut creation, &mut parent)).await?;
-        }
-        let parent = self.parent_space_id(parent.as_ref()).await?;
-        let repository = (&repo.id).into();
-        (self.ensure_parent_repository(&repository, parent.as_ref())).await?;
-        let (branch, existing) = (creation.branch.as_deref(), creation.existing.as_deref());
-        (self.check_creation(&repository, branch, existing, worktree_options(&creation))).await
-    }
-
-    /// Confine the checked `creation` and its `parent` to the scoped
-    /// `caller`'s tree, as its start confines them: a copy of a workspace
-    /// its scope reaches, below its own space unless it names one below it.
-    async fn confine_checked(
-        &self,
-        caller: &Caller,
-        creation: &mut Creation,
-        parent: &mut Option<SpaceSelector>,
-    ) -> Result<()> {
-        if let Some(copy) = &mut creation.copy {
+        if let (Some(caller), Some(copy)) = (caller, &mut creation.copy) {
             self.copy_within(caller, &mut copy.source).await?;
         }
-        self.parent_below(caller, parent).await
+        (self.check_launch_parent(launch, Some(&repo.id), caller)).await?;
+        let repository: crate::repository::Selector = (&repo.id).into();
+        let (branch, existing) = (creation.branch.as_deref(), creation.existing.as_deref());
+        (self.check_creation(&repository, branch, existing, worktree_options(&creation))).await
     }
 }
 

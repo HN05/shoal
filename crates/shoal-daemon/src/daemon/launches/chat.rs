@@ -12,7 +12,11 @@ use super::{
 };
 use crate::{
     config::modes::ModeName,
-    daemon::{manager::Manager, operations::starts::Home, scope::Caller},
+    daemon::{
+        manager::Manager,
+        operations::starts::{Home, StartIssue},
+        scope::Caller,
+    },
     forge::items::{link::ItemKind, reference::ItemInput},
     launches,
 };
@@ -26,6 +30,24 @@ impl Manager {
         shape: &Shape,
         caller: Option<&Caller>,
     ) -> Result<Placement> {
+        let (home, issue) = self.settle_chat(launch, shape, false, caller).await?;
+        Ok(Placement {
+            home: PlacedHome::Chat(home),
+            issue,
+            blockers: Vec::new(),
+        })
+    }
+
+    /// Settle where the new chat `launch` starts in `shape` runs for
+    /// `caller`, and the issue it starts on, read; one a picker has yet to
+    /// choose stays open where it `picks`.
+    async fn settle_chat(
+        &self,
+        launch: &Launch,
+        shape: &Shape,
+        picks: bool,
+        caller: Option<&Caller>,
+    ) -> Result<(Home<'static>, Option<StartIssue>)> {
         ensure_chat_takes(launch, shape)?;
         let in_workspace = launch.in_workspace.is_some();
         let (named, issue) = launches::chat_target(
@@ -34,7 +56,7 @@ impl Manager {
             launch.issue.clone(),
             in_workspace,
         )?;
-        let issue = named_issue(issue, &shape.mode)?;
+        let issue = named_issue(issue, &shape.mode, picks)?;
         let home = (self.launch_chat_home(launch, shape, (named, issue.as_ref()), caller)).await?;
         // A named parent is never the workspace the chat runs in; one it
         // leaves out is the caller's own space, wherever the chat runs.
@@ -53,11 +75,7 @@ impl Manager {
             }
             None => None,
         };
-        Ok(Placement {
-            home: PlacedHome::Chat(home),
-            issue,
-            blockers: Vec::new(),
-        })
+        Ok((home, issue))
     }
 
     /// Where the chat `launch` starts runs: in the worktree of the
@@ -137,20 +155,30 @@ fn ensure_chat_takes(launch: &Launch, shape: &Shape) -> Result<()> {
 }
 
 /// The issue a chat in `mode` starts on: one the launch names, since a
-/// pick needs a terminal.
-fn named_issue(issue: Option<IssueChoice>, mode: &ModeName) -> Result<Option<ItemInput>> {
+/// pick needs a terminal, which leaves it open where it `picks`.
+fn named_issue(
+    issue: Option<IssueChoice>,
+    mode: &ModeName,
+    picks: bool,
+) -> Result<Option<ItemInput>> {
     match issue {
         Some(IssueChoice::Pick) => {
             ensure!(
                 *mode == ModeName::PLAN,
                 "--issue needs a number or URL outside plan mode"
             );
-            anyhow::bail!("missing issue; pass --issue <number or URL> in non-interactive mode")
+            ensure!(
+                picks,
+                "missing issue; pass --issue <number or URL> in non-interactive mode"
+            );
+            Ok(None)
         }
         Some(IssueChoice::Named(issue)) => Ok(Some(issue)),
         None => Ok(None),
     }
 }
+
+mod check;
 
 #[cfg(test)]
 mod tests;

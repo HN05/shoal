@@ -125,7 +125,9 @@ pub(in crate::cli::commands::start) async fn chat(
     if here {
         launch.agent = crate::agents::checked_agent(&settings, launch.agent.take(), &launch.model)?;
     }
-    check_chat(ctx, &launch, repository.as_ref()).await?;
+    // The daemon refuses what it would refuse of the chat before a
+    // picker asks for the rest.
+    crate::client::launches::check(&ctx.paths, launch.clone()).await?;
     launch.mode = match ctx.interactive() {
         true => Some(mode.chosen(
             ctx,
@@ -228,82 +230,6 @@ async fn chat_settings(ctx: &Context, repository: Option<&Repository>) -> Result
         None => ConfigTarget::Global,
     };
     workspaces::DaemonReads(ctx).settings(target).await
-}
-
-/// Refuse what the daemon would refuse of the chat `launch` in
-/// `repository` before a picker asks for the rest: a workspace it runs in
-/// that is not ready there, permissions it gives that this process does
-/// not hold, the parent it names, and an issue it names that cannot be
-/// read.
-async fn check_chat(ctx: &Context, launch: &Launch, repository: Option<&Repository>) -> Result<()> {
-    ensure_hosting_workspace(ctx, launch).await?;
-    let selector = repository.map(|repo| crate::repository::Selector::from(repo.id.as_str()));
-    super::super::permissions::ensure_held(ctx, selector, &launch.permissions).await?;
-    check_parent(ctx, launch, repository).await?;
-    check_issue(ctx, launch, repository).await
-}
-
-/// Refuse the workspace whose worktree the chat `launch` runs in unless it
-/// is ready with its worktree there.
-async fn ensure_hosting_workspace(ctx: &Context, launch: &Launch) -> Result<()> {
-    let Some(workspace) = (launch.in_workspace.as_ref()).and_then(SpaceChoice::named) else {
-        return Ok(());
-    };
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
-        .await?
-        .workspace;
-    anyhow::ensure!(
-        workspace.state == crate::state::WorkspaceState::Ready,
-        "workspace {} is {}, and a chat runs only in a ready workspace",
-        workspace.name,
-        workspace.state
-    );
-    anyhow::ensure!(
-        workspace.path.is_dir(),
-        "the worktree of workspace {} is missing at {}",
-        workspace.name,
-        workspace.path.display()
-    );
-    Ok(())
-}
-
-/// Refuse the issue the chat `launch` in `repository` names when it cannot
-/// be read, before the daemon records a chat on it.
-async fn check_issue(
-    ctx: &Context,
-    launch: &Launch,
-    repository: Option<&Repository>,
-) -> Result<()> {
-    let in_workspace = launch.in_workspace.is_some();
-    let (_, issue) = crate::launches::chat_target(
-        launch.target.clone(),
-        launch.repository.clone(),
-        launch.issue.clone(),
-        in_workspace,
-    )?;
-    let (Some(input), Some(repo)) = (issue.as_ref().and_then(IssueChoice::named), repository)
-    else {
-        return Ok(());
-    };
-    let context = issues::read_context(ctx, repo).await?;
-    issues::load(ctx, context, input.clone()).await.map(drop)
-}
-
-/// Refuse the parent the chat `launch` in `repository` names, where the
-/// daemon would refuse it, before a picker asks for the rest.
-async fn check_parent(
-    ctx: &Context,
-    launch: &Launch,
-    repository: Option<&Repository>,
-) -> Result<()> {
-    let Some(parent) = &launch.parent else {
-        return Ok(());
-    };
-    let repository = repository.map(|repo| repo.id.clone().into());
-    let workspace = (launch.in_workspace.as_ref())
-        .and_then(SpaceChoice::named)
-        .cloned();
-    crate::client::chats::check_parent(&ctx.paths, repository, workspace, parent.clone()).await
 }
 
 /// The issue a start in plan mode that asks for one without naming it
