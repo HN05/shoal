@@ -78,21 +78,14 @@ impl Manager {
             forge.open_pulls(&account),
             forge.default_branch(&account),
         )?;
-        let workspaces = match &checkout {
-            Some(checkout) => self.repository_workspaces(&checkout.id).await?,
-            None => Vec::new(),
-        };
+        let workspaces = self.checkout_workspaces(checkout.as_ref()).await?;
         let context = Context {
             default: &BranchName::from(default),
             pulls: &pulls,
             checkout: checkout.as_ref(),
             workspaces: &workspaces,
         };
-        let listed = stream::iter(branches)
-            .map(|branch| describe(branch, &context))
-            .buffered(CHECKS_AT_ONCE)
-            .try_collect()
-            .await?;
+        let listed = context.describe_all(branches).await?;
         Ok(ReadBranches {
             forge,
             account,
@@ -102,6 +95,15 @@ impl Manager {
         })
     }
 
+    /// The workspaces of `checkout`'s repository; none outside a registered
+    /// one.
+    async fn checkout_workspaces(&self, checkout: Option<&Repository>) -> Result<Vec<Workspace>> {
+        match checkout {
+            Some(checkout) => self.repository_workspaces(&checkout.id).await,
+            None => Ok(Vec::new()),
+        }
+    }
+
     /// The registered repository a request acts in as its own; none for
     /// another one.
     async fn target_checkout(&self, target: &ForgeTarget) -> Result<Option<Repository>> {
@@ -109,6 +111,18 @@ impl Manager {
             Some(place) => Ok(Some(self.repository(place.repository_id()).await?)),
             None => Ok(None),
         }
+    }
+}
+
+impl Context<'_> {
+    /// Each of `branches` with what decides whether it can go, a few read
+    /// at once.
+    async fn describe_all(&self, branches: Vec<ForgeBranch>) -> Result<Vec<ListedBranch>> {
+        stream::iter(branches)
+            .map(|branch| describe(branch, self))
+            .buffered(CHECKS_AT_ONCE)
+            .try_collect()
+            .await
     }
 }
 
