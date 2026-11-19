@@ -8,13 +8,14 @@
 //! refuses the rest, naming the machine and when it last saw it.
 use std::sync::Arc;
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, anyhow, bail, ensure};
 use shoal_ids::member_ids::MemberId;
 use shoal_protocol::hub::{
     Member, MemberKind,
     link::{Call, Reply},
     routing::{Delivery, Expired, Forwarded, Told, Vouched},
 };
+use shoal_protocol::protocol::{LaunchMethod, Operation};
 use tokio::sync::OwnedRwLockReadGuard;
 
 use super::{queue::Held, session::Calls, streams::Streams};
@@ -35,9 +36,13 @@ impl Manager {
         mut request: Forwarded,
         delivery: Delivery,
     ) -> Result<Reply> {
-        if from.kind == MemberKind::Device {
-            request.caller = Vouched::User;
-        }
+        let machine = match from.kind {
+            MemberKind::Device => {
+                request.caller = Vouched::User;
+                self.device_target(machine, &mut request).await?
+            }
+            MemberKind::Machine => machine.clone(),
+        };
         let sender_space = match &request.caller {
             Vouched::Space(space) => Some(space.space.clone()),
             Vouched::User => None,
@@ -48,9 +53,29 @@ impl Manager {
             summary: request.summary.clone(),
             call: Call::Serve { request },
         };
-        let machine = self.hub_machine(machine).await?;
+        let machine = self.hub_machine(&machine).await?;
         self.send_or_hold(&machine, held, delivery == Delivery::Queued)
             .await
+    }
+
+    /// The machine a device's `request` goes to: for a launch, the one it
+    /// names, which it then names no longer, else `[machine.hub]
+    /// default_machine`, else `machine`, the one the device sent it to.
+    async fn device_target(&self, machine: &MemberId, request: &mut Forwarded) -> Result<MemberId> {
+        let default = self.hub_settings().and_then(|hub| hub.default_machine);
+        let Some(named) = launch_machine(&mut request.method, default)? else {
+            return Ok(machine.clone());
+        };
+        let own = self.hub_identity().await?.public.clone();
+        let member = (self.store)
+            .read(move |tx| super::members::select(tx, &named, &own))
+            .await?;
+        ensure!(
+            member.kind == MemberKind::Machine,
+            "{} is a device, which starts no spaces; name a machine",
+            member.name
+        );
+        Ok(member.id)
     }
 
     /// Answer `request`, which the member `from` forwards to the machine
@@ -189,6 +214,21 @@ impl Manager {
     }
 }
 
+/// The machine the launch `method` names, taken from it, else `default`;
+/// none for any other request.
+fn launch_machine(
+    method: &mut serde_json::Value,
+    default: Option<String>,
+) -> Result<Option<String>> {
+    let parsed = serde_json::from_value::<Operation>(method.clone());
+    let Ok(Operation::Launch(LaunchMethod::Launch { mut launch })) = parsed else {
+        return Ok(None);
+    };
+    let named = launch.machine.take().or(default);
+    *method = serde_json::to_value(Operation::Launch(LaunchMethod::Launch { launch }))?;
+    Ok(named)
+}
+
 /// Ask the machine whose link `calls` serves for the stream that answers
 /// `request`, and relay it to the caller's stream `stream` of `streams`,
 /// with what the caller writes on a duplex one relayed back.
@@ -226,3 +266,6 @@ pub(super) fn offline(machine: &Member) -> Refusal {
         ),
     )
 }
+
+#[cfg(test)]
+mod tests;

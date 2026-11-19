@@ -93,6 +93,10 @@ pub struct Hub {
     /// whose machine is offline before it passes to the next space above
     /// that is online, or to the user.
     pub escalate_after_minutes: u64,
+    /// The machine, by name or ID, a device's start goes to when it names
+    /// none, on the hub; none sends it where the device sent it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_machine: Option<String>,
     /// The local address the hub forwards the requests of paired members
     /// under each path prefix to, such as an app's own server.
     #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
@@ -110,6 +114,7 @@ impl Default for Hub {
             url: None,
             connect: Vec::new(),
             escalate_after_minutes: 30,
+            default_machine: None,
             forward: Default::default(),
         }
     }

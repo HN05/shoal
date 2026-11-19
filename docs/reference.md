@@ -951,7 +951,11 @@ origin's branches holds; a base with commits only your machine has, such as
 a stacked branch you have not pushed, goes along as a Git bundle of what the
 origin's default branch lacks, so nothing needs a push first.
 `--here`, `--focus`, `--wait`, `--in`, `--copy` and `--fork`, which need your
-machine's terminal, files or sessions, do not combine with `--machine`.
+machine's terminal, files or sessions, do not combine with `--machine`. A
+start from a device, such as an app, goes to the machine its launch names,
+else to the hub's
+[`[machine.hub] default_machine`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub),
+else to the machine the device sent it to.
 
 The tree of spaces may span machines: a space that moves to another machine,
 or that `shoal start --machine` starts there, without the space above it stays below it there, once what the hub lists of

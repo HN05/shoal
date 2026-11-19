@@ -288,6 +288,7 @@ listen = "127.0.0.1:7474"                # The default
 url = "https://shoal.example.ts.net"     # Default: http:// and the listen address
 connect = ["ssh", "desk", "shoal", "daemon", "connect"]   # Overrides a joined machine's route
 escalate_after_minutes = 30              # The default
+default_machine = "desk"                 # Where a device's start goes when it names none
 
 [machine.hub.forward]
 "/quay/" = "127.0.0.1:8080"              # A path prefix and the local server it reaches
@@ -312,6 +313,11 @@ The command ends in `shoal daemon connect` on the hub, with an absolute path to
 on this machine waits for a coordinator whose machine is offline before it
 passes to the next space above with an agent on a connected machine, or to
 you.
+
+`default_machine`, read on the hub, names the joined machine, by name or the ID
+`shoal hub ls` shows, that a start from a device goes to when it names none
+with `machine`; without it, the start goes to the machine the device sent it
+to.
 
 `forward` maps path prefixes, each starting and ending with `/`, to local
 addresses, such as an app's own server: the hub's listener forwards each
