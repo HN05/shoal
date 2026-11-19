@@ -14,7 +14,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Context as _, Result, anyhow, bail};
+use anyhow::{Context as _, Result, bail};
 use rusqlite::{Connection, OptionalExtension, params};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_leases::{allocation::Allocation, ports::Acquisition};
@@ -161,7 +161,12 @@ impl Manager {
         let tool = demo.launch.viewer(None).map(|viewer| viewer.tool);
         let program = tool.as_deref().unwrap_or("the viewer");
         let exited = || Ok((!runs(&viewer.process)).then(|| "exited".to_owned()));
-        await_port(viewer.port, program, exited).await?;
+        if let Err(error) = await_port(viewer.port, program, exited).await {
+            // Stopped and forgotten, so the next open starts another.
+            stop_recorded(&viewer.process).await;
+            self.forget_viewer(&demo.execution_id).await;
+            return Err(error);
+        }
         self.record_serving(&demo.execution_id, viewer).await
     }
 
@@ -367,12 +372,11 @@ impl Starting {
         let pid = child.id().context("the viewer exited at once")?;
         let process = match process::capture(pid) {
             Ok(Some(process)) => process,
-            captured => {
+            // Exited already, as one that exits while it starts.
+            _ => {
                 abandon(child);
-                let error = captured
-                    .err()
-                    .unwrap_or_else(|| anyhow!("it exited at once"));
-                return Err(error.context(format!("viewer {program} did not start")));
+                let message = format!("viewer {program} exited{}", printed(&log));
+                return Err(Refusal::new(Reason::NotReady, message).into());
             }
         };
         Ok(Self {

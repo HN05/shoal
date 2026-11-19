@@ -407,6 +407,34 @@ async fn a_viewer_that_exits_before_serving_takes_what_it_started_along() {
         .unwrap_or_else(|_| panic!("helper {pid} of the failed viewer still runs"));
 }
 
+#[tokio::test(start_paused = true)]
+async fn a_viewer_an_earlier_daemon_left_starting_that_never_serves_is_replaced() {
+    let (temp, manager) = manager().await;
+    let (_, demo) = running(&manager, temp.path(), Some(ECHO_VIEWER)).await;
+    let port = manager.reserve_viewer_port(&demo, None).await.unwrap();
+    // A process that runs but never takes a connection on the port.
+    let stuck = ProcessGroup::spawn(std::process::Command::new("sleep").arg("300"));
+    let process = crate::process::identity::capture(stuck.id())
+        .unwrap()
+        .unwrap();
+    let starting = Viewer {
+        port,
+        process: process.clone(),
+        serving: false,
+    };
+    (manager.record_viewer(&demo.execution_id, &starting))
+        .await
+        .unwrap();
+    let refused = manager.open_viewer(&demo, None).await.err().unwrap();
+    assert_eq!(Reason::of(&refused), Some(Reason::NotReady), "{refused:#}");
+    assert!(!runs(&process), "the stuck viewer still runs");
+    tokio::time::resume();
+    // The next open starts a viewer of its own.
+    assert_eq!(manager.open_viewer(&demo, None).await.unwrap(), port);
+    assert_ne!(viewer_process(&manager, &demo).await, process);
+    stuck.kill();
+}
+
 #[tokio::test]
 async fn a_viewer_that_exits_fails_the_open_with_what_it_printed() {
     let (temp, manager) = manager().await;
