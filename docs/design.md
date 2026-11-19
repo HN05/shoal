@@ -243,8 +243,7 @@ has, as a commit it carries first in a Git bundle of the history the
 origin's default branch lacks, over a duplex stream of the hub's links,
 which that machine fetches under a ref of Shoal's own and deletes once
 nothing needs the commit: its launch failed, or no workspace there waits
-to start from it or records it as a base that no branch or checkpoint
-holds. A device's start, which is on no machine, goes to the machine its launch
+to start from it or records it as a base that no branch holds. A device's start, which is on no machine, goes to the machine its launch
 names, else to the hub's `[machine.hub] default_machine`, else to the
 machine the device sent it to. The space tree may span
 machines, as when a space moves without its parent or starts elsewhere: what a space passes up reaches the nearest space

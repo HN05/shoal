@@ -1,7 +1,7 @@
 use std::{fs, path::Path};
 
 use super::{
-    bundle_carried, carried, carried_commit, drop_carried, fetch_carried, for_clone, held_elsewhere,
+    bundle_carried, carried, carried_commit, drop_carried, fetch_carried, for_clone, held_by_branch,
 };
 use crate::test_support::{commit, git, repository};
 
@@ -107,9 +107,12 @@ async fn a_carried_commit_stays_held_by_a_branch_once_its_ref_drops() {
     );
     git(&repo, &["switch", "-q", "pushed"]);
     git(&repo, &["branch", "-q", "-D", "unpushed"]);
-    assert!(!held_elsewhere(&repo, &commit).await.unwrap());
+    // A checkpoint expires, so it holds the commit for no workspace.
+    let checkpoint = crate::git::checkpoint::reference(&commit);
+    git(&repo, &["update-ref", &checkpoint, commit.as_str()]);
+    assert!(!held_by_branch(&repo, &commit).await.unwrap());
     git(&repo, &["branch", "work", commit.as_str()]);
-    assert!(held_elsewhere(&repo, &commit).await.unwrap());
+    assert!(held_by_branch(&repo, &commit).await.unwrap());
 
     drop_carried(&repo, &commit).await.unwrap();
 

@@ -83,9 +83,9 @@ pub async fn carried(repo: &Path) -> Result<Vec<CommitId>> {
         .collect())
 }
 
-/// Whether a branch or checkpoint of `repo` holds `commit`, which then
-/// stays reachable without its carried ref.
-pub async fn held_elsewhere(repo: &Path, commit: &CommitId) -> Result<bool> {
+/// Whether a branch of `repo` holds `commit`, which then stays reachable
+/// without its carried ref; a checkpoint, which expires, does not.
+pub async fn held_by_branch(repo: &Path, commit: &CommitId) -> Result<bool> {
     let format = "--format=%(refname)";
     let holding = [
         "for-each-ref",
@@ -94,7 +94,6 @@ pub async fn held_elsewhere(repo: &Path, commit: &CommitId) -> Result<bool> {
         "--contains",
         commit.as_str(),
         "refs/heads/",
-        super::checkpoint::REFS,
     ];
     Ok(!run_isolated(repo, &holding).await?.trim().is_empty())
 }

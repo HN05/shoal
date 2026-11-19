@@ -1,7 +1,7 @@
 //! How long a carried commit's ref stays in the repository that received
 //! it: while the launch it came for is on its way, or a workspace this
 //! machine records needs the commit, as the plan of its pending worktree
-//! or as the base it records where no branch or checkpoint holds it. Once
+//! or as the base it records where no branch holds it. Once
 //! nothing does, as when its workspace has its branch, its launch failed
 //! or its space is gone, the ref goes, and Git may collect what only it
 //! kept. The cleanup sweep reclaims the refs of launches that never came,
@@ -127,8 +127,8 @@ struct Needs {
 
 impl Needs {
     /// Whether `commit` of the repository at `path` still needs its carried
-    /// ref: the bases workspaces record need it only while no branch or
-    /// checkpoint holds it.
+    /// ref: the bases workspaces record need it only while no branch holds
+    /// it.
     async fn need(&self, path: &std::path::Path, commit: &CommitId) -> Result<bool> {
         if self.held.contains(commit) || self.pending.iter().any(|rev| *commit == **rev) {
             return Ok(true);
@@ -136,7 +136,7 @@ impl Needs {
         if !self.bases.contains(commit) {
             return Ok(false);
         }
-        Ok(!crate::git::clone_base::held_elsewhere(path, commit).await?)
+        Ok(!crate::git::clone_base::held_by_branch(path, commit).await?)
     }
 }
 
