@@ -264,6 +264,9 @@ impl Cursor {
         let read = self.replaying.get(file).map(|seen| seen.offset);
         let (offset, bytes) = match read {
             Some(read) if end <= read => {
+                // Read before, though the file's length is news, which a
+                // later return tells a shorter file by.
+                self.observe(file, size);
                 if end == read {
                     self.replaying.remove(file);
                 }
@@ -279,6 +282,15 @@ impl Cursor {
         let read = ReadTo { offset: end, size };
         self.read.insert(file.to_owned(), read);
         Some((offset, bytes))
+    }
+
+    /// Keep that `file` is `size` long now, without moving where it was
+    /// read to.
+    fn observe(&mut self, file: &Path, size: u64) {
+        let seen = [self.read.get_mut(file), self.replaying.get_mut(file)];
+        for seen in seen.into_iter().flatten() {
+            seen.size = size;
+        }
     }
 }
 

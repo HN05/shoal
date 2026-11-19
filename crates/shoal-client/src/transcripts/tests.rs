@@ -133,3 +133,20 @@ fn a_file_read_in_part_then_written_anew_shorter_comes_whole_however_far_it_was_
         Some((0, vec![3; 150]))
     );
 }
+
+#[test]
+fn a_file_sent_again_longer_then_shorter_across_two_returns_comes_whole() {
+    let mut cursor = read(2_000);
+    let rewritten = file(99);
+    cursor.resume();
+    // Read to 100 before, it comes again 200 bytes long, and the follow
+    // returns again before it is past what was read.
+    assert_eq!(cursor.take(&rewritten, chunk(0, 200), vec![1; 50]), None);
+    let from = cursor.resume();
+    assert!(!from.contains_key(&rewritten));
+    // Now 150 bytes long: shorter than it was when last seen.
+    assert_eq!(
+        cursor.take(&rewritten, chunk(0, 150), vec![2; 150]),
+        Some((0, vec![2; 150]))
+    );
+}
