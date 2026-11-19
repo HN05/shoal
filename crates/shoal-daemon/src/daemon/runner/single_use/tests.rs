@@ -1,9 +1,7 @@
 use super::*;
 use crate::daemon::{
     executions::ExecutionKind,
-    workspace::runner::tests::{
-        GitHubState, admit_and_claim, github_fixture, github_job, launched,
-    },
+    runner::tests::{GitHubState, admit_and_claim, github_fixture, github_job, launched},
 };
 
 /// Make the claimed job `id` look launched `seconds` ago.

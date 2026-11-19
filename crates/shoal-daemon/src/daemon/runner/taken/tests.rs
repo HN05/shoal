@@ -1,10 +1,10 @@
 use serde_json::json;
 
 use super::*;
-use crate::daemon::workspace::runner::JobStop;
+use crate::daemon::runner::JobStop;
 use crate::daemon::{
+    runner::tests::{admit_and_claim, github_fixture, github_job, launched},
     test_support::git,
-    workspace::runner::tests::{admit_and_claim, github_fixture, github_job, launched},
 };
 use crate::forge::numbers::JobId;
 use shoal_forge::ci::runner::RunnerRequests;

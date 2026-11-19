@@ -23,7 +23,7 @@ use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 /// How the error begins of a workspace that a removal which stopped before
 /// it finished left failed, which a later removal looks for to tell that
 /// what the worktree misses is that removal's doing.
-pub(in crate::daemon::workspace) const STOPPED_REMOVAL: &str = "removal stopped";
+pub(in crate::daemon) const STOPPED_REMOVAL: &str = "removal stopped";
 
 /// A removal under way from its reservation. Dropped before
 /// [`Self::finish`], as when its work panics or is dropped, it fails the

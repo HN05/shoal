@@ -41,7 +41,7 @@ fn forgejo() -> (Server, Arc<Mutex<Vec<String>>>) {
 }
 
 fn runner_program(root: &Path) -> std::ffi::OsString {
-    crate::daemon::workspace::runner::tests::runner_program(root, "forgejo-runner")
+    crate::daemon::runner::tests::runner_program(root, "forgejo-runner")
 }
 
 fn settings(host: &str, enabled: bool) -> String {
@@ -201,7 +201,7 @@ async fn a_github_repository_keeps_no_runner_of_its_own() {
     crate::forge::hosts::learn(&server.host, ForgeKind::GitHub);
     let origin = format!("http://{}/team/repo", server.host);
     git(&path, &["remote", "add", "origin", &origin]);
-    let bin = crate::daemon::workspace::runner::tests::runner_program(
+    let bin = crate::daemon::runner::tests::runner_program(
         &root.path().join("actions-runner"),
         "Runner.Listener",
     );

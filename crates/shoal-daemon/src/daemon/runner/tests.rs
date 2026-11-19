@@ -15,8 +15,9 @@ use crate::{
         daemon_exit::Ending,
         executions::{ExecutionKind, StartedExecution},
         notifications::NotificationKind,
+        runner::JobStop,
         test_support::{configure, git, manager, repository},
-        workspace::{Manager, lifecycle::STOPPED_REMOVAL, runner::JobStop},
+        workspace::{Manager, lifecycle::STOPPED_REMOVAL},
     },
     forge::backends::ForgeKind,
     model::{QueueEntry, Workspace},
@@ -1529,7 +1530,8 @@ async fn an_unrecorded_worktree_another_workspace_marked_stays_with_its_job() {
     let workspace = workspace_a_restart_caught_preparing(&fixture).await;
     add_worktree(&fixture, &workspace).await;
     let admin_dir = git(&workspace.path, &["rev-parse", "--absolute-git-dir"]);
-    super::super::identity::mark_owner(admin_dir.trim_end().as_ref(), "another").unwrap();
+    super::super::workspace::identity::mark_owner(admin_dir.trim_end().as_ref(), "another")
+        .unwrap();
     assert!(!removed_with_its_claim(&fixture.manager, &workspace).await);
     assert!(workspace.path.join(".git").exists());
 }

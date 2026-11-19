@@ -10,7 +10,7 @@ use super::{
     shutdown_stop::{Shutdown, StoppedSpaces},
     workspace::Manager,
 };
-use crate::daemon::{log, workspace::runner::JobStop};
+use crate::daemon::{log, runner::JobStop};
 use crate::protocol::{Exit, QueuedLaunches};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;

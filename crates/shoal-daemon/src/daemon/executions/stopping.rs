@@ -25,7 +25,7 @@ use std::collections::HashSet;
 use tokio::time::{Instant, sleep};
 
 use crate::daemon::conversions::ConversionStop;
-use crate::daemon::workspace::runner::JobStop;
+use crate::daemon::runner::JobStop;
 
 #[cfg(test)]
 mod tests;

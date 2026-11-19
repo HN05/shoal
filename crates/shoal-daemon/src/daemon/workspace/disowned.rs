@@ -43,7 +43,7 @@ impl Manager {
     /// Record the identity of the directory of `workspace`, whose ownership
     /// the removal verified, before Git begins deleting it, so that a later
     /// removal may delete what is left without Git.
-    pub(in crate::daemon::workspace) async fn record_removal_directory(
+    pub(in crate::daemon) async fn record_removal_directory(
         &self,
         workspace: &Workspace,
     ) -> Result<()> {

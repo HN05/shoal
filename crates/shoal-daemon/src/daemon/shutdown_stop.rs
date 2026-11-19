@@ -8,7 +8,7 @@ use anyhow::Result;
 use futures_util::future::join_all;
 
 use super::{executions::StopRequest, workspace::Manager};
-use crate::daemon::workspace::runner::JobStop;
+use crate::daemon::runner::JobStop;
 use crate::{
     daemon::{
         log,
