@@ -4,6 +4,7 @@ use super::*;
 
 #[test]
 fn ref_name_patterns_match_within_and_across_path_components() {
+    let chars = |text: &str| text.chars().collect::<Vec<_>>();
     for (pattern, reference, matches) in [
         ("refs/heads/main", "refs/heads/main", true),
         ("refs/heads/release/*", "refs/heads/release/1.0", true),
@@ -29,9 +30,11 @@ fn ref_name_patterns_match_within_and_across_path_components() {
         ("refs/heads/v[!0-9]", "refs/heads/v/", false),
         ("refs/heads/[ab]-fix", "refs/heads/b-fix", true),
         ("refs/heads/[ab", "refs/heads/[ab", true),
+        ("refs/heads/release/?", "refs/heads/release/é", true),
+        ("refs/heads/v[é-ê]", "refs/heads/vê", true),
     ] {
         assert_eq!(
-            fnmatch(pattern.as_bytes(), reference.as_bytes()),
+            fnmatch(&chars(pattern), &chars(reference)),
             matches,
             "{pattern} {reference}"
         );
