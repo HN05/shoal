@@ -19,38 +19,38 @@ pub async fn colors_diff(dir: &Path, terminal: bool) -> Result<bool> {
 /// names one, as Git takes them, else the one `git var GIT_PAGER` names;
 /// none where it pages nothing, as for `cat`.
 pub async fn diff_pager(dir: &Path) -> Result<Option<String>> {
-    let paging = super::queries::config_value(dir, "pager.diff").await?;
-    let pager = match paging.as_deref().map(Paging::of) {
-        Some(Paging::Off) => return Ok(None),
-        Some(Paging::Command(command)) if std::env::var_os("GIT_PAGER").is_none() => {
-            command.to_owned()
-        }
+    let pager = match diff_paging(dir).await? {
+        Paging::Off => return Ok(None),
+        Paging::Command(command) if std::env::var_os("GIT_PAGER").is_none() => command,
         _ => run(dir, &["var", "GIT_PAGER"]).await?.trim().to_owned(),
     };
     Ok((!pager.is_empty() && pager != "cat").then_some(pager))
 }
 
-/// What a `pager.<command>` setting says: a boolean, as Git reads one, or
-/// the command to page with.
-#[derive(Debug, PartialEq, Eq)]
-enum Paging<'a> {
-    On,
+/// What `pager.diff` says.
+enum Paging {
+    /// Page as `GIT_PAGER` and `core.pager` say, as without the setting.
+    Default,
     Off,
-    Command(&'a str),
+    Command(String),
 }
 
-impl<'a> Paging<'a> {
-    fn of(value: &'a str) -> Self {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "true" | "yes" | "on" => Self::On,
-            "false" | "no" | "off" => Self::Off,
-            number => match number.parse::<i64>() {
-                Ok(0) => Self::Off,
-                Ok(_) => Self::On,
-                Err(_) => Self::Command(value),
-            },
-        }
-    }
+/// What `pager.diff` says in `dir`: a boolean where Git reads one, an
+/// empty value as false and one without a value as true, else the command
+/// to page with.
+async fn diff_paging(dir: &Path) -> Result<Paging> {
+    const KEY: &str = "pager.diff";
+    let mut setting = super::command(dir);
+    setting.args(["config", "--get", KEY]);
+    let Some(setting) = super::output_unless(setting, 1).await? else {
+        return Ok(Paging::Default);
+    };
+    let boolean = run(dir, &["config", "--type=bool", "--get", KEY]).await;
+    Ok(match boolean {
+        Ok(boolean) if boolean.trim() == "false" => Paging::Off,
+        Ok(_) => Paging::Default,
+        Err(_) => Paging::Command(setting.trim_end_matches('\n').to_owned()),
+    })
 }
 
 #[cfg(test)]
