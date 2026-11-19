@@ -148,15 +148,16 @@ fn place_agent(
 }
 
 /// The chat a start in this caller begins as, since `launch` names nothing
-/// its workspace starts from: in the repository it names, else the
-/// current one.
+/// its workspace starts from: in the repository it names, else that of the
+/// space it goes below, else the current one.
 async fn starts_as_chat(ctx: &Context, launch: &Launch) -> Result<StartsAsChat> {
     let named = (launch.repository.clone()).or_else(|| match &launch.target {
         Some(StartTarget::Repository(named)) => Some(named.clone()),
         _ => None,
     });
     let named = named.map(crate::repository::named).transpose()?;
-    let repository = resolve_add_target(ctx, named, None).await?.selector;
+    let parent = launch.parent.as_ref();
+    let repository = resolve_add_target(ctx, named, None, parent).await?.selector;
     Ok(StartsAsChat {
         repository,
         mode: launch.mode.clone(),

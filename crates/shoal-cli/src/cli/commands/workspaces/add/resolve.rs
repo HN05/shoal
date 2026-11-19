@@ -3,7 +3,7 @@
 //! what creation and its named agent, blockers and permissions would
 //! refuse, the workspace whose branch it names, and the issue or PR it
 //! starts on, read so that a lookup's failure ends the start first.
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 
 use super::{
     agent::AddSettings,
@@ -85,9 +85,8 @@ pub(in crate::cli::commands) fn check_start_arguments(launch: &Launch) -> Result
 }
 
 /// The repository `launch` starts in: the one it names, else the one its
-/// link belongs to, offering to register it, else that of the space it
-/// goes below, else the current or a picked one; `launch` then names it by
-/// ID.
+/// link belongs to, offering to register it, else the one
+/// [`resolve_add_target`] finds; `launch` then names it by ID.
 async fn start_target(ctx: &Context, launch: &mut Launch) -> Result<AddTarget> {
     check_start_arguments(launch)?;
     let named = (launch.repository.clone()).or_else(|| match &launch.target {
@@ -97,12 +96,10 @@ async fn start_target(ctx: &Context, launch: &mut Launch) -> Result<AddTarget> {
     let issue = launch.issue.as_ref().and_then(IssueChoice::named).cloned();
     let named = match named {
         Some(named) => Some(crate::repository::named(named)?),
-        None => match linked_repository(ctx, launch).await? {
-            Some(linked) => Some(linked),
-            None => parent_repository(ctx, launch).await?,
-        },
+        None => linked_repository(ctx, launch).await?,
     };
-    let target = resolve_add_target(ctx, named, issue.as_ref()).await?;
+    let parent = launch.parent.as_ref();
+    let target = resolve_add_target(ctx, named, issue.as_ref(), parent).await?;
     let repo = target.repository(ctx).await?;
     // A PR or branch link opens only in the repository it belongs to.
     if matches!(
@@ -284,20 +281,6 @@ fn ensure_takes_existing(
         "{flag} applies to a new workspace, and workspace {} already has branch {branch}; the start goes into it as --in does",
         workspace.number
     )
-}
-
-/// The repository of the space `launch` goes below, which a child shares;
-/// none without a parent or for a chat without a repository.
-async fn parent_repository(
-    ctx: &Context,
-    launch: &Launch,
-) -> Result<Option<crate::repository::Selector>> {
-    let Some(parent) = &launch.parent else {
-        return Ok(None);
-    };
-    let spaces = crate::client::spaces::list(&ctx.paths).await?;
-    let space = (spaces.find(parent)).with_context(|| format!("unknown space: {parent}"))?;
-    Ok(space.repository_id.map(Into::into))
 }
 
 /// The registered repository the link `launch` starts on belongs to,

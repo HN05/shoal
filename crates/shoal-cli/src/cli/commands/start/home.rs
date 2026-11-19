@@ -11,9 +11,10 @@ use anyhow::{Context as _, Result, ensure};
 use super::{ChatPlace, Narrowing, Options, Topic, issue, launch::begin};
 use crate::{
     chat_handoff::HandedStart,
-    cli::{agents::ChatRepository, context::Context, ui},
+    cli::{agents::ChatRepository, commands::workspaces::DaemonReads, context::Context, ui},
     config::Effective,
     forge::items::reference::ItemInput,
+    launches::LaunchReads,
     model::{Repository, SpaceKind, Workspace},
     protocol::{ChatStart, ConfigTarget},
     repository,
@@ -30,7 +31,8 @@ pub(in crate::cli::commands) struct Subject {
 }
 
 /// Start a chat about the repository `repository` names, else the issue's,
-/// else the current one, else one picked.
+/// else that of the space it goes below, else the current one, else one
+/// picked.
 pub(in crate::cli::commands) async fn start(
     ctx: &Context,
     repository: Option<String>,
@@ -39,6 +41,8 @@ pub(in crate::cli::commands) async fn start(
 ) -> Result<i32> {
     async {
         let mut options = options.for_caller(ctx)?;
+        let parent = options.parent.as_ref();
+        let repository = named_or_parents(ctx, repository, &subject.issue, parent).await?;
         let repo = match &subject.issue {
             Some(input) => issue::repository(ctx, input.as_ref(), repository).await?,
             None => chosen(ctx, repository).await?,
@@ -225,6 +229,22 @@ async fn check_parent(
     let workspace = workspace.map(|workspace| SpaceSelector::id(&workspace.id));
     let repository = repo.map(|repo| repo.id.clone().into());
     crate::client::chats::check_parent(&ctx.paths, repository, workspace, parent.clone()).await
+}
+
+/// The repository `repository` names, else for a chat on no issue URL that
+/// of the space `parent` names, which a child shares, by ID.
+async fn named_or_parents(
+    ctx: &Context,
+    repository: Option<String>,
+    issue: &Option<Option<ItemInput>>,
+    parent: Option<&SpaceSelector>,
+) -> Result<Option<String>> {
+    let url = matches!(issue, Some(Some(ItemInput::Url(_))));
+    let (None, false, Some(parent)) = (&repository, url, parent) else {
+        return Ok(repository);
+    };
+    let id = DaemonReads(ctx).space_repository(parent).await?;
+    Ok(id.map(|id| id.to_string()))
 }
 
 /// `topic` in `repo` started on the issue `issue` names, if any.

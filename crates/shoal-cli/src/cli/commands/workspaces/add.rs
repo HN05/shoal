@@ -72,9 +72,9 @@ impl std::fmt::Display for StartsAsChat {
 
 impl std::error::Error for StartsAsChat {}
 
-/// The repository a start goes in, the one `repository` names or `issue`
-/// belongs to, else the current or a picked one, once the daemon accepts a
-/// workspace there below `parent`. A start checks it before asking what it
+/// The repository a start goes in, as [`resolve_add_target`] finds it from
+/// `repository`, `issue` and `parent`, once the daemon accepts a workspace
+/// there below `parent`. A start checks it before asking what it
 /// starts, so its refusals come first.
 pub(in crate::cli::commands) async fn check_target(
     ctx: &Context,
@@ -82,7 +82,7 @@ pub(in crate::cli::commands) async fn check_target(
     issue: Option<&ItemInput>,
     parent: Option<&SpaceSelector>,
 ) -> Result<crate::repository::Selector> {
-    let target = resolve_add_target(ctx, repository, issue).await?;
+    let target = resolve_add_target(ctx, repository, issue, parent).await?;
     check_add_creation(ctx, &target, &Creation::default(), parent).await?;
     Ok(target.selector)
 }

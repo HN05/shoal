@@ -2633,11 +2633,14 @@ fn start_puts_a_chat_below_the_parent_it_names() {
 
 /// On a terminal in another repository's checkout, a start below a space
 /// takes the parent's repository in every step that reads one: the mode
-/// lookup of a mode only that repository defines.
+/// lookup of a mode only that repository defines, the checks before the
+/// mode picker, and a chat's start.
 #[test]
 fn start_on_a_terminal_takes_its_parents_repository_from_another_checkout() {
     let fixture = Fixture::new();
     install_recording_agent(&fixture, "claude");
+    fixture.add_github_origin();
+    fixture.script_github(&github_issue(37, "Sort the queue", "Body."));
     let saved = fixture.root.path().join("saved.toml");
     fs::write(&saved, "[modes.triage]\ninstructions = 'Triage.'\n").unwrap();
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
@@ -2652,13 +2655,15 @@ fn start_on_a_terminal_takes_its_parents_repository_from_another_checkout() {
         assert!(output.status.success(), "{args:?}: {}", printed(&output));
     };
     start(&["--mode", "triage", "--branch", "triaged"], "none");
+    start(&["--issue", "37"], "worker");
+    start(&["--mode", "chat", "--name", "talk"], "none");
     let spaces = fixture.ok(&["list"]);
     let mut below: Vec<_> = (spaces.as_array().unwrap().iter())
         .filter(|space| space["parent"]["id"] == parent["id"])
         .map(|space| space["mode"].as_str().unwrap())
         .collect();
     below.sort_unstable();
-    assert_eq!(below, ["triage"], "{spaces}");
+    assert_eq!(below, ["chat", "triage", "worker"], "{spaces}");
 }
 
 /// Without --mode, a start on a terminal whose arguments fit either kind of
