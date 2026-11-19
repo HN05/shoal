@@ -721,6 +721,7 @@ async fn finish(
         .finish_execution(execution_id.clone(), kind, result.as_ref().ok().copied())
         .await?;
     drop(spawning);
+    manager.viewers.end(&execution_id);
     if let Some(launch) = unrun {
         manager.executions.remember_unrun_launch(launch);
     }

@@ -298,13 +298,14 @@ fn scope_token(db: &Connection, execution: &ExecutionId) -> Result<ScopeToken> {
     token.context("the demo's execution has no scope token")
 }
 
-/// Stop the viewer `process` and its process group, which it leads while
-/// its identity verifies.
+/// Kill the viewer `process` and its process group, which it leads while
+/// its identity verifies: a viewer serves only its demo, so nothing in its
+/// group has work to save.
 pub(crate) async fn stop_recorded(process: &Identity) {
     if runs(process) {
         // SAFETY: the group the live, verified viewer leads.
         unsafe {
-            libc::kill(-(process.pid as i32), libc::SIGTERM);
+            libc::kill(-(process.pid as i32), libc::SIGKILL);
         }
     }
     if let Err(error) = process::stop_verified(std::slice::from_ref(process)).await {

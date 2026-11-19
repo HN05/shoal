@@ -127,6 +127,10 @@ impl Manager {
     /// names a process group, so the proof is that nothing carrying the
     /// execution's marker survives and every live process could be read.
     async fn stop_disconnected_demo(&self, execution: &Execution) -> Result<()> {
+        // A viewer spawned meanwhile would miss the scan; one spawned after
+        // cannot record and stops itself.
+        let spawning = self.viewers.spawn_lock(&execution.id);
+        let _spawning = spawning.lock().await;
         let between_runs = execution.child.is_none() && execution.group_id.is_none();
         if !between_runs {
             return self
