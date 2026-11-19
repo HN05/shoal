@@ -2,6 +2,8 @@
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 
+use crate::process::load::{MemoryLevel, MemoryLevels};
+
 shoal_states::states! {
     /// How hard Shoal may load this machine: a computer someone works on, or
     /// one that only runs agents. It sets the CPU and memory thresholds that
@@ -225,6 +227,24 @@ impl Warning {
 }
 
 impl Overload {
+    /// The memory levels the stop, warning and recovery thresholds set.
+    pub fn memory_levels(&self) -> MemoryLevels {
+        MemoryLevels {
+            stop: MemoryLevel {
+                used_percent: self.memory.used_percent,
+                stall_percent: self.memory.stall_percent,
+            },
+            warning: MemoryLevel {
+                used_percent: self.warning.memory_used_percent,
+                stall_percent: self.warning.memory_stall_percent,
+            },
+            recovery: MemoryLevel {
+                used_percent: self.recovery.memory_used_percent,
+                stall_percent: self.recovery.memory_stall_percent,
+            },
+        }
+    }
+
     /// Set the CPU and memory thresholds `written`, the `[machine.overload]` table as
     /// the file spells it, leaves out from `load`.
     pub fn follow_load(&mut self, load: Load, written: &toml::Table) {

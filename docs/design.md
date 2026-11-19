@@ -488,8 +488,14 @@ such as CI jobs or the user's own niced work, takes only cores nothing else
 wants. One `load` setting
 (`light`, `balanced`, `full`) sets the default CPU and memory thresholds, so a
 user chooses how hard to load the machine without tuning each percentage;
-explicit thresholds override it. Linux memory defaults rise with swap, which
-makes the OOM killer a later risk. Stop connected tracked
+explicit thresholds override it. On Linux, memory protection acts on stall
+time, not only on available memory: with swap, the kernel keeps
+`MemAvailable` just short of any threshold while swap fills and the machine
+thrashes, so the threshold came with the OOM, if at all. Pressure stall
+information is the main signal; a measure of RAM and swap in use together is
+the backstop, for an allocation too fast to stall first and for kernels
+without it. Either signal counts: critical when either is, safe only when both
+are. Stall stops work only once it has held, so one burst stops nothing. Stop connected tracked
 agents through their execution wrappers, preserving work and leases, in the
 agent queue's rank reversed: the agent the user interacted with longest ago, or
 never, first, since the user is likely working with the one they touched last,

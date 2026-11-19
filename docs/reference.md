@@ -225,7 +225,7 @@ then suggests `shoal restore --all`.
 
 ### Overload protection
 
-At the configured memory threshold, the daemon asks one connected tracked agent
+At critical memory pressure, the daemon asks one connected tracked agent
 of a mode that is not [light](../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules) to stop, in the
 [agent queue's](#queue-order) order reversed: the one you
 [interacted](#sleep) with longest ago, or never, then an idle one before a
@@ -234,8 +234,16 @@ a space the one idle longest, otherwise the newest.
 An agent is idle when its
 hooks last reported a finished turn, it runs no [subagent](#agent-state), and
 none of its processes run outside its process group, such as a background
-command whose completion would start its next turn; an agent without turn reports counts as working. Linux measures usage from `MemAvailable`, including reclaimable
-cache; macOS uses native critical pressure. The wrapper terminates the process
+command whose completion would start its next turn; an agent without turn reports counts as working. On Linux,
+memory pressure is critical when RAM and swap in use together, counting
+reclaimable cache in `MemAvailable` as free, pass `memory.used_percent`, at
+once, or when every task has stalled waiting for memory for at least
+`memory.stall_percent` of the last ten seconds, from the kernel's pressure stall
+information, for `memory.sustained_seconds`. Stall shows a machine thrashing
+while memory in use still looks short of full; memory in use catches an
+allocation that reaches the kernel's OOM killer before any stall builds up, and
+alone measures a kernel without pressure stall information. macOS uses native
+critical pressure. The wrapper terminates the process
 group through its normal grace period. The monitor waits for the cooldown before
 resampling and stopping another agent if pressure persists. It retains workspaces, execution recovery records and resource
 leases and records an `agent_stopped` notification.
@@ -266,7 +274,9 @@ stops nothing, and no agent restores until every reading succeeds.
 Before stopping anything, Shoal warns the agents. While memory, CPU or free
 disk space is past its `[machine.overload.warning]` threshold and that protection is
 enabled, the daemon queues an [agent message](#agent-messages) for each
-workspace with a running agent, naming the threshold. A memory or CPU warning
+workspace with a running agent, naming the threshold. On Linux memory warns
+when memory in use passes `memory_used_percent` or some task has stalled
+waiting for memory for `memory_stall_percent` of the last ten seconds. A memory or CPU warning
 tells the agent that load is high and that it needs no action; a disk warning
 asks it to free space in its own worktree, deleting a build's output whole or
 not at all, and to leave other worktrees and Shoal's directories beside them
@@ -307,7 +317,8 @@ once healthy readings persist for the recovery interval and the
 restores instead once an update arrives for it, such as an agent message or
 activity on its workspace's issues and PRs, which it receives as it starts.
 Recovery from load requires
-headroom below each enabled signal’s recovery threshold, whose thresholds must be
+headroom below each enabled signal’s recovery threshold, on Linux memory in use
+and memory stall of some task over the last minute both, whose thresholds must be
 positive and below their stop thresholds, and with disk protection enabled at
 least `disk.cleanup_free_gib` available on every monitored filesystem. Agents restore one at a time, each with
 a fresh healthy interval, which a reload changing `[machine.overload]` restarts. Missing
@@ -2437,9 +2448,10 @@ counts at the memory a settled agent uses: the average resident memory of the
 workspaces of the agents that have run longer, at the latest usage sample, at
 least 1 GiB, or 2 GiB before any has. A start must fit the memory left below
 the warning threshold once every such warming agent uses what it is expected
-to and every running [CI job](#runner) what it has yet to use.
+to and every running [CI job](#runner) what it has yet to use, and none starts
+while memory stall is past its warning level.
 With no agent running, one starts whatever memory and disk read. Critical
-memory, disk below `machine.overload.disk.stop_free_gib`, or a failed memory
+memory, including stall past its stop level before it has held, disk below `machine.overload.disk.stop_free_gib`, or a failed memory
 or disk reading starts none, and disk below `[machine.overload.warning]
 disk_free_gib` starts none beside running work. Disabled memory or disk
 protection ignores that signal. While a fixed

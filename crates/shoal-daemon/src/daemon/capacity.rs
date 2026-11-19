@@ -252,23 +252,47 @@ impl Agents {
 /// first path is daemon state; later paths are workspaces awaiting cleanup.
 /// A failed probe never authorizes more work; deleted workspaces are skipped.
 pub(crate) fn sample(paths: &[&Path], settings: &Overload) -> HostSample {
+    let (memory, memory_room) = sample_memory(settings);
     HostSample {
-        memory: sample_memory(settings),
-        memory_room: memory_room(settings),
+        memory,
+        memory_room,
         disk_free: disk_free(paths, settings),
     }
 }
 
-/// The bytes new work may use before memory reaches the warning threshold;
-/// unlimited with memory protection off.
-fn memory_room(settings: &Overload) -> Option<u64> {
+/// The memory state and room of one reading: healthy and unlimited with
+/// memory protection off, unavailable without room after a failed reading.
+fn sample_memory(settings: &Overload) -> (MemoryState, Option<u64>) {
     if !settings.memory.enabled {
-        return Some(u64::MAX);
+        return (MemoryState::Healthy, Some(u64::MAX));
     }
-    let memory = load::memory().ok()?;
+    match load::memory(&settings.memory_levels()) {
+        Ok(reading) => (
+            memory_state(reading.pressure),
+            Some(memory_room(reading.memory, settings)),
+        ),
+        Err(_) => (MemoryState::Unavailable, None),
+    }
+}
+
+/// Stall that has yet to hold counts as critical here: it starts nothing,
+/// though it stops nothing yet.
+fn memory_state(pressure: load::MemoryPressure) -> MemoryState {
+    if pressure.critical || pressure.stalled {
+        MemoryState::Critical
+    } else if pressure.warning {
+        MemoryState::Warning
+    } else {
+        MemoryState::Healthy
+    }
+}
+
+/// The bytes new work may use before `memory` in use reaches the warning
+/// threshold.
+fn memory_room(memory: load::Memory, settings: &Overload) -> u64 {
     let warning = u128::from(memory.total) * u128::from(settings.warning.memory_used_percent) / 100;
     let used = u128::from(memory.total - memory.available);
-    Some(warning.saturating_sub(used).try_into().unwrap_or(u64::MAX))
+    warning.saturating_sub(used).try_into().unwrap_or(u64::MAX)
 }
 
 /// The least free space across `paths`, as [`sample`] probes it.
@@ -278,21 +302,6 @@ pub(crate) fn disk_free(paths: &[&Path], settings: &Overload) -> Option<u64> {
         settings.disk.enabled,
         fsutil::disk_space::available_bytes,
     )
-}
-
-fn sample_memory(settings: &Overload) -> MemoryState {
-    if !settings.memory.enabled {
-        return MemoryState::Healthy;
-    }
-    match load::critical_memory(settings.memory.used_percent) {
-        Ok(true) => MemoryState::Critical,
-        Ok(false) => match load::memory_warning(settings.warning.memory_used_percent) {
-            Ok(true) => MemoryState::Warning,
-            Ok(false) => MemoryState::Healthy,
-            Err(_) => MemoryState::Unavailable,
-        },
-        Err(_) => MemoryState::Unavailable,
-    }
 }
 
 fn sample_disk(

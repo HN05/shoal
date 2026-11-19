@@ -3,6 +3,8 @@
 use std::{sync::Arc, time::Duration};
 use tokio::time::Instant;
 
+use crate::process::load::{self, MemoryPressure};
+
 use super::{
     manager::Manager,
     warnings::{self, Signal, Warnings},
@@ -26,10 +28,9 @@ impl Sustained {
 
 /// One sample's machine readings. A disabled protection reads as calm.
 struct Readings {
-    memory: anyhow::Result<bool>,
-    cpu: anyhow::Result<crate::process::load::CpuTicks>,
-    memory_warning: anyhow::Result<bool>,
-    memory_safe: anyhow::Result<bool>,
+    /// `None` with memory protection off or a failed reading.
+    memory: Option<MemoryPressure>,
+    cpu: anyhow::Result<load::CpuTicks>,
     disk_safe: bool,
 }
 
@@ -37,32 +38,28 @@ impl Readings {
     /// Take one sample, reading CPU ticks when `cpu`: for CPU protection or
     /// dynamic job admission.
     fn take(settings: &crate::config::overload::Overload, cpu: bool, manager: &Manager) -> Self {
-        use crate::process::load;
-        let memory = settings.memory.enabled;
         Self {
-            memory: if memory {
-                load::critical_memory(settings.memory.used_percent)
-            } else {
-                Ok(false)
-            },
+            memory: memory_pressure(settings),
             cpu: if cpu {
                 load::cpu_ticks()
             } else {
                 Ok(load::CpuTicks::default())
             },
-            memory_warning: if memory && settings.warning.enabled {
-                load::memory_warning(settings.warning.memory_used_percent)
-            } else {
-                Ok(false)
-            },
-            memory_safe: if memory {
-                load::safe_memory(settings.recovery.memory_used_percent)
-            } else {
-                Ok(true)
-            },
             disk_safe: manager.config_state.disk_space_recovered(),
         }
     }
+}
+
+/// This sample's memory pressure against the configured levels, `None` with
+/// memory protection off or a failed reading, which is logged.
+fn memory_pressure(settings: &crate::config::overload::Overload) -> Option<MemoryPressure> {
+    if !settings.memory.enabled {
+        return None;
+    }
+    load::memory(&settings.memory_levels())
+        .map(|reading| reading.pressure)
+        .inspect_err(|error| log!("memory overload monitor: {error:#}"))
+        .ok()
 }
 
 /// What one sample means for the published recovery.
@@ -77,7 +74,7 @@ enum Recovery {
 
 #[derive(Default)]
 struct Monitor {
-    memory: Sustained,
+    memory_stall: Sustained,
     cpu: Sustained,
     cpu_warning: Sustained,
     healthy: Sustained,
@@ -85,7 +82,7 @@ struct Monitor {
     safe: bool,
     recovery_epoch: u64,
     cpu_used: Option<f64>,
-    previous_cpu: Option<crate::process::load::CpuTicks>,
+    previous_cpu: Option<load::CpuTicks>,
     last_observation: Option<Instant>,
 }
 
@@ -94,24 +91,20 @@ impl Monitor {
         &mut self,
         now: Instant,
         settings: &crate::config::overload::Overload,
-        memory: anyhow::Result<bool>,
-        cpu: anyhow::Result<crate::process::load::CpuTicks>,
+        memory: Option<MemoryPressure>,
+        cpu: anyhow::Result<load::CpuTicks>,
     ) -> Option<&'static str> {
         if self
             .last_observation
             .replace(now)
             .is_some_and(|previous| now.duration_since(previous) > sample_gap(settings))
         {
-            self.memory = Sustained::default();
+            self.memory_stall = Sustained::default();
             self.cpu = Sustained::default();
             self.cpu_warning = Sustained::default();
             self.healthy = Sustained::default();
             self.previous_cpu = None;
         }
-        let memory = memory.unwrap_or_else(|error| {
-            log!("memory overload monitor: {error:#}");
-            false
-        });
         let used = match cpu {
             Ok(ticks) => self
                 .previous_cpu
@@ -124,11 +117,14 @@ impl Monitor {
             }
         };
         self.cpu_used = used;
-        let memory = self.memory.observe(
+        // Memory in use stops at once; stall only once it has held.
+        let memory = memory.filter(|_| settings.memory.enabled);
+        let stalled = self.memory_stall.observe(
             now,
-            settings.memory.enabled && memory,
+            memory.is_some_and(|memory| memory.stalled),
             settings.memory.sustained_seconds,
         );
+        let memory = stalled || memory.is_some_and(|memory| memory.critical);
         let cpu = self.cpu.observe(
             now,
             settings.cpu.enabled
@@ -151,7 +147,7 @@ impl Monitor {
         &mut self,
         now: Instant,
         settings: &crate::config::overload::Overload,
-        memory: anyhow::Result<bool>,
+        memory: Option<MemoryPressure>,
     ) -> Vec<(Signal, String)> {
         let warning = &settings.warning;
         let enabled = |protection| warning.enabled && protection;
@@ -163,7 +159,8 @@ impl Monitor {
                     .is_some_and(|used| used >= f64::from(warning.cpu_used_percent)),
             warning.cpu_sustained_seconds,
         );
-        let memory = enabled(settings.memory.enabled) && memory.unwrap_or(false);
+        let memory =
+            enabled(settings.memory.enabled) && memory.is_some_and(|memory| memory.warning);
         let mut signals = Vec::new();
         if memory {
             signals.push((Signal::Memory, warnings::memory(settings)));
@@ -182,7 +179,7 @@ impl Monitor {
         now: Instant,
         settings: &crate::config::overload::Overload,
         epoch: u64,
-        memory_safe: anyhow::Result<bool>,
+        memory: Option<MemoryPressure>,
         disk_safe: bool,
     ) -> Recovery {
         if self.recovery_epoch != epoch {
@@ -190,7 +187,7 @@ impl Monitor {
             self.recovery_epoch = epoch;
         }
         let recovery = &settings.recovery;
-        let memory_safe = !settings.memory.enabled || memory_safe.unwrap_or(false);
+        let memory_safe = !settings.memory.enabled || memory.is_some_and(|memory| memory.safe);
         let cpu_safe = !settings.cpu.enabled
             || self
                 .cpu_used
@@ -236,17 +233,11 @@ pub(super) async fn run(manager: Arc<Manager>) {
         // Decide before awaiting warnings, so a reload meanwhile cannot pair
         // these readings with its new epoch.
         let epoch = manager.overload_recovery.epoch();
-        match monitor.recovery(
-            now,
-            settings,
-            epoch,
-            readings.memory_safe,
-            readings.disk_safe,
-        ) {
+        match monitor.recovery(now, settings, epoch, readings.memory, readings.disk_safe) {
             Recovery::Revoke => manager.overload_recovery.reset(),
             Recovery::Publish(ready) => manager.overload_recovery.publish(ready),
         }
-        for (signal, message) in monitor.warnings(now, settings, readings.memory_warning) {
+        for (signal, message) in monitor.warnings(now, settings, readings.memory) {
             warned.warn(&manager, now, signal, &message).await;
         }
         if let Some(reason) = reason
@@ -266,7 +257,7 @@ fn publish_busy_cpu(
     now: Instant,
     settings: &crate::config::overload::Overload,
     admission: bool,
-    cpu: &anyhow::Result<crate::process::load::CpuTicks>,
+    cpu: &anyhow::Result<load::CpuTicks>,
 ) {
     manager.busy_cpu.observe(
         now,

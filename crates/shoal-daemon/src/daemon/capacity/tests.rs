@@ -292,3 +292,35 @@ fn low_disk_holds_fixed_limits_and_critical_disk_starts_none() {
     assert_eq!(disk_limit(Some(stop - 1), 0, &settings), Some(0));
     assert_eq!(disk_limit(None, 0, &settings), Some(0));
 }
+
+#[test]
+fn memory_stall_holds_starts_as_memory_in_use_does() {
+    let calm = load::MemoryPressure {
+        critical: false,
+        stalled: false,
+        warning: false,
+        safe: true,
+    };
+    // Stall that has yet to hold stops nothing, but starts nothing either,
+    // even on an idle machine.
+    let stalled = load::MemoryPressure {
+        stalled: true,
+        ..calm
+    };
+    assert_eq!(memory_state(stalled), MemoryState::Critical);
+    let settings = Overload::default();
+    let idle = HostSample {
+        memory: memory_state(stalled),
+        ..sample(u64::MAX)
+    };
+    assert_eq!(
+        room(idle, Agents::default(), &settings),
+        Room::Held(HeldBy::Reading)
+    );
+    let warning = load::MemoryPressure {
+        warning: true,
+        ..calm
+    };
+    assert_eq!(memory_state(warning), MemoryState::Warning);
+    assert_eq!(memory_state(calm), MemoryState::Healthy);
+}

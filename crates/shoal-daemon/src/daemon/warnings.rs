@@ -73,8 +73,11 @@ pub(super) fn memory(settings: &Overload) -> String {
         "Memory pressure is high: macOS reports warning pressure, and Shoal stops an agent at critical pressure.".to_owned()
     } else {
         format!(
-            "Memory pressure is high: memory use is above {}%, and Shoal stops an agent at {}%.",
-            settings.warning.memory_used_percent, settings.memory.used_percent
+            "Memory pressure is high: RAM and swap in use passed {}% or memory stall {}%, and Shoal stops an agent at {}% in use or at {}% stall of every task.",
+            settings.warning.memory_used_percent,
+            settings.warning.memory_stall_percent,
+            settings.memory.used_percent,
+            settings.memory.stall_percent,
         )
     };
     format!("{level} {HEADS_UP}")
