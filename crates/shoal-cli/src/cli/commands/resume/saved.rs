@@ -1,7 +1,7 @@
 //! The stopped work and last sessions a restore of agents acts on.
 use anyhow::{Result, ensure};
 
-use super::super::targets::Selected;
+use crate::cli::commands::restore::targets::Selected;
 use crate::{cli::context::Context, execution::recovery::Saved, model::Space};
 use shoal_protocol::space_names::SpaceSelector;
 

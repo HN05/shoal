@@ -14,25 +14,24 @@ pub(super) async fn run(
     ctx: &Context,
     targets: SpaceTargets,
     checkpoint: Option<Option<CheckpointNumber>>,
-    options: agents::Options,
+    options: super::resume::Options,
 ) -> Result<i32> {
     if let Some(checkpoint) = checkpoint {
         return checkpoints::run(ctx, targets.space, checkpoint).await;
     }
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {
-        agents::ensure_queued()?;
+        super::resume::ensure_queued()?;
     }
     let named = !targets.space.is_empty();
     match targets::Selected::load(ctx, targets).await? {
-        Some(selected) => agents::restore(ctx, selected, named, options).await,
+        Some(selected) => super::resume::restore(ctx, selected, named, options).await,
         None => Ok(0),
     }
 }
 
-pub(super) mod agents;
 mod checkpoints;
 pub(super) mod import;
 pub(super) mod reopen;
-mod targets;
+pub(super) mod targets;
 
 pub(super) use checkpoints::checkpoint;

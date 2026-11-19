@@ -18,7 +18,7 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::saved::Queuing;
 use shoal_protocol::space_names::SpaceSelector;
 
-use super::targets::Selected;
+use crate::cli::commands::restore::targets::Selected;
 
 /// How `shoal restore` restores the agents of the spaces it selects.
 pub struct Options {
@@ -50,7 +50,7 @@ pub struct Options {
 /// Every target, and a change to the permissions given for every selected
 /// agent, is checked before any setup, reopening, continued turn or
 /// restore.
-pub(super) async fn restore(
+pub(in crate::cli::commands) async fn restore(
     ctx: &Context,
     mut selected: Selected,
     named: bool,
@@ -80,15 +80,15 @@ pub(super) async fn restore(
         permission_change::check(ctx, &selected, change).await?;
     }
     if scoped && restores_agents {
-        let mut reopened = super::reopen::reopen_each(ctx, &selected.removed).await?;
+        let mut reopened = super::restore::reopen::reopen_each(ctx, &selected.removed).await?;
         select_reopened(ctx, &mut selected, &mut reopened).await?;
         let now = options.now || options.focus;
         let alongside = Alongside::turns(turns);
         return queue::queue_below(ctx, selected, options.execution, change, now, alongside).await;
     }
     ensure_one_agent(&selected, &options)?;
-    let reopened = super::reopen::reopen_each(ctx, &selected.removed).await?;
-    let reopening = super::reopen::Reopening::of(&reopened);
+    let reopened = super::restore::reopen::reopen_each(ctx, &selected.removed).await?;
+    let reopening = super::restore::reopen::Reopening::of(&reopened);
     let alongside = Alongside { reopened, turns };
     let restored = restore_reopened(ctx, selected, alongside, options).await;
     restored.map_err(|error| reopening.explain(error))
@@ -302,7 +302,7 @@ async fn interrupted_turns(
 /// token: a scoped process only queues the restores of the agents of the
 /// spaces its scope reaches, which the daemon starts, or forgets their
 /// stopped work.
-pub(super) fn ensure_queued() -> Result<()> {
+pub(in crate::cli::commands) fn ensure_queued() -> Result<()> {
     // The daemon checks that each space is in the caller's scope, which
     // needs the scope token: a process that cleared it stays refused.
     ensure!(
@@ -437,7 +437,7 @@ async fn present_space(ctx: &Context, selector: &SpaceSelector) -> Result<Space>
 
 pub(in crate::cli::commands) mod changed;
 mod commands;
-pub(super) mod failed_starts;
+pub(in crate::cli::commands) mod failed_starts;
 mod forget;
 pub(in crate::cli::commands) mod permission_change;
 mod picker;
@@ -447,6 +447,6 @@ pub(in crate::cli::commands) mod queued;
 pub(in crate::cli::commands) mod reports;
 mod saved;
 mod sessions;
-pub(super) mod setups;
+pub(in crate::cli::commands) mod setups;
 mod space;
 mod stale;

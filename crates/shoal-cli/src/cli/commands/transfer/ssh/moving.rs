@@ -7,7 +7,7 @@ use super::{
     super::export::{self, Ending, ExportDirectory, PlannedExport},
     ImportFailure, Remote, arrived, summary,
 };
-use crate::cli::commands::restore::agents::queue::{Stopped, restore_stopped, saved_executions};
+use crate::cli::commands::resume::queue::{Stopped, restore_stopped, saved_executions};
 use crate::client::output::{restore::Reopened, transfer::Moves};
 use crate::transfer::{Carrying, ExportedSpace, ManifestExt};
 use crate::{

@@ -299,7 +299,7 @@ impl Target {
             space: vec![SpaceSelector::id(self.id())],
             all: false,
         };
-        let now = super::restore::agents::Options {
+        let now = super::resume::Options {
             execution: None,
             forget: false,
             no_resume: false,

@@ -4,7 +4,7 @@
 //! space, the current one or those picked, or else a list of them all.
 use anyhow::{Result, bail};
 
-use super::agents::setups::FailedSetup;
+use crate::cli::commands::resume::setups::FailedSetup;
 use crate::client::output::restore::{Restorable, StoppedWorkspace};
 use crate::{
     cli::{args::SpaceTargets, context::Context, ui},
@@ -14,7 +14,7 @@ use shoal_protocol::space_names::SpaceSelector;
 
 /// The space a `shoal restore` target names.
 #[derive(Debug, PartialEq)]
-pub(super) enum Target {
+pub(in crate::cli::commands) enum Target {
     /// A running chat, whose agent may continue the turn an interrupt
     /// ended.
     Running(Box<Chat>),
@@ -44,7 +44,7 @@ pub(super) fn resolve(
 
 /// The spaces a restore acts on.
 #[derive(Debug, Default)]
-pub(super) struct Selected {
+pub(in crate::cli::commands) struct Selected {
     /// The running chats named, which have nothing to restore but a turn an
     /// interrupt ended.
     pub running: Vec<Chat>,
@@ -52,11 +52,11 @@ pub(super) struct Selected {
     /// work for `None`.
     pub spaces: Option<Vec<SpaceSelector>>,
     /// The workspaces named whose setup failed, which restore by retrying
-    /// it, once [`super::agents::setups::take_failed`] takes them from the
+    /// it, once [`crate::cli::commands::resume::setups::take_failed`] takes them from the
     /// others.
     pub setups: Vec<FailedSetup>,
     /// The failed launches of the spaces named, which restore by queuing
-    /// them again, once [`super::agents::failed_starts::take`] takes them
+    /// them again, once [`crate::cli::commands::resume::failed_starts::take`] takes them
     /// from the others.
     pub failed_starts: Vec<crate::model::QueueEntry>,
     /// The removed spaces named, which open again in that order.

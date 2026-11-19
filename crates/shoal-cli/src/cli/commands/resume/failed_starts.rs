@@ -3,8 +3,8 @@
 //! `--now`, or in this terminal for `--focus`.
 use anyhow::Result;
 
-use super::super::targets::Selected;
 use super::permission_change;
+use crate::cli::commands::restore::targets::Selected;
 use crate::client::output::batch::Failure;
 use crate::{
     cli::{commands::queued_agents, context::Context, ui},
@@ -16,10 +16,7 @@ use shoal_protocol::protocol::RetryStart;
 
 /// Move the selected spaces with a failed launch from `selected`'s spaces
 /// to its failed starts.
-pub(in crate::cli::commands::restore) async fn take(
-    ctx: &Context,
-    selected: &mut Selected,
-) -> Result<()> {
+pub(in crate::cli::commands) async fn take(ctx: &Context, selected: &mut Selected) -> Result<()> {
     let Some(selectors) = selected.spaces.take() else {
         return Ok(());
     };

@@ -3,8 +3,8 @@
 use anyhow::{Context as _, Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 
-use super::super::targets::Selected;
 use super::{commands, permission_change, reports, stale};
+use crate::cli::commands::restore::targets::Selected;
 use crate::client::output::restore::Queued;
 use crate::{
     cli::{context::Context, ui},

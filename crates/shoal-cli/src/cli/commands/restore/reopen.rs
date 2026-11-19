@@ -1,11 +1,11 @@
 //! Opening removed spaces again from their removal records.
-use crate::cli::commands::restore::agents::reports::QueuedExt;
+use crate::cli::commands::resume::reports::QueuedExt;
 use shoal_ids::execution_ids::ExecutionId;
 use std::collections::BTreeSet;
 
 use anyhow::{Context as _, Result};
 
-use super::agents::queue::Stopped;
+use crate::cli::commands::resume::queue::Stopped;
 use crate::client::output::restore::{Queued, Reopened};
 use crate::{
     cli::{
@@ -24,7 +24,10 @@ use shoal_protocol::space_names::SpaceSelector;
 /// it start; an error once one fails names those opened before it. A
 /// workspace opened alone becomes the directory of a shell that follows
 /// the caller.
-pub(super) async fn reopen_each(ctx: &Context, removed: &[RemovedSpace]) -> Result<Vec<Reopened>> {
+pub(in crate::cli::commands) async fn reopen_each(
+    ctx: &Context,
+    removed: &[RemovedSpace],
+) -> Result<Vec<Reopened>> {
     let mut reopened = Vec::new();
     for space in removed {
         let opened = reopen(ctx, space).await;
@@ -118,10 +121,10 @@ async fn reopened_chat(ctx: &Context, restored: RestoredChat) -> Result<Reopened
 
 /// The spaces a restore opened again, which an error that ends it
 /// afterwards names, since it reports them no other way.
-pub(super) struct Reopening(Option<String>);
+pub(in crate::cli::commands) struct Reopening(Option<String>);
 
 impl Reopening {
-    pub(super) fn of(reopened: &[Reopened]) -> Self {
+    pub(in crate::cli::commands) fn of(reopened: &[Reopened]) -> Self {
         let names = reopened
             .iter()
             .map(|opened| format!("{} as {}", opened.space.name, opened.space.number))
@@ -130,7 +133,7 @@ impl Reopening {
     }
 
     /// `error`, saying which spaces opened before it.
-    pub(super) fn explain(&self, error: anyhow::Error) -> anyhow::Error {
+    pub(in crate::cli::commands) fn explain(&self, error: anyhow::Error) -> anyhow::Error {
         match &self.0 {
             Some(names) => error.context(format!("reopened {names}, then stopped")),
             None => error,
@@ -224,7 +227,7 @@ impl ReopenedExt for Reopened {
             return;
         }
         let stopped = Stopped::from([(self.space.id.clone(), executions)]);
-        match super::agents::queue::queue_stopped(ctx, &stopped).await {
+        match crate::cli::commands::resume::queue::queue_stopped(ctx, &stopped).await {
             Ok(queued) => {
                 self.queued = Some(queued);
                 self.agents_saved = false;

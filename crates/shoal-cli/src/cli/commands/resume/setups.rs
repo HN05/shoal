@@ -4,8 +4,8 @@
 use anyhow::{Context as _, Result};
 use shoal_protocol::model::ByKind;
 
-use super::super::targets::Selected;
 use super::permission_change;
+use crate::cli::commands::restore::targets::Selected;
 use crate::client::output::{batch::Failure, restore::SetUp};
 use crate::{
     cli::{
@@ -21,14 +21,14 @@ use crate::{
 /// A selected workspace whose setup failed or never started, with the
 /// launch of the agent waiting for it, if one does.
 #[derive(Debug)]
-pub(in crate::cli::commands::restore) struct FailedSetup {
+pub(in crate::cli::commands) struct FailedSetup {
     pub workspace: Workspace,
     pub launch: Option<QueueEntry>,
 }
 
 /// Move the selected workspaces whose setup failed or never started from
 /// `selected`'s spaces to its setups; a chat has no setup.
-pub(in crate::cli::commands::restore) async fn take_failed(
+pub(in crate::cli::commands) async fn take_failed(
     ctx: &Context,
     selected: &mut Selected,
 ) -> Result<()> {

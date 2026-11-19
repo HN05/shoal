@@ -2,11 +2,7 @@ use anyhow::Result;
 
 use crate::cli::{
     args::sessions::SessionsCommand,
-    commands::{
-        demo, queue, restart,
-        restore::{self, agents},
-        sessions, triggers,
-    },
+    commands::{demo, queue, restart, restore, resume, sessions, triggers},
     context::Context,
 };
 use crate::config::permissions::PermissionChange;
@@ -46,14 +42,14 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             import: _,
         } => {
             if let Some(host) = opened_in {
-                agents::queued::record_place(&ctx, host, &targets).await;
+                resume::queued::record_place(&ctx, host, &targets).await;
             }
             if let Some(host) = close_in {
-                agents::queued::close_place_when_done(&ctx, host, &targets).await;
+                resume::queued::close_place_when_done(&ctx, host, &targets).await;
             }
             match queue_entry {
                 None => {
-                    let options = agents::Options {
+                    let options = resume::Options {
                         execution,
                         forget,
                         no_resume,
@@ -63,7 +59,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
                     };
                     restore::run(&ctx, targets, checkpoint, options).await
                 }
-                Some(entry) => agents::queued::start_entry(&ctx, targets, execution, entry).await,
+                Some(entry) => resume::queued::start_entry(&ctx, targets, execution, entry).await,
             }
         }
         SessionsCommand::Restart {

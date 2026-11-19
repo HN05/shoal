@@ -59,6 +59,7 @@ mod repositories;
 mod resources;
 mod restart;
 pub(crate) mod restore;
+mod resume;
 
 mod create;
 mod review;

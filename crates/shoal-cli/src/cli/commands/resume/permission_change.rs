@@ -6,8 +6,8 @@
 //! the change in the records it restores or starts once nothing refuses it.
 use anyhow::{Context as _, Result};
 
-use super::super::targets::Selected;
 use super::setups::FailedSetup;
+use crate::cli::commands::restore::targets::Selected;
 use crate::{
     cli::context::Context,
     config::permissions::PermissionChange,
