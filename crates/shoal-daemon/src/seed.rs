@@ -2,12 +2,12 @@
 //! The daemon builds it in a Shoal-owned worktree and freezes its outputs as a
 //! copy-on-write snapshot, so a build running there never reaches a workspace.
 //! A new workspace clones the snapshot and takes the seed's modification time
-//! for each file its commit left unchanged, so mtime-based build tools rebuild
-//! only what the branch changed.
+//! for each file and directory its commit left unchanged, so mtime-based build
+//! tools rebuild only what the branch changed.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_refs::CommitId;
 use std::{
-    collections::HashSet,
+    collections::{BTreeSet, HashSet},
     fs,
     io::ErrorKind,
     path::{Path, PathBuf},
@@ -173,7 +173,8 @@ impl Layout {
 }
 
 /// What a frozen snapshot holds: the commit it was built from, the outputs it
-/// cloned and the modification time of every tracked file the build saw.
+/// cloned and the modification time of every tracked file the build saw and
+/// of the directories holding them.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Snapshot {
     pub commit: CommitId,
@@ -369,20 +370,23 @@ impl Snapshot {
     }
 
     /// Give each file the seed's modification time unless the worktree's
-    /// commit `changed` it, so build tools treat only changed files as new.
+    /// commit `changed` it, and each directory unless it changed a path
+    /// inside, so build tools treat only changed files and directories as
+    /// new. Cargo's `rerun-if-changed` on a directory reads its time too.
     pub fn restore_times(&self, worktree: &Path, changed: &HashSet<String>) -> Result<()> {
-        for (file, seconds, nanos) in &self.times {
-            if changed.contains(file) {
+        let stale = with_directories(changed.iter().map(String::as_str));
+        for (entry, seconds, nanos) in &self.times {
+            if stale.contains(entry.as_str()) {
                 continue;
             }
-            let path = worktree.join(file);
+            let path = worktree.join(entry);
             match path.symlink_metadata() {
-                Ok(metadata) if metadata.is_file() => {}
+                Ok(metadata) if metadata.is_file() || metadata.is_dir() => {}
                 _ => continue,
             }
             let time = UNIX_EPOCH + Duration::new(*seconds, *nanos);
             // The owner may set times through a read-only handle, so
-            // read-only tracked files work too.
+            // read-only tracked files and directories work too.
             fs::File::open(&path)
                 .and_then(|file| file.set_modified(time))
                 .with_context(|| format!("set modification time of {}", path.display()))?;
@@ -566,22 +570,34 @@ fn put_back(layout: &Layout, taken: &Path, paths: &[String]) -> Result<()> {
     }
 }
 
+/// The modification times of `files` and of the directories that hold them.
 fn modification_times(worktree: &Path, files: Vec<String>) -> Result<Vec<(String, u64, u32)>> {
+    let entries = with_directories(files.iter().map(String::as_str));
     let mut times = Vec::new();
-    for file in files {
-        let Ok(metadata) = worktree.join(&file).symlink_metadata() else {
+    for entry in entries {
+        let Ok(metadata) = worktree.join(entry).symlink_metadata() else {
             continue;
         };
-        if !metadata.is_file() {
+        if !metadata.is_file() && !metadata.is_dir() {
             continue;
         }
         let since = metadata
             .modified()?
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default();
-        times.push((file, since.as_secs(), since.subsec_nanos()));
+        times.push((entry.to_owned(), since.as_secs(), since.subsec_nanos()));
     }
     Ok(times)
+}
+
+/// The Git `paths` with every directory above them but the worktree's root.
+fn with_directories<'a>(paths: impl Iterator<Item = &'a str>) -> BTreeSet<&'a str> {
+    let mut entries = BTreeSet::new();
+    for path in paths {
+        entries.insert(path);
+        entries.extend(path.match_indices('/').map(|(end, _)| &path[..end]));
+    }
+    entries
 }
 
 /// Refuse an output whose existing parents inside `worktree` include a

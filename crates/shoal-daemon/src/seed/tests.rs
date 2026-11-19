@@ -5,9 +5,7 @@ use crate::test_support::{
 };
 
 fn set_time(path: &Path, seconds: u64) {
-    fs::File::options()
-        .write(true)
-        .open(path)
+    fs::File::open(path)
         .unwrap()
         .set_modified(UNIX_EPOCH + Duration::from_secs(seconds))
         .unwrap();
@@ -304,16 +302,29 @@ async fn new_worktrees_get_the_outputs_and_the_times_of_unchanged_files() {
     layout.claim().unwrap();
     let seed = layout.worktree();
     fs::create_dir_all(seed.join("src")).unwrap();
+    fs::create_dir_all(seed.join("configs/packaged")).unwrap();
     fs::create_dir_all(seed.join("target/debug")).unwrap();
-    for file in ["src/same.rs", "src/changed.rs", "src/modified.rs"] {
+    for file in [
+        "src/same.rs",
+        "src/changed.rs",
+        "src/modified.rs",
+        "configs/packaged/default.toml",
+    ] {
         fs::write(seed.join(file), "seed").unwrap();
         set_time(&seed.join(file), 1_000);
+    }
+    for directory in ["src", "configs", "configs/packaged"] {
+        set_time(&seed.join(directory), 1_500);
     }
     fs::write(seed.join("target/debug/app"), "binary").unwrap();
     set_time(&seed.join("target/debug/app"), 2_000);
     let copy = copier(root.path());
     // The build modified one tracked file, so the caller leaves it out.
-    let files = vec!["src/same.rs".into(), "src/changed.rs".into()];
+    let files = vec![
+        "src/same.rs".into(),
+        "src/changed.rs".into(),
+        "configs/packaged/default.toml".into(),
+    ];
     let paths = vec!["target".to_owned(), "missing".to_owned()];
     freeze(&copy, &layout, "c1", &paths, files).await.unwrap();
     // A rebuild in the seed worktree does not reach the snapshot.
@@ -321,9 +332,18 @@ async fn new_worktrees_get_the_outputs_and_the_times_of_unchanged_files() {
 
     let workspace = root.path().join("workspace");
     fs::create_dir_all(workspace.join("src")).unwrap();
-    for file in ["src/same.rs", "src/changed.rs", "src/modified.rs"] {
+    fs::create_dir_all(workspace.join("configs/packaged")).unwrap();
+    for file in [
+        "src/same.rs",
+        "src/changed.rs",
+        "src/modified.rs",
+        "configs/packaged/default.toml",
+    ] {
         fs::write(workspace.join(file), "checkout").unwrap();
         set_time(&workspace.join(file), 5_000);
+    }
+    for directory in ["src", "configs", "configs/packaged"] {
+        set_time(&workspace.join(directory), 5_000);
     }
     // Read-only tracked files still take the seed's time.
     use std::os::unix::fs::PermissionsExt as _;
@@ -349,6 +369,11 @@ async fn new_worktrees_get_the_outputs_and_the_times_of_unchanged_files() {
     assert_eq!(time(&workspace.join("src/same.rs")), 1_000);
     assert_eq!(time(&workspace.join("src/changed.rs")), 5_000);
     assert_eq!(time(&workspace.join("src/modified.rs")), 5_000);
+    // A directory holding a changed path keeps its time, so a build tool
+    // watching it, as Cargo's `rerun-if-changed` can, sees the change.
+    assert_eq!(time(&workspace.join("src")), 5_000);
+    assert_eq!(time(&workspace.join("configs")), 1_500);
+    assert_eq!(time(&workspace.join("configs/packaged")), 1_500);
     // Existing outputs are never replaced.
     assert!(
         snapshot

@@ -1509,8 +1509,10 @@ shared lock of the seed's own, which a swap or deletion of the snapshot takes
 exclusively, so starts and the refill clone at the same time and only taking the
 spare is exclusive. A new snapshot is cloned and the old one deleted outside the
 Git gate, which it takes only to swap them. Creation restores the
-seed's modification times on tracked files its commit left unchanged, since
-mtime-based tools otherwise treat every freshly checked-out file as new.
+seed's modification times on tracked files its commit left unchanged, and on
+the directories holding them where it changed no path inside, since
+mtime-based tools otherwise treat every freshly checked-out file as new, and
+Cargo's `rerun-if-changed` on a directory reads the directory's own time.
 Clones of a file still cost time per file, so on btrfs each output is a
 subvolume, whose snapshot takes the same time for any number of files: a freeze
 turns a plain output directory into one, once a probe shows Shoal can remove the

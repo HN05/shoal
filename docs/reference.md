@@ -3981,8 +3981,9 @@ worktree without any of the paths takes instead of cloning, and clones the next
 one in the background while memory and disk space are clear of their warning
 thresholds; a [copy](#copies) of a workspace's current files has that workspace's
 outputs instead. When it clones at least one, it gives every tracked file its commit left
-unchanged the seed's modification time, so tools that compare modification times,
-such as Cargo and make, rebuild only changed files; next to outputs the worktree
+unchanged, and every directory holding tracked files in which it changed no path,
+the seed's modification time, so tools that compare modification times, such as
+Cargo and make, rebuild only changed files; next to outputs the worktree
 already had, older times could hide changed sources. Cloned files share disk blocks with the snapshot
 until rewritten. An output that records an absolute path, such as a path a
 test binary was compiled with, names the seed worktree until it is rebuilt, and
