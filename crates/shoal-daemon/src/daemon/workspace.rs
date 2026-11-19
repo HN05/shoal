@@ -5,7 +5,6 @@ use crate::paths::StateFiles;
 use shoal_ids::execution_ids::ExecutionId;
 mod adoption;
 pub(crate) mod agent_queue;
-mod agent_turns;
 pub(crate) mod agents;
 mod branch_rename;
 mod branches;
