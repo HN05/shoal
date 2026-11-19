@@ -6,7 +6,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::config::repo::Lifetime;
 
-use super::super::{
+use super::{
     gates::{GuardMode, ResourceGuard},
     workspace::Manager,
 };

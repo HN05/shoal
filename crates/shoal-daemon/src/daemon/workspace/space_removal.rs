@@ -176,7 +176,7 @@ impl Manager {
 
     /// Reserve the space `id` for `removal`, then its worktree, where it has
     /// one.
-    pub(in crate::daemon::workspace) async fn reserve_space(
+    pub(in crate::daemon) async fn reserve_space(
         &self,
         id: &SpaceId,
         removal: Removal<'_>,

@@ -195,7 +195,7 @@ fn decide_and_place(
 ) -> Result<Decision> {
     let decision = decide(tx, key, approve)?;
     if decision.new && decision.request.status == DecisionStatus::Approved {
-        crate::daemon::workspace::place_approved_hold(tx, &decision.request, removing)?;
+        crate::daemon::holds::place_approved(tx, &decision.request, removing)?;
     }
     Ok(decision)
 }

@@ -69,7 +69,7 @@ impl std::fmt::Display for Retention {
 
 /// Who is removing the space, which decides how strict the checks are.
 #[derive(Clone, Copy)]
-pub(in crate::daemon::workspace) enum Removal<'a> {
+pub(in crate::daemon) enum Removal<'a> {
     /// Explicit merge completion stops tracked agents without waiting for idle.
     Merged { head: &'a str },
     /// An assignment finished; all commits must already be kept, unless

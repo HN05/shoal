@@ -743,7 +743,7 @@ fn recorded(db: &Connection, owner: &Path, root: Option<&SpaceId>) -> Result<Vec
     .map(|mut chat| {
         chat.links = store::space_links(db, &chat.id)?;
         chat.review = crate::daemon::workspace::review::list(db, &chat.id)?;
-        chat.holds = crate::daemon::workspace::holds::list(db, &chat.id)?;
+        chat.holds = crate::daemon::holds::list(db, &chat.id)?;
         chat.parent = super::tree::parent(db, &chat.id)?;
         chat.children = super::tree::children(db, &chat.id)?;
         chat.agent_state = super::agent_state::current(db, &chat.id)?;

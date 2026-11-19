@@ -23,6 +23,6 @@ pub(in crate::daemon) use abandoned::STOPPED_REMOVAL;
 pub(in crate::daemon::workspace) use abandoned::Underway;
 pub(crate) use abandoned::fail_interrupted_removals;
 pub(crate) use policy::BelowElsewhere;
-pub(in crate::daemon::workspace) use policy::Removal;
+pub(in crate::daemon) use policy::Removal;
 use policy::{Retention, Stage};
 pub(crate) use worktree::{WorktreeRemoval, not_ready};

@@ -41,6 +41,7 @@ pub(crate) mod forge_hosts;
 pub(crate) mod gate;
 mod gates;
 mod git_logins;
+pub(crate) mod holds;
 pub(crate) mod hub;
 mod idle_sleep;
 pub(crate) mod idle_wakes;

@@ -18,7 +18,6 @@ pub(super) mod creation;
 mod diff;
 mod disowned;
 mod fast_forward;
-pub(crate) mod holds;
 pub(in crate::daemon) mod identity;
 mod kept_branches;
 pub(super) mod lifecycle;
@@ -44,7 +43,6 @@ pub(crate) use contributions::holds::{
 };
 pub(crate) use copies::CopyPlace;
 pub(crate) use creation::{NewWorkspace, build_pending_in};
-pub(crate) use holds::place_approved as place_approved_hold;
 pub(crate) use lifecycle::not_ready;
 pub(crate) use merge::RecordChange;
 pub(crate) use ownership::VerifiedWorktree;
@@ -448,7 +446,7 @@ fn recorded_workspace(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<
 }
 
 fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<()> {
-    workspace.holds = holds::list(db, &workspace.id)?;
+    workspace.holds = super::holds::list(db, &workspace.id)?;
     workspace.review = review::list(db, &workspace.id)?;
     workspace.latest_review = crate::daemon::reviews::store::latest_status(db, &workspace.id)?;
     workspace.agent_state = super::agent_state::current(db, &workspace.id)?;

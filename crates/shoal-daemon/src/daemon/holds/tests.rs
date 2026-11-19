@@ -446,7 +446,7 @@ async fn a_hold_keeps_a_chat_until_it_is_released() {
     // Only the hold keeps it, as its release shows below.
     assert!(manager.keep_reason(&chat.id).await.unwrap().is_some());
     // A removal that leaves the user's holds in place refuses it.
-    let parent = super::super::lifecycle::Removal::Parent {
+    let parent = super::super::workspace::lifecycle::Removal::Parent {
         cause: crate::model::EventCause::Parent,
         refuse_holds: true,
         confirmed: None,
