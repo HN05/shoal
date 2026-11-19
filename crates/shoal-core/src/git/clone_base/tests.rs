@@ -1,6 +1,8 @@
 use std::{fs, path::Path};
 
-use super::{bundle_carried, carried_commit, fetch_carried, for_clone};
+use super::{
+    bundle_carried, carried, carried_commit, drop_carried, fetch_carried, for_clone, held_elsewhere,
+};
 use crate::test_support::{commit, git, repository};
 
 fn rev(repo: &Path, revision: &str) -> String {
@@ -66,8 +68,10 @@ async fn a_clone_of_the_origin_fetches_an_unpushed_commit_from_its_bundle() {
     fetch_carried(&clone, &file, (&commit, "pushed"))
         .await
         .unwrap();
-    let fetched = rev(&clone, &format!("refs/shoal/carried/{commit}"));
-    assert_eq!(fetched, commit.as_str());
+    assert_eq!(
+        carried(&clone).await.unwrap(),
+        std::slice::from_ref(&commit)
+    );
     // The repository that bundled it keeps no ref of it.
     let refs = git(&repo, &["for-each-ref", "refs/shoal"]);
     assert!(refs.trim().is_empty(), "{refs}");
@@ -86,4 +90,29 @@ async fn bundles_of_one_commit_at_once_each_keep_their_own_ref() {
     );
     first.unwrap();
     second.unwrap();
+}
+
+#[tokio::test]
+async fn a_carried_commit_stays_held_by_a_branch_once_its_ref_drops() {
+    let temp = tempfile::tempdir().unwrap();
+    let repo = pushed_and_not(temp.path());
+    let commit = carried_commit(&repo, "unpushed").await.unwrap();
+    git(
+        &repo,
+        &[
+            "update-ref",
+            &format!("refs/shoal/carried/{commit}"),
+            commit.as_str(),
+        ],
+    );
+    git(&repo, &["switch", "-q", "pushed"]);
+    git(&repo, &["branch", "-q", "-D", "unpushed"]);
+    assert!(!held_elsewhere(&repo, &commit).await.unwrap());
+    git(&repo, &["branch", "work", commit.as_str()]);
+    assert!(held_elsewhere(&repo, &commit).await.unwrap());
+
+    drop_carried(&repo, &commit).await.unwrap();
+
+    assert!(carried(&repo).await.unwrap().is_empty());
+    assert_eq!(rev(&repo, "work"), commit.as_str());
 }

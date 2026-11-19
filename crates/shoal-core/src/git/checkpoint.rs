@@ -9,7 +9,7 @@ use crate::fsutil::off_runtime;
 
 use super::{isolated_command_without_submodules, run_isolated, run_without_submodules};
 
-const REFS: &str = "refs/shoal/checkpoints/";
+pub(super) const REFS: &str = "refs/shoal/checkpoints/";
 
 /// The ref that keeps a checkpoint's commit reachable. It is named by the
 /// commit, so whichever checkpoints keep that commit own it.

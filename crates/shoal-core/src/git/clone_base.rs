@@ -66,9 +66,46 @@ pub async fn carried_commit(repo: &Path, rev: &str) -> Result<CommitId> {
     resolve_commit(repo, rev, run_isolated).await
 }
 
+/// The refs that keep the commits carried to a clone there.
+const CARRIED: &str = "refs/shoal/carried/";
+
 /// The ref a commit carried to another clone goes under there.
 fn carried_reference(commit: &CommitId) -> String {
-    format!("refs/shoal/carried/{commit}")
+    format!("{CARRIED}{commit}")
+}
+
+/// The commits [`fetch_carried`] took into `repo` that their carried refs
+/// still keep.
+pub async fn carried(repo: &Path) -> Result<Vec<CommitId>> {
+    let refs = super::refs::list(repo, &[CARRIED]).await?;
+    Ok((refs.into_iter())
+        .map(|reference| reference.object.into())
+        .collect())
+}
+
+/// Whether a branch or checkpoint of `repo` holds `commit`, which then
+/// stays reachable without its carried ref.
+pub async fn held_elsewhere(repo: &Path, commit: &CommitId) -> Result<bool> {
+    let format = "--format=%(refname)";
+    let holding = [
+        "for-each-ref",
+        "--count=1",
+        format,
+        "--contains",
+        commit.as_str(),
+        "refs/heads/",
+        super::checkpoint::REFS,
+    ];
+    Ok(!run_isolated(repo, &holding).await?.trim().is_empty())
+}
+
+/// Delete the carried ref of `commit` in `repo`, leaving the commit to
+/// Git's collection unless another ref holds it.
+pub async fn drop_carried(repo: &Path, commit: &CommitId) -> Result<()> {
+    let reference = carried_reference(commit);
+    run_isolated(repo, &["update-ref", "-d", &reference, commit.as_str()])
+        .await
+        .map(drop)
 }
 
 /// Write to `file` a bundle of `commit` with the history it has that the
