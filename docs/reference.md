@@ -445,7 +445,8 @@ daemon restarts, and the command returns at once, reporting the agent as
 pending. `shoal status` and `shoal list` show a kept restart, which goes once
 it happens, its agent stops or exits first, its space goes, or `shoal restart
 --cancel [space...]`, with restart's selection, drops it with the permissions
-it would give; one that fails later reaches the coordinator whose process asked
+it would give, reporting a space it could not ask about, as on an offline
+machine, and going on with the others; one that fails later reaches the coordinator whose process asked
 for it, or else the user as a notification. Interrupting the command leaves
 its restarts to the daemon. A newer restart of a space supersedes the earlier
 one: their `--permission` changes merge, the newer winning on a key both set,

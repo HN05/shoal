@@ -107,12 +107,16 @@ pub struct RestartedAgent {
     pub place: Option<shoal_protocol::sessions::Origin>,
 }
 
-/// The spaces whose recorded restarts a cancel dropped, and those that had
-/// none.
+/// The spaces whose recorded restarts a cancel dropped, those that had
+/// none, and those it could not ask about.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CancelledRestarts {
     pub cancelled: Vec<RestartSpace>,
     pub unrecorded: Vec<RestartSpace>,
+    /// The spaces whose daemon could not be asked, such as on an offline
+    /// machine, each with why.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub failed: Vec<Failure>,
 }
 
 /// A space a restart command acted on, by its name, with the other joined
