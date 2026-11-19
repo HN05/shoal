@@ -137,3 +137,34 @@ async fn a_scoped_caller_reads_and_marks_only_the_alerts_its_scope_reaches() {
             .is_empty()
     );
 }
+
+#[tokio::test]
+async fn files_alone_go_up_as_an_alert_and_text_alone_must_not_be_empty() {
+    let (temp, manager) = manager().await;
+    let (parent, child, _) = tree(&temp, &manager).await;
+    // Both run agents, so the child's alert goes to its coordinator.
+    for space in [&parent, &child] {
+        let working = crate::state::AgentState::Working;
+        (manager.set_agent_state(&SpaceSelector::id(&space.id), working, None, None))
+            .await
+            .unwrap();
+    }
+    let file = temp.path().join("report.txt");
+    std::fs::write(&file, "findings").unwrap();
+    let as_child = caller_in(&SpaceSelector::id(&child.id));
+    let up = |attachments: Vec<NewFile>| {
+        manager.send_alert(Some(&as_child), AlertTarget::Up, String::new(), attachments)
+    };
+    assert!(up(Vec::new()).await.is_err());
+    let sent = up(vec![file.clone().into()]).await.unwrap();
+    let unread = manager.unread_messages(&parent.id).await.unwrap().alerts;
+    let [alert] = unread.as_slice() else {
+        panic!("{unread:?}");
+    };
+    assert_eq!((alert.id, alert.message.as_str()), (sent.alerts[0], ""));
+    let attachments = alert.attachments();
+    let [copy] = attachments.as_slice() else {
+        panic!("{alert:?}");
+    };
+    assert_eq!(std::fs::read_to_string(copy).unwrap(), "findings");
+}

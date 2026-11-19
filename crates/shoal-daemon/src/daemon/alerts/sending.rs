@@ -47,15 +47,18 @@ impl Manager {
 
     /// Send `message` from `caller`'s space up to its coordinator, or else
     /// the user, with copies of the files `attachments`, which the space's
-    /// attached files keep for as long as its results. A message to the
-    /// user is one line, since it may show as a terminal notification.
+    /// attached files keep for as long as its results; it may be empty
+    /// when the files are the message. A message to the user is one line,
+    /// since it may show as a terminal notification.
     async fn send_up(
         &self,
         caller: &Caller,
         message: String,
         attachments: Vec<NewFile>,
     ) -> Result<Sent> {
-        crate::validate::message(&message)?;
+        if !message.is_empty() || attachments.is_empty() {
+            crate::validate::message(&message)?;
+        }
         crate::daemon::workspace_files::check_sent(&attachments)?;
         let space = self.space(&SpaceSelector::id(&caller.space_id)).await?;
         let about = About::space(&space.name, &space.id);
