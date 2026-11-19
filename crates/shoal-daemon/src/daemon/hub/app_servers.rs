@@ -133,10 +133,12 @@ struct Claim {
 
 impl Claim {
     fn of(headers: &HeaderMap) -> Result<Self> {
+        // One value each, so the member the server reads is the one the
+        // signature proves, whichever of several it would take.
         let header = |name: &str| -> Result<&str> {
-            let value = headers
-                .get(name)
-                .with_context(|| format!("no {name} header"))?;
+            let mut values = headers.get_all(name).iter();
+            let value = values.next().with_context(|| format!("no {name} header"))?;
+            ensure!(values.next().is_none(), "more than one {name} header");
             value
                 .to_str()
                 .with_context(|| format!("an unreadable {name} header"))

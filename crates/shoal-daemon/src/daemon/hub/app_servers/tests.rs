@@ -130,7 +130,16 @@ async fn a_request_no_paired_member_signed_never_reaches_the_server() {
     // Signed for another target than it asks for.
     let moved =
         signed(&member, &device, "/quay/a", &nonce().to_string()).replace("/quay/a", "/quay/b");
-    for request in [unsigned, unknown, forged, moved] {
+    // Another device's ID beside the signed one.
+    let doubled = signed(&member, &device, "/quay/", &nonce().to_string()).replace(
+        "\r\n\r\n",
+        &format!(
+            "\r\n{}: {}\r\n\r\n",
+            app_servers::MEMBER,
+            MemberId::generate()
+        ),
+    );
+    for request in [unsigned, unknown, forged, moved, doubled] {
         let response = respond(&manager, request.clone()).await;
         assert!(
             response.starts_with("HTTP/1.1 401"),
