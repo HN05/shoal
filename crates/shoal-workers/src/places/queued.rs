@@ -11,9 +11,9 @@ use crate::{
     client::connection::CommandPaths,
     config::Effective,
     model::{Repository, Space, Workspace},
-    start_plan::AddPlan,
+    start_plan::{AddPlan, open_add},
     terminal::{
-        Beside, Configured, Places, chat_place_env, open_add, open_in_background, place_env,
+        Beside, Configured, Places, chat_place_env, open_in_background, place_env,
         queued::{NO_QUEUED_HOST, queued_origin},
         shoal_command,
     },

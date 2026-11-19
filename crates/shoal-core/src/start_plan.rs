@@ -19,6 +19,9 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
+mod place;
+pub use place::open_add;
+
 /// The plan of a queued agent start, the same for every kind of space: the
 /// launch of the agent of the recorded space its entry names, and the PR it
 /// links as it starts.

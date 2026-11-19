@@ -17,10 +17,10 @@ use crate::{
     execution::TrackedAgent,
     model::{Chat, Part, Repository, Space, Workspace},
     sessions::Origin,
-    start_plan::AddPlan,
+    start_plan::{AddPlan, open_add},
     terminal::{
         Attaches, Configured, Owner, Places, Start, chat_place_env, chat_session_name, current,
-        open_add, place_env, rerun_in_host, shoal_command, show_opened,
+        place_env, rerun_in_host, shoal_command, show_opened,
     },
 };
 use shoal_workers::places::{groups, naming::name_plan, queued::start_in_background};
