@@ -1,17 +1,20 @@
 //! Apps built on Shoal: the settings the user gives each in its
 //! `[apps.<name>]` tables, and the entries each keeps in the app store.
 //! A write names the revision it replaces, and [`stale`] tells its refusal
-//! once another change took the entry past it.
+//! once another change took the entry past it; a [`Watch`] follows the
+//! entries under a key prefix as they change.
 use anyhow::Result;
 use shoal_protocol::{
     apps::{
         AppName,
         store::{
-            AppData, AppScope, Entry, EntryKey, EntryPiece, KeyPrefix, Revision, Stored, Write,
+            AppData, AppScope, Change, Entry, EntryKey, EntryPiece, KeyPrefix, Revision, Stored,
+            Write,
         },
     },
-    protocol::{self, AppMethod, ConfigTarget, ErrorCode, RemoteError},
+    protocol::{self, AppMethod, Body, ConfigTarget, ErrorCode, RemoteError, Responses},
 };
+use tokio::{io::BufReader, net::UnixStream};
 
 use crate::connection::{self, Daemon, pages, request};
 
@@ -97,6 +100,90 @@ pub fn stale(error: &anyhow::Error) -> bool {
     error
         .downcast_ref::<RemoteError>()
         .is_some_and(|remote| remote.code == ErrorCode::StaleRevision)
+}
+
+/// What a [`Watch`] reports.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Watched {
+    /// Every entry it covers, first and again once it watches anew, as
+    /// after a daemon restart, which `resynced` says.
+    Entries {
+        entries: Vec<Entry>,
+        resynced: bool,
+    },
+    Changed(Change),
+}
+
+/// A watch of the entries of an app under a key prefix, on a connection of
+/// its own: their snapshot, then each change, and a new snapshot once the
+/// watch reconnected after a daemon restart.
+pub struct Watch<D> {
+    daemon: D,
+    watched: (AppName, AppScope, KeyPrefix),
+    stream: Option<Responses<BufReader<UnixStream>>>,
+    /// The first snapshot, until [`Self::next`] returns it.
+    first: Option<Vec<Entry>>,
+}
+
+impl<D: Daemon> Watch<D> {
+    /// Watch the entries of `app` in `scope` whose keys start with
+    /// `prefix`, failing at once when the daemon refuses.
+    pub async fn open(daemon: D, app: AppName, scope: AppScope, prefix: KeyPrefix) -> Result<Self> {
+        let watched = (app, scope, prefix);
+        let (stream, entries) = watch(&daemon, &watched).await?;
+        Ok(Self {
+            daemon,
+            watched,
+            stream: Some(stream),
+            first: Some(entries),
+        })
+    }
+
+    /// The next update. Cancelling it, as `tokio::select!` does, loses no
+    /// update.
+    pub async fn next(&mut self) -> Result<Watched> {
+        if let Some(entries) = self.first.take() {
+            return Ok(Watched::Entries {
+                entries,
+                resynced: false,
+            });
+        }
+        loop {
+            let Some(stream) = &mut self.stream else {
+                let watching = connection::after_restart(|| watch(&self.daemon, &self.watched));
+                let (stream, entries) = watching.await?;
+                self.stream = Some(stream);
+                return Ok(Watched::Entries {
+                    entries,
+                    resynced: true,
+                });
+            };
+            match stream.next().await {
+                Ok(response) => {
+                    return match response.body.into_result()? {
+                        Body::AppChange(change) => Ok(Watched::Changed(change)),
+                        body => Err(body.unexpected("AppChange")),
+                    };
+                }
+                Err(error) if connection::stream_closed(&error) => self.stream = None,
+                Err(error) => return Err(error),
+            }
+        }
+    }
+}
+
+/// Watch `watched` on a new connection and read the whole snapshot.
+async fn watch(
+    daemon: &impl Daemon,
+    (app, scope, prefix): &(AppName, AppScope, KeyPrefix),
+) -> Result<(Responses<BufReader<UnixStream>>, Vec<Entry>)> {
+    let method = AppMethod::WatchAppEntries {
+        app: app.clone(),
+        scope: *scope,
+        prefix: prefix.clone(),
+    };
+    let (stream, body) = connection::open_buffered(daemon, method).await?;
+    Ok((Responses::new(stream), Vec::try_from(body)?))
 }
 
 #[cfg(test)]

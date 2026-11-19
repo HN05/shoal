@@ -766,7 +766,9 @@ them in its state directory, reached only through the protocol. Each change
 gives an entry a new revision; a write or deletion names the revision it
 replaces, none for a new entry, and is refused with `stale_revision`, which
 `apps::stale` tells, once another change took the entry past it, so two
-devices never overwrite each other unseen. An entry and each app's entries in
+devices never overwrite each other unseen. `apps::Watch` follows the entries
+under a key prefix: all of them, then each one written or deleted, and all
+of them again after a daemon restart. An entry and each app's entries in
 all are held to the
 [`[machine.app_store]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#app-store)
 limits. Without a scope token the caller is the user; with one, it is

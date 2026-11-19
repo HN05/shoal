@@ -90,6 +90,7 @@ impl Operation {
                     AppMethod::ReadAppConfig { .. }
                         | AppMethod::ReadAppEntry { .. }
                         | AppMethod::ListAppEntries { .. }
+                        | AppMethod::WatchAppEntries { .. }
                 )
                 | Self::Container(
                     ContainerMethod::ContainerCatalog { .. }

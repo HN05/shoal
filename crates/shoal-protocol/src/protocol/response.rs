@@ -228,6 +228,7 @@ response_bodies! {
     AppEntryPieces(Vec<crate::apps::store::EntryPiece>),
     AppEntries(Vec<crate::apps::store::Entry>),
     AppEntry(crate::apps::store::Entry),
+    AppChange(crate::apps::store::Change),
     ScopeToken(crate::scope_tokens::ScopeToken),
     Granted(Option<crate::scope_tokens::ScopeToken>),
     Branches(Vec<crate::model::Branch>),

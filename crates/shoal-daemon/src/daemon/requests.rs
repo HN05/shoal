@@ -97,6 +97,6 @@ pub(super) async fn handle(
         }
         Operation::Trigger(method) => triggers::handle(&server.manager, method, caller).await,
         Operation::Hub(method) => hub::handle(&server.manager, method, caller).await,
-        Operation::App(method) => apps::handle(&server.manager, method).await,
+        Operation::App(method) => apps::handle(&server.manager, method, scope).await,
     }
 }

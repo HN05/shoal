@@ -1,5 +1,5 @@
 //! The entries this daemon keeps: reading them, and changing them as one
-//! store transaction each.
+//! store transaction each, which wakes the watches of the app's entries.
 use anyhow::Result;
 use shoal_protocol::apps::{
     AppName,
@@ -60,9 +60,11 @@ impl Manager {
         bytes: Vec<u8>,
     ) -> Result<Entry> {
         let limits = self.config().machine.app_store;
-        (self.store)
+        let written = (self.store)
             .write(move |tx| Entries::of(&holder, &app).write(tx, &write, bytes, &limits))
-            .await
+            .await?;
+        self.apps.changed();
+        Ok(written)
     }
 
     /// Delete the entry of `app` under `key` that `holder` has, which must
@@ -76,6 +78,8 @@ impl Manager {
     ) -> Result<()> {
         (self.store)
             .write(move |tx| Entries::of(&holder, &app).delete(tx, &key, replaces))
-            .await
+            .await?;
+        self.apps.changed();
+        Ok(())
     }
 }

@@ -269,5 +269,15 @@ impl AppData {
     }
 }
 
+/// A change a watch reports.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Change {
+    /// The entry was written.
+    Written(Entry),
+    /// The entry under the key was deleted.
+    Deleted(EntryKey),
+}
+
 #[cfg(test)]
 mod tests;

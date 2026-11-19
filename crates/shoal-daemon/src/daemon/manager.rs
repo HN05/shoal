@@ -92,6 +92,8 @@ pub struct Manager {
     pub(crate) file_access: Arc<crate::daemon::file_access::FileAccess>,
     /// The hub role, or this machine's membership of a hub.
     pub(crate) hub: crate::daemon::hub::Hub,
+    /// The app store's watches.
+    pub(crate) apps: crate::daemon::apps::Apps,
 }
 
 impl Manager {
@@ -153,6 +155,7 @@ impl Manager {
             report_times: Default::default(),
             file_access: Default::default(),
             hub: Default::default(),
+            apps: Default::default(),
         }))
     }
 

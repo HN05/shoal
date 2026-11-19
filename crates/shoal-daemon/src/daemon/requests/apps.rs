@@ -5,17 +5,23 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use shoal_protocol::{apps::store::EntryPiece, space_names::SpaceSelector};
+use shoal_protocol::{
+    apps::store::EntryPiece, scope_tokens::ScopeToken, space_names::SpaceSelector,
+};
 
 use super::super::{
     answer::Answer,
-    apps::{Holder, Writing},
+    apps::{Holder, Socket, Watched, Writing},
     manager::Manager,
     scope::{Caller, Scoped},
 };
 use crate::protocol::{AppMethod, Body, ConfigTarget};
 
-pub(super) async fn handle(manager: &Arc<Manager>, method: AppMethod) -> Result<Answer> {
+pub(super) async fn handle(
+    manager: &Arc<Manager>,
+    method: AppMethod,
+    scope: Option<&ScopeToken>,
+) -> Result<Answer> {
     Ok(Answer::Body(match method {
         AppMethod::ReadAppConfig { app, target } => {
             Body::AppConfig(manager.app_config(&app, target).await?)
@@ -57,6 +63,25 @@ pub(super) async fn handle(manager: &Arc<Manager>, method: AppMethod) -> Result<
                 manager.answer_write(stream, id, writing).await
             }));
         }
+        AppMethod::WatchAppEntries {
+            app,
+            scope: kept,
+            prefix,
+        } => {
+            let manager = manager.clone();
+            let scope = scope.cloned();
+            let watched = Watched {
+                holder: Holder::own(kept),
+                app,
+                prefix,
+            };
+            return Ok(Answer::connection(move |stream, id, startup| async move {
+                // Each write takes an operation of its own.
+                drop(startup);
+                let mut socket = Socket::new(manager.clone(), stream, id, scope);
+                manager.watch_kept_entries(watched, &mut socket).await
+            }));
+        }
     }))
 }
 
@@ -84,7 +109,8 @@ impl Scoped for AppMethod {
             AppMethod::ReadAppEntry { .. }
             | AppMethod::ListAppEntries { .. }
             | AppMethod::WriteAppEntry { .. }
-            | AppMethod::DeleteAppEntry { .. } => None,
+            | AppMethod::DeleteAppEntry { .. }
+            | AppMethod::WatchAppEntries { .. } => None,
         })
     }
 }

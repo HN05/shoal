@@ -1,12 +1,20 @@
 //! What an app keeps in the app store of a daemon on an isolated state
 //! directory, as the user.
-use shoal_daemon::test_daemon::TestDaemon;
+use shoal_daemon::test_daemon::{HANG, TestDaemon};
 use shoal_protocol::apps::{
     AppName,
-    store::{AppScope, Write},
+    store::{AppScope, Change, Write},
 };
 
+use super::{Watch, Watched};
+use crate::connection::Connector;
 use crate::test_daemon::Connect as _;
+
+/// The watch's next update.
+async fn next(watch: &mut Watch<Connector>) -> Watched {
+    let next = tokio::time::timeout(HANG, watch.next()).await;
+    next.unwrap().unwrap()
+}
 
 fn quay() -> AppName {
     "quay".parse().unwrap()
@@ -71,4 +79,67 @@ async fn a_write_from_a_stale_revision_is_refused_as_stale() {
     .unwrap();
     let stale = super::write(&connector, quay(), AppScope::Shared, replacing, b"[1]").await;
     assert!(super::stale(&stale.unwrap_err()));
+}
+
+#[tokio::test]
+async fn a_watch_sees_the_entries_under_its_prefix_change() {
+    let daemon = TestDaemon::start().await;
+    let connector = daemon.connector();
+    let kept = super::write(
+        &connector,
+        quay(),
+        AppScope::Device,
+        write("layout/main", None),
+        b"{}",
+    )
+    .await
+    .unwrap();
+    let prefix = "layout/".parse().unwrap();
+    let mut watch = Watch::open(daemon.connector(), quay(), AppScope::Device, prefix)
+        .await
+        .unwrap();
+    let Watched::Entries { entries, .. } = next(&mut watch).await else {
+        panic!("a watch starts with its entries");
+    };
+    assert_eq!(entries, std::slice::from_ref(&kept));
+    // Neither another prefix's entry nor a shared one is watched.
+    super::write(
+        &connector,
+        quay(),
+        AppScope::Device,
+        write("exports/a", None),
+        b"1",
+    )
+    .await
+    .unwrap();
+    super::write(
+        &connector,
+        quay(),
+        AppScope::Shared,
+        write("layout/side", None),
+        b"1",
+    )
+    .await
+    .unwrap();
+    let side = super::write(
+        &connector,
+        quay(),
+        AppScope::Device,
+        write("layout/side", None),
+        b"1",
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        next(&mut watch).await,
+        Watched::Changed(Change::Written(side))
+    );
+    let key = kept.key.clone();
+    super::delete(&connector, quay(), AppScope::Device, key, kept.revision)
+        .await
+        .unwrap();
+    assert_eq!(
+        next(&mut watch).await,
+        Watched::Changed(Change::Deleted(kept.key))
+    );
 }

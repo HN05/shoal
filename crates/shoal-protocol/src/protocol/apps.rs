@@ -50,12 +50,21 @@ pub enum AppMethod {
         key: EntryKey,
         replaces: Revision,
     },
+    /// Long-lived: the entries whose keys start with `prefix` as
+    /// [`super::Body::AppEntries`], then each change of them as
+    /// [`super::Body::AppChange`], until the client hangs up.
+    WatchAppEntries {
+        app: AppName,
+        scope: AppScope,
+        #[serde(default)]
+        prefix: KeyPrefix,
+    },
 }
 
 impl AppMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
-            Self::WriteAppEntry { .. } => Lifetime::Open,
+            Self::WriteAppEntry { .. } | Self::WatchAppEntries { .. } => Lifetime::Open,
             Self::ReadAppConfig { .. }
             | Self::ReadAppEntry { .. }
             | Self::ListAppEntries { .. }
