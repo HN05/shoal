@@ -92,6 +92,22 @@ fn the_installer_installs_the_hubs_version_and_joins_with_the_code() {
 }
 
 #[test]
+fn the_installer_keeps_an_installation_it_finds() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let calls = root.path().join("calls");
+    let releases = publish(root.path(), &calls, None);
+    let existing = home.join(".local/bin/shoal");
+    fs::create_dir_all(existing.parent().unwrap()).unwrap();
+    fs::write(&existing, "mine").unwrap();
+    let output = install(&home, &releases, "code");
+    assert!(!output.status.success(), "{}", printed(&output));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("shoal hub join"));
+    assert_eq!(fs::read_to_string(&existing).unwrap(), "mine");
+    assert!(!calls.exists());
+}
+
+#[test]
 fn the_installer_refuses_an_archive_that_does_not_match_its_checksum() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");

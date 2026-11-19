@@ -856,7 +856,8 @@ release, checks it against the release's `SHA256SUMS` and its reported
 version, installs it as a downloaded binary at `~/.local/bin/shoal`, or on
 macOS as `~/Applications/Shoal.app` with that path linked to it, then runs
 `shoal daemon install` and `shoal hub join` with the code, which pins the
-hub's key. It installs neither the [runtime
+hub's key. It installs nothing where `shoal` is already installed at either
+path: run `shoal hub join` there instead. It installs neither the [runtime
 dependencies](../README.md#runtime-dependencies) nor agent tools and their
 logins; repositories are cloned once a start there needs them.
 

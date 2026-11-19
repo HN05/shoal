@@ -37,6 +37,12 @@ else
 	place=$bin
 fi
 
+for existing in "$place/$entry" "$bin/shoal"; do
+	if [ -e "$existing" ] || [ -L "$existing" ]; then
+		fail "$existing exists already; where Shoal is installed, run shoal hub join '<code>' instead"
+	fi
+done
+
 download() {
 	curl -q -fsSL --proto '=https,file' --proto-redir '=https' -o "$2" "$releases/download/v$version/$1"
 }
@@ -69,10 +75,9 @@ reported=$("$unpacked" --version) || fail "the downloaded shoal does not run her
 [ "$reported" = "shoal $version" ] || fail "the downloaded shoal reports $reported instead of version $version"
 
 mkdir -p "$place" "$bin"
-rm -rf "${place:?}/$entry"
 mv "$staging/$entry" "$place/$entry"
 if [ "$os" = macos ]; then
-	ln -sf "$executable" "$bin/shoal"
+	ln -s "$executable" "$bin/shoal"
 fi
 echo "Installed Shoal $version at $place/$entry"
 case ":$PATH:" in
