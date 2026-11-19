@@ -20,13 +20,10 @@ use tokio::{process::Command, sync::watch};
 use crate::{
     config::Effective,
     daemon::{
+        capacity::{self, MemoryState},
         log::log,
         notifications::NotificationKind,
-        workspace::{
-            Manager,
-            capacity::{self, MemoryState},
-            identity,
-        },
+        workspace::{Manager, identity},
     },
     fsutil::{
         off_runtime,

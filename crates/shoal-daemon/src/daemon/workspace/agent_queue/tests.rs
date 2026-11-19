@@ -13,10 +13,11 @@ use crate::protocol::operations::{Ended, Failure, OperationSpec, Preparation, Re
 use crate::{
     config::permissions::{PermissionChange, PermissionsConfig},
     daemon::{
+        capacity::Activity,
         notifications::NotificationKind,
         queued_starts::fake::STARTED,
         test_support::{global_config, manager, repository},
-        workspace::{Manager, PermissionTargets, capacity::Activity},
+        workspace::{Manager, PermissionTargets},
         workspace_files::Attacher,
     },
     model::{QueueAdmission, QueueEntry, QueueRequest, Repository, Workspace},

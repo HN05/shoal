@@ -11,6 +11,7 @@ mod auto_update;
 pub(crate) mod blockers;
 pub(crate) mod busy_cpu;
 pub(crate) mod caches;
+pub(crate) mod capacity;
 pub(crate) mod chats;
 pub(crate) mod checkout_sync;
 pub mod cleanup;

@@ -13,9 +13,9 @@ use anyhow::Result;
 use super::{Grant, slots::Slot};
 use crate::{
     config::{RunLimit, overload::Overload},
-    daemon::workspace::{
-        Manager,
+    daemon::{
         capacity::{self, Activity, Agents, Unfit},
+        workspace::Manager,
     },
     model::HeldBy,
     protocol::ConfigTarget,

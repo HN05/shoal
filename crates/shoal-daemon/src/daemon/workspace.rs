@@ -10,7 +10,6 @@ mod agent_turns;
 pub(crate) mod agents;
 mod branch_rename;
 mod branches;
-pub(crate) mod capacity;
 mod checkpoints;
 mod commits;
 pub(crate) mod completion_cleanup;

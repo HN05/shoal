@@ -1589,7 +1589,7 @@ async fn removing_a_job_whose_execution_is_not_recorded_yet_cancels_its_run() {
 
 #[tokio::test]
 async fn a_job_counts_as_just_started_until_its_runner_starts() {
-    use crate::daemon::workspace::capacity::{Activity, STAGGER};
+    use crate::daemon::capacity::{Activity, STAGGER};
     let fixture = fixture(vec![job("h1", 4, 1)], "").await;
     let manager = &fixture.manager;
     let ages = || async {

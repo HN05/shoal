@@ -10,7 +10,7 @@ use rusqlite::params;
 use super::weight::Light;
 use crate::{
     config::modes::ModeName,
-    daemon::workspace::{Manager, capacity::Activity},
+    daemon::{capacity::Activity, workspace::Manager},
     state::{ExecutionState, QueueKind, QueueState},
 };
 use shoal_ids::space_ids::SpaceId;
