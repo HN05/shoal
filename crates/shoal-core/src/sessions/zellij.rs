@@ -42,9 +42,10 @@ const MAX_SESSION_LEN: usize = 20;
 /// socket directory and the session's name.
 const MAX_SOCKET_PATH: usize = 103;
 const CONTRACT_DIR: &str = "/contract_version_1/";
-/// How often, and for how long, Shoal reads a new tab's, split's or
-/// session's panes until its pane shows; only a hang guard, since Zellij
-/// lists it soon after it answers, though a loaded machine can take seconds.
+/// How often, and for how long, Shoal reads a session's panes until they
+/// show what Shoal did there, such as a new tab's pane; only a hang guard,
+/// since Zellij lists it soon after it answers, or after it stops waiting
+/// for the action, though a loaded machine can take seconds.
 const PANE_POLL: Duration = Duration::from_millis(100);
 const PANE_WAIT: Duration = Duration::from_secs(30);
 /// How often, and how many times, Shoal asks Zellij again about a session
@@ -327,42 +328,55 @@ impl Zellij {
         Ok(listed.unwrap_or_default())
     }
 
-    /// What the `zellij action` that `action` makes prints for `session`
-    /// once it is `answered`, while its server is the instance `instance`,
-    /// or any instance without one; none once the server is not. Zellij
-    /// reports a busy session missing without sending the action, and under
-    /// load a command can return before its answer, so Shoal asks again
-    /// while the server still runs.
+    /// What the `zellij action` listing that `list` makes prints for
+    /// `session` once it is `answered`, while its server is the instance
+    /// `instance`, or any instance without one; none once the server is
+    /// not. Zellij reports a busy session missing without sending the
+    /// action, and under load a command can return before its answer or
+    /// without knowing it, so Shoal asks again while the server still runs.
     async fn answer(
         &self,
         session: &str,
         instance: Option<&str>,
-        action: impl Fn() -> Command,
+        list: impl Fn() -> Command,
         answered: fn(&str) -> bool,
     ) -> Result<Option<String>> {
         asked_while_running(
-            || async {
-                Ok(match reply(action()).await? {
-                    Reply::Answered(printed) if !answered(&printed) => Reply::Unanswered,
-                    reply => reply,
-                })
-            },
+            || async { Ok(reply(list()).await?.listing(answered)) },
             || self.runs(session, instance),
         )
         .await
     }
 
-    /// What the `zellij action` that `action` makes prints for `session`
-    /// while its server is the instance `instance`, or any instance without
-    /// one. Zellij reports a busy session missing without sending the
-    /// action, so Shoal sends it again while the server still runs.
+    /// What became of the `zellij action` that `action` makes, which
+    /// changes `session`, while its server is the instance `instance`, or
+    /// any instance without one; none once the server is not. Zellij
+    /// reports a busy session missing without sending the action, so Shoal
+    /// sends it again while the server still runs, but never once Zellij
+    /// sent it.
+    async fn send(
+        &self,
+        session: &str,
+        instance: Option<&str>,
+        action: impl Fn() -> Command,
+    ) -> Result<Option<Acted>> {
+        asked_while_running(
+            || async { Ok(reply(action()).await?.acted()) },
+            || self.runs(session, instance),
+        )
+        .await
+    }
+
+    /// What became of the `zellij action` that `action` makes, which
+    /// changes `session`, while its server is the instance `instance`, or
+    /// any instance without one; see [`Zellij::send`].
     async fn act(
         &self,
         session: &str,
         instance: Option<&str>,
         action: impl Fn() -> Command,
-    ) -> Result<String> {
-        self.answer(session, instance, action, |_| true)
+    ) -> Result<Acted> {
+        self.send(session, instance, action)
             .await?
             .with_context(|| format!("the Zellij session {session} ended"))
     }
@@ -435,14 +449,15 @@ impl Zellij {
     }
 
     /// Open `shell` in a new tab of `session`, which a client shows: Zellij
-    /// drops tabs opened in a session no client shows.
+    /// drops tabs opened in a session no client shows. A tab whose opening
+    /// has an unknown outcome is found once it shows.
     pub(crate) async fn open_tab(&self, session: &str, shell: &Shell<'_>) -> Result<Opened> {
         let before = self.panes(session).await?;
-        let printed = self
+        let acted = self
             .act(session, None, || self.new_tab(session, shell))
             .await
             .context("open a Zellij tab")?;
-        let tab = printed_tab(&printed, &before);
+        let tab = printed_tab(acted.printed(), &before);
         let pane = self
             .new_pane(session, |pane| opened_tab(pane, tab, shell.label, &before))
             .await
@@ -452,7 +467,7 @@ impl Zellij {
 
     /// Open `shell` in a pane splitting `beside`, in its tab, which Zellij
     /// can list only after it answers. Under load Zellij can open the pane
-    /// and print nothing.
+    /// and print nothing, or leave the opening's outcome unknown.
     pub(crate) async fn open_split(
         &self,
         beside: PaneRef<'_>,
@@ -460,13 +475,13 @@ impl Zellij {
     ) -> Result<Opened> {
         let number = pane_number(beside.pane)?;
         let before = self.panes(beside.session).await?;
-        let printed = self
+        let acted = self
             .act(beside.session, None, || {
                 self.new_split(beside.session, number, shell)
             })
             .await
             .context("open a Zellij pane")?;
-        let printed = printed.trim();
+        let printed = acted.printed().trim();
         let pane = self
             .new_pane(beside.session, |pane| {
                 opened_split(pane, printed, beside.pane, &before)
@@ -496,14 +511,30 @@ impl Zellij {
     /// The first pane of `session` that is `new`, which Shoal just opened,
     /// once Zellij lists it.
     async fn new_pane(&self, session: &str, new: impl Fn(&Pane) -> bool) -> Result<Pane> {
+        self.listing_shows(session, None, |panes| {
+            panes.iter().find(|pane| new(pane)).cloned()
+        })
+        .await
+    }
+
+    /// What `shows` finds in the panes of `session` on the server instance
+    /// `instance`, or any instance without one, once Zellij lists what
+    /// Shoal just did there: soon after Zellij answers, or, for an action
+    /// whose outcome is unknown, once the server carries it out.
+    async fn listing_shows<T>(
+        &self,
+        session: &str,
+        instance: Option<&str>,
+        shows: impl Fn(&[Pane]) -> Option<T>,
+    ) -> Result<T> {
         let deadline = tokio::time::Instant::now() + PANE_WAIT;
         loop {
-            let panes = self.panes(session).await?;
-            if let Some(pane) = panes.iter().find(|pane| new(pane)) {
-                return Ok(pane.clone());
+            let panes = self.panes_on(session, instance).await?;
+            if let Some(shown) = shows(&panes) {
+                return Ok(shown);
             }
             if tokio::time::Instant::now() >= deadline {
-                bail!("Zellij lists no new pane; it lists {}", pane_ids(&panes));
+                bail!("Zellij lists {}", pane_ids(&panes));
             }
             tokio::time::sleep(PANE_POLL).await;
         }
@@ -585,7 +616,9 @@ impl Zellij {
     }
 
     /// Type `text` into `place` exactly as given, control characters
-    /// included, while its server is the instance `instance`.
+    /// included, while its server is the instance `instance`. Text typed
+    /// with an unknown outcome counts as typed: typing it again could type
+    /// it twice.
     pub(crate) async fn write(&self, place: PaneRef<'_>, instance: &str, text: &str) -> Result<()> {
         self.require(place, instance).await?;
         self.act(place.session, Some(instance), || {
@@ -623,7 +656,8 @@ impl Zellij {
     }
 
     /// Make `pane` the focused pane of `session`, in its tab, which becomes
-    /// the session's current one.
+    /// the session's current one; a step with an unknown outcome counts as
+    /// taken, as the server carries it out.
     pub(crate) async fn select(&self, session: &str, pane: &Pane) -> Result<()> {
         let tab = pane.tab.to_string();
         self.act(session, None, || {
@@ -665,16 +699,25 @@ impl Zellij {
         Ok(())
     }
 
-    /// Name the tab of `pane` `name`.
+    /// Name the tab of `pane` `name`; a renaming whose outcome is unknown
+    /// is done once the tab shows the name.
     pub(crate) async fn rename_tab(&self, session: &str, pane: &Pane, name: &str) -> Result<()> {
         let tab = pane.tab.to_string();
-        self.act(session, None, || {
-            let mut rename = self.action(session);
-            rename.args(["rename-tab-by-id", &tab, name]);
-            rename
-        })
-        .await
-        .with_context(|| format!("rename Zellij tab {}", pane.tab))?;
+        let acted = self
+            .act(session, None, || {
+                let mut rename = self.action(session);
+                rename.args(["rename-tab-by-id", &tab, name]);
+                rename
+            })
+            .await
+            .with_context(|| format!("rename Zellij tab {}", pane.tab))?;
+        if acted == Acted::Unknown {
+            self.listing_shows(session, None, |panes| {
+                tab_named(panes, pane.tab, name).then_some(())
+            })
+            .await
+            .with_context(|| format!("the Zellij tab {} does not show its name", pane.tab))?;
+        }
         Ok(())
     }
 
@@ -708,7 +751,9 @@ impl Zellij {
     /// Close `pane` of `session`, whose panes are `panes`, with its tab
     /// when no other pane is there: Zellij leaves a tab whose last pane
     /// closed while no client showed the session. A session no longer on
-    /// the server instance `instance` holds the pane no more.
+    /// the server instance `instance` holds the pane no more, and a closing
+    /// whose outcome is unknown is done once Zellij no longer lists the
+    /// pane.
     async fn close_pane(
         &self,
         session: &str,
@@ -722,16 +767,21 @@ impl Zellij {
         } else {
             &["close-pane", "--pane-id", &pane.id]
         };
-        asked_while_running(
-            || {
+        let acted = self
+            .send(session, Some(instance), || {
                 let mut close = self.action(session);
                 close.args(args);
-                reply(close)
-            },
-            || self.on_instance(session, instance),
-        )
-        .await
-        .with_context(|| format!("close Zellij pane {}", pane.id))?;
+                close
+            })
+            .await
+            .with_context(|| format!("close Zellij pane {}", pane.id))?;
+        if acted == Some(Acted::Unknown) {
+            self.listing_shows(session, Some(instance), |panes| {
+                (!listed_in(pane, panes)).then_some(())
+            })
+            .await
+            .with_context(|| format!("the Zellij pane {} does not close", pane.id))?;
+        }
         Ok(())
     }
 
@@ -765,6 +815,20 @@ enum Reply<T> {
     /// Zellij found no answering server of that name, or, for a pane
     /// listing, the server listed nothing.
     Unanswered,
+    /// Zellij sent the action but stopped waiting for it after its own
+    /// limit, so its outcome is unknown: the server may still carry it out.
+    Unknown,
+}
+
+/// What became of an action that changes a session.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Acted {
+    /// Zellij carried it out and printed this.
+    Printed(String),
+    /// Zellij stopped waiting for it, so the server may still carry it out:
+    /// Shoal never sends it again, and settles it by what the session then
+    /// shows where Shoal reads that.
+    Unknown,
 }
 
 impl<T> Reply<T> {
@@ -772,7 +836,38 @@ impl<T> Reply<T> {
     fn answer(self) -> Option<T> {
         match self {
             Self::Answered(answer) => Some(answer),
-            Self::Unanswered => None,
+            Self::Unanswered | Self::Unknown => None,
+        }
+    }
+}
+
+impl Reply<String> {
+    /// This reply to a listing, which is unanswered unless it is
+    /// `answered`: a listing whose outcome is unknown is asked again.
+    fn listing(self, answered: fn(&str) -> bool) -> Self {
+        match self {
+            Self::Answered(printed) if answered(&printed) => Self::Answered(printed),
+            Self::Answered(_) | Self::Unanswered | Self::Unknown => Self::Unanswered,
+        }
+    }
+
+    /// This reply to an action that changes the session, which counts as
+    /// answered once Zellij sent it, whatever became of it.
+    fn acted(self) -> Reply<Acted> {
+        match self {
+            Self::Answered(printed) => Reply::Answered(Acted::Printed(printed)),
+            Self::Unanswered => Reply::Unanswered,
+            Self::Unknown => Reply::Answered(Acted::Unknown),
+        }
+    }
+}
+
+impl Acted {
+    /// What Zellij printed; nothing when the outcome is unknown.
+    fn printed(&self) -> &str {
+        match self {
+            Self::Printed(printed) => printed,
+            Self::Unknown => "",
         }
     }
 }
@@ -856,6 +951,9 @@ fn listed(output: &Output) -> Result<Reply<String>> {
     let error = crate::subprocess::diagnostic(&output.stderr);
     if nothing_to_list(&error) || (!output.status.success() && nothing_to_list(&stdout)) {
         return Ok(Reply::Unanswered);
+    }
+    if !output.status.success() && outcome_unknown(&error) {
+        return Ok(Reply::Unknown);
     }
     if output.status.success() {
         return Ok(Reply::Answered(stdout.into_owned()));
@@ -1071,7 +1169,7 @@ fn printed_tab(printed: &str, before: &[Pane]) -> Option<u64> {
 fn opened_tab(pane: &Pane, tab: Option<u64>, label: &str, before: &[Pane]) -> bool {
     pane.is_terminal()
         && tab.map_or_else(
-            || pane.tab_name == label && !listed_before(pane, before),
+            || pane.tab_name == label && !listed_in(pane, before),
             |tab| pane.tab == tab,
         )
 }
@@ -1089,13 +1187,21 @@ fn opened_split(pane: &Pane, printed: &str, beside: &str, before: &[Pane]) -> bo
         .iter()
         .find(|old| old.id == beside)
         .map(|old| old.tab);
-    pane.is_terminal() && Some(pane.tab) == tab && !listed_before(pane, before)
+    pane.is_terminal() && Some(pane.tab) == tab && !listed_in(pane, before)
 }
 
-/// Whether `before`, an earlier listing of its session, has `pane`: a
-/// server never reuses a pane's number.
-fn listed_before(pane: &Pane, before: &[Pane]) -> bool {
-    before.iter().any(|old| old.id == pane.id)
+/// Whether `panes`, a listing of its session, has `pane`: a server never
+/// reuses a pane's number.
+fn listed_in(pane: &Pane, panes: &[Pane]) -> bool {
+    panes.iter().any(|listed| listed.id == pane.id)
+}
+
+/// Whether `panes`, a listing of their session, show the tab `tab` named
+/// `name`.
+fn tab_named(panes: &[Pane], tab: u64, name: &str) -> bool {
+    panes
+        .iter()
+        .any(|pane| pane.tab == tab && pane.tab_name == name)
 }
 
 /// Whether `pane` is the only one of `panes` in its tab.
@@ -1197,6 +1303,12 @@ fn nothing_to_list(message: &str) -> bool {
     message.contains("There is no active session")
         || message.contains("No active zellij sessions found")
         || message.contains("' not found")
+}
+
+/// Whether Zellij's `message` says it stopped waiting for an action, which
+/// it gives a second, so the action's outcome is unknown.
+fn outcome_unknown(message: &str) -> bool {
+    message.contains("its outcome is unknown")
 }
 
 /// What a `zellij kill-session` that ended with `output` did. Zellij says

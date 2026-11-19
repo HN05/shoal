@@ -335,6 +335,61 @@ async fn a_session_reported_missing_is_asked_again_while_its_server_runs() {
     assert!(busy.is_err());
 }
 
+#[test]
+fn an_action_zellij_stops_waiting_for_has_an_unknown_outcome() {
+    let unknown = "Action NewTab did not complete within 1s, its outcome is unknown\n";
+    assert_eq!(listed(&exited(2, "", unknown)).ok(), Some(Reply::Unknown));
+    assert!(listed(&exited(2, "", "Permission denied\n")).is_err());
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_listing_with_an_unknown_outcome_is_asked_again() {
+    let mut replies = vec![Reply::Unknown, Reply::Answered("[]".to_owned())].into_iter();
+    let mut asked = 0;
+    let answer = asked_while_running(
+        || {
+            asked += 1;
+            let reply = replies.next().unwrap_or(Reply::Unanswered);
+            std::future::ready(Ok(reply.listing(|_| true)))
+        },
+        || async { Ok(true) },
+    )
+    .await;
+    assert_eq!(answer.ok(), Some(Some("[]".to_owned())));
+    assert_eq!(asked, 2);
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_action_with_an_unknown_outcome_is_not_sent_again() {
+    let mut replies = vec![Reply::Unanswered, Reply::Unknown].into_iter();
+    let mut sent = 0;
+    let acted = asked_while_running(
+        || {
+            sent += 1;
+            let reply = replies.next().unwrap_or(Reply::Unanswered);
+            std::future::ready(Ok(reply.acted()))
+        },
+        || async { Ok(true) },
+    )
+    .await;
+    assert_eq!(acted.ok(), Some(Some(Acted::Unknown)));
+    assert_eq!(sent, 2);
+}
+
+#[test]
+fn a_renamed_tab_shows_its_name_only_in_its_own_tab() {
+    let pane = |tab, tab_name: &str| Pane {
+        id: format!("terminal_{tab}"),
+        tab,
+        tab_name: tab_name.to_owned(),
+        command: None,
+        exited: false,
+    };
+    let panes = [pane(0, "fix login"), pane(1, "Tab #2")];
+    assert!(tab_named(&panes, 0, "fix login"));
+    assert!(!tab_named(&panes, 1, "fix login"));
+}
+
 #[tokio::test(start_paused = true)]
 async fn a_session_listed_without_clients_is_asked_again_before_it_counts_as_unshown() {
     let mut listings = vec![false, true].into_iter();
