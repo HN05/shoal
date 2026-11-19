@@ -178,7 +178,7 @@ fn the_user_starts_a_space_below_another_machine_s_space_there() {
     let machines = machines();
     machines.laptop.ok(&["repo", "add", &machines.origin]);
     let there = workspace_of(&machines.laptop, "origin", "there");
-    on_laptop(&machines, "there", "workspace");
+    ready_at(&machines.hub, &there, &machines.laptop_id);
     let repo = machines.hub.repo.to_str().unwrap().to_owned();
     let args = [
         "start",
@@ -205,7 +205,7 @@ fn a_start_below_another_machine_s_space_leaves_a_repository_it_lacks_to_that_ma
     give_origin(&machines.laptop);
     let notes = machines.laptop.repo.to_str().unwrap().to_owned();
     let there = workspace_of(&machines.laptop, &notes, "there");
-    on_laptop(&machines, "there", "workspace");
+    ready_at(&machines.hub, &there, &machines.laptop_id);
     // From the hub's own checkout, whose repository is another one.
     let args = ["start", "--machine", "laptop", "--parent", &there];
     let mut command = machines.hub.command();
@@ -217,4 +217,31 @@ fn a_start_below_another_machine_s_space_leaves_a_repository_it_lacks_to_that_ma
     assert!(started.status.success(), "{}", printed(&started));
     let child = on_laptop(&machines, "child", "workspace");
     assert_eq!(child["parent"], there.as_str(), "{child}");
+}
+
+#[test]
+fn a_space_carries_nothing_for_a_start_in_another_repository_than_its_own() {
+    let machines = machines();
+    // A second repository of the hub, with an origin and a commit only the
+    // hub has.
+    let root = machines.hub.root.path();
+    let other = root.join("other");
+    git(root, &["init", "-q", "-b", "main", other.to_str().unwrap()]);
+    git_with_identity(&other, &["commit", "-q", "--allow-empty", "-m", "first"]);
+    git(root, &["init", "-q", "--bare", "-b", "main", "other.git"]);
+    let origin = format!("file://{}", root.join("other.git").display());
+    git(&other, &["remote", "add", "origin", &origin]);
+    git(&other, &["push", "-q", "-u", "origin", "main"]);
+    git(&other, &["remote", "set-head", "origin", "main"]);
+    let tree = ["commit-tree", "HEAD^{tree}", "-p", "HEAD", "-m", "local"];
+    let commit = git_with_identity(&other, &tree);
+    git(&other, &["branch", "unpushed", commit.trim()]);
+    machines.hub.ok(&["repo", "add", other.to_str().unwrap()]);
+    let repo = other.to_str().unwrap();
+    let args = ["--repo", repo, "--branch", "x", "--base", "unpushed"];
+    let started = start_in_coordinator(&machines, &args);
+    assert!(!started.status.success(), "{}", printed(&started));
+    // The laptop registered nothing of it.
+    let repositories = machines.laptop.ok(&["repo", "ls"]);
+    assert_eq!(repositories.as_array().unwrap().len(), 1, "{repositories}");
 }

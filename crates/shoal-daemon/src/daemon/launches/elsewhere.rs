@@ -96,7 +96,8 @@ impl Manager {
     /// What `launch` carries to `machine` for `caller`: the URL of the
     /// origin of the repository it starts in, which then names that
     /// repository in place of how this machine names it, and its base as
-    /// that machine fetches it, or with the commits it carries there.
+    /// that machine fetches it, or with the commits it carries there; a
+    /// parent that takes no space of that repository refuses it first.
     async fn carried(
         &self,
         launch: &mut Launch,
@@ -106,6 +107,10 @@ impl Manager {
         let Some(repository) = self.launch_repository(launch, caller).await? else {
             return Ok(Carried::default());
         };
+        // Refused before anything goes there, as that machine would refuse it.
+        let parent = (launch.parent.as_ref()).and_then(SpaceSelector::given_id);
+        let selector = (&repository.id).into();
+        self.ensure_parent_takes(Some(&selector), parent).await?;
         let origin = crate::repository::remote_url_from_source(&repository.source).await?;
         let origin = origin.with_context(|| {
             format!(
