@@ -648,6 +648,27 @@ pub(super) async fn creates_branch(repo: &Repository, workspace: &Workspace) -> 
     }
 }
 
+/// Whether creating the worktree of `workspace` at `head`, whose files it
+/// copies there, has to create its branch, as [`creates_branch`] says,
+/// refusing the branch an earlier try created at another commit, which
+/// those files would not fit.
+pub(super) async fn creates_branch_at(
+    repo: &Repository,
+    workspace: &Workspace,
+    head: &str,
+) -> Result<bool> {
+    let creates = creates_branch(repo, workspace).await?;
+    if let (false, Some(branch)) = (creates, workspace.branch()) {
+        let tip =
+            git::resolve_commit(&repo.path, &git::local_ref(branch), git::run_isolated).await?;
+        ensure!(
+            tip.as_str() == head,
+            "branch {branch}, which an earlier try created at {tip}, no longer starts where the copy does, at {head}; delete it with `git branch -D {branch}`, then try again"
+        );
+    }
+    Ok(creates)
+}
+
 /// The commit and full ref name `shoal diff` records for a workspace base;
 /// a base that names no ref, such as a commit, records no ref.
 pub(super) async fn recorded_base(

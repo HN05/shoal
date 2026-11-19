@@ -153,3 +153,77 @@ async fn a_retried_outside_copy_keeps_what_the_earlier_try_left() {
     assert!(kept, "{checkpoints:?}");
     manager.store.shutdown().await;
 }
+
+#[tokio::test]
+async fn a_retried_copy_refuses_the_branch_an_earlier_try_made_where_the_source_was() {
+    use crate::daemon::test_support::{block_worktrees, commit, git, manager, repository};
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let source = root.path().join("outside");
+    git(
+        &path,
+        &["worktree", "add", "-b", "outside", source.to_str().unwrap()],
+    );
+    let source = fs::canonicalize(source).unwrap();
+    let blocked = block_worktrees(&path);
+    let failed = manager.adopt_workspace(&repo.id, &source, true).await;
+    assert!(failed.is_err(), "{failed:?}");
+    drop(blocked);
+    let workspace = (manager.list_workspaces().await.unwrap().into_iter())
+        .find(|workspace| workspace.path != source)
+        .unwrap();
+    let branch = workspace.branch().unwrap().to_string();
+    // The source moves on past the commit the earlier try made the branch at.
+    fs::write(source.join("later"), "later").unwrap();
+    commit(&source, "later");
+    let selector = SpaceSelector::id(&workspace.id);
+    let refused = manager
+        .create_pending_worktree(&selector)
+        .await
+        .unwrap_err();
+    assert!(format!("{refused:#}").contains(&branch), "{refused:#}");
+    git(&path, &["branch", "-D", &branch]);
+    let created = manager.create_pending_worktree(&selector).await.unwrap();
+    let head = git(&created.path, &["rev-parse", "HEAD"]);
+    assert_eq!(head, git(&source, &["rev-parse", "HEAD"]));
+    manager.store.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_retried_outside_copy_refuses_a_source_that_moved_past_its_worktree() {
+    use crate::daemon::test_support::{commit, git, manager, repository};
+    use std::os::unix::fs::PermissionsExt;
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let source = root.path().join("outside");
+    git(
+        &path,
+        &["worktree", "add", "-b", "outside", source.to_str().unwrap()],
+    );
+    let source = fs::canonicalize(source).unwrap();
+    // A file it cannot read fails the copy once Git created the worktree.
+    let unreadable = source.join("unreadable");
+    fs::write(&unreadable, "secret").unwrap();
+    fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o000)).unwrap();
+    let failed = manager.adopt_workspace(&repo.id, &source, true).await;
+    assert!(failed.is_err(), "{failed:?}");
+    fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o644)).unwrap();
+    fs::write(source.join("later"), "later").unwrap();
+    commit(&source, "later");
+    let workspace = (manager.list_workspaces().await.unwrap().into_iter())
+        .find(|workspace| workspace.path != source)
+        .unwrap();
+    let selector = SpaceSelector::id(&workspace.id);
+    let refused = manager.create_pending_worktree(&selector).await;
+    assert!(refused.is_err(), "{refused:?}");
+    assert!(!workspace.path.join("later").exists());
+    manager.store.shutdown().await;
+}

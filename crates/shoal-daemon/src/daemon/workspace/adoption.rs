@@ -1,6 +1,8 @@
 //! Explicitly transfer a linked worktree into Shoal's normal lifecycle.
 use super::super::manager::Manager;
-use super::creation::{Configured, PendingWorktree, creates_branch, existing_base, recorded_base};
+use super::creation::{
+    Configured, PendingWorktree, creates_branch_at, existing_base, recorded_base,
+};
 use crate::{
     fsutil::off_runtime,
     git,
@@ -150,7 +152,7 @@ impl Manager {
         );
         let branch = workspace.require_branch("copying a worktree")?;
         match workspace.checkout.git_dir() {
-            Some(_) => self.keep_before_retry(workspace).await?,
+            Some(_) => self.reuse_copied_worktree(workspace, source).await?,
             None => self.add_copied_worktree(repo, workspace, source).await?,
         }
         crate::fsutil::copy::copy_worktree(source, &workspace.path)
@@ -163,6 +165,25 @@ impl Manager {
         })
     }
 
+    /// Ready the worktree an earlier try of `workspace` created for its
+    /// files once a checkpoint keeps what it holds, refusing one whose HEAD
+    /// is no longer the source's, which the files copied now would not fit.
+    async fn reuse_copied_worktree(&self, workspace: &Workspace, source: &Path) -> Result<()> {
+        self.keep_before_retry(workspace).await?;
+        let (head, started) = tokio::try_join!(
+            git::resolve_commit(source, "HEAD", git::run_isolated),
+            git::resolve_commit(&workspace.path, "HEAD", git::run_isolated),
+        )?;
+        ensure!(
+            head == started,
+            "{} moved from {started}, where {} started, to {head}; `shoal rm {}` removes the workspace, and `shoal adopt --copy` copies it again",
+            source.display(),
+            workspace.name,
+            workspace.number
+        );
+        Ok(())
+    }
+
     /// Create the worktree of `workspace` on its new branch at the HEAD of
     /// the worktree at `source`, and own it before its files are copied.
     async fn add_copied_worktree(
@@ -172,7 +193,7 @@ impl Manager {
         source: &Path,
     ) -> Result<()> {
         let commit = git::resolve_commit(source, "HEAD", git::run_isolated).await?;
-        let new_branch = creates_branch(repo, workspace).await?;
+        let new_branch = creates_branch_at(repo, workspace, commit.as_str()).await?;
         git::worktree::add(
             &repo.path,
             &workspace.path,
