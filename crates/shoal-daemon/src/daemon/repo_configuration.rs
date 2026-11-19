@@ -1,6 +1,6 @@
 //! The configuration layers of a repository's workspaces, and where its
 //! local config file lives.
-use super::Manager;
+use super::workspace::Manager;
 use crate::config::hooks::HookCommand;
 use crate::{
     config::{

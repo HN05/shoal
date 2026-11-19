@@ -28,7 +28,6 @@ mod merge;
 pub(super) mod ownership;
 pub(crate) mod paths;
 mod refresh;
-mod repo_configuration;
 mod repo_removal;
 mod reservation;
 pub(super) mod restore;
@@ -151,7 +150,7 @@ pub struct Manager {
     >,
     /// The config files of worktrees the current format rejects, which the
     /// daemon ignores.
-    rejected_configs: repo_configuration::RejectedConfigs,
+    pub(super) rejected_configs: super::repo_configuration::RejectedConfigs,
     /// When each space's agent state was last reported.
     pub(super) report_times: Arc<super::lost_reports::ReportTimes>,
     /// Directories whose file access stalls, shared with startup's status answer.

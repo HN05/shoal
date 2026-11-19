@@ -72,6 +72,7 @@ pub(crate) mod queued_starts;
 pub mod recovery;
 mod registry;
 mod releases;
+mod repo_configuration;
 mod repo_move;
 mod requests;
 pub mod resources;
