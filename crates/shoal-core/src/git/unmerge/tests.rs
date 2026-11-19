@@ -255,6 +255,14 @@ async fn a_rebase_merge_is_found_past_the_commits_it_dropped_as_empty() {
     assert_eq!(rev(&repo, &format!("{rebased}~1")), previous.as_str());
     assert_eq!(
         result(&repo, &previous, MergeMethod::Rebase).await,
+        Some(rebased.clone())
+    );
+    // A later commit that reuses a dropped commit's authorship is no copy.
+    fs::write(repo.join("unrelated"), "unrelated\n").unwrap();
+    git(&repo, &["add", "unrelated"]);
+    git(&repo, &["commit", "-q", "-C", "side~2"]);
+    assert_eq!(
+        result(&repo, &previous, MergeMethod::Rebase).await,
         Some(rebased)
     );
 }

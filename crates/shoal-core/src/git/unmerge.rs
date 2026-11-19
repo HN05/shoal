@@ -139,17 +139,19 @@ async fn squashed(
         return Ok(None);
     }
     let merged = merge_tree::merged_tree(repo, previous.as_str(), source.as_str()).await?;
-    let recorded = git_run(repo, &["rev-parse", &format!("{first}^{{tree}}")]).await?;
-    Ok((merged.as_deref() == Some(recorded.trim())).then_some(first))
+    let recorded = merge_tree::tree_of(repo, first.as_str()).await?;
+    Ok((merged == Some(recorded)).then_some(first))
 }
 
 /// The last commit a rebase merge of `source` onto `previous` left in
-/// `tip`'s first-parent history: the end of the chain on `previous` whose
-/// commits each copy one of the branch's own, as [`authored_identity`]
-/// tells them, since a copy's patch differs where the rebase moved a change
-/// to a renamed file. A commit of the branch with no copy there is one the
+/// `tip`'s first-parent history: in the chain on `previous` whose commits
+/// each copy one of the branch's own, as [`authored_identity`] tells them,
+/// since a copy's patch differs where the rebase moved a change to a
+/// renamed file, the last whose files are the merge of the two, as a clean
+/// rebase leaves them. A commit of the branch with no copy there is one the
 /// rebase dropped once it became empty, as when the default branch had its
-/// change in a squash of several.
+/// change in a squash of several; a later commit that copies its authorship
+/// changes the files, so it is no part of the merge.
 async fn rebased(
     repo: &Path,
     tip: &str,
@@ -165,13 +167,19 @@ async fn rebased(
             .entry(authored_identity(repo, original.as_str()).await?)
             .or_default() += 1;
     }
+    let Some(merged) = merge_tree::merged_tree(repo, previous.as_str(), source.as_str()).await?
+    else {
+        return Ok(None);
+    };
     let mut last = None;
     for copy in chain.into_iter().rev() {
         match originals.get_mut(&authored_identity(repo, copy.as_str()).await?) {
             Some(left @ 1..) => *left -= 1,
             _ => break,
         }
-        last = Some(copy);
+        if merge_tree::tree_of(repo, copy.as_str()).await? == merged {
+            last = Some(copy);
+        }
     }
     Ok(last)
 }
