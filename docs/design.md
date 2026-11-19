@@ -1620,7 +1620,14 @@ crates and before rustc for everything else, to a second script that hands
 only `clippy-driver` runs to the workspace wrapper. That replaces a user's own
 `RUSTC_WRAPPER` or `build.rustc-wrapper`, such as sccache, whose work the seed
 already covers; one set in `[env]` wins, as every
-variable there does, and clippy then runs without the mapping. Preset seeds run the default branch's own build code, as
+variable there does, and clippy then runs without the mapping. CI runners set `CI`, under which
+Cargo leaves incremental compilation off and so misses the seed's builds of
+the workspace crates, so the preset gives Shoal runner jobs
+`CARGO_INCREMENTAL=1`, the only setting that overrides `CI`, and not agent
+workspaces, where it would make release builds incremental too. It reaches
+the steps through the runner's own environment, which a workflow's `env`
+replaces on both forges, while Forgejo's `runner.envs` would replace that
+`env` and GitHub's `GITHUB_ENV` would override it. Preset seeds run the default branch's own build code, as
 `setup.seed.command` would. Tools whose caches already serve every checkout get only what
 makes their cache keys independent of the workspace path, or one cache where
 each checkout keeps its own: Go trims paths, ccache takes the workspace as its

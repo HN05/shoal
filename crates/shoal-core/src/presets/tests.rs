@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, fs};
 
 use super::*;
-use crate::config::presets::environment;
+use crate::config::presets::{environment, job_environment};
 
 #[test]
 fn preset_variables_give_way_to_configured_ones() {
@@ -11,6 +11,17 @@ fn preset_variables_give_way_to_configured_ones() {
         environment(&[Preset::Cargo, Preset::Go], BTreeMap::new())["GOFLAGS"],
         "-trimpath"
     );
+}
+
+#[test]
+fn preset_job_variables_give_way_to_configured_ones() {
+    let none = BTreeMap::new();
+    assert_eq!(
+        job_environment(&[Preset::Go, Preset::Cargo], &none),
+        BTreeMap::from([("CARGO_INCREMENTAL".to_owned(), "1".to_owned())])
+    );
+    let configured = BTreeMap::from([("CARGO_INCREMENTAL".to_owned(), "0".to_owned())]);
+    assert!(job_environment(&[Preset::Cargo], &configured).is_empty());
 }
 
 #[test]

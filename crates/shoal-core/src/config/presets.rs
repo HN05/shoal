@@ -175,6 +175,16 @@ impl Preset {
         }
     }
 
+    /// Variables the preset gives CI jobs on Shoal's runner. Cargo builds
+    /// without incremental compilation under `CI`, which runners set, and
+    /// would then rebuild every crate the seed built incrementally.
+    fn job_environment(self) -> &'static [(&'static str, &'static str)] {
+        match self {
+            Self::Cargo => &[("CARGO_INCREMENTAL", "1")],
+            _ => &[],
+        }
+    }
+
     /// The MCP servers the preset brings, each by its name and command
     /// line, which `[mcp]` changes.
     pub(crate) fn mcp_servers(self) -> &'static [(&'static str, &'static [&'static str])] {
@@ -222,6 +232,20 @@ pub fn environment(
             .or_insert_with(|| (*value).to_owned());
     }
     env
+}
+
+/// The variables `presets` give CI jobs that `env`, the resolved `[env]`,
+/// does not set.
+pub fn job_environment(
+    presets: &[Preset],
+    env: &BTreeMap<String, String>,
+) -> BTreeMap<String, String> {
+    presets
+        .iter()
+        .flat_map(|preset| preset.job_environment())
+        .filter(|(name, _)| !env.contains_key(*name))
+        .map(|(name, value)| ((*name).to_owned(), (*value).to_owned()))
+        .collect()
 }
 
 /// Each preset is named once, and no two keep the same seed output.

@@ -3933,7 +3933,7 @@ Shoal sets each one up so its workspaces stop repeating the same work:
 
 | Preset | Sets up |
 |---|---|
-| `cargo` | Two rustc wrappers that keep the workspace crates' incremental state reusable, and a [seed](#seed-builds) running `cargo build --all-targets`, `cargo test --no-run`, `cargo check --all-targets` and `cargo clippy --all-targets`, keeping `target` |
+| `cargo` | Two rustc wrappers that keep the workspace crates' incremental state reusable, a [seed](#seed-builds) running `cargo build --all-targets`, `cargo test --no-run`, `cargo check --all-targets` and `cargo clippy --all-targets`, keeping `target`, and `CARGO_INCREMENTAL=1` for [runner](#runner) jobs |
 | `npm` | A seed running `npm ci`, keeping `node_modules` |
 | `pnpm` | A seed running `pnpm install --frozen-lockfile`, keeping `node_modules` |
 | `yarn` | A seed running `yarn install --frozen-lockfile`, keeping `node_modules` |
@@ -3993,6 +3993,13 @@ outputs they have.
 Cargo keeps separate builds of the workspace's crates for each
 wrapper, so a Cargo command run without the preset's environment, such as from
 a shell `shoal internal env` did not set up, builds them from scratch.
+
+The runner sets `CI` for every job, and Cargo leaves incremental compilation
+off under `CI`, which would rebuild every workspace crate the seed built
+incrementally. The preset therefore gives each job `CARGO_INCREMENTAL=1`,
+which turns incremental compilation on in every profile, `--release`
+included. `CARGO_INCREMENTAL` in the workflow's `env` or in `[env]` replaces
+it, so `"0"` there turns it off.
 
 The `ccache` preset needs ccache installed and CMake 3.17 or later, and applies
 when a build directory is first configured. With the workspace as ccache's base
@@ -4172,7 +4179,8 @@ the job. A runner GitHub gives no job is deleted once it has waited a minute
 and no job waits for its labels, and its workspace goes. The workspace skips setup
 and starts from the [seed build](#seed-builds) like any workspace, so the job
 rebuilds only what its commit changed. The job gets its workspace's
-environment, scope token, `TMPDIR` and `[env]`, but no agent secrets and no
+environment, scope token, `TMPDIR`, `[env]` and the variables its
+[presets](#build-tool-presets) give jobs, but no agent secrets and no
 forge login besides the token the forge gives the job. Once the execution ends,
 however it ended, the workspace goes whatever it holds, with its permit; after
 a daemon restart, a job whose runner is gone goes the same way and the forge

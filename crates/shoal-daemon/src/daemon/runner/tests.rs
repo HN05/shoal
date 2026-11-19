@@ -464,6 +464,7 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
         std::fs::metadata(&token).unwrap().permissions().mode() & 0o777,
         0o600
     );
+    assert!(job_variable(&command, "CARGO_INCREMENTAL").is_none());
 
     // A running job keeps its workspace.
     manager.finish_ended_jobs().await.unwrap();
@@ -481,6 +482,29 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
     assert!(manager.workspace_by_id(&workspace.id).await.is_err());
     assert!(manager.claimed_jobs().await.unwrap().is_empty());
     assert!(!directory.exists());
+}
+
+/// The value `command` gives its runner for `name`.
+fn job_variable<'a>(command: &'a JobCommand, name: &str) -> Option<&'a str> {
+    command
+        .env
+        .iter()
+        .find(|(variable, _)| variable == name)
+        .map(|(_, value)| value.as_str())
+}
+
+#[tokio::test]
+async fn the_cargo_presets_jobs_build_incrementally_as_its_seed_did() {
+    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
+    let manager = &fixture.manager;
+    let presets = Some("setup.presets = ['cargo']\n".into());
+    (manager.write_local_config(&fixture.repository, presets))
+        .await
+        .unwrap();
+    admit_and_claim(manager).await;
+    let claimed = manager.claimed_jobs().await.unwrap();
+    let (command, _) = launched(claimed[0].workspace_id.as_str());
+    assert_eq!(job_variable(&command, "CARGO_INCREMENTAL"), Some("1"));
 }
 
 #[tokio::test]

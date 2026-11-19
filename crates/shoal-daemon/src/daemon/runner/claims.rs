@@ -11,6 +11,7 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use std::{
+    collections::BTreeMap,
     ffi::OsString,
     io::Write as _,
     os::unix::fs::OpenOptionsExt as _,
@@ -355,8 +356,17 @@ impl Manager {
     }
 
     /// The command that runs `claim`'s job, with its files in the job's
-    /// directory.
+    /// directory and the variables its workspace's presets give jobs.
     async fn job_command(&self, claim: &Claimed<'_>, job: &QueuedJob) -> Result<JobCommand> {
+        let mut command = self.forge_job_command(claim, job).await?;
+        command
+            .env
+            .extend(self.preset_job_environment(claim.workspace).await?);
+        Ok(command)
+    }
+
+    /// The forge's command that runs `claim`'s job.
+    async fn forge_job_command(&self, claim: &Claimed<'_>, job: &QueuedJob) -> Result<JobCommand> {
         let program = self.runner_program(claim.forge)?;
         let labels = runner_labels(&claim.runner.labels);
         // Named for the claim: a job claimed again, after an earlier runner
@@ -374,6 +384,22 @@ impl Manager {
             env: &job_env(claim.workspace),
         };
         claim.forge.job_command(&self.user_account(), &launch).await
+    }
+
+    /// The variables the presets of the job workspace `workspace` give its
+    /// job where `[env]` does not set them. They reach the steps through the
+    /// runner's own environment, which a workflow's `env` replaces on both
+    /// forges, unlike the variables [`job_env`] gives the runner.
+    async fn preset_job_environment(
+        &self,
+        workspace: &Workspace,
+    ) -> Result<BTreeMap<String, String>> {
+        let settings = self.workspace_settings(workspace).await?;
+        let presets = settings.setup.presets.as_deref().unwrap_or_default();
+        Ok(crate::config::presets::job_environment(
+            presets,
+            &settings.env,
+        ))
     }
 
     /// The directory a claimed job's runner keeps its files in.
