@@ -276,6 +276,28 @@ async fn a_squash_merge_moves_main_s_checkout_whatever_its_merge_options() {
     assert_eq!(f.recorded().await, [("squash".to_owned(), f.main())]);
 }
 
+#[tokio::test]
+async fn a_rebase_merge_onto_a_renamed_file_is_undone_whole() {
+    let f = Fixture::new().await;
+    let first = f.add("first", "first").await;
+    write_commit(&first.path, "tracked", "first's edit");
+    git(&f.repo, &["mv", "tracked", "moved"]);
+    git(&f.repo, &["commit", "-q", "-m", "Move tracked"]);
+    let before = f.main();
+    f.merge_by("first", MergeMethod::Rebase).await.unwrap();
+    assert_eq!(
+        fs::read_to_string(f.repo.join("moved")).unwrap(),
+        "first's edit\n"
+    );
+    assert_eq!(f.recorded().await, [("rebase".to_owned(), f.main())]);
+    f.unmerge("first").await.unwrap();
+    assert_eq!(f.main(), before);
+    assert_eq!(
+        fs::read_to_string(f.repo.join("moved")).unwrap(),
+        "initial\n"
+    );
+}
+
 /// Merge by `method` a workspace whose change conflicts with main's.
 async fn a_conflicting_merge_by(method: MergeMethod) {
     let f = Fixture::new().await;

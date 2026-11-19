@@ -145,10 +145,11 @@ async fn squashed(
 
 /// The last commit a rebase merge of `source` onto `previous` left in
 /// `tip`'s first-parent history: the end of the chain on `previous` whose
-/// commits replay the branch's own in order, as [`replay_identity`] tells
-/// them. A commit of the branch with no copy there is one the rebase
-/// dropped once it became empty, as when the default branch had its change
-/// in a squash of several.
+/// commits copy the branch's own in order, as [`authored_identity`] tells
+/// them, since a copy's patch differs where the rebase moved a change to a
+/// renamed file. A commit of the branch with no copy there is one the
+/// rebase dropped once it became empty, as when the default branch had its
+/// change in a squash of several.
 async fn rebased(
     repo: &Path,
     tip: &str,
@@ -165,8 +166,8 @@ async fn rebased(
         let Some(copy) = copies.peek() else {
             break;
         };
-        if replay_identity(repo, copy.as_str()).await?
-            == replay_identity(repo, original.as_str()).await?
+        if authored_identity(repo, copy.as_str()).await?
+            == authored_identity(repo, original.as_str()).await?
         {
             last = copies.next().cloned();
         }
@@ -308,17 +309,7 @@ pub(crate) async fn checkout_at(
 /// the patch ID of a diff without context, which taking out an earlier
 /// merge's nearby changes leaves as it was.
 pub async fn replay_identity(repo: &Path, commit: &str) -> Result<String> {
-    let metadata = git_run(
-        repo,
-        &[
-            "show",
-            "-s",
-            "--format=%an%x00%ae%x00%ad%x00%B",
-            commit,
-            "--",
-        ],
-    )
-    .await?;
+    let metadata = authored_identity(repo, commit).await?;
     let merged = (merged_parents(repo, commit).await?.iter())
         .map(CommitId::as_str)
         .collect::<Vec<_>>()
@@ -341,6 +332,13 @@ pub async fn replay_identity(repo: &Path, commit: &str) -> Result<String> {
     let id = git::bounded(patch_id).input(patch).output().await?;
     let id = id.split_whitespace().next().unwrap_or_default();
     Ok(format!("{metadata}\0{merged}\0{id}"))
+}
+
+/// What a rebase keeps of `commit` in the copy it makes: its author, author
+/// date and message.
+async fn authored_identity(repo: &Path, commit: &str) -> Result<String> {
+    let format = "--format=%an%x00%ae%x00%ad%x00%B";
+    git_run(repo, &["show", "-s", format, commit, "--"]).await
 }
 
 /// Whether `base..tip` holds a merge commit, which `git revert` takes only
