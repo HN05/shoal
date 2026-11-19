@@ -103,7 +103,8 @@ impl<'a> Progress<'a> {
             }),
             Err(error) => {
                 let message = format!("Failed {shown} {}: {error:#}", self.next());
-                self.report.failed_saying(self.ctx, &message, name, &error);
+                self.report
+                    .failed_saying(self.ctx, &message, &shown, &error);
             }
         }
     }

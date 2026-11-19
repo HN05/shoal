@@ -65,3 +65,25 @@ fn a_restart_names_the_place_its_agent_moved_to() {
     assert_eq!(kept, "Restarted api (1/2)");
     assert_eq!(restarted(("api", "api"), "(1/2)", None, None), kept);
 }
+
+#[test]
+fn a_failed_restart_names_the_machine_of_its_space() {
+    let ctx = Context::new(Paths::for_test(std::path::Path::new("state")), true);
+    let mut progress = Progress::new(&ctx, 1, HashMap::new());
+    let offline = anyhow::anyhow!("machine desk is offline");
+    progress.ended(&elsewhere("api", "desk"), Err(offline));
+    let mut failed = Vec::new();
+    let report = progress.report.finish(&ctx, "", |restarted, failures| {
+        failed = failures;
+        Restarted {
+            restarted,
+            pending: Vec::new(),
+            failed: Vec::new(),
+            skipped: Vec::new(),
+            interrupted: false,
+        }
+    });
+    assert_eq!(report.unwrap(), 1);
+    let workspaces: Vec<&str> = failed.iter().map(|f| f.workspace.as_str()).collect();
+    assert_eq!(workspaces, ["api on desk"]);
+}
