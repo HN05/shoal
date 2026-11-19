@@ -702,23 +702,32 @@ impl Zellij {
     /// Name the tab of `pane` `name`; a renaming whose outcome is unknown
     /// is done once the tab shows the name.
     pub(crate) async fn rename_tab(&self, session: &str, pane: &Pane, name: &str) -> Result<()> {
-        let tab = pane.tab.to_string();
         let acted = self
-            .act(session, None, || {
-                let mut rename = self.action(session);
-                rename.args(["rename-tab-by-id", &tab, name]);
-                rename
-            })
+            .act(session, None, || self.renaming(session, pane.tab, name))
             .await
             .with_context(|| format!("rename Zellij tab {}", pane.tab))?;
         if acted == Acted::Unknown {
-            self.listing_shows(session, None, |panes| {
-                tab_named(panes, pane.tab, name).then_some(())
-            })
-            .await
-            .with_context(|| format!("the Zellij tab {} does not show its name", pane.tab))?;
+            self.tab_shows_name(session, pane.tab, name).await?;
         }
         Ok(())
+    }
+
+    /// The command that names the tab `tab` of `session` `name`.
+    fn renaming(&self, session: &str, tab: u64, name: &str) -> Command {
+        let mut rename = self.action(session);
+        rename
+            .args(["rename-tab-by-id", &tab.to_string()])
+            .arg(name);
+        rename
+    }
+
+    /// Wait until the tab `tab` of `session` shows the name `name`.
+    async fn tab_shows_name(&self, session: &str, tab: u64, name: &str) -> Result<()> {
+        self.listing_shows(session, None, |panes| {
+            tab_named(panes, tab, name).then_some(())
+        })
+        .await
+        .with_context(|| format!("the Zellij tab {tab} does not show its name"))
     }
 
     /// Close `place` on the server instance `instance` and nothing else, so
@@ -761,28 +770,38 @@ impl Zellij {
         pane: &Pane,
         panes: &[Pane],
     ) -> Result<()> {
-        let tab = pane.tab.to_string();
-        let args: &[&str] = if alone_in_tab(pane, panes) {
-            &["close-tab-by-id", &tab]
-        } else {
-            &["close-pane", "--pane-id", &pane.id]
-        };
         let acted = self
             .send(session, Some(instance), || {
-                let mut close = self.action(session);
-                close.args(args);
-                close
+                self.closing(session, pane, panes)
             })
             .await
             .with_context(|| format!("close Zellij pane {}", pane.id))?;
         if acted == Some(Acted::Unknown) {
-            self.listing_shows(session, Some(instance), |panes| {
-                (!listed_in(pane, panes)).then_some(())
-            })
-            .await
-            .with_context(|| format!("the Zellij pane {} does not close", pane.id))?;
+            self.pane_closes(session, instance, pane).await?;
         }
         Ok(())
+    }
+
+    /// The command that closes `pane` of `session`, whose panes are
+    /// `panes`, with its tab when no other pane is there.
+    fn closing(&self, session: &str, pane: &Pane, panes: &[Pane]) -> Command {
+        let mut close = self.action(session);
+        if alone_in_tab(pane, panes) {
+            close.args(["close-tab-by-id", &pane.tab.to_string()]);
+        } else {
+            close.args(["close-pane", "--pane-id", &pane.id]);
+        }
+        close
+    }
+
+    /// Wait until Zellij no longer lists `pane` of `session` on the server
+    /// instance `instance`.
+    async fn pane_closes(&self, session: &str, instance: &str, pane: &Pane) -> Result<()> {
+        self.listing_shows(session, Some(instance), |panes| {
+            (!listed_in(pane, panes)).then_some(())
+        })
+        .await
+        .with_context(|| format!("the Zellij pane {} does not close", pane.id))
     }
 
     /// End `session`, which holds no pane, unless it ended already, asking
