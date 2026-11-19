@@ -883,6 +883,52 @@ async fn an_idle_agent_waiting_for_an_update_lets_a_daemon_update_through() {
     serving.abort();
 }
 
+/// A waiting wrapper whose terminal closes leaves its agent's restore to the
+/// agent queue, which starts it elsewhere once the execution has ended.
+#[tokio::test]
+async fn a_waiting_agent_whose_terminal_closes_leaves_its_restore_to_the_queue() {
+    use shoal_core::execution::recovery::restore_requests;
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&manager, &workspace).await;
+    let execution = manager
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap()
+        .executions
+        .remove(0);
+    manager
+        .set_agent_state(
+            &SpaceSelector::id(&workspace.id),
+            crate::state::AgentState::Idle,
+            Some(execution.id.clone()),
+            None,
+        )
+        .await
+        .unwrap();
+    let monitor = manager.gates.operation().await;
+    assert!(
+        manager
+            .stop_agent_for_overload("test memory pressure")
+            .await
+    );
+    drop(monitor);
+    wait_paused(&manager, &workspace).await;
+    wait_restore_queued(&manager).await;
+
+    let wrapper = execution.wrapper.clone().unwrap();
+    crate::process::identity::signal(&wrapper, libc::SIGHUP).unwrap();
+
+    bounded(launched).await.unwrap().unwrap();
+    let requested: Vec<_> = restore_requests(&manager.paths, &workspace.id)
+        .unwrap()
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect();
+    assert_eq!(requested, [execution.id]);
+    serving.abort();
+}
+
 /// Launch an agent with a background command outside its process group and
 /// return that command's identity once both run.
 async fn launch_with_background(

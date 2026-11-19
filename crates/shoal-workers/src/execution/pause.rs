@@ -131,6 +131,10 @@ async fn await_restore(
                 narrowing,
             })
         }
+        Waited::Ended(ended) => {
+            leave_to_queue(paths, plan, ended, record.is_ok());
+            Ok(AfterPause::Finish)
+        }
         Waited::Cancelled { reason, removed } => {
             if record.is_ok() {
                 let cancelled = reason.map(|reason| format!(": {reason}"));
@@ -144,6 +148,30 @@ async fn await_restore(
             Ok(AfterPause::Finish)
         }
     }
+}
+
+/// Leave the restore of the agent this wrapper waited for, whose session
+/// `ended`, to the agent queue, which starts it in a new place once this
+/// execution has ended, as it does for an agent whose session ends while it
+/// runs. Without a `saved` record there is nothing to restore.
+fn leave_to_queue(paths: &CommandPaths, plan: &ExecutionPlan, ended: Halt, saved: bool) {
+    if !saved {
+        return;
+    }
+    let env = crate::terminal::start_environment();
+    let requested = recovery::request_restore(paths, &plan.space.id, &plan.id, &env);
+    // The terminal may have closed with the session.
+    let _ = match requested {
+        Ok(()) => writeln!(
+            std::io::stderr(),
+            "shoal: agent stopped{}; its restore waits in the agent queue",
+            ended.stated_reason()
+        ),
+        Err(error) => writeln!(
+            std::io::stderr(),
+            "warning: cannot queue the agent's restore: {error:#}"
+        ),
+    };
 }
 
 /// What restores the paused agent besides `shoal restore`: this wrapper when
@@ -374,6 +402,9 @@ pub(super) enum Waited {
         /// The narrowing the agent restores under, when the daemon changed it.
         narrowing: Option<crate::config::permissions::PermissionsConfig>,
     },
+    /// The session the wrapper waited in ended, as `Halt::Ended` says, so
+    /// the agent queue restores the agent elsewhere.
+    Ended(Halt),
     /// The restore was cancelled, with the daemon's reason if it gave one.
     Cancelled {
         reason: Option<String>,
@@ -392,16 +423,23 @@ impl Waited {
 }
 
 /// Wait in `place` for the daemon's verdict, or for its keys: Enter wakes the
-/// agent, Ctrl-C stops waiting. While the daemon restarts, the link
-/// reattaches and the next daemon continues the wait.
+/// agent, Ctrl-C stops waiting. A hangup or terminate ends the session it
+/// waits in, which leaves the restore to the agent queue. While the daemon
+/// restarts, the link reattaches and the next daemon continues the wait.
 pub(super) async fn wait(link: &mut Link, place: &mut Place) -> Result<Waited> {
     use super::link::{Received, Refused};
     use crate::protocol::Control;
     use tokio::signal::unix::{SignalKind, signal};
     let mut interrupt = signal(SignalKind::interrupt())?;
     let mut terminate = signal(SignalKind::terminate())?;
+    let mut hangup = signal(SignalKind::hangup())?;
     let mut quit = signal(SignalKind::quit())?;
     let signalled = || Ok(Waited::cancelled("interrupted"));
+    let ended = |signal| {
+        Ok(Waited::Ended(
+            Halt::ended_by(signal).expect("a session signal"),
+        ))
+    };
     loop {
         tokio::select! {
             received = link.recv() => match received {
@@ -428,7 +466,8 @@ pub(super) async fn wait(link: &mut Link, place: &mut Place) -> Result<Waited> {
                 Key::Stop => return signalled(),
             },
             _ = interrupt.recv() => return signalled(),
-            _ = terminate.recv() => return signalled(),
+            _ = terminate.recv() => return ended(libc::SIGTERM),
+            _ = hangup.recv() => return ended(libc::SIGHUP),
             _ = quit.recv() => return signalled(),
         }
     }

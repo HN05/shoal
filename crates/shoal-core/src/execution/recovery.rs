@@ -420,7 +420,7 @@ fn replace_record(path: &Path, record: &Record) -> Result<()> {
 /// starts with `env`, the variables of the agent's terminal host, once the
 /// execution has ended. The request is its own file beside the record, so
 /// forgetting it never replaces a record a resume may hold.
-fn request_restore(
+pub fn request_restore(
     paths: &Paths,
     space_id: &SpaceId,
     id: &ExecutionId,
