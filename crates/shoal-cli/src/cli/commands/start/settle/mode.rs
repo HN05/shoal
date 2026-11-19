@@ -76,12 +76,21 @@ pub(super) fn chosen(
     if let (ModeChoice::Named(mode), Some(_)) = (&choice, launch.setup) {
         return Ok(mode.clone());
     }
-    let names_repository = launch.in_workspace.is_some() || launches::names_repository(launch)?;
-    let fit = ModeFit {
+    choice.chosen(ctx, &settings.modes, fit(launch)?)
+}
+
+/// The spaces a mode picked for `launch` must start: of the kind its
+/// arguments other than the mode fit, and in a repository where they name
+/// one or an issue, which only a space in a repository starts on.
+fn fit(launch: &Launch) -> Result<ModeFit> {
+    let in_repository = launch.in_workspace.is_some()
+        || launch.issue.is_some()
+        || launches::names_repository(launch)?
+        || launches::named_issue(launch)?.is_some();
+    Ok(ModeFit {
         kind: launches::fitting_kind(launch),
-        repository: names_repository.then_some(true),
-    };
-    choice.chosen(ctx, &settings.modes, fit)
+        repository: in_repository.then_some(true),
+    })
 }
 
 /// The mode `mode` of `launch` under `settings`, which says what a
@@ -132,3 +141,6 @@ async fn issue_mode(
     let mode = launches::labelled_mode(&settings.issue, &issue.labels);
     Ok(mode.filter(|mode| modes::get(&settings.modes, mode).is_ok()))
 }
+
+#[cfg(test)]
+mod tests;

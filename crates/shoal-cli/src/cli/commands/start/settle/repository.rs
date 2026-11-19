@@ -15,7 +15,7 @@ use crate::{
     config::{Effective, modes::ModeName},
     forge::items::reference::ItemInput,
     launches::LaunchReads,
-    model::Repository,
+    model::{Repository, SpaceKind},
     protocol::ConfigTarget,
 };
 
@@ -44,10 +44,12 @@ pub(super) async fn found(ctx: &Context, launch: &mut Launch) -> Result<Option<R
     crate::launches::shape::launch_repository(&DaemonReads(ctx), launch).await
 }
 
-/// The repository a start in `mode` goes in and its settings: none for a
-/// mode without a repository, which starts under the global config's, as
-/// the daemon starts it; else the `found` one with its `settings`, else
-/// one a terminal picks, which `launch` then names, with its settings.
+/// The repository a start in `mode` goes in and the settings its agent
+/// starts under, as the daemon reads them: none for a mode without a
+/// repository, under the global config's; for a chat in the worktree of
+/// the workspace `launch` names, the `found` repository under its own;
+/// else the `found` one with its `settings`, else one a terminal picks,
+/// which `launch` then names, under its own.
 pub(super) async fn settled(
     ctx: &Context,
     launch: &mut Launch,
@@ -58,6 +60,13 @@ pub(super) async fn settled(
     if configured.is_some_and(|mode| !mode.repository) {
         let settings = DaemonReads(ctx).settings(ConfigTarget::Global).await?;
         return Ok((None, settings));
+    }
+    let hosted = launch.in_workspace.is_some()
+        && configured.is_some_and(|mode| mode.kind == SpaceKind::Chat);
+    if let (true, Some(repo)) = (hosted, &found) {
+        let target = ConfigTarget::Repository(repo.id.clone().into());
+        let settings = DaemonReads(ctx).settings(target).await?;
+        return Ok((found, settings));
     }
     if found.is_some() || configured.is_none() || !ui::can_pick(ctx) {
         return Ok((found, settings));
