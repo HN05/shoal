@@ -257,6 +257,8 @@ pub(super) async fn handle(
             from,
         } => {
             // Chosen first, so a space another machine has is followed there.
+            // A client follows again, from where it read, on its own.
+            let resumed = !from.is_empty();
             let following = manager.session_to_follow(&space, session, from).await?;
             // Another machine's follow is checked there as it goes, its
             // token here standing for its caller only while it starts.
@@ -264,7 +266,9 @@ pub(super) async fn handle(
             let scope = scope.cloned();
             // Following an agent is the user's interaction with it, as
             // attaching is.
-            manager.record_user_interaction(caller, &space).await;
+            if !resumed {
+                manager.record_user_interaction(caller, &space).await;
+            }
             let manager = manager.clone();
             return Ok(Answer::connection(move |stream, request_id, guard| {
                 manager.follow_session(stream, request_id, (following, scope), guard)

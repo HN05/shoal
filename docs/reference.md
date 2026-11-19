@@ -732,8 +732,8 @@ where it read each file to; one under a scope token ends once the token is
 revoked.
 Shoal copies the bytes unread, so
 the app parses each tool's format itself and sends input through the requests
-the protocol has. Following an agent and messaging it are your
-[interaction](#sleep) with it, so an agent you watch and talk to from an app
+the protocol has. Following an agent, though not following it again on
+its own, and messaging it are your [interaction](#sleep) with it, so an agent you watch and talk to from an app
 stays awake as one in your terminal does.
 Without a scope token the caller is the user; with one, it is
 that workspace's agent, under the rules of its `shoal` commands. The library
