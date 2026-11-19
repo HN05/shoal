@@ -842,3 +842,37 @@ fn scoped(id: SpaceId) -> crate::daemon::scope::Caller {
         vouched: None,
     }
 }
+
+#[tokio::test]
+async fn unread_alerts_with_long_titled_files_still_fit_one_delivery() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager, "receiver").await;
+    let title = "🦀".repeat(crate::validate::MAX_FILE_TITLE_LEN);
+    let files: Vec<_> = (0..20)
+        .map(|n| {
+            let path = temp.path().join(format!("{n:02}{}.log", "x".repeat(200)));
+            std::fs::write(&path, "log").unwrap();
+            crate::daemon::workspace_files::NewFile {
+                path,
+                title: Some(title.clone()),
+            }
+        })
+        .collect();
+    let to = SpaceSelector::id(&workspace.id);
+    let mut sent = 0;
+    while (manager.send_space_message(None, &to, format!("logs {sent}"), files.clone()))
+        .await
+        .is_ok()
+    {
+        sent += 1;
+    }
+    assert!(sent > 0);
+    let unread = manager.unread_messages(&workspace.id).await.unwrap().alerts;
+    assert_eq!(unread.len(), sent);
+    let delivered = serde_json::to_vec(&unread).unwrap();
+    assert!(
+        delivered.len() < crate::protocol::MAX_FRAME,
+        "{sent} alerts take {} bytes",
+        delivered.len()
+    );
+}

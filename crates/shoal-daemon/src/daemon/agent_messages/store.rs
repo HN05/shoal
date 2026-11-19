@@ -14,6 +14,12 @@ use crate::{
 };
 use shoal_ids::space_ids::SpaceId;
 
+/// The bytes of the names and titles of the files an alert `a` holds,
+/// which its agent receives with their paths, as [`COLUMNS`] reads them.
+const FILE_BYTES: &str = "SELECT COALESCE(SUM(LENGTH(CAST(
+        COALESCE(f.name,'') || COALESCE(f.title,'') AS BLOB))),0)
+    FROM json_each(a.attachments) j JOIN space_files f ON f.path=j.value";
+
 /// Queue `alert` for the agent of the space `space_id` in the caller's
 /// transaction, `for_user` when the user receives it should the space go
 /// before its agent reads it: its ID, or that of an identical alert from
@@ -67,9 +73,12 @@ pub(super) fn insert(
         return Ok(Queued { id, new: true });
     }
     let (unread, bytes): (i64, i64) = tx.query_row(
-        "SELECT COUNT(*),
-                COALESCE(SUM(LENGTH(CAST(COALESCE(space,'') || message || attachments AS BLOB))),0)
-            FROM alerts WHERE recipient_id=?1 AND read=0",
+        &format!(
+            "SELECT COUNT(*),
+                COALESCE(SUM(LENGTH(CAST(COALESCE(a.space,'') || a.message || a.attachments AS BLOB))
+                    + ({FILE_BYTES})),0)
+            FROM alerts a WHERE a.recipient_id=?1 AND a.read=0"
+        ),
         [space_id],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
@@ -77,7 +86,15 @@ pub(super) fn insert(
         unread < MAX_UNREAD,
         "the space already has {MAX_UNREAD} unread alerts"
     );
-    let size = about.name.as_deref().map_or(0, str::len) + alert.message.len() + attachments.len();
+    let files: i64 = tx.query_row(
+        &FILE_BYTES.replace("a.attachments", "?1"),
+        [&attachments],
+        |row| row.get(0),
+    )?;
+    let size = about.name.as_deref().map_or(0, str::len)
+        + alert.message.len()
+        + attachments.len()
+        + usize::try_from(files)?;
     ensure!(
         usize::try_from(bytes)? + size <= MAX_UNREAD_BYTES,
         "the space's unread alerts would exceed {MAX_UNREAD_BYTES} bytes"
