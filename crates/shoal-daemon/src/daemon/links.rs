@@ -7,6 +7,7 @@ pub(in crate::daemon) mod branches;
 mod checks;
 mod ci;
 pub mod issue;
+pub(crate) mod linked;
 mod listing;
 mod memories;
 mod merge_path;

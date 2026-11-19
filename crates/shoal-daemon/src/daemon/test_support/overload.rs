@@ -275,9 +275,7 @@ pub async fn execution_agent(manager: &Manager, id: ExecutionId) -> Option<crate
 /// Open the state as a restarted daemon does before it serves.
 pub async fn restart(manager: &Manager) -> Arc<Manager> {
     let reopened = Manager::open(manager.paths.clone()).await.unwrap();
-    reopened
-        .store
-        .quarantine_interrupted_operations()
+    crate::daemon::quarantine::interrupted_operations(&reopened.store)
         .await
         .unwrap();
     reopened

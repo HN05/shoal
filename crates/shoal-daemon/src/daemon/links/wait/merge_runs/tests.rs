@@ -180,7 +180,7 @@ impl Following {
     async fn related(&self) -> Vec<String> {
         let id = self.workspace.id.clone();
         let links = (self.manager.store)
-            .run(move |db| Ok(crate::daemon::store::space_links(db, &id)?))
+            .run(move |db| Ok(crate::daemon::links::linked::space_links(db, &id)?))
             .await
             .unwrap();
         links

@@ -3,7 +3,7 @@ use anyhow::{Result, ensure};
 use shoal_ids::space_ids::SpaceId;
 
 use crate::{
-    daemon::{links::wait::linked_items, manager::Manager, store},
+    daemon::{links::wait::linked_items, manager::Manager},
     forge::{
         ForgeRepo,
         items::{link::LinkKind, reference::ItemInput},
@@ -52,7 +52,8 @@ impl Manager {
                         }
                     }
                     for relation in [Relation::Opened, Relation::Related] {
-                        for item in store::recorded_items(db, &id, relation)? {
+                        for item in crate::daemon::links::linked::recorded_items(db, &id, relation)?
+                        {
                             if item.kind() == kind {
                                 links.push((id.clone(), item.url));
                             }

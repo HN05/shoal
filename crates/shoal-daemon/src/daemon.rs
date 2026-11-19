@@ -72,6 +72,7 @@ pub mod ports;
 mod pr_gate;
 pub(crate) mod progress;
 pub(crate) mod proxy_retries;
+mod quarantine;
 pub mod questions;
 pub(crate) mod queue;
 pub(crate) mod queued_starts;
@@ -380,7 +381,7 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     startup
         .step(
             "quarantining interrupted operations",
-            manager.store.quarantine_interrupted_operations(),
+            crate::daemon::quarantine::interrupted_operations(&manager.store),
         )
         .await?;
     // Finishing a move restores the states quarantine failed.

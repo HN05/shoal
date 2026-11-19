@@ -215,7 +215,7 @@ fn shown_items(
     id: &SpaceId,
     kind: Option<LinkKind>,
 ) -> Result<Vec<ItemRef>> {
-    let links = crate::daemon::store::space_links(db, id)?;
+    let links = crate::daemon::links::linked::space_links(db, id)?;
     Ok((links.items().into_iter())
         .filter(|item| kind.is_none_or(|kind| item.kind() == kind))
         .map(|item| item.url)
@@ -343,7 +343,7 @@ fn open_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
 pub(super) fn opened_open_prs(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
     let watched = linked_items(db, id, Some(ItemKind::Pr))?;
     let mut open = Vec::new();
-    for item in crate::daemon::store::recorded_items(db, id, Relation::Opened)? {
+    for item in crate::daemon::links::linked::recorded_items(db, id, Relation::Opened)? {
         let url = item.url;
         if url.kind() != LinkKind::Pr || watched.contains(&url) {
             continue;

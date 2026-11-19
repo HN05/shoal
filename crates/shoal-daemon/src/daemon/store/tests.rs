@@ -1504,7 +1504,7 @@ fn migrated_spaces_keep_their_issue_first_and_take_more() -> Result<()> {
         "INSERT INTO space_issue(space_id,url) VALUES ('workspace',?1)",
         ["https://forge.example/o/r/issues/5"],
     )?;
-    let links = super::space_links(&db, &"workspace".into())?;
+    let links = crate::daemon::links::linked::space_links(&db, &"workspace".into())?;
     let issues: Vec<_> = (links.issues.iter())
         .map(|issue| (issue.url.number().get(), issue.title.as_deref()))
         .collect();
@@ -2742,138 +2742,6 @@ fn check_columns<T: Serialize>(
     Ok(())
 }
 
-fn seed_interrupted_operations(db: &mut Connection) -> Result<()> {
-    db.execute_batch(
-        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);",
-    )?;
-    for state in WorkspaceState::ALL {
-        db.execute(
-            "INSERT INTO spaces(id,kind,repository_id,name) VALUES (?1,'workspace','repo',?1)",
-            [state],
-        )?;
-        db.execute(
-            "INSERT INTO workspaces(id,path,branch,state,error)
-                VALUES (?1,?1,?1,?1,'original error')",
-            [state],
-        )?;
-    }
-    db.execute_batch("INSERT INTO executions(id,space_id,state) VALUES ('execution','preparing','running');
-            INSERT INTO simulator_clean_requests(request_id,workspace_id,record)
-                VALUES ('clean','preparing','{\"status\":\"requested\",\"reason\":\"keep audit\"}');")?;
-    Ok(())
-}
-
-fn operation_snapshot(db: &mut Connection) -> Result<Vec<String>> {
-    Ok(db
-        .prepare(
-            "SELECT json_array(id,state,error) FROM workspaces
-            UNION ALL SELECT json_array(id,state) FROM executions
-            UNION ALL SELECT record FROM simulator_clean_requests ORDER BY 1",
-        )?
-        .query_map([], |row| row.get(0))?
-        .collect::<rusqlite::Result<_>>()?)
-}
-
-/// The operation snapshot of `seed_interrupted_operations` after quarantine.
-fn quarantined_snapshot() -> Vec<String> {
-    let mut rows: Vec<String> = (WorkspaceState::ALL.iter().zip(1..))
-        .map(|(&original, number)| {
-            let (state, error) = match original {
-                // Numbered in the order the seed inserts them.
-                WorkspaceState::Removing => (
-                    WorkspaceState::Failed,
-                    format!(
-                        "removal stopped when the daemon stopped; shoal rm {number} finishes it"
-                    ),
-                ),
-                WorkspaceState::Preparing
-                | WorkspaceState::Stopping
-                | WorkspaceState::Reconciling
-                | WorkspaceState::Restoring
-                | WorkspaceState::Updating => (
-                    WorkspaceState::Failed,
-                    "daemon stopped during workspace operation; inspect before cleanup".into(),
-                ),
-                WorkspaceState::Ready | WorkspaceState::Failed => {
-                    (original, "original error".into())
-                }
-            };
-            serde_json::json!([original, state, error]).to_string()
-        })
-        .collect();
-    rows.push(serde_json::json!(["execution", ExecutionState::Unknown]).to_string());
-    rows.push(r#"{"status":"interrupted","reason":"keep audit"}"#.into());
-    rows.sort();
-    rows
-}
-
-#[tokio::test]
-async fn current_schema_reopen_preserves_active_operations() {
-    let root = tempfile::tempdir().unwrap();
-    let path = root.path().join("state.db");
-    let store = Store::open(path.clone()).await.unwrap();
-    store.run(seed_interrupted_operations).await.unwrap();
-    let before = store.run(operation_snapshot).await.unwrap();
-    for _ in 0..2 {
-        let reopened = Store::open(path.clone()).await.unwrap();
-        assert_eq!(reopened.run(operation_snapshot).await.unwrap(), before);
-    }
-}
-
-#[tokio::test]
-async fn startup_quarantines_transient_workspaces_and_preserves_settled_states() -> Result<()> {
-    let root = tempfile::tempdir()?;
-    let store = Store::open(root.path().join("state.db")).await?;
-    store.run(seed_interrupted_operations).await?;
-    // A second quarantine finds nothing left to change.
-    for _ in 0..2 {
-        store.quarantine_interrupted_operations().await?;
-        assert_eq!(store.run(operation_snapshot).await?, quarantined_snapshot());
-    }
-    Ok(())
-}
-
-#[tokio::test]
-async fn failed_quarantine_rolls_back_without_undoing_migration() {
-    let root = tempfile::tempdir().unwrap();
-    let path = root.path().join("state.db");
-    let store = Store::open(path.clone()).await.unwrap();
-    store.run(seed_interrupted_operations).await.unwrap();
-    store
-        .run(|db| {
-            event_tests::remove_schema(db)?;
-            db.execute_batch(
-                "DROP TABLE access_requests;
-                PRAGMA user_version=16;
-                CREATE TRIGGER fail_quarantine BEFORE UPDATE OF state ON executions
-                    BEGIN SELECT RAISE(ABORT, 'quarantine blocked'); END;",
-            )?;
-            start_v0_17_0(db)
-        })
-        .await
-        .unwrap();
-    let before = store.run(operation_snapshot).await.unwrap();
-    let migrated = Store::open(path.clone()).await.unwrap();
-    let error = migrated
-        .quarantine_interrupted_operations()
-        .await
-        .unwrap_err();
-    assert!(format!("{error:#}").contains("quarantine blocked"));
-    assert_eq!(migrated.run(operation_snapshot).await.unwrap(), before);
-    migrated.run(|db| {
-            assert_eq!(db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))?, SCHEMA_VERSION);
-            db.execute("INSERT INTO access_requests(id,space_id,target_key,name,record,active,number) VALUES ('request','preparing','pool','default','{}',1,1)", [])?;
-            db.execute_batch("DROP TRIGGER fail_quarantine;")?;
-            Ok(())
-        }).await.unwrap();
-    migrated.quarantine_interrupted_operations().await.unwrap();
-    let recovered = migrated.run(operation_snapshot).await.unwrap();
-    assert_eq!(recovered, quarantined_snapshot());
-    let reopened = Store::open(path).await.unwrap();
-    reopened.quarantine_interrupted_operations().await.unwrap();
-    assert_eq!(reopened.run(operation_snapshot).await.unwrap(), recovered);
-}
-
 #[tokio::test]
 async fn approval_records_survive_reopen_and_follow_workspace_ownership() {
     let root = tempfile::tempdir().unwrap();
@@ -2958,19 +2826,6 @@ async fn migrates_original_database_without_losing_ownership_records() {
                 crate::state::ExecutionState::Running
             );
             assert!(ports(db, None)?.is_empty());
-            Ok(())
-        })
-        .await
-        .unwrap();
-    store.quarantine_interrupted_operations().await.unwrap();
-    Store::open(path)
-        .await
-        .unwrap()
-        .run(|db| {
-            assert_eq!(
-                executions(db, &SpaceId::from("workspace"))?[0].state,
-                crate::state::ExecutionState::Unknown
-            );
             Ok(())
         })
         .await
@@ -3072,22 +2927,6 @@ async fn migrates_setup_completion_without_losing_interrupted_state() {
                 |row| row.get(0),
             )?;
             assert_eq!(state, WorkspaceState::Preparing);
-            Ok(())
-        })
-        .await
-        .unwrap();
-    migrated.quarantine_interrupted_operations().await.unwrap();
-    migrated
-        .run(|db| {
-            assert!(!setup_finished(db, &SpaceId::from("preparing"))?);
-            assert_eq!(
-                db.query_row(
-                    "SELECT state FROM workspaces WHERE id='preparing'",
-                    [],
-                    |row| row.get::<_, WorkspaceState>(0)
-                )?,
-                WorkspaceState::Failed
-            );
             Ok(())
         })
         .await

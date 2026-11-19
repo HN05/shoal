@@ -66,10 +66,7 @@ async fn migration_and_transitions_preserve_json_ownership_and_audits() -> Resul
     assert_eq!(ids(&db, Some(&SpaceId::from("A")))?, ["a"]);
     assert_eq!(ids(&db, Some(&SpaceId::from("B")))?, ["b"]);
     drop(store);
-    Store::open(path)
-        .await?
-        .quarantine_interrupted_operations()
-        .await?;
+    crate::daemon::quarantine::interrupted_operations(&Store::open(path).await?).await?;
     assert_eq!(ids(&db, Some(&SpaceId::from("B")))?, ["b"]);
     sim["last_workspace_id"] = json!("B");
     sim["state"] = json!("failed");

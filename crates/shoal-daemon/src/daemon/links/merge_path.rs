@@ -6,7 +6,7 @@ use rusqlite::Connection;
 use shoal_ids::space_ids::SpaceId;
 
 use crate::{
-    daemon::{links::space::LinkSpace, manager::Manager, store},
+    daemon::{links::space::LinkSpace, manager::Manager},
     forge::items::{item::ItemState, link::ItemKind, reference::ItemRef},
     model::{MergePath, Relation},
 };
@@ -60,9 +60,10 @@ impl Manager {
 /// The PRs the space `id` links as assigned or opened, each once.
 fn own_pulls(db: &Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
     let mut pulls = super::wait::linked_items(db, id, Some(ItemKind::Pr))?;
-    let opened = (store::recorded_items(db, id, Relation::Opened)?.into_iter())
-        .filter(|item| item.kind() == ItemKind::Pr.into())
-        .map(|item| item.url);
+    let opened = (crate::daemon::links::linked::recorded_items(db, id, Relation::Opened)?
+        .into_iter())
+    .filter(|item| item.kind() == ItemKind::Pr.into())
+    .map(|item| item.url);
     for pull in opened {
         if !pulls.contains(&pull) {
             pulls.push(pull);

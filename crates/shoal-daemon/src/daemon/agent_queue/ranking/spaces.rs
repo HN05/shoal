@@ -11,7 +11,7 @@ use super::{
     labels::{self, Labelled},
 };
 use crate::{
-    daemon::{progress, store},
+    daemon::progress,
     forge::{items::link::LinkKind, updates::SnapshotState},
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
@@ -155,7 +155,7 @@ pub(super) fn prioritize(
 /// Whether the space `id` has a PR it opened or was assigned that is open,
 /// or that no watch has read yet.
 fn has_open_pr(db: &Connection, id: &SpaceId) -> Result<bool> {
-    let links = store::space_links(db, id)?;
+    let links = crate::daemon::links::linked::space_links(db, id)?;
     let opened = (links.opened.iter()).filter(|item| item.kind() == LinkKind::Pr);
     for url in links.prs.iter().chain(opened).map(|item| &item.url) {
         // The background poll's observation is current; a watch's cursor

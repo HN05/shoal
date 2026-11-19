@@ -21,7 +21,6 @@ use crate::{
         links::{space::LinkSpace, wait::linked_items},
         log,
         manager::Manager,
-        store,
     },
     forge::items::link::ItemKind,
     model::Relation,
@@ -126,9 +125,10 @@ pub async fn run(manager: Arc<Manager>) {
 /// while they are open drafts.
 fn publishing_pulls(db: &Connection, id: &SpaceId) -> Result<Vec<ItemRef>> {
     let assigned = linked_items(db, id, Some(ItemKind::Pr))?.into_iter();
-    let opened = (store::recorded_items(db, id, Relation::Opened)?.into_iter())
-        .filter(|item| item.kind() == ItemKind::Pr.into())
-        .map(|item| item.url);
+    let opened = (crate::daemon::links::linked::recorded_items(db, id, Relation::Opened)?
+        .into_iter())
+    .filter(|item| item.kind() == ItemKind::Pr.into())
+    .map(|item| item.url);
     Ok(assigned.chain(opened).collect())
 }
 

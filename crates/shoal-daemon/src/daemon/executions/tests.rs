@@ -471,9 +471,7 @@ async fn reattachment_requires_the_recorded_identities_and_scope_token() {
     drop(started);
     // A restart forgets connections and scopes and marks the record unknown.
     manager.detach_execution(&id).await;
-    manager
-        .store
-        .quarantine_interrupted_operations()
+    crate::daemon::quarantine::interrupted_operations(&manager.store)
         .await
         .unwrap();
     assert!(manager.caller(&token).await.unwrap().is_none());
@@ -572,9 +570,7 @@ async fn a_wrapper_awaiting_a_restore_reattaches_after_its_child_was_forgotten()
     // The record names no child, as after a proven pause, and a restart
     // marks it unknown.
     manager.detach_execution(&id).await;
-    manager
-        .store
-        .quarantine_interrupted_operations()
+    crate::daemon::quarantine::interrupted_operations(&manager.store)
         .await
         .unwrap();
     manager.reattach_execution(&request).await.unwrap_err();

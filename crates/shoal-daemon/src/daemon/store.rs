@@ -11,13 +11,10 @@ use shoal_refs::{BranchName, CommitId};
 use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 use crate::{
-    forge::items::reference::ItemRef,
-    model::{
-        Execution, Head, LinkedItem, PortReservation, Relation, Repository, SpaceLinks, Workspace,
-    },
+    model::{Execution, Head, PortReservation, Repository, Workspace},
     state::{ExecutionState, WorkspaceState},
 };
-use shoal_protocol::{sim::CleanRequestStatus, space_names::SpaceName};
+use shoal_protocol::space_names::SpaceName;
 
 #[cfg(test)]
 mod benchmark;
@@ -55,35 +52,6 @@ impl Store {
             .await
             .context("migrate Shoal state database")?;
         Ok(store)
-    }
-
-    /// Quarantine interrupted operations while the daemon holds its startup lock.
-    /// This commits separately from migration and must precede auditing or serving.
-    pub async fn quarantine_interrupted_operations(&self) -> Result<()> {
-        self.write(|tx| {
-            tx.execute(
-                "UPDATE simulator_clean_requests SET record=json_set(record, '$.status', ?1)
-                    WHERE json_extract(record, '$.status')=?2",
-                [CleanRequestStatus::Interrupted, CleanRequestStatus::Requested],
-            )?;
-            crate::daemon::lifecycle::fail_interrupted_removals(tx)?;
-            tx.execute(
-                "UPDATE executions SET state=?1 WHERE state=?2",
-                [ExecutionState::Unknown, ExecutionState::Running],
-            )?;
-            tx.execute(
-                "UPDATE workspaces SET state=?1, error='daemon stopped during workspace operation; inspect before cleanup'
-                    WHERE state IN (SELECT value FROM json_each(?2))
-                        AND id NOT IN (SELECT workspace_id FROM waiting_preparations)",
-                rusqlite::params![
-                    WorkspaceState::Failed,
-                    serde_json::to_string(&WorkspaceState::transient().collect::<Vec<_>>())?,
-                ],
-            )?;
-            Ok(())
-        })
-        .await
-        .context("quarantine interrupted operations at daemon startup")
     }
 
     /// Run once on the connection's blocking worker, waiting for queue space.
@@ -469,80 +437,6 @@ pub fn head_columns(
                 .map(serde_json::to_string)
                 .transpose()?,
         ),
-    })
-}
-
-/// Read canonical links while keeping malformed legacy PR records out of list output.
-pub fn space_links(db: &Connection, space_id: &SpaceId) -> rusqlite::Result<SpaceLinks> {
-    let issues = (assigned_issues(db, space_id)?.into_iter())
-        .map(|issue| LinkedItem {
-            url: issue.url,
-            title: issue.title,
-        })
-        .collect();
-    let mut titles = crate::daemon::links::pr::titles::of_space(db, space_id)?;
-    let prs = (crate::daemon::links::pr::watched_prs(db, space_id)?.into_iter())
-        .map(|url| LinkedItem {
-            title: titles.remove(url.url()),
-            url,
-        })
-        .collect();
-    Ok(SpaceLinks {
-        issues,
-        prs,
-        opened: recorded_items(db, space_id, Relation::Opened)?,
-        related: recorded_items(db, space_id, Relation::Related)?,
-        assignees: crate::daemon::links::issue::assignees_of(db, space_id)?,
-    })
-}
-
-/// An issue assigned to a space, as its row records it.
-pub(crate) struct AssignedIssue {
-    pub(crate) url: ItemRef,
-    pub(crate) title: Option<String>,
-    pub(crate) error: Option<String>,
-}
-
-/// The space's assigned issues in the order they were assigned.
-pub(crate) fn assigned_issues(
-    db: &Connection,
-    space_id: &SpaceId,
-) -> rusqlite::Result<Vec<AssignedIssue>> {
-    db.prepare("SELECT url,title,error FROM space_issue WHERE space_id=?1 ORDER BY rowid")?
-        .query_map([space_id], |row| {
-            Ok(AssignedIssue {
-                url: row.get(0)?,
-                title: row.get(1)?,
-                error: row.get(2)?,
-            })
-        })?
-        .collect()
-}
-
-/// The workspace's items with a recorded relation, oldest first.
-pub fn recorded_items(
-    db: &Connection,
-    workspace_id: &SpaceId,
-    relation: Relation,
-) -> rusqlite::Result<Vec<LinkedItem>> {
-    db.prepare(
-        "SELECT kind,url,title FROM space_items WHERE space_id=?1 AND relation=?2
-         ORDER BY created_at,rowid",
-    )?
-    .query_map(rusqlite::params![workspace_id, relation], |row| {
-        Ok(LinkedItem {
-            url: linked_url(row)?,
-            title: row.get(2)?,
-        })
-    })?
-    .collect()
-}
-
-/// The URL of a linked item's row, read as the kind the row records.
-fn linked_url(row: &Row<'_>) -> rusqlite::Result<ItemRef> {
-    let url: String = row.get(1)?;
-    ItemRef::parse_kind(row.get(0)?, &url).map_err(|error| {
-        rusqlite::Error::FromSqlConversionFailure(1, rusqlite::types::Type::Text, error.into())
     })
 }
 
