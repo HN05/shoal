@@ -296,6 +296,7 @@ enabled = true                           # This daemon takes the hub role
 listen = "127.0.0.1:7474"                # The default
 url = "https://shoal.example.ts.net"     # Default: http:// and the listen address
 connect = ["ssh", "desk", "shoal", "daemon", "connect"]   # Overrides a joined machine's route
+auto_update = true                       # The default
 escalate_after_minutes = 30              # The default
 default_machine = "desk"                 # Where a device's start goes when it names none
 
@@ -317,6 +318,13 @@ it exits, in place of the URL it paired at or the command it joined through.
 The command ends in `shoal daemon connect` on the hub, with an absolute path to
 `shoal` when it is not on the `PATH` there, such as over `ssh` or
 `docker exec`.
+
+`auto_update`, read on a joined machine, has a downloaded Shoal follow the
+hub's version: once the hub refuses this machine for running another one, it
+installs exactly the hub's release, as `shoal update --version` would, and the
+daemon restarts on it once idle. Off, or for a Homebrew installation, the
+machine stays off the hub, and you hear what to run, until its version
+matches.
 
 `escalate_after_minutes` is how long a question or approval request of a space
 on this machine waits for a coordinator whose machine is offline before it

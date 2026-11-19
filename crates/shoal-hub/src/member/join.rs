@@ -10,7 +10,10 @@ use shoal_protocol::{
     protocol::JoinVia,
 };
 
-use super::open::{Expected, Opened, Plan, Welcomed};
+use super::{
+    follow,
+    open::{Expected, LinkRefused, Opened, Plan, Welcomed},
+};
 use crate::{
     Hub,
     daemon::Daemon,
@@ -56,7 +59,14 @@ impl Hub {
         };
         let welcomed = match self.open_link(plan).await?.1 {
             Opened::Welcomed(welcomed) => welcomed,
-            Opened::Refused { refusal, .. } => {
+            Opened::Refused(LinkRefused {
+                hub_version: Some(version),
+                ..
+            }) => bail!(
+                "the hub runs Shoal {version} and takes only that one; run {} here, then join again",
+                follow::command(&version)
+            ),
+            Opened::Refused(LinkRefused { refusal, .. }) => {
                 bail!("the hub refused this machine: {}", refusal.message)
             }
         };

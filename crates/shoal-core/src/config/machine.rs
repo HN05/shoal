@@ -89,6 +89,9 @@ pub struct Hub {
     /// which this machine joins and reaches it through instead of a URL.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub connect: Vec<String>,
+    /// Install the hub's exact version once the hub refuses this machine's,
+    /// where Shoal was installed from a release download.
+    pub auto_update: bool,
     /// How long a question or approval request waits for a coordinator
     /// whose machine is offline before it passes to the next space above
     /// that is online, or to the user.
@@ -113,6 +116,7 @@ impl Default for Hub {
             listen: std::net::SocketAddr::from(([127, 0, 0, 1], 7474)),
             url: None,
             connect: Vec::new(),
+            auto_update: true,
             escalate_after_minutes: 30,
             default_machine: None,
             forward: Default::default(),

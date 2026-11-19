@@ -6,8 +6,8 @@ use anyhow::{Context as _, Result, anyhow, bail};
 use shoal_ids::member_ids::MemberId;
 use shoal_protocol::{
     hub::{
-        Fingerprint, PublicKey, Route, Signature,
-        link::{Frame, Hello, Intent, Opening, Refusal, Signer, Transcript},
+        Fingerprint, Nonce, PublicKey, Route, Signature,
+        link::{Frame, Hello, HubVersion, Intent, Opening, Refusal, Signer, Transcript},
     },
     protocol::{Method, Request, VERSION},
 };
@@ -40,10 +40,15 @@ pub(super) enum Opened {
     Welcomed(Welcomed),
     /// The hub refused the link: for sure when the refusal came `sealed`,
     /// and otherwise as anyone between the sides could have.
-    Refused {
-        refusal: Refusal,
-        sealed: bool,
-    },
+    Refused(LinkRefused),
+}
+
+/// The hub's refusal of a link, whether it came `sealed`, and the version
+/// it says the hub runs, once the hub's signature of it checks.
+pub(super) struct LinkRefused {
+    pub refusal: Refusal,
+    pub sealed: bool,
+    pub hub_version: Option<String>,
 }
 
 /// The hub took this machine as `member`, named `name`; it holds `hub_key`.
@@ -120,10 +125,12 @@ impl Hub {
         channel.send(&opening(&hello)?).await?;
         let (key, transcript) = match channel.expect::<Frame>().await? {
             Frame::Refused(refusal) => {
-                return Ok(Opened::Refused {
+                let hub_version = hub_version(&refusal, &hello.nonce, &expected);
+                return Ok(Opened::Refused(LinkRefused {
                     refusal,
                     sealed: false,
-                });
+                    hub_version,
+                }));
             }
             Frame::Challenge {
                 key,
@@ -157,10 +164,11 @@ impl Hub {
                 name,
                 hub_key: key,
             }),
-            Frame::Refused(refusal) => Opened::Refused {
+            Frame::Refused(refusal) => Opened::Refused(LinkRefused {
+                hub_version: hub_version(&refusal, &transcript.hello.nonce, &expected),
                 refusal,
                 sealed: channel.sealed_last(),
-            },
+            }),
             frame => bail!(
                 "expected the hub's welcome, not {}",
                 shown(&format!("{frame:?}"))
@@ -200,6 +208,15 @@ fn check_hub(
         );
     }
     Ok(())
+}
+
+/// The version `refusal` says the hub runs, once the hub's signature of
+/// it over `nonce`, this machine's, checks with a key `expected` admits.
+fn hub_version(refusal: &Refusal, nonce: &Nonce, expected: &Expected) -> Option<String> {
+    let signed = refusal.version.as_ref()?;
+    let bytes = HubVersion::signed(&signed.version, nonce);
+    let checks = expected.admits(&signed.key) && verify(&signed.key, &bytes, &signed.signature);
+    checks.then(|| signed.version.clone())
 }
 
 /// The request that opens a link with `hello`.

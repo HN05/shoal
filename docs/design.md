@@ -160,7 +160,13 @@ refuses a revoked one or one another installation's link holds, and
 versions match exactly: the hub refuses a member of another release,
 reading only the protocol and version of its first request, with its own
 version signed over the member's nonce, and records an alert naming the
-update, while the member keeps working on its own. Pairing codes live
+update, while the member keeps working on its own. A member follows the
+hub's version once that signature checks with the key it paired with, so
+nothing between them chooses its release: a downloaded installation installs
+exactly that release, older or newer, through `shoal update`'s checks, unless
+`[machine.hub] auto_update` is off, and the daemon's restart on a replaced
+binary carries its agents through; a Homebrew one is only told to upgrade,
+since one package manager owns each installation. Pairing codes live
 in the hub's memory and admit one join within ten minutes. Each machine
 owns its spaces' records and reports a summary of each to the hub as it
 changes, all of them whenever its link opens; the hub keeps a directory of

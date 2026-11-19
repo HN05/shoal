@@ -15,7 +15,7 @@ use shoal_ids::member_ids::MemberId;
 use shoal_protocol::hub::{
     HubRole, Membership, Route,
     availability::Classified,
-    link::{Call, Intent, Refusal, RefusalReason, Reply},
+    link::{Call, Intent, RefusalReason, Reply},
 };
 use tokio::sync::Notify;
 
@@ -34,11 +34,12 @@ use crate::{
 };
 
 mod connect;
+mod follow;
 mod join;
 mod open;
 
 use connect::Transport;
-use open::{Expected, Opened, Plan};
+use open::{Expected, LinkRefused, Opened, Plan};
 
 /// The first wait before opening a lost link again, which doubles up to
 /// [`MAX_BACKOFF`].
@@ -59,6 +60,8 @@ pub(super) struct Link {
     /// The availability the hub last told this machine it has, which
     /// stays while the link is down.
     availability: Mutex<Option<Classified>>,
+    /// The hub's version this machine last followed.
+    followed: follow::Followed,
 }
 
 /// How often the user hears of a refusal that came unsealed, which anyone
@@ -166,10 +169,9 @@ pub(super) async fn run(hub: Arc<Hub>, daemon: Arc<dyn Daemon>) {
     }
 }
 
-/// The hub's refusal of the link of `member`, and whether it came sealed.
+/// The hub's refusal of the link of `member`.
 struct HubRefusal<'a> {
-    refusal: Refusal,
-    sealed: bool,
+    refused: LinkRefused,
     member: Option<&'a MemberId>,
 }
 
@@ -226,10 +228,9 @@ impl Hub {
         let route = plan.route.clone();
         let transport = match self.open_attempt(plan).await {
             Ok(Ok(transport)) => transport,
-            Ok(Err((refusal, sealed))) => {
+            Ok(Err(refused)) => {
                 let refused = HubRefusal {
-                    refusal,
-                    sealed,
+                    refused,
                     member: plan_member(&attempt),
                 };
                 return self.refused(&**daemon, &route, refused).await;
@@ -255,14 +256,13 @@ impl Hub {
         }))
     }
 
-    /// Open the link `plan` names, or the hub's refusal and whether it
-    /// came sealed.
-    async fn open_attempt(&self, plan: Plan) -> Result<Result<Transport, (Refusal, bool)>> {
+    /// Open the link `plan` names, or the hub's refusal.
+    async fn open_attempt(&self, plan: Plan) -> Result<Result<Transport, LinkRefused>> {
         let route = plan.route.clone();
         let (transport, opened) = self.open_link(plan).await?;
         let welcomed = match opened {
             Opened::Welcomed(welcomed) => welcomed,
-            Opened::Refused { refusal, sealed } => return Ok(Err((refusal, sealed))),
+            Opened::Refused(refused) => return Ok(Err(refused)),
         };
         log!("hub: connected to {route} as {}", welcomed.member);
         Ok(Ok(transport))
@@ -353,13 +353,19 @@ impl Hub {
         Kept::Failed
     }
 
-    /// Back off after the hub's `refusal`, telling the user. A revocation
-    /// that came `sealed`, which only the hub can send, is recorded, so the
-    /// link waits for a new join; any other refusal is tried again.
+    /// Back off after the hub's refusal, telling the user. A revocation
+    /// that came sealed, which only the hub can send, is recorded, so the
+    /// link waits for a new join; a refusal of this machine's version, with
+    /// the hub's signed, follows the hub to it; any other refusal is tried
+    /// again.
     async fn refused(&self, daemon: &dyn Daemon, route: &Route, refused: HubRefusal<'_>) -> Kept {
         let HubRefusal {
-            refusal,
-            sealed,
+            refused:
+                LinkRefused {
+                    refusal,
+                    sealed,
+                    hub_version,
+                },
             member,
         } = refused;
         let text = shown(&refusal.message);
@@ -375,7 +381,9 @@ impl Hub {
             log!("hub: could not record the revoked membership: {error:#}");
         }
         self.member.set(None, Some(text));
-        if sealed || self.member.unsealed_alert.due() {
+        if let Some(version) = hub_version {
+            self.follow_hub(daemon, &shown(&version)).await;
+        } else if sealed || self.member.unsealed_alert.due() {
             self.notify(
                 daemon,
                 About::named(None),

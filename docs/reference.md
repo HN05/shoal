@@ -887,6 +887,16 @@ which is told to join as a machine of its own; and one that runs another
 Shoal version, recording an alert that names the machine, its version and the
 update to run. A refused machine keeps working on its own.
 
+A machine follows the hub's version. Once the hub refuses it for running
+another one, a Shoal downloaded from a release installs exactly the hub's
+release, as `shoal update --version` does, older or newer, after the hub's key
+signed which one it is; its daemon restarts on it once idle, with its agents
+running through the restart, and connects again.
+[`[machine.hub] auto_update = false`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
+turns that off. A Homebrew installation never updates on its own: its machine
+tells you to run `brew upgrade hn05/tap/shoal` there. A machine that does not
+follow, or fails to, stays off the hub and tells you what to run.
+
 Each machine keeps its spaces and reports a summary of each to the hub as it
 changes, all of them again whenever its link opens: its number and name, its
 kind, its repository by origin, the space above it, which may run on another
