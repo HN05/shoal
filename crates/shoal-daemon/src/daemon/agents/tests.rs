@@ -1,12 +1,12 @@
 use super::*;
 use crate::daemon::{
     executions::ExecutionKind,
-    ports::PortRequest,
     test_support::{install_test_script, manager, repository},
     workspace_files::Attacher,
 };
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
+use crate::model::PortRequest;
 use crate::model::Space;
 use futures_util::FutureExt;
 use shoal_protocol::assignments::Done;

@@ -605,7 +605,7 @@ impl Manager {
         branch: BranchRemoval,
         registration: Registration,
     ) -> Result<WorktreeRemoval> {
-        self.remove_containers(workspace).await?;
+        self.leases.remove_containers(self, workspace).await?;
         self.leases.remove_simulators(&workspace.id).await?;
         match registration {
             Registration::Listed => {

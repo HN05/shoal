@@ -1,12 +1,13 @@
 //! The leases the daemon grants a workspace: TCP port reservations,
-//! resource permits, simulators and grants of secrets, the order queued
-//! requests take capacity in, and the outcome every allocation shares.
+//! resource permits, simulators, service containers and grants of secrets,
+//! the order queued requests take capacity in, and the outcome every
+//! allocation shares.
 //! [`Leases`] holds what they keep in memory and offers their operations;
 //! what they need of the rest of the daemon is the interface in [`daemon`].
 use std::sync::Arc;
 
 use anyhow::Result;
-use shoal_core::{config, env, hooks, repository, tools};
+use shoal_core::{config, env, fsutil, hooks, repository, tools};
 use shoal_daemon_base::{callers, gates, log, notifications};
 use shoal_daemon_base::{config_state::ConfigState, notifications::Notifications};
 use shoal_ids::space_ids::SpaceId;
@@ -20,6 +21,7 @@ use tokio::sync::{Notify, futures::Notified};
 
 pub mod acquired_leases;
 pub mod allocation;
+pub mod containers;
 pub mod daemon;
 pub mod ports;
 mod queue;
@@ -45,6 +47,8 @@ pub struct Leases {
     queues: queue::Queues,
     /// Woken when a simulator goes idle, which its expiry checks.
     simulator_idle: Notify,
+    /// Woken when a workspace's containers start, whose usage is sampled.
+    containers_started: Notify,
 }
 
 impl Leases {
@@ -63,6 +67,7 @@ impl Leases {
             grants,
             queues: queue::Queues::default(),
             simulator_idle: Notify::new(),
+            containers_started: Notify::new(),
         }
     }
 
@@ -75,6 +80,11 @@ impl Leases {
     /// Wait until a simulator goes idle, which may let an idle one expire.
     pub fn simulator_idled(&self) -> Notified<'_> {
         self.simulator_idle.notified()
+    }
+
+    /// Wait until a workspace's containers start, whose usage to sample.
+    pub fn containers_started(&self) -> Notified<'_> {
+        self.containers_started.notified()
     }
 
     /// The settings of `workspace` over the current global config.

@@ -110,17 +110,6 @@ impl Manager {
         self.store.run(move |db| recorded_workspace(db, &id)).await
     }
 
-    /// Resolve an optional selector to a workspace ID filter.
-    pub async fn workspace_filter(
-        &self,
-        selector: Option<&SpaceSelector>,
-    ) -> Result<Option<SpaceId>> {
-        match selector {
-            Some(selector) => Ok(Some(self.workspace(selector).await?.id)),
-            None => Ok(None),
-        }
-    }
-
     pub async fn inspect_workspace(&self, selector: &SpaceSelector) -> Result<Inspection> {
         let workspace = self.workspace(selector).await?;
         let simulators = self.leases.list_simulators(Some(&workspace.id)).await?;

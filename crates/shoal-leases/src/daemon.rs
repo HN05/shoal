@@ -34,6 +34,11 @@ pub trait Spaces: Send + Sync {
     /// Prove that the worktree of `workspace` is still its own, before a
     /// hook runs there.
     fn verify_worktree<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<()>>;
+
+    /// Fail the setup of the workspace `id` with `message` while it is
+    /// ready; a lifecycle operation that reserved it meanwhile, such as a
+    /// removal, keeps its own state.
+    fn fail_setup<'a>(&'a self, id: &'a SpaceId, message: String) -> BoxFuture<'a, Result<()>>;
 }
 
 /// The settings of the repositories leases are configured in.
@@ -76,6 +81,9 @@ pub trait Agents: Send + Sync {
 
     /// Whether `execution` runs a demo.
     fn runs_demo<'a>(&'a self, execution: &'a ExecutionId) -> BoxFuture<'a, Result<bool>>;
+
+    /// Whether an agent launch waits to start in the space `id`.
+    fn has_queued_launch<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>>;
 }
 
 /// The approval requests a lease that needs one waits for.

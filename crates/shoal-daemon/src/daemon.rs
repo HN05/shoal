@@ -4,7 +4,7 @@ mod absent;
 pub(crate) use shoal_daemon_base::{
     config_state, events, file_access, gates, item_numbers, log, notifications,
 };
-pub(crate) use shoal_leases::{allocation, ports, resources};
+pub(crate) use shoal_leases::{allocation, containers, resources};
 mod absorb;
 pub mod access;
 pub(crate) mod acquired_leases;
@@ -27,7 +27,6 @@ pub(crate) mod checkout_sync;
 pub mod cleanup;
 pub(crate) mod completion_cleanup;
 mod connections;
-pub(crate) mod containers;
 mod contribution_holds;
 mod contributions;
 pub(crate) mod conversions;

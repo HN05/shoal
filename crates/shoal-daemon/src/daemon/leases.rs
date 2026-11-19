@@ -20,6 +20,7 @@ use crate::{
     config::{Config, Effective},
     hooks::{self, Hook, HookKind},
     model::{Repository, Workspace},
+    state::WorkspaceState,
 };
 
 impl Spaces for Manager {
@@ -37,6 +38,11 @@ impl Spaces for Manager {
 
     fn verify_worktree<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<()>> {
         Box::pin(Manager::verify_worktree(self, workspace))
+    }
+
+    fn fail_setup<'a>(&'a self, id: &'a SpaceId, message: String) -> BoxFuture<'a, Result<()>> {
+        let (ready, failed) = (WorkspaceState::Ready, WorkspaceState::Failed);
+        Box::pin(self.set_state_if(id, ready, failed, Some(message)))
     }
 }
 
@@ -87,6 +93,10 @@ impl Agents for Manager {
             self.store
                 .read(move |db| super::demos::runs_demo(db, &execution)),
         )
+    }
+
+    fn has_queued_launch<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(Manager::has_queued_launch(self, id))
     }
 }
 

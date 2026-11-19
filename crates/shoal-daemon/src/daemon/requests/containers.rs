@@ -17,29 +17,45 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
-        ContainerMethod::ContainerCatalog { workspace } => {
-            Body::ContainerCatalog(manager.container_catalog(&workspace).await?)
-        }
-        ContainerMethod::ContainerOverview { workspace } => {
-            Body::ContainerOverview(manager.container_overview(workspace.as_ref()).await?)
-        }
+        ContainerMethod::ContainerCatalog { workspace } => Body::ContainerCatalog(
+            manager
+                .leases
+                .container_catalog(&**manager, &workspace)
+                .await?,
+        ),
+        ContainerMethod::ContainerOverview { workspace } => Body::ContainerOverview(
+            manager
+                .leases
+                .container_overview(&**manager, workspace.as_ref())
+                .await?,
+        ),
         ContainerMethod::ContainerAcquire { workspace, reason } => manager
-            .acquire_containers(&workspace, reason, caller)
+            .leases
+            .acquire_containers(&**manager, &workspace, reason, caller)
             .await?
             .into_body(),
         ContainerMethod::ContainerRelease { workspace } => {
-            manager.release_containers(&workspace).await?;
+            manager
+                .leases
+                .release_containers(&**manager, &workspace)
+                .await?;
             Body::Ok
         }
         ContainerMethod::ContainerSetUp {
             workspace,
             for_agent,
         } => {
-            (manager.set_up_containers(&workspace, for_agent, caller)).await?;
+            (manager
+                .leases
+                .set_up_containers(&**manager, &workspace, for_agent, caller))
+            .await?;
             Body::Ok
         }
         ContainerMethod::ContainerAgentStart { workspace } => {
-            manager.start_agent_containers(&workspace, caller).await?;
+            manager
+                .leases
+                .start_agent_containers(&**manager, &workspace, caller)
+                .await?;
             Body::Ok
         }
     }))

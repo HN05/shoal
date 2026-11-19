@@ -8,9 +8,9 @@ use shoal_protocol::containers::ContainerProject;
 /// A project as recorded, with whether setup started it for the
 /// workspace's own agent, which takes it over when it starts.
 #[derive(Debug, Clone)]
-pub(crate) struct Recorded {
-    pub(crate) project: ContainerProject,
-    pub(crate) for_agent: bool,
+pub struct Recorded {
+    pub project: ContainerProject,
+    pub for_agent: bool,
 }
 
 const COLUMNS: &str =
@@ -24,7 +24,7 @@ fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Recorded> {
             runtime: row.get("runtime")?,
             compose: row.get("compose")?,
             state: row.get("state")?,
-            acquirer: crate::daemon::resources::row_acquirer(row)?,
+            acquirer: crate::resources::row_acquirer(row)?,
             reason: row.get("reason")?,
             error: row.get("error")?,
         },
@@ -33,13 +33,13 @@ fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Recorded> {
 }
 
 /// The project of the workspace `id`.
-pub(crate) fn find(db: &Connection, id: &SpaceId) -> Result<Option<Recorded>> {
+pub fn find(db: &Connection, id: &SpaceId) -> Result<Option<Recorded>> {
     let query = format!("SELECT {COLUMNS} FROM container_projects WHERE workspace_id=?1");
     Ok(db.query_row(&query, [id], row).optional()?)
 }
 
 /// The projects of the workspace `owner`, or of every workspace.
-pub(crate) fn list(db: &Connection, owner: Option<&SpaceId>) -> Result<Vec<Recorded>> {
+pub fn list(db: &Connection, owner: Option<&SpaceId>) -> Result<Vec<Recorded>> {
     let query = format!(
         "SELECT {COLUMNS} FROM container_projects WHERE ?1 IS NULL OR workspace_id=?1
             ORDER BY workspace_id"
@@ -50,7 +50,7 @@ pub(crate) fn list(db: &Connection, owner: Option<&SpaceId>) -> Result<Vec<Recor
 }
 
 /// Record `recorded`, replacing the workspace's earlier record.
-pub(crate) fn save(db: &Connection, recorded: &Recorded) -> Result<()> {
+pub fn save(db: &Connection, recorded: &Recorded) -> Result<()> {
     let project = &recorded.project;
     db.execute(
         &format!(
@@ -74,7 +74,7 @@ pub(crate) fn save(db: &Connection, recorded: &Recorded) -> Result<()> {
 }
 
 /// Forget the project of the workspace `id`, once `compose down` removed it.
-pub(crate) fn delete(db: &Connection, id: &SpaceId) -> Result<()> {
+pub fn delete(db: &Connection, id: &SpaceId) -> Result<()> {
     db.execute("DELETE FROM container_projects WHERE workspace_id=?1", [id])?;
     Ok(())
 }

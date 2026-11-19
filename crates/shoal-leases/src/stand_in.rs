@@ -187,6 +187,10 @@ impl Spaces for StandIn {
     fn verify_worktree<'a>(&'a self, _workspace: &'a Workspace) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { Ok(()) })
     }
+
+    fn fail_setup<'a>(&'a self, _id: &'a SpaceId, message: String) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move { anyhow::bail!("setup failed: {message}") })
+    }
 }
 
 impl Settings for StandIn {
@@ -238,6 +242,10 @@ impl Agents for StandIn {
 
     fn runs_demo<'a>(&'a self, execution: &'a ExecutionId) -> BoxFuture<'a, Result<bool>> {
         Box::pin(async move { Ok(self.demos.contains(execution)) })
+    }
+
+    fn has_queued_launch<'a>(&'a self, _id: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async { Ok(false) })
     }
 }
 

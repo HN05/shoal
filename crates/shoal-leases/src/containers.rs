@@ -4,7 +4,7 @@
 //! never touches a project it has no record of.
 mod automatic;
 mod compose;
-pub(crate) mod records;
+pub mod records;
 mod stats;
 
 use std::path::Path;
@@ -15,22 +15,21 @@ use shoal_ids::space_ids::SpaceId;
 
 use compose::Compose;
 use records::Recorded;
-pub(crate) use stats::ContainerUsage;
+pub use stats::ContainerUsage;
 
-use super::{
-    allocation::Allocation,
-    log,
-    manager::Manager,
-    ports::{self, PortRequest},
-    scope::Caller,
-};
 use crate::{
-    daemon::approvals::ApprovalRequest,
+    Leases,
+    allocation::Allocation,
+    callers::Caller,
+    daemon::Daemon,
+    log,
     model::{PortSuggestion, Workspace},
+    ports::{self, PortRequest},
     protocol::Body,
-    refusal::{Reason, Refusal},
     state::WorkspaceState,
 };
+use shoal_core::refusal::{Reason, Refusal};
+use shoal_protocol::approvals::ApprovalRequest;
 use shoal_protocol::{
     acquirers::Acquirer,
     containers::{
@@ -65,23 +64,27 @@ impl ContainerAcquisition {
 const PROJECTS_LISTED_AT_ONCE: usize = 4;
 
 /// Who a start makes the project's acquirer.
-pub(crate) struct Starter {
-    pub(crate) acquirer: Acquirer,
+struct Starter {
+    acquirer: Acquirer,
     /// Setup started it for the workspace's own agent.
-    pub(crate) for_agent: bool,
+    for_agent: bool,
     /// An agent's start, which takes over a project another agent holds,
     /// whose release may not have run yet.
-    pub(crate) agent_start: bool,
-    pub(crate) reason: Option<String>,
+    agent_start: bool,
+    reason: Option<String>,
 }
 
-impl Manager {
+impl Leases {
     /// The configuration of the containers of `selector`'s workspace, and
     /// whether a runtime can run them.
-    pub async fn container_catalog(&self, selector: &SpaceSelector) -> Result<ContainerCatalog> {
-        let workspace = self.workspace(selector).await?;
-        let config = self.config();
-        let settings = (self.workspace_settings_from(&config, &workspace).await?)
+    pub async fn container_catalog(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+    ) -> Result<ContainerCatalog> {
+        let workspace = daemon.workspace(selector).await?;
+        let config = self.config.current();
+        let settings = (daemon.settings(&config, &workspace).await?)
             .into_settings()
             .containers;
         let (runtime, unavailable) = match compose::find_runtime(config.machine.containers.runtime)
@@ -104,15 +107,16 @@ impl Manager {
     /// The projects of `selector`'s workspace, or of every workspace.
     pub async fn container_overview(
         &self,
+        daemon: &dyn Daemon,
         selector: Option<&SpaceSelector>,
     ) -> Result<ContainerOverview> {
-        let owner = self.workspace_filter(selector).await?;
+        let owner = self.workspace_filter(daemon, selector).await?;
         let recorded = self
             .store
             .read(move |db| records::list(db, owner.as_ref()))
             .await?;
         let projects = stream::iter(recorded)
-            .map(|recorded| self.describe_containers(recorded.project))
+            .map(|recorded| self.describe_containers(daemon, recorded.project))
             .buffered(PROJECTS_LISTED_AT_ONCE)
             .collect()
             .await;
@@ -120,7 +124,7 @@ impl Manager {
     }
 
     /// The project of the workspace `id`.
-    pub(crate) async fn container_project(&self, id: &SpaceId) -> Result<Option<Recorded>> {
+    pub async fn container_project(&self, id: &SpaceId) -> Result<Option<Recorded>> {
         let id = id.to_owned();
         self.store.read(move |db| records::find(db, &id)).await
     }
@@ -129,39 +133,42 @@ impl Manager {
     /// return them when they run.
     pub async fn acquire_containers(
         &self,
+        daemon: &dyn Daemon,
         selector: &SpaceSelector,
         reason: Option<String>,
         caller: Option<&Caller>,
     ) -> Result<ContainerAcquisition> {
-        let workspace = self.workspace(selector).await?;
-        self.touch(&workspace.id).await;
+        let workspace = daemon.workspace(selector).await?;
+        daemon.touch(&workspace.id).await;
         let starter = Starter {
-            acquirer: self.leases.acquirer(self, caller).await,
+            acquirer: self.acquirer(daemon, caller).await,
             for_agent: false,
             agent_start: false,
             reason,
         };
-        self.start_containers(&workspace, starter, caller).await
+        self.start_containers(daemon, &workspace, starter, caller)
+            .await
     }
 
     /// Reserve the ports of the project of `workspace`, then start it as
     /// `starter` unless it runs, persisting it before `compose` runs.
-    pub(crate) async fn start_containers(
+    async fn start_containers(
         &self,
+        daemon: &dyn Daemon,
         workspace: &Workspace,
         starter: Starter,
         caller: Option<&Caller>,
     ) -> Result<ContainerAcquisition> {
         let _gate = self.gates.lock_containers(&workspace.id).await;
-        let workspace = &self.workspace_by_id(&workspace.id).await?;
-        let config = self.config();
-        let settings = (self.workspace_settings_from(&config, workspace).await?)
+        let workspace = &daemon.workspace_by_id(&workspace.id).await?;
+        let config = self.config.current();
+        let settings = (daemon.settings(&config, workspace).await?)
             .into_settings()
             .containers;
         let compose = configured_compose(workspace, settings.compose)?;
         ensure_ready(workspace)?;
         if let Err(pending) = self
-            .reserve_ports(workspace, settings.ports, caller)
+            .reserve_ports(daemon, workspace, settings.ports, caller)
             .await?
         {
             return Ok(pending);
@@ -178,11 +185,11 @@ impl Manager {
                     None => compose::find_runtime(config.machine.containers.runtime)?,
                 };
                 let starting = starting_project(workspace, compose, runtime, starter);
-                self.run_project(workspace, starting).await?
+                self.run_project(daemon, workspace, starting).await?
             }
         };
         Ok(ContainerAcquisition::Started(Box::new(
-            self.describe_containers(project).await,
+            self.describe_containers(daemon, project).await,
         )))
     }
 
@@ -190,13 +197,18 @@ impl Manager {
     /// it went, returning the running project.
     async fn run_project(
         &self,
+        daemon: &dyn Daemon,
         workspace: &Workspace,
         mut recorded: Recorded,
     ) -> Result<ContainerProject> {
         // The record comes first, so whatever `up` leaves has one.
         self.save_containers(&recorded).await?;
         let worktree = Some(workspace.path.as_path());
-        let up = self.compose(&recorded.project, worktree).await?.up().await;
+        let up = self
+            .compose(daemon, &recorded.project, worktree)
+            .await?
+            .up()
+            .await;
         recorded.project.state = match &up {
             Ok(()) => ContainerState::Running,
             Err(_) => ContainerState::Failed,
@@ -204,7 +216,7 @@ impl Manager {
         recorded.project.error = up.as_ref().err().map(|error| format!("{error:#}"));
         self.save_containers(&recorded).await?;
         up.with_context(|| format!("the containers of {} did not start", workspace.name))?;
-        self.signals.containers_started();
+        self.containers_started.notify_one();
         Ok(recorded.project)
     }
 
@@ -212,6 +224,7 @@ impl Manager {
     /// does, or return the first reservation that is not granted.
     async fn reserve_ports(
         &self,
+        daemon: &dyn Daemon,
         workspace: &Workspace,
         names: Vec<String>,
         caller: Option<&Caller>,
@@ -220,8 +233,7 @@ impl Manager {
         for name in names {
             let request = PortRequest::default();
             let pending = match self
-                .leases
-                .acquire_port(self, &selector, name, request, caller)
+                .acquire_port(daemon, &selector, name, request, caller)
                 .await?
             {
                 ports::Acquisition::Allocation(Allocation::Granted(_)) => continue,
@@ -259,8 +271,13 @@ impl Manager {
         Ok(recorded.project)
     }
 
-    pub async fn release_containers(&self, selector: &SpaceSelector) -> Result<()> {
-        self.release_containers_held_by(selector, None).await
+    pub async fn release_containers(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+    ) -> Result<()> {
+        self.release_containers_held_by(daemon, selector, None)
+            .await
     }
 
     /// Stop the project of `selector`'s workspace, keeping its volumes and
@@ -268,17 +285,18 @@ impl Manager {
     /// has, as when the user took over an agent's project since its release
     /// was decided. Only a release without `holder`, which someone asked
     /// for, is activity.
-    pub(crate) async fn release_containers_held_by(
+    pub async fn release_containers_held_by(
         &self,
+        daemon: &dyn Daemon,
         selector: &SpaceSelector,
         holder: Option<&Acquirer>,
     ) -> Result<()> {
-        let id = self.workspace(selector).await?.id;
+        let id = daemon.workspace(selector).await?.id;
         let _gate = self.gates.lock_containers(&id).await;
-        let workspace = self.workspace_by_id(&id).await?;
+        let workspace = daemon.workspace_by_id(&id).await?;
         ensure_ready(&workspace)?;
         if holder.is_none() {
-            self.touch(&workspace.id).await;
+            daemon.touch(&workspace.id).await;
         }
         let recorded = self.container_project(&workspace.id).await?;
         if let Some(holder) = holder
@@ -293,7 +311,7 @@ impl Manager {
         if recorded.project.state == ContainerState::Stopped {
             return Ok(());
         }
-        let compose = (self.compose(&recorded.project, Some(&workspace.path))).await?;
+        let compose = (self.compose(daemon, &recorded.project, Some(&workspace.path))).await?;
         compose.stop().await?;
         recorded.project.state = ContainerState::Stopped;
         recorded.project.acquirer = Acquirer::User;
@@ -305,12 +323,16 @@ impl Manager {
     /// while the worktree has it, then by its name alone, so a deleted
     /// worktree or a broken Compose file still removes it. A failure keeps
     /// the record, and with it the workspace.
-    pub(crate) async fn remove_containers(&self, workspace: &Workspace) -> Result<()> {
+    pub async fn remove_containers(
+        &self,
+        daemon: &dyn Daemon,
+        workspace: &Workspace,
+    ) -> Result<()> {
         let _gate = self.gates.lock_containers(&workspace.id).await;
         let Some(recorded) = self.container_project(&workspace.id).await? else {
             return Ok(());
         };
-        let compose = (self.compose(&recorded.project, Some(&workspace.path))).await?;
+        let compose = (self.compose(daemon, &recorded.project, Some(&workspace.path))).await?;
         (compose.down().await).with_context(|| {
             format!(
                 "the containers of {} were not removed; retaining it",
@@ -325,7 +347,7 @@ impl Manager {
     /// which no release can stop while setup's failure leaves the workspace
     /// unready; a stop that fails is only logged, and removal still takes
     /// the project down.
-    pub(crate) async fn stop_failed_containers(&self, workspace: &SpaceId) {
+    async fn stop_failed_containers(&self, daemon: &dyn Daemon, workspace: &SpaceId) {
         let _gate = self.gates.lock_containers(workspace).await;
         let stopped = async {
             let Some(mut recorded) = self.container_project(workspace).await? else {
@@ -334,8 +356,8 @@ impl Manager {
             if recorded.project.state != ContainerState::Failed {
                 return Ok(());
             }
-            let worktree = self.workspace_by_id(workspace).await?.part.path;
-            self.compose(&recorded.project, Some(&worktree))
+            let worktree = daemon.workspace_by_id(workspace).await?.part.path;
+            self.compose(daemon, &recorded.project, Some(&worktree))
                 .await?
                 .stop()
                 .await?;
@@ -348,7 +370,7 @@ impl Manager {
     }
 
     /// Make the project of `workspace` the user's.
-    pub(crate) async fn give_containers_to_user(&self, workspace: &SpaceId) -> Result<()> {
+    pub async fn give_containers_to_user(&self, workspace: &SpaceId) -> Result<()> {
         let _gate = self.gates.lock_containers(workspace).await;
         if let Some(mut recorded) = self.container_project(workspace).await? {
             recorded.project.acquirer = Acquirer::User;
@@ -362,13 +384,12 @@ impl Manager {
     /// ports in their variables, as the file reads them.
     async fn compose<'a>(
         &self,
+        daemon: &dyn Daemon,
         project: &'a ContainerProject,
         worktree: Option<&'a Path>,
     ) -> Result<Compose<'a>> {
-        let ports = (self
-            .leases
-            .list_ports(self, Some(&SpaceSelector::id(&project.workspace_id))))
-        .await?;
+        let ports =
+            (self.list_ports(daemon, Some(&SpaceSelector::id(&project.workspace_id)))).await?;
         Ok(Compose::at(project, worktree, ports).await)
     }
 
@@ -380,13 +401,22 @@ impl Manager {
     }
 
     /// `project` with its services as the runtime lists them.
-    async fn describe_containers(&self, project: ContainerProject) -> Containers {
-        let workspace = self.workspace_by_id(&project.workspace_id).await;
+    async fn describe_containers(
+        &self,
+        daemon: &dyn Daemon,
+        project: ContainerProject,
+    ) -> Containers {
+        let workspace = daemon.workspace_by_id(&project.workspace_id).await;
         let worktree = workspace
             .as_ref()
             .ok()
             .map(|workspace| workspace.path.as_path());
-        let listed = async { self.compose(&project, worktree).await?.services().await };
+        let listed = async {
+            self.compose(daemon, &project, worktree)
+                .await?
+                .services()
+                .await
+        };
         let (services, services_error) = match listed.await {
             Ok(services) => (services, None),
             Err(error) => (Vec::new(), Some(format!("{error:#}"))),

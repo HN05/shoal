@@ -10,7 +10,7 @@ use shoal_ids::space_ids::SpaceId;
 use tokio::process::Command;
 
 use super::{compose, records};
-use crate::daemon::manager::Manager;
+use crate::Leases;
 use shoal_protocol::containers::{ContainerProject, ContainerRuntime};
 
 /// The label Compose gives each container of a project, holding its name.
@@ -21,17 +21,17 @@ const PROJECTS_LISTED_AT_ONCE: usize = 4;
 
 /// What a project's running containers use together.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub(crate) struct ContainerUsage {
+pub struct ContainerUsage {
     /// Percent of one core.
-    pub(crate) cpu_percent: f64,
-    pub(crate) memory_bytes: u64,
+    pub cpu_percent: f64,
+    pub memory_bytes: u64,
 }
 
-impl Manager {
+impl Leases {
     /// What the containers of each workspace whose project may run use, or
     /// why its runtime could not say, within `limit`, which stops the
     /// runtime calls still running.
-    pub(crate) async fn container_usage(
+    pub async fn container_usage(
         &self,
         limit: Duration,
     ) -> Result<Vec<(SpaceId, Result<ContainerUsage>)>> {

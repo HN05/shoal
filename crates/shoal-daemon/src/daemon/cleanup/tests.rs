@@ -62,10 +62,10 @@ fn fingerprint_sees_rewrites_that_restore_the_modification_time() {
 #[tokio::test]
 async fn deleted_parent_sweep_releases_leases_and_keeps_a_branch_with_work() {
     use crate::daemon::{
-        ports::PortRequest,
         resources::ResourceRequest,
         test_support::{git, manager, repository},
     };
+    use crate::model::PortRequest;
     for pending_rename in [false, true] {
         let (temp, manager) = manager().await;
         let checkout = repository(temp.path(), "repo");
@@ -407,11 +407,11 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
 async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
     use crate::{
         daemon::{
-            ports::PortRequest,
             resources::ResourceRequest,
             test_support::{commit, git as git_in, manager, repository},
         },
         git,
+        model::PortRequest,
     };
     let (temp, manager) = manager().await;
     let repository_dir = repository(temp.path(), "repo");

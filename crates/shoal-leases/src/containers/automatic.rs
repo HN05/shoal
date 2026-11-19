@@ -6,14 +6,11 @@ use anyhow::{Result, anyhow};
 
 use super::{ContainerAcquisition, Starter};
 use crate::{
-    config::repo::ContainerStart,
-    daemon::{manager::Manager, scope::Caller},
-    model::Workspace,
-    state::WorkspaceState,
+    Leases, callers::Caller, config::repo::ContainerStart, daemon::Daemon, model::Workspace,
 };
 use shoal_protocol::{acquirers::Acquirer, containers::ContainerState, space_names::SpaceSelector};
 
-impl Manager {
+impl Leases {
     /// Start the containers of `selector`'s workspace after its setup
     /// command unless they run, which leaves them to whoever holds them: for
     /// its own agent when `for_agent` or an agent launch waits there, as one
@@ -21,19 +18,22 @@ impl Manager {
     /// failure fails the workspace's setup.
     pub async fn set_up_containers(
         &self,
+        daemon: &dyn Daemon,
         selector: &SpaceSelector,
         for_agent: bool,
         caller: Option<&Caller>,
     ) -> Result<()> {
-        let workspace = self.workspace(selector).await?;
-        if !self.starts_with_setup(&workspace).await? || self.containers_run(&workspace).await? {
+        let workspace = daemon.workspace(selector).await?;
+        if !self.starts_with_setup(daemon, &workspace).await?
+            || self.containers_run(&workspace).await?
+        {
             return Ok(());
         }
-        let for_agent = for_agent || self.has_queued_launch(&workspace.id).await?;
+        let for_agent = for_agent || daemon.has_queued_launch(&workspace.id).await?;
         // The agent takes the project over when it starts.
         let acquirer = match for_agent {
             true => Acquirer::User,
-            false => self.leases.acquirer(self, caller).await,
+            false => self.acquirer(daemon, caller).await,
         };
         let starter = Starter {
             acquirer,
@@ -41,14 +41,13 @@ impl Manager {
             agent_start: false,
             reason: None,
         };
-        let started = self.start_containers(&workspace, starter, caller).await;
+        let started = self
+            .start_containers(daemon, &workspace, starter, caller)
+            .await;
         if let Err(error) = started.and_then(started_or_refused) {
-            self.stop_failed_containers(&workspace.id).await;
+            self.stop_failed_containers(daemon, &workspace.id).await;
             let message = format!("containers did not start: {error:#}; retry with shoal setup");
-            // A lifecycle operation that reserved it while `up` ran, such as
-            // a removal, keeps its own state.
-            let (ready, failed) = (WorkspaceState::Ready, WorkspaceState::Failed);
-            (self.set_state_if(&workspace.id, ready, failed, Some(message))).await?;
+            daemon.fail_setup(&workspace.id, message).await?;
             return Err(error);
         }
         Ok(())
@@ -60,20 +59,23 @@ impl Manager {
     /// its own, and one that does not run starts as its own.
     pub async fn start_agent_containers(
         &self,
+        daemon: &dyn Daemon,
         selector: &SpaceSelector,
         caller: Option<&Caller>,
     ) -> Result<()> {
-        let workspace = self.workspace(selector).await?;
-        if !self.starts_with_setup(&workspace).await? {
+        let workspace = daemon.workspace(selector).await?;
+        if !self.starts_with_setup(daemon, &workspace).await? {
             return Ok(());
         }
         let starter = Starter {
-            acquirer: self.leases.acquirer(self, caller).await,
+            acquirer: self.acquirer(daemon, caller).await,
             for_agent: false,
             agent_start: true,
             reason: None,
         };
-        let started = self.start_containers(&workspace, starter, caller).await;
+        let started = self
+            .start_containers(daemon, &workspace, starter, caller)
+            .await;
         started.and_then(started_or_refused)
     }
 
@@ -85,8 +87,8 @@ impl Manager {
 
     /// Whether the repository of `workspace` starts its containers with
     /// setup.
-    async fn starts_with_setup(&self, workspace: &Workspace) -> Result<bool> {
-        let settings = self.workspace_settings(workspace).await?.into_settings();
+    async fn starts_with_setup(&self, daemon: &dyn Daemon, workspace: &Workspace) -> Result<bool> {
+        let settings = self.settings(daemon, workspace).await?.into_settings();
         let containers = settings.containers;
         Ok(containers.compose.is_some() && containers.start == ContainerStart::Setup)
     }

@@ -330,13 +330,13 @@ pub(super) async fn run(manager: Arc<Manager>) {
         let tracked = manager.usage.with_workspaces(|usages| usages.tracked());
         let (sample, containers) = tokio::join!(
             sample(&manager, tracked),
-            manager.container_usage(CONTAINER_READ_LIMIT)
+            manager.leases.container_usage(CONTAINER_READ_LIMIT)
         );
         manager
             .usage
             .with_workspaces(|usages| usages.record(sample, containers));
         tokio::select! {
-            () = manager.signals.usage_woken() => {}
+            () = manager.leases.containers_started() => {}
             () = tokio::time::sleep(SAMPLE_INTERVAL) => {}
         }
     }

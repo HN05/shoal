@@ -201,7 +201,11 @@ impl Manager {
                     .release_simulator_held_by(self, &selector, name, holder))
                 .await
             }
-            Held::Containers => self.release_containers_held_by(&selector, holder).await,
+            Held::Containers => {
+                self.leases
+                    .release_containers_held_by(self, &selector, holder)
+                    .await
+            }
             Held::Permit { pool, name } => {
                 let (pool, name) = (pool.clone(), name.clone());
                 (self
@@ -229,7 +233,7 @@ impl Manager {
                     .give_simulator_lease_to_user(&workspace.id, name))
                 .await
             }
-            Held::Containers => self.give_containers_to_user(&workspace.id).await,
+            Held::Containers => self.leases.give_containers_to_user(&workspace.id).await,
             Held::Permit { pool, name } => {
                 (self
                     .leases
