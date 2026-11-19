@@ -71,7 +71,7 @@ async fn state(manager: &Manager, workspace: &Workspace) -> Option<AgentStatus> 
     let id = workspace.id.clone();
     manager
         .store
-        .run(move |db| crate::daemon::workspace::agent_state::current(db, &id))
+        .run(move |db| crate::daemon::agent_state::current(db, &id))
         .await
         .unwrap()
 }
@@ -395,7 +395,7 @@ async fn a_chats_lost_report_counts_only_from_the_agent_it_runs() {
     let current = |manager: Arc<Manager>, id: SpaceId| async move {
         manager
             .store
-            .run(move |db| crate::daemon::workspace::agent_state::current(db, &id))
+            .run(move |db| crate::daemon::agent_state::current(db, &id))
             .await
             .unwrap()
             .map(|status| status.state)

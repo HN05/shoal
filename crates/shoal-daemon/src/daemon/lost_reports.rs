@@ -13,7 +13,7 @@ use std::{
 
 use anyhow::Result;
 
-use super::{Manager, agent_state::TurnEnding};
+use super::{agent_state::TurnEnding, workspace::Manager};
 use crate::{
     agents::hook_reports::{self, Kept, Left, Report},
     daemon::{log, store},

@@ -8,7 +8,7 @@ use anyhow::Result;
 use rusqlite::Connection;
 
 use super::{agent_messages, log, workspace::Manager};
-use crate::{daemon::workspace::agent_state, model::Space, time::UnixTime};
+use crate::{daemon::agent_state, model::Space, time::UnixTime};
 use shoal_ids::space_ids::SpaceId;
 
 pub(crate) mod sleep;

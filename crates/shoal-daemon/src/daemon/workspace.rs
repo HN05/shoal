@@ -5,7 +5,6 @@ use crate::paths::StateFiles;
 use shoal_ids::execution_ids::ExecutionId;
 mod adoption;
 pub(crate) mod agent_queue;
-pub(crate) mod agent_state;
 mod agent_turns;
 pub(crate) mod agents;
 mod branch_rename;
@@ -34,7 +33,6 @@ mod kept_branches;
 mod lifecycle;
 pub(crate) use lifecycle::{BelowElsewhere, fail_interrupted_removals};
 mod location;
-pub(crate) mod lost_reports;
 mod merge;
 mod ownership;
 pub(crate) mod paths;
@@ -185,7 +183,7 @@ pub struct Manager {
     /// daemon ignores.
     rejected_configs: repo_configuration::RejectedConfigs,
     /// When each space's agent state was last reported.
-    report_times: Arc<lost_reports::ReportTimes>,
+    pub(super) report_times: Arc<super::lost_reports::ReportTimes>,
     /// Directories whose file access stalls, shared with startup's status answer.
     pub(crate) file_access: Arc<crate::daemon::file_access::FileAccess>,
     /// The hub role, or this machine's membership of a hub.
@@ -492,7 +490,7 @@ fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<
     workspace.holds = holds::list(db, &workspace.id)?;
     workspace.review = review::list(db, &workspace.id)?;
     workspace.latest_review = crate::daemon::reviews::store::latest_status(db, &workspace.id)?;
-    workspace.agent_state = agent_state::current(db, &workspace.id)?;
+    workspace.agent_state = super::agent_state::current(db, &workspace.id)?;
     workspace.progress = crate::daemon::progress::current(db, &workspace.id)?;
     workspace.sleep = crate::daemon::idle_wakes::sleep::current(db, &workspace.id)?;
     workspace.wake_at = crate::daemon::wake_timers::due_at(db, &workspace.id)?;

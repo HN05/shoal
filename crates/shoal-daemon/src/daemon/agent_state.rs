@@ -8,7 +8,7 @@ use std::time::{Duration, SystemTime};
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::Manager;
+use super::workspace::Manager;
 use crate::{
     agents::hook_reports,
     execution::recovery,
@@ -193,7 +193,7 @@ fn reported_by(db: &Connection, id: &ExecutionId) -> Result<Option<StoppedTurn>>
         workspace,
         state,
         execution: crate::daemon::store::find_execution(db, id)?,
-        subagent: super::subagents::runs_one(db, id, UnixTime::now())?,
+        subagent: super::workspace::subagents::runs_one(db, id, UnixTime::now())?,
     }))
 }
 
@@ -666,12 +666,18 @@ fn save(tx: &rusqlite::Transaction<'_>, report: &Report) -> Result<Option<(Agent
     }
     let changed = write_state(tx, report, starts)?;
     let previous = recorded.map(|recorded| recorded.state);
-    super::super::turn_retry::follow_state(tx, &report.space, report.state)?;
+    super::turn_retry::follow_state(tx, &report.space, report.state)?;
     crate::daemon::idle_wakes::sleep::follow_state(tx, &report.space, previous, report.state)?;
-    super::engagement::follow_state(tx, &report.space, previous, report.state, report.at)?;
+    super::workspace::engagement::follow_state(
+        tx,
+        &report.space,
+        previous,
+        report.state,
+        report.at,
+    )?;
     if !report.failed {
         let execution = report.execution.as_ref();
-        super::super::turn_retry::unretried::follow_state(tx, execution, previous, report.state)?;
+        super::turn_retry::unretried::follow_state(tx, execution, previous, report.state)?;
     }
     let status = get(tx, &report.space)?.expect("agent state was just recorded");
     Ok(Some((status, changed)))
@@ -681,7 +687,7 @@ fn save(tx: &rusqlite::Transaction<'_>, report: &Report) -> Result<Option<(Agent
 /// then waits for its restore.
 fn stopped(db: &Connection, report: &Report) -> Result<bool> {
     match &report.execution {
-        Some(execution) => super::agents::stop_recorded(db, execution),
+        Some(execution) => super::workspace::agents::stop_recorded(db, execution),
         None => Ok(false),
     }
 }

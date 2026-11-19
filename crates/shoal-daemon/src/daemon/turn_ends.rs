@@ -52,7 +52,7 @@ impl Manager {
         let space = id.to_owned();
         let state = self
             .store
-            .read(move |db| crate::daemon::workspace::agent_state::current(db, &space))
+            .read(move |db| crate::daemon::agent_state::current(db, &space))
             .await?;
         if state.is_some_and(|status| status.state == AgentState::Idle) {
             return Ok(true);

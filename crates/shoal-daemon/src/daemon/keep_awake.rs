@@ -13,10 +13,11 @@ use tokio::{
 };
 
 use super::{
+    agent_state,
     links::wait::watches_open_pr,
     log,
     notifications::NotificationKind,
-    workspace::{Manager, TrackedAgents, agent_state, delegated},
+    workspace::{Manager, TrackedAgents, delegated},
 };
 use crate::{config::Config, state::AgentState};
 

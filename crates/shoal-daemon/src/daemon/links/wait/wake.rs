@@ -161,7 +161,7 @@ impl Manager {
         let space = id.clone();
         let state = self
             .store
-            .run(move |db| crate::daemon::workspace::agent_state::get(db, &space))
+            .run(move |db| crate::daemon::agent_state::get(db, &space))
             .await?;
         let Some(idle) = state.filter(|status| status.state == crate::state::AgentState::Idle)
         else {

@@ -4,6 +4,7 @@ mod absent;
 pub mod access;
 pub(crate) mod acquired_leases;
 pub mod agent_messages;
+pub(crate) mod agent_state;
 pub mod allocation;
 mod answer;
 pub mod approvals;
@@ -41,6 +42,7 @@ mod launches;
 pub mod leftovers;
 pub mod links;
 pub(crate) mod log;
+pub(crate) mod lost_reports;
 pub mod notifications;
 pub(crate) mod oneshot;
 pub(crate) mod operations;
@@ -229,7 +231,7 @@ pub async fn run(
         &mut background,
         &manager,
         "lost hook reports",
-        workspace::lost_reports::run,
+        lost_reports::run,
     );
     spawn_supervised(&mut background, &manager, "turn ends", turn_ends::run);
     spawn_supervised(

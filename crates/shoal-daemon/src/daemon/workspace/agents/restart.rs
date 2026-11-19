@@ -8,8 +8,8 @@ use shoal_ids::execution_ids::ExecutionId;
 use tokio::sync::oneshot;
 
 use super::{Agent, Manager, stops};
+use crate::daemon::agent_state;
 use crate::daemon::log;
-use crate::daemon::workspace::agent_state;
 use crate::{
     config::permissions::PermissionChange,
     daemon::store,

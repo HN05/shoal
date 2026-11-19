@@ -9,7 +9,10 @@ use anyhow::Result;
 use rusqlite::Connection;
 use shoal_ids::space_ids::SpaceId;
 
-use super::{Manager, TrackedAgents, agent_state, tree};
+use super::super::{
+    agent_state,
+    workspace::{Manager, TrackedAgents, tree},
+};
 use crate::{
     daemon::{spaces::worktrees_mut, store},
     model::Space,
