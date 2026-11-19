@@ -35,9 +35,6 @@ pub(super) async fn handle(
             let entry = manager.queue_agent(&workspace, *launch, blockers, pr);
             Body::QueueEntry(entry.await?)
         }
-        QueueMethod::QueueChat { request } => {
-            Body::QueueAdmission(manager.queue_chat_add(*request, caller).await?)
-        }
         QueueMethod::ListQueue => Body::QueueEntries(manager.visible_queue().await?),
         QueueMethod::QueuedPlan { entry } => Body::QueuedPlan(manager.queued_plan(&entry).await?),
         QueueMethod::QueueRemove { entry } => {
@@ -100,10 +97,6 @@ impl Scoped for QueueMethod {
         Ok(match self {
             // Each answer confines the entries to those below the caller.
             QueueMethod::ListQueue | QueueMethod::QueueRemove { .. } => None,
-            QueueMethod::QueueChat { request } => {
-                manager.confine_chat_launch(caller, request).await?;
-                None
-            }
             QueueMethod::SetPriority { space, .. } => Some(space),
             QueueMethod::QueueAgent {
                 workspace, launch, ..

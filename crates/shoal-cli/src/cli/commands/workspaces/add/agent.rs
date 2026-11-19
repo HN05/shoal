@@ -1,12 +1,10 @@
 //! The agent an addition starts: named, configured or picked.
-use std::ffi::OsString;
 
 use anyhow::Result;
 
 use crate::{
     agent::{Agent, ModelChoice},
-    cli::{agents, context::Context, terminal},
-    model::Workspace,
+    cli::{agents, context::Context},
     protocol::ConfigTarget,
     start_plan::ResolvedAddAgent,
 };
@@ -69,34 +67,4 @@ pub(super) async fn resolve_add_agent(
         check_model(settings, agent, &model)?;
     }
     Ok(ResolvedAddAgent { agent, model })
-}
-
-/// What a launch in an added workspace tells its agent: the `opening`, in
-/// its mode with `narrowing` applied, the agent's `args`, and the
-/// session it starts from a fork of.
-pub(super) struct Launch {
-    pub opening: agents::Opening,
-    pub narrowing: crate::config::permissions::PermissionsConfig,
-    pub args: Vec<OsString>,
-    pub fork: Option<shoal_ids::agent_session_ids::AgentSessionId>,
-}
-
-/// Start `resolved`'s agent in `workspace` as `launch` says, else open a
-/// shell there.
-pub(super) async fn launch(
-    ctx: &Context,
-    resolved: ResolvedAddAgent,
-    workspace: Workspace,
-    launch: Launch,
-) -> Result<i32> {
-    let Some(agent) = resolved.agent else {
-        return terminal::open_shell(ctx, &workspace.path).await;
-    };
-    let options = agents::LaunchOptions {
-        fork: launch.fork,
-        model: agents::ModelRequest::Override(resolved.model),
-        narrowing: launch.narrowing,
-        ..Default::default()
-    };
-    agents::launch_agent(ctx, agent, workspace, launch.opening, launch.args, options).await
 }

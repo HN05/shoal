@@ -25,8 +25,8 @@ pub enum LaunchMethod {
 impl LaunchMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
-            // A chat's start waits for requests of the chat start worker it
-            // runs.
+            // A launch whose agent an app runs waits for the worker that
+            // starts it.
             Self::Launch { .. } => Lifetime::Open,
         }
     }

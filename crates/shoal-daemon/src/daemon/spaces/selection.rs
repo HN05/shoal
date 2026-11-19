@@ -11,7 +11,7 @@ use crate::{
         events::{self, EventDetails},
         manager::Manager,
     },
-    model::{Chat, Space, SpaceKind, Workspace},
+    model::{Space, SpaceKind, Workspace},
     refusal::{Reason, Refusal},
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -113,7 +113,8 @@ impl Manager {
 
     /// The chat, running or stopped, `selector` names, refusing a
     /// workspace.
-    pub(crate) async fn chat(&self, selector: &SpaceSelector) -> Result<Chat> {
+    #[cfg(test)]
+    pub(crate) async fn chat(&self, selector: &SpaceSelector) -> Result<crate::model::Chat> {
         (self.space(selector).await?.into_chat())
             .map_err(|workspace| other_kind(&workspace, SpaceKind::Chat))
     }

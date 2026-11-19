@@ -253,7 +253,7 @@ impl Command {
         matches!(
             self,
             Command::Internal {
-                command: InternalCommand::Add { .. }
+                command: InternalCommand::Place { .. }
                     | InternalCommand::Session { .. }
                     | InternalCommand::Detached { .. }
                     | InternalCommand::Demo { .. }

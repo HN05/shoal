@@ -111,8 +111,8 @@ pub struct InChat {
 /// workspace and starts its agent there.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StartedBeside {
-    /// The name the workspace is planned under.
-    pub workspace: SpaceName,
+    /// The name of the space whose agent or shell starts beside.
+    pub space: SpaceName,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<shoal_protocol::agent::Agent>,
 }

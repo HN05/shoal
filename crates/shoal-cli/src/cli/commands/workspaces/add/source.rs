@@ -8,7 +8,7 @@ use crate::{
     forge::items::{link::ItemKind, list::Search, reference::ItemInput},
     launches::workspace,
     protocol::ItemContext,
-    start_plan::{AddPlan, Creation},
+    start_plan::Creation,
 };
 
 /// Ask what an interactive addition starts from when no option says. Branch
@@ -67,22 +67,6 @@ pub(super) async fn pick_add_source(
         }
     }
     Ok(None)
-}
-
-/// The issue a planned start runs on: the one the workspace it names has,
-/// open or closed, since its work goes on whatever the issue's state.
-pub(super) async fn load_planned_issue(
-    ctx: &Context,
-    target: &AddTarget,
-    plan: &AddPlan,
-) -> Result<Option<issues::Issue>> {
-    let Some(input) = plan.issue.clone() else {
-        return Ok(None);
-    };
-    let context = read_context(ctx, target).await?;
-    Ok(Some(
-        issues::load_linked(ctx, context, ItemInput::from(input)).await?,
-    ))
 }
 
 /// Where the addition's forge reads run.

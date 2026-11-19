@@ -11,7 +11,7 @@ use crate::{
     client::connection::CommandPaths,
     config::Effective,
     model::{Repository, Space, Workspace},
-    start_plan::{AddPlan, open_add},
+    start_plan::{PlacePlan, open_place},
     terminal::{
         Beside, Configured, Places, chat_place_env, open_in_background, place_env,
         queued::{NO_QUEUED_HOST, queued_origin},
@@ -20,31 +20,30 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Start an admitted queue entry's `plan` in `workspace`, in the background
+/// Start an admitted queue entry's `plan` in `space`, in the background
 /// where the terminal that queued it would have.
-pub async fn start_add(
+pub async fn start_place(
     paths: &CommandPaths,
     settings: &Effective,
-    plan: &mut AddPlan,
-    workspace: &Workspace,
+    plan: &mut PlacePlan,
+    space: &Space,
 ) -> Result<()> {
     let origin = queued_origin()?;
-    let cwd = std::env::current_dir()?;
-    let repo = groups::Repo::Selected(plan.repository.clone());
+    let repo = groups::Repo::of_space(space);
     groups::first_queued(
         paths,
         settings,
         origin.as_ref(),
         &repo,
-        &cwd,
+        space.workdir.path(),
         async |host, group| {
             let Some(places) = host.places() else {
                 return Ok(None);
             };
             let template = host.options.name_template.clone();
-            super::naming::name_plan(paths, template, plan, None).await?;
+            super::naming::name_plan(paths, template, plan, space).await?;
             let beside = Beside::opening(group);
-            open_add(paths, host, places, beside, plan, workspace, false).await?;
+            open_place(paths, host, places, beside, plan, space, false).await?;
             Ok(Some(()))
         },
     )

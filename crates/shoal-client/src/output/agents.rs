@@ -1,8 +1,6 @@
 //! What commands that act on running agents print: `shoal stop`, `shoal
 //! restart` and the turn commands.
 use serde::{Deserialize, Serialize};
-use shoal_ids::execution_ids::ExecutionId;
-use shoal_protocol::agents::Delivery;
 use shoal_protocol::space_names::SpaceName;
 
 use crate::output::{batch::Failure, outputs};
@@ -140,17 +138,3 @@ outputs!(
     Restarted,
     CancelledRestarts
 );
-
-/// An agent session started detached in an app.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DetachedSession {
-    pub workspace: shoal_protocol::model::Workspace,
-    pub agent: shoal_protocol::agent::Agent,
-    pub execution_id: ExecutionId,
-    pub pid: u32,
-    pub log: std::path::PathBuf,
-    #[serde(flatten)]
-    pub delivery: Delivery,
-}
-
-outputs!(DetachedSession);

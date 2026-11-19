@@ -63,9 +63,9 @@ pub fn run(daemon: RunDaemon) {
         eprintln!("error: daemon handoff requires managed daemon run");
         std::process::exit(1);
     }
-    // SAFETY: no other threads exist before the runtime starts. The add plan is
-    // parsed above and must not reach the worker's children.
-    unsafe { std::env::remove_var(env::ADD_PLAN) };
+    // SAFETY: no other threads exist before the runtime starts. The place plan
+    // is parsed above and must not reach the worker's children.
+    unsafe { std::env::remove_var(env::PLACE_PLAN) };
     // SAFETY: as above; the queue entry goes to this process's own launch only.
     unsafe { env::take_queue_entry() };
     // SAFETY: as above; only this process's own launch ends its session.

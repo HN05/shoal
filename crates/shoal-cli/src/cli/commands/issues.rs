@@ -11,7 +11,7 @@ use crate::{
         },
     },
     model::Repository,
-    protocol::{ItemContext, operations::LaunchIssue},
+    protocol::ItemContext,
     repository,
 };
 use shoal_ids::repository_ids::RepositoryId;
@@ -189,15 +189,6 @@ impl Issue {
                 title: self.title.clone(),
                 url: self.url.to_string(),
             }),
-        }
-    }
-
-    /// The issue as a queued agent's launch names it.
-    pub fn launch_issue(&self) -> LaunchIssue {
-        LaunchIssue {
-            url: self.url.clone(),
-            title: self.title.clone(),
-            labels: self.labels.clone(),
         }
     }
 }

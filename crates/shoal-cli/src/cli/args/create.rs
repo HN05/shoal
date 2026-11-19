@@ -5,9 +5,7 @@ use clap::{Args, Subcommand};
 
 use crate::{
     agent::Agent,
-    cli::args::{
-        AgentParser, ModelArgs, command_line::CommandLine, issue_input, permission_assignment,
-    },
+    cli::args::{AgentParser, ModelArgs, issue_input, permission_assignment},
     config::permissions::PermissionChange,
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
@@ -214,14 +212,6 @@ pub struct StartArgs {
     /// space's agent gives at most its own space's.
     #[arg(long)]
     pub priority: Option<shoal_schedule::priority::Priority>,
-    /// The permissions a restored or imported chat was given, as JSON,
-    /// which a start in a background place keeps unchecked.
-    #[arg(long, hide = true, value_parser = recorded, conflicts_with = "permissions")]
-    pub recorded_narrowing: Option<crate::config::permissions::PermissionsConfig>,
-    /// Start in a chat whatever the mode's kind, as the place a chat opens in
-    /// starts it, which shoal start passes.
-    #[arg(long, hide = true, conflicts_with_all = ["branch", "path", "base", "git_profile", "add_blocker", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"])]
-    pub as_chat: bool,
     /// Start in this ready workspace instead of a new space: its worker in a
     /// mode that starts in a workspace, else a chat in its worktree; without
     /// a value, the current workspace, else a picker.
@@ -310,14 +300,6 @@ pub struct StartArgs {
     pub creation: CreationArgs,
     #[command(flatten)]
     pub model: ModelArgs,
-    /// Handoff of the starter that waits on this background place, which
-    /// shoal start passes.
-    #[arg(long, hide = true, requires = "here")]
-    pub handoff: Option<PathBuf>,
-    /// The chat its starter recorded, whose agent this place runs, which
-    /// shoal start passes.
-    #[arg(long, hide = true, requires = "here")]
-    pub chat: Option<shoal_ids::space_ids::SpaceId>,
     /// Arguments forwarded to the agent, such as its prompt.
     #[arg(last = true)]
     pub args: Vec<OsString>,
@@ -341,7 +323,7 @@ impl StartArgs {
             skip_setup: self.creation.skip_setup,
             disposable: self.creation.disposable,
             in_workspace: self.in_workspace.clone().map(SpaceChoice::from),
-            chat: self.asks_chat(),
+            chat: false,
             mode: self.mode.clone(),
             agent: self.agent.clone(),
             model: self.model.clone().into(),
@@ -363,12 +345,6 @@ impl StartArgs {
         }
     }
 
-    /// Whether the start continues a chat whatever its mode's kind: one the
-    /// place it opens in starts, or one a starter waits on there.
-    pub(in crate::cli) fn asks_chat(&self) -> bool {
-        self.as_chat || self.handoff.is_some()
-    }
-
     /// The flags these set that only a workspace takes and only this
     /// process reads, which a [`Launch`] leaves out.
     pub(in crate::cli) fn terminal_workspace_flags(&self) -> Vec<&'static str> {
@@ -377,98 +353,6 @@ impl StartArgs {
             .filter_map(|(flag, set)| set.then_some(flag))
             .collect()
     }
-
-    /// The `shoal` arguments that parse to these, without
-    /// `checked_repository`, which no argument gives.
-    pub(in crate::cli) fn command_line(&self) -> Vec<OsString> {
-        let Self {
-            mode,
-            permissions,
-            priority,
-            recorded_narrowing,
-            as_chat,
-            in_workspace,
-            parent,
-            here,
-            focus,
-            wait,
-            repository,
-            repository_override,
-            checked_repository: _,
-            branch,
-            issue,
-            path,
-            base,
-            git_profile,
-            agent,
-            fork,
-            now,
-            add_blocker,
-            name,
-            copy: CopyArgs { copy, checkpoint },
-            creation:
-                CreationArgs {
-                    skip_setup,
-                    disposable,
-                },
-            model: ModelArgs { model, effort },
-            handoff,
-            chat,
-            args,
-        } = self;
-        let mut line = CommandLine::of::<Self>(&["start"]);
-        line.positional("repository", repository.as_ref().map(ToString::to_string));
-        line.values("mode", mode.as_ref().map(|mode| mode.as_str()));
-        line.values(
-            "permissions",
-            permissions.iter().flat_map(|change| change.assignments()),
-        );
-        line.values(
-            "priority",
-            priority.map(|priority| priority.value().to_string()),
-        );
-        line.values("recorded_narrowing", recorded_narrowing.map(written));
-        line.switch("as_chat", *as_chat);
-        line.optional("in_workspace", selected(in_workspace));
-        line.values("parent", parent.as_ref().map(ToString::to_string));
-        line.switch("here", *here);
-        line.switch("focus", *focus);
-        line.switch("wait", *wait);
-        line.values("repository_override", repository_override);
-        line.values("branch", branch);
-        line.optional(
-            "issue",
-            (issue.as_ref()).map(|issue| issue.as_ref().map(ToString::to_string)),
-        );
-        line.values("path", path);
-        line.values("base", base);
-        line.values("git_profile", git_profile);
-        line.values("agent", agent.as_ref().map(Agent::name));
-        line.switch("fork", *fork);
-        line.switch("now", *now);
-        line.values("add_blocker", add_blocker);
-        line.values("name", name.as_ref().map(|name| name.as_str()));
-        line.optional("copy", selected(copy));
-        line.values("checkpoint", checkpoint.map(|number| number.to_string()));
-        line.switch("skip_setup", *skip_setup);
-        line.switch("disposable", *disposable);
-        line.values("model", model);
-        line.values("effort", effort);
-        line.values("handoff", handoff);
-        line.values("chat", chat.as_ref().map(|chat| chat.as_str()));
-        line.trailing("args", args);
-        line.into_args()
-    }
-}
-
-/// The text of a flag's optional space, as `--in` and `--copy` take it.
-fn selected(space: &Option<Option<SpaceSelector>>) -> Option<Option<String>> {
-    (space.as_ref()).map(|space| space.as_ref().map(ToString::to_string))
-}
-
-/// A recorded narrowing written as the JSON [`recorded`] reads.
-fn written(narrowing: crate::config::permissions::PermissionsConfig) -> String {
-    serde_json::to_string(&narrowing).expect("a narrowing serializes")
 }
 
 // The workspace a new one copies. A doc comment here would replace the
@@ -554,11 +438,3 @@ pub struct ContributeArgs {
     #[arg(last = true)]
     pub args: Vec<OsString>,
 }
-
-/// A recorded narrowing passed on as JSON.
-fn recorded(json: &str) -> Result<crate::config::permissions::PermissionsConfig, String> {
-    serde_json::from_str(json).map_err(|error| error.to_string())
-}
-
-#[cfg(test)]
-mod tests;

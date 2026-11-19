@@ -19,12 +19,7 @@ use crate::{
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
     client::connection::CommandPaths,
-    config::{
-        Config,
-        named_commands::{self, Commands},
-        repo::ConfigLayers,
-        resolve::Stack,
-    },
+    config::{Config, named_commands::Commands, repo::ConfigLayers, resolve::Stack},
     model::Workspace,
     protocol::ConfigTarget,
 };
@@ -248,18 +243,6 @@ async fn expand(
         &[("{prompt}", OsStr::new(""))],
     )
     .await
-}
-
-/// `name`'s command with only `fields` known, for launches outside a workspace,
-/// refused when it uses a placeholder only a workspace has a value for.
-pub(super) fn expand_outside_workspace(
-    commands: &Commands,
-    name: &str,
-    fields: &[(&str, &OsStr)],
-    args: Vec<OsString>,
-) -> Result<Vec<OsString>> {
-    let argv = commands.get(name).ok_or_else(|| unknown_command(name))?;
-    named_commands::substitute_outside_workspace(name, argv, fields, args)
 }
 
 /// The error for `name`, which no configuration it could run from defines

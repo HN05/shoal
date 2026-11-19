@@ -11,7 +11,7 @@ use anyhow::Context as _;
 
 use crate::{
     agents::{
-        forget_repository_trust,
+        AgentHome, HomeRecords, forget_repository_trust,
         trust::{TrustFile, repository_trust_paths},
     },
     cli::{commands::workspaces, context::Context},
@@ -53,6 +53,25 @@ pub(super) async fn tracked(
     keep_config_location(file, ctx, Holder::Workspace(workspace), &configured).await;
     let environment = AgentEnvironment::new(&ctx.paths.home, &configured);
     self::workspace(file, ctx, workspace, &environment).await;
+}
+
+/// Trust the directories of `space`, a workspace or a chat, for a tracked
+/// agent of `file`'s tool running with `profile`, as [`tracked`] and
+/// [`chat`] trust each kind's.
+pub(super) async fn space(
+    file: &TrustFile,
+    ctx: &Context,
+    space: &HomeRecords,
+    profile: &crate::ai::Environment,
+) {
+    match (space, space.home()) {
+        (HomeRecords::Workspace(workspace), _) => tracked(file, ctx, workspace, profile).await,
+        (HomeRecords::Chat { repository, .. }, Ok(AgentHome::Chat { home, .. })) => {
+            chat(file, ctx, repository.as_ref(), home, profile).await;
+        }
+        // A chat without a home runs nowhere to trust.
+        (HomeRecords::Chat { .. }, _) => {}
+    }
 }
 
 /// Have the daemon keep where `configured` puts the config of `file`'s tool

@@ -43,6 +43,42 @@ async fn a_chat_launch_queues_its_agent_with_its_prompt() {
     assert!(started.iter().any(|(id, _)| *id == entry.id));
 }
 
+/// A chat whose agent its caller runs here is recorded with its agent's
+/// entry starting for that caller, which the queue does not start in a
+/// place of its own.
+#[tokio::test]
+async fn a_chat_run_here_leaves_its_starting_agent_to_its_caller() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    manager.publish_config(global_config("[agents.claude]\ncommand = ['sh']\n"));
+    let launch = Launch {
+        target: Some(StartTarget::Repository(repo.id.to_string())),
+        chat: true,
+        name: Some("talk here".into()),
+        agent: Some("claude".into()),
+        here: true,
+        ..Launch::default()
+    };
+
+    let launched = (manager.launch(launch, LaunchSource::Manual, None))
+        .await
+        .unwrap();
+
+    assert_eq!(launched.space.kind(), SpaceKind::Chat);
+    let entry = launched.entry.unwrap();
+    assert_eq!(entry.space(), Some(&launched.space.id));
+    assert_eq!(entry.state, crate::state::QueueState::Starting);
+    let started = crate::daemon::queued_starts::fake::STARTED
+        .lock()
+        .unwrap()
+        .clone();
+    assert!(!started.iter().any(|(id, _)| *id == entry.id));
+}
+
 /// A registered repository whose remote is a forge's, which Shoal never
 /// reaches, and agents and modes that start chats with and without one.
 async fn offline_machine(manager: &Manager, temp: &tempfile::TempDir) -> crate::model::Repository {

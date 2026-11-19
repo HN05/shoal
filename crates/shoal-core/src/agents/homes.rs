@@ -62,7 +62,7 @@ impl<'a> AgentHome<'a> {
 
     /// The place agent `name`'s rules describe, which receives its updates
     /// as its integration and `settings` allow.
-    fn place(self, settings: &Effective, name: &Agent) -> templates::Place<'a> {
+    pub fn place(self, settings: &Effective, name: &Agent) -> templates::Place<'a> {
         let delivery = delivery(agent_integration(settings, name), settings);
         match self {
             Self::Workspace(workspace) => templates::Place::Workspace {
@@ -79,7 +79,7 @@ impl<'a> AgentHome<'a> {
 
     /// The system text of `mode` for agent `name` here, with the fields of
     /// the issue the space links.
-    pub(super) fn system(
+    pub fn system(
         self,
         settings: &Effective,
         name: &Agent,

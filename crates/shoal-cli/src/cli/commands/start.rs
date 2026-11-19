@@ -2,11 +2,12 @@
 //! told, whether it starts in a repository and, unless the command says
 //! otherwise, whether it starts in a workspace or a chat.
 //!
-//! A chat's agent talks with the user about a repository in its registered
-//! checkout, about a workspace's work in its worktree, or without a
-//! repository in `root_dir`. A chat is no workspace's agent, so it is not a
-//! tracked execution; the daemon records it while its agent runs. Every
-//! start makes a new chat, focused as its mode says.
+//! Every start sends one launch, which the daemon records and queues, and
+//! runs the agent of the space it recorded through one placement: here,
+//! beside this terminal, in a background place or detached. A chat's agent
+//! talks with the user about a repository in its registered checkout,
+//! about a workspace's work in its worktree, or without a repository in
+//! `root_dir`.
 use anyhow::{Context as _, Result, ensure};
 use shoal_ids::{agent_session_ids::AgentSessionId, space_ids::SpaceId};
 
@@ -29,14 +30,8 @@ use crate::{
 use shoal_protocol::launches::{IssueChoice, Launch, StartTarget};
 use shoal_protocol::space_names::SpaceSelector;
 
-pub(super) async fn run(ctx: &Context, mut args: StartArgs) -> Result<i32> {
-    let handoff = args.handoff.take();
-    let started = async { ending_failed(ctx, start(ctx, args).await).await };
-    crate::chat_handoff::serve(handoff.as_deref(), started).await
-}
-
 /// Start what `args` ask for.
-async fn start(ctx: &Context, mut args: StartArgs) -> Result<i32> {
+pub(super) async fn run(ctx: &Context, mut args: StartArgs) -> Result<i32> {
     ensure_scope_token(ctx)?;
     if let Some(parent) = &args.parent {
         args.parent = Some(SpaceSelector::Id(space_id(ctx, parent).await?));
@@ -50,7 +45,7 @@ async fn start(ctx: &Context, mut args: StartArgs) -> Result<i32> {
     match start_of(ctx, &mut args).await? {
         Start::Workspace(mode) if args.in_workspace.is_some() => worker_in(ctx, args, mode).await,
         Start::Workspace(mode) => in_workspace(ctx, args, mode).await,
-        Start::Chat(mode) => in_chat(ctx, args, mode).await,
+        Start::Chat(mode) => launch::chat(ctx, args, (mode, true)).await,
         Start::Outside(mode) => outside_repositories(ctx, args, mode).await,
     }
 }
@@ -118,7 +113,7 @@ async fn start_of(ctx: &Context, args: &mut StartArgs) -> Result<Start> {
     if let Some(mode) = named {
         return shaped(ctx, args, mode).await;
     }
-    if let Some(kind) = asked_kind(args).or_else(|| fitting_kind(args)) {
+    if let Some(kind) = fitting_kind(args) {
         ensure_fits(args, kind, None)?;
         return Ok(match kind {
             SpaceKind::Workspace => Start::Workspace(ModeChoice::Pick),
@@ -269,12 +264,6 @@ async fn shape(
     launches::shape::launch_kind(&DaemonReads(ctx), &located(args)?, mode).await
 }
 
-/// The kind of space a start that [`asks_chat`] asks for, whatever the
-/// mode's kind.
-fn asked_kind(args: &StartArgs) -> Option<SpaceKind> {
-    args.asks_chat().then_some(SpaceKind::Chat)
-}
-
 /// The settings whose modes decide the kind, as
 /// [`launches::shape::launch_settings`] finds them. Nothing is asked.
 async fn mode_settings(ctx: &Context, args: &StartArgs) -> Result<Effective> {
@@ -301,7 +290,7 @@ fn located(args: &StartArgs) -> Result<Launch> {
 /// agent makes a workspace once it knows the work.
 pub(super) async fn in_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Result<i32> {
     let unsettled = args.clone();
-    match launch::workspace::start(ctx, args, mode).await {
+    match launch::workspace(ctx, args, mode).await {
         Err(error) if error.is::<workspaces::StartsAsChat>() => {
             let starts = error.downcast::<workspaces::StartsAsChat>()?;
             as_chat(ctx, unsettled, starts).await
@@ -328,8 +317,7 @@ async fn as_chat(
     args.repository_override = Some(starts.repository.value().to_owned());
     args.checked_repository = None;
     let mode = starts.mode.unwrap_or(modes::ModeName::DEFAULT);
-    let options = Options::taken_from(&mut args);
-    in_chat_with(ctx, args, ModeChoice::Named(mode), options).await
+    launch::chat(ctx, args, (ModeChoice::Named(mode), true)).await
 }
 
 /// Start the worker of the existing workspace `--in` names, in `mode`, with
@@ -412,48 +400,15 @@ async fn forked(
     Ok((parent, agent, session))
 }
 
-/// Start the agent in a chat in a repository's checkout, or with `--in` in
-/// a workspace's worktree.
-async fn in_chat(ctx: &Context, mut args: StartArgs, mode: ModeChoice) -> Result<i32> {
-    let options = Options::taken_from(&mut args);
-    in_chat_with(ctx, args, mode, options).await
-}
-
-/// [`in_chat`] with the `options` taken from `args` already.
-async fn in_chat_with(
-    ctx: &Context,
-    args: StartArgs,
-    mode: ModeChoice,
-    options: Options,
-) -> Result<i32> {
-    let (repository, issue) = launches::chat_target(
-        args.repository,
-        args.repository_override,
-        args.issue.map(IssueChoice::from),
-        args.in_workspace.is_some(),
-    )?;
-    let issue = issue.map(|issue| issue.named().cloned());
-    let subject = home::Subject {
-        mode,
-        issue,
-        prompt: None,
-    };
-    match args.in_workspace {
-        Some(workspace) => home::start_in_workspace(ctx, workspace, subject, options).await,
-        None => home::start(ctx, repository, subject, options).await,
-    }
-}
-
 /// Start the agent in a chat without a repository, in `root_dir`; it starts
 /// on no repository or issue.
 async fn outside_repositories(
     ctx: &Context,
-    mut args: StartArgs,
+    args: StartArgs,
     mode: modes::ModeName,
 ) -> Result<i32> {
     launches::ensure_no_repository(&args.launch(), &mode)?;
-    let topic = Topic::outside_repositories(&mode);
-    home::start_outside_repositories(ctx, topic, Options::taken_from(&mut args)).await
+    launch::chat(ctx, args, (ModeChoice::Named(mode), false)).await
 }
 
 /// The permissions a start's `--permission` assignments give its agent,
@@ -463,17 +418,21 @@ fn given(changes: &[PermissionChange]) -> PermissionsConfig {
 }
 
 mod agent;
-mod home;
+mod attach;
+mod detached;
 mod issue;
 mod launch;
-mod options;
-mod topic;
+pub(in crate::cli::commands) mod placement;
+mod reports;
+mod run;
 
-pub(super) use agent::{chat_agent, check_model};
-pub(super) use home::{start_handed, start_outside_repositories, start_resolved};
-pub(super) use launch::{ending_failed, report_started, start_changed};
-pub(super) use options::{ChatPlace, Narrowing, Options};
-pub(super) use topic::{Relaunch, Topic};
+pub(super) use agent::check_model;
+pub(in crate::cli) use attach::execute_place;
+pub(in crate::cli::commands) use attach::{Placed, place, run as run_attached, send};
+pub(in crate::cli::commands) use detached::{ensure_detachable, leaves_caller, place_agent};
+pub(in crate::cli::commands) use placement::Attach;
+pub(in crate::cli::commands) use reports::report_queued_in;
+pub(in crate::cli) use run::run_entry;
 
 #[cfg(test)]
 mod tests;

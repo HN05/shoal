@@ -8,40 +8,40 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Result, ensure};
 
 use super::sessions::{left_open, report_detach};
 use crate::{
     cli::{context::Context, recent},
     config::{Effective, modes::ModeName},
     env,
-    model::{Chat, Part, Repository, Space, Workspace},
+    model::{Part, Space, Workspace},
     sessions::Origin,
-    start_plan::{AddPlan, open_add},
+    start_plan::{PlacePlan, open_place},
     terminal::{
-        Attaches, Configured, Owner, Places, Start, chat_place_env, chat_session_name, current,
-        place_env, rerun_in_host, shoal_command, show_opened,
+        Attaches, Configured, Owner, Places, Start, chat_session_name, current, place_env,
+        rerun_in_host,
     },
 };
 use shoal_workers::places::{groups, naming::name_plan, queued::start_in_background};
 
-/// Start `plan` in `workspace` beside this terminal as its start placed
-/// it, focused or in the background. Returns whether it left this process;
-/// a focused launch without a new tab stays here, where its agent runs in a
+/// Start `plan` in `space` beside this terminal as its start placed it,
+/// focused or in the background. Returns whether it left this process; a
+/// focused launch without a new tab stays here, where its agent runs in a
 /// session this terminal attaches to.
-pub(in crate::cli) async fn start_add(
+pub(in crate::cli) async fn start_place(
     ctx: &Context,
     settings: &Effective,
     placement: Placement,
-    plan: &mut AddPlan,
-    workspace: &Workspace,
+    plan: &mut PlacePlan,
+    space: &Space,
 ) -> Result<bool> {
     ensure!(
         !crate::process::scoped::inherits_scope(&ctx.paths.state),
-        "workspace processes cannot allocate workspaces"
+        "workspace processes open no place beside a terminal"
     );
     let host = beside(ctx, settings);
-    name_plan(&ctx.paths, host.options.name_template.clone(), plan, None).await?;
+    name_plan(&ctx.paths, host.options.name_template.clone(), plan, space).await?;
     let Some(places) = host.places() else {
         return Ok(false);
     };
@@ -52,12 +52,12 @@ pub(in crate::cli) async fn start_add(
         return Ok(false);
     }
     let cwd = std::env::current_dir()?;
-    let repo = groups::Repo::Selected(plan.repository.clone());
+    let repo = groups::Repo::of_space(space);
     let origin = groups::beside(&ctx.paths, &host, &repo, &cwd).await?;
     let beside = host.beside(origin.as_ref());
-    open_add(&ctx.paths, &host, places, beside, plan, workspace, focus).await?;
+    open_place(&ctx.paths, &host, places, beside, plan, space, focus).await?;
     if !focus && !ctx.json {
-        let name = workspace.name.as_str();
+        let name = space.name.as_str();
         outln!("Started {name} {}", places.background_place(name));
     }
     Ok(true)
@@ -163,6 +163,14 @@ impl<'a> AgentSpace<'a> {
         }
     }
 
+    /// What a host reads of the space an agent runs in at `home`.
+    pub(in crate::cli) fn of_home(home: crate::agents::AgentHome<'a>) -> Self {
+        match home {
+            crate::agents::AgentHome::Workspace(workspace) => Self::of(workspace),
+            crate::agents::AgentHome::Chat { chat, .. } => Self::of(chat),
+        }
+    }
+
     /// Whom the agent's session or place is for.
     pub(in crate::cli) fn owner(&self) -> Owner<'a> {
         self.owner
@@ -257,68 +265,6 @@ fn agent_worker(
             manual,
         },
     )
-}
-
-/// Where [`start_chat`] started a chat.
-pub(in crate::cli) enum ChatStarted {
-    /// In a place shown here, or a session this terminal attached to.
-    Shown,
-    /// In a background place, as the words that report it say.
-    Background(String),
-}
-
-/// Run Shoal with `args` for the recorded `chat` of `repository`, or of
-/// none, in `cwd`, its checkout, worktree or `root_dir`, as `placement`
-/// asks: in a new background place, or focused in a new session this
-/// terminal attaches to, as `run_agent` does for tracked agents, otherwise
-/// in a new focused place, shown here when its host does not serve this
-/// terminal. A chat shown here becomes the one `attach -` returns to. Only
-/// a host that [`opens_beside`] this terminal starts one.
-pub(in crate::cli) async fn start_chat(
-    ctx: &Context,
-    settings: &Effective,
-    (repository, cwd): (Option<&Repository>, &Path),
-    chat: &Chat,
-    placement: Placement,
-    args: &[OsString],
-) -> Result<ChatStarted> {
-    let host = beside(ctx, settings);
-    let places = (host.places()).context("no host opens a place beside this terminal")?;
-    let repo = groups::Repo::of_chat(repository, cwd);
-    let origin = groups::beside(&ctx.paths, &host, &repo, cwd).await?;
-    let beside = host.beside(origin.as_ref());
-    let focus = placement == Placement::Focus;
-    let start = Start {
-        state: &ctx.paths.state,
-        origin: beside.origin,
-        cwd,
-        label: &chat.name,
-        focus,
-        split: beside.split,
-        argv: &shoal_command(&ctx.paths, args)?,
-        env: &chat_place_env(&ctx.paths)?,
-    };
-    let shown = SpaceSelector::id(&chat.id);
-    if let Some(attaches) = host.host.attaches().filter(|_| focus) {
-        let session = attaches.run_chat(&start).await?;
-        if report_detach(attaches, &chat.number.to_string(), &session).await? {
-            recent::record_attach(ctx, &shown).await;
-        }
-        return Ok(ChatStarted::Shown);
-    }
-    let place = places.open(&start).await?;
-    match placement {
-        Placement::Focus => {
-            show_opened(&host, places, &place, &chat.name).await?;
-            recent::record_attach(ctx, &shown).await;
-            Ok(ChatStarted::Shown)
-        }
-        Placement::Background => Ok(ChatStarted::Background(format!(
-            "Started {} {}",
-            chat.name,
-            places.background_place(&chat.name)
-        ))),
-    }
 }
 
 /// Whether the host under `settings` opens places beside this terminal for

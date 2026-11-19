@@ -4,13 +4,13 @@
 //! calls live in `shoal-client`'s `queue`, the worker in `shoal-workers`'
 //! `queued_starts` and the daemon's runner in `daemon::queued_starts`.
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
-use std::{ffi::OsString, path::PathBuf};
+use std::path::PathBuf;
 
 use anyhow::Result;
 
 use crate::{
     agent::{Agent, ModelChoice},
-    model::{QueueRequest, Workspace},
+    model::QueueRequest,
     protocol::{
         CreationOptions, PullHead,
         operations::{QueuedLaunch, WorkspaceStart},
@@ -20,7 +20,7 @@ use crate::{
 use shoal_protocol::space_names::SpaceSelector;
 
 mod place;
-pub use place::open_add;
+pub use place::open_place;
 
 /// The plan of a queued agent start, the same for every kind of space: the
 /// launch of the agent of the recorded space its entry names, and the PR it
@@ -144,14 +144,10 @@ impl Creation {
     }
 }
 
-/// The agent of a plan, which queued entries store; entries queued before
-/// every launch ran tracked also carry `tracked` or `codex_mode`, which are
-/// ignored.
-#[derive(serde::Serialize, serde::Deserialize)]
+/// The agent a start runs, if any, with the model and effort requested
+/// over the configured ones.
 pub struct ResolvedAddAgent {
     pub agent: Option<Agent>,
-    /// The model and effort requested over the configured ones.
-    #[serde(default)]
     pub model: ModelChoice,
 }
 
@@ -197,152 +193,47 @@ pub struct PlaceHandoff {
     pub preparation: Option<String>,
 }
 
-/// The agent a start runs in a recorded workspace, or the workspace's shell
-/// without one, which a terminal host or the agent queue's worker carries
-/// out.
-#[derive(serde::Serialize, serde::Deserialize)]
-pub struct AddPlan {
-    pub repository: crate::repository::Selector,
-    /// The workspace the start opens and runs its agent in.
-    pub workspace: SpaceId,
-    /// The PR it links once the workspace is ready.
+/// What runs in a place opened for a recorded space, a workspace or a
+/// chat: the agent of its starting launch, or a workspace's shell without
+/// one, which a terminal host or the agent queue's worker carries out.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub struct PlacePlan {
+    /// The space whose agent, or shell, runs in the place.
+    pub space: SpaceId,
+    /// The name of the place a host opens for it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pr: Option<crate::forge::items::reference::ItemInput>,
-    /// The name of the place a host opens for the start.
-    #[serde(default)]
     pub place_name: Option<PlaceName>,
-    /// The found issue's URL; its body can exceed what the environment of
-    /// the place a host opens carries, so the worker looks it up again.
-    pub issue: Option<crate::forge::items::reference::ItemRef>,
-    pub agent: ResolvedAddAgent,
-    pub args: Vec<OsString>,
-    /// The agent's subject when no issue gives it one, which a launcher
-    /// with `{prompt}` receives there.
-    #[serde(default)]
-    pub prompt: Option<String>,
-    /// The mode the agent starts in; the default mode when `None`.
-    #[serde(default)]
-    pub mode: Option<crate::config::modes::ModeName>,
-    /// The permissions `--permission` gives its agent, whatever its mode's.
-    #[serde(
-        default,
-        skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
-    )]
-    pub narrowing: crate::config::permissions::PermissionsConfig,
-    /// The session the agent starts from a fork of.
-    #[serde(default)]
-    pub fork: Option<shoal_ids::agent_session_ids::AgentSessionId>,
-    /// The agent queue entry whose slot this launch uses.
-    #[serde(default)]
-    pub queue_entry: Option<shoal_ids::queue_entry_ids::QueueEntryId>,
-    /// The recorded launch the place a start opens beside its terminal
-    /// carries out: it follows the preparation the handoff names, if any,
-    /// then starts the launch's queued agent there, or opens a shell.
+    /// The starting launch whose agent runs there, taking its slot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queue_entry: Option<QueueEntryId>,
+    /// The start the place carries out for a caller that holds its launch:
+    /// it follows the preparation the handoff names, if any, then starts
+    /// the launch's agent once the queue lets it, or opens a shell.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub handoff: Option<PlaceHandoff>,
 }
 
-impl AddPlan {
-    /// `launch` in the existing `workspace`. It runs detached, so it stays
-    /// tracked.
-    pub fn agent_in(workspace: &Workspace, launch: QueuedLaunch) -> Result<Self> {
-        let QueuedLaunch {
-            agent,
-            prompt,
-            mode,
-            narrowing,
-            model,
-            args,
-            fork,
-            issue,
-            env: _,
-            now: _,
-            here: _,
-            source: _,
-        } = launch;
-        Ok(Self {
-            issue: issue.map(|issue| issue.url),
-            agent: ResolvedAddAgent {
-                agent: Some(agent.name().parse()?),
-                model,
-            },
-            args: args.into_iter().map(OsString::from).collect(),
-            prompt,
-            mode,
-            narrowing,
-            fork,
-            ..Self::opening(workspace)
-        })
-    }
-
-    /// The plan that runs the queued `start` in `workspace`, the space its
-    /// entry names, taking the slot of `entry`.
-    pub fn queued(workspace: &Workspace, start: QueuedStart, entry: QueueEntryId) -> Result<Self> {
-        let QueuedStart { launch, pr } = start;
-        Ok(Self {
-            pr,
-            queue_entry: Some(entry),
-            ..Self::agent_in(workspace, launch)?
-        })
-    }
-
-    /// The plan that opens the existing `workspace` without an agent.
-    pub fn opening(workspace: &Workspace) -> Self {
+impl PlacePlan {
+    /// The plan that runs the agent of the starting launch `entry` in
+    /// `space`, or opens a workspace's shell without one.
+    pub fn new(space: &SpaceId, entry: Option<&QueueEntryId>) -> Self {
         Self {
-            repository: workspace.repository().into(),
-            workspace: workspace.id.clone(),
-            pr: None,
+            space: space.clone(),
             place_name: None,
-            issue: None,
-            agent: ResolvedAddAgent {
-                agent: None,
-                model: ModelChoice::default(),
-            },
-            args: Vec::new(),
-            prompt: None,
-            mode: None,
-            narrowing: Default::default(),
-            fork: None,
-            queue_entry: None,
+            queue_entry: entry.cloned(),
             handoff: None,
         }
     }
 
-    /// Whether the plan opens `workspace`, the one it names in its
-    /// repository.
-    pub fn opens(&self, workspace: &Workspace) -> bool {
-        self.workspace == workspace.id && self.repository.value() == *workspace.repository()
-    }
-
-    /// The agent's name, when the addition starts one.
-    pub fn agent_name(&self) -> Option<Agent> {
-        self.agent.agent.clone()
-    }
-
-    /// The found issue.
-    pub fn issue(&self) -> Option<&crate::forge::items::reference::ItemRef> {
-        self.issue.as_ref()
-    }
-
-    /// The mode the agent starts in.
-    pub fn mode(&self) -> crate::config::modes::ModeName {
-        (self.mode.clone()).unwrap_or(crate::config::modes::ModeName::DEFAULT)
-    }
-
-    /// Whether the agent starts with input: an issue prompt or forwarded arguments.
-    /// A workspace shell or an agent without input waits for the user.
-    pub fn runs_unattended(&self) -> bool {
-        self.agent.agent.is_some()
-            && (self.issue.is_some() || self.prompt.is_some() || !self.args.is_empty())
-    }
-
-    /// What the place a host opens for the start in `workspace` shows.
-    pub fn label(&self, workspace: &Workspace) -> String {
-        let name = workspace.name.as_str();
-        (self.place_name.as_ref()).map_or_else(
-            || name.to_owned(),
-            |place| place.render(workspace.branch_or_name(), name),
-        )
+    /// What the place a host opens for the start in `space` shows: its
+    /// templated name in a workspace, else the space's name.
+    pub fn label(&self, space: &crate::model::Space) -> String {
+        match (&self.place_name, space.to_workspace()) {
+            (Some(place), Some(workspace)) => {
+                place.render(workspace.branch_or_name(), &workspace.name)
+            }
+            _ => space.name.to_string(),
+        }
     }
 }
 

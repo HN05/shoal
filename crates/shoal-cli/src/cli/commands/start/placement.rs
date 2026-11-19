@@ -1,6 +1,7 @@
 //! Where the agent of a start runs when it runs in its caller, and whether
 //! it skips the queue there because the user waits for it.
-use super::super::{AddOptions, detached::leaves_caller};
+use super::detached::leaves_caller;
+use crate::cli::commands::workspaces::AddOptions;
 use crate::{
     cli::{agents, context::Context, terminal},
     config::{Effective, modes::ModeName},
@@ -9,7 +10,7 @@ use shoal_protocol::launches::{Launch, StartTarget};
 
 /// Where the agent of a start runs when it runs in its caller.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(in crate::cli::commands::workspaces::add) enum Attach {
+pub(in crate::cli::commands) enum Attach {
     /// In this terminal, or in this process for an agent that runs its own
     /// way, which leaves it at once.
     Here,
@@ -27,7 +28,7 @@ impl Attach {
     /// opens places. `None` leaves the agent's start to the daemon. An
     /// `issue_linked` workspace's own issue prompts the agent where the
     /// launch names nothing to start on.
-    pub(in crate::cli::commands::workspaces::add) fn of(
+    pub(in crate::cli::commands) fn of(
         ctx: &Context,
         (launch, issue_linked): (&Launch, bool),
         agent: Option<&crate::agent::Agent>,
@@ -62,7 +63,7 @@ impl Attach {
 /// the user waits for it under `settings`, unless a scoped caller makes it;
 /// an `issue_linked` workspace's own issue prompts the agent where the
 /// launch names nothing to start on.
-pub(in crate::cli::commands::workspaces::add) fn in_caller(
+pub(in crate::cli::commands) fn in_caller(
     ctx: &Context,
     (launch, issue_linked): (&mut Launch, bool),
     settings: &Effective,

@@ -33,6 +33,14 @@ impl<'a> Repo<'a> {
         }
     }
 
+    /// The repository of `space`, or the `root_dir` of a chat without one.
+    pub fn of_space(space: &'a crate::model::Space) -> Self {
+        match &space.repository_id {
+            Some(id) => Self::Id(id.as_str()),
+            None => Self::Root(space.workdir.path()),
+        }
+    }
+
     async fn name(&self, paths: &CommandPaths) -> Result<String> {
         let repos = match self {
             Self::Known(repo) => return Ok(repo.display_name().to_owned()),

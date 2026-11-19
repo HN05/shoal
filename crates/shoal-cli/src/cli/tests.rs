@@ -305,7 +305,7 @@ fn only_wrappers_that_never_replace_themselves_claim_privacy_grants() {
         let cli = Cli::try_parse_from(["shoal", "internal"].iter().chain(args)).unwrap();
         cli.command.as_ref().is_some_and(Command::wraps_execution)
     };
-    assert!(wraps(&["add", "--host", "zmx", "{}"]));
+    assert!(wraps(&["place", "--host", "zmx", "{}"]));
     assert!(wraps(&[
         "session", "w", "claude", "--host", "zmx", "--", "claude"
     ]));

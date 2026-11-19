@@ -1,24 +1,25 @@
 //! `shoal start` of a workspace: what a terminal picks, the one launch the
 //! daemon carries out, and the agent that runs in this caller.
 mod agent;
-mod attach;
-mod detached;
 mod existing;
 mod finish;
 mod launch;
 mod mode;
 mod plan;
+mod prepared;
 mod reads;
 mod resolve;
 mod source;
 mod target;
 mod waiting;
 
-pub(in crate::cli::commands) use detached::leaves_caller;
 pub(in crate::cli::commands) use existing::start_worker;
-pub(in crate::cli) use finish::execute_add;
-pub(in crate::cli::commands) use launch::{enter_created, launch_workspace, pick_start_source};
+pub(in crate::cli::commands) use finish::{Opened, open_recorded, reopen_with_shell};
+pub(in crate::cli::commands) use launch::{
+    enter_created, launch_workspace, pick_start_source, report_launched,
+};
 pub(in crate::cli::commands) use plan::launch_args;
+pub(in crate::cli::commands) use prepared::{follow_preparation, shell_in, unprepared};
 pub(in crate::cli::commands) use reads::DaemonReads;
 pub(in crate::cli::commands) use resolve::check_start_arguments;
 use shoal_protocol::space_names::SpaceSelector;

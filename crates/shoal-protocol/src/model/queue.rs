@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
-use shoal_schedule::{priority::Priority, rank::QueueRank};
+use shoal_schedule::rank::QueueRank;
 
 use crate::progress::Blocker;
 
@@ -192,43 +192,6 @@ pub struct QueueRequest {
     /// `[priority.labels]` priority ranks it when it is given none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub issue_labels: Vec<String>,
-    /// What made the launch, which its agent's start records.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source: Option<crate::launches::LaunchSource>,
-}
-
-/// The launch of a new chat's agent to admit under the heavy slots, which
-/// its start records once the queue starts it, or records at once and
-/// attaches to the launch when it waits.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatQueueRequest {
-    /// The chat's repository, that of the workspace whose worktree it runs
-    /// in; none for a chat without one.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub repository: Option<crate::repository::Selector>,
-    pub name: SpaceName,
-    pub agent: crate::agent::Agent,
-    pub mode: crate::config::modes::ModeName,
-    /// The permissions `--permission` gave the agent.
-    #[serde(
-        default,
-        skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
-    )]
-    pub narrowing: crate::config::permissions::PermissionsConfig,
-    /// What the queue's start of the chat runs, as JSON in the format of
-    /// the binary's `start_plan::QueuedStart`, which the daemon keeps
-    /// without reading.
-    pub plan: String,
-    /// Terminal multiplexer variables the start needs to reach the same
-    /// window.
-    pub env: std::collections::BTreeMap<String, String>,
-    /// Start at once regardless of the limits; the agent still takes a slot.
-    /// Scoped callers cannot.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub now: bool,
-    /// The priority of the chat, which ranks the launch until it exists.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub priority: Option<Priority>,
     /// What made the launch, which its agent's start records.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<crate::launches::LaunchSource>,

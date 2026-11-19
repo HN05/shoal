@@ -7,7 +7,7 @@ use shoal_ids::repository_ids::RepositoryId;
 
 use super::blockers;
 use crate::{
-    model::{ChatQueueRequest, QueueEntry, QueueRequest},
+    model::{QueueEntry, QueueRequest},
     state::{QueueKind, QueueState},
 };
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
@@ -123,25 +123,6 @@ impl From<QueueRequest> for LaunchRequest {
             now: request.now,
             blockers: request.blockers,
             priority: None,
-            source: request.source,
-        }
-    }
-}
-
-impl From<ChatQueueRequest> for LaunchRequest {
-    fn from(request: ChatQueueRequest) -> Self {
-        Self {
-            name: request.name,
-            agent: request.agent,
-            mode: Some(request.mode),
-            narrowing: request.narrowing,
-            issue_title: None,
-            issue_labels: Vec::new(),
-            plan: request.plan,
-            env: request.env,
-            now: request.now,
-            blockers: Vec::new(),
-            priority: request.priority,
             source: request.source,
         }
     }

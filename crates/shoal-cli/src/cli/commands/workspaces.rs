@@ -13,10 +13,10 @@ mod setup;
 mod unmerge;
 mod waiting;
 
-pub(in crate::cli) use add::execute_add;
 pub(super) use add::{
-    AddOptions, DaemonReads, StartsAsChat, check_start_arguments, check_target, enter_created,
-    launch_args, launch_workspace, leaves_caller, pick_start_source, start_worker,
+    AddOptions, DaemonReads, Opened, StartsAsChat, check_start_arguments, check_target,
+    enter_created, follow_preparation, launch_args, launch_workspace, open_recorded,
+    pick_start_source, reopen_with_shell, report_launched, shell_in, start_worker, unprepared,
 };
 pub(super) use adopt::adopt;
 pub(super) use branch_rename::rename_branch;

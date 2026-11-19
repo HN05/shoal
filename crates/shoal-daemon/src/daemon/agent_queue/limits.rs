@@ -61,14 +61,6 @@ impl Limits {
     fn repository(&self, id: &RepositoryId) -> Option<u32> {
         self.repositories.get(id).copied().flatten()
     }
-
-    /// Whether any limit applies to an agent in `repository`, or in a chat
-    /// without one, which only the machine's limits do.
-    pub(super) fn apply_to(&self, repository: Option<&RepositoryId>) -> bool {
-        self.global.is_some()
-            || self.room.is_some()
-            || repository.is_some_and(|id| self.repository(id).is_some())
-    }
 }
 
 /// What a waiting entry starts, as admission sees it.

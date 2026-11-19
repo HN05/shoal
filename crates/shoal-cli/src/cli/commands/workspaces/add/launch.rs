@@ -10,11 +10,10 @@ use anyhow::Result;
 use super::{
     AddOptions, StartsAsChat,
     agent::AddSettings,
-    attach::{self, Attach},
-    detached::{ensure_detachable, leaves_caller, unplaceable},
-    finish::{finish_add_workspace, report_queued_in},
+    finish::finish_add_workspace,
     mode::choose_add_mode,
     plan::launch_args,
+    prepared,
     resolve::{Resolved, resolve},
     source::pick_add_source,
     target::resolve_add_target,
@@ -23,7 +22,10 @@ use super::{
 use crate::{
     cli::{
         agents,
-        commands::{links, queued_agents, start},
+        commands::{
+            links, queued_agents,
+            start::{self, Attach, placement},
+        },
         context::Context,
         output::{Palette, Style},
         ui::ModeChoice,
@@ -67,10 +69,10 @@ pub(super) async fn launch_worker(
     let started = (&launch, issue_linked);
     let attach = Attach::of(ctx, started, launch.agent.as_ref(), settings, &options);
     match attach {
-        Some(_) => attach::in_caller(ctx, (&mut launch, issue_linked), settings, &options),
-        None => ensure_detachable(settings, launch.agent.as_ref(), &options)?,
+        Some(_) => placement::in_caller(ctx, (&mut launch, issue_linked), settings, &options),
+        None => start::ensure_detachable(settings, launch.agent.as_ref(), &options)?,
     }
-    send(ctx, launch, (false, None), attach.zip(Some(settings))).await
+    start::send(ctx, launch, (false, None), attach.zip(Some(settings))).await
 }
 
 /// Have the daemon start `launch` in a new workspace, in the mode `mode`
@@ -89,7 +91,7 @@ pub(in crate::cli::commands) async fn launch_workspace(
     // A number beside a branch or issue of the start's own names a
     // repository, which the pickers then start in.
     launch.target = crate::launches::decided_target(&launch)?;
-    let leaves = leaves_caller(ctx, options.here);
+    let leaves = start::leaves_caller(ctx, options.here);
     // A start that runs in this caller settles what it starts on here, and
     // a terminal then picks what it leaves out.
     let resolved = match !leaves || ctx.interactive() {
@@ -114,38 +116,9 @@ pub(in crate::cli::commands) async fn launch_workspace(
         return Err(starts_as_chat(ctx, &launch).await?.into());
     }
     let placed = (attach, agent.as_ref());
-    place_agent(ctx, (&mut launch, issue_linked), placed, settings, options)?;
-    send(
-        ctx,
-        launch,
-        (options.wait, agent),
-        attach.zip(Some(settings)),
-    )
-    .await
-}
-
-/// Ready `launch` for where its `agent` runs: in this caller as `attach`
-/// says, which needs the agent here before anything is created, or else
-/// from the daemon, which refuses one no host can place for a start that
-/// leaves this caller, as `--focus` is refused there.
-fn place_agent(
-    ctx: &Context,
-    (launch, issue_linked): (&mut Launch, bool),
-    (attach, agent): (Option<Attach>, Option<&crate::agent::Agent>),
-    settings: &Effective,
-    options: &AddOptions,
-) -> Result<()> {
-    if leaves_caller(ctx, options.here) {
-        let refused = unplaceable(settings, agent, options)?;
-        launch.unplaceable = refused.filter(|_| attach.is_none());
-    }
-    if attach.is_some() {
-        if let Some(agent) = agent {
-            crate::agents::ensure_available(agent, settings)?;
-        }
-        attach::in_caller(ctx, (launch, issue_linked), settings, options);
-    }
-    Ok(())
+    start::place_agent(ctx, (&mut launch, issue_linked), placed, settings, options)?;
+    let attach = attach.zip(Some(settings));
+    start::send(ctx, launch, (options.wait, agent), attach).await
 }
 
 /// The chat a start in this caller begins as, since `launch` names nothing
@@ -210,13 +183,12 @@ pub(in crate::cli::commands) async fn enter_created(
         return Ok(None);
     };
     links::print_warnings(&started.warnings);
-    let started = started.clone();
-    let code = match attach {
-        Attach::Here => Box::pin(attach::run(ctx, started)).await?,
-        Attach::Beside { focused } => {
-            Box::pin(attach::run_beside(ctx, started, settings, focused)).await?
-        }
+    let placed = start::Placed {
+        space: Box::new((*started.workspace).clone().into()),
+        operation: started.operation.clone(),
+        entry: started.entry.clone(),
     };
+    let code = start::run_attached(ctx, placed, (attach, settings)).await?;
     Ok(Some(code))
 }
 
@@ -306,60 +278,30 @@ fn switched_branch(selector: &str) -> String {
         .to_owned()
 }
 
-/// Send `launch`, which `agent` runs if it names one, and report what the
-/// daemon started: a new workspace once it is recorded, or with `wait` once
-/// its preparation ends, unless the preparation waits for other work or
-/// disk space, which leaves nothing to follow yet. An agent that runs in
-/// this caller, as `attach` says under the start's settings, runs here once
-/// its workspace is prepared and the queue lets it start.
-async fn send(
-    ctx: &Context,
-    launch: Launch,
-    (wait, agent): (bool, Option<crate::agent::Agent>),
-    attach: Option<(Attach, &Effective)>,
-) -> Result<i32> {
-    let launched = crate::client::launches::launch(&ctx.paths, launch).await?;
-    if let Some(attach) = attach {
-        return attached(ctx, launched, attach).await;
-    }
-    match &launched.start {
-        Started::Queued { .. } | Started::Detached(_) => start::report_started(ctx, launched),
-        Started::Worker => report_worker(ctx, attach::workspace_start(launched)?),
-        Started::Preparing {
-            operation: Some(_), ..
-        } if wait => follow_workspace(ctx, attach::workspace_start(launched)?, agent).await,
-        Started::Preparing { .. } => report_workspace(ctx, attach::workspace_start(launched)?),
-    }
-}
-
-/// Run here the agent of the space the daemon `launched` for this caller,
-/// in this terminal or a focused place as `attach` says under `settings`.
-async fn attached(
+/// Report the workspace the daemon `launched`, whose agent, which `agent`
+/// runs if it names one, runs in no terminal of this caller: once it is
+/// recorded, or with `wait` once its preparation ends, unless the
+/// preparation waits for other work or disk space, which leaves nothing to
+/// follow yet.
+pub(in crate::cli::commands) async fn report_launched(
     ctx: &Context,
     launched: Launched,
-    (attach, settings): (Attach, &Effective),
+    (wait, agent): (bool, Option<crate::agent::Agent>),
 ) -> Result<i32> {
-    let started = match &launched.start {
-        Started::Queued { .. } | Started::Detached(_) => {
-            return start::report_started(ctx, launched);
-        }
-        Started::Worker => attach::workspace_start(launched)?,
-        // A preparation that waits for other work or disk space leaves the
-        // agent to the queue's start once it is done.
-        Started::Preparing {
-            operation: None, ..
-        } => return report_workspace(ctx, attach::workspace_start(launched)?),
-        Started::Preparing { .. } => {
-            let started = attach::workspace_start(launched)?;
-            links::print_warnings(&started.warnings);
-            started
-        }
-    };
-    match attach {
-        Attach::Here => Box::pin(attach::run(ctx, started)).await,
-        Attach::Beside { focused } => {
-            Box::pin(attach::run_beside(ctx, started, settings, focused)).await
-        }
+    let worker = matches!(launched.start, Started::Worker);
+    let follows = wait
+        && matches!(
+            launched.start,
+            Started::Preparing {
+                operation: Some(_),
+                ..
+            }
+        );
+    let started = prepared::workspace_start(launched)?;
+    match (worker, follows) {
+        (true, _) => report_worker(ctx, started),
+        (false, true) => follow_workspace(ctx, started, agent).await,
+        (false, false) => report_workspace(ctx, started),
     }
 }
 
@@ -397,7 +339,7 @@ async fn follow_workspace(
             ..*entry
         },
     };
-    report_queued_in(ctx, &workspace, &entry)
+    start::report_queued_in(ctx, &workspace.name, &entry)
 }
 
 /// Report the existing workspace whose worker the daemon `started`, and
@@ -408,7 +350,7 @@ fn report_worker(ctx: &Context, started: StartedWorkspace) -> Result<i32> {
     } = started;
     ctx.show(&*workspace, |_| ())?;
     match entry {
-        Some(entry) => report_queued_in(ctx, &workspace, &entry),
+        Some(entry) => start::report_queued_in(ctx, &workspace.name, &entry),
         None => Ok(0),
     }
 }
@@ -433,7 +375,7 @@ pub(super) fn report_workspace(ctx: &Context, started: StartedWorkspace) -> Resu
         );
     })?;
     match entry {
-        Some(entry) => report_queued_in(ctx, &workspace, &entry),
+        Some(entry) => start::report_queued_in(ctx, &workspace.name, &entry),
         None => Ok(0),
     }
 }

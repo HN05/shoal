@@ -208,14 +208,10 @@ pub enum InternalCommand {
     QueueStart {
         entry: shoal_ids::queue_entry_ids::QueueEntryId,
     },
-    /// Start, in the place this runs in, the chat whose resolved start the
-    /// chat handoff at `handoff` holds; the agent queue's start worker runs
-    /// it.
-    #[command(name = workers::CHAT)]
-    Chat { handoff: PathBuf },
-    /// Add the planned workspace inside the place `host` opened for it.
-    #[command(name = workers::ADD)]
-    Add(AddWorkerArgs),
+    /// Run a recorded space's agent, or a workspace's shell, inside the
+    /// place `host` opened for it.
+    #[command(name = workers::PLACE)]
+    Place(PlaceWorkerArgs),
     /// Tracked agent inside a new place; consumes recovery records once started.
     #[command(name = workers::SESSION)]
     Session {
@@ -306,19 +302,19 @@ fn narrowing(json: &str) -> Result<crate::config::permissions::PermissionsConfig
     serde_json::from_str(json).map_err(|error| error.to_string())
 }
 
-// Arguments of the add worker.
+// Arguments of the place worker.
 #[derive(Debug, Args)]
-pub struct AddWorkerArgs {
+pub struct PlaceWorkerArgs {
     /// The host whose place this worker runs in; none for an agent that
     /// runs its own way.
     #[arg(long)]
     pub host: Option<HostName>,
-    /// Close the place once the workspace is done.
+    /// Close the place once its workspace is done.
     #[arg(long)]
     pub close_when_done: bool,
-    /// The place was opened focused, showing the workspace's session.
+    /// The place was opened focused, showing the space's session.
     #[arg(long)]
     pub focused: bool,
-    #[arg(env = crate::env::ADD_PLAN, hide_env_values = true)]
+    #[arg(env = crate::env::PLACE_PLAN, hide_env_values = true)]
     pub plan: String,
 }

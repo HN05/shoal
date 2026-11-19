@@ -18,20 +18,19 @@ use anyhow::{Context as _, Result, ensure};
 use crate::{
     agent::{Agent, ModelChoice},
     agents::{
-        ADDED, Added, added, agent_integration, agent_off, ensure_available, ensure_forks,
-        integration, programs, resolve_model,
+        ADDED, Added, AgentHome, HomeRecords, added, agent_integration, agent_off,
+        ensure_available, ensure_forks, integration, programs, resolve_model,
     },
     ai::IntegrationKind,
     cli::{context::Context, ui},
     config::{Effective, modes, named_commands::Commands, templates},
-    model::{ChatHome, RemovedSpace, Repository, SpaceLinks, Workspace},
+    model::{RemovedSpace, Workspace},
     protocol::ConfigTarget,
     tools::{ensure_program, program_available},
 };
 use shoal_protocol::space_names::SpaceSelector;
 
 pub(in crate::cli) use desktop::{app, ensure_opens, hand_off};
-pub(in crate::cli) use launch::input;
 pub(in crate::cli) use sessions::{SessionHome, install_kept_session_files};
 pub(in crate::cli) use trust::{cleanup_moved_trust, cleanup_repository_trust};
 
@@ -42,11 +41,12 @@ pub(in crate::cli) fn chat_place(name: &Agent) -> Option<&'static str> {
     app.map(crate::agents::detached::App::place)
 }
 
-/// One launch of an agent in a ready workspace; settings are never cached
-/// across launches.
+/// One launch of an agent in a space, a ready workspace or a chat; settings
+/// are never cached across launches.
 pub(in crate::cli) struct Launch {
     pub name: Agent,
-    pub workspace: Workspace,
+    /// The space's records as the daemon has them now.
+    pub space: HomeRecords,
     pub settings: Effective,
     /// Shoal's guidance and the mode's rules.
     pub instructions: String,
@@ -69,83 +69,8 @@ pub(in crate::cli) struct Launch {
     pub new_session: bool,
 }
 
-/// The repository a chat belongs to, or none, with `root_dir`, where a chat
-/// without one runs.
-#[derive(Debug, Clone)]
-pub(in crate::cli) enum ChatRepository {
-    Registered(Repository),
-    Outside(PathBuf),
-}
-
-impl ChatRepository {
-    /// The registered repository; none for a chat without one.
-    pub fn registered(&self) -> Option<&Repository> {
-        match self {
-            Self::Registered(repository) => Some(repository),
-            Self::Outside(_) => None,
-        }
-    }
-
-    /// Where a chat runs: the worktree of `workspace` when given, else the
-    /// repository's checkout, or `root_dir`.
-    pub fn home<'a>(&'a self, workspace: Option<&'a Workspace>) -> ChatHome<'a> {
-        match (workspace, self) {
-            (Some(workspace), _) => ChatHome::Workspace(workspace),
-            (None, Self::Registered(repository)) => ChatHome::Checkout(repository),
-            (None, Self::Outside(root)) => ChatHome::Root(root),
-        }
-    }
-
-    /// The config a chat's settings come from.
-    pub fn config(&self) -> ConfigTarget {
-        match self {
-            Self::Registered(repository) => ConfigTarget::Repository(repository.id.clone().into()),
-            Self::Outside(_) => ConfigTarget::Global,
-        }
-    }
-}
-
-/// One chat about a repository in its registered checkout, or in a
-/// workspace's worktree, or without a repository in `root_dir`.
-pub(in crate::cli) struct ChatLaunch {
-    pub repository: ChatRepository,
-    /// The workspace whose worktree the chat runs in, instead of the
-    /// repository's checkout.
-    pub workspace: Option<Workspace>,
-    /// The name the chat is recorded under.
-    pub name: shoal_protocol::space_names::SpaceName,
-    /// The mode its agent starts in.
-    pub mode: modes::ModeName,
-    /// The permissions `--permission` gives the agent, whatever the mode's.
-    pub narrowing: crate::config::permissions::PermissionsConfig,
-    /// The space it goes below.
-    pub parent: Option<SpaceSelector>,
-    /// The priority set on it.
-    pub priority: Option<shoal_schedule::priority::Priority>,
-    pub settings: Effective,
-    /// The rendered chat template.
-    pub instructions: String,
-    /// The task the chat starts on before the user speaks, if any.
-    pub opening: Option<String>,
-    /// The model and effort it runs with.
-    pub model: ModelChoice,
-    pub args: Vec<OsString>,
-    /// What the chat is linked to once recorded, such as the issue it plans.
-    pub links: SpaceLinks,
-    /// Whether its agent begins a new session, rather than continuing or
-    /// forking one.
-    pub new_session: bool,
-}
-
-impl ChatLaunch {
-    /// Where the chat runs.
-    pub fn home(&self) -> ChatHome<'_> {
-        self.repository.home(self.workspace.as_ref())
-    }
-}
-
-/// What a workspace agent's launch is told: its mode decides the rules
-/// of its system text and the instructions after its subject.
+/// What an agent's launch is told: its mode decides the rules of its
+/// system text and the instructions after its subject.
 pub(in crate::cli) enum Opening {
     /// A new session, starting on `subject` when it has one.
     New {
@@ -173,28 +98,47 @@ impl Opening {
         matches!(self, Self::New { .. }) && options.fork.is_none() && options.replaces.is_empty()
     }
 
-    /// The system text and first message of the launch at `place`.
-    fn brief(&self, settings: &Effective, place: templates::Place<'_>) -> Result<templates::Brief> {
+    /// The system text and first message of agent `name`'s launch in
+    /// `home`; one told a message as it is takes the rules with the fields
+    /// of the issue its space links.
+    fn brief(
+        &self,
+        settings: &Effective,
+        name: &Agent,
+        home: AgentHome<'_>,
+    ) -> Result<templates::Brief> {
         match self {
             Self::New { mode, subject } => {
-                templates::brief(settings, mode, place, subject.as_ref())
+                templates::brief(settings, mode, home.place(settings, name), subject.as_ref())
             }
             Self::Told { mode, message } => Ok(templates::Brief {
-                system: templates::system(settings, mode, place, linked_issue(place).as_ref())?,
+                system: home.system(settings, name, mode)?,
                 first_message: Some(message.clone()),
             }),
         }
     }
 }
 
-/// The issue the workspace at `place` is linked to, for the rules of an
-/// agent that starts without its subject.
-fn linked_issue(place: templates::Place<'_>) -> Option<templates::IssueFields> {
-    match place {
-        templates::Place::Workspace { workspace, .. } => {
-            templates::IssueFields::linked(&workspace.links)
-        }
-        templates::Place::Chat { .. } => None,
+/// `brief` as an agent in `home` receives it: a chat's agent that takes no
+/// instructions apart from its first message, as `takes_instructions` says,
+/// gets them there ahead of its subject, or else of the request to wait for
+/// the user, since they start a turn before the user speaks.
+fn delivered(
+    brief: templates::Brief,
+    home: AgentHome<'_>,
+    takes_instructions: bool,
+) -> templates::Brief {
+    if takes_instructions || matches!(home, AgentHome::Workspace(_)) {
+        return brief;
+    }
+    let templates::Brief {
+        system,
+        first_message,
+    } = brief;
+    templates::Brief {
+        system: templates::chat_first_message(&system, first_message.as_deref())
+            .unwrap_or_default(),
+        first_message: None,
     }
 }
 
@@ -238,34 +182,33 @@ pub(in crate::cli) fn runs_its_own_way(agent: &Agent, settings: &Effective) -> b
     agent_integration(settings, agent).detached().is_some()
 }
 
-/// Start an agent in a ready workspace, giving it the prompt the way it
-/// accepts one.
-pub(super) async fn launch_agent(
+/// Start an agent in `space`, a ready workspace or a chat as its records
+/// say, giving it the prompt the way it accepts one.
+pub(in crate::cli) async fn launch_agent(
     ctx: &Context,
     agent: Agent,
-    workspace: Workspace,
+    space: HomeRecords,
     opening: Opening,
     args: Vec<OsString>,
     options: LaunchOptions,
 ) -> Result<i32> {
-    let settings = shoal_workers::settings::of(
-        &ctx.paths,
-        ConfigTarget::Space(SpaceSelector::id(&workspace.id)),
-    )
-    .await?;
+    let home = space.home()?;
+    let target = ConfigTarget::Space(SpaceSelector::id(home.id()));
+    let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
     let integration = agent_integration(&settings, &agent);
     let fork = match &options.fork {
-        Some(session) => fork_args(&settings, &agent, session, &workspace.path)?,
+        Some(session) => fork_args(&settings, &agent, session, home.path())?,
         None => Vec::new(),
     };
-    let place = templates::Place::Workspace {
-        workspace: &workspace,
-        delivery: crate::agents::delivery(integration, &settings),
+    let takes_instructions = match integration.detached() {
+        Some(app) => detached::takes_instructions(app, &settings),
+        None => settings.launch(&agent).arguments.instructions.is_some(),
     };
+    let brief = opening.brief(&settings, &agent, home)?;
     let templates::Brief {
         system: instructions,
         first_message: prompt,
-    } = opening.brief(&settings, place)?;
+    } = delivered(brief, home, takes_instructions);
     let new_session = opening.begins_session(&options);
     let model = match options.model {
         ModelRequest::Override(requested) => resolve_model(&settings, &agent, requested),
@@ -273,7 +216,7 @@ pub(super) async fn launch_agent(
     };
     let launch = Launch {
         name: agent,
-        workspace,
+        space,
         settings,
         instructions,
         prompt,
@@ -462,24 +405,6 @@ pub(in crate::cli) fn fork_args(
         .unwrap_or_default())
 }
 
-/// Start a chat of agent `name` its integration's own way, in the chat
-/// `record` has the daemon record; `None` leaves it to the configured
-/// command run in place of Shoal.
-pub(in crate::cli) async fn start_chat(
-    ctx: &Context,
-    name: &Agent,
-    chat: &ChatLaunch,
-    record: impl AsyncFnOnce() -> Result<shoal_protocol::chats::LaunchedChat>,
-) -> Result<Option<i32>> {
-    let integration = agent_integration(&chat.settings, name);
-    match integration.detached() {
-        Some(app) => detached::start_chat(ctx, integration, app, (name, chat), record)
-            .await
-            .map(Some),
-        None => Ok(None),
-    }
-}
-
 /// The key that cancels the running turn of agent `name` under `settings`,
 /// unless Shoal knows none.
 pub(in crate::cli) fn interrupt_key(settings: &Effective, name: &Agent) -> Option<&'static str> {
@@ -571,22 +496,6 @@ async fn trust_for(ctx: &Context, workspace: &Workspace, agents: Vec<Agent>) {
             let profile = &settings.launch(name).environment;
             trust::tracked(trust, ctx, workspace, profile).await;
         }
-    }
-}
-
-/// Trust the directory of a chat of agent `name` in `repository`, or
-/// without one, at `home` as workspace launches trust theirs. Failure only
-/// warns.
-pub(in crate::cli) async fn trust_chat(
-    ctx: &Context,
-    settings: &Effective,
-    name: &Agent,
-    repository: Option<&Repository>,
-    home: ChatHome<'_>,
-) {
-    if let Some(trust) = agent_integration(settings, name).trust_file() {
-        let profile = &settings.launch(name).environment;
-        trust::chat(trust, ctx, repository, home, profile).await;
     }
 }
 

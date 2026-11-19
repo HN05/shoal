@@ -9,10 +9,6 @@ use super::Lifetime;
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum QueueMethod {
-    /// Admit the launch of a new chat's agent now or queue it.
-    QueueChat {
-        request: Box<crate::model::ChatQueueRequest>,
-    },
     /// Queue the worker of the ready `workspace`, the launch the daemon
     /// resolves `launch` into under the workspace's settings, on the
     /// workspace's issue unless the launch gives it a task, once `blockers`

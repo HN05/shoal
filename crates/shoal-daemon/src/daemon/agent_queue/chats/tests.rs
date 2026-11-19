@@ -1,19 +1,16 @@
-use std::collections::BTreeMap;
-
 use crate::{
     daemon::{
-        agent_queue::tests::{add, admitted, register, started},
+        agent_queue::tests::{add, admitted, register},
         manager::Manager,
         test_support::{global_config, manager},
     },
-    model::{ChatQueueRequest, Repository},
+    model::Repository,
     state::QueueState,
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_protocol::{
     launches::{Launch, LaunchSource, StartTarget},
     protocol::Started,
-    space_names::SpaceSelector,
 };
 
 /// Whether the daemon started the queued `id` itself, wherever it runs.
@@ -33,100 +30,6 @@ async fn full_machine(manager: &Manager, repo: &Repository) {
          [agents.claude]\ncommand = ['sh']\n",
     ));
     assert!(admitted(&add(manager, repo, "busy").await));
-}
-
-/// The launch of a chat's agent in `mode`, of `repository` or of none.
-fn chat_launch(repository: Option<&Repository>, mode: &str) -> ChatQueueRequest {
-    ChatQueueRequest {
-        source: None,
-        repository: repository.map(|repository| (&repository.id).into()),
-        name: "talk".into(),
-        agent: "claude".into(),
-        mode: mode.into(),
-        narrowing: Default::default(),
-        plan: "{}".into(),
-        env: BTreeMap::from([("HERDR_ENV".into(), "1".into())]),
-        now: false,
-        priority: None,
-    }
-}
-
-/// A heavy chat's launch waits for a slot, as a heavy workspace agent's
-/// does, and a light one's starts beside the full machine, of a chat with a
-/// repository or without one.
-#[tokio::test]
-async fn a_chats_launch_waits_for_a_slot_by_its_modes_weight() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    full_machine(&manager, &repo).await;
-
-    for (repository, mode) in [(Some(&repo), "pair"), (None, "solo")] {
-        let admission = manager.queue_chat_add(chat_launch(repository, mode), None);
-        let admission = admission.await.unwrap();
-        let entry = admission.entry.unwrap();
-        assert!(
-            !admission.start && entry.state == QueueState::Queued,
-            "{mode}"
-        );
-    }
-    let light = manager.queue_chat_add(chat_launch(Some(&repo), "chat"), None);
-    let light = light.await.unwrap();
-    assert!(light.start);
-    assert_eq!(light.entry.unwrap().state, QueueState::Starting);
-}
-
-/// A chat's launch that no limit applies to is admitted at once with an
-/// entry, whose slot its agent takes over as any other launch's.
-#[tokio::test]
-async fn a_chats_launch_without_a_limit_has_an_admitted_entry() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-
-    let admission = manager.queue_chat_add(chat_launch(Some(&repo), "chat"), None);
-    let admission = admission.await.unwrap();
-
-    assert!(admission.start);
-    assert_eq!(admission.entry.unwrap().state, QueueState::Starting);
-}
-
-/// A waiting chat launch stays out of admission until it takes the chat
-/// its caller records, even with a slot free, and then
-/// starts from the queue in that chat, in the place the queuing terminal
-/// names.
-#[tokio::test]
-async fn a_waiting_chat_launch_starts_only_in_its_recorded_chat() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    full_machine(&manager, &repo).await;
-    let launch = chat_launch(Some(&repo), "pair");
-    let entry = manager.queue_chat_add(launch, None).await;
-    let entry = entry.unwrap().entry.unwrap();
-    let busy = manager.queue_entries().await.unwrap();
-    let busy = busy.iter().find(|queued| queued.name == "busy").unwrap();
-    manager.fail_queue_entry(&busy.id, "gone").await.unwrap();
-    manager.dispatch_queue().await.unwrap();
-    assert!(!started(&entry.id), "its chat is not attached yet");
-    let chat = crate::daemon::chats::NewChat {
-        name: "talk".into(),
-        agent: "claude".into(),
-        mode: "pair".into(),
-        narrowing: Default::default(),
-        origin: None,
-        parent: None,
-        priority: None,
-    };
-    let chat = manager.start_new_chat(Some((&repo.id).into()), None, chat);
-    let chat = chat.await.unwrap();
-
-    (manager.queue_attach(&entry.id, &SpaceSelector::id(&chat.id)))
-        .await
-        .unwrap();
-    manager.dispatch_queue().await.unwrap();
-
-    assert!(started(&entry.id));
-    let entries = manager.queue_entries().await.unwrap();
-    let starting = entries.iter().find(|queued| queued.id == entry.id).unwrap();
-    assert_eq!(starting.space_id.as_ref(), Some(&chat.id));
 }
 
 /// The launch of the chat `name` of `repo` in the heavy mode `pair`,
@@ -184,43 +87,6 @@ async fn a_launched_chat_started_now_runs_past_the_limits() {
     let entry = started.entry.unwrap();
     assert_eq!(entry.state, QueueState::Starting);
     assert!(started_launch(&entry.id));
-}
-
-/// A chat launch that fails before it took any chat frees its slot and
-/// tells why, while other chats exist, rather than leaving its entry to
-/// expire.
-#[tokio::test]
-async fn an_unattached_chat_launch_fails_while_other_chats_exist() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    full_machine(&manager, &repo).await;
-    let other = crate::daemon::chats::NewChat {
-        name: "other".into(),
-        agent: "claude".into(),
-        mode: "chat".into(),
-        narrowing: Default::default(),
-        origin: None,
-        parent: None,
-        priority: None,
-    };
-    (manager.start_new_chat(Some((&repo.id).into()), None, other))
-        .await
-        .unwrap();
-    let light = manager.queue_chat_add(chat_launch(Some(&repo), "chat"), None);
-    let entry = light.await.unwrap().entry.unwrap();
-
-    manager
-        .fail_queue_entry(&entry.id, "no place")
-        .await
-        .unwrap();
-
-    let entries = manager.queue_entries().await.unwrap();
-    assert!(entries.iter().all(|queued| queued.id != entry.id));
-    let notifications = manager.notifications.list(true, 20).await.unwrap();
-    assert!(notifications.iter().any(|notification| {
-        notification.kind == crate::daemon::notifications::NotificationKind::QueueFailed
-            && notification.message.contains("no place")
-    }));
 }
 
 /// A recorded chat's agent queues through the same request as a

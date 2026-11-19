@@ -272,10 +272,6 @@ pub trait Attaches: Sessions {
         agent: &'a crate::agent::Agent,
     ) -> BoxFuture<'a, Result<String>>;
 
-    /// Run `start`, a chat, in a new session and attach this terminal to
-    /// it, as [`Attaches::run_agent`] runs an agent.
-    fn run_chat<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<String>>;
-
     /// The program an agent launch here needs besides the agent's own.
     fn launcher_program(&self) -> &'static str;
 }

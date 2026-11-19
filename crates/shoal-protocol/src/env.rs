@@ -11,17 +11,15 @@ use anyhow::{Context as _, Result, ensure};
 
 mod scope;
 
-pub use scope::{
-    act_in_chat_scope, act_under_grant, is_scoped, release_grant, scope_token, take_handed_scope,
-};
+pub use scope::{act_in_space_scope, act_under_grant, is_scoped, release_grant, scope_token};
 
 pub const PREFIX: &str = "SHOAL_";
 
 /// Overrides the state directory; also isolates the daemon socket.
 pub const STATE_DIR: &str = "SHOAL_STATE_DIR";
-/// Resolved launch plan the place a host opens for an addition hands its
-/// worker; removed at startup.
-pub const ADD_PLAN: &str = "SHOAL_ADD_PLAN";
+/// The plan the place a host opens for a recorded space hands its worker;
+/// removed at startup.
+pub const PLACE_PLAN: &str = "SHOAL_PLACE_PLAN";
 /// The agent queue entry whose slot a launched agent takes over when it
 /// registers; passed to launch workers and removed at startup.
 pub const QUEUE_ENTRY: &str = "SHOAL_QUEUE_ENTRY";

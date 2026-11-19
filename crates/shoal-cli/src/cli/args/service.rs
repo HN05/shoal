@@ -6,7 +6,7 @@ use clap::{Args, Subcommand};
 
 use crate::{
     agent::Agent,
-    cli::args::{AgentParser, ModelArgs, command_line::CommandLine},
+    cli::args::{AgentParser, ModelArgs},
     protocol::ExitWhen,
 };
 
@@ -89,49 +89,9 @@ pub struct ConfigSetupArgs {
     pub agent: Option<Agent>,
     #[command(flatten)]
     pub model: ModelArgs,
-    /// Name of the chat; defaults to setup. A chat that reopens in a new tab
-    /// or a restore passes it.
-    #[arg(long, hide = true)]
-    pub name: Option<shoal_protocol::space_names::SpaceName>,
-    /// Agent session the chat continues, which shoal restore passes.
-    #[arg(long, hide = true)]
-    pub session: Option<shoal_ids::agent_session_ids::AgentSessionId>,
-    /// Handoff of the starter that waits on this background place.
-    #[arg(long, hide = true, requires = "here")]
-    pub handoff: Option<PathBuf>,
-    /// The chat its starter recorded, whose agent this place runs.
-    #[arg(long, hide = true, requires = "here")]
-    pub chat: Option<shoal_ids::space_ids::SpaceId>,
     /// Arguments forwarded to the agent.
     #[arg(last = true)]
     pub args: Vec<OsString>,
-}
-
-impl ConfigSetupArgs {
-    /// The `shoal` arguments that parse to these.
-    pub(in crate::cli) fn command_line(&self) -> Vec<OsString> {
-        let Self {
-            here,
-            agent,
-            model: ModelArgs { model, effort },
-            name,
-            session,
-            handoff,
-            chat,
-            args,
-        } = self;
-        let mut line = CommandLine::of::<Self>(&["config", "setup"]);
-        line.switch("here", *here);
-        line.values("agent", agent.as_ref().map(Agent::name));
-        line.values("model", model);
-        line.values("effort", effort);
-        line.values("name", name.as_ref().map(|name| name.as_str()));
-        line.values("session", session.as_ref().map(|session| session.as_str()));
-        line.values("handoff", handoff);
-        line.values("chat", chat.as_ref().map(|chat| chat.as_str()));
-        line.trailing("args", args);
-        line.into_args()
-    }
 }
 
 #[derive(Debug, Subcommand)]

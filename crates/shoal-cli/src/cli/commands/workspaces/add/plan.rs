@@ -1,5 +1,5 @@
-//! What an addition creates: the [`AddPlan`] a terminal host or the agent
-//! queue's worker carries out, built from the command's arguments.
+//! What an addition creates, checked with the daemon before anything is
+//! created, and the agent arguments its launch carries.
 use std::ffi::OsString;
 
 use anyhow::Result;

@@ -91,9 +91,9 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
             assert_eq!(workspace["name"], name);
             let launch: Value = serde_json::from_slice(lines.next().unwrap()).unwrap();
             assert!(lines.next().is_none());
-            assert_eq!(launch["happy_daemon_recorded"], false);
+            assert_eq!(launch["start"]["happy_daemon_recorded"], false);
             // Happy's Codex takes Shoal's guidance as its first message.
-            let session = launch["happy_session_id"].as_str().unwrap();
+            let session = launch["start"]["happy_session_id"].as_str().unwrap();
             assert!(server.first_message(session).starts_with(GUIDANCE_START));
             let config: toml::Value = toml::from_str(
                 &fs::read_to_string(fixture.root.path().join(".codex/config.toml")).unwrap(),
@@ -141,8 +141,8 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
             assert!(output.status.success(), "{}", printed(&output));
             assert_eq!(output.stderr, b"", "{}", printed(&output));
             let launch: Value = happy_launch(&output);
-            assert_eq!(launch["workspace"]["id"], workspace["id"]);
-            assert_eq!(launch["happy_daemon_recorded"], true);
+            assert_eq!(launch["space"]["id"], workspace["id"]);
+            assert_eq!(launch["start"]["happy_daemon_recorded"], true);
             // Detached Claude launches skip the trust dialog like `shoal claude`.
             let config: Value =
                 serde_json::from_str(&fs::read_to_string(&claude_config).unwrap()).unwrap();
@@ -154,10 +154,9 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
             );
             launch
         };
-        assert_eq!(launch["agent"], agent);
-        let pid = launch["pid"].as_u64().unwrap() as u32;
-        let execution_id = launch["execution_id"].as_str().unwrap();
-        let log = PathBuf::from(launch["log"].as_str().unwrap());
+        let pid = launch["start"]["pid"].as_u64().unwrap() as u32;
+        let execution_id = launch["start"]["execution_id"].as_str().unwrap();
+        let log = PathBuf::from(launch["start"]["log"].as_str().unwrap());
         assert!(log.starts_with(fixture.root.path().join("state/workspaces")));
         let inspection = fixture.ok(&["status", &fixture.id(&name)]);
         let executions = inspection["executions"].as_array().unwrap();
@@ -259,7 +258,7 @@ fn happy_issue_prompts_reach_claude_as_arguments_and_codex_as_its_first_message(
         assert!(output.status.success(), "{}", printed(&output));
         let launch: Value =
             serde_json::from_slice(output.stdout.split(|b| *b == b'\n').nth(1).unwrap()).unwrap();
-        let name = launch["workspace"]["name"].as_str().unwrap().to_owned();
+        let name = launch["space"]["name"].as_str().unwrap().to_owned();
         assert_eq!(name, "Fix API timeout");
         wait_until("fake happy record", || record.exists());
         let recorded = fs::read_to_string(&record).unwrap();
@@ -291,7 +290,7 @@ fn happy_issue_prompts_reach_claude_as_arguments_and_codex_as_its_first_message(
             assert_eq!(args[6], "--append-system-prompt");
             assert_eq!(after_guidance(args[7]), "General 34-fix-api-timeout");
             assert_eq!(after_temp_dirs(&args[8..])[..2], ["--model", "test"]);
-            assert_eq!(launch["happy_session_id"], Value::Null);
+            assert_eq!(launch["start"]["happy_session_id"], Value::Null);
         } else {
             assert_eq!(
                 args[..7],
@@ -306,7 +305,7 @@ fn happy_issue_prompts_reach_claude_as_arguments_and_codex_as_its_first_message(
                 ]
             );
             // The guidance and the issue arrive together as its first message.
-            let session = launch["happy_session_id"].as_str().unwrap();
+            let session = launch["start"]["happy_session_id"].as_str().unwrap();
             let message = server.first_message(session);
             let prompt = after_guidance(&message);
             assert!(
@@ -317,7 +316,7 @@ fn happy_issue_prompts_reach_claude_as_arguments_and_codex_as_its_first_message(
                 assert!(prompt.contains(value), "{prompt}");
             }
         }
-        let pid = launch["pid"].as_u64().unwrap() as u32;
+        let pid = launch["start"]["pid"].as_u64().unwrap() as u32;
         fixture.ok(&["rm", "--wait", &fixture.id(&name), "--yes"]);
         wait_until("happy to exit", || !process_alive(pid));
         fs::remove_file(&record).unwrap();
@@ -466,12 +465,17 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
             .unwrap();
         assert!(output.status.success(), "{}", printed(&output));
         let launch: Value = happy_launch(&output);
-        let session_id = launch["happy_session_id"].as_str().unwrap().to_owned();
+        let session_id = launch["start"]["happy_session_id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
         assert!(session_id.starts_with("session-"));
         // The message reached the session, so nothing is left for the user to send.
-        assert_eq!(launch.get("prompt_file"), None, "{launch}");
-        assert_eq!(launch.get("prompt_delivered"), None, "{launch}");
-        let state_dir = Path::new(launch["log"].as_str().unwrap()).parent().unwrap();
+        assert_eq!(launch["start"].get("prompt_file"), None, "{launch}");
+        assert_eq!(launch["start"].get("prompt_delivered"), None, "{launch}");
+        let state_dir = Path::new(launch["start"]["log"].as_str().unwrap())
+            .parent()
+            .unwrap();
         let prompts: Vec<_> = (fs::read_dir(state_dir).unwrap())
             .map(|entry| entry.unwrap().file_name().into_string().unwrap())
             .filter(|file| file.ends_with(".prompt.md"))
@@ -543,7 +547,7 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
             if variant == "dataKey" { 1 } else { 2 }
         );
 
-        let pid = launch["pid"].as_u64().unwrap() as u32;
+        let pid = launch["start"]["pid"].as_u64().unwrap() as u32;
         fixture.ok(&["rm", "--wait", &fixture.id(&name)]);
         wait_until("happy to exit", || !process_alive(pid));
         fs::remove_file(&record).unwrap();
@@ -716,7 +720,9 @@ done
         .output()
         .unwrap();
     assert!(started.status.success(), "{}", printed(&started));
-    let started: Value = serde_json::from_slice(&started.stdout).unwrap();
+    // The start shows the recorded chat, then the session it started.
+    let started = String::from_utf8_lossy(&started.stdout);
+    let started: Value = serde_json::from_str(started.lines().last().unwrap()).unwrap();
     wait_until("the Happy fixture to publish its launch", || {
         record.exists()
     });
@@ -806,7 +812,9 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
             .output()
             .unwrap();
         assert!(output.status.success(), "{}", printed(&output));
-        let started: Value = serde_json::from_slice(&output.stdout).unwrap();
+        // The start shows the recorded chat, then the session it started.
+        let started = String::from_utf8_lossy(&output.stdout);
+        let started: Value = serde_json::from_str(started.lines().last().unwrap()).unwrap();
         wait_until("fake happy record", || record.exists());
         (started, fs::read_to_string(&record).unwrap())
     };
@@ -904,7 +912,10 @@ fn happy_launch(output: &Output) -> Value {
     assert!(output.status.success(), "{}", printed(output));
     let stdout = String::from_utf8_lossy(&output.stdout);
     let launch: Value = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
-    assert!(launch.get("happy_daemon_recorded").is_some(), "{stdout}");
+    assert!(
+        launch["start"].get("happy_daemon_recorded").is_some(),
+        "{stdout}"
+    );
     launch
 }
 

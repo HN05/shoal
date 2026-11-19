@@ -428,7 +428,7 @@ async fn a_chat_never_takes_a_workspace_it_runs_in_or_one_above_it() {
 }
 
 #[tokio::test]
-async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
+async fn a_scoped_chat_starts_chats_only_in_the_worktrees_of_its_tree() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -449,79 +449,25 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
             },
         )
         .await;
-    let start = |workspace: &Workspace| {
-        launch_chat(crate::protocol::ChatStart {
-            repository: Some(repo.id.clone().into()),
-            workspace: Some(SpaceSelector::id(&workspace.id)),
+    let start = |workspace: &Workspace| crate::protocol::LaunchMethod::Launch {
+        launch: Box::new(shoal_protocol::launches::Launch {
+            in_workspace: Some(shoal_protocol::launches::SpaceChoice::Space(
+                SpaceSelector::id(&workspace.id),
+            )),
+            chat: true,
             name: Some("auditing".into()),
             agent: Some("claude".into()),
             ..Default::default()
-        })
+        }),
     };
     // The workspace above the chat is outside its tree...
     let authorized =
         crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut start(&root)).await;
     assert!(authorized.is_err());
     // ...and the one below it is not.
-    let mut method = start(&worker);
-    crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method)
+    crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut start(&worker))
         .await
         .unwrap();
-    let crate::protocol::ChatMethod::LaunchChat { start, .. } = method else {
-        unreachable!("the method stays a chat start");
-    };
-    let crate::protocol::ChatStart {
-        repository,
-        workspace,
-        parent,
-        ..
-    } = *start;
-    assert_eq!(workspace, Some(SpaceSelector::id(&worker.id)));
-    let new = crate::daemon::chats::NewChat {
-        priority: None,
-        narrowing: Default::default(),
-        mode: "chat".into(),
-        name: "auditing".into(),
-        agent: "claude".into(),
-        origin: None,
-        parent: parent.map(|parent| SpaceId::from(parent.to_string())),
-    };
-    let auditing = manager
-        .start_new_chat(repository, workspace.as_ref(), new)
-        .await
-        .unwrap();
-    let auditing = manager.run_chat_agent(auditing, None).await.unwrap();
-    assert_eq!(
-        auditing.workdir.workspace().map(|home| home.id.clone()),
-        Some(worker.id.clone())
-    );
-    assert_eq!(auditing.parent.map(|parent| parent.id), Some(chat.id));
-    // A chat it starts goes below a space below its own that it names, never
-    // below one outside its tree.
-    let below = |parent: &Workspace| {
-        launch_chat(crate::protocol::ChatStart {
-            repository: Some(repo.id.clone().into()),
-            name: Some("nested".into()),
-            agent: Some("claude".into()),
-            parent: Some(SpaceSelector::id(&parent.id)),
-            ..Default::default()
-        })
-    };
-    let mut method = below(&worker);
-    crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method)
-        .await
-        .unwrap();
-    let crate::protocol::ChatMethod::LaunchChat { start, .. } = method else {
-        unreachable!("the method stays a chat start");
-    };
-    assert_eq!(start.parent, Some(SpaceSelector::id(&worker.id)));
-    let error = crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut below(&root))
-        .await
-        .unwrap_err();
-    assert!(
-        format!("{error:#}").contains("outside this space's scope"),
-        "{error:#}"
-    );
     // The check before a workspace start takes the parent the same way.
     let check = |parent: &Workspace| crate::protocol::WorkspaceMethod::CheckCreation {
         repository: repo.id.clone().into(),
@@ -574,16 +520,5 @@ async fn a_scoped_process_restarts_only_the_chats_below_its_space() {
         };
         let authorized = crate::daemon::scope::authorize(&manager, Some(&token), &mut restart);
         assert_eq!(authorized.await.is_ok(), allowed, "{caller}");
-    }
-}
-
-/// The request that records the new chat `start` describes for its
-/// caller to run.
-fn launch_chat(start: crate::protocol::ChatStart) -> crate::protocol::ChatMethod {
-    crate::protocol::ChatMethod::LaunchChat {
-        start: Box::new(start),
-        chat: None,
-        origin: None,
-        queue_entry: None,
     }
 }

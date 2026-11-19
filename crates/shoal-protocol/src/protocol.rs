@@ -47,7 +47,7 @@ pub use approvals::ApprovalMethod;
 pub use apps::AppMethod;
 pub use assignments::{AssignmentMethod, SavedAgent};
 pub use branches::BranchMethod;
-pub use chats::{ChatMethod, ChatRoot, ChatStart};
+pub use chats::{ChatMethod, ChatRoot};
 pub use ci::CiMethod;
 pub use config::{ConfigTarget, RepositoryLayers};
 pub use containers::ContainerMethod;

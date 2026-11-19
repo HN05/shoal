@@ -1,7 +1,7 @@
 //! A space whose agent's launch failed to start restores by queuing that
 //! launch again exactly as it was: as the queue admits it, at once for
 //! `--now`, or in this terminal for `--focus`.
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 
 use super::super::targets::Selected;
 use super::permission_change;
@@ -9,10 +9,10 @@ use crate::client::output::batch::Failure;
 use crate::{
     cli::{commands::queued_agents, context::Context, ui},
     config::permissions::PermissionChange,
-    model::{QueueEntry, Space},
+    model::QueueEntry,
     state::QueueState,
 };
-use shoal_protocol::{protocol::RetryStart, space_names::SpaceSelector};
+use shoal_protocol::protocol::RetryStart;
 
 /// Move the selected spaces with a failed launch from `selected`'s spaces
 /// to its failed starts.
@@ -83,28 +83,5 @@ pub(super) async fn retry_here(
         (crate::client::queue::retry(&ctx.paths, failed.id.clone(), RetryStart::Here)).await?;
     let _held = queued_agents::Hold::start(&ctx.paths, &retried.id).await;
     let entry = crate::client::queue::start_here(&ctx.paths, &retried.id).await?;
-    match &entry.opens {
-        Some(_) => queued_agents::run_here(ctx, &entry.id).await,
-        None => run_chat_here(ctx, &entry).await,
-    }
-}
-
-/// Run here the agent of the chat the starting launch `entry`, which this
-/// process holds, starts in, as the queue's start would in a place.
-async fn run_chat_here(ctx: &Context, entry: &QueueEntry) -> Result<i32> {
-    let chat = (entry.space().cloned()).context("the restored launch names no chat")?;
-    let spaces = crate::client::spaces::list(&ctx.paths).await?;
-    let found = spaces.find(&SpaceSelector::id(&chat)).map(Space::into_chat);
-    let chat = found
-        .and_then(Result::ok)
-        .context("the restored launch's chat is gone")?;
-    let queued = crate::client::queue::plan(&ctx.paths, entry.id.clone()).await?;
-    let launch = crate::start_plan::QueuedStart::of(&queued.plan)?.launch;
-    crate::env::launch_queue_entry(&entry.id);
-    let start = crate::queued_starts::chat_start(&chat, launch);
-    let handed = crate::chat_handoff::HandedStart {
-        start,
-        chat: chat.id.clone(),
-    };
-    crate::cli::commands::start::start_resolved(ctx, handed).await
+    queued_agents::run_here(ctx, &entry.id).await
 }

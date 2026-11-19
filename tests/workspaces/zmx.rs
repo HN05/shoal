@@ -208,14 +208,14 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
     assert!(
         calls[4][2].starts_with("SHOAL_ENDS_SESSION=1 ")
             && calls[4][2].ends_with(
-                " internal add --host zmx --close-when-done && exit; exec \"$SHELL\" -l\r"
+                " internal place --host zmx --close-when-done && exit; exec \"$SHELL\" -l\r"
             ),
         "{calls:?}"
     );
     let session: Value =
         serde_json::from_str(&fs::read_to_string(home.join("zmx-background.env")).unwrap())
             .unwrap();
-    assert!(session["SHOAL_ADD_PLAN"].is_string(), "{session}");
+    assert!(session["SHOAL_PLACE_PLAN"].is_string(), "{session}");
     let log = fs::read_to_string(home.join("zmx-background.log")).unwrap_or_default();
     assert_eq!(runs(), "background tracked go\n", "{log}");
     let workspace = fixture.ok(&["status", &fixture.id("background")]);
@@ -540,7 +540,7 @@ fn a_detached_session_stays_open_without_close_when_done() {
     assert!(
         sent.and_then(|call| call.get(2).cloned())
             .is_some_and(|text| {
-                text.ends_with(" internal add --host zmx && exit; exec \"$SHELL\" -l\r")
+                text.ends_with(" internal place --host zmx && exit; exec \"$SHELL\" -l\r")
             }),
         "{calls:?}\n{transcript}"
     );

@@ -1,9 +1,7 @@
 //! Starting the agent of a space that changed since its session stopped,
-//! a workspace's or a chat's: what it is told and whether it starts from a
-//! fork of its session are the same for either kind; only the launch is the
-//! kind's.
+//! a workspace's or a chat's: what it is told, whether it starts from a
+//! fork of its session and its launch are the same for either kind.
 use anyhow::{Context as _, Result};
-use shoal_protocol::model::ByKind;
 use std::path::PathBuf;
 
 use super::reports;
@@ -11,7 +9,7 @@ use crate::{
     cli::context::Context,
     config::templates::Subject,
     execution::recovery::{LastSession, changes::Change},
-    model::{Space, Workspace},
+    model::Space,
     protocol::ConfigTarget,
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
@@ -20,12 +18,12 @@ use shoal_protocol::space_names::SpaceSelector;
 /// How the agent of a changed space starts: as `session` saved it, told
 /// `told`, from a fork of the session `fork` when given, replacing
 /// `records`, which it consumes once it has started.
-pub(in crate::cli::commands) struct ChangedStart {
-    pub session: LastSession,
-    pub change: Change,
-    pub fork: Option<AgentSessionId>,
-    pub told: Subject,
-    pub records: Vec<PathBuf>,
+struct ChangedStart {
+    session: LastSession,
+    change: Change,
+    fork: Option<AgentSessionId>,
+    told: Subject,
+    records: Vec<PathBuf>,
 }
 
 /// Start the agent of `session` in `space`, which changed as `change` says
@@ -53,21 +51,14 @@ pub(super) async fn start_changed(
         fork,
         records,
     };
-    match space.clone().by_kind() {
-        ByKind::Workspace(workspace) => launch_in_workspace(ctx, workspace, start).await,
-        ByKind::Chat(chat) => crate::cli::commands::start::start_changed(ctx, &chat, start).await,
-    }
+    launch_in(ctx, space, start).await
 }
 
-/// Launch the agent `start` describes in `workspace`, as a new agent is
+/// Launch the agent `start` describes in `space`, as a new agent is
 /// started, with the model and effort it ran with: a converted one starts
 /// on what it is told and its mode's instructions, any other is told it as
 /// it is.
-async fn launch_in_workspace(
-    ctx: &Context,
-    workspace: Workspace,
-    start: ChangedStart,
-) -> Result<i32> {
+async fn launch_in(ctx: &Context, space: &Space, start: ChangedStart) -> Result<i32> {
     let ChangedStart {
         session,
         change,
@@ -79,7 +70,7 @@ async fn launch_in_workspace(
     let launch: crate::agent::Agent = agent
         .name()
         .parse()
-        .with_context(|| format!("cannot start agent {agent} of {}", workspace.name))?;
+        .with_context(|| format!("cannot start agent {agent} of {}", space.name))?;
     let options = crate::cli::agents::LaunchOptions {
         replaces: records,
         fork,
@@ -97,5 +88,6 @@ async fn launch_in_workspace(
             message: told.text,
         },
     };
-    crate::cli::agents::launch_agent(ctx, launch, workspace, opening, vec![], options).await
+    let records = shoal_workers::homes::records(&ctx.paths, &SpaceSelector::id(&space.id)).await?;
+    crate::cli::agents::launch_agent(ctx, launch, records, opening, vec![], options).await
 }

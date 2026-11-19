@@ -6,7 +6,6 @@ use crate::test_daemon::{Connect as _, code, queued_plan, start_workspace};
 use shoal_core::config::repo::ConflictPolicy;
 use shoal_daemon::test_daemon::ApprovalRequestExt as _;
 use shoal_daemon::test_daemon::{TestDaemon, fake};
-use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::approvals::{ApprovalRequest, PortSpecification, Specification, Target};
 use shoal_protocol::config::repo::Lifetime;
 use shoal_protocol::files::Attacher;
@@ -580,66 +579,6 @@ async fn a_start_without_an_agent_queues_the_configured_default() {
     let entry = started.entry.expect("the start queued its agent");
     assert_eq!(entry.agent, "probe");
     worker.exit(1);
-}
-
-#[tokio::test]
-async fn a_chat_parent_in_another_repository_is_refused_before_the_chat_starts() {
-    let daemon = TestDaemon::start().await;
-    let app = daemon.connector();
-    let parent = daemon.workspace("parent").await;
-    let root = tempfile::tempdir().unwrap();
-    let other = shoal_core::test_support::repository(root.path(), "other");
-    let other = daemon
-        .manager
-        .register_repository(other.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let check = |repository: &Repository, workspace: Option<&SpaceId>, parent: &SpaceId| {
-        shoal_protocol::protocol::ChatMethod::CheckChatParent {
-            repository: Some(repository.id.clone().into()),
-            workspace: workspace.map(SpaceSelector::id),
-            parent: Some(SpaceSelector::id(parent)),
-        }
-    };
-    let refused = |method| async { connection::request::<()>(&app, method).await.is_err() };
-    connection::request::<()>(&app, check(&daemon.repository, None, &parent.id))
-        .await
-        .unwrap();
-    assert!(refused(check(&other, None, &parent.id)).await);
-    // Nor does a chat go below the workspace it runs in.
-    assert!(refused(check(&daemon.repository, Some(&parent.id), &parent.id)).await);
-    // A workspace that is not ready takes no child, chat or workspace.
-    let failed = daemon.workspace("failed").await;
-    (daemon.manager)
-        .set_state(
-            &failed.id,
-            shoal_protocol::state::WorkspaceState::Failed,
-            None,
-        )
-        .await
-        .unwrap();
-    assert!(refused(check(&daemon.repository, None, &failed.id)).await);
-    let creation = WorkspaceMethod::CheckCreation {
-        repository: daemon.repository.id.clone().into(),
-        branch: Some("child".into()),
-        existing: None,
-        base: None,
-        git_profile: None,
-        path: None,
-        options: Default::default(),
-        parent: Some(SpaceSelector::id(&failed.id)),
-    };
-    assert!(connection::request::<()>(&app, creation).await.is_err());
-    let mut child = start_workspace(&daemon, WorkspaceStart::Name("child".into()));
-    if let OperationMethod::StartWorkspace { parent, .. } = &mut child {
-        *parent = Some(SpaceSelector::id(&failed.id));
-    }
-    assert!(
-        connection::request::<StartedWorkspace>(&app, child)
-            .await
-            .is_err()
-    );
-    assert_eq!(code(inspect(&app, "child").await), ErrorCode::NotFound);
 }
 
 #[tokio::test]

@@ -29,8 +29,7 @@ pub(super) use crate::client::queue::Hold;
 /// Run the launch `entry`, which this process marked starting for itself,
 /// here, holding its slot until its agent takes it over.
 pub(super) async fn run_here(ctx: &Context, entry: &QueueEntryId) -> Result<i32> {
-    let (_, plan) = crate::queued_starts::launch_plan(&ctx.paths, entry).await?;
-    super::workspaces::execute_add(ctx, plan).await
+    super::start::run_entry(ctx, entry, None).await
 }
 
 pub(super) async fn entries(ctx: &Context) -> Result<Vec<QueueEntry>> {

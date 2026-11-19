@@ -3,7 +3,7 @@ use crate::{
     daemon::{
         chats::NewChat, manager::Manager, notifications::NotificationKind, test_support::manager,
     },
-    model::{ChatQueueRequest, QueueEntry, Repository},
+    model::{QueueEntry, Repository},
     removal::{InspectionPolicy, UnsavedWork},
     state::QueueState,
 };
@@ -129,20 +129,6 @@ async fn a_new_launch_or_the_spaces_removal_ends_its_failed_launch() {
 async fn a_chats_failed_launch_keeps_the_chat() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    let request = ChatQueueRequest {
-        source: None,
-        repository: Some((&repo.id).into()),
-        name: "talk".into(),
-        agent: "claude".into(),
-        mode: "chat".into(),
-        narrowing: Default::default(),
-        plan: r#"{"launch":{"agent":"claude"}}"#.into(),
-        env: Default::default(),
-        now: false,
-        priority: None,
-    };
-    let entry = manager.queue_chat_add(request, None).await.unwrap();
-    let entry = entry.entry.unwrap();
     let chat = NewChat {
         name: "talk".into(),
         agent: "claude".into(),
@@ -154,9 +140,9 @@ async fn a_chats_failed_launch_keeps_the_chat() {
     };
     let chat = manager.start_new_chat(Some((&repo.id).into()), None, chat);
     let chat = chat.await.unwrap();
-    (manager.queue_attach(&entry.id, &SpaceSelector::id(&chat.id)))
-        .await
-        .unwrap();
+    let launch = crate::protocol::operations::QueuedLaunch::new("claude".into());
+    let request = crate::start_plan::queued_agent_request(&chat, launch, None).unwrap();
+    let entry = manager.queue_add(request).await.unwrap().entry.unwrap();
 
     (manager.fail_queue_entry(&entry.id, "the place did not open"))
         .await

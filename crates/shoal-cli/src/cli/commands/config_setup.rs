@@ -5,56 +5,48 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result};
 
-use super::start;
+use super::{start, workspaces};
 use crate::config_file::ConfigExt;
 use crate::{
-    agent::{Agent, ModelChoice},
-    cli::{args::service::ConfigSetupArgs, context::Context},
-    config::{Config, modes, templates::Subject},
+    cli::{args::service::ConfigSetupArgs, context::Context, ui},
+    config::{Config, modes},
     protocol::ConfigTarget,
 };
+use shoal_protocol::launches::{Launch, Setup};
+use shoal_protocol::space_names::SpaceName;
 
 /// Start the setup chat, writing the packaged default config first when
-/// there is none and the agent is settled.
+/// there is none and the agent is settled. As chats do, it starts at once,
+/// and unless `--here` in a focused place beside this terminal, whatever
+/// the `focus` setting says, since the user works with it straight away.
+/// Without a terminal, or from a scoped process, the daemon starts it
+/// detached instead, as it starts any chat.
 pub(super) async fn start(ctx: &Context, mut args: ConfigSetupArgs) -> Result<i32> {
-    let handoff = args.handoff.take();
-    let set_up = async { start::ending_failed(ctx, setup(ctx, args).await).await };
-    crate::chat_handoff::serve(handoff.as_deref(), set_up).await
-}
-
-/// Start the setup chat `args` ask for.
-async fn setup(ctx: &Context, mut args: ConfigSetupArgs) -> Result<i32> {
     // Chosen before the config is written, so a refused agent leaves none.
     let settings = shoal_workers::settings::of(&ctx.paths, ConfigTarget::Global).await?;
-    let agent = start::chat_agent(ctx, &settings, args.agent.take())?;
+    let agent = crate::cli::agents::start_agent(ctx, &settings, args.agent.take())?;
     let model = std::mem::take(&mut args.model).into();
-    start::check_model(&settings, &agent, &model)?;
-    let config = installed_config(ctx)?;
-    let options = options(args, agent, model);
-    start::start_outside_repositories(ctx, topic(&config), options).await
-}
-
-/// How the setup chat of `agent` starts: as chats do, at once, and unless
-/// `--here` in a focused place beside this terminal, whatever the `focus`
-/// setting says, since the user works with it straight away. Without a
-/// terminal, or from a scoped process, the daemon starts it detached
-/// instead, as it starts any chat.
-fn options(args: ConfigSetupArgs, agent: Agent, model: ModelChoice) -> start::Options {
-    start::Options {
-        now: false,
-        priority: None,
-        narrowing: start::Narrowing::Requested(Default::default()),
-        agent: Some(agent),
-        place: start::ChatPlace::here(args.here),
-        name: args.name,
-        model,
-        args: args.args,
-        session: args.session,
-        fork: false,
-        handoff: args.handoff,
-        chat: args.chat,
-        parent: None,
+    if let Some(agent) = &agent {
+        start::check_model(&settings, agent, &model)?;
     }
+    let config = installed_config(ctx)?;
+    let launch = Launch {
+        setup: Some(Setup::Config),
+        name: Some(SpaceName::derive(modes::ModeName::SETUP.as_str(), "chat")),
+        agent,
+        model,
+        prompt: Some(subject(&config)),
+        task: workspaces::launch_args(args.args)?,
+        directory: ui::current_directory()?,
+        env: Some(crate::terminal::start_environment()),
+        ..Launch::default()
+    };
+    let options = workspaces::AddOptions {
+        here: args.here,
+        focus: !start::leaves_caller(ctx, args.here),
+        ..Default::default()
+    };
+    start::place(ctx, launch, &settings, &options).await
 }
 
 /// The global config file, in a directory that exists and is named as the
@@ -68,21 +60,6 @@ fn installed_config(ctx: &Context) -> Result<PathBuf> {
     }
     let directory = crate::agents::writable_config_dir(&path)?;
     Ok(directory.join(path.file_name().context("the config has no file name")?))
-}
-
-/// The chat that sets up the global config `config`, reopened in a new tab
-/// or restored by the same command.
-pub(in crate::cli::commands) fn topic(config: &Path) -> start::Topic {
-    start::Topic {
-        relaunch: start::Relaunch::ConfigSetup,
-        name: Some(modes::ModeName::SETUP.into()),
-        mode: modes::ModeName::SETUP,
-        subject: Some(Subject::told(subject(config))),
-        linked_issue: None,
-        links: Default::default(),
-        workspace: None,
-        tells_resumed: false,
-    }
 }
 
 /// What the setup agent of the global config `config` starts on: which file

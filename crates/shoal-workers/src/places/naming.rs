@@ -4,21 +4,21 @@ use anyhow::{Context as _, Result};
 
 use crate::{
     client::connection::CommandPaths,
-    model::Workspace,
+    model::{Space, Workspace},
     protocol::ItemContext,
-    start_plan::AddPlan,
+    start_plan::PlacePlan,
     terminal::{Host, PlaceName, names_places},
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Give `plan`'s place the host's name `template`, if any, with `issue`,
-/// its issue's number and title. Without `issue`, a plan that names one
-/// only by URL, as a queued start's does, looks it up.
+/// Give `plan`'s place in `space` the host's name `template`, if any, with
+/// the repository and first issue of a workspace; a chat's place takes its
+/// name.
 pub async fn name_plan(
     paths: &CommandPaths,
     template: Option<String>,
-    plan: &mut AddPlan,
-    issue: Option<(u64, &str)>,
+    plan: &mut PlacePlan,
+    space: &Space,
 ) -> Result<()> {
     let Some(template) = template else {
         return Ok(());
@@ -27,22 +27,11 @@ pub async fn name_plan(
         *name = name.templated(Some(template));
         return Ok(());
     }
-    let repos = crate::client::repositories::list(paths).await?;
-    let repo = crate::repository::select(&repos, &plan.repository).await?;
-    let found = match (issue, plan.issue()) {
-        // A name reads only the issue's number and title, so a workspace
-        // whose issue has closed keeps them.
-        (None, Some(url)) => {
-            let context = ItemContext::space(SpaceSelector::id(&plan.workspace));
-            let item = url.clone().into();
-            Some(crate::client::forge_reads::linked_issue_details(paths, context, item).await?)
-        }
-        _ => None,
+    let Some(workspace) = space.to_workspace() else {
+        return Ok(());
     };
-    let issue = issue.or(found
-        .as_ref()
-        .map(|issue| (issue.number.get(), &*issue.title)));
-    plan.place_name = Some(PlaceName::new(Some(template), repo, issue));
+    let name = place_name(paths, &workspace).await?;
+    plan.place_name = Some(name.templated(Some(template)));
     Ok(())
 }
 
@@ -81,11 +70,13 @@ pub async fn place_name(paths: &CommandPaths, workspace: &Workspace) -> Result<P
         .iter()
         .find(|repo| repo.id == *workspace.repository())
         .context("repository is no longer registered")?;
+    // A name reads only the issue's number and title, so a workspace whose
+    // issue has closed keeps them.
     let issue = match workspace.links.issue() {
         Some(linked) => {
             let context = ItemContext::space(SpaceSelector::id(&workspace.id));
             let input = linked.url.clone().into();
-            Some(crate::client::forge_reads::issue_details(paths, context, input).await?)
+            Some(crate::client::forge_reads::linked_issue_details(paths, context, input).await?)
         }
         None => None,
     };

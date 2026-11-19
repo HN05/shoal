@@ -28,7 +28,7 @@ fn the_flags_only_this_process_reads_fit_only_a_workspace() {
 async fn the_setup_mode_starts_only_with_its_own_commands() {
     let home = tempfile::tempdir().unwrap();
     let ctx = Context::new(crate::paths::Paths::for_test(home.path()), true);
-    for args in [&["--mode", "setup"][..], &["--mode", "setup", "--as-chat"]] {
+    for args in [&["--mode", "setup"][..], &["--mode", "setup", "--here"]] {
         let error = run(&ctx, start(args)).await.unwrap_err().to_string();
         assert!(error.contains("shoal config setup"), "{error}");
     }
@@ -43,16 +43,16 @@ fn a_workspace_start_takes_the_checked_repository_by_id() {
         ..Launch::default()
     };
     // It replaces the positional repository that named it.
-    let named = launch::workspace::checked_launch(launch("repo", None), Some(&checked));
+    let named = launch::checked_launch(launch("repo", None), Some(&checked));
     assert_eq!(
         (named.target, named.repository),
         (None, Some("repo-id".into()))
     );
     // A positional issue stays, beside the repository `--repo` named.
-    let issue = launch::workspace::checked_launch(launch("37", Some("repo")), Some(&checked));
+    let issue = launch::checked_launch(launch("37", Some("repo")), Some(&checked));
     assert_eq!(issue.target, Some("37".parse().unwrap()));
     assert_eq!(issue.repository, Some("repo-id".into()));
     // Unchecked, `--repo` stays the user's text.
-    let unchecked = launch::workspace::checked_launch(launch("37", Some("repo")), None);
+    let unchecked = launch::checked_launch(launch("37", Some("repo")), None);
     assert_eq!(unchecked.repository, Some("repo".into()));
 }

@@ -1,65 +1,15 @@
-//! The launches of new chats' agents: admitting one under the heavy slots or
-//! queuing it, and attaching it to the chat its start records.
+//! Attaching a launch to the chat its start records.
 use anyhow::{Result, ensure};
 use rusqlite::params;
 
-use super::{
-    blockers,
-    store::{self, Launch, insert_launch},
-};
+use super::{blockers, store};
 use crate::{
-    daemon::{manager::Manager, scope::Caller},
-    model::{ChatQueueRequest, QueueAdmission},
+    daemon::manager::Manager,
     state::{QueueKind, QueueState},
 };
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 
 impl Manager {
-    /// Admit the launch of the new chat `request` describes for `caller`, or
-    /// queue it: one admitted here, at once where no limit applies, starts
-    /// in the caller, which records the chat and attaches the launch to it.
-    /// One that waits has its caller record the chat at once, and starts
-    /// from the queue, which runs its plan, only once the chat is attached.
-    pub(in crate::daemon) async fn queue_chat_add(
-        &self,
-        mut request: ChatQueueRequest,
-        caller: Option<&Caller>,
-    ) -> Result<QueueAdmission> {
-        let repository = match &request.repository {
-            Some(selector) => Some(self.repository(selector).await?.id),
-            None => None,
-        };
-        request.priority = self.given_priority(caller, request.priority).await?;
-        let _gate = self.agent_queue.lock_admission().await;
-        let repositories = repository.iter().cloned().collect();
-        let limits = self.agent_limits(repositories, &[], &[]).await?;
-        let id = QueueEntryId::generate();
-        let now = request.now || !limits.apply_to(repository.as_ref());
-        let launch = Launch {
-            id: id.clone(),
-            repository,
-            request: request.into(),
-            state: match now {
-                true => QueueState::Starting,
-                false => QueueState::Queued,
-            },
-            chat: None,
-            opens: None,
-            scope: caller.map(|caller| caller.space_id.clone()),
-            awaits: Default::default(),
-        };
-        let removing = self.space_removals.clone();
-        self.store
-            .write(move |tx| insert_launch(tx, &launch, &removing))
-            .await?;
-        let admitted = now || self.admit_waiting(Some(&id)).await?;
-        // Kept before the gate opens, so no pass admits it unattached.
-        if !admitted {
-            self.agent_queue.keep_for_attach(&id);
-        }
-        self.admission_of(&id, admitted).await
-    }
-
     /// Record `chat` as the one the launch `id` starts its agent in, whether
     /// it starts or waits, unless a launch already holds the chat's agent,
     /// and let admission take a launch kept for this.

@@ -5,13 +5,10 @@ use anyhow::Result;
 
 use super::super::{
     answer::Answer,
-    chats::NewChat,
     manager::Manager,
     scope::{Caller, Scoped},
 };
-use crate::protocol::{Body, ChatMethod, ChatStart};
-use shoal_ids::queue_entry_ids::QueueEntryId;
-use shoal_protocol::chats::LaunchedChat;
+use crate::protocol::{Body, ChatMethod};
 use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn handle(
@@ -20,19 +17,6 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
-        ChatMethod::LaunchChat {
-            start,
-            chat,
-            origin,
-            queue_entry,
-        } => {
-            let launched = Launched {
-                chat,
-                origin,
-                entry: queue_entry,
-            };
-            Body::LaunchedChat(launched.take(manager, *start, caller).await?)
-        }
         ChatMethod::CheckChatParent {
             repository,
             workspace,
@@ -51,97 +35,14 @@ pub(super) async fn handle(
     }))
 }
 
-/// What a caller that runs a chat's agent itself names of its start: the
-/// chat the daemon recorded for it, the place it runs in and the launch
-/// whose slot its agent takes.
-struct Launched {
-    chat: Option<SpaceSelector>,
-    origin: Option<crate::sessions::Origin>,
-    entry: Option<QueueEntryId>,
-}
-
-impl Launched {
-    /// The chat whose agent `caller` runs: the one recorded for its start,
-    /// placed at its origin, which a scoped caller's scope must reach, else
-    /// a new one `start` describes, recorded with its launch attached and
-    /// linked.
-    async fn take(
-        self,
-        manager: &Manager,
-        start: ChatStart,
-        caller: Option<&Caller>,
-    ) -> Result<LaunchedChat> {
-        let Some(chat) = manager.space_id(self.chat.as_ref()).await? else {
-            return self.record(manager, start, caller).await;
-        };
-        if let Some(caller) = caller {
-            let space = manager.space(&SpaceSelector::id(&chat)).await?;
-            manager.ensure_reaches(caller, &space).await?;
-        }
-        manager.take_recorded_chat(&chat, self.origin).await
-    }
-
-    /// Record the new chat `start` describes for `caller`, with the
-    /// permissions and priority it may give.
-    async fn record(
-        self,
-        manager: &Manager,
-        mut start: ChatStart,
-        caller: Option<&Caller>,
-    ) -> Result<LaunchedChat> {
-        if caller.is_none() {
-            let (workspace, parent) = (start.workspace.as_ref(), start.parent.as_ref());
-            manager.ensure_parent_not_host(workspace, parent).await?;
-        }
-        let held = (start.repository.as_ref(), start.workspace.as_ref());
-        (manager.ensure_chat_given_held(caller, &start.narrowing, held)).await?;
-        start.priority = manager.given_priority(caller, start.priority).await?;
-        let parent = manager.space_id(start.parent.as_ref()).await?;
-        let new = NewChat::of(&start, parent, self.origin)?;
-        let entry = self.entry.as_ref();
-        manager.record_launch(&start, new, entry, caller).await
-    }
-}
-
 impl Scoped for ChatMethod {
     async fn scope(
         &mut self,
         manager: &Manager,
         caller: &Caller,
     ) -> Result<Option<&mut SpaceSelector>> {
-        // A chat's start takes the slot only of a launch the caller reaches.
-        if let ChatMethod::LaunchChat {
-            queue_entry: Some(entry),
-            ..
-        } = self
-        {
-            manager.ensure_entry_reached(caller, entry).await?;
-        }
         Ok(match self {
-            // A scoped caller starts chats only in its own tree, below its
-            // own space unless it names one below it, in a worktree of its
-            // tree, and runs each in the session it starts, with its scope.
-            // A named parent is never the workspace the chat runs in; one
-            // it leaves out is its own space, wherever the chat runs.
-            // A chat the daemon recorded for its start is one below it.
-            ChatMethod::LaunchChat {
-                chat: Some(chat), ..
-            } => Some(
-                manager
-                    .workspace_below(
-                        caller,
-                        chat,
-                        "scoped processes run only the chats below their own space",
-                    )
-                    .await?,
-            ),
-            ChatMethod::LaunchChat { start, .. } => {
-                let workspace = start.workspace.as_ref();
-                (manager.ensure_parent_not_host(workspace, start.parent.as_ref())).await?;
-                manager.parent_below(caller, &mut start.parent).await?;
-                start.workspace.as_mut()
-            }
-            // Its check takes the parent as its start would.
+            // Its check takes the parent as a chat's launch would.
             ChatMethod::CheckChatParent {
                 parent, workspace, ..
             } => {
@@ -153,6 +54,3 @@ impl Scoped for ChatMethod {
         })
     }
 }
-
-#[cfg(test)]
-mod tests;

@@ -11,26 +11,26 @@ use std::{
 use anyhow::Result;
 use futures_util::future::BoxFuture;
 
-use super::{ChatLaunch, Launch};
-use crate::client::output::agents::DetachedSession;
+use super::Launch;
 use crate::{
     agent::{Agent, ModelChoice},
     agents::{
-        Integration,
+        AgentHome, Integration,
         detached::{App, Delivered, Prepared, Session, model_args},
     },
     cli::context::Context,
-    config::{Effective, templates},
+    config::Effective,
     execution::{self, DetachedExecution, DetachedLaunch},
-    model::{Chat, Repository, Workspace},
+    model::Space,
     paths::Paths,
 };
-use shoal_protocol::chats::LaunchedChat;
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::protocol::{DetachedRun, Launched};
 
 /// Start `launch` as a session of `app`, detached from this terminal and
-/// tracked like any other workspace command. The CLI returns once the launch
-/// is recorded; the session's output goes to a log under Shoal's state.
+/// tracked like any other command of its space. The CLI returns once the
+/// launch is recorded; the session's output goes to a log under Shoal's
+/// state.
 pub(super) async fn start(
     ctx: &Context,
     integration: &dyn Integration,
@@ -39,7 +39,7 @@ pub(super) async fn start(
 ) -> Result<i32> {
     let Launch {
         name,
-        workspace,
+        space,
         settings,
         instructions,
         prompt,
@@ -51,18 +51,22 @@ pub(super) async fn start(
         ..
     } = launch;
     crate::agents::ensure_available(&name, &settings)?;
+    let home = space.home()?;
     let model_args = model_args(app, &settings, &name, &model)?;
-    let directories = workspace_dir_args(ctx, app, &settings, &workspace).await;
+    let directories = dir_args(ctx, app, &settings, home).await;
     let directories = [model_args, directories].concat();
-    let (prompt, args) = workspace_input(app, &settings, instructions, directories, prompt, args);
+    let (prompt, args) = session_input(app, &settings, instructions, directories, prompt, args);
     if let Some(trust) = integration.trust_file() {
-        super::trust::tracked(trust, ctx, &workspace, &Default::default()).await;
+        super::trust::space(trust, ctx, &space, &Default::default()).await;
     }
-    let files = session_files(&ctx.paths, &workspace, &name);
+    let files = session_files(&ctx.paths, home.id(), &name);
     let session = Session {
         paths: &ctx.paths,
-        directory: &workspace.path,
-        branch: workspace.branch().map(BranchName::as_str),
+        directory: home.path(),
+        branch: match home {
+            AgentHome::Workspace(workspace) => workspace.branch().map(BranchName::as_str),
+            AgentHome::Chat { .. } => None,
+        },
         prompt,
         args,
     };
@@ -77,15 +81,23 @@ pub(super) async fn start(
     let (execution, prepared) = launch_session(
         ctx,
         &agent,
-        &(&workspace).into(),
+        &execution_space(home),
         &files,
         prepared,
         app.not_inherited(),
     )
     .await?;
     let (launch, delivered) = deliver_first_message(execution, prepared).await?;
-    report_session(ctx, app, &workspace, &launch, delivered)?;
+    report_session(ctx, app, home, &launch, delivered)?;
     Ok(0)
+}
+
+/// The space an execution at `home` runs for.
+fn execution_space(home: AgentHome<'_>) -> crate::model::ExecutionSpace {
+    match home {
+        AgentHome::Workspace(workspace) => workspace.into(),
+        AgentHome::Chat { chat, .. } => chat.into(),
+    }
 }
 
 /// Launch the `prepared` session of `agent` in `space` as a detached
@@ -143,31 +155,40 @@ async fn deliver_first_message(
     Err(undelivered)
 }
 
-/// Report the workspace session `launch` started, with what `delivered`
+/// Report the session `launch` started at `home`, with what `delivered`
 /// says of its first message.
 fn report_session(
     ctx: &Context,
     app: &dyn App,
-    workspace: &Workspace,
+    home: AgentHome<'_>,
     launch: &DetachedLaunch,
     delivered: Delivered,
 ) -> Result<()> {
-    let report = DetachedSession {
-        workspace: workspace.clone(),
-        agent: app.agent(),
-        execution_id: launch.execution_id.clone(),
-        pid: launch.pid,
-        log: launch.log.clone(),
-        delivery: delivered.fields,
+    let space: Space = match home {
+        AgentHome::Workspace(workspace) => workspace.clone().into(),
+        AgentHome::Chat { chat, .. } => chat.clone().into(),
+    };
+    let name = space.name.clone();
+    let report = Launched {
+        space: Box::new(space),
+        entry: None,
+        warnings: Vec::new(),
+        start: shoal_protocol::protocol::Started::Detached(DetachedRun {
+            execution_id: launch.execution_id.clone(),
+            pid: launch.pid,
+            log: launch.log.clone(),
+            delivery: delivered.fields,
+        }),
     };
     ctx.emit(
         &format!(
-            "Started {} {} session in {} (execution {}, pid {})\nOutput: {}{}",
+            "Started {} {} session in {} (execution {}, pid {}); open it in {}\nOutput: {}{}",
             app.name(),
             app.agent(),
-            workspace.name,
+            name,
             launch.execution_id,
             launch.pid,
+            app.place(),
             launch.log.display(),
             delivered.note,
         ),
@@ -175,22 +196,22 @@ fn report_session(
     )
 }
 
-/// Where a session of agent `name` keeps its files: under the workspace's
+/// Where a session of agent `name` keeps its files: under its space's
 /// state, named after the time it starts.
-fn session_files(paths: &Paths, workspace: &Workspace, name: &Agent) -> PathBuf {
+fn session_files(paths: &Paths, space: &SpaceId, name: &Agent) -> PathBuf {
     let stamp_millis = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|elapsed| elapsed.as_millis())
         .unwrap_or_default();
     paths
-        .space_state(&workspace.id)
+        .space_state(space)
         .join(format!("{name}-{stamp_millis}"))
 }
 
-/// The first message and arguments of a workspace session with
-/// `instructions`, which runs without Shoal's hooks, as a tracked launch
-/// separates them, with the arguments that give it `directories`.
-fn workspace_input(
+/// The first message and arguments of a session with `instructions`, which
+/// runs without Shoal's hooks, as a tracked launch separates them, with the
+/// arguments that give it `directories`.
+fn session_input(
     app: &dyn App,
     settings: &Effective,
     instructions: String,
@@ -270,186 +291,24 @@ fn instruction_args(
         .filter(|_| app.takes_agent_args())
 }
 
-/// The arguments that give `app`'s agent the directories a workspace's agent
-/// works in, when it takes arguments.
-async fn workspace_dir_args(
+/// Whether `app`'s agent takes its instructions apart from its first
+/// message under `settings`.
+pub(super) fn takes_instructions(app: &dyn App, settings: &Effective) -> bool {
+    instruction_args(app, settings, "").is_some()
+}
+
+/// The arguments that give `app`'s agent the directories its agent works
+/// in at `home`, when it takes arguments.
+async fn dir_args(
     ctx: &Context,
     app: &dyn App,
     settings: &Effective,
-    workspace: &Workspace,
+    home: AgentHome<'_>,
 ) -> Vec<OsString> {
-    if app.takes_agent_args() {
-        shoal_workers::homes::workspace_dir_args(&ctx.paths, settings, &app.agent(), workspace)
-            .await
-    } else {
-        Vec::new()
+    match app.takes_agent_args() {
+        true => shoal_workers::homes::dir_args(&ctx.paths, home, settings, &app.agent()).await,
+        false => Vec::new(),
     }
-}
-
-/// The arguments that give `app`'s agent the directories `chat`'s agent
-/// works in, when it takes arguments.
-fn chat_dir_args(app: &dyn App, settings: &Effective, home: &Path, chat: &Chat) -> Vec<OsString> {
-    if app.takes_agent_args() {
-        crate::agents::chat_dir_args(settings, &app.agent(), home, chat)
-    } else {
-        Vec::new()
-    }
-}
-
-/// Start `chat` as a session of `app`, agent `name`, in its checkout or
-/// worktree, detached and tracked as workspace sessions are, as an
-/// execution of the chat `record` has the daemon record, since the user
-/// continues it in the app.
-pub(super) async fn start_chat(
-    ctx: &Context,
-    integration: &dyn Integration,
-    app: &dyn App,
-    (name, chat): (&Agent, &ChatLaunch),
-    record: impl AsyncFnOnce() -> Result<LaunchedChat>,
-) -> Result<i32> {
-    let ChatLaunch {
-        repository,
-        mode,
-        narrowing,
-        settings,
-        model,
-        new_session,
-        ..
-    } = chat;
-    crate::agents::ensure_available(name, settings)?;
-    let model_args = model_args(app, settings, name, model)?;
-    let home = chat.home();
-    if let Some(trust) = integration.trust_file() {
-        super::trust::chat(
-            trust,
-            ctx,
-            repository.registered(),
-            home,
-            &Default::default(),
-        )
-        .await;
-    }
-    let LaunchedChat {
-        chat: record,
-        warnings,
-    } = record().await?;
-    let (prompt, args) = chat_input(app, &ctx.paths.home, &record, chat);
-    let args = [model_args, args].concat();
-    let files = ctx.paths.chat_files(&record);
-    let session = Session {
-        paths: &ctx.paths,
-        directory: home.path(),
-        branch: None,
-        prompt,
-        args,
-    };
-    let prepared = with_effort(app.prepare(session).await?, app, settings, model);
-    let agent = shoal_protocol::executions::TrackedAgent {
-        name: app.execution_agent(),
-        model: model.clone(),
-        mode: mode.clone(),
-        narrowing: *narrowing,
-        new_session: *new_session,
-    };
-    let space = crate::model::ExecutionSpace {
-        id: record.id.clone(),
-        number: record.number,
-        kind: crate::model::SpaceKind::Chat,
-        path: home.path().to_owned(),
-    };
-    let (execution, prepared) =
-        launch_session(ctx, &agent, &space, &files, prepared, app.not_inherited()).await?;
-    let (launch, delivered) = deliver_first_message(execution, prepared).await?;
-    let started = Started {
-        chat: &record,
-        launch: &launch,
-        warnings,
-    };
-    report_chat(ctx, app, repository.registered(), started, delivered)?;
-    Ok(0)
-}
-
-/// The first message and arguments of the session of `launch`, recorded as
-/// `chat`: the instructions as arguments with its opening, where the agent
-/// takes them apart, otherwise as the first message, which starts a turn
-/// before the user speaks. The directories its agent works in come before
-/// its own arguments.
-fn chat_input(
-    app: &dyn App,
-    home: &Path,
-    chat: &Chat,
-    launch: &ChatLaunch,
-) -> (Option<String>, Vec<OsString>) {
-    let ChatLaunch {
-        settings,
-        instructions,
-        opening,
-        args,
-        ..
-    } = launch;
-    let args = chat_dir_args(app, settings, home, chat)
-        .into_iter()
-        .chain(args.to_vec());
-    match instruction_args(app, settings, instructions) {
-        Some(instruction_args) => (
-            opening.clone(),
-            instruction_args.into_iter().chain(args).collect(),
-        ),
-        None => (
-            templates::chat_first_message(instructions, opening.as_deref()),
-            args.collect(),
-        ),
-    }
-}
-
-/// A chat session an app started: its chat, the launch that started it and
-/// what recording the chat warned of.
-struct Started<'a> {
-    chat: &'a Chat,
-    launch: &'a DetachedLaunch,
-    warnings: Vec<String>,
-}
-
-/// Report the session `started`, with what `delivered` says of its first
-/// message.
-fn report_chat(
-    ctx: &Context,
-    app: &dyn App,
-    repository: Option<&Repository>,
-    started: Started<'_>,
-    delivered: Delivered,
-) -> Result<()> {
-    let Started {
-        chat,
-        launch,
-        warnings,
-    } = started;
-    let log = &launch.log;
-    let report = Launched {
-        space: Box::new(chat.clone().into()),
-        entry: None,
-        warnings,
-        start: shoal_protocol::protocol::Started::Detached(DetachedRun {
-            execution_id: launch.execution_id.clone(),
-            pid: launch.pid,
-            log: log.to_owned(),
-            delivery: delivered.fields,
-        }),
-    };
-    ctx.emit(
-        &format!(
-            "Started {} {} chat {} for {} (pid {}); open it in {}\nOutput: {}{}",
-            app.name(),
-            app.agent(),
-            chat.name,
-            repository.map_or("every repository", Repository::display_name),
-            launch.pid,
-            app.place(),
-            log.display(),
-            delivered.note,
-        ),
-        report,
-    )
 }
 
 #[cfg(test)]

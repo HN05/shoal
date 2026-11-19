@@ -14,7 +14,7 @@ use crate::{
         Cli, Command,
         args::{
             approvals::Decision,
-            internal::{AddWorkerArgs, InternalCommand},
+            internal::{InternalCommand, PlaceWorkerArgs},
         },
     },
     paths::Paths,
@@ -37,7 +37,7 @@ fn parse(worker: Worker<'_>, json: bool) -> InternalCommand {
 }
 
 #[test]
-fn add_round_trips_host_close_when_done_and_focus() {
+fn place_round_trips_host_close_when_done_and_focus() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
     let cases = [
@@ -46,7 +46,7 @@ fn add_round_trips_host_close_when_done_and_focus() {
         (None, false, false),
     ];
     for (place, close_when_done, focused) in cases {
-        let worker = Worker::Add {
+        let worker = Worker::Place {
             host: place,
             close_when_done,
             focused,
@@ -58,7 +58,7 @@ fn add_round_trips_host_close_when_done_and_focus() {
         assert_eq!(cli.state_dir.as_ref(), Some(&paths.state));
         let Some(Command::Internal {
             command:
-                InternalCommand::Add(AddWorkerArgs {
+                InternalCommand::Place(PlaceWorkerArgs {
                     host,
                     close_when_done: parsed,
                     focused: parsed_focus,
@@ -66,7 +66,7 @@ fn add_round_trips_host_close_when_done_and_focus() {
                 }),
         }) = cli.command
         else {
-            panic!("expected the add worker");
+            panic!("expected the place worker");
         };
         assert_eq!(host, place);
         assert_eq!(parsed, close_when_done);
@@ -400,15 +400,6 @@ fn queue_start_round_trips_its_entry() {
         panic!("expected queue start worker");
     };
     assert_eq!(entry, "entry-id");
-}
-
-#[test]
-fn chat_round_trips_its_handoff() {
-    let handoff = std::path::Path::new("/tmp/shoal-chat.handoff");
-    let InternalCommand::Chat { handoff: parsed } = parse(Worker::Chat { handoff }, false) else {
-        panic!("expected the chat worker");
-    };
-    assert_eq!(parsed, handoff);
 }
 
 #[test]

@@ -51,7 +51,7 @@ fn the_launch_file_carries_the_command_and_goes_once_read() {
     let typed = Typed::new(
         Path::new("/state"),
         &["/opt/shoal".into(), "a b".into()],
-        &[("SHOAL_ADD_PLAN", "{\"secret\":1}".into())],
+        &[("SHOAL_PLACE_PLAN", "{\"secret\":1}".into())],
     )
     .unwrap();
     assert!(!typed.text().contains("secret"));
@@ -60,7 +60,7 @@ fn the_launch_file_carries_the_command_and_goes_once_read() {
     typed.hand_over().unwrap();
     let launch = read(&file).unwrap();
     assert_eq!(launch.argv, ["/opt/shoal", "a b"]);
-    assert_eq!(launch.env["SHOAL_ADD_PLAN"], "{\"secret\":1}");
+    assert_eq!(launch.env["SHOAL_PLACE_PLAN"], "{\"secret\":1}");
     assert!(!file.exists());
 }
 

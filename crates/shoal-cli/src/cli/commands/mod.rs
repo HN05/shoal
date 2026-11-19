@@ -86,6 +86,7 @@ mod tests;
 
 pub(in crate::cli) use approvals::summary as approval_summary;
 pub(in crate::cli) use questions::summary as question_summary;
+pub(in crate::cli) use start::execute_place;
 
 use anyhow::Result;
 use clap::CommandFactory;

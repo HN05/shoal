@@ -10,7 +10,7 @@ fn a_workspace_session_gets_the_workspace_directories_before_its_own_arguments()
         .detached()
         .expect("Happy runs its agents detached");
     let directories = vec![OsString::from("--add-dir=/root/repo")];
-    let (_, args) = workspace_input(
+    let (_, args) = session_input(
         happy,
         &settings,
         "Guidance".into(),

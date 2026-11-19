@@ -2108,8 +2108,8 @@ how its agent started as `start`, whose `kind` is `background` with the
 starts detached in the checkout as `start --in --agent happy-codex` starts a workspace session, and
 you continue it in the Happy app. Happy's Claude takes the instructions as
 arguments, and Happy's Codex receives them as its first message the way its
-prompts are delivered. Its output is kept at `<state>/chats/<id>.log`, named
-after the chat's ID; `--json` reports the `log`, `pid`, `happy_session_id`
+prompts are delivered. Its output is kept in a log under Shoal's state, as a
+workspace session's is, whose path it reports; `--json` reports the `log`, `pid`, `happy_session_id`
 and `happy_daemon_recorded` in `start`. A chat's agent carries a scope of its own, which
 lasts as long as the chat, across stops and restores, so only your own terminal
 is unscoped. It acts on the chat and the spaces below it as a workspace's agent
@@ -2126,10 +2126,10 @@ under it that `--parent` names, in the background, and returns once the
 daemon has recorded the chat and queued its agent, with its entry. A start
 without a terminal also runs its chat in the background. The daemon records
 these chats and queues their agents as it does for an app, and the agent
-queue opens their place, unless the chat continues or forks a session, which
-the calling process starts itself. `--here` runs the chat in
+queue opens their place. `--here` runs the chat in
 the caller's terminal with the chat's own scope, and the caller's stops leave
-it running. A
+it running. Every start, of a chat or a workspace, runs its agent the same
+way: here, beside your terminal, in a background place or detached. A
 workspace process that cleared its scope token cannot run `shoal start` or
 `shoal rename --request`.
 A chat's agent runs as a tracked agent of the chat, as a workspace's agent

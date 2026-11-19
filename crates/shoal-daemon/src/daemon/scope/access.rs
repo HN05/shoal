@@ -12,7 +12,7 @@ use crate::{
         approvals::ApprovalRequest, item_numbers::ItemNumber, manager::Manager,
         permissions::Action, questions::Question,
     },
-    model::{ChatQueueRequest, QueueEntry, Repository, RunningAgent, Space, SpaceTarget},
+    model::{QueueEntry, Repository, RunningAgent, Space, SpaceTarget},
     protocol::operations::WorkspaceStart,
     repository::Selector,
 };
@@ -414,38 +414,6 @@ impl Manager {
         let giver = Some(caller);
         (self.ensure_agent_held(giver, target, &mode, given)).await?;
         Ok(target)
-    }
-
-    /// Confine the launch of a new chat's agent that `caller` queues: it
-    /// starts in the caller's own repository, with permissions the caller
-    /// holds, regardless of the limits as its `limits` permission allows,
-    /// as the global config's setup as its `admin` permission allows, and
-    /// its chat is recorded at once.
-    pub(in crate::daemon) async fn confine_chat_launch(
-        &self,
-        caller: &Caller,
-        request: &mut ChatQueueRequest,
-    ) -> Result<()> {
-        const REFUSAL: &str = "workspace processes start chats only in their own repository";
-        let repository = match &request.repository {
-            Some(selector) => {
-                let selector = self.own_repository(caller, selector, REFUSAL).await?;
-                let id = self.repository(&selector).await?.id;
-                request.repository = Some(selector);
-                Some(id)
-            }
-            None => None,
-        };
-        let giver = Some(caller);
-        (self.ensure_caller_holds(giver, &request.narrowing, repository.as_ref())).await?;
-        if request.mode == crate::config::modes::ModeName::SETUP {
-            self.authorize_config_setup(caller).await?;
-        }
-        if request.now {
-            let start = format!("start the agent of new chat {} now", request.name);
-            (self.authorize_beyond_limits(caller, start, repository)).await?;
-        }
-        Ok(())
     }
 
     /// Question `number` for the caller to answer, which must be one of a

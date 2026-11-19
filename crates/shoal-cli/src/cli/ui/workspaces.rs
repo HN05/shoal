@@ -68,25 +68,6 @@ pub(in crate::cli) async fn record_workspace(ctx: &Context, workspace: &SpaceSel
     recent::record_where(ctx, workspace, |space| space.kind().has_worktree()).await;
 }
 
-/// The workspace `explicit` names, else the current one, else one picked
-/// among the ready workspaces, as a command that needs a ready workspace
-/// offers them.
-pub async fn select_ready_workspace(
-    ctx: &Context,
-    explicit: Option<SpaceSelector>,
-) -> Result<SpaceSelector> {
-    let workspace = match resolve_workspace(ctx, explicit, Fallback::CurrentDirectory).await? {
-        Resolution::Named(selector) => selector,
-        Resolution::Current(id) => SpaceSelector::Id(id),
-        Resolution::Picker(mut workspaces) => {
-            workspaces.retain(|workspace| workspace.state == crate::state::WorkspaceState::Ready);
-            SpaceSelector::Id(pick_workspace(ctx, workspaces, WORKSPACE).await?)
-        }
-    };
-    record_workspace(ctx, &workspace).await;
-    Ok(workspace)
-}
-
 /// The workspace `select_workspace` selects, left out of the command's
 /// history for a command that records it once it has acted.
 pub async fn choose_workspace(

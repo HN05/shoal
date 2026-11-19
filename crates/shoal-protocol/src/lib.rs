@@ -10,7 +10,6 @@ pub mod approvals;
 pub mod apps;
 pub mod assignments;
 pub mod branches;
-pub mod chats;
 pub mod cleanup;
 pub mod config;
 pub mod connection;

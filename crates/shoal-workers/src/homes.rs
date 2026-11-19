@@ -70,16 +70,25 @@ pub async fn args(
     home.args(settings, name, &paths.home, workspaces_dir.as_deref())
 }
 
-/// The other working directories a workspace's agent `name` may use, as
-/// [`crate::agents::workspace_dir_args`] gives them.
-pub async fn workspace_dir_args(
+/// The other working directories agent `name` may use in `home`, as
+/// [`crate::agents::workspace_dir_args`] gives them a workspace's agent and
+/// [`crate::agents::chat_dir_args`] a chat's.
+pub async fn dir_args(
     paths: &CommandPaths,
+    home: AgentHome<'_>,
     settings: &Effective,
     name: &Agent,
-    workspace: &Workspace,
 ) -> Vec<OsString> {
-    let workspaces_dir = workspaces_dir(paths, workspace).await;
-    crate::agents::workspace_dir_args(settings, name, &paths.home, workspaces_dir.as_deref())
+    match home {
+        AgentHome::Workspace(workspace) => {
+            let workspaces_dir = workspaces_dir(paths, workspace).await;
+            let workspaces_dir = workspaces_dir.as_deref();
+            crate::agents::workspace_dir_args(settings, name, &paths.home, workspaces_dir)
+        }
+        AgentHome::Chat { chat, .. } => {
+            crate::agents::chat_dir_args(settings, name, &paths.home, chat)
+        }
+    }
 }
 
 /// `name`'s command among `commands` in `home`, with `fields` beside the

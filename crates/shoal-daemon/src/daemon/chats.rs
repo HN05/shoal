@@ -14,7 +14,7 @@ use anyhow::{Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{
-    daemon::{events, manager::Manager, scope::Caller, spaces, store},
+    daemon::{events, manager::Manager, spaces, store},
     fsutil::off_runtime,
     model::{
         Chat, ChatPart, RefPart, Repository, SpaceKind, SpaceLinks, SpaceRef, Workdir, Workspace,
@@ -146,27 +146,6 @@ impl Manager {
         };
         self.record_new_chat(repository, workspace.as_ref(), new)
             .await
-    }
-
-    /// Refuse the permissions `given` to a new chat in the repository or
-    /// the workspace of `place` where the scoped `caller` does not hold
-    /// them.
-    pub(crate) async fn ensure_chat_given_held(
-        &self,
-        caller: Option<&Caller>,
-        given: &crate::config::permissions::PermissionsConfig,
-        place: (Option<&crate::repository::Selector>, Option<&SpaceSelector>),
-    ) -> Result<()> {
-        let Some(caller) = caller.filter(|_| !given.is_empty()) else {
-            return Ok(());
-        };
-        let repository = match place {
-            (_, Some(workspace)) => self.chat_workspace(workspace).await?.repository_id,
-            (Some(repository), None) => Some(self.repository(repository.clone()).await?.id),
-            (None, None) => None,
-        };
-        let giver = Some(caller);
-        (self.ensure_caller_holds(giver, given, repository.as_ref())).await
     }
 
     /// Refuse a named `parent` that is `workspace`, whose worktree the chat
@@ -802,9 +781,6 @@ fn forget_unstarted(tx: &rusqlite::Transaction<'_>, id: &SpaceId, error: &str) -
     }
     Ok(())
 }
-
-mod files;
-pub(crate) mod launches;
 
 #[cfg(test)]
 mod tests;

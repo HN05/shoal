@@ -295,9 +295,6 @@ async fn a_renamed_chat_keeps_its_files() {
     };
     let talk = start("talk").await.unwrap();
     start("other").await.unwrap();
-    let files = manager.paths.chat_files(&talk);
-    std::fs::create_dir_all(files.parent().unwrap()).unwrap();
-    std::fs::write(files.with_extension("log"), "talk log").unwrap();
 
     let rename = async |chat: &str, name: &str| {
         let renamed = (manager.rename_space(&SpaceSelector::Id(chat.into()), &name.into())).await?;
@@ -323,11 +320,6 @@ async fn a_renamed_chat_keeps_its_files() {
     );
     assert_eq!(previous_name, "talk");
     assert!(manager.chats().await.unwrap().contains(&renamed));
-    assert_eq!(manager.paths.chat_files(&renamed), files);
-    assert_eq!(
-        std::fs::read_to_string(files.with_extension("log")).unwrap(),
-        "talk log"
-    );
 
     // The old name is free, and the rename is journaled.
     start("talk").await.unwrap();

@@ -76,7 +76,7 @@ async fn launch(
     options: Options,
     settings: &crate::config::Effective,
 ) -> Result<i32> {
-    let leaves = workspaces::leaves_caller(ctx, options.here);
+    let leaves = super::start::leaves_caller(ctx, options.here);
     let start = launch_options(options.here, ctx.on_terminal(), leaves);
     let launch = setup_launch(repo, (agent, prompt), options)?;
     let mode = ModeChoice::Named(modes::ModeName::SETUP);

@@ -13,7 +13,7 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Run `launch` as a tracked agent in its workspace, in a session this
+/// Run `launch` as a tracked agent in its space, in a session this
 /// terminal attaches to where the terminal keeps agents in sessions.
 pub(super) async fn tracked(
     ctx: &Context,
@@ -24,12 +24,12 @@ pub(super) async fn tracked(
     let model_args = crate::agents::model_args(&launch.settings, &launch.name, &launch.model)?;
     if let Some(trust) = integration.trust_file() {
         let profile = &launch.settings.launch(&launch.name).environment;
-        super::trust::tracked(trust, ctx, &launch.workspace, profile).await;
+        super::trust::space(trust, ctx, &launch.space, profile).await;
     }
     let command = command(ctx, &launch, model_args).await?;
     let Launch {
         name,
-        workspace,
+        space: records,
         settings,
         replaces,
         model,
@@ -45,34 +45,23 @@ pub(super) async fn tracked(
         narrowing,
         new_session,
     };
-    let space = terminal::AgentSpace::of(&workspace);
+    let space = terminal::AgentSpace::of_home(records.home()?);
     if let Some(code) =
         terminal::run_agent(ctx, &settings, &space, &agent, (&replaces, false), &command).await?
     {
         return Ok(code);
     }
     terminal::label_current(&ctx.paths, space.owner()).await?;
+    let selector = SpaceSelector::id(space.owner().id());
     if replaces.is_empty() {
-        return shoal_workers::execution::run(
-            &ctx.paths,
-            SpaceSelector::Id(workspace.id),
-            command,
-            Some(agent),
-        )
-        .await;
+        return shoal_workers::execution::run(&ctx.paths, selector, command, Some(agent)).await;
     }
-    shoal_workers::execution::run_recovery(
-        &ctx.paths,
-        SpaceSelector::Id(workspace.id),
-        command,
-        agent,
-        (replaces, None),
-    )
-    .await
+    let records = (replaces, None);
+    shoal_workers::execution::run_recovery(&ctx.paths, selector, command, agent, records).await
 }
 
 /// The agent's configured command with the arguments that fork a session,
-/// Shoal's instructions, `model_args`, its workspace arguments, the prompt
+/// Shoal's instructions, `model_args`, its space's arguments, the prompt
 /// and the forwarded arguments.
 async fn command(
     ctx: &Context,
@@ -81,7 +70,7 @@ async fn command(
 ) -> Result<Vec<OsString>> {
     let Launch {
         name,
-        workspace,
+        space,
         settings,
         instructions,
         prompt,
@@ -89,22 +78,20 @@ async fn command(
         fork,
         ..
     } = launch;
+    let home = space.home()?;
+    let space_args = shoal_workers::homes::args(&ctx.paths, home, settings, name).await?;
     let (args, prompt) = input(
         settings,
         name,
         instructions.clone(),
         prompt.clone(),
-        [
-            model_args,
-            shoal_workers::homes::args(&ctx.paths, workspace.into(), settings, name).await?,
-        ]
-        .concat(),
+        [model_args, space_args].concat(),
         args.clone(),
     );
     let args = fork.iter().cloned().chain(args).collect();
     shoal_workers::homes::expand(
         &ctx.paths,
-        workspace.into(),
+        home,
         &settings.launchers,
         name.name(),
         args,
@@ -116,7 +103,7 @@ async fn command(
 /// What agent `name`'s configured command receives: the arguments carrying
 /// `instructions`, then `hooks` and `args`, and the value of `{prompt}`. The
 /// prompt leads `args` when the command has no `{prompt}`.
-pub(in crate::cli) fn input(
+fn input(
     settings: &Effective,
     name: &Agent,
     instructions: String,

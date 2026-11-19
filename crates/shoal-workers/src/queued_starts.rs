@@ -2,7 +2,6 @@
 //! terminal: it opens the place of a launch where the terminal that queued
 //! it would have, or restores a stopped agent where it stopped or in the
 //! background. What runs in that place is the CLI's start or restore.
-mod chat;
 mod launch;
 mod restore;
 
@@ -11,9 +10,6 @@ use anyhow::Result;
 use crate::client::queue;
 use crate::{client::connection::CommandPaths, state::QueueKind};
 use shoal_ids::queue_entry_ids::QueueEntryId;
-
-pub use chat::chat_start;
-pub use launch::plan as launch_plan;
 
 /// Start the admitted queue `entry`: open its launch's place, or restore its
 /// stopped agent, freeing its slot with the error when that fails.

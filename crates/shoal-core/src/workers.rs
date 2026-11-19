@@ -27,9 +27,8 @@ pub const SECRET_TOOL: &str = "secret-tool";
 pub const PUSH_GATE: &str = "push-gate";
 pub const GIT_CREDENTIAL: &str = "git-credential";
 pub const QUEUE_START: &str = "queue-start";
-pub const CHAT: &str = "chat";
 pub const OPERATION: &str = "operation";
-pub const ADD: &str = "add";
+pub const PLACE: &str = "place";
 pub const LAUNCH: &str = "launch";
 pub const COPY_IGNORED: &str = "copy-ignored";
 pub(crate) const MENU_ROWS: &str = "menu-rows";
@@ -111,16 +110,12 @@ pub enum Worker<'a> {
     QueueStart {
         entry: &'a str,
     },
-    /// Start, in the place it runs in, the chat whose resolved start the
-    /// chat handoff at `handoff` holds, reporting there.
-    Chat {
-        handoff: &'a Path,
-    },
-    /// Add the workspace planned in the environment in the place `host`
-    /// opened for it, `focused` when it shows the place, closing it once
-    /// the workspace is done when `close_when_done` is set; without a host,
-    /// in no place, for an agent that runs its own way.
-    Add {
+    /// Carry out the plan in the environment, a recorded space's agent or a
+    /// workspace's shell, in the place `host` opened for it, `focused` when
+    /// it shows the place, closing it once a workspace is done when
+    /// `close_when_done` is set; without a host, in no place, for an agent
+    /// that runs its own way.
+    Place {
         host: Option<HostName>,
         close_when_done: bool,
         focused: bool,
@@ -366,13 +361,12 @@ pub(crate) fn internal_command_for(
         }
         Worker::Operation => args.push(OPERATION.into()),
         Worker::QueueStart { entry } => args.extend([QUEUE_START.into(), entry.into()]),
-        Worker::Chat { handoff } => args.extend([CHAT.into(), handoff.as_os_str().to_owned()]),
-        Worker::Add {
+        Worker::Place {
             host,
             close_when_done,
             focused,
         } => {
-            args.push(ADD.into());
+            args.push(PLACE.into());
             if let Some(host) = host {
                 args.extend(["--host".into(), host.as_str().into()]);
             }

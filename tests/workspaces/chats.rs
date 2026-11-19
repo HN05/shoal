@@ -745,8 +745,10 @@ pub(crate) fn after_temp_dirs<S: AsRef<str>>(args: &[S]) -> &[S] {
     rest
 }
 
-/// A heavy chat started from the user's terminal while no slot is free is
-/// recorded at once with its agent's entry, and its start names its number.
+/// A heavy chat started from the user's terminal on a task while no slot is
+/// free is recorded at once with its agent's entry, and its start names its
+/// number; one the user waits for would start at once, as a workspace's
+/// agent does.
 #[test]
 fn a_waiting_chat_from_a_terminal_is_recorded_at_once() {
     let fixture = Fixture::with_config(Some(
@@ -770,7 +772,9 @@ fn a_waiting_chat_from_a_terminal_is_recorded_at_once() {
     });
 
     let mut start = fixture.command();
-    start.args(["start", "--mode", "pair", repo, "--agent", "waiter"]);
+    start.args([
+        "start", "--mode", "pair", repo, "--agent", "waiter", "--", "pair up",
+    ]);
     let (output, transcript) = fixture.terminal_command(&mut start, "", true);
     assert!(
         output.status.success(),
@@ -848,59 +852,29 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
         "{}\n{transcript}",
         printed(&output)
     );
-    let calls = zmx_calls(&fixture);
-    assert_eq!(calls[0], ["list"]);
-    // The session takes an opaque name, since nothing is built from the
-    // chat's name.
-    assert_eq!(calls[1][..3], ["attach", "--labels", "shoal.created=1"]);
-    let session = &calls[1][3];
-    assert!(
-        session.starts_with("chat-") && session.len() == "chat-".len() + 8,
-        "{session}"
-    );
-    // The start records the chat under the name chosen here before the
-    // session opens; the session's Shoal runs that chat's agent, labels its
-    // session with it and becomes its agent.
+    // The start records the chat under the name chosen for it, then runs
+    // its agent in a session labelled as the chat's, which takes an opaque
+    // name, since nothing is built from the chat's name.
     let started = chat_created(&fixture);
     assert_eq!(started["type"], "event");
     assert_eq!(started["repository_id"], id);
     assert_eq!(started["name"], CHAT_NAME);
     assert_eq!(started.get("path"), None, "{started}");
     let chat_id = started["space_id"].as_str().unwrap();
-    let chat = calls[1].iter().position(|arg| arg == "start").unwrap();
-    assert_eq!(calls[1][chat - 1], "--text");
-    assert_eq!(
-        calls[1][chat..],
-        [
-            "start",
-            id,
-            "--mode",
-            "chat",
-            "--as-chat",
-            "--here",
-            "--agent",
-            "claude",
-            "--name",
-            CHAT_NAME,
-            "--chat",
-            chat_id,
-            "--",
-            "--model",
-            "fast"
-        ]
+    let calls = zmx_calls(&fixture);
+    let attach = (calls.iter())
+        .find(|call| call.first().map(String::as_str) == Some("attach"))
+        .unwrap();
+    assert_eq!(attach[1], "--labels");
+    assert!(
+        attach[2].contains(&format!("shoal.chat={chat_id}")),
+        "{attach:?}"
     );
-    // It tells its session apart from a later one under the name before
-    // recording the chat there.
-    assert_eq!(calls[2], ["list"]);
-    assert_eq!(
-        calls[3][..4],
-        [
-            "set",
-            session,
-            &format!("shoal.chat={chat_id}"),
-            "shoal.workspace="
-        ]
-    );
+    let session = &attach[3];
+    assert_eq!(*session, format!("chat-{}", &chat_id[..8]));
+    // The session's Shoal runs the chat's agent as its execution.
+    let worker = attach.iter().position(|arg| arg == "internal").unwrap();
+    assert_eq!(attach[worker + 1..worker + 3], ["session", chat_id]);
     assert_eq!(
         fs::read_to_string(home.join("chat-id")).unwrap().trim(),
         chat_id
@@ -974,8 +948,7 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
         printed(&output)
     );
     let calls = zmx_calls(&fixture);
-    assert_eq!(calls[before], ["list"]);
-    assert_eq!(calls[before + 1][..2], ["set", "outer"]);
+    assert_eq!(calls[before][..2], ["set", "outer"]);
     assert!(
         !calls[before..].iter().any(|call| call[0] == "attach"),
         "{calls:?}"
@@ -1683,51 +1656,6 @@ fn a_chats_agent_plans_an_issue_in_a_chat_below_it() {
     assert_eq!(plan["parent"]["name"], "planning", "{chats}");
 }
 
-/// A background place may still run below its scoped starter's processes,
-/// so it takes the scope token its starter hands it before its own scope is
-/// checked, and reports to the starter whatever stops the chat.
-#[test]
-fn a_background_place_below_its_starter_takes_the_handed_scope() {
-    let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['true']\n"));
-    fixture.add("parent");
-    let handoff = fixture.root.path().join("handoff");
-    fs::create_dir(&handoff).unwrap();
-    // The place's command inherits the workspace's scope through its
-    // ancestors, without the token in its own environment.
-    let place = fixture
-        .command()
-        .args([
-            "run",
-            "--workspace",
-            &fixture.id("parent"),
-            "--",
-            "sh",
-            "-c",
-        ])
-        .arg(
-            "printf %s \"$SHOAL_SCOPE_TOKEN\" > \"$HANDOFF/scope\"; unset SHOAL_SCOPE_TOKEN; \
-             exec \"$SHOAL\" --json start --mode chat \"$REPO\" --here --name sub --agent claude \
-             --handoff \"$HANDOFF\" </dev/null",
-        )
-        .env("SHOAL", support::shoal_binary())
-        .env("REPO", &fixture.repo)
-        .env("HANDOFF", &handoff)
-        .output()
-        .unwrap();
-    // Without a terminal the chat does not start, after the place took the
-    // token, and the starter learns why.
-    assert!(!place.status.success(), "{}", printed(&place));
-    assert!(!handoff.join("scope").exists(), "{}", printed(&place));
-    let error: Value = serde_json::from_slice(&place.stderr).unwrap();
-    let report = fs::read_to_string(handoff.join("report")).unwrap_or_default();
-    assert_eq!(
-        error["error"]["message"],
-        report.as_str(),
-        "{}",
-        printed(&place)
-    );
-}
-
 /// `shoal config setup` without a terminal has the daemon start its agent
 /// in a chat without a repository, in the setup mode, on the global config,
 /// whose directory the agent gets to work in.
@@ -2322,13 +2250,19 @@ fn chat_with_an_open_tab() -> (Fixture, Command) {
 /// `shoal restore` to start again.
 #[test]
 fn a_chat_whose_tab_fails_to_start_its_agent_stays_with_its_failed_launch() {
+    let fixture = failed_chat_launch();
+
+    assert_failed_launch_kept(&fixture, "after the tab's start");
+}
+
+/// A fixture whose chat's tab failed to start its agent, whose program is
+/// gone, leaving the chat with its failed launch.
+fn failed_chat_launch() -> Fixture {
     let (fixture, mut tab) = chat_with_an_open_tab();
     fs::remove_file(fixture.root.path().join("bin/codex")).unwrap();
-
     let (output, transcript) = fixture.interactive_command(&mut tab, "");
-
     assert!(!output.status.success(), "{transcript}");
-    assert_failed_launch_kept(&fixture, &transcript);
+    fixture
 }
 
 /// Check that `fixture`'s one chat stays with its failed launch in the
@@ -2346,25 +2280,11 @@ fn assert_failed_launch_kept(fixture: &Fixture, context: &str) {
     assert_eq!(failed, [chat["id"].clone()], "{context}");
 }
 
-/// A chat whose tab's start fails before it takes the recorded chat, as one
-/// without a terminal does, stays with its failed launch too.
-#[test]
-fn a_chat_whose_tab_fails_before_taking_it_stays_with_its_failed_launch() {
-    let (fixture, mut tab) = chat_with_an_open_tab();
-
-    let output = tab.stdin(Stdio::null()).output().unwrap();
-
-    assert!(!output.status.success(), "{}", printed(&output));
-    assert_failed_launch_kept(&fixture, &printed(&output).to_string());
-}
-
 #[test]
 fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
     let fixture = Fixture::with_config(Some("terminal.focus = false\n"));
     install_fake_herdr(&fixture);
     install_recording_agent(&fixture, "codex");
-    let repository = fixture.ok(&["repo", "ls"])[0].clone();
-    let id = repository["id"].as_str().unwrap();
     let checkout = fs::canonicalize(&fixture.repo).unwrap();
 
     let (caller, transcript) = herdr_call(
@@ -2391,36 +2311,22 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
     assert_eq!(Path::new(&option("--cwd")), fixture.repo);
     assert_eq!(option("--label"), CHAT_NAME);
     assert!(create.iter().any(|arg| arg == "--focus"));
-    // The start recorded the chat before the tab opened, passes the tab
-    // that chat and records it for `attach -` once it shows the tab.
+    // The start recorded the chat before the tab opened, whose place worker
+    // runs that chat's agent, and records it for `attach -` once it shows
+    // the tab.
     let chats = fixture.ok(&["list", "--chats"]);
     let chat_id = chats[0]["id"].as_str().unwrap();
     let worker = herdr_worker(&fixture);
-    let chat = worker.iter().position(|arg| arg == "start").unwrap();
-    assert_eq!(
-        worker[chat..],
-        [
-            "start",
-            id,
-            "--mode",
-            "chat",
-            "--as-chat",
-            "--here",
-            "--agent",
-            "codex",
-            "--name",
-            CHAT_NAME,
-            "--chat",
-            chat_id,
-            "--",
-            "--search"
-        ]
-    );
-    let history = fixture.root.path().join("state/recent-workspaces.json");
-    let recorded: Value = serde_json::from_slice(&fs::read(&history).unwrap()).unwrap();
-    assert_eq!(recorded["attach"], serde_json::json!([chat_id]));
+    let place = worker.iter().position(|arg| arg == "internal").unwrap();
+    assert_eq!(worker[place + 1..place + 3], ["place", "--host"]);
+    let plan = (create.iter())
+        .find_map(|arg| arg.strip_prefix("SHOAL_PLACE_PLAN="))
+        .unwrap();
+    let plan: Value = serde_json::from_str(plan).unwrap();
+    assert_eq!(plan["space"], chat_id, "{plan}");
 
-    // The tab's own call runs the agent in its pane.
+    // The tab's own call runs the agent in its pane, which it records for
+    // `attach -` as the focused tab's.
     let (output, transcript) = fixture.interactive_command(
         herdr_worker_command(&fixture)
             .current_dir(&fixture.repo)
@@ -2429,6 +2335,9 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
         "",
     );
     assert!(output.status.success(), "{} {transcript}", printed(&output));
+    let history = fixture.root.path().join("state/recent-workspaces.json");
+    let recorded: Value = serde_json::from_slice(&fs::read(&history).unwrap()).unwrap();
+    assert_eq!(recorded["attach"], serde_json::json!([chat_id]));
     assert_eq!(
         fs::read_to_string(fixture.root.path().join("chat-cwd"))
             .unwrap()
@@ -2629,11 +2538,13 @@ fn attach_returns_to_chats_by_name() {
     assert_eq!(attached(), ["attach", "first"]);
 
     // In a checkout with two chats running, the picker offers the chats with
-    // sessions by name.
+    // sessions by name: every running one, since a chat started here runs
+    // in a session of its own where the host keeps agents in sessions, as a
+    // workspace's agent does.
     let (output, rows) = fixture.pick_in(&fixture.repo, &["attach"], talk, "");
     assert!(output.status.success(), "{}", printed(&output));
     let rows = rows.lines().collect::<Vec<_>>();
-    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert_eq!(rows.len(), 3, "{rows:?}");
     for (id, name) in [(&talk, "talk"), (&plan, "plan-7")] {
         assert!(
             rows.iter()
@@ -2642,17 +2553,6 @@ fn attach_returns_to_chats_by_name() {
         );
     }
     assert_eq!(attached(), ["attach", "second"]);
-
-    // A chat without a session says where it runs instead, whether named or
-    // taken as its checkout's only chat.
-    let mut named = fixture.command();
-    named.args(["attach", &fixture.id("quiet")]);
-    let mut current = fixture.command();
-    current.current_dir(&other).arg("attach");
-    for command in [&mut named, &mut current] {
-        let (output, transcript) = fixture.interactive_command(command, "");
-        assert!(!output.status.success(), "{transcript}");
-    }
 }
 
 #[test]
@@ -2818,9 +2718,7 @@ fn a_removed_chat_restores_under_its_id_from_the_removed_chats() {
 /// leaves it failed, and `shoal restore` queues it again and reports it.
 #[test]
 fn a_chats_failed_launch_restores_only_with_its_agent() {
-    let (fixture, mut tab) = chat_with_an_open_tab();
-    let output = tab.stdin(Stdio::null()).output().unwrap();
-    assert!(!output.status.success(), "{}", printed(&output));
+    let fixture = failed_chat_launch();
     let chats = fixture.ok(&["list", "--chats"]);
     let chat = chats[0]["id"].as_str().unwrap().to_owned();
 
@@ -2842,9 +2740,7 @@ fn a_chats_failed_launch_restores_only_with_its_agent() {
 /// the command line names does.
 #[test]
 fn a_failed_chat_launch_picked_to_restore_queues_again() {
-    let (fixture, mut tab) = chat_with_an_open_tab();
-    let output = tab.stdin(Stdio::null()).output().unwrap();
-    assert!(!output.status.success(), "{}", printed(&output));
+    let fixture = failed_chat_launch();
 
     // The picker takes the first restorable space, the failed chat.
     let fzf = fixture.root.path().join("bin/fzf");

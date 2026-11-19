@@ -43,12 +43,6 @@ pub trait StateFiles {
         self.state().join("recent-workspaces.json")
     }
 
-    /// Where a chat started detached keeps its log and first message, named
-    /// after the chat's ID, without an extension.
-    fn chat_files(&self, chat: &shoal_protocol::model::Chat) -> PathBuf {
-        self.state().join("chats").join(chat.id.as_str())
-    }
-
     /// The copies of Shoal's release that execution wrappers run from, kept
     /// while one runs from them.
     fn releases(&self) -> PathBuf {

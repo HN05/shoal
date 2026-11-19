@@ -6,8 +6,8 @@ use crate::{
     cli::{
         args::internal::InternalCommand,
         commands::{
-            agent_state, approvals, environment, events, menu, messages, progress, start,
-            subagents, worktree_hooks,
+            agent_state, approvals, environment, events, menu, messages, progress, subagents,
+            worktree_hooks,
         },
         context::Context,
         terminal,
@@ -121,7 +121,6 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             shoal_workers::git_credential::answer(&ctx.paths, operation).await
         }
         InternalCommand::QueueStart { entry } => crate::queued_starts::run(&ctx.paths, entry).await,
-        InternalCommand::Chat { handoff } => start::start_handed(&ctx, &handoff).await,
         InternalCommand::Operation => crate::operations::run(&ctx.paths).await,
         InternalCommand::Launch { file } => crate::terminal::run_launch(&file),
         InternalCommand::TakeOver {
@@ -150,7 +149,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             };
             shoal_workers::execution::take_over(&ctx.paths, taken).await
         }
-        InternalCommand::Add(args) => terminal::add_worker(ctx, args).await,
+        InternalCommand::Place(args) => terminal::place_worker(ctx, args).await,
         InternalCommand::Demo {
             workspace,
             launch,

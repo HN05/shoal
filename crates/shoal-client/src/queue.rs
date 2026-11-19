@@ -11,19 +11,12 @@ use tokio::{io::AsyncReadExt as _, sync::oneshot};
 use crate::connection::{Daemon, open, request, stream_closed};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
-    model::{ChatQueueRequest, QueueAdmission, QueueEntry, QueuedPlan},
+    model::{QueueEntry, QueuedPlan},
     protocol::QueueMethod,
 };
 
 /// Reconnect a hold this soon after the daemon restarts.
 const HOLD_RETRY: Duration = Duration::from_secs(1);
-
-/// Admit the launch of a new chat's agent that `request` describes now or
-/// queue it.
-pub async fn add_chat(daemon: &impl Daemon, request: ChatQueueRequest) -> Result<QueueAdmission> {
-    let request = Box::new(request);
-    self::request(daemon, QueueMethod::QueueChat { request }).await
-}
 
 /// Queue the worker `start` describes, which the daemon resolves under its
 /// workspace's settings and starts detached once admitted, and return its

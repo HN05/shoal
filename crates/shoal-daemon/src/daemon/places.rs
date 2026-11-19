@@ -53,17 +53,6 @@ fn record_chat_place(db: &Connection, chat: &SpaceId, place: &Origin) -> Result<
     take_over(db, chat, place)
 }
 
-/// Record `place` as the chat `chat`'s as [`record_chat_place`] does, unless
-/// the chat has a place of its own already.
-fn place_unplaced_chat(db: &Connection, chat: &SpaceId, place: &Origin) -> Result<()> {
-    let placed =
-        crate::daemon::store::exists(db, "SELECT 1 FROM owned_places WHERE space_id=?1", [chat])?;
-    if !placed {
-        record_chat_place(db, chat, place)?;
-    }
-    Ok(())
-}
-
 /// Whether an agent of a space other than `space` is recorded at `place`,
 /// which it took over even before a record or label of the place says so;
 /// a nested command takes nothing.
@@ -146,18 +135,6 @@ impl Manager {
         let _ownership = self.place_ownership.lock().await;
         (self.store)
             .run(move |db| record_chat_place(db, &id, &place))
-            .await
-    }
-
-    /// Record `origin` as the place the chat `selector` names runs in when
-    /// it has none, as a chat recorded before its queued agent started has,
-    /// and take that place as [`Self::take_chat_place`] does, under the lock
-    /// place closes hold.
-    pub(crate) async fn place_chat(&self, selector: &SpaceSelector, origin: Origin) -> Result<()> {
-        let id = self.chat(selector).await?.id;
-        let _ownership = self.place_ownership.lock().await;
-        (self.store)
-            .write(move |tx| place_unplaced_chat(tx, &id, &origin))
             .await
     }
 

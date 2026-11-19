@@ -136,6 +136,24 @@ impl Fixture {
         self.ok(&["repo", "config", repository])
     }
 
+    /// Have the daemon record the chat `name` of `repository`, whose agent
+    /// its caller runs, at `origin`, which it records as the chat's when
+    /// Shoal opened it, as the place a start opens for a chat records it.
+    pub(crate) fn chat_at(&self, repository: &Value, name: &str, origin: Value) {
+        let launched = self.request(serde_json::json!({"launch": {"launch": {
+            "repository": repository["id"], "chat": true, "name": name, "agent": "claude",
+            "here": true,
+        }}}));
+        assert!(launched.get("error").is_none(), "{launched}");
+        if origin["owned"] == true {
+            let chat = self.id(name);
+            let recorded = self.request(serde_json::json!({"record_owned_place": {
+                "workspace": chat, "origin": origin,
+            }}));
+            assert!(recorded.get("error").is_none(), "{recorded}");
+        }
+    }
+
     pub(crate) fn rename_branch(&self, workspace: &str, branch: &str) -> Value {
         let workspace = self.id(workspace);
         self.request(serde_json::json!({"rename_branch":{"workspace":workspace,"branch":branch}}))

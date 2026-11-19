@@ -858,7 +858,7 @@ which a process inherits from whatever started it, for grants such as removable
 volume access. A zmx session's processes inherit one that has exited, so macOS
 judges each new program by itself and a restarted agent asks for its own grant
 (Claude Code's). Execution wrappers started in a place a host or the daemon
-opened (`internal add`, `session`, `detached` and `demo`) therefore replace
+opened (`internal place`, `session`, `detached` and `demo`) therefore replace
 themselves at startup with their own binary, started with responsibility
 disclaimed: the agent and everything it starts use Shoal's grant while the
 wrapper runs, whatever started it. Only certificate-signed builds claim, since
@@ -1186,10 +1186,16 @@ agent: the caller's terminal, a background place, the queue or an app only
 runs the recorded chat's agent, so a start that names nothing to link sends no
 link request. The queue starts every admitted agent the same way, opening a
 place for any recorded space, and every agent start has an entry, admitted at
-once where no limit applies. A start that opens a place for the chat beside
-its terminal records the chat first, with its queue entry attached, and
-passes the place the recorded chat with `--chat`; only a chat its starting
-process runs itself records itself there. What linking a new space, of
+once where no limit applies. Every start sends one launch, a chat's that
+runs here or beside its terminal included: the daemon records the space with
+its agent's entry, which a caller that runs the agent holds, and the CLI
+runs the recorded space's agent through one placement step for both kinds,
+here, beside, in a background place or detached, a workspace's once its
+preparation ends. One place worker runs any recorded space's agent in a
+place, and one builder makes its command from the space's records, so only
+what the record holds differs by kind, such as a chat's home and the
+instructions its agent receives first. A start that fails fails its queue
+entry. What linking a new space, of
 either kind, warns of goes to the agent of the nearest space above it with
 one, else to the user's notifications, never only to a terminal the agent then takes over. A space
 whose place never starts its agent is kept, whatever its kind, with its
@@ -1204,16 +1210,8 @@ scoped caller's do not.
 A chat an agent starts opens in a background place, which the agent queue
 opens once it admits the chat's agent, since the agent cannot hand over its
 terminal, unless `start --here` runs it in the caller's own; the place runs
-the chat's agent in the chat's own scope. Every start in a background place waits for the place
-to report that the chat is about to run its agent, or why not, since an open
-place proves neither. The place takes the handoff before anything checks its
-scope, which it may still inherit from the starter's processes, and reports
-any failure after that. The starter waits as long as the place runs once the
-place takes the handoff, which a lock the place holds until it exits shows, and gives up
-only on a place that does not take it within a hang guard or that ends without
-a report; the report and the token issued for a scoped starter's place go
-through a private directory the place's command names, never the place's
-environment, which a shell left there would keep. A chat run in the caller's terminal is the
+the chat's agent in the chat's own scope, and the start returns once the
+daemon has recorded the chat and queued its agent. A chat run in the caller's terminal is the
 chat's own execution, as a workspace's agent is, which the caller's stops
 leave running; places drop the marks and scope token of the space
 that opened them, so what runs there is the new chat's. Spaces form one tree through one parent link,
@@ -1737,8 +1735,9 @@ fields once, and updates the branch after allocation. The resolved template trav
 with the launch plan so the worker preserves the caller's naming choice. Shoal
 renders the label in its generic terminal layer; a host only applies the label it
 is given, so naming rules and their daemon and forge lookups live in one place.
-The plan travels in the tab's environment, naming a found issue by URL rather
-than carrying its unbounded body, and preserving
+The plan travels in the tab's environment, naming the starting launch, whose
+issue the place reads from the queue, rather than carrying its unbounded body,
+and preserving
 state/config selection and literal arguments without hook scripts or state files.
 By default, agents that start with an issue prompt or forwarded arguments stay in
 the background, and tabs that wait for the user's input receive focus; an
@@ -3165,8 +3164,8 @@ hosts a space, a workspace or a chat, takes a new label only while it still
 shows the label Shoal gave it, since another label is the user's: a chat's its
 old name, a workspace's the label its previous title rendered. A place labelled
 before its workspace's template, issue or branch changed keeps that stale label
-rather than risk overwriting the user's. The process the user runs records the chat
-before it opens the tab or session that hosts it, which carries its name, and a detach
+rather than risk overwriting the user's. The daemon records the chat
+before the tab or session that hosts it opens, which carries its name, and a detach
 from its zmx session names its number; the chat's record names
 the session it runs in, so `shoal attach` finds it there, not by a session name
 zmx may have suffixed, and the chat labels the session with its ID, so the

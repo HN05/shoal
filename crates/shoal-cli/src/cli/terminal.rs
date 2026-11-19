@@ -11,7 +11,7 @@ mod naming;
 mod prompts;
 mod sessions;
 
-pub(in crate::cli) use add_place::{Place, add_worker, follows_caller, host_workspace, open_shell};
+pub(in crate::cli) use add_place::{Place, follows_caller, host_space, open_shell, place_worker};
 pub(in crate::cli) use closing::watch as watch_place;
 pub(in crate::cli) use demos::{demo_screen, open_demo, send_demo_keys, start_demo};
 pub(in crate::cli) use here::{
@@ -19,8 +19,8 @@ pub(in crate::cli) use here::{
     record_owned_here,
 };
 pub(in crate::cli) use launch::{
-    AgentSpace, ChatStarted, Placement, opens_beside, rerun_where_stopped, run_agent,
-    run_in_background, start_add, start_chat,
+    AgentSpace, Placement, opens_beside, rerun_where_stopped, run_agent, run_in_background,
+    start_place,
 };
 pub(in crate::cli) use naming::{Renamed, relabel_space};
 pub(in crate::cli) use prompts::{CONTINUE_PROMPT, submitted_by_shoal};

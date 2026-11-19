@@ -709,10 +709,11 @@ fn chat_rename_relabels_a_zellij_tab_that_still_shows_the_old_name() {
     let repository = fixture.ok(&["repo", "ls"])[0].clone();
     // The chats last while this test's process runs.
     let start = |name: &str, pane: &str| {
-        let response = fixture.request(serde_json::json!({"launch_chat":{
-            "start": {"repository": repository["id"], "name": name, "agent": "claude"}, "origin": place_beside(&fixture, "placed", pane),
-        }}));
-        assert_eq!(response["type"], "launched_chat", "{response}");
+        fixture.chat_at(
+            &repository,
+            name,
+            serde_json::json!(place_beside(&fixture, "placed", pane)),
+        );
     };
     // Shoal opened `talk`'s tab under its name; `notes` runs in the tab the
     // user named.

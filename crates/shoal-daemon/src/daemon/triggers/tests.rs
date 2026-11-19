@@ -14,7 +14,7 @@ use crate::{
         test_support::{chat, chat_launches, configure, manager, repository},
         triggers::firing::Firing,
     },
-    model::{ChatQueueRequest, Repository},
+    model::Repository,
     paths::Paths,
     protocol::ItemContext,
     time::UnixTime,
@@ -297,19 +297,20 @@ async fn overlap_queue_launches_once_the_last_agent_stops() {
 #[tokio::test]
 async fn a_launch_waiting_in_the_agent_queue_overlaps_until_it_ends() {
     let (_temp, manager, repo) = with_triggers(&overlapping("skip")).await;
-    let request = ChatQueueRequest {
-        source: None,
-        repository: Some((&repo.id).into()),
+    let new = crate::daemon::chats::NewChat {
+        priority: None,
         name: "waiting".into(),
         agent: "claude".into(),
         mode: "chat".into(),
         narrowing: Default::default(),
-        plan: "{}".into(),
-        env: Default::default(),
-        now: false,
-        priority: None,
+        origin: None,
+        parent: None,
     };
-    let admission = manager.queue_chat_add(request, None).await.unwrap();
+    let waiting = manager.start_new_chat(Some((&repo.id).into()), None, new);
+    let waiting = waiting.await.unwrap();
+    let launch = crate::protocol::operations::QueuedLaunch::new("claude".into());
+    let request = crate::start_plan::queued_agent_request(&waiting, launch, None).unwrap();
+    let admission = manager.queue_add(request).await.unwrap();
     let entry = admission.entry.unwrap().id;
     record_started(&manager, &repo, "check", None, Some(entry.clone())).await;
 

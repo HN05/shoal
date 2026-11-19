@@ -185,7 +185,7 @@ pub(crate) fn herdr_calls(fixture: &Fixture) -> Vec<Vec<String>> {
 #[test]
 fn herdr_handoff_preserves_choices_and_literal_arguments() {
     let fixture = Fixture::with_config(Some(
-        "[agents.pi]\ncommand = ['sh', '-c', 'printf \"%s\\0\" \"$@\" > \"$HOME/agent-args\"; echo \"${SHOAL_ADD_PLAN-unset}\" > \"$HOME/agent-plan\"; exit 7', 'agent', '{args}']\n",
+        "[agents.pi]\ncommand = ['sh', '-c', 'printf \"%s\\0\" \"$@\" > \"$HOME/agent-args\"; echo \"${SHOAL_PLACE_PLAN-unset}\" > \"$HOME/agent-plan\"; exit 7', 'agent', '{args}']\n",
     ));
     install_fake_herdr(&fixture);
     let directive = fixture.root.path().join("caller-directive");
@@ -232,7 +232,7 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
             state.to_str().unwrap(),
             "--text",
             "internal",
-            "add",
+            "place",
             "--host",
             "herdr",
             "--close-when-done"
@@ -728,7 +728,7 @@ fn a_rename_renames_the_herdr_tab_shoal_opened_for_it() {
 }
 
 #[test]
-fn herdr_plans_carry_issue_urls_instead_of_bodies() {
+fn herdr_plans_name_the_launch_instead_of_its_issue() {
     let fixture = Fixture::new();
     fixture.add_github_origin();
     install_fake_herdr(&fixture);
@@ -745,10 +745,12 @@ fn herdr_plans_carry_issue_urls_instead_of_bodies() {
     let calls = herdr_calls(&fixture);
     let plan = calls[0]
         .iter()
-        .find_map(|arg| arg.strip_prefix("SHOAL_ADD_PLAN="))
+        .find_map(|arg| arg.strip_prefix("SHOAL_PLACE_PLAN="))
         .unwrap();
+    // The place reads the launch, issue included, from its queue entry.
+    assert!(!plan.contains("xxxx"), "{plan}");
     let plan: Value = serde_json::from_str(plan).unwrap();
-    assert_eq!(plan["issue"], "https://github.com/team/project/issues/34");
+    assert!(plan["queue_entry"].is_string(), "{plan}");
     // The issue prompt lets the agent start without the user.
     assert!(calls[0].iter().any(|arg| arg == "--no-focus"));
 }
@@ -816,7 +818,7 @@ fn a_json_start_opens_its_tab_only_from_a_terminal() {
     assert!(caller.status.success(), "{} {transcript}", printed(&caller));
     let started: Value = serde_json::from_slice(&caller.stdout).unwrap();
     assert_eq!(
-        (&started["workspace"], &started["agent"]),
+        (&started["space"], &started["agent"]),
         (&"shown".into(), &"pi".into()),
         "{started}"
     );
@@ -1235,11 +1237,11 @@ fn chat_rename_relabels_a_herdr_tab_that_still_shows_the_old_name() {
     let repository = fixture.ok(&["repo", "ls"])[0].clone();
     // The chats last while this test's process runs.
     let start = |name: &str, pane: &str, owned: bool| {
-        let response = fixture.request(serde_json::json!({"launch_chat":{
-            "start": {"repository": repository["id"], "name": name, "agent": "claude"},
-            "origin": {"host": "herdr", "place": pane, "owned": owned}
-        }}));
-        assert_eq!(response["type"], "launched_chat", "{response}");
+        fixture.chat_at(
+            &repository,
+            name,
+            serde_json::json!({"host": "herdr", "place": pane, "owned": owned}),
+        );
     };
     // Shoal opened `talk`'s tab under its name; `mine` runs in a tab the
     // user named.

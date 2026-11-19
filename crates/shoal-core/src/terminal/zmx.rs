@@ -17,7 +17,7 @@ use futures_util::future::BoxFuture;
 use tokio::process::Command;
 
 use super::{
-    Demo, Host, Owner, OwnerKind, PlaceState, Session, Start, Watched, chat_session_name,
+    Demo, Host, Owner, OwnerKind, PlaceState, Session, Start, Watched,
     host::{Attaches, Closes, Demos, Places, Sessions, Types, Watches},
 };
 use crate::{
@@ -199,10 +199,6 @@ impl Attaches for Zmx {
         Box::pin(run(start, owner, agent))
     }
 
-    fn run_chat<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<String>> {
-        Box::pin(run_chat(start))
-    }
-
     fn launcher_program(&self) -> &'static str {
         Tool::Zmx.program()
     }
@@ -247,22 +243,6 @@ async fn run(start: &Start<'_>, owner: Owner<'_>, agent: &crate::agent::Agent) -
         owner_label(owner),
         crate::sessions::zmx::state_label(start.state)?
     ));
-    attach_new(&mut zmx, &name, start);
-    ended(zmx.status().await.context("run zmx")?)?;
-    Ok(name)
-}
-
-/// Run `start`, a chat, in a new session and attach this terminal to it.
-/// The session's Shoal records the chat there, labels the session with it and
-/// becomes its agent, as it would in place. Returns the session's name.
-async fn run_chat(start: &Start<'_>) -> Result<String> {
-    ensure_zmx("chat").await?;
-    // The chat records itself only once its session runs, so its session
-    // is named after an ID of its own.
-    let id = shoal_ids::space_ids::SpaceId::generate();
-    let name = unused_name(&chat_session_name(&id)).await?;
-    let mut zmx = Command::new(Tool::Zmx.program());
-    zmx.args(["attach", "--labels", CREATED]);
     attach_new(&mut zmx, &name, start);
     ended(zmx.status().await.context("run zmx")?)?;
     Ok(name)

@@ -1,11 +1,9 @@
-//! Opening a planned workspace, setting it up and launching its agent.
+//! Opening a recorded workspace for its start, following its setup.
 use shoal_ids::space_ids::SpaceId;
-use std::ffi::OsString;
 
 use anyhow::Result;
 
 use super::{
-    source::load_planned_issue,
     target::AddTarget,
     waiting::{AfterSetup, follow_add_setup},
 };
@@ -14,7 +12,7 @@ use crate::{
     cli::{
         agents,
         commands::{
-            issues, operations, queued_agents,
+            operations, queued_agents, start,
             workspaces::{SetUp, waiting::WaitingAgent},
         },
         context::Context,
@@ -23,133 +21,69 @@ use crate::{
     },
     client::connection::CommandPaths,
     forge::items::reference::ItemInput,
-    model::{QueueEntry, Workspace},
+    model::Workspace,
     protocol::{
         ConfigTarget,
         operations::{Preparation, Prepared, QueuedLaunch, WorkspaceStart},
     },
-    start_plan::{AddPlan, ResolvedAddAgent},
-    state::QueueState,
+    start_plan::{QueuedStart, ResolvedAddAgent},
+    terminal::PlaceName,
 };
-use shoal_ids::{agent_session_ids::AgentSessionId, queue_entry_ids::QueueEntryId};
-use shoal_protocol::launches::LaunchSource;
+use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Carry out `plan` in this process: follow the preparation it names and
-/// run its agent once the queue lets it, as a focused start's place does,
-/// or else open the workspace it names and launch its agent.
-pub(in crate::cli) async fn execute_add(ctx: &Context, plan: AddPlan) -> Result<i32> {
-    if plan.handoff.is_some() {
-        return Box::pin(super::attach::run_in_place(ctx, plan)).await;
+/// Open the recorded workspace `space` in the place this process runs in,
+/// named as `place_name` says, and give it a shell, as a start of it
+/// without an agent does.
+pub(in crate::cli::commands) async fn reopen_with_shell(
+    ctx: &Context,
+    space: &SpaceId,
+    place_name: Option<PlaceName>,
+) -> Result<i32> {
+    let workspace = SpaceSelector::id(space);
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace).await?;
+    match open_recorded(ctx, &workspace.workspace, None, place_name).await? {
+        Opened::Ready { workspace, .. } => terminal::open_shell(ctx, &workspace.path).await,
+        Opened::Ended(code) => Ok(code),
     }
+}
+
+/// What opening a recorded workspace for its start left.
+pub(in crate::cli::commands) enum Opened {
+    /// The workspace, ready for the agent of the starting launch `entry`,
+    /// if any, or for a shell.
+    Ready {
+        workspace: Box<Workspace>,
+        entry: Option<QueueEntryId>,
+    },
+    /// The start ended with this code, as a failed setup ends it.
+    Ended(i32),
+}
+
+/// Open the recorded `workspace` in the place this process runs in,
+/// labelled as `place_name` says, for `agent`, the starting launch's entry
+/// and its start, else for a shell, and follow its preparation, which links
+/// the start's PR. A failed setup fails the entry, unless the agent waits
+/// in the queue for a retried setup, which this reports.
+pub(in crate::cli::commands) async fn open_recorded(
+    ctx: &Context,
+    workspace: &Workspace,
+    agent: Option<(&QueueEntryId, &QueuedStart)>,
+    place_name: Option<PlaceName>,
+) -> Result<Opened> {
     let target = AddTarget {
-        selector: plan.repository.clone(),
+        selector: workspace.repository().into(),
         repositories: tokio::sync::OnceCell::new(),
     };
-    let issue = load_planned_issue(ctx, &target, &plan).await;
-    // A queued start reports a failed lookup as it reports any other failure.
-    let issue = failing_entry(ctx, plan.queue_entry.as_ref(), issue).await?;
-    execute_add_with_target(ctx, plan, target, issue).await
-}
-
-pub(super) async fn execute_add_with_target(
-    ctx: &Context,
-    plan: AddPlan,
-    target: AddTarget,
-    issue: Option<issues::Issue>,
-) -> Result<i32> {
-    let Some(entry) = plan.queue_entry.clone() else {
-        return add_planned(ctx, plan, target, issue).await;
-    };
-    let added = Box::pin(add_planned(ctx, plan, target, issue));
-    holding(ctx, &entry, added).await
-}
-
-/// `result`, after failing the queue `entry`, if any, with its error.
-async fn failing_entry<T>(
-    ctx: &Context,
-    entry: Option<&QueueEntryId>,
-    result: Result<T>,
-) -> Result<T> {
-    if let (Some(entry), Err(error)) = (entry, &result) {
-        crate::queued_starts::fail(&ctx.paths, entry, error).await;
-    }
-    result
-}
-
-/// The launch of the agent that starts in this process.
-struct HereLaunch {
-    agent: ResolvedAddAgent,
-    opening: agents::Opening,
-    /// The permissions `--permission` gives the agent, whatever the mode's.
-    narrowing: crate::config::permissions::PermissionsConfig,
-    args: Vec<OsString>,
-    fork: Option<AgentSessionId>,
-}
-
-impl HereLaunch {
-    /// Start the agent in `workspace`.
-    async fn run(self, ctx: &Context, workspace: Workspace) -> Result<i32> {
-        let Self {
-            agent,
-            opening,
-            narrowing,
-            args,
-            fork,
-        } = self;
-        let launch = super::agent::Launch {
-            opening,
-            narrowing,
-            args,
-            fork,
-        };
-        super::agent::launch(ctx, agent, workspace, launch).await
-    }
-}
-
-/// Run `start` under queue `entry`'s slot, held until its agent takes it
-/// over, freeing the slot with the error when `start` fails.
-pub(super) async fn holding<T>(
-    ctx: &Context,
-    entry: &QueueEntryId,
-    start: impl std::future::Future<Output = Result<T>>,
-) -> Result<T> {
-    let _hold = queued_agents::Hold::start(&ctx.paths, entry).await;
-    failing_entry(ctx, Some(entry), start.await).await
-}
-
-/// Open the planned workspace and launch its agent here.
-async fn add_planned(
-    ctx: &Context,
-    plan: AddPlan,
-    target: AddTarget,
-    issue: Option<issues::Issue>,
-) -> Result<i32> {
-    let AddPlan {
-        repository: _,
-        workspace,
-        pr,
-        place_name,
-        issue: _,
-        agent,
-        args,
-        prompt,
-        mode,
-        narrowing,
-        fork,
-        queue_entry,
-        handoff: _,
-    } = plan;
-    let told = (&prompt, args.as_slice(), &fork);
-    let own = queued_launch(&agent, issue.as_ref(), (&mode, narrowing), told)?;
-    // The agent this start runs itself, which its preparation leaves
-    // waiting in the queue should setup fail.
-    let has_agent = own.is_some();
+    let queue_entry = agent.map(|(entry, _)| entry.clone());
+    let pr = agent.and_then(|(_, start)| start.pr.clone());
     let start = AddStart {
-        workspace,
+        workspace: workspace.id.clone(),
         pr: pr.clone(),
         queue_entry: queue_entry.clone(),
-        waiting: own,
+        // The agent this start runs itself, which its preparation leaves
+        // waiting in the queue should setup fail.
+        waiting: agent.map(|(_, start)| Box::new(waiting_launch(&start.launch))),
     };
     // The daemon gave the starting entry the workspace before its setup.
     let preparing = start_add_workspace(ctx, &target, start).await?;
@@ -159,16 +93,18 @@ async fn add_planned(
         Some(place) => place.render(branch, name),
         None => name.to_string(),
     };
-    let with_agent = agent.agent.is_some();
-    terminal::host_workspace(ctx, opened, with_agent, &label).await?;
+    let owner = crate::terminal::Owner::Workspace(&opened.id);
+    terminal::host_space(ctx, owner, agent.is_some(), &label).await?;
     let (name, number) = (opened.name.clone(), opened.number);
-    let subject = (issue.as_ref().map(issues::Issue::subject))
-        .or(prompt.map(crate::config::templates::Subject::told));
     // Preparation leaves the agent it queues waiting itself.
-    let waiting = has_agent.then(|| WaitingAgent::new(queue_entry.clone()));
+    let waiting = agent.map(|_| WaitingAgent::new(queue_entry.clone()));
     let mut rest = AfterSetup { pr, waiting };
+    let resolved = ResolvedAddAgent {
+        agent: agent.map(|(_, start)| start.launch.agent.clone()),
+        model: Default::default(),
+    };
     // The start names its workspace, so it reports only its agent.
-    let finished = finish_add_workspace(ctx, preparing, &mut rest, &agent, true).await?;
+    let finished = finish_add_workspace(ctx, preparing, &mut rest, &resolved, true).await?;
     // A failed setup frees the entry's slot, leaving the agent waiting.
     let (queue_entry, waits) = match rest.waiting {
         Some(waiting) => (waiting.starting.clone(), waiting.failed()),
@@ -181,59 +117,26 @@ async fn add_planned(
             );
             crate::queued_starts::fail(&ctx.paths, entry, &error).await;
         }
-        return Ok(1);
+        return Ok(Opened::Ended(1));
     };
     if waits {
-        return report_waiting_in(ctx, &workspace).await;
+        return report_waiting_in(ctx, &workspace).await.map(Opened::Ended);
     }
-    if let Some(entry) = &queue_entry {
-        crate::env::launch_queue_entry(entry);
-    }
-    let opening = agents::Opening::New {
-        mode: mode.unwrap_or(crate::config::modes::ModeName::DEFAULT),
-        subject,
-    };
-    let here = HereLaunch {
-        agent,
-        opening,
-        narrowing,
-        args,
-        fork,
-    };
-    here.run(ctx, *workspace).await
+    Ok(Opened::Ready {
+        workspace,
+        entry: queue_entry,
+    })
 }
 
-/// The launch of `agent` in `mode` with its narrowing that preparing the
-/// added workspace leaves waiting in the queue should its setup fail,
-/// prompted with `issue` or else the plan's own prompt, with its arguments
-/// and fork. The daemon then starts it outside this process, so it gets
-/// the workspace's own scope.
-fn queued_launch(
-    agent: &ResolvedAddAgent,
-    issue: Option<&issues::Issue>,
-    (mode, narrowing): (
-        &Option<crate::config::modes::ModeName>,
-        crate::config::permissions::PermissionsConfig,
-    ),
-    (prompt, args, fork): (&Option<String>, &[OsString], &Option<AgentSessionId>),
-) -> Result<Option<Box<QueuedLaunch>>> {
-    let Some(chosen) = &agent.agent else {
-        return Ok(None);
-    };
-    Ok(Some(Box::new(QueuedLaunch {
-        agent: chosen.clone(),
-        prompt: prompt.clone(),
-        mode: mode.clone(),
-        narrowing,
-        model: agent.model.clone(),
-        args: super::plan::launch_args(args.to_vec())?,
-        fork: fork.clone(),
-        issue: issue.map(issues::Issue::launch_issue),
-        env: Some(crate::terminal::start_environment()),
-        now: false,
+/// `launch`, which its caller runs, as the queue starts it once it waits
+/// for a retried setup: outside that caller, with the workspace's own
+/// scope.
+fn waiting_launch(launch: &QueuedLaunch) -> QueuedLaunch {
+    QueuedLaunch {
         here: false,
-        source: Some(LaunchSource::Manual),
-    })))
+        now: false,
+        ..launch.clone()
+    }
 }
 
 /// Report the agent that waited in the queue for the setup of the added
@@ -244,29 +147,9 @@ async fn report_waiting_in(ctx: &Context, workspace: &Workspace) -> Result<i32> 
         .iter()
         .find(|entry| entry.opens.as_ref() == Some(&workspace.id));
     match waiting {
-        Some(entry) => report_queued_in(ctx, workspace, entry),
+        Some(entry) => start::report_queued_in(ctx, &workspace.name, entry),
         None => Ok(0),
     }
-}
-
-/// Report the agent queued in the added `workspace`.
-pub(super) fn report_queued_in(
-    ctx: &Context,
-    workspace: &Workspace,
-    entry: &QueueEntry,
-) -> Result<i32> {
-    let text = match entry.state {
-        QueueState::Queued => format!(
-            "Queued {} in {} (position {}); it starts {}",
-            entry.agent,
-            workspace.name,
-            entry.position.unwrap_or(1),
-            queued_agents::starts_when(entry)
-        ),
-        _ => format!("Starting {} in {}", entry.agent, workspace.name),
-    };
-    ctx.emit(&text, entry)?;
-    Ok(0)
 }
 
 /// Whether the caller's shell enters the added `workspace`, where `agent`

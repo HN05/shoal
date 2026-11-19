@@ -122,15 +122,10 @@ impl Manager {
     }
 }
 
-/// Refuse what a chat of `shape` cannot start with: running its agent in
-/// the caller, which a launch never does for a chat, a repository's setup,
+/// Refuse what a chat of `shape` cannot start with: a repository's setup,
 /// which works on its setup branch, and for a chat without a repository
 /// what only one with a repository takes.
 fn ensure_chat_takes(launch: &Launch, shape: &Shape) -> Result<()> {
-    ensure!(
-        !launch.here,
-        "a launch runs no chat's agent in its caller; start the chat here with `shoal start --here`"
-    );
     ensure!(
         launch.setup != Some(Setup::Repository),
         "a repository's setup starts in a workspace on its setup branch"
