@@ -29,7 +29,7 @@ async fn a_workspace_becoming_a_chat_keeps_its_questions_and_requests_to_take_ac
             tx.execute_batch(
                 "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
                  INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','fix');
-                 INSERT INTO workspaces(id,path,branch,state) VALUES ('w','/work','fix','ready');
+                 INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir) VALUES ('w','/work','fix','ready','abc','/admin');
                  INSERT INTO questions(space_number,number,space_id,created_at,question,
                          recommendation,choices)
                      VALUES (1,1,'w',1,'Which?','A','[]');

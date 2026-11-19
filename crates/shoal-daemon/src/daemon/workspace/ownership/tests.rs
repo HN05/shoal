@@ -128,12 +128,9 @@ async fn cut_short(name: &str) -> Result<(tempfile::TempDir, std::sync::Arc<Mana
         .store
         .run(move |db| {
             db.execute(
-                "UPDATE workspaces SET state=?2,git_dir=NULL WHERE id=?1",
+                r#"UPDATE workspaces SET state=?2,git_dir=NULL,
+                    pending_plan='{"source":{"kind":"new"}}' WHERE id=?1"#,
                 rusqlite::params![id, WorkspaceState::Failed],
-            )?;
-            db.execute(
-                r#"INSERT INTO pending_worktrees(workspace_id,plan) VALUES (?1,'{"source":{"kind":"new"}}')"#,
-                [&id],
             )?;
             Ok(())
         })

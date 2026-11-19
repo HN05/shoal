@@ -402,7 +402,7 @@ async fn a_blocked_copy_takes_its_source_as_it_is_once_its_blockers_clear() {
     let id = copy.id.clone();
     let plan: String = (manager.store)
         .run(move |db| {
-            let sql = "SELECT plan FROM pending_worktrees WHERE workspace_id=?1";
+            let sql = "SELECT pending_plan FROM workspaces WHERE id=?1";
             Ok(db.query_row(sql, [&id], |row| row.get(0))?)
         })
         .await

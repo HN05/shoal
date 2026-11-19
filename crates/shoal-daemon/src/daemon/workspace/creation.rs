@@ -384,7 +384,7 @@ impl Manager {
                 }
                 let (branch, start_commit, made_for) = store::head_columns(&record.head)?;
                 tx.execute(
-                    "INSERT INTO workspaces (id,path,branch,state,git_dir,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,start_commit,made_for,setup_skipped,disposable) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?3,?9,?10,?11,?12,?13)",
+                    "INSERT INTO workspaces (id,path,branch,state,git_dir,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,start_commit,made_for,setup_skipped,disposable,pending_plan) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?3,?9,?10,?11,?12,?13,?14)",
                     params![
                         record.id,
                         record.path.to_str(),
@@ -399,6 +399,7 @@ impl Manager {
                         made_for,
                         record.setup_skipped,
                         record.disposable,
+                        pending,
                     ],
                 )?;
                 let number = match &placement {
@@ -417,12 +418,6 @@ impl Manager {
                         created_at: crate::time::UnixTime::now(),
                     })?,
                 };
-                if let Some(plan) = &pending {
-                    tx.execute(
-                        "INSERT INTO pending_worktrees(workspace_id,plan) VALUES (?1,?2)",
-                        params![record.id, plan],
-                    )?;
-                }
                 tx.execute(
                     "UPDATE repositories SET last_used=(SELECT COALESCE(MAX(last_used),0)+1 FROM repositories) WHERE id=?1",
                     [&record.repository_id],
@@ -592,9 +587,9 @@ impl Manager {
         let id = id.to_owned();
         self.store
             .write(move |db| {
-                db.execute("DELETE FROM pending_worktrees WHERE workspace_id=?1", [&id])?;
                 db.execute(
-                    "UPDATE workspaces SET state=?2,error=NULL,setup_finished=?3 AND NOT setup_skipped WHERE id=?1",
+                    "UPDATE workspaces SET state=?2,error=NULL,setup_finished=?3 AND NOT setup_skipped,
+                        pending_plan=NULL WHERE id=?1",
                     params![
                         id,
                         if needs_setup {

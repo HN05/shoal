@@ -11,8 +11,8 @@ fn lifecycle_events_commit_and_roll_back_with_state() -> Result<()> {
     )?;
     let tx = db.transaction()?;
     tx.execute_batch(
-        "INSERT INTO workspaces(id,path,branch,state,observed_branch)
-            VALUES ('w','/work','worker','preparing','worker');
+        "INSERT INTO workspaces(id,path,branch,state,observed_branch,base_commit,git_dir)
+            VALUES ('w','/work','worker','preparing','worker','abc','/admin');
          INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','worker');",
     )?;
     tx.execute("UPDATE workspaces SET state='ready' WHERE id='w'", [])?;
@@ -25,8 +25,8 @@ fn lifecycle_events_commit_and_roll_back_with_state() -> Result<()> {
 
     db.execute_batch(
         "BEGIN;
-         INSERT INTO workspaces(id,path,branch,state,observed_branch)
-            VALUES ('w','/work','worker','preparing','worker');
+         INSERT INTO workspaces(id,path,branch,state,observed_branch,base_commit,git_dir)
+            VALUES ('w','/work','worker','preparing','worker','abc','/admin');
          INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','worker');
          COMMIT;",
     )?;
@@ -140,6 +140,7 @@ fn remove_schema_objects(db: &Connection) -> Result<()> {
     // One transaction syncs the whole removal once instead of every statement.
     let tx = db.unchecked_transaction()?;
     let db: &Connection = &tx;
+    db.execute_batch(include_str!("pending_plans_undo.sql"))?;
     db.execute_batch(include_str!("hub_presence_undo.sql"))?;
     db.execute_batch(include_str!("hub_forward_nonces_undo.sql"))?;
     db.execute_batch(include_str!("app_entries_undo.sql"))?;
@@ -420,13 +421,13 @@ fn renames_questions_and_children_reach_their_spaces_logs() -> Result<()> {
     db.execute_batch(
         "BEGIN;
          INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-         INSERT INTO workspaces(id,path,branch,state)
-             VALUES ('parent','/plan','plan','ready');
+         INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
+             VALUES ('parent','/plan','plan','ready','abc','/admin');
          INSERT INTO spaces(id,kind,repository_id,name)
              VALUES ('parent','workspace','repo','plan');
          INSERT INTO space_parents(space_id,parent_id) VALUES ('child','parent');
-         INSERT INTO workspaces(id,path,branch,state)
-             VALUES ('child','/fix','fix','ready');
+         INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
+             VALUES ('child','/fix','fix','ready','abc','/admin');
          INSERT INTO spaces(id,kind,repository_id,name)
              VALUES ('child','workspace','repo','fix');
          INSERT INTO space_parents(space_id,parent_id) VALUES ('chat','parent');
@@ -501,8 +502,8 @@ fn a_workspace_s_creation_takes_the_base_recorded_after_it() -> Result<()> {
     db.execute_batch(
         "BEGIN;
          INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-         INSERT INTO workspaces(id,path,branch,state)
-             VALUES ('w','/fix','fix','preparing');
+         INSERT INTO workspaces(id,path,branch,state,pending_plan)
+             VALUES ('w','/fix','fix','preparing','{}');
          INSERT INTO spaces(id,kind,repository_id,name)
              VALUES ('w','workspace','repo','fix');
          UPDATE workspaces SET base_commit='abc',base_ref='refs/heads/main' WHERE id='w';

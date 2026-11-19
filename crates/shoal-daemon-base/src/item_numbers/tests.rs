@@ -6,8 +6,8 @@ fn spaces(db: &Connection) -> Result<()> {
         "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
         INSERT INTO spaces(id,kind,repository_id,name)
             VALUES ('first','workspace','repo','first');
-        INSERT INTO workspaces(id,path,branch,state)
-            VALUES ('first','/first','first','ready');
+        INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
+            VALUES ('first','/first','first','ready','abc','/admin');
         INSERT INTO spaces(id,kind,repository_id,name,mode)
             VALUES ('chat','chat','repo','planning','chat');
         INSERT INTO chats(id)

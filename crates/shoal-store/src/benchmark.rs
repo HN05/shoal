@@ -114,7 +114,7 @@ fn fixture(path: &std::path::Path, rows: usize) -> Result<()> {
     for row in 0..rows {
         let id = row.to_string();
         tx.execute(
-            "INSERT INTO workspaces(id,path,branch,state) VALUES (?1,?1,?1,'ready')",
+            "INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir) VALUES (?1,?1,?1,'ready','abc','/admin')",
             [&id],
         )?;
         tx.execute(

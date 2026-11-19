@@ -38,8 +38,8 @@ async fn an_agent_ends_once_whether_a_stop_or_its_exit_reports_it() {
             db.execute_batch(
                 "INSERT INTO repositories(id,path,source,last_used) VALUES ('r','/r','/r',1);
                  BEGIN;
-                 INSERT INTO workspaces(id,path,branch,state)
-                     VALUES ('w','/work','worker','ready');
+                 INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
+                     VALUES ('w','/work','worker','ready','abc','/admin');
                  INSERT INTO spaces(id,kind,repository_id,name)
                      VALUES ('w','workspace','r','worker');
                  COMMIT;",
@@ -86,8 +86,8 @@ fn link_events_include_item_kind_and_url() -> Result<()> {
     )?;
     db.execute_batch(
         "BEGIN;
-         INSERT INTO workspaces(id,path,branch,state,observed_branch)
-            VALUES ('w','/work','worker','ready','worker');
+         INSERT INTO workspaces(id,path,branch,state,observed_branch,base_commit,git_dir)
+            VALUES ('w','/work','worker','ready','worker','abc','/admin');
          INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','worker');
          COMMIT;",
     )?;
@@ -122,8 +122,8 @@ fn item_activity_events_include_item_and_update_details() -> Result<()> {
     )?;
     db.execute_batch(
         "BEGIN;
-         INSERT INTO workspaces(id,path,branch,state,observed_branch)
-            VALUES ('w','/work','worker','ready','worker');
+         INSERT INTO workspaces(id,path,branch,state,observed_branch,base_commit,git_dir)
+            VALUES ('w','/work','worker','ready','worker','abc','/admin');
          INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','worker');
          COMMIT;",
     )?;
@@ -166,8 +166,8 @@ fn run_link_activity_and_approval_events_read_back() -> Result<()> {
     )?;
     db.execute_batch(
         "BEGIN;
-         INSERT INTO workspaces(id,path,branch,state,observed_branch)
-            VALUES ('w','/work','worker','ready','worker');
+         INSERT INTO workspaces(id,path,branch,state,observed_branch,base_commit,git_dir)
+            VALUES ('w','/work','worker','ready','worker','abc','/admin');
          INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','worker');
          COMMIT;",
     )?;

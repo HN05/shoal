@@ -14,7 +14,7 @@ use crate::{
     state::WorkspaceState,
 };
 use anyhow::{Context, Result, bail, ensure};
-use rusqlite::{OptionalExtension, params};
+use rusqlite::params;
 use shoal_ids::{checkpoint_numbers::CheckpointNumber, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::{BranchName, CommitId};
@@ -22,7 +22,7 @@ use std::path::PathBuf;
 use tokio::sync::OwnedMutexGuard;
 
 /// How the worktree of a recorded workspace that has none yet is created,
-/// as `pending_worktrees` keeps it until it is.
+/// as its record's `pending_plan` keeps it until it is.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub(in crate::daemon) struct PendingWorktree {
     source: PendingSource,
@@ -355,13 +355,11 @@ impl Manager {
         let plan = self
             .store
             .write(move |tx| {
-                let plan: Option<String> = tx
-                    .query_row(
-                        "SELECT plan FROM pending_worktrees WHERE workspace_id=?1",
-                        [&id],
-                        |row| row.get(0),
-                    )
-                    .optional()?;
+                let plan: Option<String> = tx.query_row(
+                    "SELECT pending_plan FROM workspaces WHERE id=?1",
+                    [&id],
+                    |row| row.get(0),
+                )?;
                 let Some(plan) = plan else {
                     bail!("{name} already has its worktree");
                 };
@@ -388,18 +386,19 @@ pub(crate) fn build_pending_in(
     base: &BranchName,
     owner: Option<&SpaceId>,
 ) -> Result<()> {
-    let plan: String = tx.query_row(
-        "SELECT plan FROM pending_worktrees WHERE workspace_id=?1",
+    let plan: Option<String> = tx.query_row(
+        "SELECT pending_plan FROM workspaces WHERE id=?1",
         [id],
         |row| row.get(0),
     )?;
+    let plan = plan.context("the workspace already has its worktree")?;
     let mut pending: PendingWorktree = serde_json::from_str(&plan)?;
     let PendingSource::New { base: unset @ None } = &mut pending.source else {
         return Ok(());
     };
     *unset = Some(base.to_string());
     tx.execute(
-        "UPDATE pending_worktrees SET plan=?2 WHERE workspace_id=?1",
+        "UPDATE workspaces SET pending_plan=?2 WHERE id=?1",
         params![id, serde_json::to_string(&pending)?],
     )?;
     match owner {

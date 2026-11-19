@@ -613,36 +613,6 @@ CREATE TABLE container_projects (
 
 CREATE TABLE agent_assigned_issues (url TEXT PRIMARY KEY);
 
-CREATE TABLE "workspaces" (
-    id TEXT PRIMARY KEY
-        REFERENCES spaces(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
-    path TEXT NOT NULL UNIQUE,
-    branch TEXT,
-    state TEXT NOT NULL,
-    error TEXT,
-    base_commit TEXT,
-    base_ref TEXT,
-    git_dir TEXT,
-    setup_finished INTEGER NOT NULL DEFAULT 0 CHECK(setup_finished IN (0,1)),
-    observed_branch TEXT,
-    base_workspace_id TEXT,
-    active_at INTEGER,
-    start_commit TEXT,
-    made_for TEXT CHECK(made_for IS NULL OR start_commit IS NOT NULL)
-        CHECK((branch IS NULL) <> (start_commit IS NULL)),
-    setup_skipped INTEGER NOT NULL DEFAULT 0 CHECK(setup_skipped IN (0,1)),
-    disposable INTEGER NOT NULL DEFAULT 0 CHECK(disposable IN (0,1)),
-    copied_from TEXT,
-    copied_from_checkpoint INTEGER,
-    starting_checkpoint INTEGER,
-    starting_index TEXT
-);
-
-CREATE TABLE pending_worktrees (
-    workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
-    plan TEXT NOT NULL
-);
-
 CREATE TABLE space_wake_timers (
     space_id TEXT PRIMARY KEY,
     due_at INTEGER NOT NULL,
@@ -864,6 +834,33 @@ CREATE TABLE hub_presence (
     PRIMARY KEY(member_id, started_at)
 );
 
+CREATE TABLE "workspaces" (
+    id TEXT PRIMARY KEY
+        REFERENCES spaces(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+    path TEXT NOT NULL UNIQUE,
+    branch TEXT,
+    state TEXT NOT NULL,
+    error TEXT,
+    base_commit TEXT,
+    base_ref TEXT,
+    git_dir TEXT,
+    setup_finished INTEGER NOT NULL DEFAULT 0 CHECK(setup_finished IN (0,1)),
+    observed_branch TEXT,
+    base_workspace_id TEXT,
+    active_at INTEGER,
+    start_commit TEXT,
+    made_for TEXT CHECK(made_for IS NULL OR start_commit IS NOT NULL)
+        CHECK((branch IS NULL) <> (start_commit IS NULL)),
+    setup_skipped INTEGER NOT NULL DEFAULT 0 CHECK(setup_skipped IN (0,1)),
+    disposable INTEGER NOT NULL DEFAULT 0 CHECK(disposable IN (0,1)),
+    copied_from TEXT,
+    copied_from_checkpoint INTEGER,
+    starting_checkpoint INTEGER,
+    starting_index TEXT
+, pending_plan TEXT
+        CHECK(pending_plan IS NOT NULL OR (base_commit IS NOT NULL AND git_dir IS NOT NULL))
+        CHECK(base_ref IS NULL OR base_commit IS NOT NULL));
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
@@ -941,8 +938,6 @@ CREATE INDEX resource_lease_acquirers ON resource_leases(acquirer_execution)
 
 CREATE INDEX trigger_runs_by_trigger ON trigger_runs(scope, name, id);
 
-CREATE INDEX workspaces_base ON workspaces(base_workspace_id);
-
 CREATE INDEX reply_times_space ON reply_times(space_id, id);
 
 CREATE INDEX hub_spaces_member ON hub_spaces(member_id);
@@ -950,6 +945,8 @@ CREATE INDEX hub_spaces_member ON hub_spaces(member_id);
 CREATE INDEX hub_numbers_member ON hub_numbers(member_id);
 
 CREATE INDEX hub_queue_member ON hub_queue(member_id, seq);
+
+CREATE INDEX workspaces_base ON workspaces(base_workspace_id);
 
 CREATE VIEW space_refs AS
     SELECT spaces.id, CASE spaces.kind
@@ -1077,13 +1074,6 @@ CREATE TRIGGER repository_triggers_removed AFTER DELETE ON repositories BEGIN
     DELETE FROM trigger_states WHERE scope=OLD.id;
     DELETE FROM trigger_runs WHERE scope=OLD.id;
     DELETE FROM trigger_keys WHERE scope=OLD.id;
-END;
-
-CREATE TRIGGER workspace_base_recorded AFTER UPDATE OF base_ref ON workspaces
-WHEN OLD.base_ref IS NULL AND NEW.base_ref IS NOT NULL BEGIN
-    UPDATE space_events SET record=json_set(record,'$.base_ref',NEW.base_ref)
-        WHERE id=(SELECT MAX(id) FROM space_events
-            WHERE space_id=NEW.id AND json_extract(record,'$.kind')='created');
 END;
 
 CREATE TRIGGER file_added AFTER INSERT ON space_files BEGIN
@@ -1311,6 +1301,26 @@ CREATE TRIGGER space_created AFTER INSERT ON spaces BEGIN
         WHERE id=(SELECT parent_id FROM space_parents WHERE space_id=NEW.id);
 END;
 
+CREATE TRIGGER space_wake_timer_removed AFTER DELETE ON spaces BEGIN
+    DELETE FROM space_wake_timers WHERE space_id=OLD.id;
+END;
+
+CREATE TRIGGER space_engagement_removed AFTER DELETE ON spaces BEGIN
+    DELETE FROM space_engagement WHERE space_id=OLD.id;
+END;
+
+CREATE TRIGGER chat_restart_removed AFTER DELETE ON chats
+WHEN OLD.id NOT IN (SELECT id FROM workspaces) BEGIN
+    DELETE FROM agent_restarts WHERE space_id=OLD.id;
+END;
+
+CREATE TRIGGER workspace_base_recorded AFTER UPDATE OF base_ref ON workspaces
+WHEN OLD.base_ref IS NULL AND NEW.base_ref IS NOT NULL BEGIN
+    UPDATE space_events SET record=json_set(record,'$.base_ref',NEW.base_ref)
+        WHERE id=(SELECT MAX(id) FROM space_events
+            WHERE space_id=NEW.id AND json_extract(record,'$.kind')='created');
+END;
+
 CREATE TRIGGER workspace_base_removed BEFORE DELETE ON workspaces BEGIN
     INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
         '$.kind','base_changed','$.cause','removed',
@@ -1350,20 +1360,7 @@ WHEN NEW.state='failed' AND OLD.state='preparing' BEGIN
     ) FROM space_event_records WHERE id=NEW.id AND space_kind='workspace';
 END;
 
-CREATE TRIGGER space_wake_timer_removed AFTER DELETE ON spaces BEGIN
-    DELETE FROM space_wake_timers WHERE space_id=OLD.id;
-END;
-
-CREATE TRIGGER space_engagement_removed AFTER DELETE ON spaces BEGIN
-    DELETE FROM space_engagement WHERE space_id=OLD.id;
-END;
-
 CREATE TRIGGER workspace_restart_removed AFTER DELETE ON workspaces
 WHEN OLD.id NOT IN (SELECT id FROM chats) BEGIN
-    DELETE FROM agent_restarts WHERE space_id=OLD.id;
-END;
-
-CREATE TRIGGER chat_restart_removed AFTER DELETE ON chats
-WHEN OLD.id NOT IN (SELECT id FROM workspaces) BEGIN
     DELETE FROM agent_restarts WHERE space_id=OLD.id;
 END;

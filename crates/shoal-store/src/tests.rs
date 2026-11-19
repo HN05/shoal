@@ -716,22 +716,40 @@ pub(super) fn historical_database(version: i64) -> Result<Connection> {
     if version >= 243 {
         db.execute_batch(include_str!("hub_presence.sql"))?;
     }
+    if version >= 244 {
+        db.execute_batch(UNPLANNED_CREATIONS)?;
+    }
+    if version >= 245 {
+        db.execute_batch("PRAGMA foreign_keys=OFF;")?;
+        pending_plans(&db)?;
+        db.execute_batch("PRAGMA foreign_keys=ON;")?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
     } else {
         "workspace_id"
     };
+    // Its base and admin directory, from the versions that record them.
+    let (columns, values) = match version {
+        ..2 => ("", ""),
+        2..10 => (",base_commit", ",'abc'"),
+        10.. => (",base_commit,git_dir", ",'abc','/admin'"),
+    };
     let workspace = if version >= 182 {
-        "BEGIN;
-        INSERT INTO workspaces(id,path,branch,state)
-            VALUES ('workspace','/work','worker','ready');
-        INSERT INTO spaces(id,kind,repository_id,name)
-            VALUES ('workspace','workspace','repo','worker');
-        COMMIT;"
+        format!(
+            "BEGIN;
+            INSERT INTO workspaces(id,path,branch,state{columns})
+                VALUES ('workspace','/work','worker','ready'{values});
+            INSERT INTO spaces(id,kind,repository_id,name)
+                VALUES ('workspace','workspace','repo','worker');
+            COMMIT;"
+        )
     } else {
-        "INSERT INTO workspaces(id,repository_id,name,path,branch,state)
-            VALUES ('workspace','repo','worker','/work','worker','ready');"
+        format!(
+            "INSERT INTO workspaces(id,repository_id,name,path,branch,state{columns})
+                VALUES ('workspace','repo','worker','/work','worker','ready'{values});"
+        )
     };
     db.execute_batch(&format!(
         "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -754,13 +772,18 @@ const DROPS_CREATING_LAUNCHES: i64 = 227;
 
 /// Upgrade `db` as v0.17.0 does when its daemon starts: migrate it to that
 /// release's version, then consume the upgrade state the next migration
-/// refuses. A database already past it stays as it is.
+/// refuses. A database already past it stays as it is. A fixture's
+/// workspace from before Shoal recorded a base and admin directory gets
+/// both here, so that the migration that drops a record without them keeps
+/// it for the checks that follow.
 pub(super) fn start_v0_17_0(db: &mut Connection) -> Result<()> {
     migrate_to(db, V0_17_0)?;
     if db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))? == V0_17_0 {
         db.execute_batch(
             "DELETE FROM upgraded_chat_agents; DELETE FROM chat_legacy_names;
-             DELETE FROM earlier_attached_files;",
+             DELETE FROM earlier_attached_files;
+             UPDATE workspaces SET base_commit=coalesce(base_commit,'abc'),
+                git_dir=coalesce(git_dir,'/admin');",
         )?;
     }
     Ok(())
@@ -975,8 +998,8 @@ migration_tests! {
 fn migration_names_recorded_chats_and_keeps_what_they_own() -> Result<()> {
     let mut db = historical_database(70)?;
     db.execute_batch(
-        "INSERT INTO workspaces(id,repository_id,name,path,branch,state)
-             VALUES ('taken','repo','repo-chat-2','/taken','taken','ready');
+        "INSERT INTO workspaces(id,repository_id,name,path,branch,state,base_commit,git_dir)
+             VALUES ('taken','repo','repo-chat-2','/taken','taken','ready','abc','/admin');
          INSERT INTO chats(id,repository_id,number,agent,pid,birth,started_at)
              VALUES ('first','repo',1,'claude',1,'b',1),('second','repo',2,'codex',2,'b',2);
          UPDATE workspaces SET chat_id='second' WHERE id='workspace';
@@ -1027,8 +1050,8 @@ fn migration_names_recorded_chats_and_keeps_what_they_own() -> Result<()> {
 fn migration_starts_earlier_agents_in_the_mode_they_ran_as() -> Result<()> {
     let mut db = historical_database(132)?;
     db.execute_batch(
-        "INSERT INTO workspaces(id,repository_id,name,path,branch,state)
-             VALUES ('shell','repo','shell','/shell','shell','ready');
+        "INSERT INTO workspaces(id,repository_id,name,path,branch,state,base_commit,git_dir)
+             VALUES ('shell','repo','shell','/shell','shell','ready','abc','/admin');
          INSERT INTO executions(id,workspace_id,state) VALUES ('command','shell','running');
          UPDATE executions SET agent='claude' WHERE id='execution';
          INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
@@ -1063,11 +1086,11 @@ fn migration_keeps_one_parent_for_each_space() -> Result<()> {
         "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
              VALUES ('chat','repo','planning','claude',1,'b',1);
          INSERT INTO repositories(id,path,source,last_used) VALUES ('other','/other','/other',2);
-         INSERT INTO workspaces(id,repository_id,name,path,branch,state,parent_workspace_id,chat_id)
-             VALUES ('split','repo','split','/split','split','ready','workspace','chat'),
-                ('opened','repo','opened','/opened','opened','ready',NULL,'chat'),
-                ('orphan','repo','orphan','/orphan','orphan','ready','gone',NULL),
-                ('foreign','other','foreign','/foreign','foreign','ready',NULL,'chat');",
+         INSERT INTO workspaces(id,repository_id,name,path,branch,state,parent_workspace_id,chat_id,base_commit,git_dir)
+             VALUES ('split','repo','split','/split','split','ready','workspace','chat','abc','/admin'),
+                ('opened','repo','opened','/opened','opened','ready',NULL,'chat','abc','/admin'),
+                ('orphan','repo','orphan','/orphan','orphan','ready','gone',NULL,'abc','/admin'),
+                ('foreign','other','foreign','/foreign','foreign','ready',NULL,'chat','abc','/admin');",
     )?;
     let events: i64 = db.query_row("SELECT COUNT(*) FROM workspace_events", [], |r| r.get(0))?;
     migrate_through_v0_17_0(&mut db)?;
@@ -1105,8 +1128,8 @@ fn migration_keeps_one_parent_for_each_space() -> Result<()> {
 fn migration_numbers_recorded_spaces_workspaces_first() -> Result<()> {
     let mut db = historical_database(127)?;
     db.execute_batch(
-        "INSERT INTO workspaces(id,repository_id,name,path,branch,state)
-             VALUES ('second','repo','second','/second','second','ready');
+        "INSERT INTO workspaces(id,repository_id,name,path,branch,state,base_commit,git_dir)
+             VALUES ('second','repo','second','/second','second','ready','abc','/admin');
          INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
              VALUES ('later','repo','later','claude',1,'b',9),
                 ('earlier','repo','earlier','claude',1,'b',3);",
@@ -1130,7 +1153,7 @@ fn new_spaces_take_the_smallest_number_no_space_holds() -> Result<()> {
     db.execute_batch(
         "INSERT INTO spaces(id,kind,repository_id,name)
              VALUES ('second','workspace','repo','second');
-         INSERT INTO workspaces(id,path,branch,state) VALUES ('second','/second','second','ready');
+         INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir) VALUES ('second','/second','second','ready','abc','/admin');
          INSERT INTO spaces(id,kind,repository_id,name,mode)
              VALUES ('chat','chat','repo','chat','chat');
          INSERT INTO chats(id) VALUES ('chat');
@@ -1157,10 +1180,10 @@ fn migration_names_spaces_after_their_titles_and_issues_without_journaling() -> 
     let mut db = historical_database(150)?;
     let long = "Make space names free-text labels people can read in a tab";
     db.execute_batch(&format!(
-        r#"INSERT INTO workspaces(id,repository_id,name,path,branch,state,title)
-             VALUES ('titled','repo','fix-login','/titled','fix-login','ready','Login retries'),
-                 ('issued','repo','34-fix-api','/issued','34-fix-api','ready',NULL),
-                 ('plain','repo','plain','/plain','plain','ready',NULL);
+        r#"INSERT INTO workspaces(id,repository_id,name,path,branch,state,title,base_commit,git_dir)
+             VALUES ('titled','repo','fix-login','/titled','fix-login','ready','Login retries','abc','/admin'),
+                 ('issued','repo','34-fix-api','/issued','34-fix-api','ready',NULL,'abc','/admin'),
+                 ('plain','repo','plain','/plain','plain','ready',NULL,'abc','/admin');
          INSERT INTO space_issue(space_id,url,title)
              VALUES ('titled','https://forge.example/o/r/issues/1','Not this one'),
                  ('issued','https://forge.example/o/r/issues/34','{long}');
@@ -1413,8 +1436,8 @@ fn migrated_hold_reason_no_longer_names_the_retired_command() -> Result<()> {
     db.execute_batch(
         "INSERT INTO workspace_holds(workspace_id,name,reason,created_at,from_continuation)
                 VALUES ('workspace','continue','Kept by shoal continue',1,1);
-            INSERT INTO workspaces(id,repository_id,name,path,branch,state)
-                VALUES ('other','repo','other','/other','other','ready');
+            INSERT INTO workspaces(id,repository_id,name,path,branch,state,base_commit,git_dir)
+                VALUES ('other','repo','other','/other','other','ready','abc','/admin');
             INSERT INTO workspace_holds(workspace_id,name,reason,created_at,from_continuation)
                 VALUES ('other','thread','Kept by shoal continue',1,0);",
     )?;
@@ -1632,8 +1655,8 @@ fn migration_keeps_question_numbers_numbers_approvals_and_drops_delivered_questi
 fn migration_retires_keep_requests_and_requests_the_cleanup_they_awaited() -> Result<()> {
     let mut db = historical_database(49)?;
     db.execute_batch(
-        r#"INSERT INTO workspaces(id,repository_id,name,path,branch,state)
-                VALUES ('kept','repo','kept','/kept','kept','ready');
+        r#"INSERT INTO workspaces(id,repository_id,name,path,branch,state,base_commit,git_dir)
+                VALUES ('kept','repo','kept','/kept','kept','ready','abc','/admin');
             INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number) VALUES
                 ('keep','workspace','keep','done','{"id":1}',1,1),
                 ('land','workspace','land','branch','{"id":2}',1,2);
@@ -1764,7 +1787,7 @@ fn migration_leaves_queued_plans_naming_their_workspace_and_pr_alone() -> Result
     let mut db = historical_database(228)?;
     db.execute_batch(
         r#"BEGIN;
-        INSERT INTO workspaces(id,path,branch,state) VALUES ('other','/other','plain','ready');
+        INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir) VALUES ('other','/other','plain','ready','abc','/admin');
         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('other','workspace','repo','plain');
         COMMIT;
         INSERT INTO agent_queue(id,kind,repository_id,name,agent,plan,env,state,created_at,opens_workspace_id)
@@ -1912,7 +1935,7 @@ fn migration_records_every_space_once_and_a_conversion_keeps_it() -> Result<()> 
     // A conversion changes the space's kind and swaps its kind's row.
     db.execute_batch(
         "BEGIN;
-         INSERT INTO workspaces(id,path,branch,state) VALUES ('chat','/chat','chat','ready');
+         INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir) VALUES ('chat','/chat','chat','ready','abc','/admin');
          UPDATE spaces SET kind='workspace' WHERE id='chat';
          DELETE FROM chats WHERE id='chat';
          COMMIT;",
@@ -2363,10 +2386,10 @@ fn migrated_workspaces_hold_one_of_a_branch_and_a_starting_commit() -> Result<()
         "BEGIN;
          INSERT INTO spaces(id,kind,repository_id,name) VALUES ('neither','workspace','repo','n'),
              ('both','workspace','repo','b');
-         INSERT INTO workspaces(id,path,state,base_commit)
-             VALUES ('neither','/neither','ready','3f2a9c1');
-         INSERT INTO workspaces(id,path,branch,state,start_commit,made_for)
-             VALUES ('both','/both','topic','ready','84d4405','{\"ref\":\"main\"}');
+         INSERT INTO workspaces(id,path,state,base_commit,git_dir)
+             VALUES ('neither','/neither','ready','3f2a9c1','/admin');
+         INSERT INTO workspaces(id,path,branch,state,start_commit,made_for,base_commit,git_dir)
+             VALUES ('both','/both','topic','ready','84d4405','{\"ref\":\"main\"}','abc','/admin');
          COMMIT;",
     )?;
 
@@ -2780,7 +2803,7 @@ async fn approval_records_survive_reopen_and_follow_workspace_ownership() {
             db.execute_batch("DROP TABLE access_requests;
                 PRAGMA user_version=16;
                 INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-                INSERT INTO workspaces(id,repository_id,name,path,branch,state) VALUES ('workspace','repo','worker','/work','worker','ready');")?;
+                INSERT INTO workspaces(id,repository_id,name,path,branch,state,base_commit,git_dir) VALUES ('workspace','repo','worker','/work','worker','ready','abc','/admin');")?;
             start_v0_17_0(db)
         }).await.unwrap();
     let migrated = Store::open(path.clone()).await.unwrap();
@@ -2847,7 +2870,6 @@ async fn migrates_original_database_without_losing_ownership_records() {
                 workspace,
             )?;
             assert_eq!(workspace.name, "feature");
-            assert!(workspace.base_commit.is_none() && workspace.base_ref.is_none());
             assert!(setup_finished(db, &SpaceId::from("workspace"))?);
             assert_eq!(
                 executions(db, &SpaceId::from("workspace"))?[0].state,
@@ -2868,7 +2890,7 @@ async fn migrates_semaphore_leases_and_definitions_from_version_eight() {
     store.run(|db| {
             event_tests::remove_schema(db)?;
             db.execute_batch("INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-                INSERT INTO workspaces(id,repository_id,name,path,branch,state) VALUES ('workspace','repo','worker','/work','worker','ready');
+                INSERT INTO workspaces(id,repository_id,name,path,branch,state,base_commit,git_dir) VALUES ('workspace','repo','worker','/work','worker','ready','abc','/admin');
                 ALTER TABLE resource_leases DROP COLUMN mode;
                 ALTER TABLE workspaces DROP COLUMN git_dir;
                 ALTER TABLE workspaces DROP COLUMN git_dir_id;
@@ -2929,10 +2951,10 @@ async fn migrates_setup_completion_without_losing_interrupted_state() {
                 event_tests::remove_schema(db)?;
                 db.execute_batch(
                     "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-                    INSERT INTO workspaces(id,repository_id,name,path,branch,state,error) VALUES
-                        ('ready','repo','ready','/ready','ready','ready',NULL),
-                        ('preparing','repo','preparing','/preparing','preparing','preparing',NULL),
-                        ('failed','repo','failed','/failed','failed','failed','setup failed (exit 1, processes stopped: true); retry with shoal prepare');
+                    INSERT INTO workspaces(id,repository_id,name,path,branch,state,error,base_commit,git_dir) VALUES
+                        ('ready','repo','ready','/ready','ready','ready',NULL,'abc','/admin'),
+                        ('preparing','repo','preparing','/preparing','preparing','preparing',NULL,'abc','/admin'),
+                        ('failed','repo','failed','/failed','failed','failed','setup failed (exit 1, processes stopped: true); retry with shoal prepare','abc','/admin');
                     ALTER TABLE workspaces DROP COLUMN setup_finished;
                     PRAGMA user_version=15;",
                 )?;
@@ -2995,8 +3017,8 @@ fn workspaces_may_have_no_branch_once_migrated_and_keep_what_references_them() -
     db.execute_batch(
         "INSERT INTO spaces(id,kind,repository_id,name)
             VALUES ('detached','workspace','repo','main-3f2a9c1');
-         INSERT INTO workspaces(id,path,state,start_commit)
-            VALUES ('detached','/detached','ready','3f2a9c1');",
+         INSERT INTO workspaces(id,path,state,start_commit,base_commit,git_dir)
+            VALUES ('detached','/detached','ready','3f2a9c1','abc','/admin');",
     )?;
     let branches: Vec<Option<String>> = db
         .prepare("SELECT branch FROM spaces JOIN workspaces USING(id) ORDER BY name")?
@@ -3192,8 +3214,8 @@ fn migrated_stops_and_conversions_forget_which_space_stopped_the_agent() -> Resu
 fn an_item_linked_under_several_relations_keeps_one() -> Result<()> {
     let mut db = historical_database(168)?;
     db.execute_batch(
-        r#"INSERT INTO workspaces(id,repository_id,name,path,branch,state)
-             VALUES ('other','repo','other','/other','other','ready');
+        r#"INSERT INTO workspaces(id,repository_id,name,path,branch,state,base_commit,git_dir)
+             VALUES ('other','repo','other','/other','other','ready','abc','/admin');
          INSERT INTO space_issue(space_id,url) VALUES ('workspace','https://forge/o/r/issues/1');
          INSERT INTO pr_cleanup(space_id,record) VALUES
              ('workspace','{"urls":["https://forge/o/r/pulls/2","https://forge/o/r/pulls/3"]}'),
@@ -3628,5 +3650,46 @@ fn migration_binds_the_merge_requests_before_methods_to_a_merge_commit() -> Resu
         .query_map([], |row| row.get::<_, Option<String>>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     assert_eq!(methods, [Some("merge".to_owned()), None]);
+    Ok(())
+}
+
+#[test]
+fn migration_moves_plans_into_their_workspaces_and_drops_unplanned_failures() -> Result<()> {
+    let mut db = historical_database(242)?;
+    let plan = r#"{"source":{"kind":"new"}}"#;
+    db.execute_batch(&format!(
+        "BEGIN;
+        INSERT INTO workspaces(id,path,branch,state,base_commit)
+            VALUES ('unplanned','/unplanned','unplanned','failed','abc');
+        INSERT INTO spaces(id,kind,repository_id,name)
+            VALUES ('unplanned','workspace','repo','unplanned');
+        INSERT INTO workspaces(id,path,branch,state)
+            VALUES ('pending','/pending','pending','failed');
+        INSERT INTO spaces(id,kind,repository_id,name)
+            VALUES ('pending','workspace','repo','pending');
+        INSERT INTO pending_worktrees(workspace_id,plan) VALUES ('pending','{plan}');
+        COMMIT;"
+    ))?;
+    migrate(&mut db)?;
+    let plans = db
+        .prepare("SELECT id,pending_plan FROM workspaces ORDER BY id")?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<Vec<(String, Option<String>)>>>()?;
+    assert_eq!(
+        plans,
+        [
+            ("pending".into(), Some(plan.into())),
+            ("workspace".into(), None)
+        ]
+    );
+    // A creation finishes only once its base and admin directory are
+    // recorded.
+    let finished = "UPDATE workspaces SET pending_plan=NULL WHERE id='pending'";
+    assert!(db.execute(finished, []).is_err());
+    db.execute(
+        "UPDATE workspaces SET base_commit='abc',git_dir='/admin' WHERE id='pending'",
+        [],
+    )?;
+    db.execute(finished, [])?;
     Ok(())
 }

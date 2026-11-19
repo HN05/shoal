@@ -43,13 +43,13 @@ fn add_owners(db: &Connection, start: i64, end: i64) -> Result<()> {
                 [&owner],
             )?;
             db.execute(
-                "INSERT INTO workspaces(id,path,branch,state) VALUES (?1,?1,'main','ready')",
+                "INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir) VALUES (?1,?1,'main','ready','abc','/admin')",
                 [&owner],
             )?;
         } else {
             db.execute(
-                "INSERT INTO workspaces(id,repository_id,name,path,branch,state)
-                VALUES (?1,?1,?1,?1,'main','ready')",
+                "INSERT INTO workspaces(id,repository_id,name,path,branch,state,base_commit,git_dir)
+                VALUES (?1,?1,?1,?1,'main','ready','abc','/admin')",
                 [&owner],
             )?;
         }

@@ -13,8 +13,8 @@ fn seed_interrupted_operations(db: &mut Connection) -> Result<()> {
             [state],
         )?;
         db.execute(
-            "INSERT INTO workspaces(id,path,branch,state,error)
-                VALUES (?1,?1,?1,?1,'original error')",
+            "INSERT INTO workspaces(id,path,branch,state,error,base_commit,git_dir)
+                VALUES (?1,?1,?1,?1,'original error','abc','/admin')",
             [state],
         )?;
     }

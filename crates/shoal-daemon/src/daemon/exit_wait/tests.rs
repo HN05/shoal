@@ -28,8 +28,8 @@ async fn restart_waits_for_background_work_and_executions_that_cannot_reattach()
                 "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/test','/test',0);
                  INSERT INTO spaces(id,kind,repository_id,name)
                      VALUES ('workspace','workspace','repo','work');
-                 INSERT INTO workspaces(id,path,branch,state)
-                     VALUES ('workspace','/test/work','work','ready');
+                 INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
+                     VALUES ('workspace','/test/work','work','ready','abc','/admin');
                  INSERT INTO executions(id,space_id,state) VALUES ('legacy','workspace','running');
                  INSERT INTO executions(id,space_id,state) VALUES ('unknown','workspace','unknown');"
             )?;

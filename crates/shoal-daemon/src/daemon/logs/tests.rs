@@ -9,8 +9,8 @@ mod journal;
 const JOURNAL: &str = "
     INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
     BEGIN;
-    INSERT INTO workspaces(id,path,branch,state)
-        VALUES ('plan','/plan','plan','ready'),('other','/other','other','ready');
+    INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
+        VALUES ('plan','/plan','plan','ready','abc','/admin'),('other','/other','other','ready','abc','/admin');
     INSERT INTO spaces(id,kind,repository_id,name)
         VALUES ('plan','workspace','repo','plan'),('other','workspace','repo','other');
     COMMIT;

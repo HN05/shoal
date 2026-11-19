@@ -128,8 +128,8 @@ fn allocation_reads_only_the_named_lease_and_selected_pool() -> Result<()> {
     db.execute_batch(shoal_store::test_support::LEASE_ACQUIRERS)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('a','/a','a',0),('b','/b','b',0);
-             INSERT INTO workspaces(id,repository_id,name,path,branch,state) VALUES
-             ('a','a','a','/a/w','a','ready'),('b','b','b','/b/w','b','ready');
+             INSERT INTO workspaces(id,repository_id,name,path,branch,state,base_commit,git_dir) VALUES
+             ('a','a','a','/a/w','a','ready','abc','/admin'),('b','b','b','/b/w','b','ready','abc','/admin');
              INSERT INTO resource_pools VALUES ('global','target','{}'),('repo/a','target','{}'),
              ('repo/b','target','{}'),('global','other','{}');",
         )?;

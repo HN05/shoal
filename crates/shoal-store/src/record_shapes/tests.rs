@@ -181,8 +181,8 @@ fn a_git_directory_recorded_by_device_and_inode_takes_its_identity_now() -> Resu
     db.execute_batch(&format!(
         "BEGIN;
         INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-        INSERT INTO workspaces(id,path,branch,state,git_dir,git_dir_id)
-            VALUES ('w','/work','topic','ready','{}','{earlier}');
+        INSERT INTO workspaces(id,path,branch,state,git_dir,git_dir_id,base_commit)
+            VALUES ('w','/work','topic','ready','{}','{earlier}','abc');
         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','w');
         COMMIT;",
         directory.path().display()

@@ -9,7 +9,7 @@ use super::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 243;
+pub(super) const SCHEMA_VERSION: i64 = 245;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -527,12 +527,14 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (241, include_str!("app_entries.sql"), None),
     (242, include_str!("hub_forward_nonces.sql"), None),
     (243, include_str!("hub_presence.sql"), None),
+    (244, UNPLANNED_CREATIONS, None),
+    (245, "", Some(pending_plans)),
 ];
 
 /// The migrations that rebuild a table others reference, which run on their
 /// own with foreign keys off, so dropping the old table deletes nothing that
 /// references it.
-const REBUILDS: &[i64] = &[150, 182, 200];
+const REBUILDS: &[i64] = &[150, 182, 200, 245];
 
 /// Names are labels that may repeat, so the tables of workspaces and chats
 /// lose the unique constraint on them, which only a rebuild removes.
@@ -566,6 +568,37 @@ pub(super) fn workspace_heads(db: &Connection) -> Result<()> {
         "made_for TEXT",
         "made_for TEXT CHECK(made_for IS NULL OR start_commit IS NOT NULL)
         CHECK((branch IS NULL) <> (start_commit IS NULL))",
+    )
+}
+
+/// The records of workspaces whose creation left neither a plan to finish
+/// it nor their base and admin directory, as one that failed before every
+/// creation recorded its plan did, go with their spaces; their branches and
+/// any directory stay on disk. A base ref without its commit goes too.
+pub(super) const UNPLANNED_CREATIONS: &str = "
+    DELETE FROM spaces WHERE id IN (SELECT id FROM workspaces
+        WHERE id NOT IN (SELECT workspace_id FROM pending_worktrees)
+            AND (base_commit IS NULL OR git_dir IS NULL));
+    UPDATE workspaces SET base_ref=NULL WHERE base_commit IS NULL;";
+
+/// A workspace holds the plan of its pending worktree in `pending_plan`,
+/// where `pending_worktrees` held it, which goes; a workspace without one
+/// has its worktree, whose base and admin directory the table checks it
+/// records, which only a rebuild lets it check.
+pub(super) fn pending_plans(db: &Connection) -> Result<()> {
+    db.execute_batch(
+        "ALTER TABLE workspaces ADD COLUMN pending_plan TEXT;
+         UPDATE workspaces SET pending_plan=(SELECT plan FROM pending_worktrees
+            WHERE workspace_id=workspaces.id);
+         DROP TABLE pending_worktrees;",
+    )?;
+    rebuild(
+        db,
+        "workspaces",
+        "pending_plan TEXT",
+        "pending_plan TEXT
+        CHECK(pending_plan IS NOT NULL OR (base_commit IS NOT NULL AND git_dir IS NOT NULL))
+        CHECK(base_ref IS NULL OR base_commit IS NOT NULL)",
     )
 }
 

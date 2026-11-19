@@ -309,7 +309,8 @@ async fn removal_waiting_for_creation_keeps_what_creation_recorded() {
         .store
         .run(move |db| {
             db.execute(
-                "UPDATE workspaces SET state='preparing',base_ref=NULL,base_commit=NULL WHERE id=?1",
+                r#"UPDATE workspaces SET state='preparing',base_ref=NULL,base_commit=NULL,
+                    pending_plan='{"source":{"kind":"new"}}' WHERE id=?1"#,
                 [id],
             )?;
             Ok(())
@@ -1807,8 +1808,8 @@ fn a_runners_repository_variables_reach_no_git_of_the_tests() {
 }
 
 /// A disposable workspace as a `worktree add` whose checkout failed leaves
-/// it when Git cannot delete every file: `failed`, without the admin
-/// directory its `.git` names, which it never recorded.
+/// it when Git cannot delete every file: `failed` with its pending worktree,
+/// without the admin directory its `.git` names, which it never recorded.
 async fn failed_checkout() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
     let (root, manager, workspace) = disowned_workspace(true).await;
     let id = workspace.id.clone();
@@ -1816,7 +1817,8 @@ async fn failed_checkout() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
         .store
         .run(move |db| {
             db.execute(
-                "UPDATE workspaces SET state=?2,git_dir=NULL WHERE id=?1",
+                r#"UPDATE workspaces SET state=?2,git_dir=NULL,
+                    pending_plan='{"source":{"kind":"new"}}' WHERE id=?1"#,
                 rusqlite::params![id, WorkspaceState::Failed],
             )?;
             Ok(())

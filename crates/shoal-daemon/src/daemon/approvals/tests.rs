@@ -38,9 +38,9 @@ fn owners(db: &Connection) -> Result<()> {
     db.execute_batch(
         "INSERT INTO repositories(id,path,source,last_used,workspaces_dir) VALUES ('repo','/repo','/repo',1,'/shoal/repo');
             BEGIN;
-            INSERT INTO workspaces(id,path,branch,state)
-                VALUES ('owner','/work','worker','ready'),
-                ('other','/other','other','ready');
+            INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
+                VALUES ('owner','/work','worker','ready','abc','/admin'),
+                ('other','/other','other','ready','abc','/admin');
             INSERT INTO spaces(id,kind,repository_id,name)
                 VALUES ('owner','workspace','repo','worker'),
                 ('other','workspace','repo','other');
@@ -871,8 +871,8 @@ async fn decisions_bind_settings_and_release_obeys_configured_lifetime() {
             db.execute_batch("INSERT INTO repositories(id,path,source,last_used,workspaces_dir) VALUES ('repo','/repo','/repo',1,'/shoal/repo');
                 INSERT INTO spaces(id,kind,repository_id,name)
                     VALUES ('owner','workspace','repo','worker');
-                INSERT INTO workspaces(id,path,branch,state)
-                    VALUES ('owner','/work','worker','ready');")?;
+                INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
+                    VALUES ('owner','/work','worker','ready','abc','/admin');")?;
             for lifetime in [Lifetime::Lease, Lifetime::Workspace] {
                 let tx = db.transaction()?;
                 let target = Target::Resource { scope: Scope::Global, pool: "lock".into() };

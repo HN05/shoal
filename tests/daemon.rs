@@ -355,8 +355,8 @@ fn failed_startup_recovery_never_serves() {
                     VALUES ('repo','/repo','/repo',1,'/shoal/repo');
                 INSERT INTO spaces(id,kind,repository_id,name)
                     VALUES ('workspace','workspace','repo','worker');
-                INSERT INTO workspaces(id,path,branch,state)
-                    VALUES ('workspace','/missing/worker','worker','{state}');
+                INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
+                    VALUES ('workspace','/missing/worker','worker','{state}','abc','/admin');
                 CREATE TRIGGER block_recovery BEFORE UPDATE OF state ON workspaces
                     BEGIN SELECT RAISE(ABORT, 'recovery blocked'); END;"
             ))

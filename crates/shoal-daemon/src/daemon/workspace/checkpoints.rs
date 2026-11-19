@@ -671,9 +671,9 @@ pub(super) fn find(
 /// or the removal checkpoint its restore still creates the worktree from.
 const KEPT: &str = "(expires_at > unixepoch() OR EXISTS (SELECT 1 FROM workspaces
     WHERE id=checkpoints.workspace_id AND starting_checkpoint=checkpoints.number)
-    OR EXISTS (SELECT 1 FROM pending_worktrees WHERE workspace_id=checkpoints.workspace_id
-        AND json_extract(plan,'$.source.kind')='restore'
-        AND json_extract(plan,'$.source.checkpoint')=checkpoints.number))";
+    OR EXISTS (SELECT 1 FROM workspaces WHERE id=checkpoints.workspace_id
+        AND json_extract(pending_plan,'$.source.kind')='restore'
+        AND json_extract(pending_plan,'$.source.checkpoint')=checkpoints.number))";
 
 /// The record bytes of one listing page, leaving room in a protocol frame
 /// for the envelope; [`NAME_LIMIT`] keeps one record well below it.

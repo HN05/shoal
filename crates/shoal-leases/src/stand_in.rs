@@ -142,7 +142,7 @@ async fn record(store: &shoal_store::Store, workspace: &Workspace) {
                 [],
             )?;
             tx.execute(
-                "INSERT INTO workspaces(id,path,branch,state) VALUES ('workspace',?1,'worker','ready')",
+                "INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir) VALUES ('workspace',?1,'worker','ready','abc','/admin')",
                 [path],
             )?;
             Ok(())

@@ -154,7 +154,7 @@ pub(crate) async fn store(path: PathBuf, id: &'static str) -> Store {
                 [id],
             )?;
             tx.execute(
-                "INSERT INTO workspaces(id,path,branch,state) VALUES (?1,'/work',?1,'ready')",
+                "INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir) VALUES (?1,'/work',?1,'ready','abc','/admin')",
                 [id],
             )?;
             Ok(())

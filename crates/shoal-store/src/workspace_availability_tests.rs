@@ -9,8 +9,8 @@ fn database() -> Result<Connection> {
             ('repo','/repo','/repo',0), ('other','/other','/other',0);
          INSERT INTO spaces(id,kind,repository_id,name)
              VALUES ('owner','workspace','repo','worker');
-         INSERT INTO workspaces(id,path,branch,state)
-             VALUES ('owner','/worker','topic','ready');",
+         INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
+             VALUES ('owner','/worker','topic','ready','abc','/admin');",
     )?;
     Ok(db)
 }
