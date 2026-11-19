@@ -5378,7 +5378,8 @@ unknown), `open_prs` and `space` with its `id`, `number`, `name` and `state`.
 repository or, with `--repo`, a registered repository, from a chat without a
 repository any registered one, never a local branch. It checks every named
 branch first and deletes none while one is refused: the default branch, a
-branch the forge protects, the head or base of an open PR, a branch whose
+branch the forge protects, the head or base of an open PR, a PR from a
+fork into the repository it was forked from included, a branch whose
 changes the default branch lacks, or of which Shoal cannot tell, unless
 `--force`, and for a scoped process the branch of an active workspace outside
 its scope, whatever `--force` says. Just before deleting any, it checks that

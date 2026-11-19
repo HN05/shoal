@@ -451,8 +451,27 @@ pub(crate) fn open_pull(repo: &ForgeRepo, pull: &Value) -> Result<OpenPull> {
         number: PullNumber::new(number),
         head: branch("head")?.into(),
         fork: !head_repository.is_some_and(|name| name.eq_ignore_ascii_case(&repo.path)),
-        base: branch("base")?.into(),
+        base: Some(branch("base")?.into()),
     })
+}
+
+/// The open PRs from branches of `repo` into the repository its read names
+/// as its `parent`; none for a repository that is no fork.
+pub(crate) async fn outgoing_pulls(repo: &ForgeRepo, account: &Account) -> Result<Vec<OpenPull>> {
+    let read = repo.read_repository(account).await?;
+    let Some(parent) = read["parent"]["full_name"].as_str() else {
+        return Ok(Vec::new());
+    };
+    let parent = ForgeRepo::on(repo.kind(), repo.host.clone(), parent, repo.web_scheme())?;
+    let listed = (parent.pages(account, &parent.repo_endpoint("pulls?state=open"))).await?;
+    let mut outgoing = Vec::new();
+    for pull in &listed {
+        let pull = open_pull(repo, pull)?;
+        if !pull.fork {
+            outgoing.push(OpenPull { base: None, ..pull });
+        }
+    }
+    Ok(outgoing)
 }
 
 /// Whether the repository's read grants `account` push access.

@@ -23,14 +23,17 @@ impl ForgeRepo {
         kind.branches(self, account).await.hint_login(&kind)
     }
 
-    /// The repository's open PRs, by the branches they join.
+    /// The repository's open PRs, and those from its branches into the
+    /// repository it is a fork of, by the branches they join.
     pub async fn open_pulls(&self, account: &Account) -> Result<Vec<OpenPull>> {
         let kind = self.kind();
         let endpoint = self.repo_endpoint(kind.open_pulls_path());
         let listed = self.pages(account, &endpoint).await.hint_login(&kind)?;
-        (listed.iter())
+        let mut pulls = (listed.iter())
             .map(|pull| kind.open_pull(self, pull))
-            .collect()
+            .collect::<Result<Vec<_>>>()?;
+        pulls.extend(kind.outgoing_pulls(self, account).await.hint_login(&kind)?);
+        Ok(pulls)
     }
 
     /// Refuse `branch` once it no longer points to `head`, the commit it

@@ -19,7 +19,8 @@ pub struct ForgeBranch {
     pub protected: bool,
 }
 
-/// An open PR of a repository, by the branches it joins.
+/// An open PR of a repository, or from a branch of it into the repository
+/// it is a fork of, by the branches it joins.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OpenPull {
     pub number: PullNumber,
@@ -28,14 +29,15 @@ pub struct OpenPull {
     /// Whether its head branch is a fork's, so no branch of this
     /// repository is its head.
     pub fork: bool,
-    /// The branch of this repository it merges into.
-    pub base: BranchName,
+    /// The branch of this repository it merges into; none for a PR into the
+    /// repository this one is a fork of.
+    pub base: Option<BranchName>,
 }
 
 impl OpenPull {
     /// Whether `branch` of this repository is its head or base, which
     /// deleting would close it or leave it without one.
     pub fn joins(&self, branch: &BranchName) -> bool {
-        (!self.fork && &self.head == branch) || &self.base == branch
+        (!self.fork && &self.head == branch) || self.base.as_ref() == Some(branch)
     }
 }

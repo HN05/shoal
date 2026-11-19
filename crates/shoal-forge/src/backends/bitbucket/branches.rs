@@ -60,8 +60,27 @@ impl Branches for Bitbucket {
             number: PullNumber::new(number),
             head: branch("source")?.into(),
             fork: !head_repository.is_some_and(|name| name.eq_ignore_ascii_case(&repo.path)),
-            base: branch("destination")?.into(),
+            base: Some(branch("destination")?.into()),
         })
+    }
+
+    /// Bitbucket lists a PR under the repository it merges into.
+    async fn outgoing_pulls(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<OpenPull>> {
+        let read = repo.read_repository(account).await?;
+        let Some(parent) = read["parent"]["full_name"].as_str() else {
+            return Ok(Vec::new());
+        };
+        let parent = ForgeRepo::on(repo.kind(), repo.host.clone(), parent, repo.web_scheme())?;
+        let endpoint = parent.repo_endpoint(self.open_pulls_path());
+        let listed = parent.pages(account, &endpoint).await?;
+        let mut outgoing = Vec::new();
+        for pull in listed.iter() {
+            let pull = self.open_pull(repo, pull)?;
+            if !pull.fork {
+                outgoing.push(OpenPull { base: None, ..pull });
+            }
+        }
+        Ok(outgoing)
     }
 
     fn branch_delete(&self, repo: &ForgeRepo, branch: &str) -> Request {

@@ -51,6 +51,10 @@ impl Branches for GitHub {
         github_rest::open_pull(repo, value)
     }
 
+    async fn outgoing_pulls(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<OpenPull>> {
+        github_rest::outgoing_pulls(repo, account).await
+    }
+
     fn branch_delete(&self, repo: &ForgeRepo, branch: &str) -> Request {
         let endpoint = repo.repo_endpoint(&format!("git/refs/heads/{}", encode(branch, true)));
         Request::new(HttpMethod::Delete, endpoint, None)

@@ -105,7 +105,9 @@ async fn each_forge_lists_open_prs_by_the_branches_they_join() {
         ),
     ];
     for (kind, path, body) in listed {
-        let server = forge(vec![(path, body)]);
+        // A repository that is no fork has no PRs into another.
+        let read = ("/team", json!({"id": 1}));
+        let server = forge(vec![(path, body), read]);
         let repo = repo_on(&server, kind, "team/project");
         let pulls = repo.open_pulls(&agent_on(&server, "agent")).await.unwrap();
         let joined = |branch: &str| -> Vec<u64> {
@@ -224,4 +226,62 @@ async fn a_github_ruleset_on_a_later_page_protects_the_branches_it_names() {
         protected,
         [("main", true), ("release/1", true), ("topic", false)]
     );
+}
+
+#[tokio::test]
+async fn a_forks_open_prs_include_those_from_its_branches_into_its_parent() {
+    let github_shape = json!([
+        {"number": 12, "head": {"ref": "topic", "repo": {"full_name": "me/project"}},
+            "base": {"ref": "main"}},
+        {"number": 13, "head": {"ref": "fix", "repo": {"full_name": "someone/project"}},
+            "base": {"ref": "main"}},
+    ]);
+    let forks = [
+        (
+            ForgeKind::GitHub,
+            vec![
+                ("repos/me/project/pulls?state=open", json!([])),
+                ("repos/team/project/pulls?state=open", github_shape.clone()),
+                (
+                    "repos/me/project",
+                    json!({"parent": {"full_name": "team/project"}}),
+                ),
+            ],
+        ),
+        (
+            ForgeKind::GitLab,
+            vec![
+                ("projects/me%2Fproject/merge_requests", json!([])),
+                (
+                    "projects/team%2Fproject/merge_requests",
+                    json!([
+                        {"iid": 12, "source_branch": "topic", "target_branch": "main",
+                            "source_project_id": 2, "target_project_id": 1},
+                        {"iid": 13, "source_branch": "fix", "target_branch": "main",
+                            "source_project_id": 3, "target_project_id": 1},
+                    ]),
+                ),
+                (
+                    "projects/me%2Fproject",
+                    json!({"id": 2, "forked_from_project": {"id": 1,
+                        "path_with_namespace": "team/project"}}),
+                ),
+            ],
+        ),
+    ];
+    for (kind, replies) in forks {
+        let server = forge(replies);
+        let repo = repo_on(&server, kind, "me/project");
+        let pulls = repo.open_pulls(&agent_on(&server, "agent")).await.unwrap();
+        let joined: Vec<_> = (pulls.iter())
+            .filter(|pull| pull.joins(&"topic".into()))
+            .map(|pull| (pull.number.get(), pull.base.clone()))
+            .collect();
+        assert_eq!(joined, [(12, None)], "{kind:?}");
+        // Its base is the parent's branch, not this repository's.
+        assert!(
+            !pulls.iter().any(|pull| pull.joins(&"main".into())),
+            "{kind:?}"
+        );
+    }
 }

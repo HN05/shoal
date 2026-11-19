@@ -49,8 +49,32 @@ impl Branches for GitLab {
             number: PullNumber::new(number),
             head: branch("source_branch")?.into(),
             fork: value["source_project_id"] != value["target_project_id"],
-            base: branch("target_branch")?.into(),
+            base: Some(branch("target_branch")?.into()),
         })
+    }
+
+    /// GitLab lists a merge request under the project it merges into.
+    async fn outgoing_pulls(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<OpenPull>> {
+        let read = repo.read_repository(account).await?;
+        let parent = &read["forked_from_project"];
+        let Some(path) = parent["path_with_namespace"].as_str() else {
+            return Ok(Vec::new());
+        };
+        let parent = ForgeRepo::on(repo.kind(), repo.host.clone(), path, repo.web_scheme())?;
+        let endpoint = parent.repo_endpoint(self.open_pulls_path());
+        let listed = parent.pages(account, &endpoint).await?;
+        let mut outgoing = Vec::new();
+        for request in listed.iter() {
+            if request["source_project_id"] == read["id"] {
+                let pull = self.open_pull(&parent, request)?;
+                outgoing.push(OpenPull {
+                    fork: false,
+                    base: None,
+                    ..pull
+                });
+            }
+        }
+        Ok(outgoing)
     }
 
     fn branch_delete(&self, repo: &ForgeRepo, branch: &str) -> Request {

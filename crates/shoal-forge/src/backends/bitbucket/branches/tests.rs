@@ -50,8 +50,12 @@ fn a_prs_head_in_a_fork_is_not_the_repositorys() {
     };
     let own = Bitbucket.open_pull(&repo, &pull("team")).unwrap();
     assert_eq!(
-        (own.number.get(), own.fork, own.base.as_str()),
-        (3, false, "main")
+        (
+            own.number.get(),
+            own.fork,
+            own.base.as_ref().map(|base| base.as_str())
+        ),
+        (3, false, Some("main"))
     );
     assert!(Bitbucket.open_pull(&repo, &pull("someone")).unwrap().fork);
 }

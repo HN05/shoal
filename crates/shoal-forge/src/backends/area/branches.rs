@@ -22,6 +22,11 @@ pub(crate) trait Branches: Backend {
     /// The open PR of `repo` a listing of them returned as `value`.
     fn open_pull(&self, repo: &ForgeRepo, value: &Value) -> Result<OpenPull>;
 
+    /// The open PRs from branches of `repo` into the repository it is a
+    /// fork of, which its own listing leaves out; none for a repository that
+    /// is no fork.
+    async fn outgoing_pulls(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<OpenPull>>;
+
     /// The request that deletes `branch` from the repository.
     fn branch_delete(&self, repo: &ForgeRepo, branch: &str) -> Request;
 }
