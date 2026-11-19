@@ -3,7 +3,7 @@
 use crate::daemon::approvals::ApprovalRequestExt;
 use crate::{
     daemon::{
-        approvals::{ApprovalRequest, SecretSpecification, Specification, Target},
+        approvals::{ApprovalRequest, Specification, Target},
         manager::Manager,
         test_support::{ProcessGroup, agent_process, manager, repository},
         workspace_files::Attacher,
@@ -79,7 +79,7 @@ pub(super) async fn decider(
             &workspace.id,
             Target::Secret(secret.into()),
             "default",
-            Specification::Secret(SecretSpecification {
+            Specification::Secret(shoal_protocol::approvals::SecretSpecification {
                 command: vec!["token-source".into()],
                 tools: vec![],
             }),

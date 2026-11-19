@@ -314,7 +314,11 @@ async fn a_workspace_whose_file_lacks_the_checkouts_trigger_still_never_gets_its
     .unwrap();
 
     let selector = shoal_protocol::space_names::SpaceSelector::id(&workspace.id);
-    let catalog = manager.secret_catalog(&selector).await.unwrap();
+    let catalog = manager
+        .leases
+        .secret_catalog(&*manager, &selector)
+        .await
+        .unwrap();
 
     let names: Vec<_> = catalog
         .secrets
@@ -336,7 +340,11 @@ async fn an_unreadable_checkout_file_withholds_every_local_secret() {
     std::fs::write(repo.path.join(".shoal.toml"), "[triggers.labelled\n").unwrap();
 
     let selector = shoal_protocol::space_names::SpaceSelector::id(&workspace.id);
-    let catalog = manager.secret_catalog(&selector).await.unwrap();
+    let catalog = manager
+        .leases
+        .secret_catalog(&*manager, &selector)
+        .await
+        .unwrap();
 
     let names: Vec<_> = (catalog.secrets.iter())
         .map(|secret| secret.name.as_str())

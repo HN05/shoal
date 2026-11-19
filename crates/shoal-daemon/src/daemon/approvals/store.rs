@@ -4,9 +4,8 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Params, Transaction, params};
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::config::repo::Lifetime;
-use std::fmt;
 
-use super::{ApprovalRequest, DecisionStatus, MERGE, Target, proposals};
+use super::{ApprovalRequest, DecisionStatus, MERGE, ReasonRequired, Target, proposals};
 use crate::{
     daemon::{
         events::{self, EventKind},
@@ -193,18 +192,6 @@ pub fn current(
 ) -> Result<Option<ApprovalRequest>> {
     lookup(db, CURRENT, params![owner, target, name])
 }
-
-/// A new request names no reason; callers may say how to give one.
-#[derive(Debug)]
-pub struct ReasonRequired;
-
-impl fmt::Display for ReasonRequired {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("approval requires --reason explaining the request")
-    }
-}
-
-impl std::error::Error for ReasonRequired {}
 
 /// The caller holds the allocation transaction (or simulator gate). The exact
 /// specification includes effective policy, so a changed policy cannot reuse a grant.
@@ -415,22 +402,6 @@ impl Manager {
         let id = workspace_id.to_owned();
         self.store
             .run(move |db| proposals::push_pending(db, &id))
-            .await
-    }
-
-    /// [`release`] in its own transaction, once the workspace is ready.
-    pub async fn release_approval(
-        &self,
-        owner: SpaceId,
-        target: Target,
-        name: String,
-    ) -> Result<bool> {
-        self.store
-            .write(move |tx| {
-                require_ready_space(tx, &owner)?;
-                let released = release(tx, &owner, &target, &name)?;
-                Ok(released)
-            })
             .await
     }
 

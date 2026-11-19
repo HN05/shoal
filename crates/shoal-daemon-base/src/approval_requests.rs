@@ -1,9 +1,11 @@
 //! Building the approval requests subsystems make, which the approvals
-//! store records, routes and decides.
+//! store records, routes and decides, and its refusal of one without a
+//! reason.
 use crate::item_numbers::ItemNumber;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::approvals::{ApprovalRequest, DecisionStatus, Specification, Target};
 use shoal_protocol::config::repo::Lifetime;
+use std::fmt;
 
 /// Operations on the client type [`ApprovalRequest`] that only the `shoal` command uses.
 pub trait ApprovalRequestExt {
@@ -67,3 +69,15 @@ impl ApprovalRequestExt for ApprovalRequest {
             && self.created_at == other.created_at
     }
 }
+
+/// A new request names no reason; callers may say how to give one.
+#[derive(Debug)]
+pub struct ReasonRequired;
+
+impl fmt::Display for ReasonRequired {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("approval requires --reason explaining the request")
+    }
+}
+
+impl std::error::Error for ReasonRequired {}

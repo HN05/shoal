@@ -1348,9 +1348,7 @@ async fn a_launch_reopens_only_its_recorded_workspace() {
 #[tokio::test]
 async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_grant() {
     use crate::{
-        daemon::approvals::{
-            ApprovalRequest, DecisionStatus, SecretSpecification, Specification, Target,
-        },
+        daemon::approvals::{ApprovalRequest, DecisionStatus, Specification, Target},
         state::AgentState,
     };
     let (temp, manager) = manager().await;
@@ -1397,7 +1395,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
             &workspace.id,
             Target::Secret("token".into()),
             "default",
-            Specification::Secret(SecretSpecification {
+            Specification::Secret(shoal_protocol::approvals::SecretSpecification {
                 command: vec!["token-source".into()],
                 tools: vec![],
             }),
@@ -1574,7 +1572,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
 #[tokio::test]
 async fn a_request_passed_up_to_a_full_inbox_reports_the_user_deciding() {
     use crate::{
-        daemon::approvals::{ApprovalRequest, SecretSpecification, Specification, Target},
+        daemon::approvals::{ApprovalRequest, Specification, Target},
         state::AgentState,
     };
     let (temp, manager) = manager().await;
@@ -1621,7 +1619,7 @@ async fn a_request_passed_up_to_a_full_inbox_reports_the_user_deciding() {
             &child.id,
             Target::Secret("token".into()),
             "default",
-            Specification::Secret(SecretSpecification {
+            Specification::Secret(shoal_protocol::approvals::SecretSpecification {
                 command: vec!["token-source".into()],
                 tools: vec![],
             }),
@@ -1658,7 +1656,7 @@ async fn a_request_passed_up_to_a_full_inbox_reports_the_user_deciding() {
 async fn a_request_withdrawn_once_given_back_notifies_nobody() {
     use crate::{
         daemon::{
-            approvals::{ApprovalRequest, SecretSpecification, Specification, Target},
+            approvals::{ApprovalRequest, Specification, Target},
             notifications::NotificationKind,
         },
         state::AgentState,
@@ -1687,7 +1685,7 @@ async fn a_request_withdrawn_once_given_back_notifies_nobody() {
             &worker.id,
             Target::Secret("token".into()),
             "default",
-            Specification::Secret(SecretSpecification {
+            Specification::Secret(shoal_protocol::approvals::SecretSpecification {
                 command: vec!["token-source".into()],
                 tools: vec![],
             }),
@@ -1720,7 +1718,7 @@ async fn a_request_withdrawn_once_given_back_notifies_nobody() {
 #[tokio::test]
 async fn a_stopped_chat_leaves_its_workspaces_requests_to_the_user() {
     use crate::{
-        daemon::approvals::{ApprovalRequest, SecretSpecification, Specification, Target},
+        daemon::approvals::{ApprovalRequest, Specification, Target},
         state::AgentState,
     };
     let (temp, manager) = manager().await;
@@ -1762,7 +1760,7 @@ async fn a_stopped_chat_leaves_its_workspaces_requests_to_the_user() {
             &worker.id,
             Target::Secret("token".into()),
             "default",
-            Specification::Secret(SecretSpecification {
+            Specification::Secret(shoal_protocol::approvals::SecretSpecification {
                 command: vec!["token-source".into()],
                 tools: vec![],
             }),
@@ -1785,7 +1783,7 @@ async fn a_stopped_chat_leaves_its_workspaces_requests_to_the_user() {
 async fn a_chat_whose_agent_stops_gives_the_requests_it_decides_back_to_the_user() {
     use crate::{
         daemon::{
-            approvals::{ApprovalRequest, SecretSpecification, Specification, Target},
+            approvals::{ApprovalRequest, Specification, Target},
             notifications::NotificationKind,
         },
         state::AgentState,
@@ -1827,7 +1825,7 @@ async fn a_chat_whose_agent_stops_gives_the_requests_it_decides_back_to_the_user
             &worker.id,
             Target::Secret("token".into()),
             "default",
-            Specification::Secret(SecretSpecification {
+            Specification::Secret(shoal_protocol::approvals::SecretSpecification {
                 command: vec!["token-source".into()],
                 tools: vec![],
             }),
@@ -1868,7 +1866,7 @@ async fn a_chat_whose_agent_stops_gives_the_requests_it_decides_back_to_the_user
 async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
     use crate::{
         daemon::{
-            approvals::{ApprovalRequest, SecretSpecification, Specification, Target},
+            approvals::{ApprovalRequest, Specification, Target},
             notifications::NotificationKind,
         },
         state::AgentState,
@@ -1921,7 +1919,7 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
             &child.id,
             Target::Secret("token".into()),
             "default",
-            Specification::Secret(SecretSpecification {
+            Specification::Secret(shoal_protocol::approvals::SecretSpecification {
                 command: vec!["token-source".into()],
                 tools: vec![],
             }),
@@ -2000,9 +1998,7 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
 async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_the_user() {
     use crate::{
         daemon::{
-            approvals::{
-                ApprovalRequest, DecisionStatus, SecretSpecification, Specification, Target,
-            },
+            approvals::{ApprovalRequest, DecisionStatus, Specification, Target},
             notifications::NotificationKind,
         },
         state::AgentState,
@@ -2042,7 +2038,7 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
             &workspace.id,
             Target::Secret(name.into()),
             "default",
-            Specification::Secret(SecretSpecification {
+            Specification::Secret(shoal_protocol::approvals::SecretSpecification {
                 command: vec!["token-source".into()],
                 tools: vec![],
             }),
@@ -2190,9 +2186,7 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
 #[tokio::test]
 async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
     use crate::{
-        daemon::approvals::{
-            ApprovalRequest, DecisionStatus, SecretSpecification, Specification, Target,
-        },
+        daemon::approvals::{ApprovalRequest, DecisionStatus, Specification, Target},
         state::AgentState,
     };
     let (temp, manager) = manager().await;
@@ -2230,7 +2224,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
             &workspace.id,
             Target::Secret("token".into()),
             "default",
-            Specification::Secret(SecretSpecification {
+            Specification::Secret(shoal_protocol::approvals::SecretSpecification {
                 command: vec!["token-source".into()],
                 tools: vec![],
             }),
@@ -2333,7 +2327,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
 #[tokio::test]
 async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
     use crate::daemon::{
-        approvals::{ApprovalRequest, SecretSpecification, Specification, Target},
+        approvals::{ApprovalRequest, Specification, Target},
         questions::Ask,
     };
     let (temp, manager) = manager().await;
@@ -2378,7 +2372,7 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
                 &workspace.id,
                 Target::Secret("token".into()),
                 "default",
-                Specification::Secret(SecretSpecification {
+                Specification::Secret(shoal_protocol::approvals::SecretSpecification {
                     command: vec!["token-source".into()],
                     tools: vec![],
                 }),

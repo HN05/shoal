@@ -1,5 +1,5 @@
-//! The leases the daemon grants a workspace: TCP port reservations, and the
-//! outcome every allocation shares. [`Leases`] offers their operations;
+//! The leases the daemon grants a workspace: TCP port reservations and
+//! grants of secrets, and the outcome every allocation shares. [`Leases`] offers their operations;
 //! what they need of the rest of the daemon is the interface in [`daemon`].
 use std::sync::Arc;
 
@@ -8,6 +8,7 @@ use shoal_core::{config, env};
 use shoal_daemon_base::{callers, notifications};
 use shoal_daemon_base::{config_state::ConfigState, notifications::Notifications};
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::approvals::ApprovalRequest;
 use shoal_protocol::notifications::NotificationKind;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use shoal_protocol::{model, protocol, validate};
@@ -16,6 +17,7 @@ use shoal_store as store;
 pub mod allocation;
 pub mod daemon;
 pub mod ports;
+pub mod secrets;
 #[cfg(test)]
 mod stand_in;
 
@@ -53,6 +55,15 @@ impl Leases {
         workspace: &Workspace,
     ) -> Result<config::Effective> {
         daemon.settings(&self.config.current(), workspace).await
+    }
+
+    /// Record `request` unless a grant covers it, in a transaction of its
+    /// own, returning the request still waiting for or refused a decision.
+    async fn request_approval(&self, request: ApprovalRequest) -> Result<Option<ApprovalRequest>> {
+        let grants = self.grants.clone();
+        (self.store)
+            .write(move |tx| grants.check(tx, request))
+            .await
     }
 
     /// The workspace an optional filter names, or none for every workspace.

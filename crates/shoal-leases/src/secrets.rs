@@ -1,27 +1,24 @@
 //! Access grants for approval-gated secrets. The daemon records the decision;
 //! the CLI fetches the value only after the daemon confirms it.
-use crate::daemon::approvals::ApprovalRequestExt;
 use anyhow::{Result, anyhow, ensure};
 
 use crate::{
-    daemon::{
-        allocation::Allocation,
-        approvals::{ApprovalRequest, ReasonRequired, SecretSpecification, Specification, Target},
-        manager::Manager,
-        scope::Caller,
-    },
-    model::Workspace,
-    secrets::{Secret, specification},
+    Leases, allocation::Allocation, callers::Caller, daemon::Daemon, model::Workspace, store,
 };
-pub(crate) use shoal_protocol::secrets::{
-    CatalogSecret, SecretCatalog, SecretGrant, SecretRequest,
-};
+use shoal_core::secrets::{Secret, specification};
+use shoal_daemon_base::approval_requests::{ApprovalRequestExt, ReasonRequired};
+use shoal_protocol::approvals::{ApprovalRequest, SecretSpecification, Specification, Target};
+pub use shoal_protocol::secrets::{CatalogSecret, SecretCatalog, SecretGrant, SecretRequest};
 use shoal_protocol::space_names::SpaceSelector;
 
-impl Manager {
-    pub async fn secret_catalog(&self, selector: &SpaceSelector) -> Result<SecretCatalog> {
-        let workspace = self.workspace(selector).await?;
-        let settings = self.workspace_settings(&workspace).await?;
+impl Leases {
+    pub async fn secret_catalog(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+    ) -> Result<SecretCatalog> {
+        let workspace = daemon.workspace(selector).await?;
+        let settings = self.settings(daemon, &workspace).await?;
         let secrets = (settings.agent_secrets.into_iter())
             .map(|(name, secret)| CatalogSecret {
                 name,
@@ -38,14 +35,15 @@ impl Manager {
     /// the secret's effective source.
     pub async fn acquire_secret(
         &self,
+        daemon: &dyn Daemon,
         selector: &SpaceSelector,
         name: String,
         request: SecretRequest,
         caller: Option<&Caller>,
     ) -> Result<Allocation<SecretGrant>> {
-        let workspace = self.workspace(selector).await?;
+        let workspace = daemon.workspace(selector).await?;
         let secret = self
-            .configured_secret(&workspace, &name, request.source.as_ref())
+            .configured_secret(daemon, &workspace, &name, request.source.as_ref())
             .await?;
         crate::validate::reason("secret", request.reason.as_deref())?;
         if caller.is_none() || !secret.requires_approval {
@@ -54,7 +52,7 @@ impl Manager {
                 approved: false,
             }));
         }
-        self.touch(&workspace.id).await;
+        daemon.touch(&workspace.id).await;
         let approval = grant_request(&workspace, &name, secret, request.reason.as_deref());
         let pending = self.request_approval(approval).await.map_err(|error| {
             if error.is::<ReasonRequired>() {
@@ -73,35 +71,42 @@ impl Manager {
                 approved: true,
             }),
         };
-        self.leases
-            .notify_allocation(self, (&workspace.name, &workspace.id), &outcome, "")
-            .await;
+        let space = (&workspace.name, &workspace.id);
+        self.notify_allocation(daemon, space, &outcome, "").await;
         Ok(outcome)
     }
 
     /// Cancel the secret's request or end its lease grant; a workspace grant
     /// stays reusable until the workspace is removed.
-    pub async fn release_secret(&self, selector: &SpaceSelector, name: String) -> Result<()> {
-        let workspace = self.workspace(selector).await?;
-        self.touch(&workspace.id).await;
-        let target = Target::Secret(name.clone());
-        ensure!(
-            self.release_approval(workspace.id, target, name.clone())
-                .await?,
-            "no secret grant or approval request {name}"
-        );
-        Ok(())
+    pub async fn release_secret(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+        name: String,
+    ) -> Result<()> {
+        let workspace = daemon.workspace(selector).await?;
+        daemon.touch(&workspace.id).await;
+        let grants = self.grants.clone();
+        let released = self.store.write(move |tx| {
+            store::require_ready(tx, &workspace.id)?;
+            let target = Target::Secret(name.clone());
+            let released = grants.release(tx, &workspace.id, &target, &name)?;
+            ensure!(released, "no secret grant or approval request {name}");
+            Ok(())
+        });
+        released.await
     }
 
     /// The workspace's current definition of `name`, which must still be the
     /// `source` a caller resolved earlier, so a grant covers what it fetches.
     async fn configured_secret(
         &self,
+        daemon: &dyn Daemon,
         workspace: &Workspace,
         name: &str,
         source: Option<&SecretSpecification>,
     ) -> Result<Secret> {
-        let settings = self.workspace_settings(workspace).await?;
+        let settings = self.settings(daemon, workspace).await?;
         let secret = (settings.agent_secrets.clone())
             .remove(name)
             .ok_or_else(|| anyhow!("secrets.{name} is not configured for this workspace"))?;

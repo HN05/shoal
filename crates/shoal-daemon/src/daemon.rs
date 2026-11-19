@@ -92,7 +92,6 @@ mod restore;
 pub(crate) mod reviews;
 pub(crate) mod runner;
 pub mod scope;
-pub mod secrets;
 pub(crate) mod seed;
 mod sessions;
 mod shutdown_lock;

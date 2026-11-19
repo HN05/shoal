@@ -1,14 +1,16 @@
 //! A stand-in for the rest of the daemon, which the tests of leases build
 //! the service over: one ready workspace, recorded in a temporary store,
 //! whose repository's settings a test gives, and approval requests kept in
-//! memory, which a test decides.
+//! memory, which a test decides and which need a reason as the daemon's
+//! do.
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use futures_util::future::BoxFuture;
 use rusqlite::Transaction;
+use shoal_daemon_base::approval_requests::ReasonRequired;
 use shoal_daemon_base::{
     config_state::ConfigState,
     notifications::{Coordinators, Notifications, Source},
@@ -50,13 +52,9 @@ impl Fixture {
         let notifications = Arc::new(Notifications::new(store.clone()));
         let grants = Arc::new(StandInGrants::default());
         let leases = Leases::new(store, config, notifications, grants.clone());
-        let layers = ConfigLayers {
-            worktree_file: crate::config::repo::parse(repo).unwrap(),
-            ..ConfigLayers::default()
-        };
         let daemon = StandIn {
             workspace: workspace.clone(),
-            layers,
+            layers: Mutex::new(layers(repo)),
             touched: Mutex::default(),
             announced: Mutex::default(),
         };
@@ -69,6 +67,11 @@ impl Fixture {
         }
     }
 
+    /// Make `repo` the worktree file of the workspace's repository.
+    pub(crate) fn configure(&self, repo: &str) {
+        *self.daemon.layers.lock().unwrap() = layers(repo);
+    }
+
     pub(crate) fn selector(&self) -> SpaceSelector {
         SpaceSelector::id(&self.workspace.id)
     }
@@ -79,6 +82,14 @@ impl Fixture {
         (listed.into_iter())
             .map(|notification| (notification.kind, notification.message))
             .collect()
+    }
+}
+
+/// The layers of a repository whose worktree file is `repo`.
+fn layers(repo: &str) -> ConfigLayers {
+    ConfigLayers {
+        worktree_file: crate::config::repo::parse(repo).unwrap(),
+        ..ConfigLayers::default()
     }
 }
 
@@ -133,7 +144,7 @@ async fn record(store: &shoal_store::Store, workspace: &Workspace) {
 /// The rest of the daemon as the fixture's workspace sees it.
 pub(crate) struct StandIn {
     workspace: Workspace,
-    layers: ConfigLayers,
+    layers: Mutex<ConfigLayers>,
     /// The workspaces whose requests counted as their activity.
     pub(crate) touched: Mutex<Vec<SpaceId>>,
     /// The approval requests announced to whoever decides them.
@@ -162,7 +173,8 @@ impl Settings for StandIn {
         config: &'a Config,
         _workspace: &'a Workspace,
     ) -> BoxFuture<'a, Result<Effective>> {
-        Box::pin(async { config.resolve(&self.layers) })
+        let layers = self.layers.lock().unwrap().clone();
+        Box::pin(async move { config.resolve(&layers) })
     }
 }
 
@@ -214,6 +226,9 @@ impl Grants for StandInGrants {
             request.target.clone(),
             request.name.clone(),
         );
+        if !requests.contains_key(&key) {
+            ensure!(!request.reason.is_empty(), ReasonRequired);
+        }
         let stored = requests.entry(key).or_insert(request);
         Ok((stored.status != DecisionStatus::Approved).then(|| stored.clone()))
     }

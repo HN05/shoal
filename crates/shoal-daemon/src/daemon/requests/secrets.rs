@@ -22,16 +22,23 @@ pub(super) async fn handle(
             name,
             request,
         } => manager
-            .acquire_secret(&workspace, name, request, caller)
+            .leases
+            .acquire_secret(&**manager, &workspace, name, request, caller)
             .await?
             .into_body(Body::SecretGrant),
         SecretMethod::SecretRelease { workspace, name } => {
-            manager.release_secret(&workspace, name).await?;
+            manager
+                .leases
+                .release_secret(&**manager, &workspace, name)
+                .await?;
             Body::Ok
         }
-        SecretMethod::SecretCatalog { workspace } => {
-            Body::SecretCatalog(manager.secret_catalog(&workspace).await?)
-        }
+        SecretMethod::SecretCatalog { workspace } => Body::SecretCatalog(
+            manager
+                .leases
+                .secret_catalog(&**manager, &workspace)
+                .await?,
+        ),
     }))
 }
 
