@@ -252,6 +252,10 @@ pub enum AlertCommand {
     Withdraw {
         /// Alert number, as shoal send printed it.
         id: i64,
+        /// Space, a workspace or chat, the alert went to; finds it on the
+        /// machine that has that space.
+        #[arg(short = 's', long)]
+        space: Option<SpaceSelector>,
     },
     /// Delete the user's alerts, including unread ones.
     Clear,

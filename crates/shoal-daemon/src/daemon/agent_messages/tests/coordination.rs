@@ -550,6 +550,7 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
                 Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                     &successor.id
                 ))),
+                None,
                 id
             )
             .await
@@ -560,6 +561,7 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
             Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                 &worker.id,
             ))),
+            None,
             id,
         )
         .await

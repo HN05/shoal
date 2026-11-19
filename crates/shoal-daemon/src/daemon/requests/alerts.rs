@@ -54,9 +54,10 @@ pub(super) async fn handle(
             }
             Body::Sent(sent)
         }
-        AlertMethod::WithdrawAlert { id, from } => {
+        AlertMethod::WithdrawAlert { id, space, from } => {
             let acting = acting(manager, caller, from).await?;
-            Body::Alert(manager.withdraw_alert(acting.as_ref(), id).await?)
+            let withdrawn = manager.withdraw_alert(acting.as_ref(), space.as_ref(), id);
+            Body::Alert(withdrawn.await?)
         }
         AlertMethod::MarkAlertsRead { ids } => {
             manager.mark_alerts_read(caller, ids).await?;

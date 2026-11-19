@@ -36,9 +36,12 @@ pub enum AlertMethod {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<crate::files::NewFile>,
     },
-    /// Delete the unread alert `id` the caller sent.
+    /// Delete the unread alert `id` the caller sent, to the space `space`
+    /// when it names one, which finds the alert on that space's machine.
     WithdrawAlert {
         id: i64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        space: Option<SpaceSelector>,
         /// The space the user acts as, as a session in it that Shoal did not
         /// start does; a scoped caller always acts as its own.
         #[serde(default, skip_serializing_if = "Option::is_none")]

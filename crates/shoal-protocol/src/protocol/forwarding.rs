@@ -177,6 +177,7 @@ impl Operation {
             ) | Self::Queue(QueueMethod::SetPriority { .. } | QueueMethod::QueueRestore { .. })
                 | Self::Launch(LaunchMethod::Launch { .. } | LaunchMethod::LaunchModes { .. })
                 | Self::Demo(DemoMethod::ListDemos { .. })
+                | Self::Alert(AlertMethod::WithdrawAlert { space: Some(_), .. })
                 | Self::Hold(
                     HoldMethod::HoldAcquire { .. }
                         | HoldMethod::HoldRelease { .. }

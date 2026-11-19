@@ -1,5 +1,6 @@
 use super::*;
 use crate::questions::{Ask, QuestionStatus};
+use crate::space_names::SpaceSelector;
 
 fn question(item: u32) -> Question {
     Question {
@@ -54,4 +55,19 @@ fn an_answer_by_number_names_the_question_its_space_lists() {
     gone.pin_item(&listed, &[]);
     assert_eq!(shown(&gone), None);
     assert!(gone.names_unpinned_item());
+}
+
+#[test]
+fn a_withdrawal_goes_to_another_machine_only_when_it_names_the_recipient() {
+    let withdraw = |space: Option<SpaceSelector>| {
+        Operation::Alert(AlertMethod::WithdrawAlert {
+            id: 7,
+            space,
+            from: None,
+        })
+        .forwarding()
+    };
+    assert_eq!(withdraw(None), Forwarding::Never);
+    let named = withdraw(Some(SpaceSelector::Number(3.into())));
+    assert_eq!(named, Forwarding::Online);
 }

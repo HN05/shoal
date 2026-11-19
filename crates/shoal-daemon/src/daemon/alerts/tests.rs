@@ -182,7 +182,11 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
             message: "hello".into(),
             attachments: Vec::new(),
         },
-        AlertMethod::WithdrawAlert { id: 1, from: None },
+        AlertMethod::WithdrawAlert {
+            id: 1,
+            space: None,
+            from: None,
+        },
     ] {
         assert!(
             scope::authorize(&manager, Some(&"scope".into()), &mut method)
@@ -251,6 +255,7 @@ async fn senders_withdraw_their_own_messages_until_shown() {
                     Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                         workspace
                     ))),
+                    None,
                     id
                 )
                 .await
@@ -263,6 +268,7 @@ async fn senders_withdraw_their_own_messages_until_shown() {
             Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                 &sender.id,
             ))),
+            None,
             sent,
         )
         .await
@@ -280,6 +286,7 @@ async fn senders_withdraw_their_own_messages_until_shown() {
                 Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                     &sender.id
                 ))),
+                None,
                 shown
             )
             .await
@@ -319,6 +326,7 @@ async fn senders_withdraw_their_own_messages_until_shown() {
                 Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                     &successor.id
                 ))),
+                None,
                 unread
             )
             .await
@@ -329,6 +337,7 @@ async fn senders_withdraw_their_own_messages_until_shown() {
             Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                 &renamed.id,
             ))),
+            None,
             unread,
         )
         .await
@@ -375,6 +384,7 @@ async fn a_message_stays_its_sender_s_through_a_rename_while_it_is_recorded() {
                 Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                     &successor.id
                 ))),
+                None,
                 id
             )
             .await
@@ -385,6 +395,7 @@ async fn a_message_stays_its_sender_s_through_a_rename_while_it_is_recorded() {
             Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                 &sender.id,
             ))),
+            None,
             id,
         )
         .await

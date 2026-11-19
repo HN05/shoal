@@ -59,8 +59,13 @@ pub async fn send(
 
 /// Take back the unread alert `id` the caller sent, or the space `from`
 /// names when the user acts as one.
-pub async fn withdraw(daemon: &impl Daemon, id: i64, from: Option<SpaceSelector>) -> Result<Alert> {
-    request(daemon, AlertMethod::WithdrawAlert { id, from }).await
+pub async fn withdraw(
+    daemon: &impl Daemon,
+    id: i64,
+    space: Option<SpaceSelector>,
+    from: Option<SpaceSelector>,
+) -> Result<Alert> {
+    request(daemon, AlertMethod::WithdrawAlert { id, space, from }).await
 }
 
 /// The user's alerts the daemon records, as it records them, after the one

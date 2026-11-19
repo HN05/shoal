@@ -162,9 +162,10 @@ fn refuse_workspace_processes(ctx: &Context) -> Result<()> {
     Ok(())
 }
 
-pub(super) async fn withdraw(ctx: &Context, id: i64) -> Result<i32> {
+/// Withdraw the alert `id`, to the space `space` names when it names one.
+pub(super) async fn withdraw(ctx: &Context, id: i64, space: Option<SpaceSelector>) -> Result<i32> {
     let from = sending_space(ctx).await?;
-    let withdrawn = alerts::withdraw(&ctx.paths, id, from).await?;
+    let withdrawn = alerts::withdraw(&ctx.paths, id, space, from).await?;
     ctx.emit(
         &format!("Withdrew alert {id}: {}", withdrawn.message),
         &withdrawn,

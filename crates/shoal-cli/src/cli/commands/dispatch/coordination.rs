@@ -72,8 +72,8 @@ pub(in crate::cli::commands) async fn run(
             command: AlertCommand::List(args),
         } => alerts::list(&ctx, args).await,
         CoordinationCommand::Alert {
-            command: AlertCommand::Withdraw { id },
-        } => alerts::withdraw(&ctx, id).await,
+            command: AlertCommand::Withdraw { id, space },
+        } => alerts::withdraw(&ctx, id, space).await,
         CoordinationCommand::Alert {
             command: AlertCommand::Clear,
         } => alerts::clear(&ctx).await,

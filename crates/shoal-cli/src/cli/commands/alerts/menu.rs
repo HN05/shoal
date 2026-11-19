@@ -8,7 +8,7 @@ use crate::cli::{
     output::Palette,
     ui::{self, Key, KeyBindings, WidthLimit},
 };
-use shoal_protocol::alerts::Alert;
+use shoal_protocol::{alerts::Alert, space_names::SpaceSelector};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum AlertAction {
@@ -36,7 +36,10 @@ pub(super) async fn choose(ctx: &Context, alerts: &[Alert]) -> Result<i32> {
             outln!("{}", shown(alert));
             Ok(0)
         }
-        AlertAction::Withdraw => withdraw(ctx, alert.id).await,
+        AlertAction::Withdraw => {
+            let recipient = (alert.recipient.as_ref()).map(|to| SpaceSelector::id(&to.id));
+            withdraw(ctx, alert.id, recipient).await
+        }
     }
 }
 

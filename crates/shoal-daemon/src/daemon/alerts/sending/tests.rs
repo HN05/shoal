@@ -64,17 +64,23 @@ async fn an_alert_names_its_sender_who_alone_withdraws_it_until_read() {
     // Only the sender withdraws: the user's alert, not the parent's.
     let as_sibling = caller_in(&SpaceSelector::id(&sibling.id));
     for (caller, id) in [(Some(&as_sibling), from_parent), (None, from_parent)] {
-        assert!(manager.withdraw_alert(caller, id).await.is_err());
+        assert!(manager.withdraw_alert(caller, None, id).await.is_err());
     }
+    // Naming the space it went to finds it there alone.
+    let (to_child, to_sibling) = (SpaceSelector::id(&child.id), SpaceSelector::id(&sibling.id));
+    let withdrawn = manager.withdraw_alert(None, Some(&to_sibling), from_user);
+    assert!(withdrawn.await.is_err());
     let as_parent = caller_in(&SpaceSelector::id(&parent.id));
-    manager.withdraw_alert(None, from_user).await.unwrap();
+    (manager.withdraw_alert(None, Some(&to_child), from_user))
+        .await
+        .unwrap();
     // Once read, it stays.
     (manager.mark_alerts_read(None, vec![from_parent]))
         .await
         .unwrap();
     assert!(
         manager
-            .withdraw_alert(Some(&as_parent), from_parent)
+            .withdraw_alert(Some(&as_parent), None, from_parent)
             .await
             .is_err()
     );

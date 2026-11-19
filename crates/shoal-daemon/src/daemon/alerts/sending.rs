@@ -13,6 +13,7 @@ use crate::{
     model::{Space, SpaceKind},
     repository::Selector,
 };
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     alerts::{AlertKind, Reached, ReachedSpaces, Recipient, Refused, RefusedSpace},
     protocol::AlertTarget,
@@ -165,13 +166,27 @@ impl Manager {
     }
 
     /// Delete the unread alert `id` that `caller`, or the user without one,
-    /// sent, which its recipient need not read after all. A read alert
-    /// stays; a correction follows it.
-    pub async fn withdraw_alert(&self, caller: Option<&Caller>, id: i64) -> Result<Alert> {
-        let space = caller.map(|caller| caller.space_id.clone());
-        self.store
-            .write(move |tx| withdraw(tx, space.as_ref(), id))
-            .await
+    /// sent, to the space `recipient` names when it names one, which its
+    /// recipient need not read after all. A read alert stays; a correction
+    /// follows it. A recipient another machine has refuses it here, which
+    /// sends the request on to that machine, where the alert is.
+    pub async fn withdraw_alert(
+        &self,
+        caller: Option<&Caller>,
+        recipient: Option<&SpaceSelector>,
+        id: i64,
+    ) -> Result<Alert> {
+        let recipient = match recipient {
+            Some(recipient) => Some(self.space(recipient).await?.id),
+            None => None,
+        };
+        let sender = caller.map(|caller| caller.space_id.clone());
+        let withdrawn = Withdrawn {
+            id,
+            sender,
+            recipient,
+        };
+        self.store.write(move |tx| withdrawn.delete(tx)).await
     }
 }
 
@@ -187,33 +202,44 @@ pub(crate) fn sent_alert(about: About, message: String, files: &[SentFile]) -> N
     }
 }
 
-/// Delete the unread alert `id` the space `space` sent, or the user
-/// without one.
-fn withdraw(
-    tx: &Transaction<'_>,
-    space: Option<&shoal_ids::space_ids::SpaceId>,
+/// The alert `id` that the space `sender` sent, or the user without one,
+/// to the space `recipient` when there is one.
+struct Withdrawn {
     id: i64,
-) -> Result<Alert> {
-    let sender = match space {
-        Some(_) => Sender::Space,
-        None => Sender::User,
-    };
-    let alert = tx
-        .query_row(
-            &format!(
-                "SELECT {COLUMNS} FROM {FROM} WHERE a.id=?1 AND a.sender=?2 AND a.space_id IS ?3"
-            ),
-            params![id, sender, space],
-            super::row,
-        )
-        .optional()?
-        .with_context(|| format!("you sent no alert {id}"))?;
-    ensure!(
-        !alert.read,
-        "alert {id} was already read; send a correction with shoal send"
-    );
-    tx.execute("DELETE FROM alerts WHERE id=?1", [id])?;
-    Ok(alert)
+    sender: Option<SpaceId>,
+    recipient: Option<SpaceId>,
+}
+
+impl Withdrawn {
+    /// Delete the alert while it is unread.
+    fn delete(self, tx: &Transaction<'_>) -> Result<Alert> {
+        let Self {
+            id,
+            sender: space,
+            recipient,
+        } = self;
+        let sender = match space {
+            Some(_) => Sender::Space,
+            None => Sender::User,
+        };
+        let alert = tx
+            .query_row(
+                &format!(
+                    "SELECT {COLUMNS} FROM {FROM} WHERE a.id=?1 AND a.sender=?2 \
+                     AND a.space_id IS ?3 AND (?4 IS NULL OR a.recipient_id=?4)"
+                ),
+                params![id, sender, space, recipient],
+                super::row,
+            )
+            .optional()?
+            .with_context(|| format!("you sent no alert {id}"))?;
+        ensure!(
+            !alert.read,
+            "alert {id} was already read; send a correction with shoal send"
+        );
+        tx.execute("DELETE FROM alerts WHERE id=?1", [id])?;
+        Ok(alert)
+    }
 }
 
 /// Where a space goes in `reached` once an alert to it was `sent`: among

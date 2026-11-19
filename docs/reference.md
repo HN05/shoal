@@ -6484,7 +6484,7 @@ shoal alert list --space S     # Those for a space's agent
 shoal alert list --all         # Every recipient's you may read
 shoal alert list --follow      # Keep printing the user's, and raise terminal notifications
 shoal alert list --keep-unread # Show without marking read, also with --follow
-shoal alert withdraw <number>  # Take back an unread one you sent
+shoal alert withdraw <number> [--space S]  # Take back an unread one you sent
 shoal alert clear              # Delete the user's, including unread ones
 ```
 
@@ -6513,7 +6513,9 @@ coordinating agent, or the spaces it reached, under `now` when its agent runs
 connected, `on_start` when its agent receives it once it next runs, or
 `without_agent` when the space has no agent and the alert waits for one to
 start there, each with `workspaces` and `chats` with `--json`. The sender may
-withdraw an alert by its number until it is read.
+withdraw an alert by its number until it is read; `--space` names the space it
+went to, which finds it on the joined machine that has that space, since each
+machine numbers its own alerts.
 
 `--all` sends to every agent the sender's scope reaches, and `--repo` to every
 agent of the repository it names, or without a value the current checkout's

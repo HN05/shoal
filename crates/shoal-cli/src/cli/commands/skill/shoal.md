@@ -577,7 +577,7 @@ deliver them with PR activity; a new one also ends `shoal watch pr` with an
 `alerts` array, and `shoal alert list` shows them. Each is shown once, and
 lists each file attached to it as an `Attached file:` path. `shoal send`
 prints each alert's number, by which its sender withdraws it until it is
-read.
+read; `--space` names the space it went to, as for one on another machine.
 
 ```sh
 shoal questions ask --in-chat
