@@ -4,6 +4,7 @@
 //! agent's last stop and a worktree's file change times, so it survives
 //! daemon restarts. A space without a worktree has no branch, so it goes
 //! once nothing has used it for that period.
+use crate::model::EventCause;
 use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::HashMap,
@@ -18,7 +19,6 @@ use tokio::time::Instant;
 use super::{Rule, Snapshot, Tree, change_time};
 use crate::{
     daemon::{
-        events::EventCause,
         spaces::removal_notices::Cleanup,
         workspace::{Manager, not_ready},
     },

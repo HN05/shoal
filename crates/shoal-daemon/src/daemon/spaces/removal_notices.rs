@@ -1,10 +1,10 @@
 //! Announcing a space's removal: the notice that a cleanup removed it, or
 //! the notice and journal record that it retained it.
+use crate::model::EventCause;
 use anyhow::Result;
 
 use crate::{
     daemon::{
-        events::EventCause,
         log,
         notifications::{About, NotificationKind},
         workspace::Manager,

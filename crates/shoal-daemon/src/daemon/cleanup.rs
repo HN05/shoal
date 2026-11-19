@@ -3,6 +3,7 @@
 //! directory was deleted outside Shoal; the user can remove the idle
 //! candidates on request. A space without a worktree meets every condition
 //! on one, and goes once its agent stopped and nothing keeps it.
+use crate::model::EventCause;
 use anyhow::{Result, ensure};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
@@ -20,7 +21,6 @@ use tokio::time::{Instant, sleep};
 use crate::{
     daemon::{
         caches::Emptying,
-        events::EventCause,
         file_access, log,
         spaces::removal_notices::Cleanup,
         workspace::{Manager, not_ready},

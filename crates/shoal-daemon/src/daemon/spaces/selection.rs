@@ -1,13 +1,14 @@
 //! Resolving the space a request names, by its number or ID, over
 //! workspaces and chats alike, and refusing the other kind where a request
 //! needs one.
+use crate::model::EventCause;
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension as _, params};
 use shoal_ids::space_ids::SpaceId;
 
 use crate::{
     daemon::{
-        events::{self, EventCause, EventDetails},
+        events::{self, EventDetails},
         workspace::Manager,
     },
     model::{Chat, Space, SpaceKind, Workspace},

@@ -1,9 +1,10 @@
 use super::*;
+use crate::model::EventCause;
 use crate::paths::StateFiles;
 use crate::removal::{InspectionPolicy, UnsavedWork};
 use crate::{
     daemon::{
-        events::{EventCause, EventItem, EventKind},
+        events::{EventItem, EventKind},
         test_support::{chat_process, ended, manager, repository},
     },
     model::{RefPart, SpaceKind, SpaceRef},

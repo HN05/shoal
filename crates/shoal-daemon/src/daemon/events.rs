@@ -1,5 +1,6 @@
 //! Durable lifecycle records, independent of notification delivery and read state.
 
+use crate::model::EventCause;
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Deserialize;
@@ -9,9 +10,9 @@ use shoal_ids::space_ids::SpaceId;
 use super::{log, workspace::Manager};
 use crate::time::UnixTime;
 pub(crate) use shoal_protocol::events::{
-    AgentEvent, AlertEvent, ApprovalEvent, EventCause, EventCursor, EventDetails, EventItem,
-    EventKind, FileEvent, FileEventDetails, JobEndedEvent, ShoalEvent, ShoalEventDetails,
-    ShoalEventKind, SpaceEvent, StoppedProcess,
+    AgentEvent, AlertEvent, ApprovalEvent, EventCursor, EventDetails, EventItem, EventKind,
+    FileEvent, FileEventDetails, JobEndedEvent, ShoalEvent, ShoalEventDetails, ShoalEventKind,
+    SpaceEvent, StoppedProcess,
 };
 
 /// A journal row as stored: file events carry the space's identity in

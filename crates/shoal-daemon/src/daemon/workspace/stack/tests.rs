@@ -1,6 +1,7 @@
+use crate::model::EventCause;
 use crate::{
     daemon::{
-        events::{EventCause, EventItem, EventKind},
+        events::{EventItem, EventKind},
         test_support::{manager, repository},
     },
     model::WorkspaceRef,

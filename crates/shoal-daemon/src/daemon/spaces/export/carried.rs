@@ -1,9 +1,10 @@
 //! The spaces a package carries with its space: which go with it, and what
 //! the package holds of each once its removal recorded it.
+use crate::model::EventCause;
 use anyhow::{Context, Result};
 
 use crate::{
-    daemon::{events::EventCause, workspace::Manager},
+    daemon::workspace::Manager,
     model::{RemovedSpace, Repository, Space},
     transfer::{CarriedSpace, CarriedSpaceExt, Carrying, Manifest, ManifestExt, Placed},
 };

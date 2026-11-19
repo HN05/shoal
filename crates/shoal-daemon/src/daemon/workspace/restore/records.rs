@@ -2,6 +2,7 @@
 //! with a checkpoint, records what `shoal restore` needs to reopen the
 //! space, until the record expires.
 use crate::execution::recovery::{LastSession, LastSessionExt, StoppedAgent};
+use crate::model::EventCause;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
@@ -10,7 +11,6 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::daemon::workspace::Manager;
 use crate::{
-    daemon::events::EventCause,
     git,
     model::{
         Checkpoint, CheckpointCause, KeptChat, KeptWorkspace, RemovedKind, RemovedSpace, Space,

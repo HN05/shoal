@@ -1,12 +1,13 @@
 //! Completion cleanup: the sweep that removes completed spaces and the
 //! spaces below them, which a completion only signals.
+use crate::model::EventCause;
 use anyhow::{Result, ensure};
 use rusqlite::OptionalExtension;
 use shoal_ids::space_ids::SpaceId;
 
 use super::Manager;
 use crate::{
-    daemon::{events::EventCause, spaces::removal_notices::Cleanup},
+    daemon::spaces::removal_notices::Cleanup,
     model::{Space, Workspace},
 };
 

@@ -3,6 +3,7 @@
 //! workspace leaves `removing` for `failed`, and its log says where its
 //! removal stopped, so `shoal rm` finishes it; at startup, the files such a
 //! removal deleted of the worktree come back.
+use crate::model::EventCause;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::Result;
@@ -10,7 +11,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{
     daemon::{
-        events::{self, EventCause, EventKind},
+        events::{self, EventKind},
         log,
         store::Store,
         workspace::Manager,

@@ -8,6 +8,33 @@ use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_refs::{BranchName, CommitId};
 
+shoal_states::states!(EventCause {
+    Manual => "manual",
+    Idle => "idle",
+    Issue => "issue",
+    Pr => "pr",
+    Completion => "completion",
+    MissingDirectory => "missing_directory",
+    /// Free disk space fell below the configured cleanup threshold.
+    DiskSpace => "disk_space",
+    /// The branch merged into the default branch and the workspace stayed idle.
+    Merged => "merged",
+    /// The base workspace was removed and its own took its place, or, in
+    /// earlier versions, the parent workspace.
+    Removed => "removed",
+    /// The workspace's parent was removed, which takes its children first.
+    Parent => "parent",
+    /// The space's repository was removed, which takes its spaces first.
+    Repository => "repository",
+    /// An ancestor of the workspace finished its assignment with cleanup.
+    ParentCompletion => "parent_completion",
+    /// The space could not start, so Shoal forgot it at once.
+    StartFailed => "start_failed",
+    /// The work a new workspace's agent waited for is done, and its
+    /// worktree builds on that work's branch.
+    Blocker => "blocker",
+});
+
 /// A Git worktree under a repository's Shoal directory that no workspace owns.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UntrackedWorktree {
@@ -68,7 +95,7 @@ pub struct RemovedSpace {
     /// settings.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub session_files: Vec<crate::transfer::SessionFile>,
-    pub cause: crate::events::EventCause,
+    pub cause: EventCause,
     pub removed_at: crate::time::UnixTime,
     pub expires_at: crate::time::UnixTime,
     /// What only its kind keeps.

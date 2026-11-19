@@ -8,8 +8,8 @@ use super::candidacy::Baseline;
 use crate::daemon::space_processes::WorktreeTies;
 use crate::daemon::workspace::ownership::{CommonDir, verify_admin_dir_owner};
 use crate::daemon::workspace::runner::JobStop;
+use crate::model::EventCause;
 use crate::{
-    daemon::events::EventCause,
     fsutil::off_runtime,
     git::{
         self,

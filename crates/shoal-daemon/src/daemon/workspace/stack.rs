@@ -1,4 +1,5 @@
 //! Base workspaces: the workspace whose branch a stacked workspace builds on.
+use crate::model::EventCause;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_refs::BranchName;
@@ -11,10 +12,7 @@ use shoal_protocol::space_names::SpaceSelector;
 
 use super::Manager;
 use crate::{
-    daemon::{
-        events::{EventCause, EventKind},
-        store,
-    },
+    daemon::{events::EventKind, store},
     git,
     model::{Workspace, WorkspaceRef},
 };

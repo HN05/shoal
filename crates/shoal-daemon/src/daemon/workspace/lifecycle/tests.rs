@@ -1,11 +1,12 @@
 use super::super::Manager;
 use super::worktree::removal_options;
 use super::*;
+use crate::model::EventCause;
 use crate::paths::StateFiles;
 use crate::{
     daemon::{
         cleanup::{Rule, Snapshot},
-        events::{EventCause, EventKind},
+        events::EventKind,
         test_support::{git, install_test_script, manager, repository},
         workspace_files::Attacher,
     },

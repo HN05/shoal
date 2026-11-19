@@ -1,5 +1,6 @@
 //! Move stacked workspaces down when their base workspace's PRs merge.
 use crate::forge::items::reference::ItemRef;
+use crate::model::EventCause;
 use anyhow::Result;
 use rusqlite::params;
 use shoal_ids::space_ids::SpaceId;
@@ -10,10 +11,7 @@ use super::{
     wait,
 };
 use crate::{
-    daemon::{
-        events::EventCause,
-        workspace::{Manager, record_base_changed},
-    },
+    daemon::workspace::{Manager, record_base_changed},
     forge::{
         PullRequest,
         items::link::ItemKind,

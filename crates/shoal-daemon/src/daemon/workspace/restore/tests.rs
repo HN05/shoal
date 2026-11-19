@@ -1,10 +1,10 @@
 use crate::git;
+use crate::model::EventCause;
 use shoal_refs::BranchName;
 use std::fs;
 
 use super::*;
 use crate::{
-    daemon::events::EventCause,
     daemon::test_support::{commit, git, manager, repository},
     model::CheckpointCause,
     removal::{InspectionPolicy, UnsavedWork},

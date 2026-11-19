@@ -420,7 +420,7 @@ impl Manager {
                     tx,
                     &id,
                     crate::daemon::events::EventKind::Restored,
-                    crate::daemon::events::EventCause::Manual,
+                    crate::model::EventCause::Manual,
                     None,
                 )?;
                 tx.execute("DELETE FROM removed_spaces WHERE space_id=?1", [&id])?;

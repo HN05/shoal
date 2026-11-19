@@ -6,8 +6,9 @@ use super::super::{
 };
 use super::worktree::{WorktreeRemoval, WorktreeStage};
 use super::{Removal, Stage};
+use crate::model::EventCause;
 use crate::{
-    daemon::{cleanup::Snapshot, events::EventCause, space_processes::WorktreeTies},
+    daemon::{cleanup::Snapshot, space_processes::WorktreeTies},
     model::{Completion, Space, SpaceRef},
     process::DirectoryUsers,
     removal::{

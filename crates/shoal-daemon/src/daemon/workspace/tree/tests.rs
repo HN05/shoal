@@ -1,8 +1,9 @@
 use crate::daemon::approvals::ApprovalRequestExt;
 use crate::execution::recovery::LastSessionExt;
+use crate::model::EventCause;
 use crate::{
     daemon::{
-        events::{EventCause, EventItem, EventKind},
+        events::{EventItem, EventKind},
         scope::{Caller, ScopedExecution},
         test_support::{manager, repository},
         workspace_files::Attacher,

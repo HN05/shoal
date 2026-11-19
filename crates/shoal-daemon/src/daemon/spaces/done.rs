@@ -1,4 +1,5 @@
 //! Recording a space's completion: `shoal done` and its withdrawal.
+use crate::model::EventCause;
 use anyhow::{Context, Result, ensure};
 use rusqlite::OptionalExtension;
 use shoal_ids::space_ids::SpaceId;
@@ -7,7 +8,6 @@ use std::path::{Path, PathBuf};
 use crate::{
     config::Effective,
     daemon::{
-        events::EventCause,
         item_numbers::ItemNumber,
         links::{pr::current_head, space::require_ready_space},
         notifications::NotificationKind,

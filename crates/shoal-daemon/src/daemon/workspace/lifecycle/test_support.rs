@@ -2,11 +2,9 @@
 //! them.
 use super::super::Manager;
 use super::Removal;
+use crate::model::EventCause;
 use crate::{
-    daemon::{
-        cleanup::{Rule, Snapshot},
-        events::EventCause,
-    },
+    daemon::cleanup::{Rule, Snapshot},
     model::{CleanupReason, Space},
     process::DirectoryUsers,
     removal::RemovalResult,

@@ -2,12 +2,10 @@
 //! stage, and what retains a space from every unattended removal.
 use super::super::{completion_cleanup::CompletedAncestor, executions::StopPolicy};
 use crate::daemon::space_processes::WorktreeTies;
+use crate::model::EventCause;
 use crate::refusal::{Reason, Refusal};
 use crate::{
-    daemon::{
-        cleanup::{Rule, Snapshot},
-        events::EventCause,
-    },
+    daemon::cleanup::{Rule, Snapshot},
     model::CleanupReason,
     removal::{InspectionPolicy, NOTHING, RemovalCheck, UnsavedWork},
 };

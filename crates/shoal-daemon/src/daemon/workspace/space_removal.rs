@@ -255,7 +255,7 @@ impl Manager {
         &self,
         reservation: SpaceReservation<'_>,
         unready: bool,
-        cause: events::EventCause,
+        cause: crate::model::EventCause,
         error: &anyhow::Error,
     ) -> Result<()> {
         let id = &reservation.space.id;
@@ -279,7 +279,7 @@ impl Manager {
     pub(crate) async fn delete_space_record(
         &self,
         space: &Space,
-        cause: events::EventCause,
+        cause: crate::model::EventCause,
     ) -> Result<()> {
         let expires_at = self.removed_files_expiry(space).await;
         let id = space.id.to_owned();
@@ -368,7 +368,7 @@ struct Deleted {
 fn delete_record(
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
-    cause: events::EventCause,
+    cause: crate::model::EventCause,
     expires_at: UnixTime,
 ) -> Result<Deleted> {
     // Children go first; none may outlive its parent.

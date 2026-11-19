@@ -2,11 +2,9 @@
 //! gets one, which its preparation creates.
 
 use super::{Configured, WorkspaceSource, stack};
+use crate::model::EventCause;
 use crate::{
-    daemon::{events::EventCause, workspace::Manager},
-    model::Workspace,
-    protocol::CopySource,
-    state::WorkspaceState,
+    daemon::workspace::Manager, model::Workspace, protocol::CopySource, state::WorkspaceState,
 };
 use anyhow::{Result, bail, ensure};
 use rusqlite::{OptionalExtension, params};

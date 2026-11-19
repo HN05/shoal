@@ -4,6 +4,7 @@
 //! then emptying shared caches nothing is using, then deleting the results
 //! removed workspaces handed back, then stopping tracked executions when
 //! that cannot free enough space.
+use crate::model::EventCause;
 use anyhow::Result;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
@@ -18,7 +19,6 @@ use tokio::time::Instant;
 
 use super::{
     caches::Emptying,
-    events::EventCause,
     notifications::NotificationKind,
     spaces::removal_notices::Cleanup,
     warnings::{self, Signal, Warnings},

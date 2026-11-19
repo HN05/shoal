@@ -1,12 +1,12 @@
 //! What a log line says of an entry: a short label and its details.
+use crate::model::EventCause;
 use crate::{
     forge::{items::link::LinkKind, updates::UpdateKind},
     model::SpaceKind,
 };
 use shoal_protocol::{
     events::{
-        EventCause, EventDetails, EventKind, EventSpace, FileEventKind, ShoalEventDetails,
-        ShoalEventKind,
+        EventDetails, EventKind, EventSpace, FileEventKind, ShoalEventDetails, ShoalEventKind,
     },
     log::LogEntry,
 };

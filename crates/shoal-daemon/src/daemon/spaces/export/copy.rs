@@ -2,11 +2,12 @@
 //! sessions they reported, a workspace at a checkpoint, with copies of the
 //! spaces below it that the package carries, which `shoal move import`
 //! opens as new spaces whose agents start from forks.
+use crate::model::EventCause;
 use anyhow::Result;
 
 use super::Prepared;
 use crate::{
-    daemon::{events::EventCause, workspace::Manager},
+    daemon::workspace::Manager,
     execution::recovery::{self, Copied, Record, StoppedAgent},
     model::{Execution, RemovedSpace, Space},
     time::UnixTime,

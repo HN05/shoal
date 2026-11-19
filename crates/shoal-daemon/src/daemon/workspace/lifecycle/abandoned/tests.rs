@@ -2,11 +2,9 @@ use super::super::{
     Removal,
     tests::{fixture, removal_entries},
 };
+use crate::model::EventCause;
 use crate::{
-    daemon::{
-        events::{EventCause, EventKind},
-        workspace::reservation::RemovalRules,
-    },
+    daemon::{events::EventKind, workspace::reservation::RemovalRules},
     removal::{InspectionPolicy, NOTHING},
     state::WorkspaceState,
 };

@@ -793,7 +793,7 @@ fn forget_unstarted(tx: &rusqlite::Transaction<'_>, id: &SpaceId, error: &str) -
         [id],
     )?;
     if unstarted {
-        let cause = events::EventCause::StartFailed;
+        let cause = crate::model::EventCause::StartFailed;
         events::record(tx, id, events::EventKind::Removed, cause, Some(error))?;
         spaces::records::remove(tx, id)?;
     }
