@@ -206,7 +206,8 @@ impl ZellijServer {
     }
 
     /// The pane each client of `session` shows, and `None` while Zellij
-    /// reports the session missing, as it can a busy one or one starting.
+    /// reports the session missing, as it can a busy one or one starting,
+    /// or times out.
     fn clients(&self, session: &str) -> Option<Vec<String>> {
         let output = support::run::output(self.zellij().args([
             "--session",
@@ -214,7 +215,7 @@ impl ZellijServer {
             "action",
             "list-clients",
         ]));
-        if reported_missing(&output) {
+        if reported_missing(&output) || timed_out(&output) {
             return None;
         }
         assert!(
@@ -232,15 +233,15 @@ impl ZellijServer {
 
     /// Every terminal pane of `session`, which lasts the test, with its
     /// tab's name. Zellij can list nothing or JSON that is not a list while
-    /// it closes a tab, or report a busy session missing, which is asked
-    /// again.
+    /// it closes a tab, or report a busy session missing or time out, which
+    /// is asked again.
     fn panes(&self, session: &str) -> Vec<(String, String)> {
         wait_for("Zellij to list the panes", || self.listed_panes(session))
     }
 
     /// The terminal panes Zellij lists of `session`, and `None` when it
-    /// lists nothing, lists JSON that is not a list or reports the session
-    /// missing.
+    /// lists nothing, lists JSON that is not a list, reports the session
+    /// missing or times out.
     fn listed_panes(&self, session: &str) -> Option<Vec<(String, String)>> {
         let output = support::run::output(self.zellij().args([
             "--session",
@@ -250,7 +251,8 @@ impl ZellijServer {
             "--all",
             "--json",
         ]));
-        if reported_missing(&output) || output.stdout.trim_ascii().is_empty() {
+        if reported_missing(&output) || timed_out(&output) || output.stdout.trim_ascii().is_empty()
+        {
             return None;
         }
         assert!(
@@ -408,6 +410,12 @@ impl Drop for ZellijServer {
 fn reported_missing(output: &std::process::Output) -> bool {
     let error = String::from_utf8_lossy(&output.stderr);
     error.contains("There is no active session") || error.contains("' not found")
+}
+
+/// Whether Zellij gave up waiting on an action, which it gives 1s, leaving
+/// its outcome unknown; a loaded machine takes longer.
+fn timed_out(output: &std::process::Output) -> bool {
+    String::from_utf8_lossy(&output.stderr).contains("its outcome is unknown")
 }
 
 /// Read what a client prints on the terminal `master` until it ends,
@@ -651,7 +659,8 @@ fn place_beside(fixture: &Fixture, workspace: &str, pane: &str) -> Value {
 }
 
 impl ZellijServer {
-    /// A new tab named `name` in the user's session, returning its pane.
+    /// A new tab named `name` in the user's session, returning its pane;
+    /// the tab showing decides an action that timed out.
     fn new_tab(&self, name: &str) -> String {
         let output = support::run::output(self.zellij().args([
             "--session",
@@ -661,7 +670,11 @@ impl ZellijServer {
             "--name",
             name,
         ]));
-        assert!(output.status.success(), "{}", printed(&output));
+        assert!(
+            output.status.success() || timed_out(&output),
+            "{}",
+            printed(&output)
+        );
         wait_for("the new tab to show", || {
             self.listed_panes("caller")?
                 .into_iter()
