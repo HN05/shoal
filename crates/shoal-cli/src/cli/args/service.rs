@@ -24,7 +24,7 @@ pub enum ServiceCommand {
     /// does to follow the hub's version.
     Update {
         /// The release to install, such as 0.40.2.
-        #[arg(long, value_name = "VERSION")]
+        #[arg(long, short = 'V', value_name = "VERSION")]
         version: Option<String>,
     },
     /// Install, start, stop or restart the local daemon.
