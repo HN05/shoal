@@ -9,6 +9,7 @@ use std::{sync::Mutex, time::Duration};
 
 use anyhow::Result;
 use shoal_core::update::{self, HOMEBREW_UPGRADE, Installation, Installed, RELEASES, Target};
+use shoal_protocol::hub::link::Updates;
 use tokio::time::Instant;
 
 use shoal_daemon_base::notifications::About;
@@ -94,17 +95,39 @@ pub(super) fn command(version: &str) -> String {
     }
 }
 
+impl Way {
+    /// How the hub's alert about this machine names its update.
+    fn updates(&self) -> Updates {
+        match self {
+            Self::Install(_) => Updates::Follows,
+            Self::Homebrew => Updates::Homebrew,
+            Self::Manual { .. } => Updates::Manual,
+        }
+    }
+}
+
 impl Hub {
+    /// How this machine follows the hub's version.
+    fn way(&self, daemon: &dyn Daemon) -> Result<Way> {
+        let auto_update = self.hub_settings(daemon).is_some_and(|hub| hub.auto_update);
+        let installed = Installed::current()?;
+        Ok(way(auto_update, cfg!(debug_assertions), installed))
+    }
+
+    /// How this machine comes to run the hub's version, as its hello
+    /// states it.
+    pub(super) fn updates(&self, daemon: &dyn Daemon) -> Updates {
+        self.way(daemon)
+            .map_or(Updates::Manual, |way| way.updates())
+    }
+
     /// Follow the hub to its `version`, at most once per [`RETRY`].
     pub(super) async fn follow_hub(&self, daemon: &dyn Daemon, version: &str) {
         if !self.member.followed.take(version) {
             return;
         }
-        let auto_update = self.hub_settings(daemon).is_some_and(|hub| hub.auto_update);
         let stays = "so this machine stays off the hub until it runs that version";
-        let message = match Installed::current()
-            .map(|installed| way(auto_update, cfg!(debug_assertions), installed))
-        {
+        let message = match self.way(daemon) {
             Ok(Way::Install(installation)) => {
                 match self.install_hub_version(&installation, version).await {
                     Ok(()) => return,

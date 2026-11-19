@@ -15,6 +15,7 @@ use shoal_protocol::{
         ExchangeKey, Mac, Member, Nonce, PublicKey, Signature,
         link::{
             Frame, Hello, HubVersion, Intent, Joining, Refusal, RefusalReason, Signer, Transcript,
+            Updates,
         },
     },
     protocol,
@@ -329,7 +330,8 @@ impl Hub {
     /// The refusal of a member that runs another version or speaks
     /// `protocol`, with the hub's version signed over its nonce, after
     /// recording an alert that names it, its version and the update it
-    /// needs. What a peer sends here is not yet authenticated, so the alert
+    /// needs, for one that follows the hub only once it has not for
+    /// [`FOLLOW_GRACE`]. What a peer sends here is not yet authenticated, so the alert
     /// names only a member the hub recorded, holds the version it claims
     /// short and printable, and comes at most once an hour for each member,
     /// or for all joiners together.
@@ -338,15 +340,13 @@ impl Hub {
         let (alerted, name) = self.refused_member(opening).await;
         let newer = shoal_core::update::is_newer(&theirs, OWN_VERSION)
             .unwrap_or(protocol > protocol::VERSION);
-        let update = match newer {
-            true => "run shoal update on this hub".to_owned(),
-            false => format!("run shoal update --version {OWN_VERSION} on it"),
-        };
+        let updates = serde_json::from_value(opening["updates"].clone()).unwrap_or(Updates::Manual);
+        let Advice { update, grace } = advice(updates, newer);
         let message = format!(
             "The hub refused {name}, which runs Shoal {theirs} (protocol {protocol}); this hub runs Shoal {OWN_VERSION} (protocol {}) and takes only that one: {update}",
             protocol::VERSION
         );
-        if self.refusal_alerts.due(alerted) {
+        if self.refusal_alerts.due(alerted, grace) {
             self.notify(
                 daemon,
                 About::named(None),
@@ -410,6 +410,7 @@ impl Hub {
             registration,
         } = admitted;
         self.member_seen(&member.id, &version).await;
+        self.refusal_alerts.taken(&member.id);
         log!("hub: {} {} connected", member.kind, member.name);
         let calls = Calls::new(channel.sender(), format!("{} {}", member.kind, member.name));
         registration.serve_calls(calls.clone());
@@ -450,28 +451,74 @@ impl Hub {
 }
 
 /// How often the hub alerts the user to refusing the same member, or any
-/// joiner, for another protocol.
+/// joiner, for another version.
 const ALERT_EVERY: Duration = Duration::from_secs(60 * 60);
 
-/// When the hub last alerted the user to refusing each member, or any
-/// joiner, for another protocol; a recorded member or none, so it stays as
-/// small as the members are many.
+/// How long the hub refuses a member that follows its version before it
+/// alerts the user: it installs that version meanwhile, and its daemon
+/// restarts on it once idle.
+const FOLLOW_GRACE: Duration = Duration::from_secs(30 * 60);
+
+/// The update the hub's alert names for a member that `updates` as it
+/// does, `newer` than the hub or not, and how long it waits first.
+#[derive(Debug, PartialEq, Eq)]
+struct Advice {
+    update: String,
+    grace: Duration,
+}
+
+fn advice(updates: Updates, newer: bool) -> Advice {
+    let advice = |update: String, grace| Advice { update, grace };
+    match (updates, newer) {
+        (Updates::Follows, _) => advice(
+            format!("it did not install that one; run shoal update --version {OWN_VERSION} on it"),
+            FOLLOW_GRACE,
+        ),
+        (_, true) => advice("update this hub to it".into(), Duration::ZERO),
+        (Updates::Homebrew, false) => advice(
+            format!("run {} on it", shoal_core::update::HOMEBREW_UPGRADE),
+            Duration::ZERO,
+        ),
+        (Updates::Manual, false) => advice(
+            format!("run shoal update --version {OWN_VERSION} on it"),
+            Duration::ZERO,
+        ),
+    }
+}
+
+/// Each member the hub refuses for another version, or any joiner: since
+/// when, and when it last alerted the user to it; a recorded member or
+/// none, so it stays as small as the members are many.
 #[derive(Default)]
-pub(super) struct RefusalAlerts(std::sync::Mutex<HashMap<Option<MemberId>, Instant>>);
+pub(super) struct RefusalAlerts(std::sync::Mutex<HashMap<Option<MemberId>, Refused>>);
+
+struct Refused {
+    since: Instant,
+    alerted: Option<Instant>,
+}
 
 impl RefusalAlerts {
-    /// Whether an alert about `member`, none for a joiner, is due, which
-    /// it then is not for [`ALERT_EVERY`].
-    pub(super) fn due(&self, member: Option<MemberId>) -> bool {
+    /// Whether an alert about `member`, none for a joiner, is due once the
+    /// hub has refused it for `grace`, which it then is not for
+    /// [`ALERT_EVERY`].
+    pub(super) fn due(&self, member: Option<MemberId>, grace: Duration) -> bool {
         let now = Instant::now();
-        let mut last = self.0.lock().unwrap();
-        let due = last
-            .get(&member)
-            .is_none_or(|alerted| now.duration_since(*alerted) >= ALERT_EVERY);
+        let mut refused = self.0.lock().unwrap();
+        let refused = refused.entry(member).or_insert(Refused {
+            since: now,
+            alerted: None,
+        });
+        let due = now.duration_since(refused.since) >= grace
+            && (refused.alerted).is_none_or(|alerted| now.duration_since(alerted) >= ALERT_EVERY);
         if due {
-            last.insert(member, now);
+            refused.alerted = Some(now);
         }
         due
+    }
+
+    /// Forget the refusals of `member`, which the hub took.
+    pub(super) fn taken(&self, member: &MemberId) {
+        self.0.lock().unwrap().remove(&Some(member.clone()));
     }
 }
 

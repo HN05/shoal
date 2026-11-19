@@ -220,7 +220,7 @@ impl Hub {
     /// refuses it, or what the link reads changes.
     async fn keep_link(self: &Arc<Self>, daemon: &Arc<dyn Daemon>, attempt: Attempt) -> Kept {
         let stop = self.link_changed(&**daemon, &attempt);
-        let plan = match self.link_plan(&attempt) {
+        let plan = match self.link_plan(&**daemon, &attempt) {
             Ok(Some(plan)) => plan,
             Ok(None) => return Kept::Stopped,
             Err(error) => return self.link_failed(&error),
@@ -241,7 +241,7 @@ impl Hub {
     }
 
     /// How to open the link `attempt` names, none for an idle one.
-    fn link_plan(&self, attempt: &Attempt) -> Result<Option<Plan>> {
+    fn link_plan(&self, daemon: &dyn Daemon, attempt: &Attempt) -> Result<Option<Plan>> {
         let Attempt::Connect { joined, route } = attempt else {
             return Ok(None);
         };
@@ -253,6 +253,7 @@ impl Hub {
             key: Identity::new(&joined.key)?,
             code: None,
             expected: Expected::Key(joined.hub_key.clone()),
+            updates: self.updates(daemon),
         }))
     }
 

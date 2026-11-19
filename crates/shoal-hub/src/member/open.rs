@@ -7,7 +7,7 @@ use shoal_ids::member_ids::MemberId;
 use shoal_protocol::{
     hub::{
         Fingerprint, Nonce, PublicKey, Route, Signature,
-        link::{Frame, Hello, HubVersion, Intent, Opening, Refusal, Signer, Transcript},
+        link::{Frame, Hello, HubVersion, Intent, Opening, Refusal, Signer, Transcript, Updates},
     },
     protocol::{Method, Request, VERSION},
 };
@@ -26,13 +26,15 @@ use crate::{
 const OPEN_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// A link to open: where, what for, the key pair this machine proves, the
-/// pairing code a join proves, and the key the hub must prove.
+/// pairing code a join proves, the key the hub must prove, and how this
+/// machine comes to run the hub's version.
 pub(super) struct Plan {
     pub route: Route,
     pub intent: Intent,
     pub key: Identity,
     pub code: Option<String>,
     pub expected: Expected,
+    pub updates: Updates,
 }
 
 /// What opening a link came to.
@@ -87,6 +89,7 @@ impl Hub {
             key,
             code,
             expected,
+            updates,
         } = plan;
         let late = || {
             anyhow!(
@@ -96,7 +99,7 @@ impl Hub {
         };
         let connected = tokio::time::timeout(OPEN_TIMEOUT, Transport::connect(&route)).await;
         let mut transport = connected.map_err(|_| late())??;
-        let opened = self.open_on(transport.channel(), intent, &key, code, expected);
+        let opened = self.open_on(transport.channel(), intent, &key, code, expected, updates);
         match tokio::time::timeout(OPEN_TIMEOUT, opened).await {
             Ok(Ok(opened)) => Ok((transport, opened)),
             Ok(Err(error)) => Err(transport.failure(error).await),
@@ -105,7 +108,8 @@ impl Hub {
     }
 
     /// Open the link on `channel` for `intent`, proving `identity` and
-    /// `code`, and seal it once this side sent its proof.
+    /// `code`, and stating that this machine `updates` so, and seal it once
+    /// this side sent its proof.
     async fn open_on(
         &self,
         channel: &mut Channel,
@@ -113,6 +117,7 @@ impl Hub {
         identity: &Identity,
         code: Option<String>,
         expected: Expected,
+        updates: Updates,
     ) -> Result<Opened> {
         let exchange = Exchange::new()?;
         let hello = Hello {
@@ -120,6 +125,7 @@ impl Hub {
             nonce: nonce(),
             exchange: exchange.public.clone(),
             instance: self.hub_instance(),
+            updates,
             intent,
         };
         channel.send(&opening(&hello)?).await?;

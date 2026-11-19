@@ -56,6 +56,7 @@ impl Hub {
             key: identity,
             code,
             expected,
+            updates: self.updates(daemon),
         };
         let welcomed = match self.open_link(plan).await?.1 {
             Opened::Welcomed(welcomed) => welcomed,

@@ -1,6 +1,6 @@
 use super::{
     ExchangeKey, HubUrl, MemberKind, Nonce, PublicKey,
-    link::{Hello, Intent, Joining, Signer, Transcript},
+    link::{Hello, Intent, Joining, Signer, Transcript, Updates},
     pairing::PairingCode,
 };
 
@@ -86,6 +86,7 @@ fn joining(key: u8) -> Transcript {
             nonce: Nonce::try_from(bytes(1).as_slice()).unwrap(),
             exchange: ExchangeKey::try_from(bytes(3).as_slice()).unwrap(),
             instance: "desk".into(),
+            updates: Updates::Follows,
             intent: Intent::Join(Joining {
                 kind: MemberKind::Machine,
                 name: "laptop".into(),

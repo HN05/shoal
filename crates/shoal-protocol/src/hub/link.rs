@@ -88,18 +88,35 @@ pub struct Hello {
     /// it from another one holding a copy of its credential, such as a
     /// cloned state directory.
     pub instance: String,
+    /// How the member follows the hub's version, which the hub's alert
+    /// about a refused member goes by.
+    pub updates: Updates,
     pub intent: Intent,
+}
+
+states! {
+    /// How a member comes to run the hub's version.
+    Updates {
+        /// It installs the hub's version itself.
+        Follows => "follows",
+        /// Homebrew installed it, which the user upgrades.
+        Homebrew => "homebrew",
+        /// The user installs the hub's version with `shoal update`.
+        Manual => "manual",
+    }
 }
 
 impl Hello {
     /// The fields of what the member claims, in the order the transcript
-    /// signs them: its version, installation, nonce and exchange key, then
+    /// signs them: its version, installation, how it updates, nonce and
+    /// exchange key, then
     /// its intent, a joiner's kind, name and key, or the member it
     /// connects as.
     fn claim(&self) -> Vec<Vec<u8>> {
         let mut fields = vec![
             self.version.as_bytes().to_vec(),
             self.instance.as_bytes().to_vec(),
+            self.updates.as_str().as_bytes().to_vec(),
             self.nonce.as_bytes().to_vec(),
             self.exchange.as_bytes().to_vec(),
         ];

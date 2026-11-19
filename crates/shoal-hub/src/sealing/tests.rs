@@ -1,6 +1,6 @@
 use shoal_protocol::hub::{
     Nonce,
-    link::{Hello, Intent, Signer, Transcript},
+    link::{Hello, Intent, Signer, Transcript, Updates},
 };
 
 use super::{Exchange, Keys};
@@ -14,6 +14,7 @@ fn linked() -> (Keys, Keys) {
             nonce: Nonce::try_from([1u8; 32].as_slice()).unwrap(),
             exchange: member.public.clone(),
             instance: "desk".into(),
+            updates: Updates::Follows,
             intent: Intent::Connect {
                 member: "m1".to_owned().into(),
             },

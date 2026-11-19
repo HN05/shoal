@@ -2,7 +2,13 @@ use serde_json::json;
 use shoal_ids::member_ids::MemberId;
 use shoal_protocol::{hub::link::HubVersion, protocol::VERSION};
 
-use super::{ALERT_EVERY, OWN_VERSION, RefusalAlerts, claimed_version, same_release};
+use std::time::Duration;
+
+use shoal_protocol::hub::link::Updates;
+
+use super::{
+    ALERT_EVERY, FOLLOW_GRACE, OWN_VERSION, RefusalAlerts, advice, claimed_version, same_release,
+};
 use crate::{
     identity::{nonce, verify},
     stand_in::{self, StandIn},
@@ -12,13 +18,42 @@ use crate::{
 async fn the_hub_alerts_to_each_refused_member_at_most_once_a_while() {
     let alerts = RefusalAlerts::default();
     let member = MemberId::generate();
-    assert!(alerts.due(None));
-    assert!(!alerts.due(None));
-    assert!(alerts.due(Some(member.clone())));
-    assert!(!alerts.due(Some(member.clone())));
+    let now = Duration::ZERO;
+    assert!(alerts.due(None, now));
+    assert!(!alerts.due(None, now));
+    assert!(alerts.due(Some(member.clone()), now));
+    assert!(!alerts.due(Some(member.clone()), now));
     tokio::time::advance(ALERT_EVERY).await;
-    assert!(alerts.due(None));
-    assert!(alerts.due(Some(member)));
+    assert!(alerts.due(None, now));
+    assert!(alerts.due(Some(member), now));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_member_that_follows_the_hub_alerts_only_once_it_did_not_for_a_while() {
+    let alerts = RefusalAlerts::default();
+    let member = Some(MemberId::generate());
+    assert!(!alerts.due(member.clone(), FOLLOW_GRACE));
+    tokio::time::advance(FOLLOW_GRACE).await;
+    assert!(alerts.due(member.clone(), FOLLOW_GRACE));
+    // Taken, it is refused afresh after the next update.
+    alerts.taken(member.as_ref().unwrap());
+    assert!(!alerts.due(member, FOLLOW_GRACE));
+}
+
+#[test]
+fn the_alert_names_the_update_by_how_the_member_updates() {
+    let follows = advice(Updates::Follows, false);
+    assert_eq!(follows.grace, FOLLOW_GRACE);
+    assert!(follows.update.contains(&format!("--version {OWN_VERSION}")));
+    let homebrew = advice(Updates::Homebrew, false);
+    assert_eq!(homebrew.grace, Duration::ZERO);
+    assert!(homebrew.update.contains("brew upgrade"));
+    assert!(
+        advice(Updates::Manual, false)
+            .update
+            .contains(&format!("--version {OWN_VERSION}"))
+    );
+    assert!(advice(Updates::Homebrew, true).update.contains("this hub"));
 }
 
 #[test]
