@@ -23,6 +23,12 @@ pub async fn add(repo: &Path, path: &Path, branch: &BranchName, base: Option<&st
     if let Some(base) = base {
         (super::branch::create(repo, branch, base).await).with_context(context)?;
     }
+    (add_on_branch(repo, path, branch).await).with_context(context)
+}
+
+/// Check out the existing `branch` in a new linked worktree of `repo` at
+/// `path`.
+async fn add_on_branch(repo: &Path, path: &Path, branch: &BranchName) -> Result<()> {
     super::worktree_add::run(|| {
         let mut command = super::isolated_command_without_submodules(repo);
         command
@@ -32,7 +38,6 @@ pub async fn add(repo: &Path, path: &Path, branch: &BranchName, base: Option<&st
         command
     })
     .await
-    .with_context(context)
     .map(drop)
 }
 

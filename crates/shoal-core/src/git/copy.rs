@@ -19,6 +19,17 @@ pub async fn add_worktree(
     if let Some(branch) = branch {
         (super::branch::create(repo, branch, rev).await).with_context(context)?;
     }
+    (add_unchecked_out(repo, path, branch, rev).await).with_context(context)
+}
+
+/// Create a linked worktree of `repo` at `path` with nothing checked out,
+/// on the existing `branch` or else detached at `rev`.
+async fn add_unchecked_out(
+    repo: &Path,
+    path: &Path,
+    branch: Option<&BranchName>,
+    rev: &str,
+) -> Result<()> {
     super::worktree_add::run(|| {
         let mut command = super::isolated_command_without_submodules(repo);
         command.args(["worktree", "add", "--no-checkout"]);
@@ -29,7 +40,6 @@ pub async fn add_worktree(
         command
     })
     .await
-    .with_context(context)
     .map(drop)
 }
 
