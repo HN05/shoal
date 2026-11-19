@@ -12,6 +12,7 @@ pub mod existing_branch;
 pub mod fetch;
 pub mod files;
 pub mod ignored;
+pub mod merge_into;
 mod merge_methods;
 mod merge_tree;
 pub(crate) mod predicates;
@@ -331,25 +332,6 @@ pub(crate) async fn run_without_submodules(repo: &Path, args: &[&str]) -> Result
     let mut command = isolated_command_without_submodules(repo);
     command.args(args);
     output(command).await
-}
-
-/// Merge a resolved source, allowing a fast-forward or a named merge commit.
-pub(crate) fn merge_commit(repo: &Path, branch: &BranchName, rev: &str) -> Command {
-    let mut command = isolated_command_without_submodules(repo);
-    command.args([
-        "merge",
-        "--ff",
-        "--no-squash",
-        "--no-edit",
-        "--no-stat",
-        "--no-autostash",
-        "--no-overwrite-ignore",
-        "-m",
-        &format!("Merge branch '{branch}'"),
-        "--",
-        rev,
-    ]);
-    command
 }
 
 /// Native fetch refuses a checked-out destination and a non-fast-forward,

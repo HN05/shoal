@@ -1,7 +1,7 @@
-//! Local squash and rebase merges: the commit each makes on the default
-//! branch's commit, which the merge worker then fast-forwards the default
-//! branch to. Neither changes a branch or a checkout, so one that does not
-//! apply cleanly leaves everything as it was.
+//! Local merges by each method: the commit a merge commit, a squash or a
+//! rebase makes on the target branch's commit, which the target branch then
+//! fast-forwards to. None changes a branch or a checkout, so one that does
+//! not apply cleanly leaves everything as it was.
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -13,15 +13,43 @@ use crate::git::{
     run_isolated as git_run, scratch,
 };
 
-/// What squashing or rebasing a branch onto the default branch made.
+/// What merging a branch into the target branch made.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Applied {
-    /// The commit the default branch moves to.
+    /// The commit the target branch moves to.
     Commit(CommitId),
-    /// The default branch already has every change of the branch.
+    /// The target branch already has every change of the branch.
     Unchanged,
     /// The branch does not apply cleanly; what Git reported.
     Conflicts(String),
+}
+
+/// `source` itself when `previous` fast-forwards to it, else a merge commit
+/// of `previous` and `source`, by whoever merges, with `message`.
+pub(crate) async fn merge(
+    repo: &Path,
+    previous: &CommitId,
+    source: &CommitId,
+    message: &str,
+) -> Result<Applied> {
+    if is_ancestor(repo, source, previous).await? {
+        return Ok(Applied::Unchanged);
+    }
+    if is_ancestor(repo, previous, source).await? {
+        return Ok(Applied::Commit(source.clone()));
+    }
+    let tree = match merge_tree::merge(repo, previous.as_str(), source.as_str()).await? {
+        Merged::Tree(tree) => tree,
+        Merged::Conflicts(report) => return Ok(Applied::Conflicts(report)),
+    };
+    let message = cleaned_message(repo, message).await?;
+    let commit = commit_tree(repo, &tree, &[previous, source], message).await;
+    Ok(Applied::Commit(commit.context("make the merge commit")?))
+}
+
+/// Whether `first` is `second` or an ancestor of it.
+async fn is_ancestor(repo: &Path, first: &CommitId, second: &CommitId) -> Result<bool> {
+    git::is_ancestor(repo, first.as_str(), second.as_str(), git::isolated_command).await
 }
 
 /// One commit on `previous` whose tree is the merge of `previous` and
@@ -45,25 +73,26 @@ pub(crate) async fn squash(
         None => squash_message(repo, previous, source).await?,
     };
     let message = cleaned_message(repo, &message).await?;
+    let commit = commit_tree(repo, &tree, &[previous], message).await;
     Ok(Applied::Commit(
-        commit_tree(repo, &tree, previous, message).await?,
+        commit.context("make the squash merge's commit")?,
     ))
 }
 
-/// A commit of `tree` on `parent` with `message`, by whoever merges.
+/// A commit of `tree` on `parents` with `message`, by whoever merges.
 async fn commit_tree(
     repo: &Path,
     tree: &str,
-    parent: &CommitId,
+    parents: &[&CommitId],
     message: String,
 ) -> Result<CommitId> {
     let mut command = git::isolated_command(repo);
-    command.args(["commit-tree", tree, "-p", parent.as_str(), "-F", "-"]);
-    let commit = git::bounded(command)
-        .input(message)
-        .output()
-        .await
-        .context("make the squash merge's commit")?;
+    command.args(["commit-tree", tree]);
+    for parent in parents {
+        command.args(["-p", parent.as_str()]);
+    }
+    command.args(["-F", "-"]);
+    let commit = git::bounded(command).input(message).output().await?;
     Ok(commit.trim().into())
 }
 

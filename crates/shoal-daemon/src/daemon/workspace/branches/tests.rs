@@ -2226,14 +2226,23 @@ async fn merge_refreshes_the_default_branch_and_needs_it_outside_workspaces() {
         "remote\n"
     );
     assert_eq!(git(&f.repo, &["for-each-ref", "refs/shoal/"]), "");
-    // Without a checkout of the default branch only fast-forwards merge.
+    // Without a checkout of the default branch the merge commit is made
+    // aside and the default branch moves to it.
     git(&f.repo, &["switch", "-c", "side"]);
     let main = git(&f.repo, &["rev-parse", "main"]);
     fs::write(workspace.path.join("feature"), "diverged\n").unwrap();
     commit(&workspace.path, "feature");
-    f.manager.merge_workspace("worker").await.unwrap_err();
-    assert_eq!(git(&f.repo, &["rev-parse", "main"]), main);
+    let merged = f.manager.merge_workspace("worker").await.unwrap();
+    assert!(merged.updated && !merged.fast_forward);
+    assert_eq!(
+        git(&f.repo, &["rev-parse", "main"]).trim(),
+        merged.commit.as_str()
+    );
+    assert_eq!(git(&f.repo, &["rev-parse", "main^1"]), main);
+    // A branch that has the default branch fast-forwards it.
     git(&workspace.path, &["merge", "--no-edit", "main"]);
+    fs::write(workspace.path.join("feature"), "ahead\n").unwrap();
+    commit(&workspace.path, "feature");
     let expected = git(&workspace.path, &["rev-parse", "HEAD"]);
     let merged = f.manager.merge_workspace("worker").await.unwrap();
     assert!(merged.updated && merged.fast_forward);
