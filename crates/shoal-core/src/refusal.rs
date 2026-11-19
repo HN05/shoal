@@ -47,7 +47,10 @@ impl Refusal {
 
     /// `cause` refused for `reason`, showing its message; [`Self::cause`]
     /// finds it again.
-    pub fn because(reason: Reason, cause: impl std::error::Error + Send + Sync + 'static) -> Self {
+    pub(crate) fn because(
+        reason: Reason,
+        cause: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
         let refusal = Self::new(reason, &cause);
         Self {
             cause: Some(Box::new(cause)),
@@ -75,7 +78,7 @@ impl Refusal {
 
     /// The cause of type `T` that the first refusal in `error`'s chain
     /// reports, if it reports one.
-    pub fn cause<T: std::error::Error + 'static>(error: &anyhow::Error) -> Option<&T> {
+    pub(crate) fn cause<T: std::error::Error + 'static>(error: &anyhow::Error) -> Option<&T> {
         let refusal = error
             .chain()
             .find_map(|cause| cause.downcast_ref::<Self>())?;
