@@ -3,7 +3,7 @@
 //! a command's standard input and output.
 use anyhow::{Context as _, Result};
 use shoal_protocol::{
-    hub::{Left, Member, Membership, Overview, directory::HubView, pairing::Pairing},
+    hub::{HubUpdate, Left, Member, Membership, Overview, directory::HubView, pairing::Pairing},
     paths::Paths,
     protocol::{HubMethod, JoinVia},
 };
@@ -24,6 +24,11 @@ pub async fn join(daemon: &impl Daemon, via: JoinVia, name: Option<String>) -> R
 /// Leave the hub, revoking this machine's credential there.
 pub async fn leave(daemon: &impl Daemon) -> Result<Left> {
     request(daemon, HubMethod::LeaveHub).await
+}
+
+/// Install the latest release on the hub.
+pub async fn update(daemon: &impl Daemon) -> Result<HubUpdate> {
+    request(daemon, HubMethod::UpdateHub).await
 }
 
 /// The hub's listener and members.

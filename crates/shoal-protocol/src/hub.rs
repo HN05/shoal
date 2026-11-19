@@ -337,5 +337,16 @@ pub struct Left {
     pub revoked: bool,
 }
 
+/// What `shoal hub update` did on the hub.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HubUpdate {
+    /// The version the hub ran.
+    pub previous: String,
+    /// The release it installed, none when it ran the latest; its daemon
+    /// restarts on it once idle, and its machines follow it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installed: Option<String>,
+}
+
 #[cfg(test)]
 mod tests;

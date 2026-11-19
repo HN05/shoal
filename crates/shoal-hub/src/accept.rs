@@ -474,7 +474,7 @@ fn advice(updates: Updates, newer: bool) -> Advice {
             format!("it did not install that one; run shoal update --version {OWN_VERSION} on it"),
             FOLLOW_GRACE,
         ),
-        (_, true) => advice("update this hub to it".into(), Duration::ZERO),
+        (_, true) => advice("run shoal hub update".into(), Duration::ZERO),
         (Updates::Homebrew, false) => advice(
             format!("run {} on it", shoal_core::update::HOMEBREW_UPGRADE),
             Duration::ZERO,

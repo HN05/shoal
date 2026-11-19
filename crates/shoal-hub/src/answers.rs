@@ -91,6 +91,7 @@ impl Hub {
                 self.release_member(&member.id).await?;
                 Reply::Left
             }
+            Call::Update => Reply::Updated(self.update_own_installation().await?),
             Call::Report { report, reserved } => {
                 ensure_machine(member)?;
                 Reply::Reported(
@@ -280,6 +281,6 @@ pub(crate) fn overview(reply: Reply) -> Result<Overview> {
     }
 }
 
-fn unexpected(reply: Reply) -> anyhow::Error {
+pub(super) fn unexpected(reply: Reply) -> anyhow::Error {
     anyhow!("the hub answered with an unexpected {reply:?}")
 }

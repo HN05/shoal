@@ -1,7 +1,7 @@
 //! The daemon's answers to [`HubMethod`] requests, and who may send them:
 //! anyone lists the hub's members and the spaces of its machines, as far as
-//! their scope reaches them, and only the user changes the members, joins or
-//! leaves.
+//! their scope reaches them, and only the user changes the members, joins,
+//! leaves or updates the hub.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -25,7 +25,7 @@ pub(super) async fn handle(
     if caller.is_some() && !matches!(method, HubMethod::HubMembers | HubMethod::HubDirectory) {
         return Err(Refusal::new(
             Reason::NotReady,
-            "only the user's own terminal pairs, joins, leaves and revokes the hub's machines",
+            "only the user's own terminal pairs, joins, leaves, updates and revokes the hub's machines",
         )
         .into());
     }
@@ -35,6 +35,7 @@ pub(super) async fn handle(
             Body::Membership(manager.hub.join_hub(&**manager, via, name).await?)
         }
         HubMethod::LeaveHub => Body::LeftHub(manager.hub.leave_hub().await?),
+        HubMethod::UpdateHub => Body::HubUpdate(manager.hub.update_hub(&**manager).await?),
         HubMethod::HubMembers => Body::HubOverview(manager.hub.hub_overview(&**manager).await?),
         HubMethod::RevokeHubMember { member } => {
             Body::HubMember(manager.hub.revoke_hub_member(&**manager, member).await?)

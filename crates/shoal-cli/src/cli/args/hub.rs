@@ -20,6 +20,12 @@ pub enum HubCommand {
     Leave,
     /// List the hub's machines and devices, with its listener.
     Ls,
+    /// Install the latest release on the hub, from any machine that joined it.
+    ///
+    /// The hub's daemon restarts on it once idle, and the machines that follow its version
+    /// install it too. A hub that Homebrew installed is refused: run brew upgrade hn05/tap/shoal
+    /// there.
+    Update,
     /// Revoke the credential of a machine or device, named by its ID or name.
     Revoke { member: String },
 }

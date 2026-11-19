@@ -17,6 +17,7 @@ pub struct Paired {
 
 outputs!(
     Paired,
+    shoal_protocol::hub::HubUpdate,
     shoal_protocol::hub::Left,
     shoal_protocol::hub::Member,
     shoal_protocol::hub::Membership,

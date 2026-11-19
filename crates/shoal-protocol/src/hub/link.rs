@@ -307,6 +307,9 @@ pub enum Call {
     Revoke { member: String },
     /// Revoke the caller's own credential. Answered with [`Reply::Left`].
     Leave,
+    /// Install the latest release on the hub. Answered with
+    /// [`Reply::Updated`].
+    Update,
     /// A machine's report of its spaces, with every number it holds
     /// without a space, as for a removed space's issue proposals, which no
     /// other space may take. Answered with [`Reply::Reported`] and the
@@ -392,6 +395,7 @@ pub enum Reply {
     Members(Overview),
     Revoked(super::Member),
     Left,
+    Updated(super::HubUpdate),
     Reported(Numbering),
     Availability(Classified),
     Directory(Directory),

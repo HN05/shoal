@@ -23,6 +23,9 @@ pub enum HubMethod {
     /// The hub's listener and members. Answers with
     /// [`super::Body::HubOverview`].
     HubMembers,
+    /// Install the latest release on the hub, where it was downloaded.
+    /// Answers with [`super::Body::HubUpdate`].
+    UpdateHub,
     /// Revoke the credential of the member `member` names by ID or name.
     /// Answers with [`super::Body::HubMember`].
     RevokeHubMember { member: String },

@@ -818,6 +818,7 @@ shoal hub join <code> [--name N]   # Join this machine with that code
 shoal hub join --connect "ssh desk shoal daemon connect"   # Or through a command, without a code
 shoal hub ls                       # The listener, and every machine and device
 shoal hub revoke <machine or device>
+shoal hub update                   # The latest release on the hub, from any machine
 shoal hub leave
 ```
 
@@ -886,6 +887,10 @@ credential another machine's link holds, as a copy of a state directory does,
 which is told to join as a machine of its own; and one that runs another
 Shoal version, recording an alert that names the machine, its version and the
 update to run. A refused machine keeps working on its own.
+
+The hub updates as it was installed: with `brew upgrade hn05/tap/shoal`
+there, or for a downloaded binary with `shoal update` there or `shoal hub
+update` on any of its machines, which only your own terminal runs.
 
 A machine follows the hub's version. Once the hub refuses it for running
 another one, a Shoal downloaded from a release installs exactly the hub's

@@ -156,6 +156,19 @@ fn a_machine_joins_over_the_listener_with_a_code_it_uses_once() {
 }
 
 #[test]
+fn a_joined_machine_asks_the_hub_to_update_itself() {
+    let hub = Machine::hub();
+    let laptop = Machine::start("");
+    laptop.join_through_command(&hub, "laptop");
+    laptop.connected();
+    // A development build never replaces itself, which only the hub knows.
+    let output = laptop.run(&["hub", "update"]);
+    assert!(!output.status.success(), "{}", printed(&output));
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("development build"), "{error}");
+}
+
+#[test]
 fn the_hub_refuses_a_revoked_credential() {
     let hub = Machine::hub();
     let laptop = Machine::start("");

@@ -222,6 +222,7 @@ response_bodies! {
     Pairing(crate::hub::pairing::Pairing),
     Membership(crate::hub::Membership),
     LeftHub(crate::hub::Left),
+    HubUpdate(crate::hub::HubUpdate),
     HubOverview(crate::hub::Overview),
     HubMember(crate::hub::Member),
     HubView(Vec<crate::hub::directory::ViewPart>),

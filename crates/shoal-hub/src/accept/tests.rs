@@ -53,7 +53,11 @@ fn the_alert_names_the_update_by_how_the_member_updates() {
             .update
             .contains(&format!("--version {OWN_VERSION}"))
     );
-    assert!(advice(Updates::Homebrew, true).update.contains("this hub"));
+    assert!(
+        advice(Updates::Homebrew, true)
+            .update
+            .contains("shoal hub update")
+    );
 }
 
 #[test]

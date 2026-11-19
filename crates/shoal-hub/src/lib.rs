@@ -65,6 +65,7 @@ mod telling;
 pub mod test_support;
 pub mod transport;
 mod tree;
+mod updating;
 mod view;
 
 use daemon::Daemon;
