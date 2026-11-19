@@ -2229,7 +2229,10 @@ Single-workspace actions select an explicit target, otherwise the caller's scope
 workspace or the workspace containing the current directory, then an interactive
 picker; a deleted current directory provides no workspace context. Explicit misses
 and other refused arguments fail without fallback, before any prompt for the
-omitted ones; `start` asks the daemon to check its creation request first.
+omitted ones; `start` first sends the daemon its launch, with what the pickers
+choose still unset, which the daemon settles through its own start's steps up to
+where they would create or fetch anything, so each input its start refuses is
+refused before a picker.
 Noninteractive and JSON calls without a current workspace require a target.
 An action that can apply to several workspaces takes several targets, and its
 picker selects several: Tab selects each entry and Ctrl-A all of them. It checks

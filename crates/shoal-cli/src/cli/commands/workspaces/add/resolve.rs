@@ -1,24 +1,15 @@
 //! What a start that runs in this caller settles before anything is
 //! created, whether or not a terminal then picks the rest: its repository,
-//! what creation and its named agent, blockers and permissions would
-//! refuse, the workspace whose branch it names, and the issue or PR it
-//! starts on, read so that a lookup's failure ends the start first.
+//! what its permissions and named agent would refuse, and what the daemon
+//! would refuse of its new workspace, which names the workspace whose
+//! branch it names.
 use anyhow::Result;
-use shoal_protocol::progress::Blocker;
 
 use super::{
     agent::AddSettings,
-    plan::check_add_creation,
-    reads::DaemonReads,
     target::{AddTarget, resolve_add_target},
 };
-use crate::{
-    cli::{client, commands::issues, context::Context},
-    forge::{PullRequest, items::issue::IssueDetails},
-    model::{Repository, Workspace},
-    protocol::CopySource,
-    start_plan::{CopyCreation, Creation},
-};
+use crate::cli::{commands::issues, context::Context};
 use shoal_protocol::launches::{IssueChoice, Launch, StartTarget};
 
 /// What a start that runs in this caller settled: where it starts, the
@@ -36,12 +27,10 @@ pub(super) async fn resolve<'a>(ctx: &'a Context, launch: &mut Launch) -> Result
     let target = start_target(ctx, launch).await?;
     let selector = Some(target.selector.clone());
     crate::cli::commands::permissions::ensure_held(ctx, selector, &launch.permissions).await?;
-    check_named_blockers(ctx, &target, &launch.blockers).await?;
-    let pull = read_start_pull(ctx, &target, launch).await?;
-    let issue = read_start_issue(ctx, &target, launch).await?;
-    // A branch a workspace has reopens it, under its own settings.
-    let items = (pull.as_ref(), issue.as_ref());
-    let reopened = check_launch_creation(ctx, &target, launch, items).await?;
+    // The daemon settles the launch as its start would, short of creating
+    // or fetching anything; a branch a workspace has reopens it, under its
+    // own settings.
+    let reopened = crate::client::launches::check(&ctx.paths, launch.clone()).await?;
     let issue_linked =
         (reopened.as_ref()).is_some_and(|workspace| workspace.links.issue().is_some());
     let settings = match &reopened {
@@ -117,75 +106,6 @@ async fn start_target(ctx: &Context, launch: &mut Launch) -> Result<AddTarget> {
     Ok(target)
 }
 
-/// Read the issue `launch` starts on in `target`'s repository, so that one
-/// that cannot be read ends the start before a picker asks.
-async fn read_start_issue(
-    ctx: &Context,
-    target: &AddTarget,
-    launch: &Launch,
-) -> Result<Option<IssueDetails>> {
-    let Some(issue) = named_issue(launch)? else {
-        return Ok(None);
-    };
-    let context = issues::read_context(ctx, target.repository(ctx).await?).await?;
-    client::issue_details(&ctx.paths, context, issue)
-        .await
-        .map(Some)
-}
-
-/// Read the PR `launch` starts on in `target`'s repository, so that one
-/// that cannot be read ends the start before a picker asks.
-async fn read_start_pull(
-    ctx: &Context,
-    target: &AddTarget,
-    launch: &Launch,
-) -> Result<Option<PullRequest>> {
-    let Some(StartTarget::Pull(pull)) = &launch.target else {
-        return Ok(None);
-    };
-    let context = issues::read_context(ctx, target.repository(ctx).await?).await?;
-    (client::pull_request(&ctx.paths, context, pull.clone().into()).await).map(Some)
-}
-
-/// The issue `launch` starts on, by `--issue` or the positional argument.
-fn named_issue(launch: &Launch) -> Result<Option<crate::forge::items::reference::ItemInput>> {
-    if let Some(issue) = launch.issue.as_ref().and_then(IssueChoice::named) {
-        return Ok(Some(issue.clone()));
-    }
-    Ok(
-        match (launch.target.clone())
-            .map(|target| target.decided(false))
-            .transpose()?
-        {
-            Some(StartTarget::Issue(issue)) => Some(issue),
-            _ => None,
-        },
-    )
-}
-
-/// Refuse the workspaces, queued agents and issues a start `named` as its
-/// blockers in `target`'s repository when the daemon knows none of them,
-/// before a picker asks anything.
-pub(super) async fn check_named_blockers(
-    ctx: &Context,
-    target: &AddTarget,
-    named: &[String],
-) -> Result<()> {
-    if named.is_empty() {
-        return Ok(());
-    }
-    let repo = target.repository(ctx).await?;
-    let mut blockers = Vec::new();
-    for input in named {
-        blockers.push(match input.parse()? {
-            Blocker::Issue(issue) => Blocker::Issue(issues::issue(ctx, repo, &issue).await?.into()),
-            blocker => blocker,
-        });
-    }
-    let selector = target.selector.clone();
-    crate::client::workspaces::check_blockers(&ctx.paths, selector, blockers).await
-}
-
 /// Refuse the agent `launch` names, and the model it asks of it, before a
 /// picker asks anything, when `settings` cannot start them.
 async fn ensure_agent_runs(settings: &AddSettings<'_>, launch: &Launch) -> Result<()> {
@@ -196,92 +116,6 @@ async fn ensure_agent_runs(settings: &AddSettings<'_>, launch: &Launch) -> Resul
     crate::agents::ensure_available(agent, settings)?;
     let model = crate::agents::resolve_model(settings, agent, launch.model.clone());
     crate::agents::check_model(settings, agent, &model)
-}
-
-/// Refuse, before a picker asks anything, what creating the workspace
-/// `launch` names in `target`, on the PR or issue it starts on if any,
-/// would refuse, returning instead the workspace that already has the
-/// branch it names, which the start opens.
-async fn check_launch_creation(
-    ctx: &Context,
-    target: &AddTarget,
-    launch: &Launch,
-    (pull, issue): (Option<&PullRequest>, Option<&IssueDetails>),
-) -> Result<Option<Workspace>> {
-    let mut creation = crate::launches::workspace::launch_creation(launch, launch_copy(launch));
-    let repo = (&target.selector, target.repository(ctx).await?);
-    let reads = DaemonReads(ctx);
-    link_creation((&reads, repo.1), launch, pull, &mut creation).await?;
-    let settle = crate::launches::workspace::settle(&reads, repo, &mut creation);
-    if let Some(workspace) = settle.await? {
-        ensure_takes_existing(launch, &creation, &workspace)?;
-        return Ok(Some(workspace));
-    }
-    // An issue settles the branch nothing else names, refusing a workspace
-    // earlier work on it left that cannot reopen.
-    let issue = issue.map(|issue| (&issue.url, issue.title.as_str()));
-    let creation = crate::launches::workspace::issue_settled(&reads, repo.1, creation, issue);
-    check_add_creation(ctx, target, &creation.await?, launch.parent.as_ref()).await?;
-    Ok(None)
-}
-
-/// Fill `creation` from the link `launch` starts on in `repo` as the daemon
-/// does, short of fetching a PR's branches: a branch link opens its pushed
-/// branch, which creation refuses when it is missing, a fork PR's head,
-/// `pull`, refuses what only a branch takes, and another PR opens its head
-/// branch, in the workspace that owns it if any.
-async fn link_creation(
-    (reads, repo): (&DaemonReads<'_>, &Repository),
-    launch: &Launch,
-    pull: Option<&PullRequest>,
-    creation: &mut Creation,
-) -> Result<()> {
-    use crate::launches::workspace as settle;
-    match (&launch.target, pull) {
-        (Some(StartTarget::Branch { branch, .. }), _) => {
-            settle::branch_creation(branch, creation).await
-        }
-        (_, Some(pull)) if pull.fork => settle::ensure_fork_opens(pull, creation),
-        (_, Some(pull)) => (settle::pull_head_settled(reads, repo, pull, creation).await).map(drop),
-        _ => Ok(()),
-    }
-}
-
-/// The copy of the workspace `launch` names with `--copy`, as far as the
-/// checks before a picker read it: they ask only whether it copies, and the
-/// daemon names the copy.
-fn launch_copy(launch: &Launch) -> Option<CopyCreation> {
-    let workspace = launch.copy.as_ref()?.named()?.clone();
-    let source = CopySource {
-        workspace,
-        checkpoint: launch.checkpoint,
-    };
-    Some(CopyCreation {
-        source,
-        name: String::new(),
-    })
-}
-
-/// Refuse what only a new workspace takes for `launch`, which goes into the
-/// existing `workspace` that has the branch it names, as the daemon refuses
-/// it. The parent of a fork without a copy is the workspace whose agent it
-/// forks, which an existing workspace's start takes too.
-fn ensure_takes_existing(
-    launch: &Launch,
-    creation: &Creation,
-    workspace: &Workspace,
-) -> Result<()> {
-    let forks_parent = launch.fork.is_some() && creation.copy.is_none();
-    let parent = launch.parent.is_some() && !forks_parent;
-    let issue = launch.issue.is_some();
-    let Some(flag) = crate::launches::workspace::new_space_flag(creation, issue, parent) else {
-        return Ok(());
-    };
-    let branch = workspace.branch().map_or("", |branch| branch.as_str());
-    anyhow::bail!(
-        "{flag} applies to a new workspace, and workspace {} already has branch {branch}; the start goes into it as --in does",
-        workspace.number
-    )
 }
 
 /// The registered repository the link `launch` starts on belongs to,

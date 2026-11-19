@@ -10,10 +10,13 @@ use super::{
     agent::{AddSettings, resolve_add_agent},
     launch::launch_worker,
     mode::choose_add_mode,
-    resolve::check_named_blockers,
     target::AddTarget,
 };
-use crate::{agent::Agent, cli::context::Context};
+use crate::{
+    agent::Agent,
+    cli::{commands::issues, context::Context},
+};
+use shoal_protocol::progress::Blocker;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Start `agent`, else on a terminal a picked one, as the worker of the
@@ -49,4 +52,23 @@ pub(in crate::cli::commands) async fn start_worker(
     let agent = resolve_add_agent(ctx, &settings, agent, options.model.clone()).await?;
     let picked = (mode, agent);
     launch_worker(ctx, &workspace, picked, args, (options, &settings)).await
+}
+
+/// Refuse the workspaces, queued agents and issues a start `named` as its
+/// blockers in `target`'s repository when the daemon knows none of them,
+/// before a picker asks anything.
+async fn check_named_blockers(ctx: &Context, target: &AddTarget, named: &[String]) -> Result<()> {
+    if named.is_empty() {
+        return Ok(());
+    }
+    let repo = target.repository(ctx).await?;
+    let mut blockers = Vec::new();
+    for input in named {
+        blockers.push(match input.parse()? {
+            Blocker::Issue(issue) => Blocker::Issue(issues::issue(ctx, repo, &issue).await?.into()),
+            blocker => blocker,
+        });
+    }
+    let selector = target.selector.clone();
+    crate::client::workspaces::check_blockers(&ctx.paths, selector, blockers).await
 }

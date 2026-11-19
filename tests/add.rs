@@ -65,7 +65,7 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
                 "list_repositories",
                 "layered_config id:test",
                 "list_repositories",
-                "list_spaces",
+                "check_launch test new",
                 "layered_config test",
                 "launch here now=false",
             ],
@@ -176,7 +176,7 @@ fn a_scoped_start_here_takes_its_own_slot_without_skipping_the_limits() {
             "list_repositories",
             "layered_config id:test",
             "list_repositories",
-            "list_spaces",
+            "check_launch test new",
             "layered_config test",
             "launch here now=false",
         ],
@@ -239,7 +239,7 @@ fn interactive_commands_refuse_their_arguments_before_prompting() {
                 "list_repositories",
                 "layered_config id:test",
                 "list_repositories",
-                "check_creation test",
+                "check_launch test",
                 "layered_config test",
             ],
             "--base applies to a new workspace's branch",
@@ -254,13 +254,13 @@ fn interactive_commands_refuse_their_arguments_before_prompting() {
                 "list_repositories",
                 "layered_config id:test",
                 "list_repositories",
-                "list_spaces",
-                "check_creation test topic",
+                "check_launch test topic",
                 "layered_config test",
             ],
             "unknown agent",
         ),
-        // So is a blocker the daemon knows nothing of.
+        // So is a blocker the daemon knows nothing of, which its check of
+        // the launch refuses.
         (
             &[
                 "start",
@@ -276,7 +276,7 @@ fn interactive_commands_refuse_their_arguments_before_prompting() {
                 "list_repositories",
                 "layered_config id:test",
                 "list_repositories",
-                "check_blockers",
+                "check_launch test topic",
             ],
             "missing is neither a workspace nor a queued agent",
         ),
@@ -399,9 +399,19 @@ impl FakeDaemon {
                             }}),
                         }
                     }
-                    "check_blockers" => json!({"type": "error", "data": {
-                        "code": "operation_failed", "message": "missing is neither a workspace nor a queued agent"
-                    }}),
+                    "check_launch" => {
+                        let launch = &request["method"]["check_launch"]["launch"];
+                        method = format!("check_launch {}", launch["repository"].as_str().unwrap());
+                        if let Some(branch) = launch["branch"].as_str() {
+                            method = format!("{method} {branch}");
+                        }
+                        match launch.get("blockers") {
+                            Some(_) => json!({"type": "error", "data": {
+                                "code": "operation_failed", "message": "missing is neither a workspace nor a queued agent"
+                            }}),
+                            None => json!({"type": "checked_launch", "data": null}),
+                        }
+                    }
                     // The daemon refuses the number before it reads the issue.
                     "issue_details" => json!({"type": "error", "data": {
                         "code": "operation_failed", "message": "issue number must be positive"
