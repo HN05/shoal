@@ -285,7 +285,8 @@ impl Manager {
                 exit_code: Some(0),
             };
             let kind = crate::daemon::events::EventKind::AgentExited;
-            self.record_agent(&execution.space_id, kind, ended).await;
+            crate::daemon::events::record_agent(&self.store, &execution.space_id, kind, ended)
+                .await;
         }
         if let Some(group) = recorded.and_then(|execution| execution.group_id) {
             // SAFETY: kill only sends a signal.

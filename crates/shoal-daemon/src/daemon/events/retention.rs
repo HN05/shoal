@@ -9,10 +9,9 @@ use std::{collections::HashMap, time::Duration};
 use anyhow::Result;
 use rusqlite::{Connection, Transaction};
 
-use crate::{
-    daemon::{log, manager::Manager},
-    time::UnixTime,
-};
+use futures_util::future::BoxFuture;
+
+use crate::{daemon::store::Store, time::UnixTime};
 use shoal_ids::space_ids::SpaceId;
 
 /// A space that is gone, with its repository and when it went.
@@ -22,52 +21,45 @@ struct Gone {
     removed_at: UnixTime,
 }
 
-impl Manager {
-    /// Forget the events of each space gone for longer than its retention,
-    /// and Shoal's own events older than the global retention.
-    pub(crate) async fn expire_events(&self) -> Result<()> {
-        let gone = self.store.run(|db| gone(db)).await?;
-        let expired = self.expired(gone).await;
-        let shoal_kept_from = UnixTime::now() - self.retention(None).await;
-        self.store
-            .write(move |tx| {
-                forget(tx, &expired)?;
-                forget_shoal_before(tx, shoal_kept_from)
-            })
-            .await
-    }
+/// How long a removed space of a repository keeps what it leaves, which
+/// the daemon reads from that repository's settings.
+pub(crate) trait Retention: Send + Sync {
+    /// The retention of a removed space of `repository`, or of a chat
+    /// without one.
+    fn of<'a>(&'a self, repository: Option<&'a RepositoryId>) -> BoxFuture<'a, Duration>;
+}
 
-    /// The IDs of the `gone` spaces whose retention after their removal
-    /// has passed, reading each repository's retention once.
-    async fn expired(&self, gone: Vec<Gone>) -> Vec<SpaceId> {
-        let now = UnixTime::now();
-        let mut retention = HashMap::new();
-        let mut expired = Vec::new();
-        for space in gone {
-            if !retention.contains_key(&space.repository_id) {
-                let kept = self.retention(space.repository_id.as_ref()).await;
-                retention.insert(space.repository_id.clone(), kept);
-            }
-            let kept = retention[&space.repository_id];
-            if space.removed_at + kept <= now {
-                expired.push(space.id);
-            }
-        }
-        expired
-    }
-
-    /// How long a removed space of `repository` keeps what it leaves:
-    /// its settings' retention, or the global setting's for a chat without a
-    /// repository or when the repository's cannot be read.
-    async fn retention(&self, repository: Option<&RepositoryId>) -> Duration {
-        let settings = self.space_settings_in(repository).await.or_else(|error| {
-            log!("events of removed spaces kept by the global retention: {error:#}");
-            self.config().resolve(&Default::default())
-        });
-        settings.map_or(Duration::ZERO, |settings| {
-            settings.cleanup.restore.retention()
+/// Forget the events of each space gone for longer than its `retention`,
+/// and Shoal's own events older than the global retention.
+pub(crate) async fn expire(store: &Store, retention: &dyn Retention) -> Result<()> {
+    let gone = store.run(|db| gone(db)).await?;
+    let expired = expired(gone, retention).await;
+    let shoal_kept_from = UnixTime::now() - retention.of(None).await;
+    store
+        .write(move |tx| {
+            forget(tx, &expired)?;
+            forget_shoal_before(tx, shoal_kept_from)
         })
+        .await
+}
+
+/// The IDs of the `gone` spaces whose retention after their removal has
+/// passed, reading each repository's retention once.
+async fn expired(gone: Vec<Gone>, retention: &dyn Retention) -> Vec<SpaceId> {
+    let now = UnixTime::now();
+    let mut kept_for = HashMap::new();
+    let mut expired = Vec::new();
+    for space in gone {
+        if !kept_for.contains_key(&space.repository_id) {
+            let kept = retention.of(space.repository_id.as_ref()).await;
+            kept_for.insert(space.repository_id.clone(), kept);
+        }
+        let kept = kept_for[&space.repository_id];
+        if space.removed_at + kept <= now {
+            expired.push(space.id);
+        }
     }
+    expired
 }
 
 /// The spaces with events that are gone without a removal record or

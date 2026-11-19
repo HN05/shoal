@@ -154,7 +154,12 @@ impl Manager {
     pub async fn reload_config_and_recheck(&self) -> Result<()> {
         let reloaded = self.reload_config().await;
         let refused = reloaded.as_ref().err();
-        (self.record_shoal_outcome(ShoalEventKind::ConfigReloaded, refused)).await;
+        (crate::daemon::events::record_shoal_outcome(
+            &self.store,
+            ShoalEventKind::ConfigReloaded,
+            refused,
+        ))
+        .await;
         reloaded?;
         self.signals.recheck_environment();
         Ok(())

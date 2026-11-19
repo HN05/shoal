@@ -262,6 +262,24 @@ async fn observe_branches(manager: &Manager) -> Result<()> {
     failed.into_result()
 }
 
+impl Manager {
+    /// Observe external checkouts without changing the branch Shoal owns.
+    pub(crate) async fn observe_workspace_branch(&self, workspace: &crate::model::Workspace) -> Result<()> {
+        self.verify_worktree(workspace).await?;
+        let branch = crate::git::checked_out_branch(&workspace.path).await?;
+        let id = workspace.id.clone();
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE workspaces SET observed_branch=?2 WHERE id=?1 AND observed_branch IS NOT ?2",
+                    rusqlite::params![id, branch],
+                )?;
+                Ok(())
+            })
+            .await
+    }
+}
+
 /// Whether `path` is a directory, read off the runtime's threads and within
 /// a check's time limit, since stalled file access can hold the read. The daemon's
 /// own read says nothing about the processes it starts there, so it records
@@ -602,7 +620,13 @@ async fn remove_on_request(
                 report.removed_ids.push(space.id.clone());
             }
             Err(error) => {
-                (manager.record_retained(&space.id, EventCause::Manual, &error)).await?;
+                (crate::daemon::events::record_retained(
+                    &manager.store,
+                    &space.id,
+                    EventCause::Manual,
+                    &error,
+                ))
+                .await?;
                 log!("manual cleanup retained {name}: {error:#}");
                 report.retain(name, &error);
             }

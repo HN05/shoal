@@ -7,7 +7,7 @@ use serde::Deserialize;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
-use super::{log, manager::Manager};
+use super::{log, store::Store};
 use crate::time::UnixTime;
 pub(crate) use shoal_protocol::events::{
     AgentEvent, AlertEvent, ApprovalEvent, EventCursor, EventDetails, EventItem, EventKind,
@@ -301,7 +301,7 @@ pub(crate) fn record_blocker(
 /// Record that the agent of the space `id` started, stopped or exited. An
 /// execution's agent ends once: a stop that saved it for a restore, then its
 /// wrapper's end, records one stop.
-fn record_agent(db: &Connection, id: &SpaceId, kind: EventKind, agent: &AgentEvent) -> Result<()> {
+fn insert_agent(db: &Connection, id: &SpaceId, kind: EventKind, agent: &AgentEvent) -> Result<()> {
     ensure!(matches!(
         kind,
         EventKind::AgentStarted | EventKind::AgentStopped | EventKind::AgentExited
@@ -362,7 +362,7 @@ fn agent_ended(db: &Connection, id: &SpaceId, execution: Option<&ExecutionId>) -
 }
 
 /// Record `details`, an event of Shoal itself.
-fn record_shoal(db: &Connection, details: &ShoalEventDetails) -> Result<()> {
+fn insert_shoal(db: &Connection, details: &ShoalEventDetails) -> Result<()> {
     db.execute(
         "INSERT INTO space_events(record) VALUES (?1)",
         [serde_json::to_string(details)?],
@@ -400,183 +400,158 @@ pub(crate) fn record_gate(
     record_with(db, &request.space_id, EventKind::GateDecided, "gate", gate)
 }
 
-impl Manager {
-    /// Record an agent's start, stop or exit in the space `id`'s log; a
-    /// failure is logged, never returned, as it must not fail the agent's
-    /// lifecycle.
-    pub(crate) async fn record_agent(&self, id: &SpaceId, kind: EventKind, agent: AgentEvent) {
-        let space = id.clone();
-        let recorded = self
-            .store
-            .run(move |db| record_agent(db, &space, kind, &agent))
-            .await;
-        if let Err(error) = recorded {
-            log!("agent event of {id} not recorded: {error:#}");
-        }
-    }
-
-    /// Record `details`, an event of Shoal itself, in Shoal's log; a
-    /// failure is logged, never returned, as it must not fail what Shoal
-    /// did.
-    pub(crate) async fn record_shoal(&self, details: ShoalEventDetails) {
-        let kind = details.kind;
-        let recorded = self.store.run(move |db| record_shoal(db, &details)).await;
-        if let Err(error) = recorded {
-            log!("{kind} not recorded: {error:#}");
-        }
-    }
-
-    /// Record `kind` in Shoal's log, with `error` when what it records
-    /// failed.
-    pub(crate) async fn record_shoal_outcome(
-        &self,
-        kind: ShoalEventKind,
-        error: Option<&anyhow::Error>,
-    ) {
-        let mut details = ShoalEventDetails::new(kind);
-        details.error = error.map(|error| format!("{error:#}"));
-        self.record_shoal(details).await;
-    }
-
-    /// Record the alert the space `id` sent, which reached its coordinator
-    /// or the user.
-    pub(crate) async fn record_alert(&self, id: &SpaceId, message: String) {
-        let space = id.clone();
-        let recorded = self
-            .store
-            .run(move |db| {
-                let alert = AlertEvent { message };
-                record_with(db, &space, EventKind::AlertSent, "alert", &alert)
-            })
-            .await;
-        if let Err(error) = recorded {
-            log!("alert of {id} not recorded: {error:#}");
-        }
-    }
-
-    /// Record that Shoal ended the CI job of the workspace `id`, which
-    /// outlived its run on the forge.
-    pub(crate) async fn record_job_ended(&self, id: &SpaceId, job: JobEndedEvent) {
-        let space = id.clone();
-        let recorded = self
-            .store
-            .run(move |db| record_with(db, &space, EventKind::JobEnded, "job", &job))
-            .await;
-        if let Err(error) = recorded {
-            log!("job end of {id} not recorded: {error:#}");
-        }
-    }
-
-    /// Observe external checkouts without changing the branch Shoal owns.
-    pub(crate) async fn observe_workspace_branch(
-        &self,
-        workspace: &crate::model::Workspace,
-    ) -> Result<()> {
-        self.verify_worktree(workspace).await?;
-        let branch = crate::git::checked_out_branch(&workspace.path).await?;
-        let id = workspace.id.clone();
-        self.store.run(move |db| {
-            db.execute("UPDATE workspaces SET observed_branch=?2 WHERE id=?1 AND observed_branch IS NOT ?2", params![id, branch])?;
-            Ok(())
-        }).await
-    }
-
-    pub(crate) async fn latest_space_event_id(&self) -> Result<EventCursor> {
-        self.store
-            .run(|db| {
-                Ok(
-                    db.query_row("SELECT COALESCE(MAX(id),0) FROM space_events", [], |r| {
-                        r.get(0)
-                    })?,
-                )
-            })
-            .await
-    }
-
-    /// A consistent replay batch from a client's cursor, including an
-    /// explicit expired or future one.
-    #[cfg(any(test, feature = "test-support"))]
-    pub async fn space_events(
-        &self,
-        after: Option<EventCursor>,
-        limit: u32,
-    ) -> Result<Vec<EventItem>> {
-        let (items, _) = self.space_events_page(after, None, limit).await?;
-        Ok(items)
-    }
-
-    /// A replay batch after `cursor` and the highest ID retention had
-    /// deleted, `pruned`, when the previous batch read it; none for the
-    /// client's own cursor. Returns that ID as of this batch, for the next.
-    pub(crate) async fn space_events_page(
-        &self,
-        cursor: Option<EventCursor>,
-        pruned: Option<EventCursor>,
-        limit: u32,
-    ) -> Result<(Vec<EventItem>, EventCursor)> {
-        ensure!(
-            cursor.is_none_or(|cursor| cursor.id() >= 0),
-            "event cursor must be nonnegative"
-        );
-        self.store
-            .run(move |db| replay(db, cursor, pruned, limit))
-            .await
-    }
-    pub(crate) async fn retain_workspace(
-        &self,
-        id: &SpaceId,
-        state: crate::state::WorkspaceState,
-        cause: EventCause,
-        error: &anyhow::Error,
-    ) -> Result<()> {
-        let id = id.to_owned();
-        let error = format!("{error:#}");
-        self.store
-            .write(move |tx| retain(tx, &id, state, cause, &error))
-            .await
-    }
-
-    /// Record that a removal of the space `id` for `cause` started, unless
-    /// it retries one for the same cause that just failed, so a cleanup that
-    /// fails on every sweep leaves one failure in the log rather than a pair
-    /// for each attempt.
-    pub(crate) async fn record_removal_start(&self, id: &SpaceId, cause: EventCause) -> Result<()> {
-        let id = id.to_owned();
-        self.store
-            .write(move |tx| {
-                let retry = super::store::exists(
-                    tx,
-                    "SELECT 1 FROM space_events WHERE id=(
-                         SELECT MAX(id) FROM space_events WHERE space_id=?1
-                     ) AND json_extract(record,'$.kind')=?2
-                         AND json_extract(record,'$.cause')=?3",
-                    params![id, EventKind::Retained, cause],
-                )?;
-                if retry {
-                    return Ok(());
-                }
-                record(tx, &id, EventKind::RemovalStarted, cause, None)
-            })
-            .await
-    }
-
-    pub(crate) async fn record_retained(
-        &self,
-        id: &SpaceId,
-        cause: EventCause,
-        error: &anyhow::Error,
-    ) -> Result<()> {
-        let id = id.to_owned();
-        let error = format!("{error:#}");
-        self.store
-            .run(move |db| record(db, &id, EventKind::Retained, cause, Some(&error)))
-            .await
+/// Record an agent's start, stop or exit in the space `id`'s log; a
+/// failure is logged, never returned, as it must not fail the agent's
+/// lifecycle.
+pub(crate) async fn record_agent(store: &Store, id: &SpaceId, kind: EventKind, agent: AgentEvent) {
+    let space = id.clone();
+    let recorded = store
+        .run(move |db| insert_agent(db, &space, kind, &agent))
+        .await;
+    if let Err(error) = recorded {
+        log!("agent event of {id} not recorded: {error:#}");
     }
 }
 
-mod retention;
-mod shoal_log;
-mod space_log;
+/// Record `details`, an event of Shoal itself, in Shoal's log; a failure
+/// is logged, never returned, as it must not fail what Shoal did.
+pub(crate) async fn record_shoal(store: &Store, details: ShoalEventDetails) {
+    let kind = details.kind;
+    let recorded = store.run(move |db| insert_shoal(db, &details)).await;
+    if let Err(error) = recorded {
+        log!("{kind} not recorded: {error:#}");
+    }
+}
+
+/// Record `kind` in Shoal's log, with `error` when what it records failed.
+pub(crate) async fn record_shoal_outcome(
+    store: &Store,
+    kind: ShoalEventKind,
+    error: Option<&anyhow::Error>,
+) {
+    let mut details = ShoalEventDetails::new(kind);
+    details.error = error.map(|error| format!("{error:#}"));
+    record_shoal(store, details).await;
+}
+
+/// Record the alert the space `id` sent, which reached its coordinator or
+/// the user.
+pub(crate) async fn record_alert(store: &Store, id: &SpaceId, message: String) {
+    let space = id.clone();
+    let recorded = store
+        .run(move |db| {
+            let alert = AlertEvent { message };
+            record_with(db, &space, EventKind::AlertSent, "alert", &alert)
+        })
+        .await;
+    if let Err(error) = recorded {
+        log!("alert of {id} not recorded: {error:#}");
+    }
+}
+
+/// Record that Shoal ended the CI job of the workspace `id`, which outlived
+/// its run on the forge.
+pub(crate) async fn record_job_ended(store: &Store, id: &SpaceId, job: JobEndedEvent) {
+    let space = id.clone();
+    let recorded = store
+        .run(move |db| record_with(db, &space, EventKind::JobEnded, "job", &job))
+        .await;
+    if let Err(error) = recorded {
+        log!("job end of {id} not recorded: {error:#}");
+    }
+}
+
+/// The ID of the journal's newest event.
+pub(crate) async fn latest_id(store: &Store) -> Result<EventCursor> {
+    store
+        .run(|db| {
+            Ok(
+                db.query_row("SELECT COALESCE(MAX(id),0) FROM space_events", [], |r| {
+                    r.get(0)
+                })?,
+            )
+        })
+        .await
+}
+
+/// A replay batch after `cursor` and the highest ID retention had deleted,
+/// `pruned`, when the previous batch read it; none for the client's own
+/// cursor. Returns that ID as of this batch, for the next.
+pub(crate) async fn page(
+    store: &Store,
+    cursor: Option<EventCursor>,
+    pruned: Option<EventCursor>,
+    limit: u32,
+) -> Result<(Vec<EventItem>, EventCursor)> {
+    ensure!(
+        cursor.is_none_or(|cursor| cursor.id() >= 0),
+        "event cursor must be nonnegative"
+    );
+    store.run(move |db| replay(db, cursor, pruned, limit)).await
+}
+
+/// Leave the workspace `id`, whose removal for `cause` failed with `error`,
+/// in `state`, recording that it stays.
+pub(crate) async fn retain_workspace(
+    store: &Store,
+    id: &SpaceId,
+    state: crate::state::WorkspaceState,
+    cause: EventCause,
+    error: &anyhow::Error,
+) -> Result<()> {
+    let id = id.to_owned();
+    let error = format!("{error:#}");
+    store
+        .write(move |tx| retain(tx, &id, state, cause, &error))
+        .await
+}
+
+/// Record that a removal of the space `id` for `cause` started, unless it
+/// retries one for the same cause that just failed, so a cleanup that fails
+/// on every sweep leaves one failure in the log rather than a pair for each
+/// attempt.
+pub(crate) async fn record_removal_start(
+    store: &Store,
+    id: &SpaceId,
+    cause: EventCause,
+) -> Result<()> {
+    let id = id.to_owned();
+    store
+        .write(move |tx| {
+            let retry = super::store::exists(
+                tx,
+                "SELECT 1 FROM space_events WHERE id=(
+                     SELECT MAX(id) FROM space_events WHERE space_id=?1
+                 ) AND json_extract(record,'$.kind')=?2
+                     AND json_extract(record,'$.cause')=?3",
+                params![id, EventKind::Retained, cause],
+            )?;
+            if retry {
+                return Ok(());
+            }
+            record(tx, &id, EventKind::RemovalStarted, cause, None)
+        })
+        .await
+}
+
+/// Record that the space `id`, whose removal for `cause` failed with
+/// `error`, stays.
+pub(crate) async fn record_retained(
+    store: &Store,
+    id: &SpaceId,
+    cause: EventCause,
+    error: &anyhow::Error,
+) -> Result<()> {
+    let id = id.to_owned();
+    let error = format!("{error:#}");
+    store
+        .run(move |db| record(db, &id, EventKind::Retained, cause, Some(&error)))
+        .await
+}
+
+pub(crate) mod retention;
+pub(crate) mod shoal_log;
+pub(crate) mod space_log;
 
 #[cfg(test)]
 mod tests;

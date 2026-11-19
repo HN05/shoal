@@ -39,7 +39,7 @@ impl Manager {
         let mut details = ShoalEventDetails::new(ShoalEventKind::CleanupRan);
         details.removed = removed;
         details.error = failed;
-        self.record_shoal(details).await;
+        crate::daemon::events::record_shoal(&self.store, details).await;
     }
 }
 

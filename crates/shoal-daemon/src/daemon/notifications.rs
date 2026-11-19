@@ -291,7 +291,7 @@ impl Manager {
             |files| async move { self.record_sent(about, kind, message, &files).await },
         ))
         .await?;
-        self.record_alert(&id, text).await;
+        crate::daemon::events::record_alert(&self.store, &id, text).await;
         Ok(Sent { notification })
     }
 

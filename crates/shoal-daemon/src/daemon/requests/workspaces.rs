@@ -528,7 +528,7 @@ pub(in crate::daemon) async fn watch_space_events(
     }
     // Subscribe before the first read so a concurrent commit cannot be missed.
     let mut changed = manager.store.watch_changes();
-    let end = manager.latest_space_event_id().await?;
+    let end = crate::daemon::events::latest_id(&manager.store).await?;
     protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await?;
     let _finite_request = if follow {
         drop(startup);
@@ -541,7 +541,8 @@ pub(in crate::daemon) async fn watch_space_events(
     let mut pruned = None;
     loop {
         let operation = manager.gates.operation().await;
-        let (items, now_pruned) = (manager.space_events_page(cursor, pruned, 100)).await?;
+        let (items, now_pruned) =
+            (crate::daemon::events::page(&manager.store, cursor, pruned, 100)).await?;
         pruned = Some(now_pruned);
         let mut delivered = false;
         for item in items {

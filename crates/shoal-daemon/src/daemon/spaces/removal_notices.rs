@@ -193,7 +193,7 @@ impl Manager {
         error: &anyhow::Error,
     ) -> Result<()> {
         let cause = cleanup.cause(self, space.id).await?;
-        self.record_retained(space.id, cause, error).await
+        crate::daemon::events::record_retained(&self.store, space.id, cause, error).await
     }
 }
 

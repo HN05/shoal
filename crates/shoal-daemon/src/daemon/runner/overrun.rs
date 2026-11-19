@@ -41,7 +41,7 @@ impl Manager {
         self.stop_job_runner(job).await?;
         self.log_job_stop(job, JobStop::Overrun, "its run had finished");
         let ended = ended_job(job.job.job.name.clone(), run, stopped);
-        self.record_job_ended(&job.workspace_id, ended).await;
+        crate::daemon::events::record_job_ended(&self.store, &job.workspace_id, ended).await;
         Ok(true)
     }
 

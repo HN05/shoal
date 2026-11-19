@@ -19,7 +19,7 @@ async fn a_removal_the_daemon_stopped_fails_its_workspace_for_shoal_rm() {
         .reserve_lifecycle_for_removal(&workspace.id, RemovalRules::default())
         .await
         .unwrap();
-    (manager.record_removal_start(&workspace.id, EventCause::Idle))
+    (crate::daemon::events::record_removal_start(&manager.store, &workspace.id, EventCause::Idle))
         .await
         .unwrap();
     crate::daemon::quarantine::interrupted_operations(&manager.store)

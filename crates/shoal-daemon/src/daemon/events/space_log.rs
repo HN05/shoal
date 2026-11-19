@@ -1,125 +1,50 @@
-//! A space's log, read from the journal: a space that exists by any
-//! selector, a removed one by its last name or ID until its events expire,
-//! within the caller's scope.
-use anyhow::{Result, ensure};
+//! A space's log, read from the journal, which keeps a removed space's
+//! events until they expire.
+use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{EventCursor, EventKind, decode, log_entry};
+use crate::daemon::store::Store;
 use crate::time::UnixTime;
-use crate::{
-    config::permissions::PermissionKey,
-    daemon::{manager::Manager, permissions::Action, scope::Caller},
-};
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::{
-    log::{LogEntry, LogFilter, LogTopic},
-    space_names::SpaceSelector,
-};
+use shoal_protocol::log::{LogEntry, LogFilter};
 
-/// How far a removed space's log looks up for a space that still exists,
-/// through the spaces removed above it.
-const REMOVED_ANCESTORS: usize = 32;
+/// The newest `limit` events of the space `id`'s log that `filter` shows,
+/// oldest first.
+pub(crate) async fn read(
+    store: &Store,
+    id: SpaceId,
+    filter: LogFilter,
+    limit: u32,
+) -> Result<Vec<LogEntry>> {
+    let events = store.run(move |db| events_of(db, &id)).await?;
+    Ok(shown(events, filter, limit))
+}
 
-impl Manager {
-    /// The newest `limit` events of the log of the space `space` names, or
-    /// of Shoal's without one, that `filter` shows, oldest first.
-    pub(crate) async fn log(
-        &self,
-        space: Option<&SpaceSelector>,
-        filter: LogFilter,
-        limit: u32,
-    ) -> Result<Vec<LogEntry>> {
-        match space {
-            Some(space) => self.space_log(space, filter, limit).await,
-            None => self.shoal_log(filter, limit).await,
-        }
-    }
+/// The removed space `id`, while the journal keeps its removal.
+pub(crate) async fn removed(store: &Store, id: SpaceId) -> Result<Option<SpaceId>> {
+    store
+        .run(move |db| Ok(super::removal(db, &id)?.map(|removal| removal.space_id)))
+        .await
+}
 
-    /// The newest `limit` events of the log of the space `selector` names
-    /// that `filter` shows, oldest first.
-    pub(crate) async fn space_log(
-        &self,
-        selector: &SpaceSelector,
-        filter: LogFilter,
-        limit: u32,
-    ) -> Result<Vec<LogEntry>> {
-        let id = self.log_space(selector).await?;
-        let events = self.store.run(move |db| events_of(db, &id)).await?;
-        Ok(shown(events, filter, limit))
-    }
-
-    /// Point `selector` at the space whose log a scoped caller reads: its
-    /// own or one below it, or a removed space that was below it. Shoal's
-    /// log, without a space, is the user's.
-    pub(in crate::daemon) async fn narrow_to_log(
-        &self,
-        caller: &Caller,
-        selector: &mut Option<SpaceSelector>,
-    ) -> Result<()> {
-        let Some(selector) = selector else {
-            let action = Action::new(PermissionKey::Notifications, "Shoal's log");
-            return self.authorize_action(Some(caller), action).await;
-        };
-        let id = self.log_space(selector).await?;
-        let reached = match self.nearest_existing(&id).await? {
-            Some(space) => self.reaches(caller, &space).await?,
-            None => self.reach_root(Some(caller)).await?.is_none(),
-        };
-        ensure!(
-            reached,
-            "workspace processes can only read the logs of their own space and those below it"
-        );
-        *selector = SpaceSelector::id(&id);
-        Ok(())
-    }
-
-    /// `topic` naming its space by ID, so a rename, or a later space taking
-    /// its name, does not change the log a subscription follows.
-    pub(in crate::daemon) async fn pin_log(&self, topic: LogTopic) -> Result<LogTopic> {
-        let Some(space) = &topic.space else {
-            return Ok(topic);
-        };
-        let id = self.log_space(space).await?;
-        Ok(LogTopic {
-            space: Some(SpaceSelector::id(&id)),
-            ..topic
+/// The space the removed space `id` was below when it went, as that
+/// space's log recorded it.
+pub(crate) async fn parent_at_removal(store: &Store, id: SpaceId) -> Result<Option<SpaceId>> {
+    store
+        .run(move |db| {
+            Ok(db
+                .query_row(
+                    "SELECT space_id FROM space_events
+                     WHERE json_extract(record,'$.kind')=?2
+                         AND json_extract(record,'$.child.id')=?1
+                     ORDER BY id DESC LIMIT 1",
+                    params![id, EventKind::ChildRemoved],
+                    |row| row.get(0),
+                )
+                .optional()?)
         })
-    }
-
-    /// The space `id` when it exists, else the nearest one that existed
-    /// above it when it was removed, through the spaces removed above it;
-    /// none once that walk leaves the tree.
-    async fn nearest_existing(&self, id: &SpaceId) -> Result<Option<SpaceId>> {
-        let mut space = id.clone();
-        for _ in 0..REMOVED_ANCESTORS {
-            if self.space_by_id(&space).await.is_ok() {
-                return Ok(Some(space));
-            }
-            let removed = space.clone();
-            match (self.store)
-                .run(move |db| parent_at_removal(db, &removed))
-                .await?
-            {
-                Some(parent) => space = parent,
-                None => return Ok(None),
-            }
-        }
-        Ok(None)
-    }
-
-    /// The ID of the space `selector` names: one that exists, else a
-    /// removed one whose events the journal keeps.
-    async fn log_space(&self, selector: &SpaceSelector) -> Result<SpaceId> {
-        let error = match self.space(selector).await {
-            Ok(space) => return Ok(space.id.clone()),
-            Err(error) => error,
-        };
-        let removed = match selector.given_id().cloned() {
-            Some(id) => self.store.run(move |db| removed(db, &id)).await?,
-            None => None,
-        };
-        removed.ok_or(error)
-    }
+        .await
 }
 
 /// Every event of the space `id`, oldest first.
@@ -155,25 +80,6 @@ fn shown(events: Vec<LogEntry>, filter: LogFilter, limit: u32) -> Vec<LogEntry> 
     let limit = usize::try_from(limit).unwrap_or(usize::MAX);
     shown.drain(..shown.len().saturating_sub(limit));
     shown
-}
-
-/// The removed space `id`, while the journal keeps its removal.
-fn removed(db: &Connection, id: &SpaceId) -> Result<Option<SpaceId>> {
-    Ok(super::removal(db, id)?.map(|removal| removal.space_id))
-}
-
-/// The space the removed space `id` was below when it went, as that
-/// space's log recorded it.
-fn parent_at_removal(db: &Connection, id: &SpaceId) -> Result<Option<SpaceId>> {
-    Ok(db
-        .query_row(
-            "SELECT space_id FROM space_events
-             WHERE json_extract(record,'$.kind')=?2 AND json_extract(record,'$.child.id')=?1
-             ORDER BY id DESC LIMIT 1",
-            params![id, EventKind::ChildRemoved],
-            |row| row.get(0),
-        )
-        .optional()?)
 }
 
 #[cfg(test)]

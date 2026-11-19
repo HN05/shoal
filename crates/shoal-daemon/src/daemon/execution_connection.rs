@@ -394,7 +394,13 @@ async fn relay(
                         source: source.take(),
                         ..agent_event(tracked, execution_id, None)
                     };
-                    (manager.record_agent(&space.id, EventKind::AgentStarted, started)).await;
+                    (crate::daemon::events::record_agent(
+                        &manager.store,
+                        &space.id,
+                        EventKind::AgentStarted,
+                        started,
+                    ))
+                    .await;
                 }
                 protocol::write(writer, &Control::Started).await?;
                 // A slow host close holds back no daemon update; a stop
@@ -451,7 +457,13 @@ async fn relay(
                 *handoff_claimed = true;
                 if let Some(tracked) = agent {
                     let stopped = agent_event(tracked, execution_id, None);
-                    (manager.record_agent(&space.id, EventKind::AgentStopped, stopped)).await;
+                    (crate::daemon::events::record_agent(
+                        &manager.store,
+                        &space.id,
+                        EventKind::AgentStopped,
+                        stopped,
+                    ))
+                    .await;
                 }
                 // A wrapper whose own session ended saves its agent unasked,
                 // which stops the agent as a requested pause does.
@@ -741,7 +753,7 @@ async fn finish(
             false => (EventKind::AgentExited, code),
         };
         let ended = agent_event(agent, &execution_id, code);
-        manager.record_agent(&space.id, kind, ended).await;
+        crate::daemon::events::record_agent(&manager.store, &space.id, kind, ended).await;
         manager
             .notify_agent_exit(
                 &space,

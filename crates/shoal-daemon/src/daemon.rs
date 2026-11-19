@@ -56,6 +56,7 @@ pub mod leftovers;
 mod lifecycle;
 pub mod links;
 pub(crate) mod log;
+mod logs;
 pub(crate) mod lost_reports;
 pub mod manager;
 pub mod notifications;
@@ -428,7 +429,7 @@ impl Manager {
     async fn record_start(&self) {
         let mut started = ShoalEventDetails::new(ShoalEventKind::DaemonStarted);
         started.version = Some(env!("CARGO_PKG_VERSION").to_owned());
-        self.record_shoal(started).await;
+        crate::daemon::events::record_shoal(&self.store, started).await;
     }
 
     /// Bring the installed service definition up to date with this release,
@@ -457,7 +458,7 @@ impl Manager {
             (Ending::Detach, None) => ShoalEventKind::DaemonRestarted,
             _ => ShoalEventKind::DaemonStopped,
         };
-        self.record_shoal_outcome(kind, error).await;
+        crate::daemon::events::record_shoal_outcome(&self.store, kind, error).await;
     }
 }
 

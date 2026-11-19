@@ -381,7 +381,7 @@ impl Manager {
         let cause = (worktree.as_ref()).map_or(removal.cause(), |stage| stage.cause(removal));
         // A conversion's own event records what became of the space.
         if !removal.converts() {
-            self.record_removal_start(id, cause).await?;
+            crate::daemon::events::record_removal_start(&self.store, id, cause).await?;
         }
         let initial =
             (self.check_space_and_worktree(id, removal, Stage::Initial, worktree.as_ref(), &[]))

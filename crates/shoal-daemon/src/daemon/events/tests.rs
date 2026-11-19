@@ -2,6 +2,7 @@ use super::*;
 use crate::{
     daemon::{
         executions::ExecutionKind,
+        manager::Manager,
         notifications::NotificationKind,
         test_support::{git, manager, repository},
         workspace_files::Attacher,
@@ -402,7 +403,7 @@ async fn an_agent_ends_once_whether_a_stop_or_its_exit_reports_it() {
                  COMMIT;",
             )?;
             for (kind, agent) in &recorded {
-                record_agent(db, &SpaceId::from("w"), *kind, agent)?;
+                insert_agent(db, &SpaceId::from("w"), *kind, agent)?;
             }
             Ok(())
         })

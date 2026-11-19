@@ -261,14 +261,14 @@ impl Manager {
     ) -> Result<()> {
         let id = &reservation.space.id;
         let Some(worktree) = reservation.worktree else {
-            return self.record_retained(id, cause, error).await;
+            return crate::daemon::events::record_retained(&self.store, id, cause, error).await;
         };
         let state = if unready {
             WorkspaceState::Failed
         } else {
             worktree.replaced
         };
-        (self.retain_workspace(id, state, cause, error)).await?;
+        (crate::daemon::events::retain_workspace(&self.store, id, state, cause, error)).await?;
         worktree.underway.finish();
         Ok(())
     }

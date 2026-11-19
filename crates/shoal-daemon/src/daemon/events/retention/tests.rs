@@ -1,6 +1,27 @@
 use super::*;
-use crate::daemon::test_support::manager;
 use rusqlite::params;
+
+/// A removed space's events stay a month, and Shoal's own a year.
+struct Fixed;
+
+impl Retention for Fixed {
+    fn of<'a>(&'a self, repository: Option<&'a RepositoryId>) -> BoxFuture<'a, Duration> {
+        let days = if repository.is_some() { 30 } else { 365 };
+        Box::pin(async move { Duration::from_secs(days * 24 * 3600) })
+    }
+}
+
+/// A store in a temporary state directory.
+async fn store() -> (tempfile::TempDir, Store) {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("state.db");
+    (
+        temp,
+        shoal_store::test_support::unsynced_store(path)
+            .await
+            .unwrap(),
+    )
+}
 
 /// The spaces with events, in the order of their first one.
 fn spaces(db: &Connection) -> Result<Vec<String>> {
@@ -22,10 +43,9 @@ fn journal(db: &Connection, id: &str, kind: &str, age: i64) -> Result<()> {
 
 #[tokio::test]
 async fn gone_spaces_keep_their_events_for_the_retention_after_their_removal() {
-    let (_temp, manager) = manager().await;
+    let (_temp, store) = store().await;
     let decade = 3651 * 24 * 3600;
-    manager
-        .store
+    store
         .run(move |db| {
             journal(db, "long-gone", "created", decade + 60)?;
             journal(db, "long-gone", "removed", decade)?;
@@ -52,14 +72,14 @@ async fn gone_spaces_keep_their_events_for_the_retention_after_their_removal() {
         })
         .await
         .unwrap();
-    manager.expire_events().await.unwrap();
-    let left = manager.store.run(|db| spaces(db)).await.unwrap();
+    expire(&store, &Fixed).await.unwrap();
+    let left = store.run(|db| spaces(db)).await.unwrap();
     assert_eq!(left, ["just-removed", "restorable"]);
 }
 
 #[tokio::test]
 async fn shoal_s_own_events_stay_for_the_global_retention() {
-    let (_temp, manager) = manager().await;
+    let (_temp, store) = store().await;
     let decade = 3651 * 24 * 3600;
     let shoal = |db: &Connection, version: &str, age: i64| {
         db.execute(
@@ -68,8 +88,7 @@ async fn shoal_s_own_events_stay_for_the_global_retention() {
             params![version, age],
         )
     };
-    manager
-        .store
+    store
         .run(move |db| {
             shoal(db, "old", decade)?;
             shoal(db, "new", 0)?;
@@ -77,8 +96,8 @@ async fn shoal_s_own_events_stay_for_the_global_retention() {
         })
         .await
         .unwrap();
-    manager.expire_events().await.unwrap();
-    let left: Vec<String> = (manager.store)
+    expire(&store, &Fixed).await.unwrap();
+    let left: Vec<String> = store
         .run(|db| {
             Ok(db
                 .prepare("SELECT json_extract(record,'$.version') FROM space_events")?
