@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn github_threads_carry_resolution_comments_and_cursors() {
+fn github_threads_carry_resolution_and_comments() {
     let node = json!({"id": "T_1", "isResolved": true, "comments": {
             "pageInfo": {"hasNextPage": true, "endCursor": "c1"},
             "nodes": [{"databaseId": 5}, {"databaseId": 9}]}});
@@ -13,13 +13,6 @@ fn github_threads_carry_resolution_comments_and_cursors() {
             comments: vec![CommentId::new(5), CommentId::new(9)],
         }
     );
-    assert_eq!(
-        next_cursor(&node["comments"]).unwrap().as_deref(),
-        Some("c1")
-    );
-    let last = json!({"pageInfo": {"hasNextPage": false, "endCursor": null}});
-    assert_eq!(next_cursor(&last).unwrap(), None);
-    assert!(next_cursor(&json!({"pageInfo": {"hasNextPage": true}})).is_err());
     assert!(thread_node(&json!({"id": "T_2"})).is_err());
 }
 

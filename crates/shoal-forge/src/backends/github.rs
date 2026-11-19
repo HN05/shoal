@@ -8,6 +8,7 @@ mod activity;
 mod attachments;
 mod checks;
 mod conventions;
+mod graphql;
 mod items;
 mod merging;
 mod reactions;

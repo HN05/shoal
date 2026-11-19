@@ -3,14 +3,11 @@
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
 
-use crate::{
-    account::Account,
-    transport::api::{Request, TransportRequests},
-};
+use super::graphql::{graphql_nodes, next_cursor};
+use crate::account::Account;
 use shoal_forge_types::{
     ForgeRepo,
     numbers::{CommentId, PullNumber},
-    raw::HttpMethod,
     review::thread::{Target, Thread},
 };
 
@@ -59,39 +56,6 @@ pub(crate) async fn threads(
     Ok(threads)
 }
 
-/// Every node of the connection `connection` finds in the query's data,
-/// following its pages from the `after` in `variables`.
-async fn graphql_nodes(
-    repo: &ForgeRepo,
-    account: &Account,
-    query: &str,
-    mut variables: Value,
-    connection: fn(&Value) -> &Value,
-) -> Result<Vec<Value>> {
-    let mut nodes = Vec::new();
-    loop {
-        let request = Request::new(
-            HttpMethod::Post,
-            "graphql".into(),
-            Some(json!({ "query": query, "variables": variables })),
-        )
-        .reading();
-        let response = repo.send(account, &request).await?;
-        let page = connection(&response["data"]);
-        nodes.extend(
-            page["nodes"]
-                .as_array()
-                .context("GitHub did not return a page of review threads or comments")?
-                .iter()
-                .cloned(),
-        );
-        match next_cursor(page)? {
-            Some(after) => variables["after"] = after.into(),
-            None => return Ok(nodes),
-        }
-    }
-}
-
 /// A thread with its first page of comments.
 fn thread_node(node: &Value) -> Result<GitHubThread> {
     let comments = node["comments"]["nodes"]
@@ -113,18 +77,6 @@ fn comment_ids(comments: &[Value]) -> Vec<CommentId> {
         .filter_map(|comment| comment["databaseId"].as_u64())
         .map(CommentId::new)
         .collect()
-}
-
-/// The cursor of the page after `connection`'s, when there is one.
-fn next_cursor(connection: &Value) -> Result<Option<String>> {
-    let info = &connection["pageInfo"];
-    if info["hasNextPage"] != true {
-        return Ok(None);
-    }
-    info["endCursor"]
-        .as_str()
-        .map(|cursor| Some(cursor.to_owned()))
-        .context("GitHub did not return the next page's cursor")
 }
 
 /// The GitHub thread with `comment`.
