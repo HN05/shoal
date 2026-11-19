@@ -471,6 +471,42 @@ async fn a_demo_whose_viewer_is_off_is_refused_one() {
     assert_eq!(Reason::of(&refused), Some(Reason::NotReady));
 }
 
+#[tokio::test]
+async fn stopping_a_viewer_that_exited_unreaped_takes_what_it_started_along() {
+    let temp = tempfile::tempdir().unwrap();
+    let pid_file = temp.path().join("helper.pid");
+    let script = format!("sleep 30 & echo $! > {}; exit 0", pid_file.display());
+    let mut child = Command::new("sh")
+        .args(["-c", &script])
+        .process_group(0)
+        .spawn()
+        .unwrap();
+    let leader = crate::process::identity::capture(child.id().unwrap())
+        .unwrap()
+        .unwrap();
+    // The leader exits, leaving its helper, and stays unreaped.
+    while !process::unreaped(&leader).unwrap() {
+        tokio::time::sleep(START_POLL).await;
+    }
+    let pid: u32 = std::fs::read_to_string(&pid_file)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+    stop_unreaped(&mut child).await;
+    let gone = async {
+        while crate::process::identity::capture(pid)
+            .unwrap()
+            .is_some_and(|helper| runs(&helper))
+        {
+            tokio::time::sleep(START_POLL).await;
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(60), gone)
+        .await
+        .unwrap_or_else(|_| panic!("helper {pid} still runs"));
+}
+
 #[test]
 fn a_failure_shows_a_bounded_tail_of_what_the_viewer_printed() {
     let temp = tempfile::tempdir().unwrap();

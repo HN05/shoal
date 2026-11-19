@@ -473,23 +473,17 @@ async fn await_port(
     }
 }
 
-/// Kill the process group of `child`, which this daemon never waited for,
-/// so its PID still names that group, and reap it meanwhile.
+/// Kill the process group of `child` and reap it meanwhile.
 fn abandon(mut child: Child) {
-    if let Some(pid) = child.id() {
-        // SAFETY: the group of the unreaped child this daemon started.
-        unsafe {
-            libc::kill(-(pid as i32), libc::SIGKILL);
-        }
-    }
-    tokio::spawn(async move { child.wait().await });
+    tokio::spawn(async move { stop_unreaped(&mut child).await });
 }
 
-/// Stop the process group `child` leads. Only while it is unreaped does
-/// its PID still name that group.
+/// Kill the process group `child` leads, then reap it. Until this daemon
+/// reaps it, exited or not, its PID still names that group.
 async fn stop_unreaped(child: &mut Child) {
-    if let (Ok(None), Some(pid)) = (child.try_wait(), child.id()) {
-        // SAFETY: the group of the unreaped child this daemon started.
+    if let Some(pid) = child.id() {
+        // SAFETY: the group of the child this daemon started and has not
+        // reaped.
         unsafe {
             libc::kill(-(pid as i32), libc::SIGKILL);
         }
