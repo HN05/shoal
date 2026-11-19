@@ -24,6 +24,7 @@ mod config_state;
 mod connections;
 pub(crate) mod containers;
 mod contribution_holds;
+mod contributions;
 pub(crate) mod conversions;
 mod coordinated;
 mod daemon_exit;
@@ -206,7 +207,7 @@ pub async fn run(
         exit,
         capacity: Arc::new(connections::Capacity::for_descriptors(descriptors)),
     };
-    let resumes_until = tokio::time::Instant::now() + workspace::CONTRIBUTION_RESUME_WINDOW;
+    let resumes_until = tokio::time::Instant::now() + contributions::holds::RESUME_WINDOW;
     manager.contribution_holds.await_resumes(resumes_until);
     let mut background = JoinSet::new();
     spawn_supervised(&mut background, &manager, "auto cleanup", cleanup::run);

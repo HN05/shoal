@@ -9,7 +9,6 @@ mod branches;
 pub(super) mod checkpoints;
 pub(super) mod commits;
 pub(crate) mod conflicts;
-mod contributions;
 mod converted;
 mod copies;
 pub(super) mod creation;
@@ -31,9 +30,6 @@ mod usage;
 mod xcode;
 
 pub(crate) use branches::NewWorktreeOptions;
-pub(crate) use contributions::holds::{
-    ContributionHold, RESUME_WINDOW as CONTRIBUTION_RESUME_WINDOW,
-};
 pub(crate) use copies::CopyPlace;
 pub(crate) use creation::{NewWorkspace, build_pending_in};
 pub(crate) use merge::RecordChange;
@@ -87,7 +83,7 @@ pub struct Manager {
     pub(crate) busy_cpu: super::busy_cpu::BusyCpu,
     pub agent_queue: super::agent_queue::AgentQueue,
     /// The contributions a running `shoal contribute` keeps from cleanup.
-    pub(crate) contribution_holds: contributions::holds::ContributionHolds,
+    pub(crate) contribution_holds: super::contributions::holds::ContributionHolds,
     pub(crate) operations: Arc<crate::daemon::operations::Operations>,
     /// The scope tokens approved commands take their permission's actions
     /// with.

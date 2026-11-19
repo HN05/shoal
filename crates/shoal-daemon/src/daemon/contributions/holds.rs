@@ -10,7 +10,7 @@ use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
 use tokio::time::Instant;
 
-use super::super::Manager;
+use super::super::workspace::Manager;
 
 /// How long after the daemon starts every contribution counts as held, so
 /// the clients whose holds a restart closed hold them again first.

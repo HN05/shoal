@@ -62,7 +62,7 @@ impl Manager {
         &self,
         source: String,
         name: Option<String>,
-    ) -> Result<(Repository, super::workspace::ContributionHold)> {
+    ) -> Result<(Repository, super::contributions::holds::ContributionHold)> {
         let _guard = self.gates.lock_registry().await;
         let registration = Registration::Contribution;
         let repo = (self.register_locked(source.into(), name, None, registration)).await?;
