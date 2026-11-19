@@ -40,32 +40,30 @@ impl Launch {
     }
 
     /// Start the workspace's own `claude` agent in `path`, whose fake agent
-    /// touches `agent-started`, then the command `sh -c script`, which
-    /// touches `command-started`, and wait until both run. The agent's start
-    /// brings the workspace up to date, during which a command's start is
-    /// refused, so the command starts only once the agent has.
+    /// touches `agent-started`, and at once the command `sh -c script`,
+    /// which touches `command-started`, and wait until both run.
     pub(crate) fn agent_and_command(
         fixture: &Fixture,
         workspace: &str,
         path: &Path,
         script: &str,
     ) -> [Self; 2] {
-        let mut agent = Self::spawn(
-            fixture,
-            "agent",
-            Some("claude"),
-            &["start", "--in", workspace, "--here", "--agent", "claude"],
-            path.join("agent-started"),
-        );
-        Self::wait_started(fixture, workspace, std::slice::from_mut(&mut agent));
-        let command = Self::spawn(
-            fixture,
-            "command",
-            None,
-            &["run", "--workspace", workspace, "--", "sh", "-c", script],
-            path.join("command-started"),
-        );
-        let mut launches = [agent, command];
+        let mut launches = [
+            Self::spawn(
+                fixture,
+                "agent",
+                Some("claude"),
+                &["start", "--in", workspace, "--here", "--agent", "claude"],
+                path.join("agent-started"),
+            ),
+            Self::spawn(
+                fixture,
+                "command",
+                None,
+                &["run", "--workspace", workspace, "--", "sh", "-c", script],
+                path.join("command-started"),
+            ),
+        ];
         Self::wait_started(fixture, workspace, &mut launches);
         launches
     }
