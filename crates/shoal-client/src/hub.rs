@@ -44,21 +44,21 @@ pub async fn directory(daemon: &impl Daemon) -> Result<Option<HubView>> {
 }
 
 /// Carry `input` to the socket of the daemon `paths` names and its replies
-/// to `output`, byte for byte, until the daemon closes the connection; the
-/// end of `input` closes the daemon's side for reading. It never starts a
-/// daemon: one that does not run fails it.
+/// to `output`, byte for byte, until the daemon closes the connection and
+/// all it sent before has gone to `output`; the end of `input` closes the
+/// daemon's side for reading. It never starts a daemon: one that does not
+/// run fails it.
 pub async fn relay(
     paths: &Paths,
-    mut input: impl AsyncRead + Unpin,
+    input: impl AsyncRead + Unpin,
     mut output: impl AsyncWrite + Unpin,
 ) -> Result<()> {
     let mut socket = tokio::net::UnixStream::connect(&paths.socket)
         .await
         .with_context(|| format!("no Shoal daemon runs for {}", paths.state.display()))?;
-    let (mut from_daemon, mut to_daemon) = socket.split();
-    let upstream = async {
-        tokio::io::copy(&mut input, &mut to_daemon).await?;
-        to_daemon.shutdown().await?;
+    let (mut from_daemon, to_daemon) = socket.split();
+    let upstream = async move {
+        send_to_daemon(input, to_daemon).await;
         std::future::pending().await
     };
     let downstream = async {
@@ -66,8 +66,20 @@ pub async fn relay(
         output.flush().await
     };
     let relayed: std::io::Result<()> = tokio::select! {
-        relayed = upstream => relayed,
+        never = upstream => never,
         relayed = downstream => relayed,
     };
     relayed.context("relay to the daemon")
 }
+
+/// Carry `input` to the daemon until either side ends, then close the
+/// daemon's side for reading and let `input` go. A daemon that closed the
+/// connection fails the copy, which ends nothing: what it wrote before,
+/// such as its reply to a member that leaves, still goes to the output.
+async fn send_to_daemon(mut input: impl AsyncRead + Unpin, mut to_daemon: impl AsyncWrite + Unpin) {
+    let _ = tokio::io::copy(&mut input, &mut to_daemon).await;
+    let _ = to_daemon.shutdown().await;
+}
+
+#[cfg(test)]
+mod tests;
