@@ -94,10 +94,12 @@ pub enum SessionsCommand {
         /// Restart only agents of this name, such as claude.
         #[arg(short = 'a', long, value_parser = AgentParser)]
         agent: Option<Agent>,
-        /// Restart each agent once its turn ends.
+        /// Restart each agent once its turn ends. The daemon keeps the
+        /// restart, so the command returns at once.
         #[arg(long)]
         wait: bool,
-        /// Restart one agent at a time, idle ones first, 10 seconds apart.
+        /// Restart one agent at a time, in turn with the other sequential
+        /// restarts, 10 seconds apart.
         #[arg(long)]
         sequential: bool,
         /// Restart each agent in the terminal it runs in.

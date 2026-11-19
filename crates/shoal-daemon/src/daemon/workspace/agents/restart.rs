@@ -77,20 +77,22 @@ impl Manager {
     /// returning once it runs again, with the place of the wrapper that runs
     /// it when that runs in a terminal host. The agent starts again with
     /// `change` made to the permissions it was given.
+    #[cfg(any(test, feature = "test-support"))]
     pub async fn restart_agent(
         &self,
         execution: &ExecutionId,
         in_place: bool,
         change: Option<PermissionChange>,
     ) -> Result<Option<Origin>> {
-        let answer = (self.request_restart(execution, in_place, change)).await?;
+        let answer = (self.begin_restart(execution, in_place, change)).await?;
         restarted(answer).await
     }
 
     /// Ask the agent's wrapper to stop it for a restart, or join the
-    /// restart that starts it in a new wrapper. `id` may name an execution
-    /// the agent ran as before such a restart.
-    async fn request_restart(
+    /// restart that starts it in a new wrapper, returning what answers once
+    /// the agent runs again, which [`restarted`] reads. `id` may name an
+    /// execution the agent ran as before such a restart.
+    pub(crate) async fn begin_restart(
         &self,
         id: &ExecutionId,
         in_place: bool,

@@ -337,7 +337,7 @@ async fn a_second_request_joins_the_restart_in_progress() {
     let mut stop = execution.stop.clone();
     stop.wait_for(|stopping| *stopping).await.unwrap();
     // Registered before the agent starts again, which answers it.
-    let second = manager.request_restart(&id, true, None).await.unwrap();
+    let second = manager.begin_restart(&id, true, None).await.unwrap();
     // The agent's start answers both, and leaves it running.
     assert!(manager.resume_agent_execution(&id, None).await.unwrap());
     manager.agent_started(&id).await;
@@ -356,7 +356,7 @@ async fn a_failed_restart_answers_with_why() {
         .unwrap();
     let id = execution.plan.id.clone();
     track(&manager, &workspace, &id, "claude", true).await;
-    let failed = manager.request_restart(&id, true, None).await.unwrap();
+    let failed = manager.begin_restart(&id, true, None).await.unwrap();
     manager
         .fail_restart(&id, "automatic restore failed".into())
         .await;
@@ -375,7 +375,7 @@ async fn a_cancelled_restart_answers_that_it_was() {
         .unwrap();
     let id = execution.plan.id.clone();
     track(&manager, &workspace, &id, "claude", true).await;
-    let cancelled = manager.request_restart(&id, true, None).await.unwrap();
+    let cancelled = manager.begin_restart(&id, true, None).await.unwrap();
     manager
         .executions
         .with_agent(&id, |agent| agent.cancel_recovery())
@@ -524,16 +524,16 @@ async fn a_restart_making_a_permission_change_is_joined_only_with_the_same_chang
         Some(crate::config::permissions::PermissionChange::assigned(assignment).unwrap())
     };
     let _first = manager
-        .request_restart(&id, false, narrowing("push=propose"))
+        .begin_restart(&id, false, narrowing("push=propose"))
         .await
         .unwrap();
     // Another request joins it with the same --permission, or without one,
     // but not with another.
     let other = manager
-        .request_restart(&id, false, narrowing("push=deny"))
+        .begin_restart(&id, false, narrowing("push=deny"))
         .await;
     assert!(other.is_err());
     for same in [None, narrowing("push=propose")] {
-        manager.request_restart(&id, false, same).await.unwrap();
+        manager.begin_restart(&id, false, same).await.unwrap();
     }
 }

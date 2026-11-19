@@ -70,8 +70,8 @@ mod usage;
 mod xcode;
 
 pub(crate) use agent_queue::Grant;
-pub(crate) use agents::RestartWaits;
 pub(crate) use agents::{Pause, Protection};
+pub(crate) use agents::{RestartWaits, restarted};
 pub(crate) use branches::NewWorktreeOptions;
 pub(crate) use contributions::holds::{
     ContributionHold, RESUME_WINDOW as CONTRIBUTION_RESUME_WINDOW,
@@ -162,6 +162,9 @@ pub struct Manager {
     /// Held while a converted space's agent is handed over to the new place,
     /// so a stop and the relocation never both hand it over.
     pub(crate) conversion_handovers: crate::daemon::conversions::Handovers,
+    /// The restarts of agents the daemon took, and the line of sequential
+    /// ones.
+    pub(crate) restarts: crate::daemon::restarts::Restarts,
     /// Held while an agent is admitted to a workspace, until it is tracked,
     /// and while a workspace's conversion into a chat is recorded, so no
     /// agent starts in a workspace that becomes a chat.
@@ -237,6 +240,7 @@ impl Manager {
             usage: Default::default(),
             leftovers: Default::default(),
             conversion_handovers: Default::default(),
+            restarts: Default::default(),
             agent_admissions: Default::default(),
             space_removals: Default::default(),
             completed_owners: Default::default(),

@@ -3,12 +3,15 @@ use std::time::Duration;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
 
+use super::record::{self, Recorded};
 use crate::{
     daemon::{
+        scope::Caller,
         test_support::{manager, repository},
         workspace::{ExecutionKind, Manager},
     },
     model::{AgentRestart, RestartOutcome, RestartWait, Workspace},
+    state::AgentState,
 };
 
 async fn workspace(root: &std::path::Path, manager: &Manager) -> Workspace {
@@ -137,4 +140,185 @@ async fn a_restart_waiting_for_processes_answers_what_it_waits_for() {
             waits,
         }
     );
+}
+
+/// A workspace whose `claude` agent runs as the returned execution and
+/// works on a turn.
+async fn working(
+    root: &std::path::Path,
+    manager: &Manager,
+) -> (Workspace, crate::daemon::workspace::StartedExecution) {
+    let workspace = workspace(root, manager).await;
+    let execution = manager
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    track(manager, &workspace, &execution.plan.id, "claude", true).await;
+    let space = SpaceSelector::id(&workspace.id);
+    (manager.set_agent_state(&space, AgentState::Working, None, None))
+        .await
+        .unwrap();
+    (workspace, execution)
+}
+
+/// The restarts the daemon recorded.
+async fn recorded(manager: &Manager) -> Vec<Recorded> {
+    manager.store.read(|db| record::all(db)).await.unwrap()
+}
+
+fn waiting() -> AgentRestart {
+    AgentRestart {
+        wait: true,
+        in_place: true,
+        ..Default::default()
+    }
+}
+
+#[tokio::test]
+async fn a_restart_waiting_for_the_turn_is_recorded_until_the_turn_ends() {
+    let (root, manager) = manager().await;
+    let (workspace, execution) = working(root.path(), &manager).await;
+    let space = SpaceSelector::id(&workspace.id);
+    let outcome = manager.restart_space(None, &space, waiting()).await;
+    let waits = RestartOutcome::Waits {
+        agent: "claude".into(),
+        waits: RestartWait::Turn,
+    };
+    assert_eq!(outcome.unwrap(), waits);
+    let restart = Recorded {
+        space_id: workspace.id.clone(),
+        restart: waiting(),
+        asked_by: None,
+    };
+    assert_eq!(recorded(&manager).await, [restart]);
+    // Nothing restarts while the turn goes on.
+    manager.restart_finished_turns().await.unwrap();
+    assert!(!*execution.stop.borrow());
+
+    (manager.set_agent_state(&space, AgentState::Idle, None, None))
+        .await
+        .unwrap();
+    manager.restart_finished_turns().await.unwrap();
+    let mut stop = execution.stop.clone();
+    stop.wait_for(|stopping| *stopping).await.unwrap();
+    assert!(manager.restart_in_place(&execution.plan.id).await);
+    assert!(recorded(&manager).await.is_empty());
+}
+
+#[tokio::test]
+async fn a_recorded_restart_goes_when_its_agent_exits_first() {
+    let (root, manager) = manager().await;
+    let (workspace, execution) = working(root.path(), &manager).await;
+    let space = SpaceSelector::id(&workspace.id);
+    (manager.restart_space(None, &space, waiting()))
+        .await
+        .unwrap();
+    let id = execution.plan.id.clone();
+    (manager.finish_execution(id, ExecutionKind::Command, Some(0)))
+        .await
+        .unwrap();
+    assert!(!manager.act_on_restart(&workspace.id).await);
+    assert!(recorded(&manager).await.is_empty());
+}
+
+/// Record a restart of the agent of `workspace`, running as `execution`,
+/// for `caller` once the turn ends, then fail it as the agent's wrapper
+/// would, with no request left to answer.
+async fn fail_after_the_turn(
+    manager: &std::sync::Arc<Manager>,
+    workspace: &Workspace,
+    execution: &crate::daemon::workspace::StartedExecution,
+    caller: Option<&Caller>,
+) {
+    let space = SpaceSelector::id(&workspace.id);
+    (manager.restart_space(caller, &space, waiting()))
+        .await
+        .unwrap();
+    (manager.set_agent_state(&space, AgentState::Idle, None, None))
+        .await
+        .unwrap();
+    let acting = tokio::spawn({
+        let (manager, id) = (manager.clone(), workspace.id.clone());
+        async move { manager.act_on_restart(&id).await }
+    });
+    let mut stop = execution.stop.clone();
+    stop.wait_for(|stopping| *stopping).await.unwrap();
+    let id = &execution.plan.id;
+    manager.fail_restart(id, FAILURE.into()).await;
+    assert!(!acting.await.unwrap());
+}
+
+const FAILURE: &str = "automatic restore failed";
+
+#[tokio::test]
+async fn a_deferred_restart_that_fails_reaches_the_user() {
+    let (root, manager) = manager().await;
+    let (workspace, execution) = working(root.path(), &manager).await;
+    fail_after_the_turn(&manager, &workspace, &execution, None).await;
+    let notifications = manager.notifications(false, 10).await.unwrap();
+    assert!(
+        notifications.iter().any(|notice| notice.kind
+            == crate::daemon::notifications::NotificationKind::RecoveryBlocked
+            && notice.message.contains(FAILURE)),
+        "{notifications:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_deferred_restart_that_fails_reaches_the_coordinator_that_asked() {
+    let (root, manager) = manager().await;
+    let (workspace, execution) = working(root.path(), &manager).await;
+    let repository = workspace.repository().clone();
+    let coordinator = manager
+        .create_workspace(&repository, "coordinator".into(), None, None, None)
+        .await
+        .unwrap();
+    let caller = Caller {
+        space_id: coordinator.id.clone(),
+        execution: None,
+        granted: None,
+        read_only: false,
+    };
+    fail_after_the_turn(&manager, &workspace, &execution, Some(&caller)).await;
+    let coordinator = SpaceSelector::id(&coordinator.id);
+    let messages = manager.agent_messages(&coordinator).await.unwrap();
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.message.contains(FAILURE)),
+        "{messages:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_sequential_restart_answers_once_the_line_restarted_its_agent() {
+    let (root, manager) = manager().await;
+    let workspace = workspace(root.path(), &manager).await;
+    let execution = manager
+        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    let id = execution.plan.id.clone();
+    track(&manager, &workspace, &id, "claude", true).await;
+    let line = tokio::spawn(super::run_line(manager.clone()));
+    let restart = AgentRestart {
+        sequential: true,
+        in_place: true,
+        ..Default::default()
+    };
+    let restarting = tokio::spawn({
+        let (manager, space) = (manager.clone(), SpaceSelector::id(&workspace.id));
+        async move { manager.restart_space(None, &space, restart).await }
+    });
+    let mut stop = execution.stop.clone();
+    stop.wait_for(|stopping| *stopping).await.unwrap();
+    assert!(manager.resume_agent_execution(&id, None).await.unwrap());
+    manager.agent_started(&id).await;
+    let outcome = restarting.await.unwrap().unwrap();
+    assert!(
+        matches!(outcome, RestartOutcome::Restarted { .. }),
+        "{outcome:?}"
+    );
+    assert!(recorded(&manager).await.is_empty());
+    line.abort();
 }

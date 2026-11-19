@@ -38,6 +38,7 @@ mod make_room;
 mod restart;
 mod stops;
 pub use restart::RestartWaits;
+pub(crate) use restart::restarted;
 pub(crate) use restart::{Renewals, forget_ended_renewals};
 pub(crate) use stops::recorded as stop_recorded;
 

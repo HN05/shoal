@@ -56,7 +56,7 @@ mod releases;
 mod requests;
 pub mod resources;
 mod restart_recovery;
-mod restarts;
+pub(crate) mod restarts;
 pub(crate) mod reviews;
 pub(crate) mod runner;
 pub mod scope;
@@ -229,6 +229,12 @@ pub async fn run(
         workspace::lost_reports::run,
     );
     spawn_supervised(&mut background, &manager, "turn ends", turn_ends::run);
+    spawn_supervised(
+        &mut background,
+        &manager,
+        "sequential restarts",
+        restarts::run_line,
+    );
     spawn_supervised(
         &mut background,
         &manager,

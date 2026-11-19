@@ -824,6 +824,13 @@ CREATE TABLE hub_known_tree (
     tree TEXT NOT NULL
 );
 
+CREATE TABLE agent_restarts (
+    space_id TEXT PRIMARY KEY,
+    restart TEXT NOT NULL,
+    asked_by TEXT,
+    recorded_at INTEGER NOT NULL
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
@@ -1314,4 +1321,14 @@ END;
 
 CREATE TRIGGER space_engagement_removed AFTER DELETE ON spaces BEGIN
     DELETE FROM space_engagement WHERE space_id=OLD.id;
+END;
+
+CREATE TRIGGER workspace_restart_removed AFTER DELETE ON workspaces
+WHEN OLD.id NOT IN (SELECT id FROM chats) BEGIN
+    DELETE FROM agent_restarts WHERE space_id=OLD.id;
+END;
+
+CREATE TRIGGER chat_restart_removed AFTER DELETE ON chats
+WHEN OLD.id NOT IN (SELECT id FROM workspaces) BEGIN
+    DELETE FROM agent_restarts WHERE space_id=OLD.id;
 END;

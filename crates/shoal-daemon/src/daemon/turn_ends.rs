@@ -1,6 +1,7 @@
 //! Acting on spaces once their agents' turns end, through one loop that
 //! looks whenever an agent's state changes and every few seconds besides:
-//! a converted space's agent moves to its new place.
+//! a converted space's agent moves to its new place, and a recorded restart
+//! restarts its agent.
 use shoal_ids::space_ids::SpaceId;
 use std::{sync::Arc, time::Duration};
 
@@ -32,9 +33,12 @@ pub(crate) async fn run(manager: Arc<Manager>) {
 impl Manager {
     /// Do what waits for the end of an agent's turn, for each space whose
     /// agent's turn ended.
-    async fn act_on_turn_ends(&self) {
+    async fn act_on_turn_ends(self: &Arc<Self>) {
         if let Err(error) = self.relocate_finished_turns().await {
             log!("conversions: {error:#}");
+        }
+        if let Err(error) = self.restart_finished_turns().await {
+            log!("restarts: {error:#}");
         }
     }
 
