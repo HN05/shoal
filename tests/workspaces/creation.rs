@@ -2650,7 +2650,7 @@ fn a_workspace_at_a_commit_runs_its_own_agent_whose_commits_keep_it() {
 /// top-level workspace without an agent, which needs no `agent.default`:
 /// on a branch it names, at a path relative to the caller's directory, on
 /// an issue URL, which it links and names the workspace after, or at a
-/// commit in the repository `--repo` names, with the name given.
+/// commit in the repository it names, with the name given.
 #[test]
 fn create_outside_a_space_makes_top_level_workspaces_without_an_agent() {
     let fixture = Fixture::with_config(Some("[machine.overload.disk]\nenabled = false\n"));
@@ -2666,14 +2666,7 @@ fn create_outside_a_space_makes_top_level_workspaces_without_an_agent() {
     let on_issue = fixture.ok(&["create", url, "--repo", repo]);
     let at_commit = fixture.ok_from(
         fixture.command().current_dir(&elsewhere),
-        &[
-            "create",
-            "--no-branch",
-            "--repo",
-            repo,
-            "--name",
-            "Read only",
-        ],
+        &["create", repo, "--no-branch", "--name", "Read only"],
     );
 
     for created in [&on_branch, &on_issue, &at_commit] {

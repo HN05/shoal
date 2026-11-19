@@ -3090,8 +3090,8 @@ commit without stacking it. It is named after the branch at its short commit
 [`shoal refresh`](#refresh) moves to a PR's new head or a branch's new tip. Run by a workspace's or a chat's
 process it is a child of the caller's space, or of `--parent` when that names
 one below it; run by the user it is a child of `--parent`
-or the current space, and outside one a top-level workspace of `--repo` or the
-current repository that the user owns. It does not take `--branch`, `--issue`,
+or the current space, and outside one a top-level workspace of the repository
+it names or the current one that the user owns. It does not take `--branch`, `--issue`,
 `--agent` or `--fork`, as `create` starts no agent: its owner, a CI job, a
 reviewer or the user runs things in it with `shoal run`, `shoal demo` or a
 shell, and `shoal start --in` starts an agent of its own there, whose opening

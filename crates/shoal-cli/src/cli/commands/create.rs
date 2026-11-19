@@ -98,11 +98,9 @@ async fn parent_space(
 /// of `parent`, or without one a top-level workspace in the repository
 /// they name, else the copied one's or the current one.
 async fn at_commit(ctx: &Context, parent: Option<SpaceSelector>, args: &CreateArgs) -> Result<i32> {
+    let named = commit_named_repository(args)?;
     let copy = super::copies::source(ctx, args.copy.clone()).await?;
     let copied = copy.as_ref().map(|copy| copy.repository.clone());
-    let named = (args.repository_override.clone())
-        .map(crate::repository::named)
-        .transpose()?;
     let repository = match named {
         Some(named) => named,
         None => commit_repository(ctx, parent.as_ref(), copied).await?,
@@ -124,6 +122,27 @@ async fn at_commit(ctx: &Context, parent: Option<SpaceSelector>, args: &CreateAr
     };
     report(ctx, &child)?;
     Ok(0)
+}
+
+/// The repository a creation at a commit names, positionally or with
+/// `--repo`, refusing an item or branch link, which a workspace at a commit
+/// does not start on.
+fn commit_named_repository(args: &CreateArgs) -> Result<Option<crate::repository::Selector>> {
+    use shoal_protocol::launches::StartTarget;
+    let positional = match &args.repository {
+        None => None,
+        Some(StartTarget::Repository(named) | StartTarget::Number(named)) => Some(named.clone()),
+        Some(_) => anyhow::bail!(
+            "--no-branch starts at a commit of a repository, not an issue, PR or branch link"
+        ),
+    };
+    anyhow::ensure!(
+        positional.is_none() || args.repository_override.is_none(),
+        "a positional repository cannot be combined with --repo"
+    );
+    (positional.or(args.repository_override.clone()))
+        .map(crate::repository::named)
+        .transpose()
 }
 
 /// The repository of a workspace at a commit: that of its `parent`, or the

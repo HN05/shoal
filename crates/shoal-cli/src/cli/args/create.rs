@@ -141,7 +141,7 @@ pub struct CreateArgs {
     /// Create a workspace at a commit, with no branch of its own, for
     /// comparisons and research: at --base, a tag or commit, or the default
     /// branch.
-    #[arg(long, conflicts_with_all = ["branch", "issue", "repository", "path", "git_profile"])]
+    #[arg(long, conflicts_with_all = ["branch", "issue", "path", "git_profile"])]
     pub no_branch: bool,
     /// Create this worktree at an exact new directory instead of the repository default.
     #[arg(long)]
