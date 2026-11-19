@@ -273,8 +273,19 @@ async fn branches(
     repo: &Repository,
     name: &str,
 ) -> Result<(Option<(String, BranchName)>, Vec<BranchName>)> {
-    let remote = git::remote_branch(&repo.path, name).await?;
-    Ok((remote, git::branch::names_in_use(&repo.path).await?))
+    let read = async {
+        let remote = git::remote_branch(&repo.path, name).await?;
+        Ok((remote, git::branch::names_in_use(&repo.path).await?))
+    };
+    match read.await {
+        // Removed meanwhile, as `shoal repo rm` takes its checkout.
+        Err(_) if !repo.path.try_exists().unwrap_or(true) => {
+            let name = repo.display_name();
+            let message = format!("repository {name} ({}) was removed", repo.id);
+            Err(crate::refusal::Refusal::new(crate::refusal::Reason::NotFound, message).into())
+        }
+        read => read,
+    }
 }
 
 /// `creation` on the branch the issue at `url` with `title` settles in

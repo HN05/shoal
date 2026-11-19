@@ -18,3 +18,23 @@ fn issue_names_are_portable_bounded_and_stable() {
     assert_eq!(branch(&format!("Fix {}", "x".repeat(200))), "34-fix");
     assert_eq!(branch("日本語 to the"), "issue-34");
 }
+
+#[tokio::test]
+async fn reading_the_branches_of_a_repository_removed_meanwhile_says_so() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = Repository {
+        id: "repo-id".into(),
+        path: root.path().join("removed"),
+        source: "https://example.com/team/repo".into(),
+        last_used: 0,
+        name: Some("repo".into()),
+        workspaces_dir: root.path().join("workspaces"),
+        contribution: false,
+    };
+    let error = branches(&repo, "racing").await.unwrap_err();
+    let error = format!("{error:#}");
+    assert!(
+        error.contains("removed") && error.contains("repo-id"),
+        "{error}"
+    );
+}
