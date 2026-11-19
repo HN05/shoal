@@ -4,7 +4,7 @@ use std::{ffi::OsString, time::Duration};
 use anyhow::Result;
 use tokio::time::Instant;
 
-use crate::cli::{commands::messages, context::Context};
+use crate::cli::{commands::alerts, context::Context};
 use crate::client::items;
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -27,10 +27,10 @@ pub(in crate::cli::commands) async fn watch_items(
         executable.resume_or(error, || resume_watch_arguments(&workspace, deadline))
     })?;
     ctx.show(&updates, |updates| {
-        for message in &updates.messages {
+        for alert in &updates.alerts {
             outln!(
-                "Message: {}",
-                messages::hanging_indent(&messages::shown(message), "         ")
+                "Alert: {}",
+                alerts::hanging_indent(&alerts::shown(alert), "       ")
             );
         }
         for update in &updates.updates {
@@ -44,14 +44,14 @@ pub(in crate::cli::commands) async fn watch_items(
         }
     })?;
     crate::stdout::flush()?;
-    if updates.updates.is_empty() && updates.messages.is_empty() {
+    if updates.updates.is_empty() && updates.alerts.is_empty() {
         return Ok(0);
     }
     let deliveries = (updates.updates.iter())
         .map(|update| update.delivery.clone())
         .collect();
-    let messages = updates.messages.iter().map(|message| message.id).collect();
-    crate::client::agent_messages::acknowledge(
+    let messages = updates.alerts.iter().map(|message| message.id).collect();
+    crate::client::agent_updates::acknowledge(
         &ctx.paths,
         workspace.clone(),
         deliveries,

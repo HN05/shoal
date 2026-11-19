@@ -152,10 +152,10 @@ async fn an_agents_files_name_its_kind_and_session() {
         .unwrap();
     manager
         .send_space_message(
+            Some(&caller),
             &SpaceSelector::id(&workspace.id),
             "See the log".into(),
             vec![log.into()],
-            &attacher,
         )
         .await
         .unwrap();
@@ -252,10 +252,10 @@ async fn files_sent_with_messages_are_listed_until_they_expire() {
     for _ in 0..2 {
         manager
             .send_space_message(
+                None,
                 &SpaceSelector::id(&workspace.id),
                 "See the log".into(),
                 vec![file.clone().into()],
-                &Attacher::User,
             )
             .await
             .unwrap();
@@ -346,10 +346,10 @@ async fn added_files_need_no_message() {
         .unwrap();
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&workspace.id),
             String::new(),
             vec![file.into()],
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -365,7 +365,7 @@ async fn added_files_need_no_message() {
             .await
             .unwrap()
             .iter()
-            .all(|message| message.attachments.len() == 1),
+            .all(|message| message.attachments().len() == 1),
         "adding sends no message"
     );
 }
@@ -405,10 +405,10 @@ async fn titles_stay_with_their_files_until_a_new_one() {
         .unwrap();
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&workspace.id),
             String::new(),
             vec![titled(&shot, "Login screen"), report.clone().into()],
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -492,10 +492,10 @@ async fn deleting_by_name_keeps_the_other_files() {
     std::fs::write(&shot, "image").unwrap();
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&workspace.id),
             "See".into(),
             vec![log.clone().into(), shot.into()],
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -531,10 +531,10 @@ async fn deleting_by_name_keeps_the_other_files() {
     // Sending the same files again copies the deleted one anew.
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&workspace.id),
             "See".into(),
             vec![log.into(), temp.path().join("shot.png").into()],
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -982,10 +982,10 @@ async fn deleting_a_record_keeps_other_copies_of_the_same_name() {
         .unwrap();
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&workspace.id),
             String::new(),
             vec![file.into()],
-            &Attacher::User,
         )
         .await
         .unwrap();

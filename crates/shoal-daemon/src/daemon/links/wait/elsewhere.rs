@@ -110,7 +110,8 @@ impl Manager {
         let event = Event {
             name: &space.name,
             space: &space.id,
-            kind: None,
+            kind: crate::daemon::alerts::AlertKind::ItemActivity,
+            for_user: false,
             message: activity_message(updates),
             attachments: &[],
         };

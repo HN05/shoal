@@ -16,7 +16,8 @@ async fn a_long_notification_listing_goes_in_pages() {
     }
     let answer = handle(
         &manager,
-        NotificationMethod::ListNotifications {
+        AlertMethod::ListAlerts {
+            to: crate::protocol::AlertsFor::User,
             unread_only: true,
             limit: 200,
         },

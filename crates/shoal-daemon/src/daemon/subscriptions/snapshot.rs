@@ -7,29 +7,22 @@ use anyhow::Result;
 
 use super::agents;
 use crate::{
-    daemon::{
-        agent_messages::AgentMessage,
-        approvals::DecisionStatus,
-        manager::Manager,
-        notifications::{Alert, AlertKind},
-        scope::Caller,
-    },
+    daemon::{approvals::DecisionStatus, manager::Manager, scope::Caller},
     model::{Relation, Space},
 };
 use shoal_forge::updates::Snapshot;
 use shoal_protocol::{
     log::LogTopic,
     subscriptions::records::{
-        Check, Link, LookupError, Message, MessageRecipient, Record, RecordKey, ReportedSessions,
-        SpaceRecord, Topic,
+        Check, Link, LookupError, Record, RecordKey, ReportedSessions, SpaceRecord, Topic,
     },
 };
 
 /// Records by key, each with its JSON, which tells a changed one apart.
 pub(super) type Records = BTreeMap<RecordKey, (Record, serde_json::Value)>;
 
-/// The topics a subscription covers: those it asked for, without
-/// notifications for a scoped caller, and the log of a space it may read.
+/// The topics a subscription covers: those it asked for, and the log of a
+/// space it may read.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(super) struct Topics {
     topics: HashSet<Topic>,
@@ -37,12 +30,8 @@ pub(super) struct Topics {
 }
 
 impl Topics {
-    pub(super) fn new(topics: &[Topic], log: Option<LogTopic>, caller: Option<&Caller>) -> Self {
-        let topics = topics
-            .iter()
-            .copied()
-            .filter(|topic| caller.is_none() || *topic != Topic::Notifications)
-            .collect();
+    pub(super) fn new(topics: &[Topic], log: Option<LogTopic>) -> Self {
+        let topics = topics.iter().copied().collect();
         Self { topics, log }
     }
 
@@ -77,11 +66,8 @@ pub(super) async fn take(
     if topics.has(Topic::Approvals) {
         found.extend(approvals(manager, caller, &visible).await?);
     }
-    if topics.has(Topic::Messages) {
-        found.extend(messages(manager, caller, &visible).await?);
-    }
-    if topics.has(Topic::Notifications) {
-        found.extend(notifications(manager).await?);
+    if topics.has(Topic::Alerts) {
+        found.extend(alerts(manager, caller, &visible).await?);
     }
     if let Some(log) = &topics.log {
         let entries = manager
@@ -116,7 +102,7 @@ impl Visible {
             Topic::Sessions,
             Topic::Questions,
             Topic::Approvals,
-            Topic::Messages,
+            Topic::Alerts,
         ];
         if !reading_spaces.into_iter().any(|topic| topics.has(topic)) {
             return Ok(Self::default());
@@ -279,70 +265,27 @@ async fn approvals(
         .collect())
 }
 
-/// Messages queued for the agents of the visible spaces, and for the user,
-/// who alone reads the messages agents send it.
-async fn messages(
+/// Unread alerts to the agents of the visible spaces, and for the user
+/// every alert to the user.
+async fn alerts(
     manager: &Manager,
     caller: Option<&Caller>,
     visible: &Visible,
 ) -> Result<Vec<Record>> {
-    let mut messages: Vec<Record> = (manager.store)
+    let mut alerts: Vec<Record> = (manager.store)
         .read(|db| crate::daemon::agent_messages::every_unread(db))
         .await?
         .into_iter()
-        .filter_map(|(space_id, message)| {
-            let space = visible.space(&space_id)?;
-            Some(Record::Message(agent_message(message, space)))
+        .filter(|alert| {
+            (alert.recipient.as_ref()).is_some_and(|recipient| visible.contains(&recipient.id))
         })
+        .map(Record::Alert)
         .collect();
     if caller.is_none() {
-        messages.extend(
-            manager
-                .notifications
-                .list(false, u32::MAX)
-                .await?
-                .iter()
-                .filter(|notification| notification.kind == AlertKind::AgentMessage)
-                .map(|notification| Record::Message(user_message(notification))),
-        );
+        let users = manager.notifications.list(false, u32::MAX).await?;
+        alerts.extend(users.into_iter().map(Record::Alert));
     }
-    Ok(messages)
-}
-
-/// A message queued for the agent of `space`.
-fn agent_message(message: AgentMessage, space: &Space) -> Message {
-    Message {
-        id: format!("agent/{}", message.id),
-        recipient: MessageRecipient::Agent,
-        space_id: Some(space.id.clone()),
-        space: Some(space.name.clone()),
-        text: message.message,
-        attachments: message.attachments,
-        created_at: message.created_at,
-    }
-}
-
-/// A space's message to the user, which its notification records.
-fn user_message(notification: &Alert) -> Message {
-    Message {
-        id: format!("user/{}", notification.id),
-        recipient: MessageRecipient::User,
-        space_id: None,
-        space: notification.workspace.clone(),
-        text: notification.message.clone(),
-        attachments: Vec::new(),
-        created_at: notification.created_at,
-    }
-}
-
-async fn notifications(manager: &Manager) -> Result<Vec<Record>> {
-    Ok(manager
-        .notifications
-        .list(false, u32::MAX)
-        .await?
-        .into_iter()
-        .map(Record::Alert)
-        .collect())
+    Ok(alerts)
 }
 
 /// What the daemon last observed of each linked item on its forge, by space

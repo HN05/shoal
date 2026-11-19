@@ -289,7 +289,7 @@ pub(super) async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<
         if !updates.is_empty() {
             return Ok(Updates {
                 updates,
-                messages: Vec::new(),
+                alerts: Vec::new(),
                 leftovers: Vec::new(),
                 timed_out: false,
                 superseded: false,

@@ -2583,7 +2583,7 @@ fn a_rate_limited_forge_slows_watches_instead_of_failing_lookups() {
             .spawn()
             .unwrap();
         let limited = || {
-            let notifications = fixture.ok(&["alerts", "--keep-unread"]);
+            let notifications = fixture.ok(&["alert", "list", "--unread", "--keep-unread"]);
             notifications
                 .as_array()
                 .unwrap()
@@ -5595,7 +5595,7 @@ fn writes(fixture: &Fixture) -> Vec<Value> {
 /// The workspace's new agent messages.
 fn messages(fixture: &Fixture) -> Vec<String> {
     fixture
-        .ok(&["messages", &fixture.id("topic")])
+        .ok(&["alert", "list", "--unread", "--space", &fixture.id("topic")])
         .as_array()
         .unwrap()
         .iter()
@@ -5814,7 +5814,13 @@ fn a_chats_proposed_issue_opens_from_its_checkout_on_approval() {
     assert_eq!(links["issues"][0]["url"], json!(url), "{chats}");
     assert_eq!(links["opened"], json!([]), "{chats}");
     let told: Vec<_> = (fixture
-        .ok(&["messages", &fixture.id("planning")])
+        .ok(&[
+            "alert",
+            "list",
+            "--unread",
+            "--space",
+            &fixture.id("planning"),
+        ])
         .as_array()
         .unwrap()
         .iter())

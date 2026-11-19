@@ -57,7 +57,7 @@ fn joining_renumbers_a_space_whose_number_the_hub_holds_and_says_so() {
         (number(&hub, &on_hub), shown),
         (1.into(), renumbered.clone())
     );
-    let alerts = laptop.ok(&["alerts"]);
+    let alerts = laptop.ok(&["alert", "list", "--unread"]);
     let notice = (alerts.as_array().unwrap().iter())
         .find(|alert| alert["kind"] == "space_renumbered")
         .unwrap_or_else(|| panic!("no notice of the renumbering: {alerts}"));
@@ -97,7 +97,7 @@ fn spaces_a_machine_numbers_while_the_hub_is_unreachable_never_share_a_number() 
     });
     assert_eq!(numbers.len(), 8);
     let renumbered = [&hub, &laptop].map(|machine| {
-        let alerts = machine.ok(&["alerts"]);
+        let alerts = machine.ok(&["alert", "list", "--unread"]);
         (alerts.as_array().unwrap().iter())
             .filter(|alert| alert["kind"] == "space_renumbered")
             .count()

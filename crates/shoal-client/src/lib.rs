@@ -3,8 +3,9 @@
 //! `shoal` command prints. The types the protocol carries are
 //! `shoal-protocol`'s.
 
-pub mod agent_messages;
+pub mod agent_updates;
 pub mod agents;
+pub mod alerts;
 pub mod approvals;
 pub mod apps;
 pub mod assignments;
@@ -25,7 +26,6 @@ pub mod items;
 pub mod launches;
 pub mod leases;
 pub mod log;
-pub mod notifications;
 pub mod operations;
 pub mod output;
 pub mod preparation;

@@ -201,8 +201,8 @@ fn leftovers_reach_status_and_the_agent_hook_once() {
             &fixture.id("leaky"),
             "--",
             support::shoal_binary(),
-            "messages",
-            "--hook",
+            "internal",
+            "deliver",
         ]);
         assert!(output.status.success(), "{}", printed(&output));
         String::from_utf8(output.stdout).unwrap()

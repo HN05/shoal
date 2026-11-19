@@ -7,7 +7,6 @@ use crate::{
         executions::ExecutionKind,
         manager::Manager,
         test_support::{manager, repository},
-        workspace_files::Attacher,
     },
     model::{Chat, Workspace},
     protocol::TurnEnd,
@@ -141,10 +140,10 @@ async fn an_interrupted_agent_alone_is_due_a_wake_for_its_interruption() {
         .unwrap();
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&workspace.id),
             "Rebase onto main".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -187,12 +186,7 @@ async fn a_chats_interrupted_agent_is_due_its_wrappers_wake_for_a_message() {
         .await
         .unwrap();
     manager
-        .send_space_message(
-            &selected,
-            "Rebase onto main".into(),
-            Vec::new(),
-            &Attacher::User,
-        )
+        .send_space_message(None, &selected, "Rebase onto main".into(), Vec::new())
         .await
         .unwrap();
     // A hang guard only: each wait answers the state it is given.

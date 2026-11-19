@@ -93,11 +93,11 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
     assert_eq!(agent.status.code(), Some(7), "{}", printed(&agent));
     wait_until("failed agent exit hook", || {
         fixture
-            .ok(&["alerts", "--all"])
+            .ok(&["alert", "list"])
             .as_array()
             .unwrap()
             .iter()
-            .any(|n| n["kind"] == "hook_failed" && n["workspace"] == "agent-work")
+            .any(|n| n["kind"] == "hook_failed" && n["space"] == "agent-work")
     });
 }
 
@@ -259,11 +259,11 @@ fn post_done_hook_runs_for_scoped_done_and_retained_cleanup_with_config_layers()
     );
     assert!(
         fixture
-            .ok(&["alerts", "--all"])
+            .ok(&["alert", "list"])
             .as_array()
             .unwrap()
             .iter()
-            .any(|n| n["kind"] == "hook_failed" && n["workspace"] == "hooked")
+            .any(|n| n["kind"] == "hook_failed" && n["space"] == "hooked")
     );
 }
 
@@ -550,7 +550,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy(cleanup: b
         });
         let state = fixture.ok(&["status", &fixture.id("multi")]);
         assert_eq!(state["pr_cleanup"]["merged_head"], head.trim());
-        fixture.ok(&["alerts"]);
+        fixture.ok(&["alert", "list", "--unread"]);
         // A changed default must not change a kept assignment.
         fs::write(
             root.join(".config/shoal/config.toml"),
@@ -566,7 +566,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy(cleanup: b
     let db = rusqlite::Connection::open(root.join("state/state.db")).unwrap();
     let count: i64 = db
         .query_row(
-            "SELECT count(*) FROM notifications WHERE kind='workspace_done' AND workspace='multi'",
+            "SELECT count(*) FROM alerts WHERE kind='workspace_done' AND space='multi'",
             [],
             |row| row.get(0),
         )

@@ -2,10 +2,8 @@ use crate::removal::{InspectionPolicy, UnsavedWork};
 use crate::{
     daemon::{
         manager::Manager,
-        notifications::AlertKind,
-        notifications::Source,
+        notifications::{AlertKind, Source},
         test_support::{manager, repository},
-        workspace_files::Attacher,
     },
     model::{Chat, Workspace},
     state::AgentState,
@@ -43,14 +41,20 @@ async fn received(manager: &Manager, chat: &Chat) -> Vec<String> {
         .agent_messages(&SpaceSelector::id(&chat.id))
         .await
         .unwrap();
-    messages.into_iter().map(|m| m.message).collect()
+    // As the agent reads them, after the space each names.
+    (messages.into_iter())
+        .map(|m| match m.space_label() {
+            Some(space) => format!("{space}: {}", m.message),
+            None => m.message,
+        })
+        .collect()
 }
 
 async fn user(manager: &Manager) -> Vec<(Option<String>, AlertKind, String)> {
     let notifications = manager.notifications.list(false, 100).await.unwrap();
     notifications
         .into_iter()
-        .map(|n| (n.workspace.map(String::from), n.kind, n.message))
+        .map(|n| (n.space.map(String::from), n.kind, n.message))
         .collect()
 }
 
@@ -70,11 +74,13 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
     // Without an agent of its own, the worker is the chat's or the user's
     // own work, which the user hears about.
     manager
-        .send_message(
-            &SpaceSelector::id(&worker.id),
+        .send_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &worker.id,
+            ))),
+            crate::protocol::AlertTarget::Up,
             "first".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -97,21 +103,25 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
         .await
         .unwrap();
     manager
-        .send_message(
-            &SpaceSelector::id(&worker.id),
+        .send_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &worker.id,
+            ))),
+            crate::protocol::AlertTarget::Up,
             "second".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
     // The worker's agent coordinates the helper below it, not the chat.
     manager
-        .send_message(
-            &SpaceSelector::id(&helper.id),
+        .send_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &helper.id,
+            ))),
+            crate::protocol::AlertTarget::Up,
             "to the worker".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -124,16 +134,12 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
         .await
         .unwrap();
     assert_eq!(
-        worker_messages[0].message,
+        worker_messages[0].text(),
         format!("{} helper: to the worker", helper.number)
     );
     assert_eq!(
         user(&manager).await,
-        [(
-            Some("worker".into()),
-            AlertKind::AgentMessage,
-            "first".into()
-        )]
+        [(Some("worker".into()), AlertKind::Message, "first".into())]
     );
 
     // Once the worker's agent has gone, the chat that owns the worker
@@ -148,11 +154,13 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
         .await
         .unwrap();
     manager
-        .send_message(
-            &SpaceSelector::id(&helper.id),
+        .send_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &helper.id,
+            ))),
+            crate::protocol::AlertTarget::Up,
             "to the chat".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -185,22 +193,24 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
         async move { manager.wait_space_updates(&SpaceSelector::id(&chat)).await }
     });
     manager
-        .send_message(
-            &SpaceSelector::id(&worker.id),
+        .send_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &worker.id,
+            ))),
+            crate::protocol::AlertTarget::Up,
             "done with the tests".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
     let woken = waiting.await.unwrap().unwrap();
     assert!(!woken.superseded);
     assert_eq!(
-        woken.messages[0].message,
+        woken.alerts[0].text(),
         format!("{} worker: done with the tests", worker.number)
     );
 
-    let ids = woken.messages.iter().map(|m| m.id).collect();
+    let ids = woken.alerts.iter().map(|m| m.id).collect();
     manager
         .mark_agent_messages_delivered(&SpaceSelector::id(&chat.id), ids)
         .await
@@ -209,7 +219,9 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
         .read(|db| crate::daemon::agent_messages::every_unread(db))
         .await
         .unwrap();
-    assert!(unread.iter().all(|(space, _)| *space != chat.id));
+    assert!(
+        (unread.iter()).all(|alert| alert.recipient.as_ref().is_none_or(|to| to.id != chat.id))
+    );
 
     // A hook delivery replaces a wait still running, which leaves the next
     // messages to the delivery.
@@ -225,16 +237,18 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
             .agent_updates(&SpaceSelector::id(&chat.id))
             .await
             .unwrap()
-            .messages
+            .alerts
             .is_empty()
     );
     assert!(waiting.await.unwrap().unwrap().superseded);
     manager
-        .send_message(
-            &SpaceSelector::id(&worker.id),
+        .send_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &worker.id,
+            ))),
+            crate::protocol::AlertTarget::Up,
             "next".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -243,7 +257,7 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
         .await
         .unwrap();
     assert_eq!(
-        delivered.messages[0].message,
+        delivered.alerts[0].text(),
         format!("{} worker: next", worker.number)
     );
 }
@@ -259,23 +273,23 @@ async fn the_user_messages_a_chat_without_naming_a_workspace() {
     });
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&chat.id),
             "Pick a new name".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
     let woken = waiting.await.unwrap().unwrap();
-    assert_eq!(woken.messages[0].message, "Pick a new name");
+    assert_eq!(woken.alerts[0].message, "Pick a new name");
 
     // Sent again before the chat reads it, by ID this time, it collapses.
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&chat.id),
             "Pick a new name".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -283,10 +297,10 @@ async fn the_user_messages_a_chat_without_naming_a_workspace() {
 
     manager
         .send_space_message(
+            None,
             &"missing".into(),
             "Pick a new name".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap_err();
@@ -319,26 +333,30 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
         .await
         .unwrap();
     manager
-        .send_message(
-            &SpaceSelector::id(&worker.id),
+        .send_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &worker.id,
+            ))),
+            crate::protocol::AlertTarget::Up,
             "unread".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
     // Ready marks reach only a coordinator, never the user.
     assert!(
-        manager
+        (manager
             .tell_coordinator(
-                &worker.name,
-                Some(&worker.id),
-                None,
-                "marked ready".into(),
-                Vec::new(),
+                crate::daemon::alerts::NewAlert::shoal(
+                    AlertKind::ReadyMarked,
+                    crate::daemon::alerts::About::space(&worker.name, &worker.id),
+                    "marked ready".into(),
+                ),
+                false,
                 Source::Agent,
             )
-            .await
+            .await)
+            .is_some()
     );
     assert_eq!(
         received(&manager, &chat).await,
@@ -371,10 +389,12 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
         .read(|db| crate::daemon::agent_messages::every_unread(db))
         .await
         .unwrap();
-    assert!(unread.iter().all(|(space, _)| *space != chat.id));
+    assert!(
+        (unread.iter()).all(|alert| alert.recipient.as_ref().is_none_or(|to| to.id != chat.id))
+    );
     let unread = (
         Some("worker".to_owned()),
-        AlertKind::AgentMessage,
+        AlertKind::Message,
         "unread".to_owned(),
     );
     assert_eq!(user(&manager).await, [unread]);
@@ -415,17 +435,23 @@ async fn a_removed_workspace_gives_the_user_the_events_it_had_not_received() {
             .unwrap();
     }
     manager
-        .send_message(
-            &SpaceSelector::id(&child.id),
+        .send_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &child.id,
+            ))),
+            crate::protocol::AlertTarget::Up,
             "unread".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
     // Shoal's own messages stand for no notification.
     manager
-        .queue_agent_message(&parent.id, "from Shoal".into())
+        .queue_agent_message(
+            &parent.id,
+            crate::daemon::alerts::AlertKind::Message,
+            "from Shoal".into(),
+        )
         .await
         .unwrap();
     assert!(user(&manager).await.is_empty());
@@ -439,11 +465,11 @@ async fn a_removed_workspace_gives_the_user_the_events_it_had_not_received() {
         .await
         .unwrap();
     let messages: Vec<_> = (user(&manager).await.into_iter())
-        .filter(|(_, kind, _)| *kind == AlertKind::AgentMessage)
+        .filter(|(_, kind, _)| *kind == AlertKind::Message)
         .collect();
     let unread = (
         Some("child".to_owned()),
-        AlertKind::AgentMessage,
+        AlertKind::Message,
         "unread".to_owned(),
     );
     assert_eq!(messages, [unread]);
@@ -476,11 +502,13 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
         .await
         .unwrap();
     manager
-        .send_message(
-            &SpaceSelector::id(&worker.id),
+        .send_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &worker.id,
+            ))),
+            crate::protocol::AlertTarget::Up,
             "unread".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -518,12 +546,22 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
     let id = handed[0].id;
     assert!(
         manager
-            .withdraw_message(&SpaceSelector::id(&successor.id), id)
+            .withdraw_alert(
+                Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                    &successor.id
+                ))),
+                id
+            )
             .await
             .is_err()
     );
     manager
-        .withdraw_message(&SpaceSelector::id(&worker.id), id)
+        .withdraw_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &worker.id,
+            ))),
+            id,
+        )
         .await
         .unwrap();
 }
@@ -557,11 +595,13 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
     let shot = temp.path().join("layout.png");
     std::fs::write(&shot, "png").unwrap();
     manager
-        .send_message(
-            &SpaceSelector::id(&worker.id),
+        .send_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &worker.id,
+            ))),
+            crate::protocol::AlertTarget::Up,
             "Which layout?".into(),
             vec![shot.into()],
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -569,7 +609,8 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
         .agent_messages(&SpaceSelector::id(&chat.id))
         .await
         .unwrap();
-    let [copy] = messages[0].attachments.as_slice() else {
+    let attachments = messages[0].attachments();
+    let [copy] = attachments.as_slice() else {
         panic!("{messages:?}");
     };
     assert_eq!(std::fs::read_to_string(copy).unwrap(), "png");
@@ -586,7 +627,7 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
         .store
         .write(move |tx| {
             crate::daemon::workspace_files::rebase(tx, &id, &from, &to)?;
-            crate::daemon::agent_messages::rebase_attachments(tx, &from, &to)?;
+            crate::daemon::alerts::rebase_attachments(tx, &from, &to)?;
             Ok(())
         })
         .await
@@ -595,7 +636,8 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
         .agent_messages(&SpaceSelector::id(&chat.id))
         .await
         .unwrap();
-    let [moved] = messages[0].attachments.as_slice() else {
+    let attachments = messages[0].attachments();
+    let [moved] = attachments.as_slice() else {
         panic!("{messages:?}");
     };
     assert_eq!(
@@ -659,11 +701,13 @@ async fn same_named_spaces_reach_their_own_coordinators() {
     }
     for (workspace, message) in [(&worker, "from the worker"), (&other, "from the other")] {
         manager
-            .send_message(
-                &SpaceSelector::id(&workspace.id),
+            .send_alert(
+                Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                    &workspace.id,
+                ))),
+                crate::protocol::AlertTarget::Up,
                 message.into(),
                 Vec::new(),
-                &Attacher::User,
             )
             .await
             .unwrap();
@@ -702,11 +746,13 @@ async fn same_named_siblings_send_the_same_message_apart() {
     }
     for workspace in [&worker, &sibling] {
         manager
-            .send_message(
-                &SpaceSelector::id(&workspace.id),
+            .send_alert(
+                Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                    &workspace.id,
+                ))),
+                crate::protocol::AlertTarget::Up,
                 "tests pass".into(),
                 Vec::new(),
-                &Attacher::User,
             )
             .await
             .unwrap();

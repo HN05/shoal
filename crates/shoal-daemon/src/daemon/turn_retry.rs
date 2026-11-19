@@ -325,7 +325,9 @@ fn deliver(tx: &Transaction<'_>, space_id: &SpaceId, now: UnixTime) -> Result<bo
         return Ok(false);
     };
     if due.deliverable {
-        agent_messages::queue_shoal_message(tx, space_id, &continuation(due.failure, due.attempt))?;
+        let message = continuation(due.failure, due.attempt);
+        let kind = crate::daemon::alerts::AlertKind::TurnRetried;
+        agent_messages::queue_shoal_message(tx, space_id, kind, &message)?;
         tx.execute(
             "UPDATE space_turn_retries SET delivered=1 WHERE space_id=?1",
             [space_id],

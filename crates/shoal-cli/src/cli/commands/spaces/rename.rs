@@ -103,8 +103,8 @@ async fn ask_name(ctx: &Context) -> Result<SpaceName> {
 }
 
 /// Ask the running agent of the space `space` selects, else the one this
-/// runs in or a picked one, to choose its name, through the messages
-/// `shoal messages send` queues. Without an agent the message would wait
+/// runs in or a picked one, to choose its name, through the alert
+/// `shoal send` queues. Without an agent the alert would wait
 /// unread, so that is refused.
 pub(in crate::cli::commands) async fn request_name(
     ctx: &Context,
@@ -122,8 +122,8 @@ pub(in crate::cli::commands) async fn request_name(
         space.label(),
         space.number
     );
-    crate::client::agent_messages::send(&ctx.paths, selector, NAME_REQUEST.into(), Vec::new())
-        .await?;
+    let to = shoal_protocol::protocol::AlertTarget::Space { space: selector };
+    crate::client::alerts::send(&ctx.paths, to, NAME_REQUEST.into(), Vec::new()).await?;
     ctx.emit("Asked the space's agent to choose its name.", ())?;
     Ok(0)
 }

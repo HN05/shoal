@@ -54,7 +54,12 @@ impl Warnings {
                 continue;
             }
             if let Err(error) = manager
-                .queue_agent_message_delivered(&key.0, message.into(), delivery)
+                .queue_agent_message_delivered(
+                    &key.0,
+                    crate::daemon::alerts::AlertKind::LoadWarning,
+                    message.into(),
+                    delivery,
+                )
                 .await
             {
                 log!("pressure warning not queued: {error:#}");

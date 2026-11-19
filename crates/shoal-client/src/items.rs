@@ -95,7 +95,7 @@ pub async fn await_updates(
             Ok(reply) => reply?,
             Err(_) => Body::PrUpdates(Updates {
                 updates: Vec::new(),
-                messages: Vec::new(),
+                alerts: Vec::new(),
                 leftovers: Vec::new(),
                 timed_out: true,
                 superseded: false,

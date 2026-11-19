@@ -10,7 +10,7 @@ use super::{
     wake_log::WakeWaitLog,
 };
 use crate::{
-    daemon::{agent_messages::AgentMessage, manager::Manager},
+    daemon::{alerts::Alert, manager::Manager},
     forge::{
         items::link::{LinkKind, Selection},
         updates::Update,
@@ -53,7 +53,7 @@ impl Manager {
         let mut queued = self.signals.watch_messages();
         let mut background = self.signals.watch_item_updates();
         let unread = self.unread_messages(&space.id).await?;
-        let mut messages = unread.messages;
+        let mut messages = unread.alerts;
         if !unread.wakes {
             // A cancelled poll leaves its deliveries pending for the newer wait.
             tokio::select! {
@@ -133,7 +133,7 @@ impl Manager {
             return Ok(Updates::superseded());
         }
         Ok(Updates {
-            messages,
+            alerts: messages,
             updates,
             leftovers,
             timed_out: false,
@@ -232,12 +232,12 @@ impl Manager {
         &self,
         id: &SpaceId,
         queued: &mut tokio::sync::watch::Receiver<u64>,
-    ) -> Result<Vec<AgentMessage>> {
+    ) -> Result<Vec<Alert>> {
         loop {
             queued.changed().await?;
             let unread = self.unread_messages(id).await?;
             if unread.wakes {
-                return Ok(unread.messages);
+                return Ok(unread.alerts);
             }
         }
     }

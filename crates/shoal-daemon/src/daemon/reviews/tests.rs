@@ -289,7 +289,7 @@ async fn the_coordinating_agent_hears_one_line() {
         .await
         .unwrap()
         .into_iter()
-        .map(|message| message.message)
+        .map(|message| message.text())
         .collect();
     let [line] = received.as_slice() else {
         panic!("{received:?}");

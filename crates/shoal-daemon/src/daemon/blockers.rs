@@ -13,7 +13,7 @@ use crate::{
     state::BlockerKind,
 };
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::{files::Attacher, progress::Progress, space_names::SpaceSelector};
+use shoal_protocol::{progress::Progress, space_names::SpaceSelector};
 
 mod forge;
 
@@ -91,7 +91,11 @@ impl Manager {
 
     /// Send the agent of the space `selector` names `text`, from Shoal.
     async fn tell(&self, selector: &SpaceSelector, text: String) {
-        let sent = self.send_space_message(selector, text, Vec::new(), &Attacher::User);
+        let sent = async {
+            let id = self.space(selector).await?.id;
+            let kind = crate::daemon::alerts::AlertKind::BlockersChanged;
+            self.queue_agent_message(&id, kind, text).await
+        };
         if let Err(error) = sent.await {
             log!("blockers of {selector} untold: {error:#}");
         }

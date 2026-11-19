@@ -244,7 +244,10 @@ impl Manager {
         };
         let message = format!("The agent of {} did not restart: {error:#}", space.name);
         let told = match &recorded.asked_by {
-            Some(asker) => self.tell_space(asker, message.clone()).await,
+            Some(asker) => {
+                let kind = AlertKind::RecoveryBlocked;
+                self.tell_space(asker, kind, message.clone()).await
+            }
             None => false,
         };
         if !told {

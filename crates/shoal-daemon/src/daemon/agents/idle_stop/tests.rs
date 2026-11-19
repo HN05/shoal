@@ -448,7 +448,11 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
         "[machine.overload.disk]\nenabled = false",
     ));
     manager
-        .queue_agent_message(&workspace.id, "PR activity".into())
+        .queue_agent_message(
+            &workspace.id,
+            crate::daemon::alerts::AlertKind::Message,
+            "PR activity".into(),
+        )
         .await
         .unwrap();
     assert!(

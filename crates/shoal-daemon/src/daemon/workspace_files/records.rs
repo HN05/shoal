@@ -21,22 +21,6 @@ const COLUMNS: &str = "id,space,source,name,title,path,bytes,created_at,attached
 /// The owners of attached files that are gone.
 const GONE: &str = "space_id NOT IN (SELECT id FROM spaces)";
 
-/// The record IDs of Shoal's copies at `paths`, in their order, as a column
-/// [`sent_files`] reads stores them; a path no record has is left out.
-pub(crate) fn ids_at(db: &Connection, paths: &[PathBuf]) -> Result<String> {
-    let mut statement = db.prepare("SELECT id FROM space_files WHERE path=?1")?;
-    let mut ids = Vec::new();
-    for path in paths {
-        if let Some(id) = statement
-            .query_row([path.to_string_lossy()], |row| row.get::<_, i64>(0))
-            .optional()?
-        {
-            ids.push(id);
-        }
-    }
-    Ok(serde_json::to_string(&ids)?)
-}
-
 fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AttachedFile> {
     let kind = match row.get(10)? {
         true => SpaceKind::Chat,

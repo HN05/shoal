@@ -1212,7 +1212,7 @@ fn herdr_removal_and_cleanup_close_the_pane_shoal_opened_without_a_watcher() {
     fixture.ok(&["rm", "--wait", &fixture.id("tabbed"), "--yes"]);
     assert!(closes(&fixture) >= 1);
     assert!(recorded(&fixture));
-    let alerts = fixture.ok(&["alerts"]);
+    let alerts = fixture.ok(&["alert", "list", "--unread"]);
     assert!(
         alerts
             .as_array()

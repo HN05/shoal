@@ -442,10 +442,10 @@ async fn messages_and_files_follow_their_copies_to_the_new_root() -> Result<()> 
     fs::write(&file, "panic")?;
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&workspace.id),
             "See the log".into(),
             vec![file.clone().into()],
-            &Attacher::User,
         )
         .await?;
     manager
@@ -468,7 +468,8 @@ async fn messages_and_files_follow_their_copies_to_the_new_root() -> Result<()> 
     let messages = manager
         .agent_messages(&SpaceSelector::id(&workspace.id))
         .await?;
-    let [copy] = messages[0].attachments.as_slice() else {
+    let attachments = messages[0].attachments();
+    let [copy] = attachments.as_slice() else {
         anyhow::bail!("expected one attachment: {messages:?}");
     };
     assert!(
@@ -536,16 +537,16 @@ async fn a_move_waits_for_a_send_keeping_attached_files() -> Result<()> {
     // A send after the move copies to the new place.
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&workspace.id),
             "See the log".into(),
             vec![file.into()],
-            &Attacher::User,
         )
         .await?;
     let messages = manager
         .agent_messages(&SpaceSelector::id(&workspace.id))
         .await?;
-    let copy = &messages[0].attachments[0];
+    let copy = &messages[0].attachments()[0];
     assert!(copy.starts_with(root.join("origin")), "{copy:?}");
     assert!(copy.exists());
     Ok(())

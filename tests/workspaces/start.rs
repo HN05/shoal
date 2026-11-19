@@ -2826,7 +2826,7 @@ fn without_launch_arguments<'a>(args: &[&'a str]) -> Vec<&'a str> {
             continue;
         }
         match (arg, args.clone().next()) {
-            ("--settings", Some(value)) if value.contains("messages --hook") => {}
+            ("--settings", Some(value)) if value.contains("internal deliver") => {}
             ("-c", Some(value))
                 if value.starts_with("hooks.")
                     || *value == "sandbox_workspace_write.network_access=true" => {}
@@ -3305,11 +3305,11 @@ fn a_queued_issue_start_reopens_its_workspace_by_any_repository_name() {
     fixture.ok(&["stop", &fixture.id("first")]);
     first.wait().unwrap();
     let failed = || {
-        (fixture.ok(&["alerts", "--all"]).as_array().unwrap().iter())
+        (fixture.ok(&["alert", "list"]).as_array().unwrap().iter())
             .any(|alert| alert["kind"] == "queue_failed")
     };
     wait_until("the queued start's outcome", || runs() == 2 || failed());
-    assert!(!failed(), "{}", fixture.ok(&["alerts", "--all"]));
+    assert!(!failed(), "{}", fixture.ok(&["alert", "list"]));
 }
 
 /// A queued start of an existing workspace's worker opens where that
@@ -3350,11 +3350,11 @@ fn a_queued_worker_start_opens_in_its_workspaces_terminal_host() {
     first.wait().unwrap();
     let runs = || fs::read_to_string(fixture.root.path().join("counted")).is_ok();
     let failed = || {
-        (fixture.ok(&["alerts", "--all"]).as_array().unwrap().iter())
+        (fixture.ok(&["alert", "list"]).as_array().unwrap().iter())
             .any(|alert| alert["kind"] == "queue_failed")
     };
     wait_until("the queued start's outcome", || runs() || failed());
-    assert!(!failed(), "{}", fixture.ok(&["alerts", "--all"]));
+    assert!(!failed(), "{}", fixture.ok(&["alert", "list"]));
 }
 
 /// `queue start --attach` starts a waiting agent and attaches this terminal

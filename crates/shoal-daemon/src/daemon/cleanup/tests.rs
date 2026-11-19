@@ -301,7 +301,7 @@ async fn invalid_pr_record_does_not_block_other_workspace_cleanup() {
     let notifications = manager.notifications.list(true, 100).await.unwrap();
     let failures: Vec<_> = notifications
         .iter()
-        .filter(|notification| notification.workspace.as_deref() == Some(&invalid.name))
+        .filter(|notification| notification.space.as_deref() == Some(&invalid.name))
         .collect();
     assert_eq!(
         failures.len(),
@@ -1132,7 +1132,7 @@ async fn completion_cleanup_keeps_a_parent_whose_child_elsewhere_stalled() {
         .unwrap()
         .into_iter()
         .filter(|notification| notification.kind == AlertKind::CleanupFailed)
-        .map(|notification| notification.workspace)
+        .map(|notification| notification.space)
         .collect();
     assert_eq!(failures, [Some("parent".into())]);
     assert!(parent.path.exists());

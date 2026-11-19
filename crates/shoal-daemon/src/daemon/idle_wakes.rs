@@ -81,7 +81,10 @@ impl Manager {
         let (space, turn, message) = (id.to_owned(), idle.turn, wake_message(minutes));
         let queued = (self.store)
             .write(move |tx| match still_idle(tx, &space, turn)? {
-                true => agent_messages::queue_shoal_message(tx, &space, &message),
+                true => {
+                    let kind = crate::daemon::alerts::AlertKind::IdleWake;
+                    agent_messages::queue_shoal_message(tx, &space, kind, &message)
+                }
                 false => Ok(None),
             })
             .await?;

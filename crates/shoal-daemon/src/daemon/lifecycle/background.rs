@@ -9,7 +9,8 @@ use tokio::sync::oneshot;
 use super::Removal;
 use crate::{
     daemon::{
-        agent_messages, log,
+        alerts::NewAlert,
+        log,
         manager::Manager,
         notifications::{About, AlertKind},
         scope::Caller,
@@ -90,15 +91,11 @@ impl Manager {
             space.number
         );
         if let Some(requester) = requester {
-            let about = agent_messages::About {
-                name: space.name.clone(),
-                id: Some(space.id.clone()),
-                kind: Some(kind),
-            };
-            let queued =
-                self.queue_space_message(requester, Some(about), message.clone(), Vec::new());
+            let about = About::space(&space.name, &space.id);
+            let alert = NewAlert::shoal(kind, about, message.clone());
+            let queued = self.queue_alert(requester, alert, true);
             match queued.await {
-                Ok(()) => return,
+                Ok(_) => return,
                 Err(error) => log!("removal failure not sent to {requester}: {error:#}"),
             }
         }

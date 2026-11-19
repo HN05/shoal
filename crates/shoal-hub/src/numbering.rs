@@ -52,7 +52,7 @@ impl Hub {
         let kind = AlertKind::SpaceRenumbered;
         let about = About::space(name, id);
         self.notify(daemon, about, kind, message.clone()).await;
-        let told = daemon.message_next_turn(id, message);
+        let told = daemon.message_next_turn(id, kind, message);
         if let Err(error) = told.await {
             log!("hub: could not tell space {id} its new number: {error:#}");
         }

@@ -414,7 +414,8 @@ fn record_restack(tx: &rusqlite::Transaction<'_>, stacked: &Stacked, tell: Tell)
         wait::queue_update(tx, id, update)?;
     }
     if let Some(message) = message {
-        agent_messages::queue_shoal_message(tx, id, &message)?;
+        let kind = crate::daemon::alerts::AlertKind::BaseChanged;
+        agent_messages::queue_shoal_message(tx, id, kind, &message)?;
     }
     for (url, edited) in retargeted {
         let change = wait::OwnChange {

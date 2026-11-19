@@ -31,9 +31,7 @@ pub enum AgentMethod {
         change: crate::progress::ProgressChange,
     },
     /// The space's progress.
-    Progress {
-        space: SpaceSelector,
-    },
+    Progress { space: SpaceSelector },
     /// Let the space's agent sleep as `sleep` says, so Shoal does not wake
     /// it for having stayed idle, replacing its timer with `timer` when one
     /// is given, or end its sleep and cancel its timer with none; a space
@@ -48,9 +46,7 @@ pub enum AgentMethod {
     /// [`Self::SetAgentState`] working for the turn a wake hook starts with
     /// an update, unless a stop of the caller's agent came first, which
     /// leaves the update for its restore. Answers whether the turn starts.
-    StartWokenTurn {
-        workspace: SpaceSelector,
-    },
+    StartWokenTurn { workspace: SpaceSelector },
     /// [`Self::SetAgentState`] idle for a turn `failure` ended, which may
     /// schedule a retry of the turn. An unscoped caller, such as the wrapper
     /// whose proxy ended the turn, names the reporting `execution`; a scoped
@@ -129,9 +125,7 @@ pub enum AgentMethod {
         execution: ExecutionId,
     },
     /// The caller attached to the sessions of the space.
-    ReportAttach {
-        space: SpaceSelector,
-    },
+    ReportAttach { space: SpaceSelector },
     /// Long-lived: answers once whether the workspace's agent is idle with
     /// undelivered messages or queued item updates matches `due`; with
     /// `hooked`, the execution whose agent a hook of its own wakes, only
@@ -145,9 +139,7 @@ pub enum AgentMethod {
     },
     /// The agents connected in the space, a workspace or a running chat,
     /// with their turns and places.
-    SpaceAgents {
-        space: SpaceSelector,
-    },
+    SpaceAgents { space: SpaceSelector },
     /// An interrupt the caller typed ended the turn of the agent `execution`
     /// runs in the space, as [`Self::SpaceAgents`] lists it, which leaves it
     /// idle.
@@ -163,63 +155,25 @@ pub enum AgentMethod {
     },
     /// Drop the restart the daemon recorded for the agent of `space`,
     /// answering with the one it dropped, if any.
-    CancelRestart {
-        space: SpaceSelector,
-    },
+    CancelRestart { space: SpaceSelector },
     /// The session of the space's agent that a fork starts from: the
     /// caller's own agent there, else its only one.
-    AgentSession {
-        space: SpaceSelector,
-    },
-    /// A message to the agents of a workspace or running chat, answered
-    /// with the space it reached.
-    SendAgentMessage {
-        space: SpaceSelector,
-        message: String,
-        /// Files to attach by absolute path, which the daemon copies.
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        attachments: Vec<crate::files::NewFile>,
-    },
-    /// [`Self::SendAgentMessage`] to every workspace and chat with a running
-    /// agent, of one repository when it names one, answered with the spaces
-    /// it reached.
-    SendAllAgentMessage {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        repository: Option<crate::repository::Selector>,
-        message: String,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        attachments: Vec<crate::files::NewFile>,
-    },
-    /// The undelivered messages of the agents of a workspace or running
-    /// chat, oldest first.
-    AgentMessages {
-        space: SpaceSelector,
-    },
-    MarkAgentMessagesDelivered {
-        space: SpaceSelector,
-        ids: Vec<i64>,
-    },
-    /// The undelivered agent messages and queued item updates of a
+    AgentSession { space: SpaceSelector },
+    /// The unread alerts and queued item updates of a
     /// workspace or running chat, without waiting or polling the forge;
     /// acknowledge them with [`Self::AcknowledgePrUpdates`]. It replaces a
     /// running watch.
-    AgentUpdates {
-        space: SpaceSelector,
-    },
+    AgentUpdates { space: SpaceSelector },
     /// Long-lived: what [`Self::AgentUpdates`] answers, once there is any.
-    WaitAgentUpdates {
-        space: SpaceSelector,
-    },
+    WaitAgentUpdates { space: SpaceSelector },
     /// The caller's login for Git over HTTPS to `host`: the agent token
     /// `[machine.forges]` sets for it, for any scoped caller; none for an
     /// unscoped caller or a host without one.
-    GitCredential {
-        host: String,
-    },
+    GitCredential { host: String },
     AcknowledgePrUpdates {
         space: SpaceSelector,
         deliveries: Vec<String>,
-        /// Agent messages the watch printed.
+        /// Alerts the watch printed.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         messages: Vec<i64>,
         /// The PIDs of the leftovers the hook printed.

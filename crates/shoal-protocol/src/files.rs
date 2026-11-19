@@ -15,7 +15,7 @@ states!(FileSource {
     Added => "added",
     /// Handed back with `shoal done`.
     Result => "result",
-    /// Sent to the user with `shoal alerts send`.
+    /// Sent up with `shoal send`.
     Alert => "alert",
     /// Sent to the user with `shoal questions ask`.
     Question => "question",

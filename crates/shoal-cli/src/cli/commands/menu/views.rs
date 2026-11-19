@@ -8,7 +8,7 @@ use crate::cli::{scoping::Scoping, ui::PickerView};
 pub(crate) enum View {
     Inbox,
     Spaces,
-    Notifications,
+    Alerts,
 }
 
 impl View {
@@ -16,7 +16,7 @@ impl View {
         match self {
             Self::Inbox => "inbox> ",
             Self::Spaces => "spaces> ",
-            Self::Notifications => "notifications> ",
+            Self::Alerts => "alerts> ",
         }
     }
 
@@ -24,7 +24,7 @@ impl View {
     fn binds(self, action: Action) -> bool {
         match self {
             Self::Inbox => !matches!(action, Action::Execute | Action::Stop | Action::Delete),
-            Self::Notifications => {
+            Self::Alerts => {
                 matches!(action, Action::Enter | Action::Status | Action::Add)
             }
             Self::Spaces => true,
@@ -34,7 +34,7 @@ impl View {
     pub(super) fn enter_label(self) -> &'static str {
         match self {
             Self::Inbox => "act",
-            Self::Spaces | Self::Notifications => "cd",
+            Self::Spaces | Self::Alerts => "cd",
         }
     }
 
@@ -43,7 +43,7 @@ impl View {
     pub(super) fn available(scoping: Scoping) -> &'static [Self] {
         match scoping {
             Scoping::Scoped => &[Self::Spaces],
-            Scoping::Unscoped => &[Self::Inbox, Self::Spaces, Self::Notifications],
+            Scoping::Unscoped => &[Self::Inbox, Self::Spaces, Self::Alerts],
         }
     }
 

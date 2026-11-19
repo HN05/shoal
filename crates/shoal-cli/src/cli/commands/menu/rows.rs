@@ -18,18 +18,19 @@ use crate::{
         scoping::Scoping,
         ui::{self, Entries, WidthLimit},
     },
-    client::notifications,
+    client::alerts,
     forge::items::reference::ItemRef,
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::alerts::Alert;
 use shoal_protocol::item_numbers::ItemNumber;
+use shoal_protocol::protocol::AlertsFor;
 use shoal_protocol::space_names::SpaceSelector;
 
 const ADD_ENTRY: &str = "add-workspace";
 
-/// How many recent notifications the notifications view lists.
-const NOTIFICATIONS_SHOWN: u32 = 50;
+/// How many recent alerts the alerts view lists.
+const ALERTS_SHOWN: u32 = 50;
 
 /// What a row stands for, by the picker id it is chosen with: an inbox
 /// item with its space's ID, a workspace, or the entry that adds one.
@@ -144,7 +145,7 @@ impl Row {
             Self::SyncFailed(repository) => format!("sync-failed:{repository}"),
             Self::Elsewhere(space) => format!("elsewhere:{space}"),
             Self::Workspace(workspace) => workspace.to_string(),
-            Self::Alert(id) => format!("notification:{id}"),
+            Self::Alert(id) => format!("alert:{id}"),
             Self::Add => ADD_ENTRY.into(),
         }
     }
@@ -156,7 +157,7 @@ impl Row {
         let Some((kind, rest)) = id.split_once(':') else {
             return Ok(Self::Workspace(SpaceId::from(id)));
         };
-        if kind == "notification" {
+        if kind == "alert" {
             return Ok(Self::Alert(rest.to_owned()));
         }
         if kind == "untracked" {
@@ -257,15 +258,15 @@ pub(super) async fn rows(ctx: &Context, view: View, scoping: Scoping) -> Result<
     match view {
         View::Inbox => inbox_rows(ctx).await,
         View::Spaces => space_rows(ctx, scoping).await,
-        View::Notifications => notification_rows(ctx).await,
+        View::Alerts => alert_rows(ctx).await,
     }
 }
 
-/// Recent notifications, newest first; showing the unread ones marks them
-/// read, as `shoal alerts` does.
-async fn notification_rows(ctx: &Context) -> Result<Entries> {
-    let notifications = notifications::list(&ctx.paths, false, NOTIFICATIONS_SHOWN).await?;
-    let labels = notification_labels(&notifications);
+/// The user's recent alerts, newest first; showing the unread ones marks
+/// them read, as `shoal alert list` does.
+async fn alert_rows(ctx: &Context) -> Result<Entries> {
+    let notifications = alerts::list(&ctx.paths, AlertsFor::User, false, ALERTS_SHOWN).await?;
+    let labels = alert_labels(&notifications);
     mark_read(ctx, &notifications).await?;
     Ok(notifications
         .iter()
@@ -283,9 +284,9 @@ async fn notification_rows(ctx: &Context) -> Result<Entries> {
         .collect())
 }
 
-/// One aligned row per notification: when, its workspace, and the message,
+/// One aligned row per alert: when, its space, and the text,
 /// dimmed once read and cut to fit the picker.
-fn notification_labels(notifications: &[Alert]) -> Vec<String> {
+fn alert_labels(notifications: &[Alert]) -> Vec<String> {
     let now = crate::time::UnixTime::now();
     let cells = notifications
         .iter()
@@ -293,7 +294,7 @@ fn notification_labels(notifications: &[Alert]) -> Vec<String> {
             [
                 (notification.created_at.local_ago(now), Some(Style::Muted)),
                 (
-                    notification.workspace.as_deref().unwrap_or("-").to_owned(),
+                    notification.space.as_deref().unwrap_or("-").to_owned(),
                     Some(Style::Heading),
                 ),
                 (
@@ -317,7 +318,7 @@ async fn mark_read(ctx: &Context, notifications: &[Alert]) -> Result<()> {
     if unread.is_empty() {
         return Ok(());
     }
-    notifications::mark_read(&ctx.paths, unread).await
+    alerts::mark_read(&ctx.paths, unread).await
 }
 
 /// One row per item that needs the user.

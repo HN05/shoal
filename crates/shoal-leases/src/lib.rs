@@ -127,8 +127,7 @@ impl Leases {
         message: String,
     ) {
         let about = notifications::About::space(name, id);
-        (self.notifications)
-            .notify(daemon, about, kind, message, &[])
-            .await;
+        let alert = shoal_daemon_base::alerts::NewAlert::shoal(kind, about, message);
+        self.notifications.notify(daemon, alert).await;
     }
 }

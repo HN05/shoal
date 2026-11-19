@@ -13,8 +13,7 @@ use crate::{
         workspace_files::Attacher,
     },
     protocol::{
-        self, Body, DaemonMethod, ExecutionMethod, NotificationMethod, QuestionMethod, Request,
-        Response,
+        self, AlertMethod, Body, DaemonMethod, ExecutionMethod, QuestionMethod, Request, Response,
     },
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -122,7 +121,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         origin: None,
         merge: None,
     };
-    let watch = NotificationMethod::WatchNotifications {
+    let watch = AlertMethod::WatchAlerts {
         keep_unread: false,
         after: 0,
     };

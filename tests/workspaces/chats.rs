@@ -548,13 +548,13 @@ fn a_chat_records_its_work_done_and_withdraws_it() {
     assert!(finished.to_string().contains("planning"), "{finished}");
     let inbox = fixture.ok(&["inbox"]);
     assert_eq!(inbox[0]["kind"], "chat_done", "{inbox}");
-    let alerts = fixture.ok(&["alerts"]);
+    let alerts = fixture.ok(&["alert", "list", "--unread"]);
     assert!(
         alerts
             .as_array()
             .unwrap()
             .iter()
-            .any(|alert| { alert["kind"] == "workspace_done" && alert["workspace"] == "planning" }),
+            .any(|alert| { alert["kind"] == "workspace_done" && alert["space"] == "planning" }),
         "{alerts}"
     );
     // The user attached the report; the chat's agent attaches its own.
@@ -609,12 +609,12 @@ fn completion_cleanup_removes_a_done_chat_with_the_workspaces_below_it() {
     assert_eq!(completion["cleanup"], true, "{completion}");
     // The user hears once the removal finished.
     wait_until("completion cleanup to remove the chat", || {
-        let alerts = fixture.ok(&["alerts", "--all"]);
+        let alerts = fixture.ok(&["alert", "list"]);
         alerts
             .as_array()
             .unwrap()
             .iter()
-            .any(|alert| alert["kind"] == "workspace_removed" && alert["workspace"] == "planning")
+            .any(|alert| alert["kind"] == "workspace_removed" && alert["space"] == "planning")
     });
     assert_eq!(fixture.ok(&["list", "--chats"]), serde_json::json!([]));
     // The workspace below it went first, and its agent stopped.
@@ -900,7 +900,7 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
             .collect()
     };
     let runs = |event: &str, text: &str| commands(event).iter().any(|c| c.contains(text));
-    assert!(runs("PostToolUse", " messages --hook"));
+    assert!(runs("PostToolUse", " internal deliver"));
     assert!(runs("PostToolUse", " internal agent-state working "));
     assert!(runs("SessionStart", " internal agent-state idle "));
     assert!(runs("Stop", " internal agent-state idle --ends-turn "));
@@ -1297,7 +1297,7 @@ fn a_chat_receives_the_events_of_the_workers_it_coordinates() {
     install_test_script(
         home.join("bin/claude"),
         format!(
-            "#!/bin/sh\nshoal='{}'\n\"$shoal\" create \"$PWD\" --branch chat-worker </dev/null >/dev/null\n\"$shoal\" internal agent-state working --space chat-worker 2>/dev/null; echo $? > \"$HOME/chat-report\"\ntouch \"$HOME/worker-opened\"\nwhile [ ! -e \"$HOME/worker-reported\" ]; do sleep 0.1; done\necho '{{\"hook_event_name\":\"PostToolUse\"}}' | \"$shoal\" messages --hook > \"$HOME/chat-hook\"\n\"$shoal\" messages --hook </dev/null > \"$HOME/chat-hook-again\"\n",
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" create \"$PWD\" --branch chat-worker </dev/null >/dev/null\n\"$shoal\" internal agent-state working --space chat-worker 2>/dev/null; echo $? > \"$HOME/chat-report\"\ntouch \"$HOME/worker-opened\"\nwhile [ ! -e \"$HOME/worker-reported\" ]; do sleep 0.1; done\necho '{{\"hook_event_name\":\"PostToolUse\"}}' | \"$shoal\" internal deliver > \"$HOME/chat-hook\"\n\"$shoal\" internal deliver </dev/null > \"$HOME/chat-hook-again\"\n",
             support::shoal_binary()
         ),
     );
@@ -1322,13 +1322,8 @@ fn a_chat_receives_the_events_of_the_workers_it_coordinates() {
             "--space",
             &fixture.id("chat-worker"),
         ]);
-        fixture.ok(&[
-            "alerts",
-            "send",
-            "--space",
-            &fixture.id("chat-worker"),
-            "Tests pass",
-        ]);
+        let sent = scoped_command(&fixture, "chat-worker", &["send", "Tests pass"]);
+        assert!(sent.status.success(), "{}", printed(&sent));
         fs::write(home.join("worker-reported"), "").unwrap();
         chat.join().unwrap()
     });
@@ -1351,7 +1346,10 @@ fn a_chat_receives_the_events_of_the_workers_it_coordinates() {
         fs::read_to_string(home.join("chat-hook-again")).unwrap(),
         ""
     );
-    assert_eq!(fixture.ok(&["alerts"]), serde_json::json!([]));
+    assert_eq!(
+        fixture.ok(&["alert", "list", "--unread"]),
+        serde_json::json!([])
+    );
 }
 
 #[test]
@@ -1372,9 +1370,9 @@ run stop stop --interrupt "$below"
 run env internal env "$below"
 run ownenv internal env
 run rename rename renamed
-run alerts alerts
+run alerts alert list --unread
 run repo repo add "$HOME"
-run outside messages send --space {} hello
+run outside send --space {} hello
 run takeover start "$PWD" --branch outside
 run remove rm "$below" --yes --wait
 "#,
@@ -1920,14 +1918,9 @@ fn a_chat_between_workspaces_decides_and_coordinates_for_the_one_below() {
     let request = fixture.ok(&["approvals", asked["request"]["number"].as_str().unwrap()]);
     assert_eq!(request["decider"], middle.as_str(), "{request}");
     // The chat coordinates it: the workspace's activity reaches the chat.
-    fixture.ok(&[
-        "alerts",
-        "send",
-        "--space",
-        &fixture.id("deep"),
-        "Tests pass",
-    ]);
-    let messages = fixture.ok(&["messages", &middle]);
+    let sent = scoped_command(&fixture, "deep", &["send", "Tests pass"]);
+    assert!(sent.status.success(), "{}", printed(&sent));
+    let messages = fixture.ok(&["alert", "list", "--unread", "--space", &middle]);
     assert!(messages.to_string().contains("Tests pass"), "{messages}");
     // The workspace's process reaches neither the chat nor the workspace
     // above it.
@@ -1935,7 +1928,7 @@ fn a_chat_between_workspaces_decides_and_coordinates_for_the_one_below() {
         let refused = scoped_command(
             &fixture,
             "deep",
-            &["messages", "send", "--space", &fixture.id(space), "hi"],
+            &["send", "--space", &fixture.id(space), "hi"],
         );
         assert!(!refused.status.success(), "{space}: {}", printed(&refused));
     }
@@ -2633,7 +2626,7 @@ fn a_name_request_reaches_the_chats_agent() {
     let output = fixture
         .command()
         .env("SHOAL_SPACE", &chat)
-        .args(["--json", "messages"])
+        .args(["--json", "alert", "list", "--unread"])
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", printed(&output));
@@ -2654,13 +2647,7 @@ fn a_restored_chat_continues_its_session_with_its_messages_waiting() {
         assert!(output.status.success(), "{}", printed(&output));
     });
     let talk = fixture.id("talk");
-    let output = fixture.run(&[
-        "messages",
-        "send",
-        "--space",
-        &talk,
-        "What blocked you cleared",
-    ]);
+    let output = fixture.run(&["send", "--space", &talk, "What blocked you cleared"]);
     assert!(output.status.success(), "{}", printed(&output));
 
     let (output, transcript) =
@@ -2682,7 +2669,7 @@ fn chat_messages(fixture: &Fixture, id: &str) -> String {
     let output = fixture
         .command()
         .env("SHOAL_SPACE", id)
-        .args(["--json", "messages"])
+        .args(["--json", "alert", "list", "--unread"])
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", printed(&output));

@@ -7,7 +7,7 @@ workspaces. Shoal commands that act on a workspace, such as `shoal diff`,
 from here. Those that also act on chats, such as `shoal view`, `shoal ci`,
 `shoal link` and `shoal ready`, act on this chat, and with `--space {workspace_number}`
 on the workspace's issue, PRs and CI runs. The `shoal` skill
-describes Shoal's commands. {updates} Messages from the user and Shoal arrive
+describes Shoal's commands. {updates} Alerts from the user and Shoal arrive
 the same way. The agents of the spaces below this chat report to you through
-Shoal messages. `$TMPDIR` belongs to this chat, and Shoal deletes it with the
+Shoal alerts. `$TMPDIR` belongs to this chat, and Shoal deletes it with the
 chat.

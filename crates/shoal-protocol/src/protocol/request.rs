@@ -1,11 +1,11 @@
 //! The request envelope and the method each request carries.
 use super::{
-    AgentMethod, AppMethod, ApprovalMethod, AssignmentMethod, BranchMethod, ChatMethod, CiMethod,
-    ContainerMethod, DaemonMethod, DemoMethod, ExecutionMethod, ExitRequest, FileMethod,
-    HoldMethod, HubMethod, ItemMethod, LaunchMethod, NotificationMethod, OperationMethod,
-    PortMethod, QuestionMethod, QueueMethod, Reattach, RecoveryMethod, RemovalMethod,
-    RepositoryMethod, ResourceMethod, ReviewMethod, SecretMethod, SimulatorMethod,
-    SubscriptionMethod, TriggerMethod, VERSION, WorkspaceMethod,
+    AgentMethod, AlertMethod, AppMethod, ApprovalMethod, AssignmentMethod, BranchMethod,
+    ChatMethod, CiMethod, ContainerMethod, DaemonMethod, DemoMethod, ExecutionMethod, ExitRequest,
+    FileMethod, HoldMethod, HubMethod, ItemMethod, LaunchMethod, OperationMethod, PortMethod,
+    QuestionMethod, QueueMethod, Reattach, RecoveryMethod, RemovalMethod, RepositoryMethod,
+    ResourceMethod, ReviewMethod, SecretMethod, SimulatorMethod, SubscriptionMethod, TriggerMethod,
+    VERSION, WorkspaceMethod,
 };
 use serde::{Deserialize, Serialize};
 
@@ -75,7 +75,7 @@ pub enum Operation {
     Item(ItemMethod),
     Ci(CiMethod),
     Branch(BranchMethod),
-    Alert(NotificationMethod),
+    Alert(AlertMethod),
     Operations(OperationMethod),
     Question(QuestionMethod),
     Review(ReviewMethod),
@@ -232,7 +232,7 @@ from_domains!(
     Item(ItemMethod),
     Ci(CiMethod),
     Branch(BranchMethod),
-    Alert(NotificationMethod),
+    Alert(AlertMethod),
     Operations(OperationMethod),
     Question(QuestionMethod),
     Review(ReviewMethod),

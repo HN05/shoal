@@ -1,39 +1,36 @@
-//! Messages for the agent of a space, a workspace or a chat, from the user,
-//! the daemon or the spaces below it. The daemon never writes to an agent's
-//! terminal: agents receive messages through `shoal messages`, watches and
-//! agent hooks, and a delivered message is deleted. Files attached to a
-//! message outlive it, until their space is removed (see
+//! Alerts for the agent of a space, a workspace or a chat, from the user,
+//! Shoal or the spaces above and below it. The daemon never writes to an
+//! agent's terminal: agents receive alerts through `shoal alert list`,
+//! watches and agent hooks, which mark them read. Files attached to an
+//! alert outlive it, until their space is removed (see
 //! [`crate::daemon::workspace_files`]).
 use shoal_ids::space_ids::SpaceId;
-use std::path::PathBuf;
 
 use anyhow::Result;
 use rusqlite::Transaction;
 
 use crate::{
     daemon::{
+        alerts::{About, Alert, AlertKind, NewAlert, Sender},
         manager::Manager,
-        notifications::AlertKind,
         workspace_files::{self, Attacher, NewFile, layout::Copy},
     },
     model::Space,
 };
-pub(crate) use shoal_protocol::agent_messages::AgentMessage;
-use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+use shoal_protocol::space_names::SpaceSelector;
 
-mod recipients;
 mod settle;
 mod store;
 
 pub(crate) use settle::SettleClock;
-pub(crate) use store::{every_unread, hand_to_user, rebase_attachments};
+pub(crate) use store::{every_unread, hand_to_user};
 
-/// Unread messages one space may hold, and their total size, attached
+/// Unread alerts one space may hold, and their total size, attached
 /// paths included; together they fit one response.
 pub(crate) const MAX_UNREAD: i64 = 50;
 pub(crate) const MAX_UNREAD_BYTES: usize = 50 * crate::validate::MAX_MESSAGE_LEN;
 
-/// How a queued message reaches an idle agent.
+/// How a queued alert reaches an idle agent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Delivery {
     /// It starts the agent's next turn.
@@ -42,160 +39,161 @@ pub(crate) enum Delivery {
     NextTurn,
 }
 
-/// The space a message for another space's agent is about.
-#[derive(Debug, Clone)]
-pub(crate) struct About {
-    pub name: SpaceName,
-    pub id: Option<SpaceId>,
-    /// The notification the event would be for the user, which the user
-    /// receives instead if the space goes before its agent reads it.
-    pub kind: Option<AlertKind>,
+/// An alert queued for a space's agent: its ID, and whether queueing it
+/// changed what the agent receives rather than finding it unread already.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Queued {
+    pub id: i64,
+    pub new: bool,
 }
 
-/// A space's unread messages.
+/// A space's unread alerts.
 #[derive(Debug, Default)]
 pub(crate) struct Unread {
-    pub messages: Vec<AgentMessage>,
+    pub alerts: Vec<Alert>,
     /// Whether one of them starts an idle agent's next turn.
     pub wakes: bool,
 }
 
-/// The files a queued message attaches.
-enum Attached {
-    /// Shoal's copies of files another space's files already keep.
-    Kept(Vec<PathBuf>),
-    /// Copies the recipient's attached files list from then on as attached
-    /// by the attacher.
-    Copied(Vec<Copy>, Attacher),
-}
+/// The copies a sent alert attaches, which the recipient's attached files
+/// list from then on as attached by the attacher.
+struct Copied(Vec<Copy>, Attacher);
 
-impl Attached {
-    /// The paths of Shoal's copies.
-    fn paths(&self) -> Vec<PathBuf> {
-        match self {
-            Self::Kept(paths) => paths.clone(),
-            Self::Copied(copies, _) => copies.iter().map(|copy| copy.path.clone()).collect(),
-        }
-    }
-
-    /// Record the copies made for a message to the space `id` among its
+impl Copied {
+    /// Record the copies made for an alert to the space `id` among its
     /// attached files, in the transaction that queues it.
     fn record(&self, tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
-        match self {
-            Self::Kept(_) => Ok(()),
-            Self::Copied(copies, attacher) => {
-                let source = workspace_files::FileSource::Message;
-                workspace_files::record(tx, id, source, attacher, copies)
-            }
-        }
+        let source = workspace_files::FileSource::Message;
+        workspace_files::record(tx, id, source, &self.1, &self.0)
     }
 }
 
-/// Queue `message` from Shoal, about no other space, for the agent of the
-/// space `id` in the caller's transaction, as
-/// [`Manager::queue_space_message`] queues one, for a caller that decides
-/// in the same transaction whether to send it: its ID, or `None` when an
-/// identical message is unread. The caller wakes the waits for messages
-/// after committing.
+/// Queue Shoal's alert of `kind`, about no other space, for the agent of
+/// the space `id` in the caller's transaction, as
+/// [`Manager::queue_alert`] queues one, for a caller that decides in the
+/// same transaction whether to send it: its ID, or `None` when an identical
+/// alert is unread. The caller wakes the waits for alerts after committing.
 pub(crate) fn queue_shoal_message(
     tx: &Transaction<'_>,
     id: &SpaceId,
+    kind: AlertKind,
     message: &str,
 ) -> Result<Option<i64>> {
-    store::insert(tx, id, None, message, &[], Delivery::Wake)
+    let alert = NewAlert::shoal(kind, About::default(), message.to_owned());
+    let queued = store::insert(tx, id, &alert, Delivery::Wake, false)?;
+    Ok(queued.new.then_some(queued.id))
 }
 
 impl Manager {
-    /// Queue a message for the agent of `space`, with copies of the files
-    /// `attachments`, attached by `attacher`; without text, the files are
-    /// the message. An identical unread message is not repeated.
-    async fn send_to(
+    /// Queue `message` from `sender` for the agent of `space`, with copies
+    /// of the files `attachments`, attached by `attacher`; without text,
+    /// the files are the message. An identical unread alert is not
+    /// repeated. Returns the alert's ID.
+    pub(super) async fn send_to(
         &self,
         space: Space,
+        sender: &(Sender, About),
         message: String,
         attachments: Vec<NewFile>,
         attacher: &Attacher,
-    ) -> Result<()> {
+    ) -> Result<i64> {
         if !message.is_empty() || attachments.is_empty() {
             crate::validate::agent_message(&message)?;
         }
         let id = space.id.clone();
+        let alert = NewAlert {
+            kind: AlertKind::Message,
+            sender: sender.0,
+            about: sender.1.clone(),
+            message,
+            attachments: Vec::new(),
+        };
         if attachments.is_empty() {
-            return self.queue_agent_message(&id, message).await;
+            return self.queue(&id, alert, false, Delivery::Wake, None).await;
         }
-        let text = message.clone();
+        let text = alert.message.clone();
         self.queue_attached(space.into(), &text, attachments, |copies| {
-            let attached = Attached::Copied(copies, attacher.clone());
-            self.queue(&id, None, message, attached, Delivery::Wake)
+            let alert = NewAlert {
+                attachments: copies.iter().map(|copy| copy.path.clone()).collect(),
+                ..alert
+            };
+            let copied = Copied(copies, attacher.clone());
+            self.queue(&id, alert, false, Delivery::Wake, Some(copied))
         })
         .await
     }
 
-    /// Queue `message` for the agent of the space `id`, with Shoal's copies
-    /// `attachments` of files another space's files already keep, `about`
-    /// another space when it concerns one. A space whose agent is not
+    /// Queue `alert` for the agent of the space `id`, whose files another
+    /// space's files already keep; `for_user` says the user receives it if
+    /// the space goes before its agent reads it. A space whose agent is not
     /// running receives it once its agent starts. It reads the space as
     /// recorded, stopping no chat, so a caller holding the approval
-    /// announcement gate may queue one.
-    pub(crate) async fn queue_space_message(
+    /// announcement gate may queue one. Returns the alert's ID.
+    pub(crate) async fn queue_alert(
         &self,
         id: &SpaceId,
-        about: Option<About>,
-        message: String,
-        attachments: Vec<PathBuf>,
-    ) -> Result<()> {
-        let attached = Attached::Kept(attachments);
-        self.queue(id, about, message, attached, Delivery::Wake)
-            .await
+        alert: NewAlert,
+        for_user: bool,
+    ) -> Result<i64> {
+        self.queue(id, alert, for_user, Delivery::Wake, None).await
     }
 
-    pub(crate) async fn queue_agent_message(&self, id: &SpaceId, message: String) -> Result<()> {
-        self.queue_agent_message_delivered(id, message, Delivery::Wake)
-            .await
+    /// Queue Shoal's alert of `kind`, about no other space, for the agent
+    /// of the space `id`.
+    pub(crate) async fn queue_agent_message(
+        &self,
+        id: &SpaceId,
+        kind: AlertKind,
+        message: String,
+    ) -> Result<()> {
+        (self.queue_agent_message_delivered(id, kind, message, Delivery::Wake)).await
     }
 
     pub(crate) async fn queue_agent_message_delivered(
         &self,
         id: &SpaceId,
+        kind: AlertKind,
         message: String,
         delivery: Delivery,
     ) -> Result<()> {
-        let attached = Attached::Kept(Vec::new());
-        self.queue(id, None, message, attached, delivery).await
+        let alert = NewAlert::shoal(kind, About::default(), message);
+        self.queue(id, alert, false, delivery, None).await?;
+        Ok(())
     }
 
-    /// Queue `message` for the agent of the space `id` with the files
-    /// `attached`, `about` another space when it concerns one, then wake
-    /// the waits for it.
+    /// Queue `alert` for the agent of the space `id` with the files it
+    /// `copied`, then wake the waits for it. Returns the alert's ID.
     async fn queue(
         &self,
         id: &SpaceId,
-        about: Option<About>,
-        message: String,
-        attached: Attached,
+        alert: NewAlert,
+        for_user: bool,
         delivery: Delivery,
-    ) -> Result<()> {
+        copied: Option<Copied>,
+    ) -> Result<i64> {
         let id = id.to_owned();
         let queued = self
             .store
             .write(move |tx| {
-                let paths = attached.paths();
-                let queued = store::insert(tx, &id, about.as_ref(), &message, &paths, delivery)?;
-                attached.record(tx, &id)?;
-                Ok(queued.is_some())
+                let queued = store::insert(tx, &id, &alert, delivery, for_user)?;
+                if let Some(copied) = &copied {
+                    copied.record(tx, &id)?;
+                }
+                Ok(queued)
             })
             .await?;
-        if queued {
+        if queued.new {
             self.signals.message_queued();
         }
-        Ok(())
+        Ok(queued.id)
     }
 
     /// The unread messages of the space `selector` names, oldest first.
     /// They stay unread until delivered.
-    pub async fn agent_messages(&self, selector: &SpaceSelector) -> Result<Vec<AgentMessage>> {
+    #[cfg(test)]
+    pub async fn agent_messages(&self, selector: &SpaceSelector) -> Result<Vec<Alert>> {
         let space = self.space(selector).await?;
-        Ok(self.unread_messages(&space.id).await?.messages)
+        Ok(self.unread_messages(&space.id).await?.alerts)
     }
 
     /// The unread messages of the space `id`, oldest first, and whether one
@@ -222,9 +220,9 @@ impl Manager {
         self.acknowledge_leftovers(selector, leftovers).await
     }
 
-    /// Delete exactly these messages once the agent of the space `selector`
-    /// names has received them, with the questions whose answers they
-    /// carried.
+    /// Mark exactly these alerts read once the agent of the space
+    /// `selector` names has received them, and delete the questions whose
+    /// answers they carried.
     pub async fn mark_agent_messages_delivered(
         &self,
         selector: &SpaceSelector,
@@ -234,7 +232,7 @@ impl Manager {
         self.store
             .write(move |tx| {
                 for id in ids {
-                    store::delete_delivered(tx, &space, id)?;
+                    store::mark_delivered(tx, &space, id)?;
                 }
                 Ok(())
             })

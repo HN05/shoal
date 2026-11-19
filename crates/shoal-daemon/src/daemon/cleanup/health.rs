@@ -267,11 +267,7 @@ impl Manager {
             let name = health.name().to_lowercase();
             let message = format!("{name} failed: {}", unreported.error);
             let kind = AlertKind::CleanupFailed;
-            match self
-                .notifications
-                .record(self, about, kind, message, &[])
-                .await
-            {
+            match self.record_notification(about, kind, message).await {
                 Ok(_) => {
                     let id = unreported.workspace.as_ref().map(|(id, _)| id.as_str());
                     health.failure_notified(id);

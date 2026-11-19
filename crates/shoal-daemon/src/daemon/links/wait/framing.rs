@@ -7,7 +7,7 @@ use super::{
     cursor::{all_pending, save_pending},
 };
 use crate::{
-    daemon::{agent_messages::AgentMessage, manager::Manager},
+    daemon::{alerts::Alert, manager::Manager},
     forge::updates::Update,
 };
 use shoal_ids::space_ids::SpaceId;
@@ -138,16 +138,13 @@ fn redeliver_after(
 
 /// `updates` with the unread `messages` when the wait found updates and both
 /// fit one response; otherwise the messages wait for a later delivery.
-pub(super) fn with_unread_messages(
-    mut updates: Updates,
-    messages: Vec<AgentMessage>,
-) -> Result<Updates> {
+pub(super) fn with_unread_messages(mut updates: Updates, messages: Vec<Alert>) -> Result<Updates> {
     if updates.updates.is_empty() || messages.is_empty() {
         return Ok(updates);
     }
     let size = serde_json::to_vec(&updates)?.len() + serde_json::to_vec(&messages)?.len();
     if size <= RESPONSE_LIMIT {
-        updates.messages = messages;
+        updates.alerts = messages;
     }
     Ok(updates)
 }

@@ -21,6 +21,7 @@ use shoal_protocol::{
 };
 
 use crate::{Hub, daemon::Daemon, log, time::UnixTime};
+use shoal_daemon_base::alerts::{About, NewAlert};
 
 /// How often a machine looks for what waits for an offline coordinator,
 /// besides once its stored state settles after a change.
@@ -135,7 +136,8 @@ impl Hub {
                         space: question.space_id.clone(),
                         name: question.space.clone(),
                     }),
-                    kind: Some(AlertKind::QuestionAsked),
+                    kind: AlertKind::QuestionAsked,
+                    for_user: true,
                     message: question.notification(),
                     files: Vec::new(),
                 };
@@ -144,9 +146,9 @@ impl Hub {
             None => {
                 let kind = AlertKind::QuestionAsked;
                 let (name, id) = (&question.space, &question.space_id);
-                let about = shoal_daemon_base::notifications::About::space(name, id);
-                let message = question.notification();
-                self.notifications.notify_user(about, kind, message).await;
+                let about = About::space(name, id);
+                let alert = NewAlert::shoal(kind, about, question.notification());
+                self.notifications.notify_user(alert).await;
             }
         }
         let question = question.clone();

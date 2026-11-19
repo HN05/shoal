@@ -1193,10 +1193,10 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
     // An update makes it due; it waits for the launch's slot like a launch.
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&idle.id),
             "Review requested".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -1247,18 +1247,11 @@ async fn a_message_to_every_agent_restores_an_idle_stopped_agent() {
     manager.dispatch_queue().await.unwrap();
     assert!(manager.queue_entries().await.unwrap()[0].waits_for_update);
     let reached = manager
-        .send_all_message(
-            None,
-            "Rebase onto main".into(),
-            Vec::new(),
-            &Attacher::User,
-            None,
-            None,
-        )
+        .send_all_message(None, None, "Rebase onto main".into(), Vec::new())
         .await
         .unwrap();
     assert_eq!(
-        crate::daemon::test_support::names(&reached.on_start.workspaces),
+        crate::daemon::test_support::names(&reached.reached.on_start.workspaces),
         ["idle"]
     );
     manager.dispatch_queue().await.unwrap();
@@ -1380,10 +1373,10 @@ async fn an_update_restores_an_idle_agent_only_once_disk_space_recovered() {
     let restoring = await_restore(&manager, &execution).await;
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&idle.id),
             "Review requested".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();

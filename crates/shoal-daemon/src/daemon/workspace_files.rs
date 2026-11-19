@@ -22,7 +22,7 @@ pub(crate) mod layout;
 mod records;
 mod retention;
 
-pub(crate) use records::{claim, count, ids_at, keep_removed, rebase, record, restore};
+pub(crate) use records::{claim, count, keep_removed, rebase, record, restore};
 
 use layout::{Kept, Layout};
 
@@ -181,16 +181,16 @@ impl Manager {
     /// Copy `attachments` into the files of `space` and queue `message` with
     /// the copies through `queue`, deleting the copies made for a message it
     /// refuses.
-    pub(crate) async fn queue_attached<Queue, Queued>(
+    pub(crate) async fn queue_attached<Queue, Queued, T>(
         &self,
         space: Space,
         message: &str,
         attachments: Vec<NewFile>,
         queue: Queue,
-    ) -> Result<()>
+    ) -> Result<T>
     where
         Queue: FnOnce(Vec<layout::Copy>) -> Queued,
-        Queued: Future<Output = Result<()>>,
+        Queued: Future<Output = Result<T>>,
     {
         let (layout, _files) = self.lock_files(&space).await?;
         let kept = keep(layout, &space.id, message, attachments).await?;

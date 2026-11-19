@@ -234,7 +234,12 @@ impl Manager {
             request.number,
             request.subject()
         );
-        self.tell_space(&request.space_id, message).await;
+        self.tell_space(
+            &request.space_id,
+            crate::daemon::alerts::AlertKind::ApprovalDecided,
+            message,
+        )
+        .await;
         anyhow!(
             "approval request {} is outdated: the branch moved since it was requested; the agent was told to push again",
             request.number

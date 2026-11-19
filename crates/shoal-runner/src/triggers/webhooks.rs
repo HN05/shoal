@@ -13,7 +13,7 @@ use hyper::{
     service::service_fn,
 };
 use hyper_util::rt::{TokioIo, TokioTimer};
-use shoal_daemon_base::notifications::About;
+use shoal_daemon_base::alerts::{About, NewAlert};
 use shoal_protocol::{alerts::AlertKind, triggers::WebhookRequest};
 use tokio::{
     net::{TcpListener, TcpStream},
@@ -92,9 +92,8 @@ impl Runner {
                 );
                 log!("webhooks: {message}");
                 let kind = AlertKind::EnvironmentProblem;
-                (self.notifications)
-                    .notify_user(About::default(), kind, message)
-                    .await;
+                let alert = NewAlert::shoal(kind, About::default(), message);
+                self.notifications.notify_user(alert).await;
                 None
             }
         }

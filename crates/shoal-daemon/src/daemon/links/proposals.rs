@@ -232,7 +232,12 @@ impl Manager {
         self.forget_proposal(request).await?;
         self.prune_proposal_files(request).await;
         if let Some(space) = space {
-            self.tell_space(&space.id, message).await;
+            self.tell_space(
+                &space.id,
+                crate::daemon::alerts::AlertKind::ApprovalDecided,
+                message,
+            )
+            .await;
         }
         Ok(())
     }
@@ -584,7 +589,12 @@ impl Manager {
             request.number,
             request.subject()
         );
-        self.tell_space(&request.space_id, message).await;
+        self.tell_space(
+            &request.space_id,
+            crate::daemon::alerts::AlertKind::ApprovalDecided,
+            message,
+        )
+        .await;
         Ok(Moved(Box::new(request.clone())))
     }
 

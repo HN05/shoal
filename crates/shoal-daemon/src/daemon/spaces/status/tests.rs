@@ -42,11 +42,13 @@ async fn status_counts_only_the_spaces_own_unread_notifications() {
     }
     manager.notify(None, kind, "daemon").await;
     manager
-        .send_message(
-            &manager.named("planning").await,
+        .send_alert(
+            Some(&crate::daemon::test_support::caller_in(
+                &manager.named("planning").await,
+            )),
+            crate::protocol::AlertTarget::Up,
             "chat".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();

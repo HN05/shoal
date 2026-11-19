@@ -54,10 +54,10 @@ async fn every_route_records_one_added_event_per_file() {
     for _ in 0..2 {
         manager
             .send_space_message(
+                None,
                 &SpaceSelector::id(&workspace.id),
                 "See".into(),
                 vec![log.clone().into(), shot.clone().into()],
-                &Attacher::User,
             )
             .await
             .unwrap();

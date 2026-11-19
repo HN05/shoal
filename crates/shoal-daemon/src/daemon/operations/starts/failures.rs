@@ -54,11 +54,7 @@ impl Manager {
         );
         let about = About::space(name, id);
         let kind = AlertKind::PreparationFailed;
-        if let Err(error) = self
-            .notifications
-            .record(self, about, kind, message, &[])
-            .await
-        {
+        if let Err(error) = self.record_notification(about, kind, message).await {
             log!("preparation failure of {name} not reported: {error:#}");
         }
     }

@@ -9,8 +9,9 @@ use std::sync::Arc;
 use anyhow::Result;
 use futures_util::future::BoxFuture;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use shoal_daemon_base::alerts::{AlertKind, NewAlert};
 use shoal_hub::daemon::{
-    About, Approvals, Apps, Dispatch, Messages, Receiver, Records, SpacePermissions, Spaces,
+    Approvals, Apps, Dispatch, Messages, Receiver, Records, SpacePermissions, Spaces,
 };
 
 use shoal_ids::repository_ids::RepositoryId;
@@ -145,31 +146,32 @@ impl SpacePermissions for Manager {
 }
 
 impl Messages for Manager {
-    fn message<'a>(&'a self, id: &'a SpaceId, message: String) -> BoxFuture<'a, Result<()>> {
-        Box::pin(self.queue_agent_message(id, message))
+    fn message<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        kind: AlertKind,
+        message: String,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(self.queue_agent_message(id, kind, message))
     }
 
     fn message_next_turn<'a>(
         &'a self,
         id: &'a SpaceId,
+        kind: AlertKind,
         message: String,
     ) -> BoxFuture<'a, Result<()>> {
         let next_turn = agent_messages::Delivery::NextTurn;
-        Box::pin(self.queue_agent_message_delivered(id, message, next_turn))
+        Box::pin(self.queue_agent_message_delivered(id, kind, message, next_turn))
     }
 
-    fn message_about<'a>(
+    fn alert<'a>(
         &'a self,
         id: &'a SpaceId,
-        about: Option<About>,
-        message: String,
+        alert: NewAlert,
+        for_user: bool,
     ) -> BoxFuture<'a, Result<()>> {
-        let about = about.map(|about| agent_messages::About {
-            name: about.name,
-            id: about.id,
-            kind: about.kind,
-        });
-        Box::pin(self.queue_space_message(id, about, message, Vec::new()))
+        Box::pin(async move { self.queue_alert(id, alert, for_user).await.map(drop) })
     }
 }
 

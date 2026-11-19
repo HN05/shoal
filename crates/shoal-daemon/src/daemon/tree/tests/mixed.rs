@@ -6,7 +6,6 @@ use crate::{
         approvals::{ApprovalRequest, Specification, Target},
         manager::Manager,
         test_support::{ProcessGroup, agent_process, manager, repository},
-        workspace_files::Attacher,
     },
     model::{Chat, SpaceKind, Workspace},
     removal::{InspectionPolicy, UnsavedWork},
@@ -129,11 +128,13 @@ async fn a_chat_below_a_workspace_decides_and_coordinates_for_the_spaces_below_i
         Some(chat.id.clone())
     );
     manager
-        .send_message(
-            &SpaceSelector::id(&worker.id),
+        .send_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &worker.id,
+            ))),
+            crate::protocol::AlertTarget::Up,
             "first".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -142,7 +143,7 @@ async fn a_chat_below_a_workspace_decides_and_coordinates_for_the_spaces_below_i
         .await
         .unwrap();
     assert_eq!(
-        told.last().unwrap().message,
+        told.last().unwrap().text(),
         format!("{} worker: first", worker.number)
     );
     // The chat has an agent of its own, so none of the activity below it
@@ -156,11 +157,13 @@ async fn a_chat_below_a_workspace_decides_and_coordinates_for_the_spaces_below_i
         Some(root.id.clone())
     );
     manager
-        .send_message(
-            &SpaceSelector::id(&worker.id),
+        .send_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &worker.id,
+            ))),
+            crate::protocol::AlertTarget::Up,
             "second".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -169,7 +172,7 @@ async fn a_chat_below_a_workspace_decides_and_coordinates_for_the_spaces_below_i
         .await
         .unwrap();
     assert_eq!(
-        received.last().unwrap().message,
+        received.last().unwrap().text(),
         format!("{} worker: second", worker.number)
     );
     let delegated = manager.delegated_spaces(&root.id).await.unwrap();

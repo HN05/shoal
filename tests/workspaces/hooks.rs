@@ -559,13 +559,13 @@ test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
             .status
             .success()
     );
-    let notifications = fixture.ok(&["alerts"]);
+    let notifications = fixture.ok(&["alert", "list", "--unread"]);
     assert!(
         notifications
             .as_array()
             .unwrap()
             .iter()
-            .any(|n| n["kind"] == "hook_failed" && n["workspace"] == "hooked")
+            .any(|n| n["kind"] == "hook_failed" && n["space"] == "hooked")
     );
     assert_eq!(
         fs::read_to_string(fixture.root.path().join("removed")).unwrap(),

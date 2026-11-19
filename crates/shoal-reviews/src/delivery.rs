@@ -11,6 +11,7 @@ use crate::{
     store,
     validate::MAX_AGENT_MESSAGE_LEN,
 };
+use shoal_protocol::alerts::AlertKind;
 
 impl Reviews {
     /// Deliver review `id`, which has ended: to the workspace's agents,
@@ -36,12 +37,23 @@ impl Reviews {
         };
         if cancelled_by.as_deref() != Some(review.workspace_id.as_str())
             && let Err(error) = daemon
-                .message(&review.workspace_id, agent_message(&review))
+                .message(
+                    &review.workspace_id,
+                    AlertKind::ReviewFinished,
+                    agent_message(&review),
+                )
                 .await
         {
             log!("delivering review {id}: {error:#}");
         }
-        (daemon.tell_coordinator(&review.workspace, &review.workspace_id, notice(&review))).await;
+        let kind = AlertKind::ReviewFinished;
+        (daemon.tell_coordinator(
+            &review.workspace,
+            &review.workspace_id,
+            kind,
+            notice(&review),
+        ))
+        .await;
     }
 }
 

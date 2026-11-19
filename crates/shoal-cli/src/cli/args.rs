@@ -5,7 +5,6 @@ pub mod changes;
 pub mod ci;
 pub mod coordination;
 pub mod create;
-pub mod diagnostics;
 pub mod hub;
 pub mod integration;
 pub mod internal;

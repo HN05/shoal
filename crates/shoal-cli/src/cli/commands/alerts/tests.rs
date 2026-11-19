@@ -4,8 +4,11 @@ fn terminal_notification_is_one_osc_9_sequence_without_control_characters() {
     let notification = shoal_protocol::alerts::Alert {
         id: 1,
         created_at: UnixTime::from_seconds(0),
-        workspace: Some("fix-login".into()),
+        sender: shoal_protocol::alerts::Sender::Shoal,
+        recipient: None,
+        space: Some("fix-login".into()),
         space_id: None,
+        number: None,
         kind: shoal_protocol::alerts::AlertKind::AgentExited,
         message: "claude exited\x07 with code 0\n".into(),
         read: false,
@@ -18,13 +21,16 @@ fn terminal_notification_is_one_osc_9_sequence_without_control_characters() {
 }
 
 #[test]
-fn listed_notifications_name_the_files_sent_with_them() {
+fn listed_alerts_name_the_files_sent_with_them() {
     let notification = shoal_protocol::alerts::Alert {
         id: 1,
         created_at: UnixTime::from_seconds(0),
-        workspace: Some("fix-login".into()),
+        sender: shoal_protocol::alerts::Sender::Shoal,
+        recipient: None,
+        space: Some("fix-login".into()),
         space_id: None,
-        kind: shoal_protocol::alerts::AlertKind::AgentMessage,
+        number: None,
+        kind: shoal_protocol::alerts::AlertKind::Message,
         message: "Which layout?".into(),
         read: false,
         files: vec![shoal_protocol::files::SentFile {
@@ -37,5 +43,13 @@ fn listed_notifications_name_the_files_sent_with_them() {
     assert_eq!(
         super::with_files("row", &notification),
         "row\n  Attached file: /shoal/repo/.attachments/results/w/a.png"
+    );
+}
+
+#[test]
+fn multi_line_alerts_stay_one_entry() {
+    assert_eq!(
+        super::hanging_indent("Move commits:\n\nabc123 to api\ndef456 to cli", "  "),
+        "Move commits:\n\n  abc123 to api\n  def456 to cli"
     );
 }

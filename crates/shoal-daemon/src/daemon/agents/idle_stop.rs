@@ -154,7 +154,8 @@ impl Manager {
     /// whatever cleared the space.
     async fn leave_blocked_message(&self, agent: &StoppedAgent) {
         let message = crate::daemon::blockers::STOPPED_BLOCKED.to_owned();
-        if let Err(error) = self.queue_agent_message(&agent.workspace_id, message).await {
+        let kind = crate::daemon::alerts::AlertKind::SpaceBlocked;
+        if let Err(error) = (self.queue_agent_message(&agent.workspace_id, kind, message)).await {
             crate::daemon::log!("blocked agent {} untold: {error:#}", agent.id);
         }
     }

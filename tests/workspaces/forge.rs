@@ -2310,7 +2310,13 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
             .as_str()
             .is_some_and(|error| error.contains("could not check whether"))
     });
-    assert!(fixture.ok(&["alerts"]).as_array().unwrap().is_empty());
+    assert!(
+        fixture
+            .ok(&["alert", "list", "--unread"])
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
     // A merge that left out the base's HEAD keeps the stack, since rebasing
     // onto it would drop the missing commits.
     fs::remove_file(root.join("fail")).unwrap();

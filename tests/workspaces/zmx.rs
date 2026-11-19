@@ -587,7 +587,6 @@ fn an_idle_codex_with_updates_is_prompted_in_its_zmx_session() {
     let fixture = Fixture::new();
     fixture.add("prompted");
     fixture.ok(&[
-        "messages",
         "send",
         "Rebase onto main",
         "--space",

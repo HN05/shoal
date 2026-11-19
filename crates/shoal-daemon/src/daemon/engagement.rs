@@ -234,7 +234,7 @@ impl Manager {
     pub(crate) async fn record_users_message(
         &self,
         caller: Option<&Caller>,
-        reached: &shoal_protocol::agent_messages::Reached,
+        reached: &shoal_protocol::alerts::Reached,
     ) {
         let spaces = [&reached.now, &reached.on_start].into_iter();
         let recipients: Vec<SpaceSelector> = spaces

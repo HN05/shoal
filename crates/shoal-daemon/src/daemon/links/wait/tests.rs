@@ -123,10 +123,10 @@ async fn agent_messages_end_a_watch_before_item_activity() {
     // Waiting would fail without a linked PR; a queued message answers first.
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&workspace.id),
             "Rebase onto main".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -135,11 +135,11 @@ async fn agent_messages_end_a_watch_before_item_activity() {
         .await
         .unwrap();
     assert!(updates.updates.is_empty() && !updates.timed_out);
-    assert_eq!(updates.messages[0].message, "Rebase onto main");
+    assert_eq!(updates.alerts[0].message, "Rebase onto main");
     manager
         .mark_agent_messages_delivered(
             &SpaceSelector::id(&workspace.id),
-            vec![updates.messages[0].id],
+            vec![updates.alerts[0].id],
         )
         .await
         .unwrap();
@@ -158,10 +158,10 @@ async fn agent_messages_end_a_watch_before_item_activity() {
     };
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&workspace.id),
             "Stop the dev server".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -330,10 +330,10 @@ async fn background_activity_queues_for_the_agents_hooks() {
     assert!(queued.has_changed().unwrap());
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&workspace.id),
             "Rebase onto main".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -346,11 +346,11 @@ async fn background_activity_queues_for_the_agents_hooks() {
     watch.superseded.notified().await;
     assert!(!watch.is_current());
     assert_eq!(delivered.updates[0].kind, UpdateKind::Comment);
-    assert_eq!(delivered.messages[0].message, "Rebase onto main");
+    assert_eq!(delivered.alerts[0].message, "Rebase onto main");
     manager
         .mark_agent_messages_delivered(
             &SpaceSelector::id(&workspace.id),
-            vec![delivered.messages[0].id],
+            vec![delivered.alerts[0].id],
         )
         .await
         .unwrap();
@@ -365,7 +365,7 @@ async fn background_activity_queues_for_the_agents_hooks() {
         .agent_updates(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
-    assert!(after.updates.is_empty() && after.messages.is_empty());
+    assert!(after.updates.is_empty() && after.alerts.is_empty());
 }
 
 #[tokio::test]
@@ -749,10 +749,10 @@ async fn hook_delivery_does_not_wait_for_the_pr_gate() {
         .unwrap();
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&workspace.id),
             "Rebase onto main".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -768,7 +768,7 @@ async fn hook_delivery_does_not_wait_for_the_pr_gate() {
         .await
         .unwrap();
     assert!(delivered.updates.is_empty());
-    assert_eq!(delivered.messages[0].message, "Rebase onto main");
+    assert_eq!(delivered.alerts[0].message, "Rebase onto main");
     manager
         .acknowledge_pr_updates(&SpaceSelector::id(&workspace.id), vec![delivery])
         .await
@@ -1176,10 +1176,10 @@ async fn hook_responses_fit_messages_and_updates_together() {
     for n in 0..50 {
         manager
             .send_space_message(
+                None,
                 &SpaceSelector::id(&parent.id),
                 format!("{n:02}{}", "m".repeat(498)),
                 Vec::new(),
-                &Attacher::User,
             )
             .await
             .unwrap();
@@ -1188,7 +1188,7 @@ async fn hook_responses_fit_messages_and_updates_together() {
         .agent_updates(&SpaceSelector::id(&parent.id))
         .await
         .unwrap();
-    assert_eq!(delivered.messages.len(), 50);
+    assert_eq!(delivered.alerts.len(), 50);
     assert!(!delivered.updates.is_empty());
     let response = crate::protocol::Response::new(1, crate::protocol::Body::PrUpdates(delivered));
     assert!(serde_json::to_vec(&response).unwrap().len() < crate::protocol::MAX_FRAME);
@@ -1355,10 +1355,10 @@ async fn agent_wakes_are_due_while_an_idle_agent_has_updates() {
     state(crate::state::AgentState::Working).await.unwrap();
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&workspace.id),
             "Rebase onto main".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -2052,6 +2052,7 @@ async fn messages_for_the_next_turn_come_with_the_next_updates() {
     manager
         .queue_agent_message_delivered(
             &workspace.id,
+            crate::daemon::alerts::AlertKind::Message,
             "Memory is low".into(),
             crate::daemon::agent_messages::Delivery::NextTurn,
         )
@@ -2077,7 +2078,7 @@ async fn messages_for_the_next_turn_come_with_the_next_updates() {
         .await
         .unwrap();
     assert_eq!(updates.updates.len(), 1);
-    assert_eq!(updates.messages[0].message, "Memory is low");
+    assert_eq!(updates.alerts[0].message, "Memory is low");
 }
 
 #[tokio::test]
@@ -2128,6 +2129,7 @@ async fn messages_queued_during_a_wait_come_with_its_updates() {
     manager
         .queue_agent_message_delivered(
             &parent.id,
+            crate::daemon::alerts::AlertKind::Message,
             "Memory is low".into(),
             crate::daemon::agent_messages::Delivery::NextTurn,
         )
@@ -2148,7 +2150,7 @@ async fn messages_queued_during_a_wait_come_with_its_updates() {
         .unwrap()
         .unwrap();
     assert_eq!(updates.updates.len(), 1);
-    assert_eq!(updates.messages[0].message, "Memory is low");
+    assert_eq!(updates.alerts[0].message, "Memory is low");
 }
 
 #[tokio::test]
@@ -3045,6 +3047,7 @@ async fn updates_leave_settling_messages_for_a_later_delivery() {
     manager
         .queue_agent_message_delivered(
             &workspace.id,
+            crate::daemon::alerts::AlertKind::Message,
             "Memory is low".into(),
             crate::daemon::agent_messages::Delivery::NextTurn,
         )
@@ -3062,7 +3065,7 @@ async fn updates_leave_settling_messages_for_a_later_delivery() {
         .await
         .unwrap();
     assert_eq!(updates.updates.len(), 1);
-    assert!(updates.messages.is_empty(), "{updates:?}");
+    assert!(updates.alerts.is_empty(), "{updates:?}");
     let unread = manager
         .agent_messages(&SpaceSelector::id(&workspace.id))
         .await
@@ -3076,10 +3079,10 @@ async fn a_watch_times_out_while_its_messages_settle() {
     let workspace = settling_workspace(&root, &manager).await;
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&workspace.id),
             "Request 1 approved".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -3093,7 +3096,7 @@ async fn a_watch_times_out_while_its_messages_settle() {
         .await
         .unwrap();
     assert!(
-        updates.timed_out && updates.messages.is_empty(),
+        updates.timed_out && updates.alerts.is_empty(),
         "{updates:?}"
     );
     let unread = manager

@@ -808,7 +808,7 @@ fn resource_claims_are_atomic_persistent_and_wait_for_release() {
     fixture.daemon.kill();
     fixture.restart();
     assert_eq!(fixture.ok(&["leases", "resource", "--all"]), leases);
-    fixture.ok(&["alerts"]);
+    fixture.ok(&["alert", "list", "--unread"]);
     let mut waiter = fixture
         .command()
         .args([
@@ -1489,7 +1489,7 @@ fn rwlock_modes_survive_restart_wait_and_failed_removal() {
             .code(),
         Some(2)
     );
-    fixture.ok(&["alerts"]);
+    fixture.ok(&["alert", "list", "--unread"]);
     let mut waiter = fixture
         .command()
         .args([
@@ -1681,7 +1681,7 @@ fn rwlock_scope_and_kind_drift_preserve_active_leases() {
 pub(crate) fn wait_for_busy(fixture: &Fixture, workspace: &str) {
     wait_until("blocked acquisition notification", || {
         fixture
-            .ok(&["alerts"])
+            .ok(&["alert", "list", "--unread"])
             .as_array()
             .unwrap()
             .iter()

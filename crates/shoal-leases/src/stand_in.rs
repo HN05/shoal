@@ -13,6 +13,7 @@ use futures_util::future::BoxFuture;
 use rusqlite::{Connection, Transaction};
 use shoal_daemon_base::approval_requests::ReasonRequired;
 use shoal_daemon_base::{
+    alerts::{NewAlert, Sent},
     config_state::ConfigState,
     gates::Gates,
     notifications::{Coordinators, Notifications, Source},
@@ -267,14 +268,11 @@ impl Approvals for StandIn {
 impl Coordinators for StandIn {
     fn tell<'a>(
         &'a self,
-        _name: &'a SpaceName,
-        _id: Option<&'a SpaceId>,
-        _kind: AlertKind,
-        _message: String,
-        _files: Vec<PathBuf>,
+        _alert: NewAlert,
+        _for_user: bool,
         _source: Source,
-    ) -> BoxFuture<'a, bool> {
-        Box::pin(async { false })
+    ) -> BoxFuture<'a, Option<Sent>> {
+        Box::pin(async { None })
     }
 }
 

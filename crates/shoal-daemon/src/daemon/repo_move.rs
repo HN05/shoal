@@ -473,7 +473,7 @@ impl Manager {
                     ),
                     params![id, source, destination],
                 )?;
-                crate::daemon::agent_messages::rebase_attachments(
+                crate::daemon::alerts::rebase_attachments(
                     tx,
                     Path::new(&source),
                     Path::new(&destination),

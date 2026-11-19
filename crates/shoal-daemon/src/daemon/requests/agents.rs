@@ -192,54 +192,11 @@ pub(super) async fn handle(
                 .agent_session(&space, caller.and_then(Caller::execution_id))
                 .await?,
         ),
-        AgentMethod::SendAgentMessage {
-            space,
-            message,
-            attachments,
-        } => {
-            // A message the user sends an agent is a prompt they submit.
-            manager.record_user_interaction(caller, &space).await;
-            let attacher = manager.attacher(caller).await;
-            Body::Reached(
-                manager
-                    .send_space_message(&space, message, attachments, &attacher)
-                    .await?,
-            )
-        }
-        AgentMethod::SendAllAgentMessage {
-            repository,
-            message,
-            attachments,
-        } => {
-            let attacher = manager.attacher(caller).await;
-            let below = manager.reach_root(caller).await?;
-            let below = below.as_ref();
-            let reached = manager
-                .send_all_message(
-                    repository.as_ref(),
-                    message,
-                    attachments,
-                    &attacher,
-                    below,
-                    caller.map(|caller| &caller.space_id),
-                )
-                .await?;
-            // A message the user sends agents is a prompt they submit to each.
-            manager.record_users_message(caller, &reached).await;
-            Body::Reached(reached)
-        }
-        AgentMethod::AgentMessages { space } => {
-            Body::AgentMessages(manager.agent_messages(&space).await?)
-        }
         AgentMethod::GitCredential { host } => {
             Body::GitCredential(manager.agent_git_credential(caller, &host).await?)
         }
         AgentMethod::AgentUpdates { space } => {
             Body::PrUpdates(manager.agent_updates(&space).await?)
-        }
-        AgentMethod::MarkAgentMessagesDelivered { space, ids } => {
-            manager.mark_agent_messages_delivered(&space, ids).await?;
-            Body::Ok
         }
     }))
 }
@@ -254,8 +211,6 @@ impl Scoped for AgentMethod {
             AgentMethod::GitCredential { .. } => None,
             AgentMethod::AwaitAgentWake { workspace, .. } => Some(workspace),
             AgentMethod::AgentSession { space }
-            | AgentMethod::AgentMessages { space }
-            | AgentMethod::MarkAgentMessagesDelivered { space, .. }
             | AgentMethod::AgentUpdates { space }
             | AgentMethod::WaitAgentUpdates { space }
             | AgentMethod::ReportWakeEnd { space, .. }
@@ -332,33 +287,6 @@ impl Scoped for AgentMethod {
                     )
                     .await?,
             ),
-            AgentMethod::SendAgentMessage { space, .. } => Some(
-                manager
-                    .workspace_below(
-                        caller,
-                        space,
-                        "scoped processes send agent messages only to the spaces below theirs",
-                    )
-                    .await?,
-            ),
-            // The handler narrows the recipients to the spaces below the
-            // caller's.
-            AgentMethod::SendAllAgentMessage {
-                repository: Some(repository),
-                ..
-            } => {
-                *repository = manager
-                    .own_repository(
-                        caller,
-                        repository,
-                        "scoped processes send agent messages only to the spaces below theirs",
-                    )
-                    .await?;
-                None
-            }
-            AgentMethod::SendAllAgentMessage {
-                repository: None, ..
-            } => None,
         })
     }
 }

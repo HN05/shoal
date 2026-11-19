@@ -63,7 +63,7 @@ async fn a_large_snapshot_arrives_in_pages() {
     let (reader, mut writer) = stream.into_split();
     let mut reader = tokio::io::BufReader::new(reader);
     let subscribe = SubscriptionMethod::Subscribe {
-        topics: vec![Topic::Notifications],
+        topics: vec![Topic::Alerts],
         log: None,
     };
     let request = Request {

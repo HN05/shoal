@@ -464,10 +464,10 @@ async fn a_signal_stopped_idle_agent_waits_for_an_update_unless_resumed() {
     .unwrap();
     manager
         .send_space_message(
+            None,
             &manager.named("idle").await,
             "Review requested".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -546,10 +546,10 @@ async fn a_queued_restore_of_an_idle_agent_keeps_its_workspace_from_no_cleanup()
     manager.publish_config(global_config(""));
     manager
         .send_space_message(
+            None,
             &manager.named("idle").await,
             "Review requested".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();

@@ -42,11 +42,6 @@ CREATE TABLE repository_removals (
             deleting_files INTEGER NOT NULL DEFAULT 0 CHECK(deleting_files IN (0,1))
         , workspace_paths TEXT NOT NULL DEFAULT '[]');
 
-CREATE TABLE notifications (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, created_at INTEGER NOT NULL, workspace TEXT,
-            kind TEXT NOT NULL, message TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0 CHECK(read IN (0,1))
-        , space_id TEXT, subject TEXT, files TEXT NOT NULL DEFAULT '[]');
-
 CREATE TABLE repository_resource_leases (
             lease_id TEXT PRIMARY KEY REFERENCES resource_leases(id) ON DELETE CASCADE,
             repository_id TEXT NOT NULL REFERENCES repositories(id), path TEXT NOT NULL
@@ -411,18 +406,6 @@ CREATE TABLE agent_stops (
 CREATE TABLE space_priority (
     space_id TEXT PRIMARY KEY,
     priority INTEGER NOT NULL CHECK(priority BETWEEN 0 AND 100)
-);
-
-CREATE TABLE space_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    space_id TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    message TEXT NOT NULL,
-    attachments TEXT NOT NULL DEFAULT '[]',
-    wakes INTEGER NOT NULL DEFAULT 1 CHECK(wakes IN (0,1)),
-    about TEXT,
-    about_id TEXT,
-    kind TEXT
 );
 
 CREATE TABLE space_issue (
@@ -868,13 +851,28 @@ CREATE TABLE demo_viewers (
     serving INTEGER NOT NULL CHECK(serving IN (0,1))
 );
 
+CREATE TABLE alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    sender TEXT NOT NULL CHECK(sender IN ('user','space','shoal')),
+    recipient_id TEXT,
+    space TEXT,
+    space_id TEXT,
+    subject TEXT,
+    message TEXT NOT NULL,
+    attachments TEXT NOT NULL DEFAULT '[]',
+    wakes INTEGER NOT NULL DEFAULT 1 CHECK(wakes IN (0,1)),
+    for_user INTEGER NOT NULL DEFAULT 0 CHECK(for_user IN (0,1)),
+    read INTEGER NOT NULL DEFAULT 0 CHECK(read IN (0,1)),
+    CHECK(sender <> 'space' OR space_id IS NOT NULL)
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
 
 CREATE INDEX resource_lease_pool ON resource_leases(scope,pool);
-
-CREATE INDEX notifications_unread ON notifications(read,id);
 
 CREATE INDEX simulators_effective_owner ON simulators (
     coalesce(json_extract(record, '$.workspace_id'), json_extract(record, '$.last_workspace_id')),
@@ -910,8 +908,6 @@ CREATE INDEX agent_queue_blocker_targets ON agent_queue_blockers(kind, target);
 CREATE INDEX executions_space ON executions(space_id);
 
 CREATE INDEX agent_queue_space ON agent_queue(space_id);
-
-CREATE INDEX space_messages_space ON space_messages(space_id, id);
 
 CREATE INDEX space_turn_retries_execution ON space_turn_retries(execution_id);
 
@@ -955,6 +951,8 @@ CREATE INDEX hub_queue_member ON hub_queue(member_id, seq);
 
 CREATE INDEX workspaces_base ON workspaces(base_workspace_id);
 
+CREATE INDEX alerts_unread ON alerts(recipient_id, read, id);
+
 CREATE VIEW space_refs AS
     SELECT spaces.id, CASE spaces.kind
             WHEN 'workspace' THEN json_object('id',spaces.id,'name',spaces.name,
@@ -992,11 +990,9 @@ INSERT INTO "sqlite_sequence" VALUES ('review_replies', 0);
 
 INSERT INTO "sqlite_sequence" VALUES ('agent_queue', 0);
 
-INSERT INTO "sqlite_sequence" VALUES ('space_messages', 0);
-
 INSERT INTO "sqlite_sequence" VALUES ('questions', 0);
 
-INSERT INTO "sqlite_sequence" VALUES ('notifications', 0);
+INSERT INTO "sqlite_sequence" VALUES ('alerts', 0);
 
 INSERT INTO "journal_pruned" VALUES (0);
 
@@ -1030,33 +1026,6 @@ WHEN CASE
 END
 BEGIN
     SELECT RAISE(ABORT, 'invalid simulator ownership record: ' || NEW.id);
-END;
-
-CREATE TRIGGER space_removed AFTER DELETE ON spaces BEGIN
-    DELETE FROM space_parents WHERE space_id=OLD.id OR parent_id=OLD.id;
-    DELETE FROM space_issue WHERE space_id=OLD.id;
-    DELETE FROM pr_cleanup WHERE space_id=OLD.id;
-    DELETE FROM space_items WHERE space_id=OLD.id;
-    DELETE FROM pr_activity WHERE space_id=OLD.id;
-    DELETE FROM space_item_activity WHERE space_id=OLD.id;
-    DELETE FROM space_review WHERE space_id=OLD.id;
-    DELETE FROM pending_updates WHERE space_id=OLD.id;
-    DELETE FROM cleanup_grace WHERE space_id=OLD.id;
-    DELETE FROM space_agent_state WHERE space_id=OLD.id;
-    DELETE FROM space_progress WHERE space_id=OLD.id;
-    DELETE FROM space_conversions WHERE space_id=OLD.id;
-    DELETE FROM space_completion WHERE space_id=OLD.id;
-    DELETE FROM space_turns WHERE space_id=OLD.id;
-    DELETE FROM space_priority WHERE space_id=OLD.id;
-    DELETE FROM space_sleep WHERE space_id=OLD.id;
-    DELETE FROM space_messages WHERE space_id=OLD.id;
-    DELETE FROM space_pr_titles WHERE space_id=OLD.id;
-    DELETE FROM space_turn_retries WHERE space_id=OLD.id;
-    DELETE FROM gate_sessions WHERE space_id=OLD.id;
-    DELETE FROM gate_verdicts WHERE space_id=OLD.id;
-    DELETE FROM executions WHERE space_id=OLD.id;
-    DELETE FROM agent_queue WHERE space_id=OLD.id;
-    DELETE FROM agent_queue WHERE scope_space_id=OLD.id AND space_id IS NULL;
 END;
 
 CREATE TRIGGER space_agent_state_turn_kept AFTER DELETE ON space_agent_state
@@ -1375,4 +1344,31 @@ END;
 CREATE TRIGGER workspace_lifecycle_changed AFTER UPDATE OF state ON workspaces
 WHEN NEW.state IS NOT OLD.state BEGIN
     UPDATE workspaces SET lifecycle_generation=lifecycle_generation+1 WHERE id=NEW.id;
+END;
+
+CREATE TRIGGER space_removed AFTER DELETE ON spaces BEGIN
+    DELETE FROM space_parents WHERE space_id=OLD.id OR parent_id=OLD.id;
+    DELETE FROM space_issue WHERE space_id=OLD.id;
+    DELETE FROM pr_cleanup WHERE space_id=OLD.id;
+    DELETE FROM space_items WHERE space_id=OLD.id;
+    DELETE FROM pr_activity WHERE space_id=OLD.id;
+    DELETE FROM space_item_activity WHERE space_id=OLD.id;
+    DELETE FROM space_review WHERE space_id=OLD.id;
+    DELETE FROM pending_updates WHERE space_id=OLD.id;
+    DELETE FROM cleanup_grace WHERE space_id=OLD.id;
+    DELETE FROM space_agent_state WHERE space_id=OLD.id;
+    DELETE FROM space_progress WHERE space_id=OLD.id;
+    DELETE FROM space_conversions WHERE space_id=OLD.id;
+    DELETE FROM space_completion WHERE space_id=OLD.id;
+    DELETE FROM space_turns WHERE space_id=OLD.id;
+    DELETE FROM space_priority WHERE space_id=OLD.id;
+    DELETE FROM space_sleep WHERE space_id=OLD.id;
+    DELETE FROM alerts WHERE recipient_id=OLD.id;
+    DELETE FROM space_pr_titles WHERE space_id=OLD.id;
+    DELETE FROM space_turn_retries WHERE space_id=OLD.id;
+    DELETE FROM gate_sessions WHERE space_id=OLD.id;
+    DELETE FROM gate_verdicts WHERE space_id=OLD.id;
+    DELETE FROM executions WHERE space_id=OLD.id;
+    DELETE FROM agent_queue WHERE space_id=OLD.id;
+    DELETE FROM agent_queue WHERE scope_space_id=OLD.id AND space_id IS NULL;
 END;

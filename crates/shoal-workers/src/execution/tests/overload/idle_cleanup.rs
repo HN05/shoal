@@ -4,7 +4,6 @@
 use super::*;
 use crate::{model::CleanupReason, state::AgentState};
 use shoal_ids::execution_ids::ExecutionId;
-use shoal_protocol::files::Attacher;
 use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
@@ -101,10 +100,10 @@ async fn a_workspace_being_removed_refuses_messages_for_its_stopped_agent() {
     .await;
     let refused = manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&workspace.id),
             "Review requested".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await;
     assert!(refused.is_err());

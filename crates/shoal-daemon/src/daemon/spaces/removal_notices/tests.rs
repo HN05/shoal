@@ -22,7 +22,7 @@ async fn notices(manager: &Manager) -> Vec<(AlertKind, Option<String>)> {
     let notifications = manager.notifications.list(false, 100).await.unwrap();
     notifications
         .into_iter()
-        .map(|notification| (notification.kind, notification.workspace.map(String::from)))
+        .map(|notification| (notification.kind, notification.space.map(String::from)))
         .collect()
 }
 

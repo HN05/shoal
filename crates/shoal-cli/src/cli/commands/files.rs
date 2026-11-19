@@ -64,7 +64,7 @@ pub(super) async fn add(
     space: Option<SpaceSelector>,
     files: Vec<String>,
 ) -> Result<i32> {
-    let files = super::messages::attachments(&files)?;
+    let files = super::send::attachments(&files)?;
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let added = crate::client::files::add(&ctx.paths, space.clone(), files).await?;
     ctx.show(&added, |added| {

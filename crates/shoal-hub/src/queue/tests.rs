@@ -15,7 +15,8 @@ fn database() -> Connection {
 
 fn held(summary: &str) -> Held {
     let told = json!({
-        "above": "coordinator", "message": summary,
+        "above": "coordinator", "kind": "approval_decided", "for_user": false,
+        "message": summary,
     });
     Held {
         sender: MemberId::from("desk".to_owned()),

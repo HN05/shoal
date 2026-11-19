@@ -10,7 +10,7 @@ use crate::{config::Effective, sessions::Origin};
 
 /// What an agent's wrapper submits to wake the agent with new updates,
 /// which the prompt's hook supplies.
-pub const WAKE_PROMPT: &str = "Shoal: new messages or activity on this workspace's issues and PRs.";
+pub const WAKE_PROMPT: &str = "Shoal: new alerts or activity on this workspace's issues and PRs.";
 
 /// Submit `text` as a prompt in `place`, as if pasted and sent: bracketed
 /// paste keeps it one prompt, and Enter in the same write submits it rather

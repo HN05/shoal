@@ -214,7 +214,7 @@ async fn a_space_without_reply_times_takes_the_users_capped_average() {
 
 #[tokio::test]
 async fn a_message_the_user_sends_every_agent_counts_for_each_it_reached() {
-    use shoal_protocol::agent_messages::{Reached, Recipient};
+    use shoal_protocol::alerts::{Reached, Recipient};
     let (root, manager) = manager().await;
     let (id, _) = workspace(&manager, root.path()).await;
     let mut reached = Reached::default();

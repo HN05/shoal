@@ -119,7 +119,7 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
         serde_json::from_slice::<Value>(&busy.stdout).unwrap()["acquired"],
         false
     );
-    fixture.ok(&["alerts"]);
+    fixture.ok(&["alert", "list", "--unread"]);
     let mut waiting = fixture
         .command()
         .args([

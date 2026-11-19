@@ -131,8 +131,8 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
             .unwrap()
             .is_empty()
     );
-    assert!(fixture.ok(&["alerts", "clear"])["cleared"].as_u64() >= Some(1));
-    assert_eq!(fixture.ok(&["alerts", "--all"]), Value::Array(vec![]));
+    assert!(fixture.ok(&["alert", "clear"])["cleared"].as_u64() >= Some(1));
+    assert_eq!(fixture.ok(&["alert", "list"]), Value::Array(vec![]));
 }
 
 #[test]

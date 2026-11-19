@@ -31,7 +31,7 @@ fn an_unread_notice_of_moved_packages_refuses_the_upgrade_until_read() -> Result
     assert!(migrate(&mut db).is_err());
     db.execute_batch("UPDATE notifications SET read=1")?;
     migrate(&mut db)?;
-    let left: i64 = db.query_row("SELECT COUNT(*) FROM notifications", [], |row| row.get(0))?;
+    let left: i64 = db.query_row("SELECT COUNT(*) FROM alerts", [], |row| row.get(0))?;
     assert_eq!(left, 0);
     Ok(())
 }

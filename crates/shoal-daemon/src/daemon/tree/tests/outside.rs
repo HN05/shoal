@@ -7,12 +7,9 @@ use crate::{
         chats::NewChat,
         manager::Manager,
         test_support::{ProcessGroup, agent_process, manager, repository},
-        workspace_files::Attacher,
     },
     model::{Chat, Repository, Workspace},
-    protocol::{
-        AgentMethod, ItemContext, ItemMethod, NotificationMethod, QueueMethod, WorkspaceMethod,
-    },
+    protocol::{AlertMethod, AlertTarget, ItemContext, ItemMethod, QueueMethod, WorkspaceMethod},
     state::AgentState,
 };
 use shoal_ids::space_ids::SpaceId;
@@ -202,11 +199,13 @@ async fn activity_reaches_a_chat_without_a_repository_only_from_below_it() {
 
     // Its hooks receive what the space below it sends, and acknowledge it.
     manager
-        .send_message(
-            &SpaceSelector::id(&below.id),
+        .send_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &below.id,
+            ))),
+            crate::protocol::AlertTarget::Up,
             "done".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -214,20 +213,13 @@ async fn activity_reaches_a_chat_without_a_repository_only_from_below_it() {
         .agent_updates(&SpaceSelector::id(&master.id))
         .await
         .unwrap();
-    let last = delivered
-        .messages
-        .last()
-        .map(|message| message.message.as_str());
+    let last = delivered.alerts.last().map(|alert| alert.text());
     let done = format!("{} below: done", below.number);
-    assert_eq!(last, Some(done.as_str()), "{delivered:?}");
+    assert_eq!(last, Some(done), "{delivered:?}");
     let deliveries = (delivered.updates.iter())
         .map(|update| update.delivery.clone())
         .collect();
-    let messages = delivered
-        .messages
-        .iter()
-        .map(|message| message.id)
-        .collect();
+    let messages = delivered.alerts.iter().map(|message| message.id).collect();
     manager
         .acknowledge_space_delivery(&SpaceSelector::id(&master.id), deliveries, messages, &[])
         .await
@@ -236,7 +228,7 @@ async fn activity_reaches_a_chat_without_a_repository_only_from_below_it() {
         .agent_updates(&SpaceSelector::id(&master.id))
         .await
         .unwrap();
-    assert!(again.messages.is_empty(), "{again:?}");
+    assert!(again.alerts.is_empty(), "{again:?}");
 }
 
 #[tokio::test]
@@ -281,21 +273,18 @@ async fn a_broadcast_with_files_reaches_a_chat_without_a_repository() {
         .unwrap();
     let report = temp.path().join("report.md");
     std::fs::write(&report, "Plan").unwrap();
-    let send = |attachments| {
-        manager.send_all_message(
-            None,
-            "Note".into(),
-            attachments,
-            &crate::daemon::workspace_files::Attacher::User,
-            None,
-            None,
-        )
-    };
+    let send = |attachments| manager.send_all_message(None, None, "Note".into(), attachments);
     let reached = send(vec![report.into()]).await.unwrap();
     let names = crate::daemon::test_support::names;
-    assert_eq!(names(&reached.now.chats), ["master", talk.name.as_str()]);
+    assert_eq!(
+        names(&reached.reached.now.chats),
+        ["master", talk.name.as_str()]
+    );
     let reached = send(Vec::new()).await.unwrap();
-    assert_eq!(names(&reached.now.chats), ["master", talk.name.as_str()]);
+    assert_eq!(
+        names(&reached.reached.now.chats),
+        ["master", talk.name.as_str()]
+    );
 }
 
 #[tokio::test]
@@ -334,8 +323,10 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
         )
         .await
         .unwrap();
-    let message = || AgentMethod::SendAgentMessage {
-        space: SpaceSelector::id(&user.id),
+    let message = || AlertMethod::SendAlert {
+        to: AlertTarget::Space {
+            space: SpaceSelector::id(&user.id),
+        },
         message: "Rebase onto main".into(),
         attachments: Vec::new(),
     };
@@ -344,8 +335,12 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
     crate::daemon::scope::authorize(&manager, Some(&token), &mut method)
         .await
         .unwrap();
-    let AgentMethod::SendAgentMessage { space, .. } = method else {
-        unreachable!("the method stays a message");
+    let AlertMethod::SendAlert {
+        to: AlertTarget::Space { space },
+        ..
+    } = method
+    else {
+        unreachable!("the method stays an alert to the space");
     };
     assert_eq!(space, SpaceSelector::id(&user.id));
     // A chat of a repository reaches only its own tree.
@@ -429,7 +424,8 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
     let merging = crate::daemon::scope::authorize(&manager, Some(&token), &mut merge).await;
     assert!(merging.is_err());
     // A master session reads the user's notifications.
-    let mut notifications = NotificationMethod::ListNotifications {
+    let mut notifications = AlertMethod::ListAlerts {
+        to: crate::protocol::AlertsFor::User,
         unread_only: true,
         limit: 10,
     };

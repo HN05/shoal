@@ -3,9 +3,7 @@
 //! the sessions each space's agents reported, open questions, pending
 //! approval requests, messages and notifications, each named by a
 //! [`RecordKey`].
-use crate::space_names::SpaceName;
 use shoal_ids::space_ids::SpaceId;
-use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use shoal_refs::CommitId;
@@ -35,10 +33,9 @@ states!(
         Questions => "questions",
         /// Pending approval requests.
         Approvals => "approvals",
-        /// Messages to agents, and from agents to the user.
-        Messages => "messages",
-        /// The user's notifications; scoped callers cannot subscribe.
-        Notifications => "notifications",
+        /// Unread alerts to the agents of the spaces, and the user's alerts,
+        /// which scoped callers do not receive.
+        Alerts => "alerts",
     }
 );
 
@@ -52,8 +49,7 @@ states!(
         Sessions => "sessions",
         Question => "question",
         Approval => "approval",
-        Message => "message",
-        Alert => "notification",
+        Alert => "alert",
         LogEntry => "log_entry",
     }
 );
@@ -76,7 +72,6 @@ pub enum Record {
     Sessions(ReportedSessions),
     Question(Question),
     Approval(Box<ApprovalRequest>),
-    Message(Message),
     Alert(Alert),
     /// An entry of the space's log the subscription follows.
     LogEntry(Box<crate::log::LogEntry>),
@@ -91,7 +86,6 @@ impl Record {
             Self::Sessions(record) => (RecordKind::Sessions, record.space_id.to_string()),
             Self::Question(record) => (RecordKind::Question, record.number.to_string()),
             Self::Approval(record) => (RecordKind::Approval, record.key.clone()),
-            Self::Message(record) => (RecordKind::Message, record.id.clone()),
             Self::Alert(record) => (RecordKind::Alert, record.id.to_string()),
             // Padded, so keys sort as the log does.
             Self::LogEntry(record) => (RecordKind::LogEntry, format!("{:020}", record.id())),
@@ -192,30 +186,4 @@ pub struct LookupError {
     /// What it could not read, such as `CI`.
     pub source: String,
     pub message: String,
-}
-
-states!(
-    /// Who a message is for.
-    MessageRecipient {
-        /// A space's agent, until it is delivered.
-        Agent => "agent",
-        /// The user, from a space's process.
-        User => "user",
-    }
-);
-
-/// A message to a space's agent, or from one to the user.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Message {
-    pub id: String,
-    pub recipient: MessageRecipient,
-    /// The space's ID, for a message to its agent.
-    pub space_id: Option<SpaceId>,
-    /// The space's name.
-    pub space: Option<SpaceName>,
-    /// Empty when the message is only its attachments.
-    pub text: String,
-    /// Shoal's copies of the attached files.
-    pub attachments: Vec<PathBuf>,
-    pub created_at: crate::time::UnixTime,
 }

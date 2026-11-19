@@ -17,6 +17,7 @@ use shoal_reviews::daemon::{Admission, Agents, Forge, Records, Repositories, Set
 
 use super::{
     agent_queue::{self, OneShotAdmission, Serving},
+    alerts::{About, AlertKind, NewAlert},
     manager::Manager,
     notifications::Source,
 };
@@ -133,20 +134,26 @@ impl Agents for Manager {
         self.agent_queue.hold_oneshot(repository);
     }
 
-    fn message<'a>(&'a self, id: &'a SpaceId, message: String) -> BoxFuture<'a, Result<()>> {
-        Box::pin(self.queue_agent_message(id, message))
+    fn message<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        kind: AlertKind,
+        message: String,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(self.queue_agent_message(id, kind, message))
     }
 
     fn tell_coordinator<'a>(
         &'a self,
         name: &'a SpaceName,
         id: &'a SpaceId,
+        kind: AlertKind,
         message: String,
     ) -> BoxFuture<'a, ()> {
         Box::pin(async move {
-            let source = Source::Daemon;
-            Manager::tell_coordinator(self, name, Some(id), None, message, Vec::new(), source)
-                .await;
+            let about = About::space(name, id);
+            let alert = NewAlert::shoal(kind, about, message);
+            Manager::tell_coordinator(self, alert, false, Source::Daemon).await;
         })
     }
 }

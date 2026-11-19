@@ -106,7 +106,7 @@ fn config_show_reports_effective_values_and_their_layers() {
 fn the_daemon_alerts_about_global_config_problems_on_start_and_reload() {
     let environment = |fixture: &Fixture| -> Vec<String> {
         fixture
-            .ok(&["alerts", "--all", "--keep-unread"])
+            .ok(&["alert", "list", "--keep-unread"])
             .as_array()
             .unwrap()
             .iter()

@@ -1,0 +1,139 @@
+use super::*;
+use crate::daemon::alerts::AlertKind;
+use crate::{
+    daemon::{
+        manager::Manager,
+        test_support::{caller_in, manager, repository},
+    },
+    model::Workspace,
+    protocol::{AlertTarget, AlertsFor},
+};
+use shoal_protocol::space_names::SpaceSelector;
+
+/// A parent workspace, a child below it and a sibling beside it.
+async fn tree(temp: &tempfile::TempDir, manager: &Manager) -> (Workspace, Workspace, Workspace) {
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .create_child(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
+        .await
+        .unwrap();
+    let sibling = manager
+        .create_workspace(&repo.id, "sibling".into(), None, None, None)
+        .await
+        .unwrap();
+    (parent, child, sibling)
+}
+
+/// Send `text` from `from`, a space or the user, down to `to`.
+async fn send(manager: &Manager, from: Option<&Workspace>, to: &Workspace, text: &str) -> i64 {
+    let caller = from.map(|from| caller_in(&SpaceSelector::id(&from.id)));
+    let to = AlertTarget::Space {
+        space: SpaceSelector::id(&to.id),
+    };
+    let sent = manager.send_alert(caller.as_ref(), to, text.into(), Vec::new());
+    sent.await.unwrap().alerts[0]
+}
+
+#[tokio::test]
+async fn an_alert_names_its_sender_who_alone_withdraws_it_until_read() {
+    let (temp, manager) = manager().await;
+    let (parent, child, sibling) = tree(&temp, &manager).await;
+    let from_user = send(&manager, None, &child, "Rebase onto main").await;
+    let from_parent = send(&manager, Some(&parent), &child, "Stop the dev server").await;
+    let unread = manager.unread_messages(&child.id).await.unwrap().alerts;
+    let senders: Vec<_> = (unread.iter())
+        .map(|alert| (alert.sender, alert.space_id.as_ref()))
+        .collect();
+    assert_eq!(
+        senders,
+        [(Sender::User, None), (Sender::Space, Some(&parent.id))]
+    );
+    // Only the sender withdraws: the user's alert, not the parent's.
+    let as_sibling = caller_in(&SpaceSelector::id(&sibling.id));
+    for (caller, id) in [(Some(&as_sibling), from_parent), (None, from_parent)] {
+        assert!(manager.withdraw_alert(caller, id).await.is_err());
+    }
+    let as_parent = caller_in(&SpaceSelector::id(&parent.id));
+    manager.withdraw_alert(None, from_user).await.unwrap();
+    // Once read, it stays.
+    (manager.mark_alerts_read(None, vec![from_parent]))
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .withdraw_alert(Some(&as_parent), from_parent)
+            .await
+            .is_err()
+    );
+    let left = manager
+        .alerts_for(
+            None,
+            AlertsFor::Space {
+                space: SpaceSelector::id(&child.id),
+            },
+            false,
+            50,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        left.iter()
+            .map(|alert| (alert.id, alert.read))
+            .collect::<Vec<_>>(),
+        [(from_parent, true)]
+    );
+}
+
+#[tokio::test]
+async fn a_scoped_caller_reads_and_marks_only_the_alerts_its_scope_reaches() {
+    let (temp, manager) = manager().await;
+    let (parent, child, sibling) = tree(&temp, &manager).await;
+    let below = send(&manager, None, &child, "below").await;
+    let beside = send(&manager, None, &sibling, "beside").await;
+    (manager.notify(None, AlertKind::ResourceBusy, "pool busy")).await;
+    let as_parent = caller_in(&SpaceSelector::id(&parent.id));
+    let every = manager
+        .alerts_for(Some(&as_parent), AlertsFor::Every, false, 50)
+        .await
+        .unwrap();
+    // The user's alerts take the `notifications` permission, which a
+    // workspace's agent lacks by default.
+    assert_eq!(
+        every.iter().map(|alert| alert.id).collect::<Vec<_>>(),
+        [below]
+    );
+    let user = manager
+        .alerts_for(None, AlertsFor::Every, false, 50)
+        .await
+        .unwrap();
+    assert_eq!(user.len(), 3);
+    assert!(
+        (manager.mark_alerts_read(Some(&as_parent), vec![beside]))
+            .await
+            .is_err()
+    );
+    (manager.mark_alerts_read(Some(&as_parent), vec![below]))
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .unread_messages(&child.id)
+            .await
+            .unwrap()
+            .alerts
+            .is_empty()
+    );
+}

@@ -260,7 +260,24 @@ impl Manager {
 }
 
 /// The names of the spaces a message's result lists, as tests compare them.
-pub fn names(spaces: &[shoal_protocol::agent_messages::Recipient]) -> Vec<&str> {
+/// A process of the space `selector` names by its ID, as alerts it sends
+/// come from it.
+pub(crate) fn caller_in(
+    selector: &shoal_protocol::space_names::SpaceSelector,
+) -> crate::daemon::scope::Caller {
+    let shoal_protocol::space_names::SpaceSelector::Id(id) = selector else {
+        panic!("a test names the sending space by its ID: {selector}");
+    };
+    crate::daemon::scope::Caller {
+        space_id: id.clone(),
+        execution: None,
+        granted: None,
+        read_only: false,
+        vouched: None,
+    }
+}
+
+pub fn names(spaces: &[shoal_protocol::alerts::Recipient]) -> Vec<&str> {
     spaces.iter().map(|space| space.name.as_str()).collect()
 }
 

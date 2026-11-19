@@ -108,7 +108,7 @@ async fn a_failure_reaches_the_requesting_agent() {
     assert!(
         messages
             .iter()
-            .any(|message| message.message.contains(workspace.name.as_str()))
+            .any(|message| message.text().contains(workspace.name.as_str()))
     );
     let notifications = manager.notifications.list(true, 10).await.unwrap();
     assert!(
@@ -145,7 +145,7 @@ async fn a_failure_outlives_the_requesting_chat() {
     drop(manager.gates.quiesce().await);
     let failed = |notification: &crate::daemon::notifications::Alert| {
         notification.kind == AlertKind::RemovalFailed
-            && notification.workspace.as_ref() == Some(&workspace.name)
+            && notification.space.as_ref() == Some(&workspace.name)
     };
     assert!(
         !manager

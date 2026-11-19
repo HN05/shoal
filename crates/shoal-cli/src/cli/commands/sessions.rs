@@ -310,7 +310,7 @@ impl Target {
         let code = super::restore::run(ctx, targets, None, now).await?;
         ensure!(
             code == 0,
-            "{} did not restore; shoal alerts shows why",
+            "{} did not restore; shoal alert list shows why",
             self.name()
         );
         // A restore whose agent registered already left the queue, which

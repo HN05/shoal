@@ -1041,8 +1041,8 @@ fn a_start_without_a_terminal_admits_a_happy_agent_before_it_opens_here() {
     first.wait().unwrap();
     let happy = fixture.id("happy");
     let kinds = || -> Vec<String> {
-        (fixture.ok(&["alerts", "--all"]).as_array().unwrap().iter())
-            .filter(|alert| alert["space_id"] == happy.as_str() || alert["workspace"] == "happy")
+        (fixture.ok(&["alert", "list"]).as_array().unwrap().iter())
+            .filter(|alert| alert["space_id"] == happy.as_str() || alert["space"] == "happy")
             .map(|alert| alert["kind"].as_str().unwrap().to_owned())
             .collect()
     };

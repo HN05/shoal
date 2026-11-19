@@ -54,7 +54,7 @@ async fn item_wait_continues_on_the_replacement_daemon() {
         assert!((1..=600).contains(&timeout_secs.unwrap()));
         let updates = Updates {
             updates: Vec::new(),
-            messages: Vec::new(),
+            alerts: Vec::new(),
             leftovers: Vec::new(),
             timed_out: true,
             superseded: false,

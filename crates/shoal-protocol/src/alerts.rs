@@ -1,7 +1,11 @@
-//! The user's notifications: what the daemon recorded for the user to read.
+//! Alerts: one-way notices from the user, a space or Shoal, for the user or
+//! a space's agent.
+use std::path::PathBuf;
+
 use crate::space_names::SpaceName;
 
 use serde::{Deserialize, Serialize};
+use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 
 use shoal_states::states;
 
@@ -47,8 +51,35 @@ states!(AlertKind {
     /// The gate could not be set up to decide a request, as when no agent
     /// it can run is configured, which denied the request.
     GateUnavailable => "gate_unavailable",
-    /// A workspace process asked for the user's attention.
-    AgentMessage => "agent_message",
+    /// Text the user or a space sent.
+    Message => "message",
+    /// The answer to a question the space's agent asked.
+    QuestionAnswered => "question_answered",
+    /// A decision on an approval request the space made.
+    ApprovalDecided => "approval_decided",
+    /// The findings of a review of the space's work.
+    ReviewFinished => "review_finished",
+    /// A space below marked its work ready for review.
+    ReadyMarked => "ready_marked",
+    /// The gate decided an approval request of a space below.
+    GateDecided => "gate_decided",
+    /// The agent stayed idle as long as its mode wakes it after.
+    IdleWake => "idle_wake",
+    /// A timer the agent set with `shoal sleep` ran out.
+    WakeTimer => "wake_timer",
+    /// Shoal retries a turn an API failure ended.
+    TurnRetried => "turn_retried",
+    /// The machine's memory, CPU or disk space runs short.
+    LoadWarning => "load_warning",
+    /// What blocks the space's work changed.
+    BlockersChanged => "blockers_changed",
+    /// Another space's work was absorbed into the space.
+    SpaceAbsorbed => "space_absorbed",
+    /// The branch the space builds on changed.
+    BaseChanged => "base_changed",
+    /// Activity on the issues and PRs of a space below without an agent of
+    /// its own, which another machine runs.
+    ItemActivity => "item_activity",
     /// The daemon started an agent from the queue.
     QueueStarted => "queue_started",
     /// A queued agent could not start.
@@ -116,34 +147,165 @@ states!(AlertKind {
     HubExpired => "hub_expired",
 });
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+states!(Sender {
+    /// The user, from a terminal outside every space.
+    User => "user",
+    /// A space's agent or process.
+    Space => "space",
+    /// Shoal itself, about an event it saw.
+    Shoal => "shoal",
+});
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Alert {
     pub id: i64,
     pub created_at: crate::time::UnixTime,
-    /// Workspace name when the event happened; kept after removal.
-    pub workspace: Option<SpaceName>,
+    pub kind: AlertKind,
+    pub sender: Sender,
+    /// The space the alert is for; none when it is for the user.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recipient: Option<Recipient>,
+    /// The space that sent the alert, or else the space it is about, by
+    /// its name then; kept after removal.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub space: Option<SpaceName>,
     /// The ID of that space, which selects it while it exists.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub space_id: Option<shoal_ids::space_ids::SpaceId>,
-    pub kind: AlertKind,
+    pub space_id: Option<SpaceId>,
+    /// That space's number while it has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub number: Option<SpaceNumber>,
+    /// Empty when the alert is only its files.
     pub message: String,
     pub read: bool,
-    /// The files the space's agent sent with the message.
+    /// Shoal's copies of the files attached to it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<crate::files::SentFile>,
 }
 
-/// Where a workspace process's message went: the user's notification, which
-/// the sender may withdraw while unread, or none when a coordinating agent
-/// received it instead.
-#[derive(Debug, Serialize, Deserialize)]
+impl Alert {
+    /// The paths of Shoal's copies of its files.
+    pub fn attachments(&self) -> Vec<PathBuf> {
+        self.files.iter().map(|file| file.path.clone()).collect()
+    }
+
+    /// Its text as an agent reads it, after the space it names.
+    pub fn text(&self) -> String {
+        match self.space_label() {
+            Some(space) => format!("{space}: {}", self.message),
+            None => self.message.clone(),
+        }
+    }
+
+    /// The space it names, by its number while it has one, since names
+    /// repeat.
+    pub fn space_label(&self) -> Option<String> {
+        let name = self.space.as_ref()?;
+        Some(match self.number {
+            Some(number) => crate::space_names::label(number, name),
+            None => name.to_string(),
+        })
+    }
+}
+
+/// Where an alert went: the alerts recorded, which their sender may
+/// withdraw while unread, to the user or the spaces it reached, or passed
+/// up to a coordinator on another machine.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Sent {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub notification: Option<i64>,
+    /// The IDs of the alerts recorded, one for each recipient that took it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub alerts: Vec<i64>,
+    /// Whether it went to the user.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub user: bool,
+    /// Whether it went to the coordinator on another machine.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub passed_up: bool,
+    /// The spaces it reached.
+    #[serde(flatten)]
+    pub reached: Reached,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Cleared {
-    /// Notifications deleted, read or not.
+    /// Alerts deleted, read or not.
     pub cleared: u64,
+}
+
+/// The spaces a message reached, by whether their agent receives it now or
+/// once it next runs, or they have none.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Reached {
+    /// The spaces whose agent runs.
+    pub now: ReachedSpaces,
+    /// The spaces whose agent is stopped, queued, waits for its restore or
+    /// has a wrapper waiting to reattach.
+    pub on_start: ReachedSpaces,
+    /// The space without an agent, where the message waits for one to
+    /// start; never one a message to every agent reaches.
+    #[serde(default, skip_serializing_if = "ReachedSpaces::is_empty")]
+    pub without_agent: ReachedSpaces,
+    /// The spaces that refused the message, such as one whose unread
+    /// messages are full, which the others still received.
+    #[serde(default, skip_serializing_if = "Refused::is_empty")]
+    pub refused: Refused,
+}
+
+impl Reached {
+    pub fn is_empty(&self) -> bool {
+        self.now.is_empty()
+            && self.on_start.is_empty()
+            && self.without_agent.is_empty()
+            && self.refused.is_empty()
+    }
+}
+
+/// Workspaces and chats that refused a message.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Refused {
+    pub workspaces: Vec<RefusedSpace>,
+    pub chats: Vec<RefusedSpace>,
+}
+
+impl Refused {
+    pub fn is_empty(&self) -> bool {
+        self.workspaces.is_empty() && self.chats.is_empty()
+    }
+}
+
+/// A space that refused a message, with why.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RefusedSpace {
+    #[serde(flatten)]
+    pub space: Recipient,
+    pub error: String,
+}
+
+/// Workspaces and chats a message reached.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReachedSpaces {
+    pub workspaces: Vec<Recipient>,
+    pub chats: Vec<Recipient>,
+}
+
+/// A space a message was sent to, by its number, ID and name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Recipient {
+    pub number: SpaceNumber,
+    pub id: SpaceId,
+    pub name: SpaceName,
+}
+
+impl Recipient {
+    /// Its number with its name, as text that names it does.
+    pub fn label(&self) -> String {
+        crate::space_names::label(self.number, &self.name)
+    }
+}
+
+impl ReachedSpaces {
+    pub fn is_empty(&self) -> bool {
+        self.workspaces.is_empty() && self.chats.is_empty()
+    }
 }

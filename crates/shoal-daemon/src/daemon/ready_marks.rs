@@ -116,15 +116,10 @@ impl Manager {
         if let Some(command) = command {
             (self.run_post_ready(&space, &settings, &command, &ready.marks)).await;
         }
-        self.tell_coordinator(
-            &space.name,
-            Some(&id),
-            None,
-            ready_notice(&ready.marks),
-            Vec::new(),
-            super::notifications::Source::Agent,
-        )
-        .await;
+        let about = crate::daemon::alerts::About::space(&space.name, &id);
+        let kind = crate::daemon::alerts::AlertKind::ReadyMarked;
+        let alert = crate::daemon::alerts::NewAlert::shoal(kind, about, ready_notice(&ready.marks));
+        (self.tell_coordinator(alert, false, super::notifications::Source::Agent)).await;
         undrafted.context("marked ready for review, but a PR is still a draft")?;
         (self.check_conventions(&space, &settings, &mut ready.marks)).await;
         Ok(ready)

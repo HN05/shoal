@@ -639,7 +639,7 @@ async fn children_never_keep_their_parent_and_go_with_it() {
     assert!(
         notifications
             .iter()
-            .any(|notification| notification.workspace.as_deref() == Some("child")),
+            .any(|notification| notification.space.as_deref() == Some("child")),
         "{notifications:?}"
     );
 }
@@ -866,7 +866,7 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
             .await
             .unwrap()
             .into_iter()
-            .map(|m| m.message)
+            .map(|m| m.text())
             .collect::<Vec<_>>()
     };
     manager
@@ -880,11 +880,13 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
         .unwrap();
     // Without an agent above, the user hears the child's agent.
     manager
-        .send_message(
-            &SpaceSelector::id(&child.id),
+        .send_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &child.id,
+            ))),
+            crate::protocol::AlertTarget::Up,
             "first".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -900,21 +902,25 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
         .await
         .unwrap();
     manager
-        .send_message(
-            &SpaceSelector::id(&child.id),
+        .send_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &child.id,
+            ))),
+            crate::protocol::AlertTarget::Up,
             "second".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
     // A child without an agent of its own is the coordinator's own work.
     manager
-        .send_message(
-            &SpaceSelector::id(&helper.id),
+        .send_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &helper.id,
+            ))),
+            crate::protocol::AlertTarget::Up,
             "from the parent".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -1026,11 +1032,6 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
         // Interrupting and continuing type into the agent's terminal once
         // its agents are listed.
         let methods = [
-            AgentMethod::SendAgentMessage {
-                space: name(),
-                message: "Rebase onto main".into(),
-                attachments: Vec::new(),
-            },
             AgentMethod::SpaceAgents { space: name() },
             AgentMethod::InterruptTurn {
                 space: name(),
@@ -1042,6 +1043,14 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
                 crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
             assert_eq!(authorized.is_ok(), allowed, "{} {method:?}", workspace.name);
         }
+        let mut alert = crate::protocol::AlertMethod::SendAlert {
+            to: crate::protocol::AlertTarget::Space { space: name() },
+            message: "Rebase onto main".into(),
+            attachments: Vec::new(),
+        };
+        let authorized =
+            crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut alert).await;
+        assert_eq!(authorized.is_ok(), allowed, "{} {alert:?}", workspace.name);
     }
     for (question, allowed) in [(&below, true), (&own, false), (&beside, false)] {
         let mut answer = QuestionMethod::AnswerQuestion {
@@ -1101,11 +1110,13 @@ async fn tracked_agents_without_turn_states_coordinate_and_report() {
         connections.push(started.stop);
     }
     manager
-        .send_message(
-            &SpaceSelector::id(&child.id),
+        .send_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &child.id,
+            ))),
+            crate::protocol::AlertTarget::Up,
             "done with the API".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -1114,7 +1125,7 @@ async fn tracked_agents_without_turn_states_coordinate_and_report() {
         .await
         .unwrap();
     assert_eq!(
-        received[0].message,
+        received[0].text(),
         format!("{} child: done with the API", child.number)
     );
     assert!(
@@ -1638,10 +1649,10 @@ async fn a_request_passed_up_to_a_full_inbox_reports_the_user_deciding() {
     let mut n = 0;
     while manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&root.id),
             format!("note {n}"),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .is_ok()
@@ -2160,10 +2171,10 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
     let mut n = 0;
     while manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&parent.id),
             format!("note {n}"),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .is_ok()

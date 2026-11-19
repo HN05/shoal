@@ -178,7 +178,7 @@ shoal list --repo my-project  # Only one repository's workspaces, chats and queu
 shoal list --status needs-input,failed  # Only rows with these statuses
 shoal status 3                # A workspace's or chat's activity, issue and PR state; a workspace's changes and resources
 shoal status pr 12            # Workspaces and chats that link PR 12; also issue, ci or resource
-shoal status                  # Outside a space: the daemon, unread notifications and cleanup failures
+shoal status                  # Outside a space: the daemon, unread alerts and cleanup failures
 shoal config show 3           # Effective settings and the source of each value
 shoal config reference        # This release's configuration reference
 shoal config set agent.default codex
@@ -206,14 +206,14 @@ shoal rename 5 "Login design"  # Rename a running chat
 shoal rename --request 5        # Ask its agent to choose the name
 shoal diff 3                   # Changes since the branch's fork point
 shoal conflicts --workspace 3  # Whether the branch merges cleanly into main
-shoal alerts                  # Conflicts, finished agents, and removals you missed
-shoal alerts send "PR #12 is ready to merge"  # Notify the user from a workspace
-shoal alerts send "New layout" --attach shot.png  # Send the user a file with it
+shoal alert list              # Conflicts, finished agents, and removals you missed
+shoal send "PR #12 is ready to merge"  # From a workspace: to its coordinator, else the user
+shoal send "New layout" --attach shot.png  # Send a file with it
 shoal progress "Reproduced; the cause is the query limit"  # Set the agent's status line
 shoal progress --space 3  # Its status line and plan steps
-shoal messages send "Stop the dev server" --space 3  # Message the agents of a workspace or chat
-shoal messages send "Crash on launch" --attach shot.png  # Attach a file the agents can read
-shoal messages send --all "Network is back"  # Message every agent, running or stopped
+shoal send "Stop the dev server" --space 3  # Alert the agent of a workspace or chat
+shoal send "Crash on launch" --space 3 --attach shot.png  # Attach a file the agent can read
+shoal send --all "Network is back"  # Alert every agent, running or stopped
 shoal log 3              # The space's log: creation, agent, PRs, ready, done; --follow keeps printing
 shoal log                # Outside a space: every space's entries, daemon starts and stops, reloads, cleanup
 shoal files 3                 # The files attached to the workspace
@@ -530,7 +530,7 @@ Configure idle cleanup in a repository's `.shoal.toml`, or for every repository 
 enabled = false
 ```
 
-When something looks wrong, `shoal inbox` and `shoal alerts` show what Shoal
+When something looks wrong, `shoal inbox` and `shoal alert list` show what Shoal
 found and the command that fixes it, and `shoal status <name>` shows one
 workspace or chat; see [cleanup](docs/reference.md#automatic-cleanup) and
 [recovery](docs/reference.md#recovery) for details.

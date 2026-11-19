@@ -1,4 +1,5 @@
-//! The user's notifications: what the daemon recorded for the user to read.
+//! Alerts: one-way notices to the user or a space's agent, from the user, a
+//! space or Shoal.
 use shoal_protocol::alerts::{Alert, Cleared, Sent};
 
 use anyhow::{Context, Result};
@@ -6,52 +7,58 @@ use anyhow::{Context, Result};
 use tokio::{io::BufReader, net::UnixStream};
 
 use crate::connection::{Daemon, open_buffered, pages, reconnect, request, stream_closed};
-use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     files::NewFile,
-    protocol::{self, NotificationMethod, Response},
+    protocol::{self, AlertMethod, AlertTarget, AlertsFor, Response},
 };
 
-/// The newest `limit` notifications, only the unread ones when `unread_only`.
-pub async fn list(daemon: &impl Daemon, unread_only: bool, limit: u32) -> Result<Vec<Alert>> {
-    pages(
-        daemon,
-        NotificationMethod::ListNotifications { unread_only, limit },
-    )
-    .await
+/// The alerts for `to`: the oldest unread ones when `unread_only`, else the
+/// newest `limit`, oldest first.
+pub async fn list(
+    daemon: &impl Daemon,
+    to: AlertsFor,
+    unread_only: bool,
+    limit: u32,
+) -> Result<Vec<Alert>> {
+    let method = AlertMethod::ListAlerts {
+        to,
+        unread_only,
+        limit,
+    };
+    pages(daemon, method).await
 }
 
+/// Mark the alerts `ids` read, so they do not come back as new.
 pub async fn mark_read(daemon: &impl Daemon, ids: Vec<i64>) -> Result<()> {
-    request(daemon, NotificationMethod::MarkNotificationsRead { ids }).await
+    request(daemon, AlertMethod::MarkAlertsRead { ids }).await
 }
 
-/// Delete every notification.
+/// Delete every alert to the user.
 pub async fn clear(daemon: &impl Daemon) -> Result<Cleared> {
-    request(daemon, NotificationMethod::ClearNotifications).await
+    request(daemon, AlertMethod::ClearAlerts).await
 }
 
-/// Send the user, or the coordinating agent, `message` from `space` with
-/// `attachments`.
+/// Send `message` with `attachments` to `to`.
 pub async fn send(
     daemon: &impl Daemon,
-    space: SpaceSelector,
+    to: AlertTarget,
     message: String,
     attachments: Vec<NewFile>,
 ) -> Result<Sent> {
-    let method = NotificationMethod::SendMessage {
-        space,
+    let method = AlertMethod::SendAlert {
+        to,
         message,
         attachments,
     };
     request(daemon, method).await
 }
 
-/// Take back `space`'s unread notification `id`.
-pub async fn withdraw(daemon: &impl Daemon, space: SpaceSelector, id: i64) -> Result<Alert> {
-    request(daemon, NotificationMethod::WithdrawMessage { space, id }).await
+/// Take back the unread alert `id` the caller sent.
+pub async fn withdraw(daemon: &impl Daemon, id: i64) -> Result<Alert> {
+    request(daemon, AlertMethod::WithdrawAlert { id }).await
 }
 
-/// The notifications the daemon records, as it records them, after the one
+/// The user's alerts the daemon records, as it records them, after the one
 /// last delivered, across daemon restarts. The daemon marks each read as it
 /// delivers it unless the watch keeps them unread.
 pub struct Watch {
@@ -61,7 +68,7 @@ pub struct Watch {
 }
 
 impl Watch {
-    /// Watch the notifications after `after`.
+    /// Watch the alerts after `after`.
     pub async fn start(daemon: &impl Daemon, keep_unread: bool, after: i64) -> Result<Self> {
         let (stream, body) = open_buffered(daemon, watch(keep_unread, after)).await?;
         <()>::try_from(body)?;
@@ -72,13 +79,13 @@ impl Watch {
         })
     }
 
-    /// The ID of the last notification delivered, which a later watch
+    /// The ID of the last alert delivered, which a later watch
     /// resumes after.
     pub fn delivered(&self) -> i64 {
         self.delivered
     }
 
-    /// The next notification, once the daemon records it.
+    /// The next alert, once the daemon records it.
     pub async fn next(&mut self, daemon: &impl Daemon) -> Result<Alert> {
         loop {
             let response: Response = match protocol::read_buffered(&mut self.stream).await {
@@ -90,15 +97,15 @@ impl Watch {
                     self.stream = stream;
                     continue;
                 }
-                Err(error) => return Err(error).context("daemon closed the notification stream"),
+                Err(error) => return Err(error).context("daemon closed the alert stream"),
             };
-            let notification = Alert::try_from(response.body)?;
-            self.delivered = notification.id;
-            return Ok(notification);
+            let alert = Alert::try_from(response.body)?;
+            self.delivered = alert.id;
+            return Ok(alert);
         }
     }
 }
 
-fn watch(keep_unread: bool, after: i64) -> NotificationMethod {
-    NotificationMethod::WatchNotifications { keep_unread, after }
+fn watch(keep_unread: bool, after: i64) -> AlertMethod {
+    AlertMethod::WatchAlerts { keep_unread, after }
 }

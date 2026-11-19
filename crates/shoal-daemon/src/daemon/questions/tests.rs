@@ -584,7 +584,7 @@ async fn listings_and_unread_answers_fit_one_response() {
         .await
         .unwrap();
     assert_eq!(messages.len(), unread);
-    let body = crate::protocol::Body::AgentMessages(messages);
+    let body = crate::protocol::Body::Alerts(messages);
     assert!(serde_json::to_vec(&body).unwrap().len() < crate::protocol::MAX_FRAME);
 
     // The question whose answer did not fit stays open; more open questions
@@ -634,7 +634,7 @@ async fn notifications_of_maximal_questions_fit_one_response() {
     let message = &notifications[0].message;
     assert!(message.len() <= crate::validate::MAX_MESSAGE_LEN);
     assert!(message.ends_with('…'));
-    let body = crate::protocol::Body::Notifications(notifications);
+    let body = crate::protocol::Body::Alerts(notifications);
     assert!(serde_json::to_vec(&body).unwrap().len() < crate::protocol::MAX_FRAME);
 
     assert_eq!(manager.question(first.number).await.unwrap(), first);

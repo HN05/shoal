@@ -1,6 +1,6 @@
 //! Hook groups agents run Shoal through, in the event-and-group shape Claude
-//! Code and Codex share: `shoal messages --hook` delivers undelivered agent
-//! messages as context, `shoal internal agent-state` reports the turn
+//! Code and Codex share: `shoal internal deliver` delivers unread alerts as
+//! context, `shoal internal agent-state` reports the turn
 //! state, `shoal internal subagent` the subagents it runs, and
 //! `shoal internal plan` the plan the agent's plan tools keep. Integrations
 //! choose the events and how the agent receives them.
@@ -47,7 +47,7 @@ fn executable(started: &crate::installed::Executable) -> std::io::Result<std::pa
 pub(crate) fn messages(shoal: &str) -> impl Iterator<Item = (&'static str, Value)> {
     let handler = json!({
         "type": "command",
-        "command": format!("{shoal} messages --hook"),
+        "command": format!("{shoal} internal deliver"),
         "timeout": MESSAGE_TIMEOUT.as_secs(),
     });
     MESSAGE_EVENTS

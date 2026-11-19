@@ -1,12 +1,12 @@
-//! Holding a run of agent messages until it settles, so messages queued in
+//! Holding a run of alerts to an agent until it settles, so alerts queued in
 //! quick succession, such as the user's approval decisions, reach the agent in
 //! one delivery instead of one hook output or turn each. Hooks, waits and wake
-//! prompts deliver only settled messages; `shoal messages` reads them at once.
+//! prompts deliver only settled alerts; `shoal alert list` reads them at once.
 use std::time::Duration;
 
 use anyhow::Result;
 
-use super::AgentMessage;
+use crate::daemon::alerts::Alert;
 use crate::{daemon::manager::Manager, model::Space, time::UnixTime};
 
 mod clock;
@@ -19,11 +19,7 @@ const MAX_WINDOWS: u32 = 6;
 /// When unread `messages` settle: `settle` after the newest, at most
 /// [`MAX_WINDOWS`] windows after the oldest; `None` once they have settled at
 /// `now`.
-pub(crate) fn held_until(
-    messages: &[AgentMessage],
-    settle: Duration,
-    now: UnixTime,
-) -> Option<UnixTime> {
+pub(crate) fn held_until(messages: &[Alert], settle: Duration, now: UnixTime) -> Option<UnixTime> {
     let newest = messages.iter().map(|message| message.created_at).max()?;
     let oldest = messages.iter().map(|message| message.created_at).min()?;
     let settles = (newest + settle).min(oldest + settle.saturating_mul(MAX_WINDOWS));
@@ -36,7 +32,7 @@ impl Manager {
     pub(crate) async fn message_hold(
         &self,
         space: &Space,
-        messages: &[AgentMessage],
+        messages: &[Alert],
     ) -> Result<Option<Duration>> {
         if messages.is_empty() {
             return Ok(None);
@@ -51,19 +47,19 @@ impl Manager {
     pub(crate) async fn settled_messages(
         &self,
         space: &Space,
-        mut messages: Vec<AgentMessage>,
-    ) -> Result<Vec<AgentMessage>> {
+        mut messages: Vec<Alert>,
+    ) -> Result<Vec<Alert>> {
         while let Some(hold) = self.message_hold(space, &messages).await? {
             self.settle_clock.sleep(hold).await;
-            messages = self.unread_messages(&space.id).await?.messages;
+            messages = self.unread_messages(&space.id).await?.alerts;
         }
         Ok(messages)
     }
 
     /// The unread messages of `space` that have settled: all of them, or
     /// none while they wait for more.
-    pub(crate) async fn deliverable_messages(&self, space: &Space) -> Result<Vec<AgentMessage>> {
-        let messages = self.unread_messages(&space.id).await?.messages;
+    pub(crate) async fn deliverable_messages(&self, space: &Space) -> Result<Vec<Alert>> {
+        let messages = self.unread_messages(&space.id).await?.alerts;
         if self.message_hold(space, &messages).await?.is_some() {
             return Ok(Vec::new());
         }

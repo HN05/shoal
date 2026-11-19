@@ -24,7 +24,7 @@ const GROUPS: &[(&str, &[&str])] = &[
             "refresh",
             "checkpoint",
             "restore",
-            "messages",
+            "send",
             "files",
             "questions",
             "approvals",
@@ -67,7 +67,7 @@ const GROUPS: &[(&str, &[&str])] = &[
         "Shared resources",
         &["acquire", "release", "leases", "catalog", "history"],
     ),
-    ("Activity", &["alerts"]),
+    ("Activity", &["alert"]),
     (
         "Configuration and installation",
         &[

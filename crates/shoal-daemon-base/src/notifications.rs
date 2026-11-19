@@ -1,26 +1,20 @@
-//! Events the daemon records for the user: conflicts it saw, agents that
-//! finished, workspaces it removed. Recording never fails the operation that
-//! caused the event; the CLI shows them and marks them read.
+//! Alerts for the user: conflicts Shoal saw, agents that finished,
+//! workspaces it removed, and what spaces send the user. Recording Shoal's
+//! own never fails the operation that caused the event; the CLI shows them
+//! and marks them read.
 use shoal_ids::space_ids::SpaceId;
-use std::path::PathBuf;
 
-use anyhow::{Context, Result, ensure};
+use anyhow::Result;
 use rusqlite::{OptionalExtension, params};
 
 use futures_util::future::BoxFuture;
 use tokio::sync::watch;
 
+pub use crate::alerts::About;
+use crate::alerts::{self, COLUMNS, FROM, NewAlert};
 use crate::log;
-use crate::store::{
-    Store,
-    sent_files::{sent_files, sent_ids},
-};
+use crate::store::Store;
 pub use shoal_protocol::alerts::{Alert, AlertKind, Cleared, Sent};
-use shoal_protocol::files::SentFile;
-use shoal_protocol::space_names::SpaceName;
-
-/// Rows kept before older read notifications are pruned; unread ones stay.
-const RETAINED: usize = 500;
 
 /// Operations on the client type [`AlertKind`] that only the `shoal` command uses.
 trait AlertKindExt {
@@ -43,7 +37,7 @@ impl AlertKindExt for AlertKind {
             | Self::StartWarned
             | Self::StartFailed
             | Self::PreparationFailed => Some(Source::Daemon),
-            Self::AgentMessage
+            Self::Message
             | Self::QuestionAsked
             | Self::QuestionWithdrawn
             | Self::SpaceDone
@@ -77,53 +71,25 @@ pub struct Recorded {
     pub new: bool,
 }
 
-/// What a notification is about: the space's name at the time and its
-/// identity, which withdrawal matches since names change and are reused, and
-/// the key of a request it asks the user to decide.
-#[derive(Debug, Clone, Default)]
-pub struct About {
-    pub name: Option<SpaceName>,
-    pub id: Option<SpaceId>,
-    pub subject: Option<String>,
-}
-
-impl About {
-    /// A space named `name` whose identity the caller does not know, such
-    /// as a launch that opened no workspace; names repeat, so it has none.
-    pub fn named(name: Option<&SpaceName>) -> Self {
-        Self {
-            name: name.cloned(),
-            ..Self::default()
-        }
-    }
-
-    /// The space `id`, which has `name`.
-    pub fn space(name: &SpaceName, id: &SpaceId) -> Self {
-        Self {
-            name: Some(name.clone()),
-            id: Some(id.to_owned()),
-            subject: None,
-        }
-    }
-}
-
-/// Record an event for the user in the caller's transaction, with the files
-/// whose record IDs the JSON array `files` lists. Callers wake watchers with
-/// [`Notifications::recorded`] after committing a new one.
-pub fn insert(
-    tx: &rusqlite::Transaction<'_>,
-    about: &About,
-    kind: AlertKind,
-    message: &str,
-    files: &str,
-) -> Result<Recorded> {
-    if kind.collapses() {
+/// Record `alert` for the user in the caller's transaction. Callers wake
+/// watchers with [`Notifications::recorded`] after committing a new one.
+pub fn insert(tx: &rusqlite::Transaction<'_>, alert: &NewAlert) -> Result<Recorded> {
+    if alert.kind.collapses() {
+        let about = &alert.about;
         let pending: Option<i64> = tx
             .query_row(
-                "SELECT id FROM notifications WHERE read=0 AND workspace IS ?1
+                "SELECT id FROM alerts WHERE recipient_id IS NULL AND read=0 AND space IS ?1
                     AND space_id IS ?2 AND subject IS ?3 AND kind=?4 AND message=?5
-                    AND files=?6",
-                params![about.name, about.id, about.subject, kind, message, files],
+                    AND attachments=?6 AND sender=?7",
+                params![
+                    about.name,
+                    about.id,
+                    about.subject,
+                    alert.kind,
+                    alert.message,
+                    alert.attachments_column()?,
+                    alert.sender
+                ],
                 |row| row.get(0),
             )
             .optional()?;
@@ -131,24 +97,7 @@ pub fn insert(
             return Ok(Recorded { id, new: false });
         }
     }
-    tx.execute(
-        "INSERT INTO notifications(created_at,workspace,space_id,subject,kind,message,files)
-            VALUES (?1,?2,?3,?4,?5,?6,?7)",
-        params![
-            crate::time::UnixTime::now(),
-            about.name,
-            about.id,
-            about.subject,
-            kind,
-            message,
-            files
-        ],
-    )?;
-    let id = tx.last_insert_rowid();
-    tx.execute(
-        "DELETE FROM notifications WHERE read=1 AND id <= (SELECT id FROM notifications ORDER BY id DESC LIMIT 1 OFFSET ?1)",
-        [RETAINED as i64],
-    )?;
+    let id = alerts::insert(tx, None, alert, false, false)?;
     Ok(Recorded { id, new: true })
 }
 
@@ -162,7 +111,8 @@ pub fn retract(
     message: &str,
 ) -> Result<bool> {
     let deleted = tx.execute(
-        "DELETE FROM notifications WHERE read=0 AND space_id=?1 AND kind=?2 AND message=?3",
+        "DELETE FROM alerts
+            WHERE recipient_id IS NULL AND read=0 AND space_id=?1 AND kind=?2 AND message=?3",
         params![space_id, kind, message],
     )?;
     Ok(deleted > 0)
@@ -176,66 +126,25 @@ pub fn retract_about(
     subject: &str,
 ) -> Result<bool> {
     let deleted = tx.execute(
-        "DELETE FROM notifications WHERE read=0 AND kind=?1 AND subject=?2",
+        "DELETE FROM alerts WHERE recipient_id IS NULL AND read=0 AND kind=?1 AND subject=?2",
         params![kind, subject],
     )?;
     Ok(deleted > 0)
 }
 
-/// Delete the unread message `id` that `workspace` sent the user.
-fn withdraw_message(tx: &rusqlite::Transaction<'_>, space: &About, id: i64) -> Result<Alert> {
-    let notification = tx
-        .query_row(
-            &format!("SELECT {COLUMNS} FROM notifications WHERE id=?1 AND space_id=?2 AND kind=?3"),
-            params![id, space.id, AlertKind::AgentMessage],
-            row,
-        )
-        .optional()?
-        .with_context(|| {
-            let name = space.name.as_deref().unwrap_or_default();
-            format!("{name} sent no notification {id}")
-        })?;
-    ensure!(
-        !notification.read,
-        "notification {id} was already shown; send a correction with shoal alerts send"
-    );
-    tx.execute("DELETE FROM notifications WHERE id=?1", [id])?;
-    Ok(notification)
-}
-
-fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Alert> {
-    Ok(Alert {
-        id: row.get(0)?,
-        created_at: row.get(1)?,
-        workspace: row.get(2)?,
-        kind: row.get(3)?,
-        message: row.get(4)?,
-        read: row.get(5)?,
-        space_id: row.get(6)?,
-        files: crate::store::json_column(row, "files")?.unwrap_or_default(),
-    })
-}
-
-const COLUMNS: &str = concat!(
-    "id,created_at,workspace,kind,message,read,space_id,",
-    sent_files!("notifications.files")
-);
-
 /// What tells a space's coordinator, the agent of the nearest space above
 /// it with one, about an event that would otherwise reach the user.
 pub trait Coordinators: Send + Sync {
-    /// Tell the coordinator of the space `id`, named `name`, about an event
-    /// of `kind` that `source` caused, with the files at `files`. Returns
-    /// whether one received it.
+    /// Queue `alert` for the coordinator of the space it names; `for_user`
+    /// says the user would receive it without one, which the user then does
+    /// if the coordinator's space goes before its agent reads it. Returns
+    /// where it went, or none when the user receives it instead.
     fn tell<'a>(
         &'a self,
-        name: &'a SpaceName,
-        id: Option<&'a SpaceId>,
-        kind: AlertKind,
-        message: String,
-        files: Vec<PathBuf>,
+        alert: NewAlert,
+        for_user: bool,
         source: Source,
-    ) -> BoxFuture<'a, bool>;
+    ) -> BoxFuture<'a, Option<Sent>>;
 }
 
 /// What caused an event a coordinator may receive.
@@ -243,7 +152,7 @@ pub trait Coordinators: Send + Sync {
 pub enum Source {
     /// The daemon, about the workspace's agent, such as its exit.
     Daemon,
-    /// A process acting in the workspace, such as `shoal alerts send`.
+    /// A process acting in the workspace, such as `shoal send`.
     Agent,
 }
 
@@ -263,7 +172,7 @@ impl Notifications {
         }
     }
 
-    /// Wake `shoal alerts --follow` for the notification `id`, recorded in a
+    /// Wake `shoal alert list --follow` for the alert `id`, recorded in a
     /// transaction of another change.
     pub fn recorded(&self, id: i64) {
         self.recorded.send_replace(id);
@@ -274,86 +183,50 @@ impl Notifications {
         self.recorded.subscribe()
     }
 
-    /// Tell the agent coordinating the space `about` names about an event,
-    /// or record it for the user with the files the space sent. Failures are
-    /// logged, never returned: a notification must not fail the operation it
-    /// describes.
-    pub async fn notify(
-        &self,
-        coordinators: &dyn Coordinators,
-        about: About,
-        kind: AlertKind,
-        message: String,
-        files: &[SentFile],
-    ) {
-        if let Err(error) = self.record(coordinators, about, kind, message, files).await {
+    /// Tell the agent coordinating the space `alert` names about it, or
+    /// record it for the user. Failures are logged, never returned: an alert
+    /// of Shoal's must not fail the operation it describes.
+    pub async fn notify(&self, coordinators: &dyn Coordinators, alert: NewAlert) {
+        if let Err(error) = self.record(coordinators, alert).await {
             log!("notification not recorded: {error:#}");
         }
     }
 
-    /// Tell the agent coordinating the space `about` names about an event,
-    /// or record it for the user and return its ID. A coordinating agent
-    /// receives the files the space sent as the message's attached files.
-    pub async fn record(
-        &self,
-        coordinators: &dyn Coordinators,
-        about: About,
-        kind: AlertKind,
-        message: String,
-        files: &[SentFile],
-    ) -> Result<Option<i64>> {
-        if let (Some(source), Some(name)) = (kind.coordination(), &about.name) {
-            let paths: Vec<PathBuf> = files.iter().map(|file| file.path.clone()).collect();
-            let (id, message) = (about.id.as_ref(), message.clone());
-            if coordinators
-                .tell(name, id, kind, message, paths, source)
-                .await
-            {
-                return Ok(None);
-            }
+    /// Tell the agent coordinating the space `alert` names about it, or
+    /// record it for the user; where it went. A coordinating agent receives
+    /// the files the space sent as the alert's attached files.
+    pub async fn record(&self, coordinators: &dyn Coordinators, alert: NewAlert) -> Result<Sent> {
+        if let Some(source) = alert.kind.coordination()
+            && alert.about.name.is_some()
+            && let Some(sent) = coordinators.tell(alert.clone(), true, source).await
+        {
+            return Ok(sent);
         }
-        let files = sent_ids(files)?;
-        let id = self.record_for_user(about, kind, message, files).await?;
-        Ok(Some(id))
+        let id = self.record_for_user(alert).await?;
+        Ok(Sent {
+            alerts: vec![id],
+            user: true,
+            ..Sent::default()
+        })
     }
 
-    /// Record an event about the space `about` names for the user whatever
-    /// space above it has an agent, as when its coordinator's machine stays
-    /// offline. A failure is logged.
-    pub async fn notify_user(&self, about: About, kind: AlertKind, message: String) {
-        let recorded = self.record_for_user(about, kind, message, "[]".into());
-        if let Err(error) = recorded.await {
+    /// Record `alert` for the user whatever space above the space it names
+    /// has an agent, as when its coordinator's machine stays offline. A
+    /// failure is logged.
+    pub async fn notify_user(&self, alert: NewAlert) {
+        if let Err(error) = self.record_for_user(alert).await {
             log!("notification not recorded: {error:#}");
         }
     }
 
-    /// Record an event for the user with the files whose record IDs the
-    /// JSON array `files` lists, wake watchers when it is new, and return
+    /// Record `alert` for the user, wake watchers when it is new, and return
     /// its ID.
-    async fn record_for_user(
-        &self,
-        about: About,
-        kind: AlertKind,
-        message: String,
-        files: String,
-    ) -> Result<i64> {
-        let recorded = self
-            .store
-            .write(move |tx| insert(tx, &about, kind, &message, &files))
-            .await?;
+    async fn record_for_user(&self, alert: NewAlert) -> Result<i64> {
+        let recorded = self.store.write(move |tx| insert(tx, &alert)).await?;
         if recorded.new {
             self.recorded(recorded.id);
         }
         Ok(recorded.id)
-    }
-
-    /// Delete the message `id` the space `about` names sent the user, which
-    /// the user need not see after all. A shown message stays; a correction
-    /// follows it.
-    pub async fn withdraw_message(&self, about: About, id: i64) -> Result<Alert> {
-        self.store
-            .write(move |tx| withdraw_message(tx, &about, id))
-            .await
     }
 
     /// Oldest first. `unread_only` gives the oldest unread notifications, so a
@@ -364,16 +237,18 @@ impl Notifications {
                 if unread_only {
                     return Ok(db
                         .prepare(&format!(
-                            "SELECT {COLUMNS} FROM notifications WHERE read=0 ORDER BY id LIMIT ?1"
+                            "SELECT {COLUMNS} FROM {FROM}
+                                WHERE a.recipient_id IS NULL AND a.read=0 ORDER BY a.id LIMIT ?1"
                         ))?
-                        .query_map([limit], row)?
+                        .query_map([limit], alerts::row)?
                         .collect::<rusqlite::Result<Vec<_>>>()?);
                 }
                 let mut newest = db
                     .prepare(&format!(
-                        "SELECT {COLUMNS} FROM notifications ORDER BY id DESC LIMIT ?1"
+                        "SELECT {COLUMNS} FROM {FROM}
+                            WHERE a.recipient_id IS NULL ORDER BY a.id DESC LIMIT ?1"
                     ))?
-                    .query_map([limit], row)?
+                    .query_map([limit], alerts::row)?
                     .collect::<rusqlite::Result<Vec<_>>>()?;
                 newest.reverse();
                 Ok(newest)
@@ -387,9 +262,11 @@ impl Notifications {
             .run(move |db| {
                 Ok(db
                     .prepare(&format!(
-                        "SELECT {COLUMNS} FROM notifications WHERE read=0 AND id>?1 ORDER BY id LIMIT ?2"
+                        "SELECT {COLUMNS} FROM {FROM}
+                            WHERE a.recipient_id IS NULL AND a.read=0 AND a.id>?1
+                            ORDER BY a.id LIMIT ?2"
                     ))?
-                    .query_map(params![after, limit], row)?
+                    .query_map(params![after, limit], alerts::row)?
                     .collect::<rusqlite::Result<Vec<_>>>()?)
             })
             .await
@@ -399,7 +276,7 @@ impl Notifications {
         self.store
             .run(|db| {
                 let count: i64 = db.query_row(
-                    "SELECT COUNT(*) FROM notifications WHERE read=0",
+                    "SELECT COUNT(*) FROM alerts WHERE recipient_id IS NULL AND read=0",
                     [],
                     |row| row.get(0),
                 )?;
@@ -414,7 +291,8 @@ impl Notifications {
         self.store
             .run(move |db| {
                 let count: i64 = db.query_row(
-                    "SELECT COUNT(*) FROM notifications WHERE read=0 AND space_id=?1",
+                    "SELECT COUNT(*) FROM alerts
+                        WHERE recipient_id IS NULL AND read=0 AND space_id=?1",
                     [space_id],
                     |row| row.get(0),
                 )?;
@@ -428,7 +306,10 @@ impl Notifications {
         self.store
             .write(move |tx| {
                 for id in ids {
-                    tx.execute("UPDATE notifications SET read=1 WHERE id=?1", [id])?;
+                    tx.execute(
+                        "UPDATE alerts SET read=1 WHERE id=?1 AND recipient_id IS NULL",
+                        [id],
+                    )?;
                 }
                 Ok(())
             })
@@ -440,7 +321,7 @@ impl Notifications {
     pub async fn clear(&self) -> Result<Cleared> {
         self.store
             .run(|db| {
-                let cleared = db.execute("DELETE FROM notifications", [])?;
+                let cleared = db.execute("DELETE FROM alerts WHERE recipient_id IS NULL", [])?;
                 Ok(Cleared {
                     cleared: u64::try_from(cleared)?,
                 })

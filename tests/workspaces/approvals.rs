@@ -1289,7 +1289,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
     for args in [
         vec!["rm", "--wait", &fixture.id("external"), "--yes"],
         vec!["rm", "--wait", &fixture.id("other"), "--yes"],
-        vec!["alerts"],
+        vec!["alert", "list", "--unread"],
         vec!["status", &fixture.id("other")],
         vec!["internal", "env", &fixture.id("other")],
         vec![

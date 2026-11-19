@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    agent_messages::AgentMessage,
+    alerts::Alert,
     approvals::ApprovalRequest,
     forge::{items::item::Opened, updates::Update},
     processes::Leftover,
@@ -68,9 +68,9 @@ pub struct Proposed {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Updates {
     pub updates: Vec<Update>,
-    /// Agent messages end a wait on their own, ahead of item activity.
+    /// Alerts end a wait on their own, ahead of item activity.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub messages: Vec<AgentMessage>,
+    pub alerts: Vec<Alert>,
     /// Leftovers of the space its agent has not been told about, which
     /// only the hook after a tool call delivers.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

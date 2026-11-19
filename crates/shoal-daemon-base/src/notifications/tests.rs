@@ -1,4 +1,5 @@
 use super::*;
+use crate::alerts::RETAINED;
 
 /// No space has a coordinator.
 struct Nobody;
@@ -6,14 +7,11 @@ struct Nobody;
 impl Coordinators for Nobody {
     fn tell<'a>(
         &'a self,
-        _name: &'a SpaceName,
-        _id: Option<&'a SpaceId>,
-        _kind: AlertKind,
-        _message: String,
-        _files: Vec<PathBuf>,
+        _alert: NewAlert,
+        _for_user: bool,
         _source: Source,
-    ) -> BoxFuture<'a, bool> {
-        Box::pin(async { false })
+    ) -> BoxFuture<'a, Option<Sent>> {
+        Box::pin(async { None })
     }
 }
 
@@ -30,8 +28,9 @@ async fn notifications() -> (tempfile::TempDir, Notifications) {
 #[tokio::test]
 async fn pruning_keeps_unread_and_the_newest_read_notifications() {
     let (_temp, notifications) = notifications().await;
-    let notify =
-        |kind, message: String| notifications.notify(&Nobody, About::default(), kind, message, &[]);
+    let notify = |kind, message: String| {
+        notifications.notify(&Nobody, NewAlert::shoal(kind, About::default(), message))
+    };
     notify(AlertKind::SpaceRemoved, "keep unread".into()).await;
     for i in 0..RETAINED + 5 {
         notify(AlertKind::AgentExited, format!("exit {i}")).await;
@@ -39,7 +38,7 @@ async fn pruning_keeps_unread_and_the_newest_read_notifications() {
     notifications
         .store
         .run(|db| {
-            db.execute("UPDATE notifications SET read=1 WHERE id>1", [])?;
+            db.execute("UPDATE alerts SET read=1 WHERE id>1", [])?;
             Ok(())
         })
         .await

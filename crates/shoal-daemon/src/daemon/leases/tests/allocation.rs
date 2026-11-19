@@ -93,7 +93,7 @@ async fn notifications_preserve_busy_wording_and_only_announce_pending_approvals
     assert!(
         notifications
             .iter()
-            .all(|n| n.workspace.as_deref() == Some("worker"))
+            .all(|n| n.space.as_deref() == Some("worker"))
     );
     assert_eq!(notifications[0].kind, AlertKind::ResourceBusy);
     assert_eq!(notifications[0].message, "busy");

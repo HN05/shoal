@@ -349,7 +349,12 @@ impl Agents for StandIn {
         self.held.lock().unwrap().push(repository.clone());
     }
 
-    fn message<'a>(&'a self, _id: &'a SpaceId, message: String) -> BoxFuture<'a, Result<()>> {
+    fn message<'a>(
+        &'a self,
+        _id: &'a SpaceId,
+        _kind: AlertKind,
+        message: String,
+    ) -> BoxFuture<'a, Result<()>> {
         self.messages.lock().unwrap().push(message);
         Box::pin(async { Ok(()) })
     }
@@ -358,6 +363,7 @@ impl Agents for StandIn {
         &'a self,
         _name: &'a SpaceName,
         _id: &'a SpaceId,
+        _kind: AlertKind,
         message: String,
     ) -> BoxFuture<'a, ()> {
         self.notices.lock().unwrap().push(message);
@@ -456,7 +462,12 @@ impl Requesters for StandIn {
         Box::pin(async move { permissions })
     }
 
-    fn tell_space<'a>(&'a self, _id: &'a SpaceId, message: String) -> BoxFuture<'a, bool> {
+    fn tell_space<'a>(
+        &'a self,
+        _id: &'a SpaceId,
+        _kind: AlertKind,
+        message: String,
+    ) -> BoxFuture<'a, bool> {
         self.messages.lock().unwrap().push(message);
         self.requests.changed();
         Box::pin(async { true })

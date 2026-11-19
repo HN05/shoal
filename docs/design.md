@@ -95,7 +95,7 @@ elsewhere never changes what an old migration does. Over the store,
 `shoal-daemon-base` holds what every part of the daemon uses: its log, who
 sends a request, the approval requests it makes, the global config it runs
 under, the gates that order conflicting changes, the journal of events, the
-notifications for the user, the numbers of questions and approval requests,
+alert record and the user's alerts, the numbers of questions and approval requests,
 and the checks of file access that can stall. What these read of the rest of
 the daemon, such as a space's coordinator or a repository's retention, is an
 interface the base declares and the daemon implements, and the daemon's
@@ -556,7 +556,7 @@ processes outside its process group, such as background shell commands, since
 automatic and manual restores both require the execution proven stopped. When
 the proof fails, the waiting wrapper stays connected and restores once it holds,
 instead of leaving an unknown execution. Stop and exit
-notifications carry the pressure reason and recovery path, distinguishing automatic
+alerts carry the pressure reason and recovery path, distinguishing automatic
 restore from manual recovery and missing recovery records. Persist a minimal
 agent recovery record with the stop reason before delivering the stop, so a lost wrapper does not lose
 the handoff; failure to save warns without disabling overload protection. Agent
@@ -647,7 +647,7 @@ asking for the agent, starts that restore at once. `shoal sleep` is the
 agent saying it has nothing to do until something arrives, so it ends the
 agent's idle wakes, and it takes the agent's timer, since a timer says the same until a time: one per space, which a
 new one replaces, kept as daemon state through stops, restores and restarts
-until it fires as an agent message, `--undo` cancels it or the space is done or
+until it fires as an alert, `--undo` cancels it or the space is done or
 removed. A loop sets its next timer each turn, so Shoal parses no recurring
 schedule. Queued work that
 needs a slot or memory may also put an idle agent to sleep before its wait
@@ -698,7 +698,7 @@ protection sends, with the reason `restarted by shoal restart` and recovery
 whatever the overload policy, and once the agent's processes are proven
 stopped, cancels the wrapper's restore, which every release finishes on with
 the agent's record kept. The record becomes no last session, and its end no
-exit notification; the daemon then records the record's restore as admitted
+exit alert; the daemon then records the record's restore as admitted
 and starts it through the queue start worker, as `shoal restore --now` does,
 in the terminal host of the agent's recorded place. The new wrapper runs in a
 new process tree, so a restart recovers an agent whose wrapper's tree broke,
@@ -772,7 +772,7 @@ gave them, so a settled agent's memory includes the services its work
 started; other processes that leave the workspace's environment, such as
 work handed to a shared server, count for the machine only.
 Warnings come first: below each enabled protection's stop threshold, the daemon
-queues an agent message for every workspace with a running agent, so agents
+queues an alert for every workspace with a running agent, so agents
 know of the load before anything stops. A memory or CPU warning is a heads-up
 that asks for no action, so agents keep to their work. Warnings repeat per signal and workspace only
 after an interval and never stop, clean up or notify. A memory or CPU warning
@@ -1315,7 +1315,7 @@ what the record holds differs by kind, such as a chat's home and the
 instructions its agent receives first. A start that fails fails its queue
 entry. What linking a new space, of
 either kind, warns of goes to the agent of the nearest space above it with
-one, else to the user's notifications, never only to a terminal the agent then takes over. A space
+one, else to the user's alerts, never only to a terminal the agent then takes over. A space
 whose place never starts its agent is kept, whatever its kind, with its
 launch as a failed queue entry, which nothing admits and which keeps no
 space from cleanup; its failure goes to the starter the same way, naming
@@ -1514,7 +1514,7 @@ Leftovers are reported, not stopped on sight: the cleanup sweep finds every
 space's from one process listing and keeps them in memory, so no tool call
 waits for a scan, and the agent's hook names each new one once, since the agent
 knows whether its own test servers should keep running. They create no
-notification; `shoal status` lists them for the user.
+alert; `shoal status` lists them for the user.
 They use global defaults below repository config.
 The pre-setup hook runs in the daemon after ownership and execution checks,
 with a time limit, while preparation excludes lifecycle and permit changes;
@@ -1530,7 +1530,7 @@ A manual removal answers its request once the workspace is reserved and passes
 the checks removal makes before changing anything, and goes on in the
 background, under the gate a daemon update waits for, unless the caller waits
 for it; a later failure retains the workspace and reaches the requesting agent,
-or else the user as a notification. Chat removal stays synchronous.
+or else the user as an alert. Chat removal stays synchronous.
 Idle cleanup requires unchanged
 HEAD, activity and file metadata; while the timer runs, sweeps compare HEAD and
 activity and check recorded state and directory users, and inspect Git state and
@@ -1546,7 +1546,7 @@ hooks keeps its branch when only that branch has the new commits.
 Post-remove runs after ownership is released,
 from the repository checkout with its copy of the executable, retaining the old
 workspace path in the environment. Its command is selected before removal.
-It is best-effort: failure is a warning and notification, never a failed removal
+It is best-effort: failure is a warning and alert, never a failed removal
 or restored ownership. Cleanup of deleted worktrees tolerates missing ancestors
 and skips hooks; post-remove events are not durably queued or replayed.
 
@@ -1837,8 +1837,8 @@ machine and repositories to another root under `move`, forge inspection and API 
 shell integration under `shell`. `run` lists configured commands, runs one by
 name, or executes an arbitrary command after `--`; `--workspace` selects the
 workspace in either form. `done --undo` withdraws completion and `ready --undo`
-withdraws review marks. Creating a question uses `questions ask`; notifications use `alerts`, with
-`alerts send` to send one for a space, which the notification names. Notification rows, in `alerts` and the picker, show
+withdraws review marks. Creating a question uses `questions ask`; alerts use top-level `send`,
+which a later thread number can lead, and `alert list`, `withdraw` and `clear`. Alert rows, in `alert list` and the picker, show
 the time for today's and otherwise how long ago they came in whole days, weeks,
 months or years, such as `1 day ago` or `2 weeks ago`.
 Approval snapshots carry their stable request key through the CLI so reused
@@ -1851,7 +1851,7 @@ plain terminal; `new_tab` only governs opening new tabs.
 The CLI owns Herdr tab handoffs after issue lookup and interactive workspace and
 agent choices and labels the tab with the space's name by default, which a
 template's `{name}` also gives. The user may rename the space or ask the
-agent to choose a name, a fixed agent message refused without a running agent,
+agent to choose a name, a fixed alert refused without a running agent,
 which would leave it unread until removal. A rename relabels the places the
 space's agents run in and those Shoal created for it, wherever the command runs: each through the host
 that opened it, on the server its record names, as closing reaches it. An optional `terminal.herdr.tab_name` template
@@ -2445,7 +2445,7 @@ redirected or JSON output.
 Bare `shoal` is the one place to see what needs the user and the work going
 on: a plain fzf picker whose inbox view lists open questions, pending approvals,
 agents that need input, failed workspaces and ready marks, and whose
-spaces view lists workspaces, followed by a view of recent notifications. It opens
+spaces view lists workspaces, followed by a view of recent alerts. It opens
 on the inbox when that has rows, searching for the current workspace's items
 when it has some; Tab reloads the next view in place, and each view binds only the keys that act on
 its rows, with a key meaning the same wherever it is bound and its header listing
@@ -2549,7 +2549,7 @@ agent's name needs no distance from the built-in commands; for an agent's
 name without an entry, the error names `start --in`.
 What a tool needs of the machine, its skill directory and proxy, sits under
 `[machine.agents.<name>]`. Pickers and completion offer providers only. Agents run
-as tracked agents with scope, an agent Git profile, and exit notifications. Their `{prompt}` argument combines general instructions
+as tracked agents with scope, an agent Git profile, and exit alerts. Their `{prompt}` argument combines general instructions
 and issue context; without it, nonempty context precedes forwarded arguments.
 Plain command invocations expand `{prompt}` to an empty string. User arguments
 and inserted prompt text remain literal. A provider's instruction, resume and
@@ -2587,7 +2587,7 @@ the reporting execution and cancelled by any new turn, so it never competes with
 the user or with another delivery. A turn Shoal does not retry, with `retry` off or a
 failure no retry fixes, notifies once per execution until the agent ends a turn
 normally, so an idle agent whose turns fail is never silent and a run of failures
-is one notification.
+is one alert.
 The retrying proxy lives in `crates/shoal-proxy`, which knows the wire protocols
 and depends on no Shoal crate but `shoal-time`, as `shoal-forge` depends only on
 `shoal-forge-types` and leaf crates such as `shoal-subprocess` and `shoal-time`. Each tracked agent that names one gets its
@@ -2710,7 +2710,7 @@ a space (in that parent's log) are journal events for it, each recorded where
 the change is made. A scoped caller reads the logs of its own space and the
 spaces below it; a removed space's place in the tree is the one its parent's
 log recorded at its removal. Unscoped integrations replay or
-follow them without consuming notifications; expired cursors report a gap for
+follow them without consuming alerts; expired cursors report a gap for
 resync. External branch changes are observed during daemon sweeps without
 changing recorded ownership. Issue and PR association changes append `linked` or
 `unlinked` events in the same transaction as the association mutation, carrying
@@ -2737,7 +2737,7 @@ conditional request, so an unchanged item costs a `304 Not Modified`, which
 GitHub does not count against its primary rate limit. The memory is not
 persisted: a restart reads everything once in full. The same layer reads each
 forge's rate-limit headers and sends nothing to a forge that limits the account
-until the limit ends; polls wait for it and the user gets one notification,
+until the limit ends; polls wait for it and the user gets one alert,
 because a lookup failure would ask an agent to act on what only time fixes. A
 429 is such a limit, never resent within seconds as a 503 is.
 The layer sends a read again after a failure that may pass, since reading twice
@@ -2775,40 +2775,52 @@ serves no forge never keeps the space. A repository that
 merges locally thus hears of a broken default branch through the same path;
 lookups are keyed by their commit, which a PR's or a push's names.
 
-Notifications stay in the terminal: the daemon records what a user would
+Messages to agents and alerts to the user are one record, an alert: a
+one-way notice that records its typed kind, its sender (the user, a space or
+Shoal) and its recipient (the user or a space), so one set of commands sends,
+lists and withdraws them in either direction, and later threads build on it.
+Shoal sends its own, naming the space they concern: what a user would
 otherwise miss (busy resources and who holds them, port conflicts, exits of
-agents launched in place, workspaces it removed or retained on its own, messages
-a workspace's agent sends to ask for attention) and the
-CLI shows them once, unless asked to keep them unread, on request or as a followed stream that also raises the
-terminal's own notifications (OSC 9); `status`, in a space and outside one, only counts them. Recording never fails the operation it describes,
-repeated polled conflicts and identical messages collapse until read, and scoped
-processes cannot read them. Agent messages are separate from completion: telling
-the user a PR is ready neither ends the assignment nor affects cleanup. What a
-finished assignment found travels with its completion instead: `done --summary`
-records one line under the alert message rule and ends the completion notice
-with it, and longer findings are files handed back with it. The
-sending workspace may withdraw its message while it is unread; once shown, it
-stays, because deleting it would not unsay it, and a correction does. `hooks.post_agent_exit` exposes a space's tracked-agent exit notifications to user
-integrations while it is a ready workspace or a chat that no removal has, using normal configuration precedence
-and daemon hook rules with the agent name, reported code, and process-completion
-status. Failure notifies without changing the exit result or marking completion;
-removal uses its own hooks. Desktop or push delivery was considered and not adopted.
+agents launched in place, workspaces it removed or retained on its own) and
+what an agent needs (answers, decisions, reviews, wakes, machine load). One
+daemon operation decides whom an alert reaches: without a target it goes up,
+to the coordinator or else the user, and with one it goes down to spaces the
+sender's scope reaches, so configurable routes can replace that operation
+later. Alerts stay in the terminal: the CLI shows the user's once, unless
+asked to keep them unread, on request, in a picker or as a followed stream
+that also raises the terminal's own notifications (OSC 9); `status`, in a
+space and outside one, only counts them. Recording Shoal's own never fails
+the operation it describes, repeated polled conflicts and identical alerts
+collapse until read, and scoped processes read the user's only as their
+`notifications` permission allows. An alert is separate from completion:
+telling the user a PR is ready neither ends the assignment nor affects
+cleanup. What a finished assignment found travels with its completion
+instead: `done --summary` records one line under the rule for an alert sent
+up and ends the completion notice with it, and longer findings are files
+handed back with it. The sender may withdraw an alert while it is unread;
+once read, it stays, because deleting it would not unsay it, and a
+correction does. `hooks.post_agent_exit` exposes a space's tracked-agent exit
+alerts to user integrations while it is a ready workspace or a chat that no
+removal has, using normal configuration precedence and daemon hook rules with
+the agent name, reported code, and process-completion status. Failure notifies
+without changing the exit result or marking completion; removal uses its own
+hooks. Desktop or push delivery was considered and not adopted.
 
-Messages to agents travel the other way: the user queues them for a workspace,
-and the daemon holds them until an agent in that workspace reads them, then
-deletes them. Unlike notifications, which a terminal notification shows as one
-line, they may span lines, because instructions to an agent often need several.
-Agents read messages through Shoal commands, and a pending watch
-ends for a new message. Messages and item activity are pushed rather than polled by the agent,
+An alert to a space waits until its agent reads it, which marks it read as
+reading marks the user's. An alert sent up is one line, since it may reach
+the user's terminal notification; one sent down may span lines, because
+instructions to an agent often need several.
+Agents read alerts through Shoal commands, and a pending watch
+ends for a new alert. Alerts and item activity are pushed rather than polled by the agent,
 because agents forget or misuse watches: built-in agent launches register a hook
 that delivers both after each tool call and prompt, the only point where a
 working agent accepts new context, except a subagent's tool call, whose context
 the agent never sees, and replaces a running watch so nothing is
-delivered twice. A space's messages reach its agent once they settle: a run
+delivered twice. A space's alerts reach its agent once they settle: a run
 queued in quick succession, such as the user deciding several approvals, would
-otherwise cost a wake or a hook output each, so deliveries hold unread messages
+otherwise cost a wake or a hook output each, so deliveries hold unread alerts
 until none has arrived for a configured window, bounded so a steady stream still
-arrives; reading them with `messages` does not wait. The hook never waits for cleanup or an item change, which can
+arrives; reading them with `alert list` does not wait. The hook never waits for cleanup or an item change, which can
 hold Shoal's item records for minutes: an agent discards the output of a hook
 that outlasts its timeout, so the activity waits for a later delivery. Claude Code also runs a background hook, after a turn ends normally
 (`Stop`) or on an API error (`StopFailure`), that waits for the next update and
@@ -2827,7 +2839,7 @@ logs how a wake hook's wait ends without updates, and the hook reports the
 reasons only it sees, such as its agent's exit or a signal, so a missed wake
 can be traced. Since a missed wake, a needless question or a restore can
 still leave an agent idle with work outstanding, a mode's `idle_wake_minutes`
-backs these wakes up: a message wakes an agent idle that long, by the state
+backs these wakes up: an alert wakes an agent idle that long, by the state
 its hooks report rather than separate detection, and again after each further
 period without backoff, so it reaches the agent through the same delivery as
 any update. An agent that legitimately waits says so with `shoal sleep`, until
@@ -2839,26 +2851,26 @@ terminal only the interrupt key `shoal stop --interrupt` sends and the fixed
 prompt with which `shoal restore` continues the interrupted turn: the daemon
 never does, the prompts carry no forge text, and they are appended to anything
 typed but not yet sent. Shoal does not
-pre-trust hooks where the agent requires review. Identical unread messages collapse.
-A message may attach files, which the daemon copies from paths the CLI checked
+pre-trust hooks where the agent requires review. Identical unread alerts collapse.
+An alert may attach files, which the daemon copies from paths the CLI checked
 into the repository directory beside its workspaces: agents get that directory
 as a working directory, so a sandboxed agent reads them there without a
 prompt, and a copy in the worktree would be an untracked file that holds up
-cleanup. A copy outlives its message, whose path the agent's transcript keeps,
-until the workspace is removed, and is named by the message and the files'
-contents, so an identical message with the same files still collapses.
-A workspace being removed takes no message, since removal decides from the
-messages it has and deletes them with the workspace.
-`messages` reads new messages while `messages send` sends them, to one space,
+cleanup. A copy outlives its alert, whose path the agent's transcript keeps,
+until the workspace is removed, and is named by the alert and the files'
+contents, so an identical alert with the same files still collapses.
+A workspace being removed takes no alert, since removal decides from the
+alerts it has and deletes them with the workspace.
+`alert list` reads alerts while `send` sends them down to one space,
 a workspace or running chat, or, with `--all`, to every agent in workspaces
 and chats, such as to tell them the network works again, or, with `--repo`, to
 those of one repository, such as to have them rebase onto a fix: running
 agents and those stopped, queued or waiting for their restore, which read it
 once they start, since such a message is meant for all work in progress; a
-workspace without any agent would hold the message until removal. A message
+workspace without any agent would hold the alert until removal. An alert
 to a chat goes the way the user's own messages to it go, with its files kept
 among the chat's. Scoped
-processes may read their own space's messages and send messages only to
+processes may read their own space's alerts and send alerts down only to
 the agents of the spaces below their own, which they coordinate.
 
 `shoal questions` opens a question picker on a terminal. A numbered question
@@ -2873,7 +2885,7 @@ Questions are how an agent asks the user for a decision whose answer is text,
 separate from approvals, whose answer is yes or no. A question states the
 decision and the agent's recommendation, so most answers are a word or a choice
 number. Only the user answers, or the agent coordinating the asking workspace
-from an ancestor, and the answer travels as an agent message naming
+from an ancestor, and the answer travels as an alert naming
 the question, so the same hooks deliver it and wake an idle agent; an agent that
 cannot continue without it waits on the question instead. The answer and its
 message are recorded together, and a wait that prints the answer delivers the
@@ -2887,7 +2899,7 @@ keeps them. Marking the assignment done closes its open questions,
 since the finished work waits on no answer and a question it made pointless would
 otherwise keep the workspace until the user answers. An agent that no longer needs
 an answer withdraws its question, which closes it the same way and takes back its
-notification while the user has not seen it, so the user is not asked to decide
+alert while the user has not seen it, so the user is not asked to decide
 what no longer matters. Withdrawing completion does not reopen them, and a closed
 question keeps its number until its space goes, so a late answer is refused
 instead of reaching a later question.
@@ -3082,7 +3094,7 @@ and the user's login Shoal added, so a restore or a move assigns as before and
 keeps Shoal's ownership, and a moved space leaves the agent account to the
 machine it moved to. Assigning never refuses or undoes the link or the
 transition: other assignees and forge failures come back as warnings or
-notifications.
+alerts.
 
 `shoal pr open` pushes to the branch's push remote, then finds or opens the branch's
 PR and assigns it in one daemon request; a push remote on the origin's forge host
@@ -3300,7 +3312,7 @@ which keeps the workspace. Nothing moves a session between directories: a chat
 about another workspace is a new chat.
 A chat's messages, including the user's request to rename it, wait and reach
 its agent as a workspace's do; a removed space, of either kind, gives the user
-the notifications its unread messages stand for.
+the alerts its unread alerts stand for.
 A chat passes a question up by asking the user, who attends it. The approval
 requests of the spaces below it come to it when it is the nearest space above
 them with an agent, and it approves them by its own permissions or grants, as
@@ -3635,7 +3647,7 @@ Git environment fixed at launch, wait for a restart. A check uses the acting
 space's permissions, so a parent acting on a child acts under its own.
 
 What only the user could do, such as administering Shoal, stopping the
-daemon, releasing the user's holds, reading notifications, starting agents
+daemon, releasing the user's holds, reading alerts, starting agents
 beyond the limits, approving CI runs, merging PRs and deciding any request
 below, is an action a permission key governs, because which spaces an
 agent acts on is a question of reach and which actions it takes is one of
@@ -3933,7 +3945,7 @@ runs in, or a chat without a repository's `root_dir` with the global config's
 hook. Only a workspace's completion reads a branch, verifies a worktree or takes
 `--integrated`.
 It is bounded, excludes lifecycle and permit changes, and reports failure through
-a notification without undoing completion or blocking cleanup. Explicit signals
+an alert without undoing completion or blocking cleanup. Explicit signals
 rerun it; events are not queued or replayed on restart. Completion/PR serialization
 is per workspace: cleanup sweeps hold a workspace's gate only while they handle it,
 including its forge lookups and removal, so commands for one workspace never wait

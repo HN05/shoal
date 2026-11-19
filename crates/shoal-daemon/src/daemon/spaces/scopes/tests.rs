@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     daemon::{scope, test_support},
-    protocol::{ExecutionMethod, NotificationMethod, Operation, WorkspaceMethod},
+    protocol::{AlertMethod, ExecutionMethod, Operation, WorkspaceMethod},
 };
 
 #[tokio::test]
@@ -47,7 +47,8 @@ async fn issued_scopes_are_persistent_independent_and_untracked() {
             space: SpaceSelector::id(&other.id),
         }),
         ExecutionMethod::CheckMerge.into(),
-        NotificationMethod::ListNotifications {
+        AlertMethod::ListAlerts {
+            to: crate::protocol::AlertsFor::User,
             unread_only: true,
             limit: 50,
         }

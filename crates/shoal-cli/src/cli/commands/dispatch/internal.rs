@@ -6,7 +6,7 @@ use crate::{
     cli::{
         args::internal::InternalCommand,
         commands::{
-            agent_state, approvals, environment, events, menu, messages, progress, sessions,
+            agent_state, alerts, approvals, environment, events, menu, progress, sessions,
             subagents, worktree_hooks,
         },
         context::Context,
@@ -45,7 +45,8 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             space,
             handed_over,
             resume,
-        } => messages::wake(&ctx, agent, space.or(handed_over), resume).await,
+        } => alerts::delivery::wake(&ctx, agent, space.or(handed_over), resume).await,
+        InternalCommand::Deliver => alerts::delivery::deliver(&ctx).await,
         InternalCommand::SubagentStart => subagents::start(&ctx).await,
         InternalCommand::Subagent { integration, space } => {
             subagents::report(&ctx, space, integration).await

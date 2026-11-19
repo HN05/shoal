@@ -1,5 +1,6 @@
 //! Every request routed to the handler of its domain.
 mod agents;
+mod alerts;
 mod approvals;
 mod apps;
 mod assignments;
@@ -15,7 +16,6 @@ mod holds;
 mod hub;
 mod items;
 mod launches;
-mod notifications;
 mod operations;
 mod ports;
 mod questions;
@@ -78,7 +78,7 @@ pub(super) async fn handle(
         Operation::Item(method) => items::handle(&server.manager, method, caller).await,
         Operation::Ci(method) => ci::handle(&server.manager, method, caller).await,
         Operation::Branch(method) => branches::handle(&server.manager, method, caller).await,
-        Operation::Alert(method) => notifications::handle(&server.manager, method, caller).await,
+        Operation::Alert(method) => alerts::handle(&server.manager, method, caller).await,
         Operation::Operations(method) => {
             operations::handle(&server.manager, method, caller, scope).await
         }

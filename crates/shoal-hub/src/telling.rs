@@ -20,18 +20,21 @@ use shoal_protocol::{
 };
 
 use super::{membership, session::Calls};
-use crate::{Hub, daemon::About, daemon::Daemon, daemon::Receiver, log, time::UnixTime};
+use crate::{Hub, daemon::Daemon, daemon::Receiver, log, time::UnixTime};
+use shoal_daemon_base::alerts::{About, NewAlert, Sender};
 
 /// How often the outbox looks for what it keeps, besides when it keeps
 /// something new.
 const OUTBOX_LOOK: std::time::Duration = std::time::Duration::from_secs(60);
 
-/// An event a space passes up: the space it is about, the notification it
-/// is for the user, its message and the files it sent.
+/// An event a space passes up: the space it is about, the kind of alert it
+/// is, whether the user receives it when no space above takes it, its
+/// message and the files it sent.
 pub struct Event<'a> {
     pub name: &'a SpaceName,
     pub space: &'a SpaceId,
-    pub kind: Option<AlertKind>,
+    pub kind: AlertKind,
+    pub for_user: bool,
     pub message: String,
     pub attachments: &'a [PathBuf],
 }
@@ -79,12 +82,14 @@ impl Hub {
         &self,
         daemon: &dyn Daemon,
         id: &SpaceId,
+        kind: AlertKind,
         message: String,
     ) -> Result<()> {
         let told = Told {
             above: id.clone(),
             about: None,
-            kind: None,
+            kind,
+            for_user: false,
             message,
             files: Vec::new(),
         };
@@ -165,12 +170,18 @@ impl Hub {
         let message = with_files(&told);
         match (receiver, told.about) {
             (Some(Receiver::Here(coordinator)), about) => {
-                let about = about.map(|about| About {
-                    name: about.name,
-                    id: Some(about.space),
-                    kind: told.kind,
+                let about = about.map_or_else(About::default, |about| {
+                    About::space(&about.name, &about.space)
                 });
-                (daemon.message_about(&coordinator, about, message)).await
+                let sender = match told.kind {
+                    AlertKind::Message if about.id.is_some() => Sender::Space,
+                    _ => Sender::Shoal,
+                };
+                let alert = NewAlert {
+                    sender,
+                    ..NewAlert::shoal(told.kind, about, message)
+                };
+                (daemon.alert(&coordinator, alert, told.for_user)).await
             }
             (Some(Receiver::Elsewhere(next)), about) => {
                 let told = Told {
@@ -181,10 +192,10 @@ impl Hub {
                 self.send_told(daemon, told).await
             }
             (None, Some(about)) => {
-                if let Some(kind) = told.kind {
-                    let about =
-                        shoal_daemon_base::notifications::About::space(&about.name, &about.space);
-                    self.notifications.notify_user(about, kind, message).await;
+                if told.for_user {
+                    let about = About::space(&about.name, &about.space);
+                    let alert = NewAlert::shoal(told.kind, about, message);
+                    self.notifications.notify_user(alert).await;
                 }
                 Ok(())
             }
@@ -209,7 +220,10 @@ impl Hub {
             ),
         };
         if let Some(space) = &expired.from
-            && (daemon.message(space, message.clone()).await).is_ok()
+            && (daemon
+                .message(space, AlertKind::HubExpired, message.clone())
+                .await)
+                .is_ok()
         {
             return;
         }
@@ -236,6 +250,7 @@ fn told_above(above: SpaceId, event: Event<'_>) -> Told {
             name: event.name.clone(),
         }),
         kind: event.kind,
+        for_user: event.for_user,
         message: event.message,
         files,
     }

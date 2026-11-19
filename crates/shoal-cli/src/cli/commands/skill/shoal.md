@@ -160,13 +160,13 @@ space and the spaces below it.
 ## Coordinate spaces below
 
 The agent of the nearest space above with an agent coordinates a space: its
-agent's messages, questions, completion, ready marks and exits arrive there as
-messages naming it, instead of reaching the user, and the issue and PR
+agent's alerts, questions, completion, ready marks and exits arrive there as
+alerts naming it, instead of reaching the user, and the issue and PR
 activity of a space without an agent of its own arrives too. An agent started
 with `shoal start` receives its own issue and PR activity.
 
 ```sh
-shoal messages send --space <child> "<text>"   # --body-file F, --attach FILE
+shoal send --space <child> "<text>"   # --body-file F, --attach FILE
 shoal questions <S.N> --answer "<answer or choice number>"
 shoal stop <child>                  # --skip-children stops only the child
 shoal stop --interrupt <child>      # Cancel its agent's turn, keeping it running
@@ -220,7 +220,7 @@ shoal list            # Spaces, children below their parent; --chats for chats
 shoal inbox           # Questions, approvals, waiting or failed spaces, ready marks
 shoal status 3
 shoal log 3           # Its log; --all for every event, --follow
-shoal alerts
+shoal alert list      # Your alerts; --unread, --space S, --all
 ```
 
 `status` names a workspace's base, parent and children, its watched PRs in
@@ -236,10 +236,10 @@ space is selected by its ID. Outside a space, `status` shows the daemon and
 reaches, each with its `machine`. Commands that act on a space work on one
 elsewhere through the hub, under your scope, except those that need its files
 or processes, such as `diff`, `conflicts`, leases and demos, which name its
-machine. While that machine is offline, a message, answer, approval decision
+machine. While that machine is offline, an alert, answer, approval decision
 or stop prints that it is queued and goes through once it connects; other
 commands fail, naming the machine.
-Notifications report agent exits, alerts, questions, busy resources, pending
+The user's alerts report agent exits, questions, busy resources, pending
 approvals and cleanup Shoal did on its own; reading them marks them read, and
 scoped callers read them as their `notifications` permission allows.
 
@@ -430,7 +430,7 @@ the PR's head and the review's text, `triggers` pausing, resuming and running
 and removing what the user holds, and `daemon` the daemon's service
 commands, `shoal update` and `shoal hub update` while a daemon of this
 Shoal answers to decide it. `notifications`, `deny` or `direct`, lets a
-space read the user's notifications, Shoal's own log and the inbox's
+space read the user's alerts, Shoal's own log and the inbox's
 daemon-wide problems, and `decide`, `deny` or `direct`, decide the requests
 of the spaces below as the user does.
 With `propose` the command exits 2 with `approval_pending` and the request,
@@ -559,17 +559,25 @@ whose head on the forge is not HEAD, naming each with its reason on stderr.
 New commits leave a mark as it was; `shoal ready --undo` withdraws the marks,
 and `--draft` also returns the PR to draft.
 
-## Messages, alerts and questions
+## Alerts and questions
 
-The user, Shoal and a coordinator send messages to a space, such as a request
-to free memory or disk space. Hooks deliver them with PR activity; a new
-message also ends `shoal watch pr` with a `messages` array, and
-`shoal messages` shows new ones. Each message is shown once, and lists each
-file attached to it as an `Attached file:` path.
+```sh
+shoal send "<text>" [--attach FILE]   # Up: to your coordinator, else the user
+shoal send --space <child> "<text>"   # Down: to the agent of a space below
+shoal alert list [--unread]           # Your space's alerts
+shoal alert withdraw <number>         # Take back one you sent, until it is read
+```
 
-`shoal alerts send "<one-line message>" [--attach FILE]` tells the user
-something without asking, and `shoal alerts withdraw <number>` withdraws it
-before the user reads it. Neither affects completion or cleanup.
+An alert is a one-way notice. Without `--space`, `shoal send` goes up to your
+coordinator, or else the user, as one line; it tells them something without
+asking, and affects neither completion nor cleanup. `--space`, `--all` and
+`--repo` send down to the agents below. The user, Shoal and your coordinator
+send your space alerts, such as a request to free memory or disk space. Hooks
+deliver them with PR activity; a new one also ends `shoal watch pr` with an
+`alerts` array, and `shoal alert list` shows them. Each is shown once, and
+lists each file attached to it as an `Attached file:` path. `shoal send`
+prints each alert's number, by which its sender withdraws it until it is
+read.
 
 ```sh
 shoal questions ask --in-chat
@@ -584,7 +592,7 @@ A question reaches the space's coordinator, or else the user's questions.
 questions too; a reply in the chat closes it. It takes no attachments,
 and is refused for an agent without Shoal's hooks. The other form states the
 decision, a recommended answer and optional choices. An answer given through
-`shoal questions` arrives as a message naming the question. `--wait` blocks without a
+`shoal questions` arrives as an alert naming the question. `--wait` blocks without a
 time limit and prints the answer. Asking the identical question again waits
 for the same one. An open question keeps the space from cleanup, and
 `shoal done` closes the space's open questions.

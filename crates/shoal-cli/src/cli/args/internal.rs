@@ -81,7 +81,12 @@ pub enum InternalCommand {
         #[arg(long)]
         space: Option<SpaceSelector>,
     },
-    /// Wait for the next agent messages or item activity of the workspace or
+    /// Print the space's new alerts, item activity and leftover processes as
+    /// hook context, reading the hook event on stdin and never failing the
+    /// agent; Shoal's agent hooks run it after tool calls and when a prompt
+    /// is submitted.
+    Deliver,
+    /// Wait for the next alerts or item activity of the workspace or
     /// chat, print them and exit 2; Shoal's Claude Code `Stop` and `StopFailure`
     /// hooks run it in the background so the update starts the idle agent's
     /// next turn.

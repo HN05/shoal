@@ -1,26 +1,23 @@
 use super::*;
 use crate::forge::updates::{Update, UpdateKind};
 use crate::time::UnixTime;
-
-#[test]
-fn multi_line_messages_stay_one_entry() {
-    assert_eq!(
-        hanging_indent("Move commits:\n\nabc123 to api\ndef456 to cli", "  "),
-        "Move commits:\n\n  abc123 to api\n  def456 to cli"
-    );
-}
+use shoal_protocol::alerts::Alert;
 
 #[test]
 fn attached_files_follow_the_message_text() {
-    let message = |text: &str| AgentMessage {
-        id: 1,
-        created_at: UnixTime::from_seconds(0),
+    let message = |text: &str| Alert {
         message: text.into(),
-        attachments: vec!["/repo/.attachments/w/k/0/shot.png".into()],
+        files: vec![shoal_protocol::files::SentFile {
+            id: 3,
+            name: "shot.png".into(),
+            title: None,
+            path: "/repo/.attachments/w/k/0/shot.png".into(),
+        }],
+        ..alert("")
     };
     let updates = Updates {
         updates: Vec::new(),
-        messages: vec![message("See the crash"), message("")],
+        alerts: vec![message("See the crash"), message("")],
         leftovers: Vec::new(),
         timed_out: false,
         superseded: false,
@@ -42,47 +39,6 @@ fn attached_files_follow_the_message_text() {
 }
 
 #[test]
-fn attachments_are_checked_before_sending() {
-    let dir = tempfile::tempdir().unwrap();
-    let file = dir.path().join("crash.log");
-    std::fs::write(&file, "panic").unwrap();
-    let given = |path: &std::path::Path, title: &str| format!("{}{title}", path.display());
-    assert_eq!(
-        attachments(&[given(&file, ""), given(&file, "#Crash log ")]).unwrap(),
-        [
-            NewFile {
-                path: file.clone(),
-                title: None,
-            },
-            NewFile {
-                path: file.clone(),
-                title: Some("Crash log".into()),
-            },
-        ]
-    );
-    for refused in [
-        given(dir.path(), ""),
-        given(&dir.path().join("missing.png"), ""),
-        given(&file, "#Crash\u{7}log"),
-    ] {
-        assert!(
-            attachments(std::slice::from_ref(&refused)).is_err(),
-            "{refused}"
-        );
-    }
-}
-
-#[test]
-fn files_alone_may_be_the_message() {
-    assert_eq!(message_text(None, None, true).unwrap(), "");
-    assert_eq!(
-        message_text(Some("Look".into()), None, true).unwrap(),
-        "Look"
-    );
-    assert!(message_text(None, None, false).is_err());
-}
-
-#[test]
 fn hook_output_names_the_event_it_answers() {
     let updates = Updates {
         updates: vec![Update {
@@ -93,12 +49,7 @@ fn hook_output_names_the_event_it_answers() {
             check: None,
             workspace: None,
         }],
-        messages: vec![AgentMessage {
-            id: 1,
-            created_at: UnixTime::from_seconds(0),
-            message: "Stop the dev server".into(),
-            attachments: Vec::new(),
-        }],
+        alerts: vec![alert("Stop the dev server")],
         leftovers: Vec::new(),
         timed_out: false,
         superseded: false,
@@ -156,4 +107,21 @@ fn only_prompts_the_user_submits_reply_in_the_chat() {
         r#"{"hook_event_name":"PostToolUse","tool_name":"Bash"}"#
     ));
     assert!(!user_prompt(""));
+}
+
+/// The user's alert of `text` to a space.
+fn alert(text: &str) -> Alert {
+    Alert {
+        id: 1,
+        created_at: UnixTime::from_seconds(0),
+        kind: shoal_protocol::alerts::AlertKind::Message,
+        sender: shoal_protocol::alerts::Sender::User,
+        recipient: None,
+        space: None,
+        space_id: None,
+        number: None,
+        message: text.into(),
+        read: false,
+        files: Vec::new(),
+    }
 }

@@ -4,6 +4,7 @@ use crate::paths::PathsExt;
 mod absorb;
 mod acquisition;
 mod agent_state;
+mod alerts;
 mod api;
 mod approvals;
 mod authorization;
@@ -41,8 +42,6 @@ mod machines;
 pub(crate) mod menu;
 mod merge;
 mod merge_warning;
-mod messages;
-mod notifications;
 pub(crate) mod operations;
 mod preparation;
 
@@ -64,6 +63,7 @@ pub(crate) mod restore;
 mod create;
 mod review;
 mod secrets;
+mod send;
 mod service;
 pub(in crate::cli) mod sessions;
 mod simulators;
@@ -365,7 +365,6 @@ fn dispatch(
         Command::Workspace(command) => Box::pin(dispatch::workspace::run(ctx, command)),
         Command::Changes(command) => Box::pin(dispatch::changes::run(ctx, command)),
         Command::Resources(command) => Box::pin(dispatch::resources::run(ctx, command)),
-        Command::Diagnostics(command) => Box::pin(dispatch::diagnostics::run(ctx, command)),
         Command::Lifecycle(command) => Box::pin(dispatch::lifecycle::run(ctx, command)),
         Command::Service(command) => Box::pin(dispatch::service::run(ctx, command, daemon)),
     }

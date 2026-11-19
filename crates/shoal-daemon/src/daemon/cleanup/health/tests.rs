@@ -125,7 +125,7 @@ async fn failing_passes_notify_once_and_show_where_they_belong() {
     let notifications = manager.notifications.list(true, 100).await.unwrap();
     let cleanup: Vec<_> = (notifications.iter())
         .filter(|notification| notification.kind == AlertKind::CleanupFailed)
-        .map(|notification| notification.workspace.as_deref())
+        .map(|notification| notification.space.as_deref())
         .collect();
     assert_eq!(cleanup, [None, Some("failing")]);
     let problem = manager.cleanup_problem().unwrap();

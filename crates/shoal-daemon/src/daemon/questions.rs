@@ -131,7 +131,7 @@ impl AskFromChat for Ask {
 const SELECT: &str = concat!(
     "SELECT q.space_number,q.number,q.space_id,s.name,q.created_at,
     q.question,q.recommendation,q.reason,q.choices,q.answer,q.answered_at,
-    (SELECT m.id FROM space_messages m WHERE m.id=q.message_id),
+    (SELECT m.id FROM alerts m WHERE m.id=q.message_id AND m.read=0),
     q.closed_at,q.withdrawn,q.in_chat,",
     sent_files!("q.files"),
     " FROM questions q LEFT JOIN spaces s ON s.id=q.space_id"
@@ -361,7 +361,12 @@ fn record_answer(
     let status = QuestionStatus::Answered {
         answer,
         answered_at: crate::time::UnixTime::now(),
-        message_id: agent_messages::queue_shoal_message(tx, &question.space_id, &message)?,
+        message_id: agent_messages::queue_shoal_message(
+            tx,
+            &question.space_id,
+            AlertKind::QuestionAnswered,
+            &message,
+        )?,
     };
     store_status(tx, &mut question, status)?;
     Ok(question)
@@ -705,9 +710,7 @@ impl Manager {
         }
         let about = About::space(&question.space, &question.space_id);
         let kind = AlertKind::QuestionAsked;
-        (self.notifications)
-            .notify(self, about, kind, question.notification(), &question.files)
-            .await;
+        (self.notify_with_files(about, kind, question.notification(), &question.files)).await;
     }
 
     /// The newest open questions that fit one response, oldest first, of

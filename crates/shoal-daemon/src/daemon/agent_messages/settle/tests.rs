@@ -1,20 +1,26 @@
 use super::*;
 use crate::daemon::test_support::{manager, repository};
-use crate::daemon::workspace_files::Attacher;
 use crate::forge::items::link::Selection;
 use crate::model::Workspace;
 use crate::time::UnixTime;
 use shoal_protocol::space_names::SpaceSelector;
 
-fn sent_at(times: &[i64]) -> Vec<AgentMessage> {
+fn sent_at(times: &[i64]) -> Vec<Alert> {
     times
         .iter()
         .enumerate()
-        .map(|(n, &created_at)| AgentMessage {
+        .map(|(n, &created_at)| Alert {
             id: i64::try_from(n).unwrap(),
             created_at: UnixTime::from_seconds(created_at),
+            kind: crate::daemon::alerts::AlertKind::Message,
+            sender: crate::daemon::alerts::Sender::User,
+            recipient: None,
+            space: None,
+            space_id: None,
+            number: None,
             message: format!("message {n}"),
-            attachments: Vec::new(),
+            read: false,
+            files: Vec::new(),
         })
         .collect()
 }
@@ -69,7 +75,7 @@ async fn age_messages(manager: &Manager, workspace: &Workspace, seconds: i64) {
         .store
         .run(move |db| {
             db.execute(
-                "UPDATE space_messages SET created_at=created_at-?2 WHERE space_id=?1",
+                "UPDATE alerts SET created_at=created_at-?2 WHERE recipient_id=?1",
                 rusqlite::params![id, seconds],
             )?;
             Ok(())
@@ -116,10 +122,10 @@ async fn send(manager: &Manager, workspace: &Workspace, messages: &[&str]) {
     for &message in messages {
         manager
             .send_space_message(
+                None,
                 &SpaceSelector::id(&workspace.id),
                 message.into(),
                 Vec::new(),
-                &Attacher::User,
             )
             .await
             .unwrap();
@@ -141,8 +147,8 @@ async fn hooks_and_wake_prompts_deliver_a_run_once_it_settles() {
         .agent_updates(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
-    assert!(delivered.messages.is_empty(), "{delivered:?}");
-    // `shoal messages` reads a run before it settles.
+    assert!(delivered.alerts.is_empty(), "{delivered:?}");
+    // `shoal alert list` reads a run before it settles.
     assert_eq!(
         manager
             .agent_messages(&SpaceSelector::id(&workspace.id))
@@ -158,7 +164,7 @@ async fn hooks_and_wake_prompts_deliver_a_run_once_it_settles() {
         .agent_updates(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
-    let messages = delivered.messages.iter().map(|message| &message.message);
+    let messages = delivered.alerts.iter().map(|message| &message.message);
     assert_eq!(
         messages.collect::<Vec<_>>(),
         ["Request 1 approved", "Request 2 approved"]
@@ -180,7 +186,7 @@ async fn a_wait_returns_a_run_once_it_settles() {
     let selected = SpaceSelector::id(&workspace.id);
     let wait = manager.wait_items(&selected, &selection, None, None);
     let updates = settle_while(&manager, wait).await.unwrap();
-    assert_eq!(updates.messages.len(), 2, "{updates:?}");
+    assert_eq!(updates.alerts.len(), 2, "{updates:?}");
 }
 
 #[tokio::test]

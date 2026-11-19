@@ -119,7 +119,10 @@ fn the_runner_runs_a_waiting_job_in_its_own_workspace_and_deletes_itself_when_tu
         written.ends_with('\n').then(|| written.trim().to_owned())
     });
     let Some(workspace_id) = workspace_id else {
-        let alerts = cli(root).args(["--json", "alerts"]).output().unwrap();
+        let alerts = cli(root)
+            .args(["--json", "alert", "list", "--unread"])
+            .output()
+            .unwrap();
         let queue = cli(root).args(["--json", "queue"]).output().unwrap();
         eprintln!("queue: {}", String::from_utf8_lossy(&queue.stdout));
         eprintln!("list: {:?}", workspaces(root));

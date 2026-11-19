@@ -3,7 +3,6 @@
 //! approvals or app store, acting on the global config a test gives the
 //! service, and a temporary store with no spaces in it.
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -12,6 +11,7 @@ use futures_util::future::BoxFuture;
 use rusqlite::{Connection, Transaction};
 use shoal_core::config::Config;
 use shoal_daemon_base::{
+    alerts::{NewAlert, Sent},
     callers::Caller,
     config_state::ConfigState,
     gates::Gates,
@@ -35,9 +35,7 @@ use shoal_schedule::priority::Priority;
 
 use crate::{
     Hub,
-    daemon::{
-        About, Approvals, Apps, Dispatch, Messages, Receiver, Records, SpacePermissions, Spaces,
-    },
+    daemon::{Approvals, Apps, Dispatch, Messages, Receiver, Records, SpacePermissions, Spaces},
     streams::{Incoming, Outgoing},
 };
 
@@ -159,20 +157,20 @@ impl SpacePermissions for StandIn {
 }
 
 impl Messages for StandIn {
-    fn message<'a>(&'a self, _: &'a SpaceId, _: String) -> BoxFuture<'a, Result<()>> {
+    fn message<'a>(&'a self, _: &'a SpaceId, _: AlertKind, _: String) -> BoxFuture<'a, Result<()>> {
         none("agents")
     }
 
-    fn message_next_turn<'a>(&'a self, _: &'a SpaceId, _: String) -> BoxFuture<'a, Result<()>> {
-        none("agents")
-    }
-
-    fn message_about<'a>(
+    fn message_next_turn<'a>(
         &'a self,
         _: &'a SpaceId,
-        _: Option<About>,
+        _: AlertKind,
         _: String,
     ) -> BoxFuture<'a, Result<()>> {
+        none("agents")
+    }
+
+    fn alert<'a>(&'a self, _: &'a SpaceId, _: NewAlert, _: bool) -> BoxFuture<'a, Result<()>> {
         none("agents")
     }
 }
@@ -238,16 +236,8 @@ impl Apps for StandIn {
 }
 
 impl Coordinators for StandIn {
-    fn tell<'a>(
-        &'a self,
-        _: &'a SpaceName,
-        _: Option<&'a SpaceId>,
-        _: AlertKind,
-        _: String,
-        _: Vec<PathBuf>,
-        _: Source,
-    ) -> BoxFuture<'a, bool> {
-        Box::pin(async { false })
+    fn tell<'a>(&'a self, _: NewAlert, _: bool, _: Source) -> BoxFuture<'a, Option<Sent>> {
+        Box::pin(async { None })
     }
 }
 

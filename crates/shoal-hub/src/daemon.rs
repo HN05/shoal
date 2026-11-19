@@ -8,7 +8,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use futures_util::future::BoxFuture;
 use rusqlite::{Connection, Transaction};
-use shoal_daemon_base::{callers::Caller, notifications::Coordinators};
+use shoal_daemon_base::{alerts::NewAlert, callers::Caller, notifications::Coordinators};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::{
@@ -117,36 +117,33 @@ pub trait SpacePermissions: Send + Sync {
     ) -> BoxFuture<'a, Result<Permissions>>;
 }
 
-/// The space a message for another space's agent is about.
-#[derive(Debug, Clone)]
-pub struct About {
-    pub name: SpaceName,
-    pub id: Option<SpaceId>,
-    /// The notification the event would be for the user.
-    pub kind: Option<AlertKind>,
-}
-
 /// The messages that reach the agents of spaces here.
 pub trait Messages: Send + Sync {
-    /// Queue `message` for the agents of the space `id`, starting their
-    /// next turn.
-    fn message<'a>(&'a self, id: &'a SpaceId, message: String) -> BoxFuture<'a, Result<()>>;
-
-    /// Queue `message` for the agents of the space `id`, for their next
-    /// turn or update.
-    fn message_next_turn<'a>(
+    /// Queue Shoal's `message`, an alert of `kind`, for the agents of the
+    /// space `id`, starting their next turn.
+    fn message<'a>(
         &'a self,
         id: &'a SpaceId,
+        kind: AlertKind,
         message: String,
     ) -> BoxFuture<'a, Result<()>>;
 
-    /// Queue `message` for the agent of the space `id`, about the space
-    /// `about` names.
-    fn message_about<'a>(
+    /// Queue Shoal's `message`, an alert of `kind`, for the agents of the
+    /// space `id`, for their next turn or update.
+    fn message_next_turn<'a>(
         &'a self,
         id: &'a SpaceId,
-        about: Option<About>,
+        kind: AlertKind,
         message: String,
+    ) -> BoxFuture<'a, Result<()>>;
+
+    /// Queue `alert` for the agent of the space `id`; `for_user` says the
+    /// user receives it should the space go before its agent reads it.
+    fn alert<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        alert: NewAlert,
+        for_user: bool,
     ) -> BoxFuture<'a, Result<()>>;
 }
 

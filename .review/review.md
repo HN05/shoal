@@ -185,7 +185,7 @@ instead of the PR delivery guidance below.
   requires unchanged HEAD and activity, and manual removal refuses unsaved work its
   confirmation did not cover.
   Post-remove runs from the repository checkout after ownership is released; failure is a
-  warning and notification, never restored ownership. Already-missing worktrees
+  warning and alert, never restored ownership. Already-missing worktrees
   skip hooks, and post-remove events are not replayed on restart. Post-done runs
   after completion persists and before cleanup;
   failure notifies without undoing completion or blocking cleanup. It excludes
@@ -214,18 +214,18 @@ instead of the PR delivery guidance below.
   whose directory it runs in, while agent hooks always report for the own workspace.
   Workspace allocation other than a child of their own space, removal other than of a space below their own
   and restoring a removed space other than below its recorded parent within their scope stay denied, the
-  daemon deciding the restore; administering Shoal, the daemon, the user's holds and notifications, starting agents beyond the
+  daemon deciding the restore; administering Shoal, the daemon, the user's holds and alerts, starting agents beyond the
   limits, approving CI runs, merging PRs and deciding any request below follow the permission key that
   governs each, as below. For the spaces their scope reaches but their own, scoped callers hold them, queue agents,
   which the daemon starts detached unless `start --here` runs one in the caller's terminal, and which hold their own space's scope, never the caller's, cancel and prioritize their queue
-  entries, send agent messages,
+  entries, send them alerts,
   answer questions, stop their executions and agents, confirming a stop Shoal cannot prove, restart their agents, convert and rename them,
   queue restores of the agents, a workspace's or a chat's, whoever stopped them,
-  which the daemon starts a chat's in the place it ran in, and forget stopped work; the nearest space above with an agent, of either kind, receives a child agent's messages,
+  which the daemon starts a chat's in the place it ran in, and forget stopped work; the nearest space above with an agent, of either kind, receives a child agent's alerts,
   questions, completion and ready marks and its agent's exits and stops instead of the user,
   except what a process causes in a child without an agent of its own. Own-workspace setup, rename, base workspace, PR registration,
   linking and watching CI runs of the own repository,
-  merge acknowledgements, messages to the user, reading their own agent messages, ready-for-review marks,
+  merge acknowledgements, alerts up to their coordinator or the user, reading their own space's alerts, ready-for-review marks,
   assignment completion and its withdrawal, listing issues and PRs of any repository, opening and changing
   those of the own repository, approving or requesting changes only as their `pr_review` permission allows, rerunning or cancelling their CI jobs,
   starting, rerunning or cancelling CI runs of the default branch and of the branches of the workspaces their scope reaches, and reading any repository's issues, PRs and runs,
@@ -236,14 +236,18 @@ instead of the PR delivery guidance below.
   workspace's export requires a ready, verified worktree; tokens persist across
   restart until revocation or the space's removal, without execution tracking or
   cleanup protection, and a chat's agent's own token is never handed out.
-  Notifications are read by the user, and by scoped callers only as their
-  `notifications` permission allows, and never fail the
-  operation they record; an agent message is the operation, so its failure is
-  returned, and it never records completion. Only unscoped callers, and the
-  coordinating agents of the workspaces below theirs, queue messages for a workspace's agents, and delivery deletes a message. Agent hooks deliver
-  messages and queued item activity, replacing a running watch, and a Claude Code
+  An alert records its kind, its sender (the user, a space or Shoal) and its
+  recipient (the user or a space), and one daemon operation decides whom it
+  reaches. The user's alerts are read by the user, and by scoped callers only
+  as their `notifications` permission allows; Shoal's own never fail the
+  operation they record, while an alert a caller sends is the operation, so its
+  failure is returned, and it never records completion. Only unscoped callers,
+  and the coordinating agents of the spaces below theirs, send alerts down to
+  a space's agent, delivery marks an alert read, and only its sender
+  withdraws an unread one. Agent hooks deliver
+  alerts and queued item activity, replacing a running watch, and a Claude Code
   hook wakes the idle agent; an agent idle as long as its mode's
-  `idle_wake_minutes` gets a message asking it to continue, again each period,
+  `idle_wake_minutes` gets an alert asking it to continue, again each period,
   unless its space is done or `shoal sleep` holds it. An agent Shoal stopped and
   brings back on its own is asleep; one that waits for `shoal restore` is
   stopped. An idle heavy agent sleeps seconds after its turn ends unless the
@@ -259,7 +263,7 @@ instead of the PR delivery guidance below.
   nor stop on idle, in a workspace or a chat. `shoal
   attach` wakes an asleep or stopped agent at once through its restore, never
   beside a waiting wrapper; a chat's hooks deliver its own queue of its workers'
-  events, which the user receives as notifications if the chat is removed first; a workspace's own Shoal comments, thread replies,
+  events, which the user receives as alerts if the chat is removed first; a workspace's own Shoal comments, thread replies,
   closing and reopening are not reported back to it. The only terminal input Shoal writes is
   the tracked wrapper's fixed prompt into an idle Codex's terminal session, or an
   idle Claude Code's after an interrupted turn or once it has idled with no
@@ -267,7 +271,7 @@ instead of the PR delivery guidance below.
   agent's interrupt key the CLI types for `shoal stop --interrupt`, and the
   fixed prompt with which `shoal restore` continues that turn, each reported to
   the daemon before it types; the daemon never writes to a terminal. Space events are an unscoped, durable lifecycle
-  stream with replay gaps, independent of notification read state, recorded
+  stream with replay gaps, independent of alert read state, recorded
   for chats through the same path and in the same shape as workspaces, keyed
   by space ID, and kept per space: while it
   exists and for the restore retention after its removal, with only turn
@@ -377,7 +381,7 @@ instead of the PR delivery guidance below.
   chat does. Requests a permission governs take the decider's own permission instead of a
   grant, and a space whose `decide` permission is `direct` decides any request of a space below
   it as the user does, approving one a permission governs only where it holds that permission at
-  `direct` too, so a key it only proposes never passes through a child. That decision, which queues an agent message for the requester; failing to queue it
+  `direct` too, so a key it only proposes never passes through a child. That decision, which queues an alert for the requester; failing to queue it
   never fails the decision. Pending requests reserve nothing; grant lifetime follows configuration
   and approval never bypasses capacity or simulator cleanup rules. Approval lookups
   validate their selected ID or active workspace/target/name record; grant reuse
@@ -631,7 +635,7 @@ instead of the PR delivery guidance below.
   path, distinguish automatic recovery from manual or unavailable recovery, and never select disconnected
   executions. Failed readings reset the sustained timer and authorize no stop.
   Below each enabled protection's stop threshold, `[machine.overload.warning]` queues an
-  agent message for every workspace with a running agent, at most once per signal
+  alert for every workspace with a running agent, at most once per signal
   and workspace per repeat interval; warnings never stop, clean up or notify.
   A memory or CPU warning never wakes an idle agent; a disk warning does.
   Automatic recovery uses built-in Codex and Claude session restore commands or a

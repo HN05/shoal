@@ -46,8 +46,13 @@ impl Requesters for Manager {
         Box::pin(self.space_permissions(id, repository))
     }
 
-    fn tell_space<'a>(&'a self, id: &'a SpaceId, message: String) -> BoxFuture<'a, bool> {
-        Box::pin(Manager::tell_space(self, id, message))
+    fn tell_space<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        kind: AlertKind,
+        message: String,
+    ) -> BoxFuture<'a, bool> {
+        Box::pin(Manager::tell_space(self, id, kind, message))
     }
 
     fn notify(&self, about: About, kind: AlertKind, message: String) -> BoxFuture<'_, ()> {

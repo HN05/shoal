@@ -16,7 +16,11 @@ impl Manager {
         let message = request.withdrawal_notification();
         if let Some(decider) = &request.decider
             && self
-                .tell_space(decider, format!("{}: {message}", request.space_name()))
+                .tell_space(
+                    decider,
+                    AlertKind::ApprovalWithdrawn,
+                    format!("{}: {message}", request.space_name()),
+                )
                 .await
         {
             return;
@@ -35,20 +39,18 @@ impl Manager {
 
     /// Failure only logs; the decision stands.
     pub(super) async fn tell_requester(&self, request: &ApprovalRequest) {
-        self.tell_space(&request.space_id, request.decision_message())
-            .await;
+        let message = request.decision_message();
+        (self.tell_space(&request.space_id, AlertKind::ApprovalDecided, message)).await;
     }
 
-    /// Queue `message` for the agent of the space `id`, here or on another
-    /// joined machine; false when it cannot be, which only logs.
-    pub(crate) async fn tell_space(&self, id: &SpaceId, message: String) -> bool {
+    /// Queue Shoal's alert of `kind` for the agent of the space `id`, here
+    /// or on another joined machine; false when it cannot be, which only
+    /// logs.
+    pub(crate) async fn tell_space(&self, id: &SpaceId, kind: AlertKind, message: String) -> bool {
         let here = self.find_space(id).await.is_ok_and(|space| space.is_some());
         let queued = match here || !self.hub.runs_elsewhere(self, id).await {
-            true => {
-                self.queue_space_message(id, None, message, Vec::new())
-                    .await
-            }
-            false => self.hub.message_elsewhere(self, id, message).await,
+            true => self.queue_agent_message(id, kind, message).await,
+            false => self.hub.message_elsewhere(self, id, kind, message).await,
         };
         match queued {
             Ok(()) => true,
@@ -63,7 +65,11 @@ impl Manager {
     /// decides it or its decider cannot be told.
     pub(super) async fn announce_approval(&self, request: &ApprovalRequest) {
         let told = match &request.decider {
-            Some(decider) => self.tell_space(decider, request.routed_message()).await,
+            Some(decider) => {
+                let kind = AlertKind::ApprovalRequested;
+                self.tell_space(decider, kind, request.routed_message())
+                    .await
+            }
             None => false,
         };
         // The user decides what no space could be told about.

@@ -158,9 +158,7 @@ async fn inspection(backend: &Backend, metrics: &Arc<Metrics>, id: SpaceId) -> R
     backend
         .run(metrics.clone(), |db| {
             let count: i64 =
-                db.query_row("SELECT count(*) FROM notifications WHERE read=0", [], |r| {
-                    r.get(0)
-                })?;
+                db.query_row("SELECT count(*) FROM alerts WHERE read=0", [], |r| r.get(0))?;
             assert_eq!(count, 0);
             Ok(())
         })

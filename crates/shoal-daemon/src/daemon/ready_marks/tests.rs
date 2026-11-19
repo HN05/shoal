@@ -848,7 +848,7 @@ async fn a_chats_ready_mark_reaches_the_agent_above_it() {
         .await
         .unwrap()
         .into_iter()
-        .map(|message| message.message)
+        .map(|message| message.text())
         .collect();
     assert_eq!(
         received,

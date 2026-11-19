@@ -82,9 +82,9 @@ impl Need {
             | ["questions", "ask"]
             | ["demo", "start"] => Self::Ready,
             [
-                "diff" | "conflicts" | "rm" | "absorb" | "leases" | "messages" | "files"
+                "diff" | "conflicts" | "rm" | "absorb" | "leases" | "send" | "messages" | "files"
                 | "questions" | "approvals" | "view" | "catalog" | "history" | "config" | "pr"
-                | "issue" | "alerts" | "demo" | "queue" | "review" | "progress" | "sleep"
+                | "issue" | "alert" | "demo" | "queue" | "review" | "progress" | "sleep"
                 | "priority" | "log",
                 ..,
             ] => Self::Any,

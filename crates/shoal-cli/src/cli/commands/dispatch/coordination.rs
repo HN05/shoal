@@ -2,9 +2,9 @@ use anyhow::Result;
 
 use crate::cli::{
     args::coordination::{
-        CoordinationCommand, FilesCommand, MessagesCommand, QuestionAskArgs, QuestionsCommand,
+        AlertCommand, CoordinationCommand, FilesCommand, QuestionAskArgs, QuestionsCommand,
     },
-    commands::{files, messages, priority, progress, questions, sleep, spaces},
+    commands::{alerts, files, priority, progress, questions, send, sleep, spaces},
     context::Context,
 };
 
@@ -53,36 +53,31 @@ pub(in crate::cli::commands) async fn run(
             command: None,
             args,
         } => questions::run(&ctx, args).await,
-        CoordinationCommand::Messages {
-            command:
-                Some(MessagesCommand::Send {
-                    message,
-                    body_file,
-                    attach,
-                    space,
-                    all,
-                    repository,
-                }),
-            ..
+        CoordinationCommand::Send {
+            message,
+            body_file,
+            attach,
+            space,
+            all,
+            repository,
         } => {
             let recipients = match repository {
-                Some(repository) => messages::Recipients::Repository(repository),
-                None if all => messages::Recipients::All,
-                None => messages::Recipients::Space(space),
+                Some(repository) => send::Recipients::Repository(repository),
+                None if all => send::Recipients::All,
+                None => send::Recipients::Space(space),
             };
-            messages::send(&ctx, recipients, message, body_file, attach).await
+            send::send(&ctx, recipients, message, body_file, attach).await
         }
-        CoordinationCommand::Messages {
-            command: None,
-            space,
-            hook,
-        } => {
-            if hook {
-                messages::hook(&ctx).await
-            } else {
-                messages::show(&ctx, space).await
-            }
-        }
+        CoordinationCommand::Alert {
+            command: AlertCommand::List(args),
+        } => alerts::list(&ctx, args).await,
+        CoordinationCommand::Alert {
+            command: AlertCommand::Withdraw { id },
+        } => alerts::withdraw(&ctx, id).await,
+        CoordinationCommand::Alert {
+            command: AlertCommand::Clear,
+        } => alerts::clear(&ctx).await,
+        CoordinationCommand::Messages { hook: _ } => alerts::delivery::deliver(&ctx).await,
         CoordinationCommand::Files {
             command: Some(FilesCommand::Add { files, space }),
             ..
@@ -167,7 +162,7 @@ pub(in crate::cli::commands) async fn run(
                     cleanup,
                     integrated,
                     keep_demos,
-                    results: messages::attachments(&attach)?,
+                    results: send::attachments(&attach)?,
                     summary,
                 };
                 // Before anything is picked or stopped.

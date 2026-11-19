@@ -8,9 +8,9 @@
 use crate::{approvals::ApprovalRequest, item_numbers::ItemNumber, questions::Question};
 
 use super::{
-    AgentMethod, ApprovalMethod, AssignmentMethod, BranchMethod, CiMethod, DemoMethod, HoldMethod,
-    ItemMethod, LaunchMethod, Operation, QuestionMethod, QueueMethod, RemovalMethod,
-    RepositoryMethod, WorkspaceMethod,
+    AgentMethod, AlertMethod, AlertTarget, ApprovalMethod, AssignmentMethod, BranchMethod,
+    CiMethod, DemoMethod, HoldMethod, ItemMethod, LaunchMethod, Operation, QuestionMethod,
+    QueueMethod, RemovalMethod, RepositoryMethod, WorkspaceMethod,
 };
 
 /// What a daemon does with a request for another machine's space.
@@ -128,12 +128,13 @@ impl Operation {
     fn waits_for_machine(&self) -> bool {
         matches!(
             self,
-            Self::Agent(AgentMethod::SendAgentMessage { .. })
-                | Self::Question(
-                    QuestionMethod::AnswerQuestion { .. }
-                        | QuestionMethod::AcceptQuestionRecommendation { .. }
-                )
-                | Self::Approval(ApprovalMethod::DecideApproval { .. })
+            Self::Alert(AlertMethod::SendAlert {
+                to: AlertTarget::Space { .. },
+                ..
+            }) | Self::Question(
+                QuestionMethod::AnswerQuestion { .. }
+                    | QuestionMethod::AcceptQuestionRecommendation { .. }
+            ) | Self::Approval(ApprovalMethod::DecideApproval { .. })
                 | Self::Removal(RemovalMethod::StopSpace { .. })
         )
     }

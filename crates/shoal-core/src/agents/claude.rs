@@ -196,7 +196,7 @@ fn own_branch(workspace: AgentWorkspace) -> Option<String> {
 const LIFECYCLE_COMMANDS: [&str; 8] = [
     "done",
     "ready",
-    "alerts send",
+    "send",
     "questions ask",
     "pr",
     "issue",

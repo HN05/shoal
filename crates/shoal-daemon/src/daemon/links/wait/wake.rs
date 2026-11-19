@@ -60,7 +60,7 @@ impl Manager {
             // One reading decides both whether messages are due and when
             // held ones settle, which no signal announces.
             let unread = self.unread_messages(&space.id).await?;
-            let hold = self.message_hold(&space, &unread.messages).await?;
+            let hold = self.message_hold(&space, &unread.alerts).await?;
             let messages_due = wake_messages_due(unread.wakes, hold, phase);
             if self
                 .agent_wake_due(&space, hooked, messages_due, phase)

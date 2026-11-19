@@ -1358,51 +1358,48 @@ esac
     let to_notifications = next("spaces> ");
     assert!(
         to_notifications.starts_with("unbind(ctrl-t,ctrl-f,ctrl-v,ctrl-e,ctrl-s,ctrl-d)+")
-            && to_notifications.ends_with("internal menu-rows notifications\n"),
+            && to_notifications.ends_with("internal menu-rows alerts\n"),
         "{to_notifications}"
     );
-    let to_inbox = next("notifications> ");
+    let to_inbox = next("alerts> ");
     assert!(
         to_inbox.starts_with("unbind(ctrl-e,ctrl-s,ctrl-d)+")
             && to_inbox.ends_with("internal menu-rows inbox\n"),
         "{to_inbox}"
     );
     // Notifications name their workspace, and showing them marks them read.
-    fixture.ok(&[
-        "alerts",
-        "send",
-        "build finished",
-        "--space",
-        &fixture.id("asker"),
-    ]);
-    let shown = fixture.run(&["internal", "menu-rows", "notifications"]);
+    let sent = scoped_command(&fixture, "asker", &["send", "build finished"]);
+    assert!(sent.status.success(), "{}", printed(&sent));
+    let shown = fixture.run(&["internal", "menu-rows", "alerts"]);
     let shown = String::from_utf8(shown.stdout).unwrap();
     assert!(
-        shown.starts_with(&format!("notification:{}\t", fixture.id("asker")))
+        shown.starts_with(&format!("alert:{}\t", fixture.id("asker")))
             && shown.contains("build finished"),
         "{shown}"
     );
-    assert_eq!(fixture.ok(&["alerts"]), serde_json::json!([]));
+    assert_eq!(
+        fixture.ok(&["alert", "list", "--unread"]),
+        serde_json::json!([])
+    );
     // A workspace process cannot see them, even having cleared its token.
-    fixture.ok(&[
-        "alerts",
-        "send",
-        "agent only",
-        "--space",
-        &fixture.id("asker"),
-    ]);
+    let sent = scoped_command(&fixture, "asker", &["send", "agent only"]);
+    assert!(sent.status.success(), "{}", printed(&sent));
     let cleared = fixture
         .command()
         .args(["run", "--workspace", &fixture.id("asker"), "--", "sh", "-c"])
         // A second command keeps the scoped shell as the listing's parent.
-        .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" internal menu-rows notifications; exit $?"#)
+        .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" internal menu-rows alerts; exit $?"#)
         .arg(support::shoal_binary())
         .output()
         .unwrap();
     assert!(!cleared.status.success(), "{}", printed(&cleared));
     assert!(!String::from_utf8_lossy(&cleared.stdout).contains("agent only"));
     assert_eq!(
-        fixture.ok(&["alerts"]).as_array().unwrap().len(),
+        fixture
+            .ok(&["alert", "list", "--unread"])
+            .as_array()
+            .unwrap()
+            .len(),
         1,
         "the refused listing marked nothing read"
     );
@@ -1453,7 +1450,7 @@ esac
     assert_eq!(fixture.ok(&["inbox"]), serde_json::json!([]));
     // A row Tab loaded is chosen like the first view's: Enter on a
     // notification enters its workspace.
-    let (output, transcript, _, _) = open(&format!("=notification:{}", fixture.id("quiet")), "");
+    let (output, transcript, _, _) = open(&format!("=alert:{}", fixture.id("quiet")), "");
     assert!(output.status.success(), "{transcript}");
     assert!(transcript.contains("quiet"), "{transcript}");
 }

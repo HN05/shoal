@@ -5,22 +5,19 @@
 //! down that link, whatever each space's kind.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
-use std::{
-    collections::{HashMap, HashSet},
-    path::PathBuf,
-};
+use std::collections::{HashMap, HashSet};
 
 use anyhow::{Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{manager::Manager, notifications::Source};
+use crate::daemon::alerts::{Recipients, Sent};
 use crate::{
-    daemon::notifications::AlertKind,
     model::{RefPart, Repository, Space, SpaceKind, SpaceRef, Workspace},
     protocol::CopySource,
     state::WorkspaceState,
 };
-use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Each space a removal of another takes first, as `space_id, parent_id`:
 /// the spaces below it, and the chats in a workspace's worktree, which are
@@ -168,64 +165,58 @@ impl Manager {
         Ok(!self.hub.descendants_elsewhere(self, id).await?.is_empty())
     }
 
-    /// Queue `message` about the workspace named `name` for its coordinator,
-    /// with Shoal's copies `attachments` of the files it sent: the nearest
-    /// space above it with an agent, which receives what arrived once a
-    /// queued restore starts it, or, once the tree goes on above this
-    /// machine, the nearest on the machines above, which the event passes
-    /// up to. `kind` is the notification the event would be for the user.
-    /// Returns false when there is no coordinator, its messages are full,
-    /// or the event comes from an agent and the workspace has none of its
-    /// own, since the coordinator itself or the user acted there; the user
-    /// then receives the event instead.
+    /// Queue `alert` about the space it names for its coordinator: the
+    /// nearest space above it with an agent, which receives what arrived
+    /// once a queued restore starts it, or, once the tree goes on above
+    /// this machine, the nearest on the machines above, which the event
+    /// passes up to. `for_user` says the user would receive the event
+    /// without a coordinator, which the user then does if the coordinator's
+    /// space goes before its agent reads it. Returns where it went, or none
+    /// when the alert goes to the user, as [`Self::route`] decides, or its
+    /// coordinator's alerts are full; the user then receives the event
+    /// instead.
     pub(crate) async fn tell_coordinator(
         &self,
-        name: &SpaceName,
-        workspace_id: Option<&SpaceId>,
-        kind: Option<AlertKind>,
-        message: String,
-        attachments: Vec<PathBuf>,
+        alert: crate::daemon::alerts::NewAlert,
+        for_user: bool,
         source: Source,
-    ) -> bool {
-        let id = workspace_id.cloned();
-        let agents = self.tracked_agents().await;
-        let found = self
-            .store
-            .run(move |db| coordinator(db, id, source, &agents))
-            .await;
-        let told = match found {
-            Ok(Some(Receiver::Here(coordinator))) => {
-                let about = crate::daemon::agent_messages::About {
-                    name: name.clone(),
-                    id: workspace_id.cloned(),
-                    kind,
-                };
-                (self.queue_space_message(&coordinator, Some(about), message, attachments)).await
+    ) -> Option<Sent> {
+        let (Some(name), Some(id)) = (alert.about.name.clone(), alert.about.id.clone()) else {
+            return None;
+        };
+        let told = match self.route_up(&id, source).await {
+            Ok(Recipients::Coordinator(coordinator)) => {
+                let queued = self.queue_alert(&coordinator, alert, for_user).await;
+                queued.map(|id| Sent {
+                    alerts: vec![id],
+                    ..Sent::default()
+                })
             }
-            Ok(Some(Receiver::Elsewhere(above))) => {
-                // Found from the space's ID, which the event names.
-                let Some(space) = workspace_id else {
-                    return false;
-                };
+            Ok(Recipients::Above(above)) => {
                 let event = crate::daemon::hub::Event {
-                    name,
-                    space,
-                    kind,
-                    message,
-                    attachments: &attachments,
+                    name: &name,
+                    space: &id,
+                    kind: alert.kind,
+                    for_user,
+                    message: alert.message,
+                    attachments: &alert.attachments,
                 };
                 // Boxed: on the hub, an event for its own machine's space
                 // comes back here when no space there takes it.
-                Box::pin(self.hub.pass_up(self, above, event)).await
+                let passed = Box::pin(self.hub.pass_up(self, above, event)).await;
+                passed.map(|()| Sent {
+                    passed_up: true,
+                    ..Sent::default()
+                })
             }
-            Ok(None) => return false,
+            Ok(Recipients::User | Recipients::Spaces(_)) => return None,
             Err(error) => Err(error),
         };
         match told {
-            Ok(()) => true,
+            Ok(sent) => Some(sent),
             Err(error) => {
                 crate::daemon::log!("message for the coordinator of {name}: {error:#}");
-                false
+                None
             }
         }
     }
@@ -720,7 +711,7 @@ pub(crate) enum Receiver {
 /// nearest space above it with an agent, or the first one above on
 /// another machine. An event about no known space, which names repeat too
 /// much to find, has none.
-fn coordinator(
+pub(crate) fn coordinator(
     db: &Connection,
     id: Option<SpaceId>,
     source: Source,

@@ -306,10 +306,10 @@ async fn a_full_message_queue_defers_only_its_own_retry() {
     for n in 0..crate::daemon::agent_messages::MAX_UNREAD {
         manager
             .send_space_message(
+                None,
                 &SpaceSelector::id(&full.id),
                 format!("unread {n}"),
                 Vec::new(),
-                &Attacher::User,
             )
             .await
             .unwrap();
@@ -661,7 +661,7 @@ async fn usage_limits_keep_retrying_beyond_a_week_and_survive_reopen() -> Result
                 let pending = get(tx, &id)?.context("pending usage-limit retry")?;
                 assert!(pending.due_at > now);
                 assert!(deliver(tx, &id, pending.due_at)?);
-                tx.execute("DELETE FROM space_messages WHERE space_id=?1", [&id])?;
+                tx.execute("DELETE FROM alerts WHERE recipient_id=?1", [&id])?;
                 now = pending.due_at;
             }
             record_failure(tx, &id, &scheduling_execution, failure, now, 0.5)?;

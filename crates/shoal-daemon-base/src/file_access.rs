@@ -22,6 +22,7 @@ use futures_util::future::BoxFuture;
 use tokio::time::Instant;
 
 use super::{
+    alerts::NewAlert,
     log,
     notifications::{About, AlertKind, Notifications},
 };
@@ -99,9 +100,8 @@ impl FileAccess {
             let (result, stall) = self.check(path, check).await;
             if let Some(stall) = stall {
                 let kind = AlertKind::AccessStalled;
-                (notifications)
-                    .notify_user(About::default(), kind, stall.message())
-                    .await;
+                let alert = NewAlert::shoal(kind, About::default(), stall.message());
+                notifications.notify_user(alert).await;
             }
             result
         })

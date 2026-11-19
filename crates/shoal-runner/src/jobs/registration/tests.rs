@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex, atomic::Ordering};
 use serde_json::json;
 use shoal_forge::test_support::Server;
 use shoal_forge_types::backends::ForgeKind;
-use shoal_protocol::notifications::Notification;
+use shoal_protocol::alerts::Alert;
 
 use super::*;
 use crate::stand_in::{Fixture, runner_program};
@@ -56,7 +56,7 @@ async fn registration(fixture: &Fixture) -> Option<Registration> {
     registration.await.unwrap()
 }
 
-async fn runner_notifications(fixture: &Fixture) -> Vec<Notification> {
+async fn runner_notifications(fixture: &Fixture) -> Vec<Alert> {
     let notifications = fixture.runner.notifications.list(false, 50).await.unwrap();
     notifications
         .into_iter()

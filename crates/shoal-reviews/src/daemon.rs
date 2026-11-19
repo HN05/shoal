@@ -123,15 +123,22 @@ pub trait Agents: Send + Sync {
     /// stopped.
     fn hold_admission(&self, repository: &RepositoryId);
 
-    /// Queue `message` for the agents of the space `id`.
-    fn message<'a>(&'a self, id: &'a SpaceId, message: String) -> BoxFuture<'a, Result<()>>;
+    /// Queue `message`, an alert of `kind`, for the agents of the space
+    /// `id`.
+    fn message<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        kind: AlertKind,
+        message: String,
+    ) -> BoxFuture<'a, Result<()>>;
 
     /// Tell the coordinator of the space `id`, named `name`, about one of
-    /// its reviews.
+    /// its reviews or gate decisions, in an alert of `kind`.
     fn tell_coordinator<'a>(
         &'a self,
         name: &'a SpaceName,
         id: &'a SpaceId,
+        kind: AlertKind,
         message: String,
     ) -> BoxFuture<'a, ()>;
 }
@@ -191,9 +198,14 @@ pub trait Requesters: Send + Sync {
         repository: Option<&'a RepositoryId>,
     ) -> BoxFuture<'a, Result<Permissions>>;
 
-    /// Tell the agents of the space `id`, wherever it runs, `message`;
-    /// whether it was queued for them.
-    fn tell_space<'a>(&'a self, id: &'a SpaceId, message: String) -> BoxFuture<'a, bool>;
+    /// Tell the agents of the space `id`, wherever it runs, `message`, an
+    /// alert of `kind`; whether it was queued for them.
+    fn tell_space<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        kind: AlertKind,
+        message: String,
+    ) -> BoxFuture<'a, bool>;
 
     /// Tell the user `message`, of `kind`, about what `about` names.
     fn notify(&self, about: About, kind: AlertKind, message: String) -> BoxFuture<'_, ()>;

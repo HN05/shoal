@@ -79,7 +79,8 @@ fn fire(tx: &Transaction<'_>, id: &SpaceId, now: UnixTime) -> Result<bool> {
     let Some(message) = message else {
         return Ok(false);
     };
-    let queued = agent_messages::queue_shoal_message(tx, id, &delivery(message.as_deref()))?;
+    let kind = crate::daemon::alerts::AlertKind::WakeTimer;
+    let queued = agent_messages::queue_shoal_message(tx, id, kind, &delivery(message.as_deref()))?;
     Ok(queued.is_some())
 }
 

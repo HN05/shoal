@@ -107,7 +107,11 @@ pub(super) fn scope_of(machine: &Base, id: &str) -> String {
 /// holds `text`.
 fn message_with(machine: &Base, id: &str, text: &str) -> Value {
     wait_for("the agent's message", || {
-        let messages = request(machine, json!({"agent_messages": {"space": id}}));
+        let to = json!({"space": {"space": id}});
+        let messages = request(
+            machine,
+            json!({"list_alerts": {"to": to, "unread_only": true, "limit": 50}}),
+        );
         let messages = messages["data"].as_array().cloned().unwrap_or_default();
         (messages.into_iter()).find(|message| {
             message["message"]
@@ -272,16 +276,10 @@ fn a_coordinator_messages_its_child_on_another_machine_and_nothing_outside_its_s
         command.env("SHOAL_SCOPE_TOKEN", &token).args(args);
         command.output().unwrap()
     };
-    let sent = scoped(&[
-        "messages",
-        "send",
-        "--space",
-        &child,
-        "from the coordinator",
-    ]);
+    let sent = scoped(&["send", "--space", &child, "from the coordinator"]);
     assert!(sent.status.success(), "{}", printed(&sent));
     message_with(&laptop, &child, "from the coordinator");
-    let refused = scoped(&["messages", "send", "--space", &other, "not yours"]);
+    let refused = scoped(&["send", "--space", &other, "not yours"]);
     assert!(!refused.status.success(), "{}", printed(&refused));
     let error = String::from_utf8_lossy(&refused.stderr);
     assert!(error.contains("outside this space's scope"), "{error}");
@@ -327,7 +325,7 @@ fn the_hub_holds_a_message_for_an_offline_machine_and_refuses_what_cannot_wait()
         let laptop = (members.as_array().unwrap().iter()).find(|member| member["name"] == "laptop");
         (laptop?["connected"] == false).then_some(())
     });
-    let queued = hub.ok(&["messages", "send", "--space", &there, "while away"]);
+    let queued = hub.ok(&["send", "--space", &there, "while away"]);
     assert_eq!(queued["name"], "laptop", "{queued}");
     assert!(queued["expires_at"].is_number(), "{queued}");
     let stop = hub.ok(&["stop", &there]);
@@ -382,7 +380,7 @@ fn a_question_for_an_offline_coordinator_goes_on_to_the_user() {
     );
     assert_ne!(asked["type"], "error", "{asked}");
     wait_for("the question to reach the user", || {
-        let alerts = laptop.ok(&["alerts"]);
+        let alerts = laptop.ok(&["alert", "list", "--unread"]);
         (alerts.as_array().unwrap().iter())
             .find(|alert| alert["kind"] == "question_asked" && alert["space_id"] == child.as_str())
             .cloned()

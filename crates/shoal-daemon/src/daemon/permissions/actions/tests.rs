@@ -223,12 +223,13 @@ async fn releasing_the_user_s_hold_follows_the_user_holds_permission() {
 
 #[tokio::test]
 async fn reading_the_user_s_notifications_follows_the_notifications_permission() {
-    use crate::{daemon::scope::Scoped, protocol::NotificationMethod};
+    use crate::{daemon::scope::Scoped, protocol::AlertMethod};
 
     let (_temp, manager) = manager().await;
     let master = chat(&manager, "master", "orchestrate", None, None).await;
     let below = chat(&manager, "below", "chat", None, Some(&master.id)).await;
-    let list = || NotificationMethod::ListNotifications {
+    let list = || AlertMethod::ListAlerts {
+        to: crate::protocol::AlertsFor::User,
         unread_only: false,
         limit: 10,
     };

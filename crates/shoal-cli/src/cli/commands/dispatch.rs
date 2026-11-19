@@ -3,7 +3,6 @@ pub(super) mod approvals;
 pub(super) mod changes;
 pub(super) mod coordination;
 pub(super) mod create;
-pub(super) mod diagnostics;
 pub(super) mod integration;
 pub(super) mod internal;
 pub(super) mod items;

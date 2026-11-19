@@ -18,7 +18,7 @@ its own from the first file that sets it:
    `.shoal/config.toml`; both together is an error. Where no workspace applies,
    such as for the seed build or a repository's agent limit, the registered
    checkout's file applies. A worktree file the current format rejects is
-   ignored, with a warning in `shoal config show` and a notification.
+   ignored, with a warning in `shoal config show` and an alert.
 3. The **global config**, `~/.config/shoal/config.toml` (or
    `$XDG_CONFIG_HOME/shoal/config.toml`), which `shoal daemon install` creates
    from [default.toml](../../../../../shoal-core/configs/default.toml).
@@ -589,7 +589,7 @@ of a PR or a branch, its automatic merge and `unmerge`, `push` pushes to the rep
 `daemon` installing, starting, stopping and restarting the daemon and
 `shoal update` while a daemon of the same Shoal answers to decide it, `limits` starting agents regardless of `max_heavy_agents` and
 memory, `user_holds` releasing the user's holds and removing the spaces the
-user holds, `notifications` reading your notifications, Shoal's own log and
+user holds, `notifications` reading your alerts, Shoal's own log and
 the inbox's daemon-wide problems, `decide` deciding the approval requests of
 the spaces below as you would, `ci_approve` approving CI runs that wait for
 approval, `pr_review` approving and requesting changes on PRs, as the host's
@@ -675,9 +675,9 @@ See [sleep](../../../../../../docs/reference.md#sleep).
 settle_seconds = 5   # At most 60; 0 delivers each message at once
 ```
 
-`settle_seconds` holds an agent's unread messages until none has arrived for
+`settle_seconds` holds an agent's unread alerts until none has arrived for
 that long, and at most six times as long after the first; see
-[agent messages](../../../../../../docs/reference.md#agent-messages).
+[alerts](../../../../../../docs/reference.md#alerts).
 
 ### Triggers
 

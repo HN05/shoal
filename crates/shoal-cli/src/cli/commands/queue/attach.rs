@@ -119,12 +119,12 @@ async fn agent_terminal_session(
                 }
                 ensure!(
                     current.is_some(),
-                    "{} has no agent session to attach; shoal status {id} shows whether its agent runs, and shoal alerts why it did not start",
+                    "{} has no agent session to attach; shoal status {id} shows whether its agent runs, and shoal alert list why it did not start",
                     entry.name
                 );
             }
             None if current.is_none() => {
-                bail!("{} did not start; shoal alerts shows why", entry.name)
+                bail!("{} did not start; shoal alert list shows why", entry.name)
             }
             None => {}
         }

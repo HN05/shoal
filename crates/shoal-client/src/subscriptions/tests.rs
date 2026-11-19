@@ -7,6 +7,7 @@ use shoal_core::execution::recovery::LastSessionExt as _;
 use shoal_core::removal::{InspectionPolicy, UnsavedWork};
 use shoal_daemon::test_daemon::{ApprovalRequestExt as _, HANG, TestDaemon, store_issue_proposal};
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::alerts::Sender;
 use shoal_protocol::config::repo::Lifetime;
 use shoal_protocol::files::Attacher;
 use shoal_protocol::model::{HoldPlacer, Relation};
@@ -15,7 +16,7 @@ use shoal_protocol::questions::Ask;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::subscriptions::{
     Update,
-    records::{MessageRecipient, Record, RecordKind, Topic},
+    records::{Record, RecordKind, Topic},
 };
 
 use super::Subscription;
@@ -146,28 +147,34 @@ async fn a_subscription_sends_its_snapshot_then_each_kind_of_change() {
 
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&workspace.id),
             "Rebase on main".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
     until(&mut subscription, |update| {
-        matches!(update, Update::Changed(record) if matches!(&**record, Record::Message(m) if m.recipient == MessageRecipient::Agent))
+        matches!(update, Update::Changed(record) if matches!(&**record, Record::Alert(m) if m.recipient.is_some()))
     })
     .await;
     manager
-        .send_message(
-            &SpaceSelector::id(&workspace.id),
+        .send_alert(
+            Some(&shoal_daemon::test_daemon::Caller {
+                space_id: workspace.id.clone(),
+                execution: None,
+                granted: None,
+                read_only: false,
+                vouched: None,
+            }),
+            shoal_protocol::protocol::AlertTarget::Up,
             "Ready for review".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
     until(&mut subscription, |update| {
-        matches!(update, Update::Changed(record) if matches!(&**record, Record::Message(m) if m.recipient == MessageRecipient::User))
+        matches!(update, Update::Changed(record) if matches!(&**record, Record::Alert(m) if m.recipient.is_none() && m.sender == Sender::Space))
     })
     .await;
 
@@ -339,16 +346,16 @@ async fn a_chat_reaches_a_subscription_with_its_agent_links_and_messages() {
         .await
         .unwrap();
     manager
-        .send_space_message(&selector, "Plan it".into(), Vec::new(), &Attacher::User)
+        .send_space_message(None, &selector, "Plan it".into(), Vec::new())
         .await
         .unwrap();
-    let topics = [Topic::Spaces, Topic::Links, Topic::Messages];
+    let topics = [Topic::Spaces, Topic::Links, Topic::Alerts];
     let mut subscription = subscribe(daemon.connector(), &topics).await;
     let records = snapshot(&mut subscription).await;
     let [
         Record::Space(space),
         Record::Link(link),
-        Record::Message(message),
+        Record::Alert(message),
     ] = records.as_slice()
     else {
         panic!("expected the chat, its link and its message: {records:?}");
@@ -360,9 +367,10 @@ async fn a_chat_reaches_a_subscription_with_its_agent_links_and_messages() {
     let agent = space.agent.as_ref().and_then(|agent| agent.agent.as_ref());
     assert_eq!(agent.map(AsRef::<str>::as_ref), Some("claude"));
     assert_eq!(link.space_id, chat.id);
+    let recipient = message.recipient.as_ref();
     assert_eq!(
-        (message.space_id.as_ref(), message.space.as_deref()),
-        (Some(&chat.id), Some("planning"))
+        recipient.map(|to| (&to.id, to.name.as_str())),
+        Some((&chat.id, "planning"))
     );
 }
 
@@ -581,24 +589,27 @@ async fn a_scoped_subscription_without_space_records_names_its_tree() {
         daemon
             .manager
             .send_space_message(
+                None,
                 &SpaceSelector::id(&workspace.id),
                 "Rebase on main".into(),
                 Vec::new(),
-                &Attacher::User,
             )
             .await
             .unwrap();
     }
-    let topics = [Topic::Questions, Topic::Messages];
+    let topics = [Topic::Questions, Topic::Alerts];
     let mut subscription = subscribe(daemon.scoped(&own).await, &topics).await;
     let records = snapshot(&mut subscription).await;
     assert_eq!(records.len(), 2, "{records:?}");
     for record in &records {
         match record {
             Record::Question(question) => assert_eq!(question.space_id, own.id),
-            Record::Message(message) => {
-                assert_eq!(message.space_id.as_ref(), Some(&own.id));
-                assert_eq!(message.space.as_deref(), Some(own.name.as_str()));
+            Record::Alert(message) => {
+                let recipient = message.recipient.as_ref();
+                assert_eq!(
+                    recipient.map(|to| (&to.id, to.name.as_str())),
+                    Some((&own.id, own.name.as_str()))
+                );
             }
             other => panic!("unexpected record: {other:?}"),
         }

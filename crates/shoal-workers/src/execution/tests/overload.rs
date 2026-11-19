@@ -859,10 +859,10 @@ async fn an_idle_agent_waiting_for_an_update_lets_a_daemon_update_through() {
     manager.config_state.publish_disk_reading(Some(generation));
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&workspace.id),
             "Review requested".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();

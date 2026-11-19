@@ -2,9 +2,9 @@
 //! hangs up. Cancelling one that changes state could leave it half done, so
 //! those finish instead, including reads that first finish or record work.
 use super::{
-    AgentMethod, AppMethod, ApprovalMethod, BranchMethod, CiMethod, ContainerMethod, DaemonMethod,
-    DemoMethod, ExecutionMethod, FileMethod, HoldMethod, HubMethod, ItemMethod, LaunchMethod,
-    NotificationMethod, Operation, PortMethod, QuestionMethod, QueueMethod, RecoveryMethod,
+    AgentMethod, AlertMethod, AppMethod, ApprovalMethod, BranchMethod, CiMethod, ContainerMethod,
+    DaemonMethod, DemoMethod, ExecutionMethod, FileMethod, HoldMethod, HubMethod, ItemMethod,
+    LaunchMethod, Operation, PortMethod, QuestionMethod, QueueMethod, RecoveryMethod,
     RemovalMethod, RepositoryMethod, ResourceMethod, SecretMethod, SimulatorMethod, TriggerMethod,
     WorkspaceMethod,
 };
@@ -15,8 +15,7 @@ impl Operation {
             self,
             Self::Daemon(DaemonMethod::Status)
                 | Self::Agent(
-                    AgentMethod::AgentMessages { .. }
-                        | AgentMethod::AgentUpdates { .. }
+                    AgentMethod::AgentUpdates { .. }
                         | AgentMethod::Progress { .. }
                         | AgentMethod::GitCredential { .. }
                 )
@@ -56,7 +55,7 @@ impl Operation {
                         | ItemMethod::ViewItems { .. }
                         | ItemMethod::ForgeDownload { .. }
                 )
-                | Self::Alert(NotificationMethod::ListNotifications { .. })
+                | Self::Alert(AlertMethod::ListAlerts { .. })
                 | Self::Port(PortMethod::PortOverview { .. } | PortMethod::PortCatalog { .. })
                 | Self::Question(
                     QuestionMethod::ListQuestions { .. } | QuestionMethod::ShowQuestion { .. }

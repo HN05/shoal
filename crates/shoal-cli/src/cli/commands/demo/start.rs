@@ -100,14 +100,8 @@ pub(super) async fn start(
     );
     if crate::env::is_scoped() {
         let message = format!("Demo {} is running; open it with {opening}", chosen.name);
-        let space = workspace.id.clone();
-        crate::client::notifications::send(
-            &ctx.paths,
-            SpaceSelector::id(&space),
-            message,
-            Vec::new(),
-        )
-        .await?;
+        let up = shoal_protocol::protocol::AlertTarget::Up;
+        crate::client::alerts::send(&ctx.paths, up, message, Vec::new()).await?;
     }
     ctx.emit_styled(
         Style::Success,

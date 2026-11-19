@@ -1,4 +1,4 @@
-//! Arguments of commands agents and the user coordinate with: messages, questions and completion.
+//! Arguments of commands agents and the user coordinate with: alerts, questions and completion.
 use std::path::PathBuf;
 
 use clap::{Args, Subcommand};
@@ -9,17 +9,47 @@ use shoal_protocol::space_names::SpaceSelector;
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum CoordinationCommand {
-    /// Read new messages or send one to a space's agents.
-    #[command(args_conflicts_with_subcommands = true)]
-    Messages {
-        #[command(subcommand)]
-        command: Option<MessagesCommand>,
-        /// Space, a workspace or chat, whose messages to read; defaults to the
-        /// current workspace or chat, or a picker.
+    /// Send an alert: up to your coordinator, or else the user; with
+    /// --space down to a space's agent, or with --all or --repo to every
+    /// agent below. From the user's terminal it picks the space.
+    Send {
+        /// Text such as "Stop the dev server before running tests".
+        #[arg(required_unless_present_any = ["body_file", "attach"])]
+        message: Option<String>,
+        /// Read the text from a file, such as multi-line instructions.
+        #[arg(long, value_name = "PATH", conflicts_with = "message")]
+        body_file: Option<PathBuf>,
+        /// Attach a file, such as a screenshot or log, as PATH or
+        /// PATH#TITLE, which Shoal copies where the recipient can read it;
+        /// repeat for more.
+        #[arg(long = "attach", value_name = "FILE")]
+        attach: Vec<String>,
+        /// Space, a workspace or chat, whose agent receives it.
+        #[arg(short = 's', long, conflicts_with_all = ["all", "repository"])]
         space: Option<SpaceSelector>,
-        /// Run as an agent hook: read the hook event on stdin, print new
-        /// messages as additional context, and never fail the agent.
-        #[arg(long, conflicts_with = "space")]
+        /// Send to every agent of the workspaces and chats your scope
+        /// reaches, such as to tell them the network works again: running
+        /// ones now, and stopped, queued or restoring ones when they next
+        /// run.
+        #[arg(short = 'A', long, conflicts_with = "repository")]
+        all: bool,
+        /// Send to every agent of this repository's workspaces and chats,
+        /// such as to have them rebase onto a fix on its default branch;
+        /// without a value, the current repository, else a picker. Put the
+        /// text before a --repo without a value.
+        #[arg(short = 'r', long = "repo", num_args = 0..=1, value_name = "REPOSITORY")]
+        repository: Option<Option<String>>,
+    },
+    /// List, withdraw or clear alerts.
+    Alert {
+        #[command(subcommand)]
+        command: AlertCommand,
+    },
+    /// The agent hook of an earlier release, which agents it started still
+    /// run until they restart: `shoal internal deliver`.
+    #[command(hide = true)]
+    Messages {
+        #[arg(long, required = true)]
         hook: bool,
     },
     /// Review and answer questions from the agents of workspaces and chats.
@@ -203,37 +233,49 @@ pub struct QuestionsArgs {
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
-pub enum MessagesCommand {
-    /// Queue a message for the agents working in a space.
-    Send {
-        /// Text such as "Stop the dev server before running tests".
-        #[arg(required_unless_present_any = ["body_file", "attach"])]
-        message: Option<String>,
-        /// Read the message from a file, such as multi-line instructions.
-        #[arg(long, value_name = "PATH", conflicts_with = "message")]
-        body_file: Option<PathBuf>,
-        /// Attach a file, such as a screenshot or log, as PATH or
-        /// PATH#TITLE, which Shoal copies where the agents can read it;
-        /// repeat for more.
-        #[arg(long = "attach", value_name = "FILE")]
-        attach: Vec<String>,
-        /// Space, a workspace or chat, to send to; defaults to the current
-        /// workspace or chat, or a picker.
-        #[arg(short = 's', long, conflicts_with_all = ["all", "repository"])]
-        space: Option<SpaceSelector>,
-        /// Send to every agent of the workspaces and chats, such as to tell
-        /// them the network works again: running ones now, and stopped,
-        /// queued or restoring ones when they next run.
-        #[arg(short = 'A', long, conflicts_with = "repository")]
-        all: bool,
-        /// Send to every agent of this repository's workspaces and chats,
-        /// such as to have them rebase onto a fix on its default branch:
-        /// running ones now, and stopped, queued or restoring ones when they
-        /// next run; without a value, the current repository, else a picker.
-        /// Put the message before a --repo without a value.
-        #[arg(short = 'r', long = "repo", num_args = 0..=1, value_name = "REPOSITORY")]
-        repository: Option<Option<String>>,
+pub enum AlertCommand {
+    /// Show alerts for you: in a picker on a terminal, else as a list.
+    /// Showing them marks them read.
+    List(AlertListArgs),
+    /// Withdraw an alert you sent before its recipient reads it.
+    Withdraw {
+        /// Alert number, as shoal send printed it.
+        id: i64,
     },
+    /// Delete the user's alerts, including unread ones.
+    Clear,
+}
+
+// Arguments of `shoal alert list`; a doc comment would replace the
+// command's help.
+#[derive(Debug, Args)]
+pub struct AlertListArgs {
+    /// Space, a workspace or chat, whose agent's alerts to show; defaults
+    /// to your own space, or the user's alerts from the user's terminal.
+    #[arg(short = 's', long, conflicts_with = "all")]
+    pub space: Option<SpaceSelector>,
+    /// Show the alerts of every recipient you may read: the user and each
+    /// space your scope reaches.
+    #[arg(short = 'A', long)]
+    pub all: bool,
+    /// Show only unread alerts, oldest first.
+    #[arg(short = 'u', long)]
+    pub unread: bool,
+    /// Keep printing the user's new alerts as Shoal records them.
+    #[arg(long, conflicts_with_all = ["space", "all", "print"])]
+    pub follow: bool,
+    /// Show alerts without marking them read.
+    #[arg(long)]
+    pub keep_unread: bool,
+    /// Print the list instead of opening the picker on a terminal.
+    #[arg(short = 'p', long)]
+    pub print: bool,
+    /// Continue following after this alert, as the installed release does
+    /// after an upgrade restarted the daemon.
+    #[arg(long, hide = true, requires = "follow")]
+    pub resume: Option<i64>,
+    #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..=200))]
+    pub limit: u32,
 }
 
 // Arguments of `shoal sleep` that set the agent's timer, replacing the one

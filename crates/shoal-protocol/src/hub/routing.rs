@@ -114,10 +114,10 @@ pub struct Told {
     /// The space below `above` it is about.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub about: Option<ToldAbout>,
-    /// The notification the event is for the user, if no space above takes
-    /// it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub kind: Option<AlertKind>,
+    /// The kind of alert it is.
+    pub kind: AlertKind,
+    /// Whether the user receives it when no space above takes it.
+    pub for_user: bool,
     pub message: String,
     /// What the space's machine kept of the files it sent, which stay
     /// there.

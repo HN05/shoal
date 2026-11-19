@@ -8,6 +8,7 @@ use shoal_forge_types as forge;
 use shoal_protocol::{model, protocol, state, time};
 use shoal_store as store;
 
+pub mod alerts;
 pub mod approval_requests;
 pub mod callers;
 pub mod config_state;

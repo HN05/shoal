@@ -7,7 +7,7 @@ use crate::client::output::workspaces::InChat;
 use crate::{
     cli::{
         args::coordination::QuestionsArgs,
-        commands::messages::hanging_indent,
+        commands::alerts::hanging_indent,
         context::Context,
         installed::{arguments, replace_option, without_option},
         output::{Palette, Style},
@@ -55,7 +55,7 @@ pub(super) async fn ask(
     attach: Vec<String>,
     wait: bool,
 ) -> Result<i32> {
-    let attachments = super::messages::attachments(&attach)?;
+    let attachments = super::send::attachments(&attach)?;
     shoal_protocol::files::check_sent(&attachments)?;
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let question = questions::ask(&ctx.paths, space.clone(), ask, attachments).await?;
@@ -76,7 +76,7 @@ pub(super) async fn ask(
     } else {
         question
     };
-    print_answer(ctx, space, &question).await?;
+    print_answer(ctx, &question).await?;
     Ok(0)
 }
 
@@ -100,12 +100,12 @@ pub(super) async fn resume(
     ask: Ask,
 ) -> Result<i32> {
     let question = await_answer(ctx, &space, Asked { item, ask }, true).await?;
-    print_answer(ctx, space, &question).await?;
+    print_answer(ctx, &question).await?;
     Ok(0)
 }
 
 /// Printed here, the answer's message need not reach the agent again.
-async fn print_answer(ctx: &Context, space: SpaceSelector, question: &Question) -> Result<()> {
+async fn print_answer(ctx: &Context, question: &Question) -> Result<()> {
     let QuestionStatus::Answered {
         answer, message_id, ..
     } = &question.status
@@ -117,7 +117,7 @@ async fn print_answer(ctx: &Context, space: SpaceSelector, question: &Question) 
     let Some(id) = *message_id else {
         return Ok(());
     };
-    crate::client::agent_messages::mark_delivered(&ctx.paths, space, vec![id]).await
+    crate::client::alerts::mark_read(&ctx.paths, vec![id]).await
 }
 
 /// The question a wait follows: its number within its space and what it

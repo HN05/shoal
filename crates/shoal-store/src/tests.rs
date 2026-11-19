@@ -733,6 +733,9 @@ pub(super) fn historical_database(version: i64) -> Result<Connection> {
     if version >= 248 {
         db.execute_batch(include_str!("lifecycle_generations.sql"))?;
     }
+    if version >= 249 {
+        db.execute_batch(include_str!("alerts.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -778,6 +781,10 @@ const DROPS_UPGRADE_STATE: i64 = 180;
 
 /// The migration that drops queued launches that create their workspace.
 const DROPS_CREATING_LAUNCHES: i64 = 227;
+
+/// The migration that merges notifications and space messages into alerts,
+/// which tests of the migrations that fill either table stop before.
+const MERGES_ALERTS: i64 = 249;
 
 /// Upgrade `db` as v0.17.0 does when its daemon starts: migrate it to that
 /// release's version, then consume the upgrade state the next migration
@@ -1019,7 +1026,8 @@ fn migration_names_recorded_chats_and_keeps_what_they_own() -> Result<()> {
         Ok(db.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))?)
     };
     let events = count(&db, "workspace_events")?;
-    migrate_through_v0_17_0(&mut db)?;
+    start_v0_17_0(&mut db)?;
+    migrate_to(&mut db, MERGES_ALERTS - 1)?;
 
     let names = db
         .prepare("SELECT id,name FROM spaces WHERE kind='chat' ORDER BY id")?
@@ -1294,7 +1302,8 @@ fn migration_numbers_items_within_their_space() -> Result<()> {
              (5,'worker','approval_requested','approval 4: hold it; approve with shoal approvals --approve 4','workspace','decided'),
              (6,'worker','approval_withdrawn','approval 4: hold it was withdrawn; no decision needed','workspace',NULL);"#,
     )?;
-    migrate_through_v0_17_0(&mut db)?;
+    start_v0_17_0(&mut db)?;
+    migrate_to(&mut db, MERGES_ALERTS - 1)?;
     let numbers = |table: &str| -> Result<Vec<(String, i64, i64)>> {
         let key = match table {
             "questions" => "question",
@@ -1599,7 +1608,8 @@ fn migrated_notifications_name_the_numbered_commands() -> Result<()> {
                 (2,'w','agent_message','run shoal access approve 7'),
                 (3,'w','question_asked','question 4 (answer with shoal answer 4): Which database?');",
         )?;
-    migrate_through_v0_17_0(&mut db)?;
+    start_v0_17_0(&mut db)?;
+    migrate_to(&mut db, MERGES_ALERTS - 1)?;
     let rows = db
         .prepare("SELECT kind,message FROM notifications ORDER BY id")?
         .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
@@ -1777,7 +1787,7 @@ fn migration_drops_the_queued_launches_that_create_their_workspace() -> Result<(
                 ('chat','launch','repo','talk','claude','{"chat_start":{"resolved":{}}}','{}','queued',1,NULL),
                 ('opens','launch','repo','worker','claude','{}','{}','queued',1,'workspace');"#,
     )?;
-    migrate(&mut db)?;
+    migrate_to(&mut db, MERGES_ALERTS - 1)?;
     let kept: Vec<String> = (db.prepare("SELECT id FROM agent_queue ORDER BY id")?)
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?;
@@ -1836,7 +1846,7 @@ fn migration_drops_the_queued_chat_launches_that_run_their_arguments_again() -> 
             VALUES ('relaunch','launch','repo','talk','claude','{"chat_start":{"relaunch":{"args":[]}}}','{}','queued',1),
                 ('resolved','launch','repo','plan','claude','{"chat_start":{"resolved":{}}}','{}','queued',1);"#,
     )?;
-    migrate(&mut db)?;
+    migrate_to(&mut db, MERGES_ALERTS - 1)?;
     let kept: Vec<String> = (db.prepare("SELECT id FROM agent_queue ORDER BY id")?)
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?;
@@ -3048,7 +3058,8 @@ fn chats_may_have_no_repository_once_migrated_and_keep_what_references_them() ->
         INSERT INTO chat_messages(chat_id,created_at,workspace,message)
             VALUES ('chat',1,'worker','Hello');",
     )?;
-    migrate_through_v0_17_0(&mut db)?;
+    start_v0_17_0(&mut db)?;
+    migrate_to(&mut db, MERGES_ALERTS - 1)?;
     db.execute_batch(
         "INSERT INTO spaces(id,kind,name,mode) VALUES ('master','chat','master','chat');
          INSERT INTO chats(id) VALUES ('master');",
@@ -3273,7 +3284,7 @@ fn every_space_keeps_its_unread_messages_in_one_table() -> Result<()> {
                  answered_at,message_id,number)
              VALUES ('chat',1,'Which?','A','[]','A',2,4,1);"#,
     )?;
-    migrate(&mut db)?;
+    migrate_to(&mut db, MERGES_ALERTS - 1)?;
     type Row = (
         i64,
         String,
@@ -3562,7 +3573,7 @@ fn migration_keeps_questions_requests_and_notifications_with_their_spaces() -> R
          INSERT INTO notifications(created_at,kind,message,workspace_id)
              VALUES (1,'agent_message','hi','chat'),(1,'agent_message','gone','removed');",
     )?;
-    migrate(&mut db)?;
+    migrate_to(&mut db, MERGES_ALERTS - 1)?;
     let pairs = |sql: &str| -> Result<Vec<(String, Option<String>)>> {
         Ok(db
             .prepare(sql)?
@@ -3701,5 +3712,177 @@ fn migration_moves_plans_into_their_workspaces_and_drops_unplanned_failures() ->
         [],
     )?;
     db.execute(finished, [])?;
+    Ok(())
+}
+
+#[test]
+fn notifications_and_space_messages_become_alerts_with_their_sender() -> Result<()> {
+    let mut db = historical_database(MERGES_ALERTS - 1)?;
+    db.execute_batch(
+        r#"BEGIN;
+         INSERT INTO chats(id) VALUES ('chat');
+         INSERT INTO spaces(id,kind,repository_id,name,number)
+             VALUES ('chat','chat','repo','chat',2);
+         COMMIT;
+         INSERT INTO space_files(id,space_id,space,source,name,path,bytes,created_at)
+             VALUES (7,'workspace','worker','alert','a.png','/repo/.attachments/a.png',1,1);
+         INSERT INTO notifications(id,created_at,workspace,space_id,kind,message,read,files)
+             VALUES (1,1,'worker','workspace','agent_message','ready',1,'[7]'),
+                 (4,2,NULL,NULL,'resource_busy','busy',0,'[]');
+         UPDATE sqlite_sequence SET seq=6 WHERE name='notifications';
+         INSERT INTO space_messages(id,space_id,created_at,message,wakes,about,about_id,kind)
+             VALUES (2,'chat',3,'from the user',1,NULL,NULL,NULL),
+                 (3,'chat',4,'done',0,'worker','workspace','agent_message');
+         UPDATE sqlite_sequence SET seq=9 WHERE name='space_messages';
+         INSERT INTO questions(space_id,created_at,question,recommendation,choices,answer,
+                 answered_at,message_id,number)
+             VALUES ('chat',1,'Which?','A','[]','A',2,3,1);
+         INSERT INTO hub_outbox(call,queued_at) VALUES
+             ('{"tell":{"told":{"above":"x","about":{"space":"s","name":"n"},"message":"m"}}}',1),
+             ('{"tell":{"told":{"above":"x","kind":"agent_message","message":"m"}}}',2);"#,
+    )?;
+    migrate(&mut db)?;
+    type Row = (
+        i64,
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        String,
+        bool,
+        bool,
+        String,
+    );
+    let rows: Vec<Row> = db
+        .prepare(
+            "SELECT id,kind,sender,recipient_id,space_id,message,read,for_user,attachments
+                FROM alerts ORDER BY id",
+        )?
+        .query_map([], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+                r.get(6)?,
+                r.get(7)?,
+                r.get(8)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    let owned = |text: Option<&str>| text.map(str::to_owned);
+    // ID, kind, sender, recipient, space named, message, read, for the user
+    // and attachments.
+    type Expected<'a> = (
+        i64,
+        &'a str,
+        &'a str,
+        Option<&'a str>,
+        Option<&'a str>,
+        &'a str,
+        bool,
+        bool,
+        &'a str,
+    );
+    let row = |(id, kind, sender, to, space, message, read, for_user, files): Expected<'_>| -> Row {
+        let (kind, sender, message, files) =
+            (kind.into(), sender.into(), message.into(), files.into());
+        (
+            id,
+            kind,
+            sender,
+            owned(to),
+            owned(space),
+            message,
+            read,
+            for_user,
+            files,
+        )
+    };
+    // Space messages move above every ID notifications gave, and keep the
+    // questions whose answers they carry.
+    let attached = r#"["/repo/.attachments/a.png"]"#;
+    assert_eq!(
+        rows,
+        [
+            row((
+                1,
+                "message",
+                "space",
+                None,
+                Some("workspace"),
+                "ready",
+                true,
+                false,
+                attached
+            )),
+            row((
+                4,
+                "resource_busy",
+                "shoal",
+                None,
+                None,
+                "busy",
+                false,
+                false,
+                "[]"
+            )),
+            row((
+                8,
+                "message",
+                "user",
+                Some("chat"),
+                None,
+                "from the user",
+                false,
+                false,
+                "[]"
+            )),
+            row((
+                9,
+                "message",
+                "shoal",
+                Some("chat"),
+                Some("workspace"),
+                "done",
+                false,
+                true,
+                "[]"
+            )),
+        ]
+    );
+    let message_id: i64 = db.query_row("SELECT message_id FROM questions", [], |r| r.get(0))?;
+    assert_eq!(message_id, 9);
+    db.execute(
+        "INSERT INTO alerts(created_at,kind,sender,message) VALUES (5,'message','user','next')",
+        [],
+    )?;
+    assert_eq!(db.last_insert_rowid(), 16);
+    let told: Vec<String> = db
+        .prepare("SELECT json_extract(call,'$.tell.told') FROM hub_outbox ORDER BY seq")?
+        .query_map([], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    let told: Vec<serde_json::Value> = told
+        .iter()
+        .map(|told| serde_json::from_str(told))
+        .collect::<serde_json::Result<_>>()?;
+    assert_eq!(
+        told.iter()
+            .map(|told| (told["kind"].clone(), told["for_user"].clone()))
+            .collect::<Vec<_>>(),
+        [
+            (serde_json::json!("ready_marked"), serde_json::json!(false)),
+            (serde_json::json!("message"), serde_json::json!(true)),
+        ]
+    );
+    // A space's alerts go with its row; those naming it stay.
+    db.execute("DELETE FROM spaces WHERE id='chat'", [])?;
+    let left: Vec<i64> = db
+        .prepare("SELECT id FROM alerts ORDER BY id")?
+        .query_map([], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    assert_eq!(left, [1, 4, 16]);
     Ok(())
 }

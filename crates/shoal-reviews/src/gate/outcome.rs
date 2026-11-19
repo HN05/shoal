@@ -13,6 +13,7 @@ use crate::{Reviews, agent::Agent, daemon::GateDaemon, log};
 use shoal_daemon_base::events;
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::{
+    alerts::AlertKind,
     approvals::{ApprovalRequest, GateVerdict},
     events::GateEvent,
     time::UnixTime,
@@ -192,7 +193,8 @@ impl Reviews {
             Ok(None) => return,
             Err(error) => return log!("approval {}: {error:#}", allowed.number),
         };
-        (daemon.tell_space(&pending.space_id, unapplied_message(&pending, &error))).await;
+        let message = unapplied_message(&pending, &error);
+        (daemon.tell_space(&pending.space_id, AlertKind::GateDecided, message)).await;
         daemon.announce(&pending).await;
     }
 
@@ -223,7 +225,8 @@ impl Reviews {
         if denied.target.is_proposal() {
             daemon.prune_proposal_files(&denied).await;
         }
-        (daemon.tell_space(&denied.space_id, denial_message(&denied, &recorded))).await;
+        let message = denial_message(&denied, &recorded);
+        (daemon.tell_space(&denied.space_id, AlertKind::GateDecided, message)).await;
         let verb = denial_verb(recorded.kind);
         self.tell_gate_coordinator(daemon, &denied, verb, recorded.reason)
             .await;
@@ -259,7 +262,7 @@ impl Reviews {
         };
         daemon.announce(&escalated).await;
         let message = escalation_message(&escalated, recorded.reason);
-        daemon.tell_space(&escalated.space_id, message).await;
+        (daemon.tell_space(&escalated.space_id, AlertKind::GateDecided, message)).await;
     }
 
     /// Tell the coordinator of the request's space, in one line, that the
@@ -279,7 +282,8 @@ impl Reviews {
             request.number,
             request.subject()
         );
-        (daemon.tell_coordinator(name, &request.space_id, line)).await;
+        let kind = AlertKind::GateDecided;
+        (daemon.tell_coordinator(name, &request.space_id, kind, line)).await;
     }
 }
 
@@ -290,8 +294,8 @@ fn denial_message(denied: &ApprovalRequest, recorded: &Recorded) -> String {
     match recorded.kind {
         GateVerdict::Failed => format!(
             "The gate could not decide approval {number} to {subject}, so it is denied: \
-             {reason}. Run the command again to ask again; tell the user with shoal alerts \
-             send or ask with shoal questions ask."
+             {reason}. Run the command again to ask again; tell the user with shoal send \
+             or ask with shoal questions ask."
         ),
         _ => format!(
             "The gate denied approval {number} to {subject}: {reason}. Change what it names \

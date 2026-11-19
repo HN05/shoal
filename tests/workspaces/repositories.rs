@@ -768,7 +768,7 @@ fn the_daemon_alerts_about_a_bare_flag_on_a_checkout_with_a_working_tree() {
     git(&fixture.repo, &["config", "core.bare", "true"]);
     fixture.ok(&["config", "reload"]);
     wait_until("the core.bare alert", || {
-        let alerts = fixture.ok(&["alerts", "--all", "--keep-unread"]);
+        let alerts = fixture.ok(&["alert", "list", "--keep-unread"]);
         alerts
             .as_array()
             .unwrap()

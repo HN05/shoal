@@ -297,7 +297,7 @@ fn message_hook_gives_up_on_a_daemon_that_does_not_answer() {
     // Connections queue without an answer, as with a daemon that is busy.
     let _listener = support::fake_daemon::bind_fake_daemon(root.path());
     let mut hook = support::cli(root.path())
-        .args(["messages", "--hook"])
+        .args(["internal", "deliver"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -875,12 +875,12 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
             "expected Repository, received Ok",
         ),
         (
-            vec!["alerts", "--follow"],
+            vec!["alert", "list", "--follow"],
             json!({"type": "spaces", "data": []}),
             "expected Ok, received Spaces",
         ),
         (
-            vec!["alerts", "--follow"],
+            vec!["alert", "list", "--follow"],
             json!({"type": "error", "data": {"code": "scope_denied", "message": "denied"}}),
             "scope_denied: denied",
         ),

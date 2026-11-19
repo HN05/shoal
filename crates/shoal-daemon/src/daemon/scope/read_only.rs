@@ -4,8 +4,7 @@
 //! client makes it.
 use super::Scoped;
 use crate::protocol::{
-    AgentMethod, ExecutionMethod, ItemMethod, LaunchMethod, NotificationMethod, Operation,
-    RemovalMethod,
+    AgentMethod, AlertMethod, ExecutionMethod, ItemMethod, LaunchMethod, Operation, RemovalMethod,
 };
 
 /// Whether a read-only scope may send `operation`.
@@ -19,7 +18,7 @@ fn takes_more_than_it_reads(operation: &Operation) -> bool {
     matches!(
         operation,
         Operation::Agent(AgentMethod::AgentUpdates { .. } | AgentMethod::GitCredential { .. })
-            | Operation::Alert(NotificationMethod::ListNotifications { .. })
+            | Operation::Alert(AlertMethod::ListAlerts { .. })
             | Operation::Item(ItemMethod::ForgeDownload { .. })
             | Operation::Launch(
                 LaunchMethod::CheckLaunch { .. } | LaunchMethod::LaunchModes { .. }

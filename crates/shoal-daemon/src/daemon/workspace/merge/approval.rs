@@ -115,7 +115,11 @@ impl Manager {
             request.number,
             request.subject()
         );
-        if let Err(error) = self.queue_agent_message(&request.space_id, message).await {
+        let kind = crate::daemon::alerts::AlertKind::ApprovalDecided;
+        if let Err(error) = self
+            .queue_agent_message(&request.space_id, kind, message)
+            .await
+        {
             log!("stale merge request message not queued: {error:#}");
         }
         Ok(())

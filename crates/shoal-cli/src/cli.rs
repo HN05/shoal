@@ -31,7 +31,6 @@ use crate::cli::args::{
     changes::ChangesCommand,
     coordination::CoordinationCommand,
     create::CreateCommand,
-    diagnostics::DiagnosticsCommand,
     hub::HubCommand,
     integration::IntegrationCommand,
     internal::InternalCommand,
@@ -137,8 +136,6 @@ pub enum Command {
         #[command(flatten)]
         args: ApprovalsArgs,
     },
-    #[command(flatten)]
-    Diagnostics(DiagnosticsCommand),
     #[command(flatten)]
     Lifecycle(LifecycleCommand),
     #[command(flatten)]

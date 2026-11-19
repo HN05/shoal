@@ -7,9 +7,8 @@ use crate::{
         manager::Manager,
         scope::{self, Caller},
         test_support::{manager, names, repository},
-        workspace_files::Attacher,
     },
-    protocol::AgentMethod,
+    protocol::{AlertMethod, AlertTarget, AlertsFor},
 };
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
@@ -39,10 +38,10 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
     for _ in 0..2 {
         manager
             .send_space_message(
+                None,
                 &SpaceSelector::id(&workspace.id),
                 "Stop the dev server".into(),
                 Vec::new(),
-                &Attacher::User,
             )
             .await
             .unwrap();
@@ -50,19 +49,19 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
     assert!(changed.has_changed().unwrap());
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&workspace.id),
             "Rebase onto main".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&workspace.id),
             "Move:\n\tabc123 to api".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -73,10 +72,10 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
         assert!(
             manager
                 .send_space_message(
+                    None,
                     &SpaceSelector::id(&workspace.id),
                     rejected,
                     Vec::new(),
-                    &Attacher::User
                 )
                 .await
                 .is_err()
@@ -107,10 +106,10 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
     // A delivered message may be sent again.
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&workspace.id),
             "Stop the dev server".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -129,7 +128,12 @@ async fn a_message_for_the_next_turn_wakes_only_once_queued_to_wake() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager, "receiver").await;
     let queue = |delivery| {
-        manager.queue_agent_message_delivered(&workspace.id, "Memory is high".into(), delivery)
+        manager.queue_agent_message_delivered(
+            &workspace.id,
+            crate::daemon::alerts::AlertKind::Message,
+            "Memory is high".into(),
+            delivery,
+        )
     };
     let wakes = || async { manager.unread_messages(&workspace.id).await.unwrap().wakes };
     // Work running in the workspace does not make it wake.
@@ -181,25 +185,25 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
         )
         .await;
     for (target, allowed) in [(&workspace.id, true), (&other.id, false)] {
-        for mut method in [
-            AgentMethod::AgentMessages {
+        let mut method = AlertMethod::ListAlerts {
+            to: AlertsFor::Space {
                 space: SpaceSelector::from(target),
             },
-            AgentMethod::MarkAgentMessagesDelivered {
-                space: SpaceSelector::from(target),
-                ids: Vec::new(),
-            },
-        ] {
-            assert_eq!(
-                scope::authorize(&manager, Some(&"scope".into()), &mut method)
-                    .await
-                    .is_ok(),
-                allowed
-            );
-        }
+            unread_only: true,
+            limit: 50,
+        };
+        assert_eq!(
+            scope::authorize(&manager, Some(&"scope".into()), &mut method)
+                .await
+                .is_ok(),
+            allowed
+        );
     }
-    let mut method = AgentMethod::SendAgentMessage {
-        space: SpaceSelector::id(&workspace.id),
+    // A process sends its own space's agent nothing: its alerts go up.
+    let mut method = AlertMethod::SendAlert {
+        to: AlertTarget::Space {
+            space: SpaceSelector::id(&workspace.id),
+        },
         message: "hello".into(),
         attachments: Vec::new(),
     };
@@ -254,28 +258,28 @@ async fn a_message_to_one_space_says_when_its_agent_reads_it() {
         let manager = &manager;
         async move {
             manager
-                .send_space_message(&selector, "Rebase".into(), Vec::new(), &Attacher::User)
+                .send_space_message(None, &selector, "Rebase".into(), Vec::new())
                 .await
                 .unwrap()
         }
     };
-    fn ids(spaces: &shoal_protocol::agent_messages::ReachedSpaces) -> Vec<&SpaceId> {
+    fn ids(spaces: &shoal_protocol::alerts::ReachedSpaces) -> Vec<&SpaceId> {
         let spaces = spaces.workspaces.iter().chain(&spaces.chats);
         spaces.map(|space| &space.id).collect()
     }
     let reached = send(&running.id).await;
-    assert_eq!(reached.now.workspaces[0].number, running.number);
-    assert_eq!(ids(&reached.now), [&running.id]);
+    assert_eq!(reached.reached.now.workspaces[0].number, running.number);
+    assert_eq!(ids(&reached.reached.now), [&running.id]);
     let reached = send(&queued.id).await;
-    assert_eq!(ids(&reached.on_start), [&queued.id]);
+    assert_eq!(ids(&reached.reached.on_start), [&queued.id]);
     let reached = send(&without.id).await;
-    assert_eq!(ids(&reached.without_agent), [&without.id]);
+    assert_eq!(ids(&reached.reached.without_agent), [&without.id]);
     assert_eq!(
-        (ids(&reached.now), ids(&reached.on_start)),
+        (ids(&reached.reached.now), ids(&reached.reached.on_start)),
         (vec![], vec![])
     );
     let reached = send(&chat.id).await;
-    assert_eq!(names(&reached.now.chats), ["planning"]);
+    assert_eq!(names(&reached.reached.now.chats), ["planning"]);
     // The space without an agent holds the message for one that starts.
     let messages = manager
         .agent_messages(&SpaceSelector::id(&without.id))
@@ -336,39 +340,35 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
             .unwrap();
         chats.push(chat);
     }
-    // The sending chat reaches every space; a workspace's process only
-    // those below its own.
-    let chat = chats[1].id.clone();
+    // The user reaches every space; a workspace's process only those below
+    // its own, but its own.
     let send = |repository: Option<&RepositoryId>, below: Option<SpaceId>| {
-        let sender = below.clone().unwrap_or_else(|| chat.clone());
+        let caller = below.map(scoped);
         let manager = &manager;
         let repository = repository.cloned().map(Into::into);
         async move {
             manager
                 .send_all_message(
+                    caller.as_ref(),
                     repository.as_ref(),
                     "Rebase onto main".into(),
                     Vec::new(),
-                    &Attacher::User,
-                    below.as_ref(),
-                    Some(&sender),
                 )
                 .await
                 .unwrap()
         }
     };
-    let reached = send(None, None).await.now;
+    let reached = send(None, None).await.reached.now;
     assert_eq!(
         (names(&reached.workspaces), names(&reached.chats)),
         (
             vec!["child", "outside", "parent", "sibling"],
-            vec!["other", "planning"]
+            vec!["other", "planning", "sender"]
         )
     );
-    let reached = send(parent.repository_id.as_ref(), None).await.now;
+    let reached = send(parent.repository_id.as_ref(), None).await.reached.now;
     assert_eq!(names(&reached.workspaces), ["child", "parent", "sibling"]);
-    // The sending chat is left out.
-    assert_eq!(names(&reached.chats), ["planning"]);
+    assert_eq!(names(&reached.chats), ["planning", "sender"]);
     // The repeat collapses into the unread message.
     for workspace in [&parent, &child, &sibling, &outside] {
         let messages = manager
@@ -386,10 +386,13 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
     );
     let reached = send(None, Some(parent.id.clone())).await;
     assert_eq!(
-        (names(&reached.now.workspaces), names(&reached.now.chats)),
+        (
+            names(&reached.reached.now.workspaces),
+            names(&reached.reached.now.chats)
+        ),
         (vec!["child"], vec![])
     );
-    assert!(send(None, Some(child.id.clone())).await.is_empty());
+    assert!(send(None, Some(child.id.clone())).await.reached.is_empty());
     // A workspace process names only its own repository, or none.
     manager
         .executions
@@ -409,8 +412,10 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
         (Some(&elsewhere.id), false),
         (None, true),
     ] {
-        let mut method = AgentMethod::SendAllAgentMessage {
-            repository: repository.cloned().map(Into::into),
+        let mut method = AlertMethod::SendAlert {
+            to: AlertTarget::All {
+                repository: repository.cloned().map(Into::into),
+            },
             message: "Rebase onto main".into(),
             attachments: Vec::new(),
         };
@@ -445,18 +450,16 @@ async fn a_message_to_all_from_a_coordinator_reaches_the_chats_below_it_not_bein
     let _removal = manager.space_removals.reserve(&chats[1].id).unwrap();
     let reached = manager
         .send_all_message(
+            Some(&scoped(parent.id.clone())),
             None,
             "Rebase onto main".into(),
             Vec::new(),
-            &Attacher::User,
-            Some(&parent.id),
-            Some(&parent.id),
         )
         .await
         .unwrap();
-    assert_eq!(names(&reached.now.chats), ["below"]);
-    assert!(reached.now.workspaces.is_empty());
-    assert!(reached.on_start.is_empty() && reached.refused.is_empty());
+    assert_eq!(names(&reached.reached.now.chats), ["below"]);
+    assert!(reached.reached.now.workspaces.is_empty());
+    assert!(reached.reached.on_start.is_empty() && reached.reached.refused.is_empty());
 }
 
 #[tokio::test]
@@ -520,7 +523,11 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
     }
     for n in 0..super::MAX_UNREAD {
         manager
-            .queue_agent_message(&full.id, format!("Message {n}"))
+            .queue_agent_message(
+                &full.id,
+                crate::daemon::alerts::AlertKind::Message,
+                format!("Message {n}"),
+            )
             .await
             .unwrap();
     }
@@ -539,34 +546,27 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
     let paused = chats.iter().find(|chat| chat.name == "paused").unwrap();
     manager.end_executions(&paused.id).await;
     let reached = manager
-        .send_all_message(
-            None,
-            "Rebase onto main".into(),
-            Vec::new(),
-            &Attacher::User,
-            None,
-            None,
-        )
+        .send_all_message(None, None, "Rebase onto main".into(), Vec::new())
         .await
         .unwrap();
-    let [refused] = reached.refused.workspaces.as_slice() else {
-        panic!("{:?}", reached.refused);
+    let [refused] = reached.reached.refused.workspaces.as_slice() else {
+        panic!("{:?}", reached.reached.refused);
     };
     assert_eq!(refused.space.id, full.id);
     assert!(refused.error.contains("unread"), "{}", refused.error);
-    let [running_space] = reached.now.workspaces.as_slice() else {
-        panic!("{:?}", reached.now);
+    let [running_space] = reached.reached.now.workspaces.as_slice() else {
+        panic!("{:?}", reached.reached.now);
     };
     assert_eq!(
         (running_space.number, &running_space.id),
         (running.number, &running.id)
     );
-    assert_eq!(names(&reached.now.chats), ["planning"]);
+    assert_eq!(names(&reached.reached.now.chats), ["planning"]);
     assert_eq!(
-        names(&reached.on_start.workspaces),
+        names(&reached.reached.on_start.workspaces),
         ["queued", "reattaching", "stopped"]
     );
-    assert_eq!(names(&reached.on_start.chats), ["paused"]);
+    assert_eq!(names(&reached.reached.on_start.chats), ["paused"]);
     for (workspace, unread) in [(&stopped, 1), (&queued, 1), (&without, 0)] {
         let messages = manager
             .agent_messages(&SpaceSelector::id(&workspace.id))
@@ -590,20 +590,20 @@ async fn attached_files_are_copied_beside_the_workspaces_until_removal() {
     for _ in 0..2 {
         manager
             .send_space_message(
+                None,
                 &SpaceSelector::id(&workspace.id),
                 "See the log".into(),
                 vec![file.clone().into()],
-                &Attacher::User,
             )
             .await
             .unwrap();
     }
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&workspace.id),
             String::new(),
             vec![file.clone().into()],
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -616,7 +616,8 @@ async fn attached_files_are_copied_beside_the_workspaces_until_removal() {
         panic!("{messages:?}");
     };
     assert_eq!(alone.message, "");
-    let [copy] = attached.attachments.as_slice() else {
+    let attachments = attached.attachments();
+    let [copy] = attachments.as_slice() else {
         panic!("{attached:?}");
     };
     assert_eq!(std::fs::read_to_string(copy).unwrap(), "panic");
@@ -658,10 +659,10 @@ async fn a_refused_message_leaves_no_copies() {
     for n in 0..super::MAX_UNREAD {
         manager
             .send_space_message(
+                None,
                 &SpaceSelector::id(&workspace.id),
                 format!("message {n}"),
                 Vec::new(),
-                &Attacher::User,
             )
             .await
             .unwrap();
@@ -671,10 +672,10 @@ async fn a_refused_message_leaves_no_copies() {
     assert!(
         manager
             .send_space_message(
+                None,
                 &SpaceSelector::id(&workspace.id),
                 "See the log".into(),
                 vec![file.into()],
-                &Attacher::User
             )
             .await
             .is_err()
@@ -701,10 +702,10 @@ async fn an_attached_send_waits_for_the_files_gate() {
         async move {
             manager
                 .send_space_message(
+                    None,
                     &SpaceSelector::id(&id),
                     "See the log".into(),
                     vec![file.into()],
-                    &Attacher::User,
                 )
                 .await
         }
@@ -733,7 +734,7 @@ async fn an_attached_send_waits_for_the_files_gate() {
         .agent_messages(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
-    assert!(messages[0].attachments[0].exists());
+    assert!(messages[0].attachments()[0].exists());
 }
 
 #[tokio::test]
@@ -752,10 +753,10 @@ async fn a_send_waiting_through_removal_leaves_no_files() {
         async move {
             manager
                 .send_space_message(
+                    None,
                     &SpaceSelector::id(&id),
                     "See the log".into(),
                     vec![file.into()],
-                    &Attacher::User,
                 )
                 .await
         }
@@ -799,10 +800,10 @@ async fn attachments_must_be_files() {
     ] {
         let sent = manager
             .send_space_message(
+                None,
                 &SpaceSelector::id(&workspace.id),
                 "See".into(),
                 vec![refused.clone().into()],
-                &Attacher::User,
             )
             .await;
         assert!(sent.is_err(), "{}", refused.display());
@@ -810,10 +811,10 @@ async fn attachments_must_be_files() {
     assert!(
         manager
             .send_space_message(
+                None,
                 &SpaceSelector::id(&workspace.id),
                 String::new(),
                 Vec::new(),
-                &Attacher::User
             )
             .await
             .is_err()
@@ -828,3 +829,14 @@ async fn attachments_must_be_files() {
 }
 
 mod coordination;
+
+/// A caller scoped to the space `id`.
+fn scoped(id: SpaceId) -> crate::daemon::scope::Caller {
+    crate::daemon::scope::Caller {
+        space_id: id,
+        execution: None,
+        granted: None,
+        read_only: false,
+        vouched: None,
+    }
+}

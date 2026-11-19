@@ -52,7 +52,7 @@ impl Subscriber {
                 Some(log) => Some(manager.pin_log(log).await?),
                 None => None,
             };
-            let topics = Topics::new(&topics, log, self.caller.as_ref());
+            let topics = Topics::new(&topics, log);
             let records = snapshot::take(manager, self.caller.as_ref(), &topics).await?;
             anyhow::Ok((topics, records))
         };

@@ -10,7 +10,7 @@ pub(crate) use self::{
     start::WatchStarts,
     waits::ActiveWaits,
 };
-use crate::daemon::agent_messages::AgentMessage;
+use crate::daemon::alerts::Alert;
 
 pub(crate) use shoal_protocol::links::Updates;
 
@@ -35,14 +35,14 @@ pub(crate) trait UpdatesExt {
 
     fn timed_out() -> Self;
 
-    fn messages(messages: Vec<AgentMessage>) -> Self;
+    fn messages(messages: Vec<Alert>) -> Self;
 }
 
 impl UpdatesExt for Updates {
     fn superseded() -> Self {
         Self {
             updates: Vec::new(),
-            messages: Vec::new(),
+            alerts: Vec::new(),
             leftovers: Vec::new(),
             timed_out: false,
             superseded: true,
@@ -52,17 +52,17 @@ impl UpdatesExt for Updates {
     fn timed_out() -> Self {
         Self {
             updates: Vec::new(),
-            messages: Vec::new(),
+            alerts: Vec::new(),
             leftovers: Vec::new(),
             timed_out: true,
             superseded: false,
         }
     }
 
-    fn messages(messages: Vec<AgentMessage>) -> Self {
+    fn messages(messages: Vec<Alert>) -> Self {
         Self {
             updates: Vec::new(),
-            messages,
+            alerts: messages,
             leftovers: Vec::new(),
             timed_out: false,
             superseded: false,

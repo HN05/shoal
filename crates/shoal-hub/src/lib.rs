@@ -9,6 +9,7 @@
 use std::sync::Arc;
 
 use shoal_core::{agents, config, process, refusal, repository};
+use shoal_daemon_base::alerts::NewAlert;
 use shoal_daemon_base::{
     config_state::ConfigState,
     gates::Gates,
@@ -148,9 +149,8 @@ impl Hub {
     /// Tell the user `message`, of `kind`, about what `about` names, or
     /// its coordinator.
     async fn notify(&self, daemon: &dyn Daemon, about: About, kind: AlertKind, message: String) {
-        (self.notifications)
-            .notify(daemon, about, kind, message, &[])
-            .await;
+        let alert = NewAlert::shoal(kind, about, message);
+        self.notifications.notify(daemon, alert).await;
     }
 }
 

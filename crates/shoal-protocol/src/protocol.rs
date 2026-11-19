@@ -1,6 +1,7 @@
 //! Newline-delimited JSON over the daemon's Unix socket. Bump [`VERSION`]
 //! whenever a request, response, or event changes shape or spelling.
 mod agents;
+mod alerts;
 mod approvals;
 mod apps;
 mod assignments;
@@ -19,7 +20,6 @@ mod holds;
 mod hub;
 mod items;
 mod launches;
-mod notifications;
 pub mod operations;
 mod ports;
 mod questions;
@@ -43,6 +43,7 @@ mod workspaces;
 mod wrapper;
 
 pub use agents::{AgentMethod, SubagentChange, TurnEnd, WakeEnd, WokenTurn};
+pub use alerts::{AlertMethod, AlertTarget, AlertsFor};
 pub use approvals::ApprovalMethod;
 pub use apps::AppMethod;
 pub use assignments::{AssignmentMethod, SavedAgent};
@@ -64,7 +65,6 @@ pub use holds::HoldMethod;
 pub use hub::{HubMethod, JoinVia};
 pub use items::{DownloadPiece, ItemContext, ItemMethod, RepoTarget, ViewPiece};
 pub use launches::{DetachedRun, LaunchMethod, Launched, Started};
-pub use notifications::NotificationMethod;
 pub use operations::OperationMethod;
 pub use ports::PortMethod;
 pub use questions::QuestionMethod;

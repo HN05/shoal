@@ -68,8 +68,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   a ready workspace or a chat of its own repository, or a chat without a
   repository, which takes children in any, never one below it; any other
   child in another repository is refused. Scope, approvals, coordinator and
-  delegated messages, removal and cleanup take one walk up or down that link
-  and one check for an agent, with no branch on kind; messages to a space go
+  delegated alerts, removal and cleanup take one walk up or down that link
+  and one check for an agent, with no branch on kind; alerts to a space go
   through one operation.
 - Shoal refuses a request only for a very good reason: it would act outside
   the caller's scope or permissions, lose or damage work, or cannot be done at
@@ -156,7 +156,7 @@ for delivering a PR, under Committing near the end, decide when work is done.
   `shoal-ids`, `shoal-protocol` and `shoal-refs`.
 - `crates/shoal-daemon-base` holds what every subsystem of the daemon uses:
   its log, a request's caller, the approval requests subsystems make, config
-  state, gates, events, notifications, item numbers and file access. What it
+  state, gates, events, alerts, item numbers and file access. What it
   needs of a subsystem is an interface it declares, a trait whose methods
   return a `Send` `BoxFuture`, which the daemon implements; its code is no
   method of `Manager`. It depends on no Shoal crate but `shoal-core`,
@@ -219,7 +219,7 @@ for delivering a PR, under Committing near the end, decide when work is done.
   readiness, excluding lifecycle and permit changes; `hooks.post_setup` runs in
   setup's daemon-started operation after ready, and `hooks.pre_remove` inside the shared daemon removal path.
   `hooks.post_remove` runs from the repository checkout after successful removal;
-  failure reports a warning and notification without restoring ownership.
+  failure reports a warning and alert without restoring ownership.
   `hooks.post_done` runs in the daemon after completion persists and before cleanup,
   excluding lifecycle and permit changes; failure notifies without undoing completion
   or blocking cleanup. Explicit completion reruns it; restart does not replay it.
@@ -252,10 +252,10 @@ for delivering a PR, under Committing near the end, decide when work is done.
   a background place the agent queue opens, unless `start --here` runs it in the caller's terminal, and the user's terminal creates top-level spaces. Enforce own-worktree resource access
   in the daemon and deny workspace allocation/removal/recovery other than creating a child of their own space, removing a space below it and restoring a removed space below its recorded parent where their scope reaches that parent, and administering Shoal and the other actions a permission key governs only as that key allows. For the spaces their scope reaches but their own, scoped callers may hold them, queue
   agents and the restores of stopped agents, a workspace's or a chat's, whoever stopped them, which the daemon starts detached, a chat's in the place it ran in, unless `start --here` runs an agent in the caller's terminal under its own space's scope, restart and stop their agents, confirming a stop Shoal cannot prove, convert and rename them, cancel and prioritize their queue
-  entries, a CI job's through the spaces its run is for and a new space's launch through its parent, send agent messages, answer questions, stop their executions, and forget stopped work; they may also stop the untracked processes and leftovers of their own workspace and those below it; the agent
+  entries, a CI job's through the spaces its run is for and a new space's launch through its parent, send them alerts, answer questions, stop their executions, and forget stopped work; they may also stop the untracked processes and leftovers of their own workspace and those below it; the agent
   of the nearest ancestor with one receives a child's agent-caused and agent-lifecycle events
   instead of the user. Own-workspace setup, rename, base workspace, issue, PR and own-repository CI run links and watches, merge
-  acknowledgements, their demos, messages to the user, asking the user questions and waiting for answers, reading their own agent messages, ready-for-review marks, checkpoints and restoring them, assignment completion and withdrawal, own-repository
+  acknowledgements, their demos, alerts up to their coordinator or the user, asking the user questions and waiting for answers, reading their own space's alerts, ready-for-review marks, checkpoints and restoring them, assignment completion and withdrawal, own-repository
   sync, listing issues and PRs of any repository, opening and changing those of the own repository (for a chat without a repository, every registered one, under its permissions there), opening issues
   in other repositories as their `issue_other_repositories` permission allows, rerunning
   or cancelling their CI jobs, starting, rerunning or cancelling CI runs of the default branch and of the branches of the workspaces their scope reaches in the repository they act in, and reading any repository's issues, PRs and runs, and GET requests to any repository's forge API, or
@@ -271,12 +271,16 @@ for delivering a PR, under Committing near the end, decide when work is done.
   daemon decides what a caller may do, and which account it acts as, from its
   `Option<&Caller>`, `None` for the user, never from a `bool` saying whether
   it is scoped.
-- Notifications are daemon records the CLI shows: record them where the daemon
-  decides (busy resources, port conflicts, agent exits, its own
-  removals), never fail the operation for one, collapse repeated polled events
-  until read, and let scoped callers read them only as their `notifications`
-  permission allows. A scoped caller may send
-  the user a message for its own workspace, separate from completion.
+- An alert is one daemon record of a one-way notice, with its typed kind, its
+  sender (the user, a space or Shoal) and its recipient (the user or a
+  space); one daemon operation decides whom it reaches, up to the
+  coordinator or the user, or down to spaces the sender's scope reaches.
+  Record Shoal's own where the daemon decides (busy resources, port
+  conflicts, agent exits, its own removals), never fail the operation for
+  one, collapse repeated polled events until read, and let scoped callers
+  read the user's only as their `notifications` permission allows. Only the
+  sender withdraws an alert, while it is unread, and an alert stays separate
+  from completion.
 - The daemon keeps each registered checkout's default branch in sync with its
   remote in the background, and `shoal repo sync` syncs it at once; commands that
   only read the default branch use what the checkout has. Syncing never pushes or
@@ -399,7 +403,7 @@ for delivering a PR, under Committing near the end, decide when work is done.
   its key without asking again.
 - Lifecycle states, resource scopes, approval targets and approval
   specifications are typed and reject unknown values.
-- Problems show where the user looks (`inbox`, `alerts`, `status`, the failing
+- Problems show where the user looks (`inbox`, `alert list`, `status`, the failing
   command's error) and name the command that fixes them; repair preserves work
   and resource leases. Startup audits ownership and never deletes work, and the cleanup sweep readies a
   workspace the audit failed once its ownership verifies; the daemon clears an unknown

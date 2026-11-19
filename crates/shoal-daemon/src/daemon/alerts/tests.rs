@@ -1,5 +1,6 @@
 use super::*;
 use crate::daemon::test_support::manager;
+use crate::daemon::workspace_files::{FileSource, NewFile};
 use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
@@ -32,7 +33,7 @@ async fn repeated_conflicts_collapse_until_read_and_completed_events_never_do() 
     let unread = manager.notifications.list(true, 50).await.unwrap();
     let summary: Vec<_> = unread
         .iter()
-        .map(|n| (n.workspace.as_deref(), n.kind, n.message.as_str()))
+        .map(|n| (n.space.as_deref(), n.kind, n.message.as_str()))
         .collect();
     assert_eq!(
         summary,
@@ -113,7 +114,7 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
             scope::{self, Caller},
             test_support::repository,
         },
-        protocol::NotificationMethod,
+        protocol::AlertMethod,
     };
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
@@ -125,18 +126,16 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
         .create_workspace(&repo.id, "sender".into(), None, None, None)
         .await
         .unwrap();
-    let other = manager
-        .create_workspace(&repo.id, "other".into(), None, None, None)
-        .await
-        .unwrap();
     for invalid in ["", "  ", "two\nlines", "bell\x07", &"x".repeat(513)] {
         assert!(
             manager
-                .send_message(
-                    &SpaceSelector::id(&workspace.id),
+                .send_alert(
+                    Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                        &workspace.id
+                    ))),
+                    crate::protocol::AlertTarget::Up,
                     invalid.into(),
                     Vec::new(),
-                    &Attacher::User
                 )
                 .await
                 .is_err(),
@@ -145,19 +144,21 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
     }
     for _ in 0..2 {
         manager
-            .send_message(
-                &SpaceSelector::id(&workspace.id),
+            .send_alert(
+                Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                    &workspace.id,
+                ))),
+                crate::protocol::AlertTarget::Up,
                 "PR #12 is ready to merge".into(),
                 Vec::new(),
-                &Attacher::User,
             )
             .await
             .unwrap();
     }
     let unread = manager.notifications.list(true, 50).await.unwrap();
     assert_eq!(unread.len(), 1);
-    assert_eq!(unread[0].workspace.as_deref(), Some("sender"));
-    assert_eq!(unread[0].kind, AlertKind::AgentMessage);
+    assert_eq!(unread[0].space.as_deref(), Some("sender"));
+    assert_eq!(unread[0].kind, AlertKind::Message);
     assert_eq!(unread[0].message, "PR #12 is ready to merge");
     manager
         .executions
@@ -172,32 +173,29 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
             },
         )
         .await;
-    for (target, allowed) in [(&workspace.id, true), (&other.id, false)] {
-        for mut method in [
-            NotificationMethod::SendMessage {
-                space: SpaceSelector::from(target),
-                message: "hello".into(),
-                attachments: Vec::new(),
-            },
-            NotificationMethod::WithdrawMessage {
-                space: SpaceSelector::from(target),
-                id: 1,
-            },
-        ] {
-            assert_eq!(
-                scope::authorize(&manager, Some(&"scope".into()), &mut method)
-                    .await
-                    .is_ok(),
-                allowed
-            );
-        }
+    // A process sends alerts up and withdraws the ones it sent; the daemon
+    // tells which by its scope.
+    for mut method in [
+        AlertMethod::SendAlert {
+            to: crate::protocol::AlertTarget::Up,
+            message: "hello".into(),
+            attachments: Vec::new(),
+        },
+        AlertMethod::WithdrawAlert { id: 1 },
+    ] {
+        assert!(
+            scope::authorize(&manager, Some(&"scope".into()), &mut method)
+                .await
+                .is_ok()
+        );
     }
     for mut method in [
-        NotificationMethod::ListNotifications {
+        AlertMethod::ListAlerts {
+            to: crate::protocol::AlertsFor::User,
             unread_only: true,
             limit: 50,
         },
-        NotificationMethod::ClearNotifications,
+        AlertMethod::ClearAlerts,
     ] {
         assert!(
             scope::authorize(&manager, Some(&"scope".into()), &mut method)
@@ -226,16 +224,17 @@ async fn senders_withdraw_their_own_messages_until_shown() {
         .unwrap();
     let send = async |message: &str| {
         manager
-            .send_message(
-                &SpaceSelector::id(&sender.id),
+            .send_alert(
+                Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                    &sender.id,
+                ))),
+                crate::protocol::AlertTarget::Up,
                 message.into(),
                 Vec::new(),
-                &Attacher::User,
             )
             .await
             .unwrap()
-            .notification
-            .unwrap()
+            .alerts[0]
     };
     let sent = send("PR #12 is ready to merge").await;
     // A repeat collapses into the same notification.
@@ -247,14 +246,24 @@ async fn senders_withdraw_their_own_messages_until_shown() {
     for (workspace, id) in [(&other.id, sent), (&sender.id, busy)] {
         assert!(
             manager
-                .withdraw_message(&SpaceSelector::from(workspace.as_str()), id)
+                .withdraw_alert(
+                    Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                        workspace
+                    ))),
+                    id
+                )
                 .await
                 .is_err()
         );
     }
 
     let withdrawn = manager
-        .withdraw_message(&SpaceSelector::id(&sender.id), sent)
+        .withdraw_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &sender.id,
+            ))),
+            sent,
+        )
         .await
         .unwrap();
     assert_eq!(withdrawn.message, "PR #12 is ready to merge");
@@ -266,7 +275,12 @@ async fn senders_withdraw_their_own_messages_until_shown() {
     manager.notifications.mark_read(vec![shown]).await.unwrap();
     assert!(
         manager
-            .withdraw_message(&SpaceSelector::id(&sender.id), shown)
+            .withdraw_alert(
+                Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                    &sender.id
+                ))),
+                shown
+            )
             .await
             .is_err()
     );
@@ -286,25 +300,36 @@ async fn senders_withdraw_their_own_messages_until_shown() {
         .unwrap();
     // The same message from it is its own, not collapsed into the earlier one.
     let own = manager
-        .send_message(
-            &SpaceSelector::id(&successor.id),
+        .send_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &successor.id,
+            ))),
+            crate::protocol::AlertTarget::Up,
             "PR #14 is ready to merge".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap()
-        .notification
-        .unwrap();
+        .alerts[0];
     assert_ne!(own, unread);
     assert!(
         manager
-            .withdraw_message(&SpaceSelector::id(&successor.id), unread)
+            .withdraw_alert(
+                Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                    &successor.id
+                ))),
+                unread
+            )
             .await
             .is_err()
     );
     manager
-        .withdraw_message(&SpaceSelector::id(&renamed.id), unread)
+        .withdraw_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &renamed.id,
+            ))),
+            unread,
+        )
         .await
         .unwrap();
 }
@@ -334,20 +359,33 @@ async fn a_message_stays_its_sender_s_through_a_rename_while_it_is_recorded() {
         .create_workspace(&repo.id, "sender".into(), None, None, path)
         .await
         .unwrap();
-    let kind = AlertKind::AgentMessage;
-    let id = (manager.notifications)
-        .record(&*manager, about, kind, "ready".into(), &[])
+    let id = manager
+        .record_sent(crate::daemon::alerts::sent_alert(
+            about,
+            "ready".into(),
+            &[],
+        ))
         .await
         .unwrap()
-        .unwrap();
+        .alerts[0];
     assert!(
         manager
-            .withdraw_message(&SpaceSelector::id(&successor.id), id)
+            .withdraw_alert(
+                Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                    &successor.id
+                ))),
+                id
+            )
             .await
             .is_err()
     );
     manager
-        .withdraw_message(&SpaceSelector::id(&sender.id), id)
+        .withdraw_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &sender.id,
+            ))),
+            id,
+        )
         .await
         .unwrap();
 }
@@ -373,7 +411,7 @@ async fn a_failed_state_report_alerts_one_line_that_fits() {
     let unread = manager.notifications.list(true, 50).await.unwrap();
     assert_eq!(unread.len(), 1);
     assert_eq!(unread[0].kind, AlertKind::StateReportFailed);
-    assert_eq!(unread[0].workspace.as_deref(), Some("reporter"));
+    assert_eq!(unread[0].space.as_deref(), Some("reporter"));
     assert!(crate::validate::message(&unread[0].message).is_ok());
     assert!(
         unread[0].message.contains("first second x"),
@@ -414,11 +452,13 @@ async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
     };
     for _ in 0..2 {
         manager
-            .send_message(
-                &SpaceSelector::id(&child.id),
+            .send_alert(
+                Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                    &child.id,
+                ))),
+                crate::protocol::AlertTarget::Up,
                 "Which layout?".into(),
                 attach(),
-                &Attacher::User,
             )
             .await
             .unwrap();
@@ -468,15 +508,17 @@ async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
         .await
         .unwrap();
     let sent = manager
-        .send_message(
-            &SpaceSelector::id(&child.id),
+        .send_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &child.id,
+            ))),
+            crate::protocol::AlertTarget::Up,
             "Done".into(),
             attach(),
-            &Attacher::User,
         )
         .await
         .unwrap();
-    assert_eq!(sent.notification, None);
+    assert!(!sent.user);
     let received = manager
         .agent_messages(&SpaceSelector::id(&parent.id))
         .await
@@ -484,8 +526,9 @@ async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
     let [message] = received.as_slice() else {
         panic!("{received:?}");
     };
-    assert_eq!(message.message, format!("{} child: Done", child.number));
-    let [copy] = message.attachments.as_slice() else {
+    assert_eq!(message.text(), format!("{} child: Done", child.number));
+    let attachments = message.attachments();
+    let [copy] = attachments.as_slice() else {
         panic!("{message:?}");
     };
     assert_eq!(std::fs::read_to_string(copy).unwrap(), "png");
@@ -525,11 +568,13 @@ async fn a_message_to_the_user_sends_a_limited_number_of_files() {
     std::fs::write(&shot, "png").unwrap();
     let files = vec![NewFile::from(shot); shoal_protocol::files::MAX_SENT + 1];
     let sent = manager
-        .send_message(
-            &SpaceSelector::id(&workspace.id),
+        .send_alert(
+            Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
+                &workspace.id,
+            ))),
+            crate::protocol::AlertTarget::Up,
             "Look".into(),
             files,
-            &Attacher::User,
         )
         .await;
     assert!(sent.is_err());
@@ -569,6 +614,6 @@ async fn an_event_named_alone_takes_no_workspace_that_shares_its_name() {
     let [notification] = &manager.notifications.list(true, 10).await.unwrap()[..] else {
         panic!("one notification");
     };
-    assert_eq!(notification.workspace.as_deref(), Some("fix"));
+    assert_eq!(notification.space.as_deref(), Some("fix"));
     assert_eq!(notification.space_id, None);
 }

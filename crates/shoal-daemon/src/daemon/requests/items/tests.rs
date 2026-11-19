@@ -2,7 +2,7 @@ use tokio::net::UnixStream;
 
 use super::super::super::answer;
 use super::*;
-use crate::{daemon::workspace_files::Attacher, protocol::Response};
+use crate::protocol::Response;
 use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
@@ -20,10 +20,10 @@ async fn item_waits_close_unanswered_while_an_update_restarts_the_daemon() {
         .unwrap();
     manager
         .send_space_message(
+            None,
             &SpaceSelector::id(&workspace.id),
             "Rebase onto main".into(),
             Vec::new(),
-            &Attacher::User,
         )
         .await
         .unwrap();
@@ -56,7 +56,7 @@ async fn item_waits_close_unanswered_while_an_update_restarts_the_daemon() {
     let Body::PrUpdates(updates) = response.body else {
         panic!("expected item updates");
     };
-    assert_eq!(updates.messages[0].message, "Rebase onto main");
+    assert_eq!(updates.alerts[0].message, "Rebase onto main");
 }
 
 /// A Forgejo where PR 7 was opened by the review account's login and PR 8

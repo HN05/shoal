@@ -241,7 +241,7 @@ fn the_hub_refuses_another_protocol_and_alerts_the_user() {
     );
     let refused = daemon_client::receive(&stream);
     assert_eq!(refused["refused"]["reason"], "version", "{refused}");
-    let notifications = hub.json(&["alerts"]);
+    let notifications = hub.json(&["alert", "list", "--unread"]);
     let alert = (notifications.as_array().unwrap().iter())
         .find(|notification| notification["kind"] == "hub_refused")
         .unwrap_or_else(|| panic!("no hub alert in {notifications}"));

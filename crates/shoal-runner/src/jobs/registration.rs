@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use rusqlite::{OptionalExtension, params};
 use shoal_core::fsutil::executables::find_executable;
-use shoal_daemon_base::notifications::About;
+use shoal_daemon_base::alerts::{About, NewAlert};
 use shoal_forge::{
     account::Account,
     ci::runner::{RegisteredRunner, RunnerRequests},
@@ -237,9 +237,8 @@ impl Runner {
     /// Tell the user `message` about a runner that failed.
     async fn notify_runner_failed(&self, message: String) {
         let kind = AlertKind::RunnerFailed;
-        (self.notifications)
-            .notify_user(About::default(), kind, message)
-            .await;
+        let alert = NewAlert::shoal(kind, About::default(), message);
+        self.notifications.notify_user(alert).await;
     }
 }
 

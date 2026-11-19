@@ -157,7 +157,7 @@ fn a_second_machine_with_a_spaces_id_is_a_conflict_the_hub_lists_once() {
     let desk = start(copied(&laptop), false, "desk-app");
     join(&desk, &hub, "desk");
     let alert = wait_for("the conflict alert", || {
-        let alerts = hub.ok(&["alerts"]);
+        let alerts = hub.ok(&["alert", "list", "--unread"]);
         (alerts.as_array().unwrap().iter())
             .find(|alert| alert["kind"] == "space_conflict")
             .cloned()
@@ -207,7 +207,7 @@ fn a_move_between_joined_machines_hands_the_space_over_with_its_number() {
     assert_eq!(moved["failed"], serde_json::json!([]), "{moved}");
     // It keeps its number.
     assert_eq!(listed(&hub, &work, &desk_id)["number"], number);
-    let alerts = hub.ok(&["alerts"]);
+    let alerts = hub.ok(&["alert", "list", "--unread"]);
     let conflict =
         (alerts.as_array().unwrap().iter()).find(|alert| alert["kind"] == "space_conflict");
     assert!(conflict.is_none(), "{alerts}");

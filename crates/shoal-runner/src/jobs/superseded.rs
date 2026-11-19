@@ -8,7 +8,7 @@
 use std::collections::{BTreeMap, HashSet};
 
 use anyhow::Result;
-use shoal_daemon_base::notifications::About;
+use shoal_daemon_base::alerts::{About, NewAlert};
 use shoal_forge::ci::{
     checks::CheckRequests, run_action::RunActionRequests, runner::RunnerRequests,
 };
@@ -126,9 +126,8 @@ impl Runner {
              shoal ci cancel {run}"
         );
         let (about, kind) = (About::named(Some(name)), AlertKind::RunnerFailed);
-        (self.notifications)
-            .notify(daemon, about, kind, message, &[])
-            .await;
+        let alert = NewAlert::shoal(kind, about, message);
+        self.notifications.notify(daemon, alert).await;
     }
 }
 

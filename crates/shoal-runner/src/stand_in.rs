@@ -17,6 +17,7 @@ use shoal_core::config::{
     repo::{self, ConfigLayers},
 };
 use shoal_daemon_base::{
+    alerts::{NewAlert, Sent},
     callers::Caller,
     config_state::ConfigState,
     gates::Gates,
@@ -31,12 +32,10 @@ use shoal_forge::{
 use shoal_forge_types::{ForgeRepo, backends::ForgeKind, items::reference::ItemRef};
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    alerts::AlertKind,
     config::permissions::PermissionKey,
     launches::{Launch, LaunchSource},
     model::{QueueEntry, QueuedJob, Repository, Space, Workspace, WorkspaceUsage},
     protocol::ItemContext,
-    space_names::SpaceName,
 };
 
 use crate::{
@@ -401,16 +400,8 @@ impl Spaces for StandIn {
 
 /// No space has a coordinator, so every event reaches the user.
 impl Coordinators for StandIn {
-    fn tell<'a>(
-        &'a self,
-        _: &'a SpaceName,
-        _: Option<&'a SpaceId>,
-        _: AlertKind,
-        _: String,
-        _: Vec<std::path::PathBuf>,
-        _: Source,
-    ) -> BoxFuture<'a, bool> {
-        Box::pin(async { false })
+    fn tell<'a>(&'a self, _: NewAlert, _: bool, _: Source) -> BoxFuture<'a, Option<Sent>> {
+        Box::pin(async { None })
     }
 }
 

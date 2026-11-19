@@ -32,7 +32,7 @@ struct Start {
 pub(super) async fn start(ctx: &Context) -> Result<i32> {
     let input = hook_input();
     match brief(ctx, &input).await {
-        Ok(brief) => outln!("{}", super::messages::hook_output(&input, &brief)),
+        Ok(brief) => outln!("{}", super::alerts::delivery::hook_output(&input, &brief)),
         Err(error) => eprintln!("shoal: subagent brief unavailable: {error:#}"),
     }
     Ok(0)

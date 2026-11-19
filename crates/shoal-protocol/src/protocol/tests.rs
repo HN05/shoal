@@ -9,11 +9,11 @@ use shoal_ids::space_ids::SpaceId;
 #[test]
 fn method_names_are_their_protocol_tags() {
     assert_eq!(Method::from(DaemonMethod::Status).name(), "status");
-    let watch = Method::from(NotificationMethod::WatchNotifications {
+    let watch = Method::from(AlertMethod::WatchAlerts {
         keep_unread: false,
         after: 0,
     });
-    assert_eq!(watch.name(), "watch_notifications");
+    assert_eq!(watch.name(), "watch_alerts");
 }
 
 #[test]
