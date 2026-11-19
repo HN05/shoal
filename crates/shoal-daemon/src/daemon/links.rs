@@ -42,7 +42,7 @@ use crate::{
         events::{self, EventKind},
         links::{pr::Action, space::LinkSpace},
         manager::Manager,
-        review,
+        ready_marks,
         scope::Caller,
     },
     forge::items::{
@@ -478,7 +478,7 @@ pub(crate) fn forget_assigned(
 ) -> Result<()> {
     let urls: Vec<String> = urls.iter().map(ToString::to_string).collect();
     forget_activity(db, id, &urls)?;
-    review::forget(db, id, &urls)?;
+    ready_marks::forget(db, id, &urls)?;
     for url in &urls {
         events::record_link(db, id, EventKind::Unlinked, Relation::Assigned, kind, url)?;
     }
