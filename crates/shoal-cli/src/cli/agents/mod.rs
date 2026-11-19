@@ -304,7 +304,13 @@ pub(super) async fn default_agent(
     agent: Option<Agent>,
 ) -> Result<Option<Agent>> {
     let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
-    start_agent(ctx, &settings, agent)
+    let agent = start_agent(ctx, &settings, agent)?;
+    // Without a terminal nothing picks one, which this caller refuses.
+    ensure!(
+        agent.is_some() || ctx.interactive(),
+        crate::agents::NO_AGENT
+    );
+    Ok(agent)
 }
 
 /// The agent a start runs under `settings`: the one `named`, else

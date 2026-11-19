@@ -1479,3 +1479,13 @@ fn a_repository_that_keeps_its_refs_in_a_reftable_takes_workspaces() {
     // Removal keeps the branch, whose commit the default branch lacks.
     assert_eq!(git(&repo, &["rev-parse", "refs/heads/topic"]), head);
 }
+
+/// Without `agent.default` or a terminal to pick one, a repository's setup
+/// is refused rather than ending as if a picker were cancelled.
+#[test]
+fn repository_setup_without_an_agent_or_terminal_is_refused() {
+    let fixture = Fixture::new();
+    let output = fixture.run(&["repo", "setup", fixture.repo.to_str().unwrap()]);
+    assert!(!output.status.success(), "{}", printed(&output));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("agent.default"));
+}
