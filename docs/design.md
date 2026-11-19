@@ -2140,7 +2140,8 @@ only the UI that speaks it changes with it. The daemon starts it on the
 demo's first open from elsewhere, bound to loopback on a port reserved under
 the demo's name, with the demo's execution's marker, so stopping, removal and
 recovery stop it with the demo's other processes; it outlives the command's
-runs, and a demo nobody opens runs none. serve-sim's HTTP mode suits the
+runs and the daemon's restarts, which know it by the process recorded with the
+demo, and a demo nobody opens runs none. serve-sim's HTTP mode suits the
 hub's TCP streams, where WebRTC needs UDP. A missing viewer leaves the demo
 running and fails the open, naming its install command; Shoal installs
 nothing. Agents drive the device with serve-sim's or AXe's own commands, which
