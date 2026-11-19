@@ -106,7 +106,7 @@ fn write_helper(paths: &Paths) -> Result<tempfile::TempDir> {
 /// Remove the rewrites from the Git settings `command` passes on, for a
 /// push Shoal already authorized or the helper runs itself.
 pub fn strip(command: &mut tokio::process::Command) {
-    crate::agent_git::retain(command, |(key, _)| !is_rewrite(key));
+    super::retain(command, |(key, _)| !is_rewrite(key));
 }
 
 /// Whether the Git setting `key` is one of the rewrites; Git compares the

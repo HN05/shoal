@@ -1,6 +1,9 @@
 //! The Git settings of agent launches only: the selected Git profile, the
-//! agent token logins of [`crate::git_credential`], and the push rewrites of
-//! [`crate::push_gate`].
+//! agent token logins of [`git_credential`], and the push rewrites of
+//! [`push_gate`].
+pub mod git_credential;
+pub mod push_gate;
+
 use std::ffi::{OsStr, OsString};
 
 use anyhow::{Context, Result};
@@ -41,7 +44,7 @@ impl Launch {
         paths: &crate::paths::Paths,
         hosts: impl IntoIterator<Item = &'a str>,
     ) -> Result<()> {
-        let logins = crate::git_credential::settings(paths, hosts, &self.git)?;
+        let logins = git_credential::settings(paths, hosts, &self.git)?;
         self.git.extend(logins);
         Ok(())
     }
