@@ -1,12 +1,42 @@
 //! Workspace lifecycle reservation: holding a workspace in a transient
 //! state that excludes every other lifecycle operation, and recording the
-//! state it leaves it in.
+//! state it leaves it in, and waiting for such a state to pass.
 
 use super::super::{gates::GuardMode, manager::Manager};
 use crate::{daemon::store, state::WorkspaceState};
 use anyhow::{Result, bail};
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use shoal_ids::space_ids::SpaceId;
+
+/// The refusal of a workspace held in a lifecycle state that passes, which
+/// [`Manager::await_reservation_end`] waits out.
+#[derive(Debug)]
+pub(crate) struct Reserved(WorkspaceState);
+
+impl std::fmt::Display for Reserved {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "workspace is {}", self.0)
+    }
+}
+
+impl std::error::Error for Reserved {}
+
+/// Refuse the workspace with [`Reserved`] while a lifecycle operation that
+/// passes holds it.
+pub(crate) fn ensure_unreserved(db: &Connection, id: &SpaceId) -> Result<()> {
+    match state(db, id)? {
+        Some(state) if state.passes() => Err(Reserved(state).into()),
+        _ => Ok(()),
+    }
+}
+
+fn state(db: &Connection, id: &SpaceId) -> Result<Option<WorkspaceState>> {
+    Ok(db
+        .query_row("SELECT state FROM workspaces WHERE id=?1", [id], |row| {
+            row.get(0)
+        })
+        .optional()?)
+}
 
 impl Manager {
     pub async fn set_state(
@@ -45,6 +75,20 @@ impl Manager {
                 Ok(())
             })
             .await
+    }
+
+    /// Wait until no lifecycle operation that passes holds the workspace.
+    pub(crate) async fn await_reservation_end(&self, id: &SpaceId) -> Result<()> {
+        // Subscribe before reading, so a change in between still wakes.
+        let mut changed = self.store.watch_changes();
+        loop {
+            let workspace = id.to_owned();
+            match self.store.run(move |db| state(db, &workspace)).await? {
+                None => bail!("workspace no longer exists"),
+                Some(state) if state.passes() => changed.changed().await?,
+                Some(_) => return Ok(()),
+            }
+        }
     }
 
     /// Move a ready or failed workspace into a transient lifecycle state,

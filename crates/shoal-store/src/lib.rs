@@ -117,6 +117,13 @@ impl Store {
         self.worker.changed.subscribe()
     }
 
+    /// How many waits watch the store's changes now, which tells a test
+    /// that a wait it started waits.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn change_watchers(&self) -> usize {
+        self.worker.changed.receiver_count()
+    }
+
     pub async fn shutdown(&self) {
         self.worker.shutdown().await;
     }

@@ -10,6 +10,7 @@ use super::{
     gates::{GuardMode, ResourceGuard},
     manager::Manager,
     places::ExecutionPlace,
+    workspace::reservation::{self, Reserved},
 };
 use crate::daemon::log;
 use crate::{
@@ -96,6 +97,7 @@ struct PreparedExecution {
 }
 
 /// The record a new execution persists at registration.
+#[derive(Clone)]
 struct ExecutionRecord {
     id: ExecutionId,
     kind: ExecutionKind,
@@ -162,7 +164,10 @@ impl ExecutionKindExt for ExecutionKind {
         // would otherwise accept.
         store::ensure_no_pending_move(tx, workspace_id)?;
         match self {
-            Self::Command | Self::Merge | Self::Unmerge => store::require_ready(tx, workspace_id)?,
+            Self::Command | Self::Merge | Self::Unmerge => {
+                reservation::ensure_unreserved(tx, workspace_id)?;
+                store::require_ready(tx, workspace_id)?
+            }
             Self::Setup => {
                 let blocking: Option<ExecutionId> = tx.query_row(
                     "SELECT id FROM executions WHERE space_id=?1 AND (?2 IS NULL OR id != ?2) LIMIT 1",
@@ -318,25 +323,12 @@ impl Manager {
             merge,
             agent,
         } = request;
-        let (space_id, preparation) = self
-            .prepare_execution(selector, wrapper.as_ref(), kind, caller, merge)
-            .await?;
         // An agent's execution is its own, wherever the process that started
         // it runs.
         let agent_execution = match caller.filter(|_| !agent) {
             Some(caller) => self.caller_agent(caller).await.map(|agent| agent.execution),
             None => None,
         };
-        let PreparedExecution {
-            setup_cmd,
-            copy_ignored,
-            pre_setup,
-            registration_guard,
-            lifetime_guard,
-            merge,
-            unmerge,
-            _resources,
-        } = preparation;
         let launch = demo.clone();
         let record = ExecutionRecord {
             id: ExecutionId::generate(),
@@ -348,7 +340,19 @@ impl Manager {
             demo,
             place,
         };
-        let registered = self.register_execution(&space_id, record).await?;
+        let (space_id, preparation, registered) = self
+            .register_unreserved(selector, record, caller, merge)
+            .await?;
+        let PreparedExecution {
+            setup_cmd,
+            copy_ignored,
+            pre_setup,
+            registration_guard,
+            lifetime_guard,
+            merge,
+            unmerge,
+            _resources,
+        } = preparation;
         if let Some(launch) = &launch {
             self.leases
                 .give_demo_its_leases(&registered.id, &space_id, launch)
@@ -377,6 +381,38 @@ impl Manager {
             stop: registered.stop,
             _git_guard: lifetime_guard,
         })
+    }
+
+    /// Prepare `record` in the space `selector` names and record it there,
+    /// waiting out a lifecycle operation that holds the workspace for a
+    /// while, such as an update an agent's start makes, and preparing it
+    /// again for the workspace that operation leaves.
+    async fn register_unreserved(
+        &self,
+        selector: &SpaceSelector,
+        record: ExecutionRecord,
+        caller: Option<&Caller>,
+        merge: Option<crate::model::MergeOptions>,
+    ) -> Result<(SpaceId, PreparedExecution, RegisteredExecution)> {
+        loop {
+            let (space_id, preparation) = self
+                .prepare_execution(
+                    selector,
+                    record.wrapper.as_ref(),
+                    record.kind,
+                    caller,
+                    merge.clone(),
+                )
+                .await?;
+            match self.register_execution(&space_id, record.clone()).await {
+                Err(error) if error.is::<Reserved>() => {
+                    // The operation may need the gates the preparation holds.
+                    drop(preparation);
+                    self.await_reservation_end(&space_id).await?;
+                }
+                registered => return Ok((space_id, preparation, registered?)),
+            }
+        }
     }
 
     /// Record `record` as an execution of the space `space_id`, with what

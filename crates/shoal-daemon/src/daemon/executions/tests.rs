@@ -738,3 +738,85 @@ async fn an_idle_agent_with_work_outside_its_group_keeps_a_working_turn() {
         assert_eq!(record.turn, Some(expected), "background work: {background}");
     }
 }
+
+/// What a command's registration decides for its workspace in `state`.
+async fn command_reservation(
+    manager: &Manager,
+    workspace: &Workspace,
+    state: WorkspaceState,
+) -> Result<()> {
+    manager.set_state(&workspace.id, state, None).await?;
+    let id = workspace.id.clone();
+    manager
+        .store
+        .write(move |tx| ExecutionKind::Command.reserve(tx, &id, None))
+        .await
+}
+
+#[tokio::test]
+async fn a_command_waits_only_for_a_state_that_passes() {
+    let (_root, manager, workspace) = fixture("exit 0").await;
+    let updating = command_reservation(&manager, &workspace, WorkspaceState::Updating).await;
+    assert!(updating.unwrap_err().is::<Reserved>());
+    for lasting in [WorkspaceState::Failed, WorkspaceState::Removing] {
+        let refused = command_reservation(&manager, &workspace, lasting)
+            .await
+            .unwrap_err();
+        assert!(!refused.is::<Reserved>(), "{lasting}: {refused:#}");
+        let reason = crate::refusal::Reason::of(&refused);
+        assert_eq!(reason, Some(crate::refusal::Reason::NotReady), "{lasting}");
+    }
+}
+
+/// Start a command in `workspace` while an update holds it, then end the
+/// update in `after`, returning the command's start.
+async fn command_started_during_update(
+    manager: &Arc<Manager>,
+    workspace: &Workspace,
+    after: WorkspaceState,
+) -> Result<StartedExecution> {
+    manager
+        .reserve_lifecycle(&workspace.id, WorkspaceState::Updating)
+        .await
+        .unwrap();
+    let watchers = manager.store.change_watchers();
+    let start = {
+        let manager = manager.clone();
+        let id = workspace.id.clone();
+        tokio::spawn(async move {
+            (manager.begin_execution(id.as_str(), None, ExecutionKind::Command, None)).await
+        })
+    };
+    // End the update only once the start waits for it, or has given up.
+    bounded(async {
+        while manager.store.change_watchers() == watchers && !start.is_finished() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await;
+    manager.set_state(&workspace.id, after, None).await.unwrap();
+    bounded(start).await.unwrap()
+}
+
+#[tokio::test]
+async fn a_command_started_during_an_update_runs_once_it_ends() {
+    let (_root, manager, workspace) = fixture("exit 0").await;
+    let started = command_started_during_update(&manager, &workspace, WorkspaceState::Ready)
+        .await
+        .unwrap();
+    assert_eq!(started.space.id, workspace.id);
+}
+
+#[tokio::test]
+async fn a_command_started_during_an_update_that_fails_is_refused() {
+    let (_root, manager, workspace) = fixture("exit 0").await;
+    let refused = command_started_during_update(&manager, &workspace, WorkspaceState::Failed)
+        .await
+        .unwrap_err();
+    let reason = crate::refusal::Reason::of(&refused);
+    assert_eq!(
+        reason,
+        Some(crate::refusal::Reason::NotReady),
+        "{refused:#}"
+    );
+}

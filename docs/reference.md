@@ -1331,6 +1331,11 @@ managed workspace it lists only global commands and built-in defaults.
 Execution preserves terminal I/O, scope, reserved-port variables, and exit status
 just like arbitrary `run` commands. `{diff_base}` resolves lazily through the same
 daemon fork-point/merge-base lookup as `shoal diff`; failure prevents launch.
+A command, `shoal merge` or `shoal unmerge` that starts while an operation
+that returns its workspace to ready on its own holds it, such as the update an
+agent's start makes, waits for that to end and then runs, or is refused as not
+ready when it leaves the workspace failed; a workspace being set up or removed
+refuses it at once.
 
 Agents' launchers are the [`command`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools) of their AI tool.
 Overriding the `command` of Claude or Codex changes the executable or flags;

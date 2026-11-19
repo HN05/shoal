@@ -350,6 +350,11 @@ worktree, a branch that holds nothing of its own fast-forwards to what it
 builds on, as `shoal refresh` does, so its agent starts on a current branch,
 and the PR the start names is linked, a refusal warning the starter; a copy
 is made when its preparation runs, which waited for what it waits for.
+A command, merge or unmerge whose start falls in such an update, or in any
+lifecycle operation that returns the workspace to ready or failed on its own,
+waits for it to end and is prepared again for the workspace it leaves: the
+window is Shoal's own, not a reason the command cannot run. Removal, a
+failure and setup, which may wait for other work first, still refuse it.
 The request answers once the workspace is recorded, so a
 caller gets its number and its agent's entry without waiting for Git or
 setup; until its worktree exists, what reads it refuses the workspace, and
@@ -4002,7 +4007,7 @@ user's packs, so objects already packed stay until the user's gc. Checkpoint
 objects stay in the repository's object store, since checkpoint refs also keep
 a removed workspace's HEAD reachable after its branch is deleted.
 Restoring a checkpoint reserves the `restoring` lifecycle state, which excludes
-other lifecycle operations and new executions, refuses while another execution is
+other lifecycle operations and holds new executions until it ends, refuses while another execution is
 recorded or the checkpoint's HEAD or files collide with ignored ones, keeps the current state in
 a checkpoint and stops when that one keeps HEAD only, then cleans untracked files under the current ignore rules, resets
 the branch and applies the snapshot's files without staging them. Scoped

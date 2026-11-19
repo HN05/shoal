@@ -28,6 +28,17 @@ impl WorkspaceState {
         })
     }
 
+    /// A lifecycle operation that returns the workspace to ready or failed
+    /// once it ends, which a command's start waits out. Removal never
+    /// returns it, and setup, which may wait for other work first, takes as
+    /// long as the repository's own command.
+    pub fn passes(self) -> bool {
+        matches!(
+            self,
+            Self::Stopping | Self::Reconciling | Self::Restoring | Self::Updating
+        )
+    }
+
     /// A workspace being stopped, removed, reconciled, restored or updated
     /// takes no link changes.
     pub fn accepts_links(self) -> bool {

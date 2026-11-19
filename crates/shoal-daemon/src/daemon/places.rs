@@ -15,6 +15,7 @@ use crate::{
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Where an execution runs in a terminal host, as its wrapper reports it.
+#[derive(Clone)]
 pub(crate) struct ExecutionPlace {
     pub origin: Origin,
     /// It runs an agent, which takes over a place Shoal created for another
