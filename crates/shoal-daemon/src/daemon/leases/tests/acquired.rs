@@ -1,13 +1,18 @@
+//! Leases that end with the agents and demos that acquired them, as the
+//! daemon tracks their executions.
 use std::{sync::Arc, time::Duration};
 
 use shoal_ids::execution_ids::ExecutionId;
 
-use super::*;
-use crate::daemon::scope::Caller;
-use crate::{
-    daemon::test_support::{agent_process, configure, manager, repository},
-    model::Workspace,
+use crate::daemon::{
+    allocation::Allocation,
+    manager::Manager,
+    scope::Caller,
+    test_support::{agent_process, configure, manager, repository},
 };
+use crate::{model::Workspace, refusal::Reason};
+use shoal_protocol::acquirers::Acquirer;
+use shoal_protocol::notifications::NotificationKind;
 use shoal_protocol::{resources::ResourceRequest, space_names::SpaceSelector};
 
 /// A ready workspace in a daemon whose global config is `config`.
@@ -212,8 +217,16 @@ async fn a_stopped_agents_leases_end_and_a_demo_keeps_its_own_between_runs() {
     fixture.lease_simulator("agent", agent_acquirer).await;
     fixture.lease_simulator("demo", demo_acquirer).await;
 
-    fixture.manager.release_agent_leases(&agent).await;
-    fixture.manager.release_agent_leases(&demo).await;
+    fixture
+        .manager
+        .leases
+        .release_agent_leases(&*fixture.manager, &agent)
+        .await;
+    fixture
+        .manager
+        .leases
+        .release_agent_leases(&*fixture.manager, &demo)
+        .await;
 
     assert_eq!(fixture.simulators().await, ["demo"]);
 }
@@ -228,37 +241,6 @@ async fn the_users_acquire_keeps_an_agents_permit_past_its_exit() {
     fixture.manager.end_test_execution(execution_id).await;
 
     assert_eq!(fixture.permits().await, [permit("shared", &Acquirer::User)]);
-}
-
-#[tokio::test]
-async fn a_failing_release_hook_keeps_the_permit_as_the_users_and_tells_the_user() {
-    let config = format!("hooks.pre_resource_release = 'release.sh'\n{POOL}");
-    let fixture = Fixture::new(&config).await;
-    let hook = fixture.workspace.path.join("release.sh");
-    std::fs::write(&hook, "#!/bin/sh\necho 'device in use' >&2\nexit 1\n").unwrap();
-    let mut permissions = std::fs::metadata(&hook).unwrap().permissions();
-    std::os::unix::fs::PermissionsExt::set_mode(&mut permissions, 0o755);
-    std::fs::set_permissions(&hook, permissions).unwrap();
-    let (execution_id, caller) = fixture.agent().await;
-    fixture.acquire("agent", Some(&caller)).await;
-
-    fixture.manager.end_test_execution(execution_id).await;
-    // A later pass does not run the failing hook again.
-    (fixture.manager.release_leases_of_ended_executions())
-        .await
-        .unwrap();
-
-    assert_eq!(fixture.permits().await, [permit("agent", &Acquirer::User)]);
-    let notices = fixture.manager.notifications.list(false, 10).await.unwrap();
-    let failed: Vec<_> = (notices.iter())
-        .filter(|notice| notice.kind == NotificationKind::ReleaseFailed)
-        .collect();
-    assert_eq!(failed.len(), 1);
-    assert!(
-        failed[0]
-            .message
-            .contains("shoal release resource lock --name agent")
-    );
 }
 
 /// The sweep releases the leases of an agent whose execution ended, or
@@ -302,9 +284,12 @@ async fn leases_of_ended_and_stopped_agents_are_released_and_running_ones_kept()
         fixture.lease_simulator(name, acquirer).await;
     }
 
-    (fixture.manager.release_leases_of_ended_executions())
-        .await
-        .unwrap();
+    (fixture
+        .manager
+        .leases
+        .release_leases_of_ended_executions(&*fixture.manager))
+    .await
+    .unwrap();
 
     assert_eq!(fixture.simulators().await, ["between-runs", "running"]);
     process.kill();
@@ -423,7 +408,8 @@ async fn an_agent_ending_during_a_stop_releases_its_leases_once_the_stop_ends() 
         .await
         .unwrap();
     manager
-        .release_ended_leases_of(&fixture.workspace.id)
+        .leases
+        .release_ended_leases_of(&**manager, &fixture.workspace.id)
         .await
         .unwrap();
     assert_eq!(fixture.permits().await, []);
@@ -446,7 +432,11 @@ async fn a_release_a_busy_resource_operation_holds_off_waits_for_the_next_pass()
     assert_eq!(fixture.permits().await, [permit("agent", &agent)]);
 
     drop(hook);
-    manager.release_leases_of_ended_executions().await.unwrap();
+    manager
+        .leases
+        .release_leases_of_ended_executions(&**manager)
+        .await
+        .unwrap();
     assert_eq!(fixture.permits().await, []);
     let notices = manager.notifications.list(false, 10).await.unwrap();
     assert!(
@@ -475,7 +465,8 @@ async fn a_simulator_release_a_lifecycle_operation_holds_off_waits() {
         .release_simulator(&**manager, &selector, "agent".into())
         .await;
 
-    assert!(waits(&released.unwrap_err()));
+    let error = released.unwrap_err();
+    assert_eq!(Reason::of(&error), Some(Reason::NotReady), "{error:#}");
 }
 
 /// A release decided for an agent's lease leaves it alone once the user
@@ -537,7 +528,10 @@ async fn releasing_an_ended_agents_leases_leaves_the_workspace_idle() {
     .await
     .unwrap();
 
-    manager.release_agent_leases(&execution_id).await;
+    manager
+        .leases
+        .release_agent_leases(&**manager, &execution_id)
+        .await;
 
     assert_eq!(fixture.permits().await, []);
     assert_eq!(fixture.simulators().await, Vec::<String>::new());

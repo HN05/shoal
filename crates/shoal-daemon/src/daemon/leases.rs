@@ -1,6 +1,7 @@
 //! What leases need of the rest of the daemon, which [`Manager`] gives
 //! them: the spaces they belong to, their repositories' settings and hooks,
 //! the agents that acquire them and the approval requests that gate them.
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
@@ -95,9 +96,21 @@ impl Agents for Manager {
         )
     }
 
+    fn recorded_executions(&self) -> BoxFuture<'_, Result<HashMap<ExecutionId, bool>>> {
+        Box::pin(self.store.read(|db| recorded_executions(db)))
+    }
+
     fn has_queued_launch<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
         Box::pin(Manager::has_queued_launch(self, id))
     }
+}
+
+/// Every execution with a record, and whether it runs a process.
+fn recorded_executions(db: &Connection) -> Result<HashMap<ExecutionId, bool>> {
+    let mut statement =
+        db.prepare("SELECT id, child IS NOT NULL OR group_id IS NOT NULL FROM executions")?;
+    let ids = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+    Ok(ids.collect::<rusqlite::Result<_>>()?)
 }
 
 impl Approvals for Manager {

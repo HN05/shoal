@@ -1,6 +1,7 @@
 //! What leases need of the rest of the daemon, which implements it: the
 //! spaces they belong to, their repositories' settings and hooks, the agents
 //! that acquire them and the approval requests that gate them.
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
@@ -81,6 +82,11 @@ pub trait Agents: Send + Sync {
 
     /// Whether `execution` runs a demo.
     fn runs_demo<'a>(&'a self, execution: &'a ExecutionId) -> BoxFuture<'a, Result<bool>>;
+
+    /// Every execution with a record, which a recorded end deletes, and
+    /// whether it runs a process: a stopped agent waiting for its restore
+    /// has none recorded.
+    fn recorded_executions(&self) -> BoxFuture<'_, Result<HashMap<ExecutionId, bool>>>;
 
     /// Whether an agent launch waits to start in the space `id`.
     fn has_queued_launch<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>>;

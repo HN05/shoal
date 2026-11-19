@@ -14,7 +14,7 @@ pub use shoal_protocol::sim::{
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Operations on the client type [`CleanRequest`] that only the `shoal` command uses.
-pub trait CleanRequestExt {
+pub(super) trait CleanRequestExt {
     /// Record an idle device about to be deleted to make room.
     fn record_eviction(&mut self, sim: &Simulator);
 

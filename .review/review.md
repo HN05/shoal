@@ -44,12 +44,20 @@ instead of the PR delivery guidance below.
   row mappers and guards every subsystem shares, and depends on no Shoal crate
   but `shoal-core`, `shoal-ids`, `shoal-protocol` and `shoal-refs`. Flag a
   migration that calls code outside the store instead of a frozen copy.
-- `crates/shoal-daemon-base` holds the daemon's log, config state, gates,
-  events, notifications, item numbers and file access, and depends on no
-  Shoal crate but `shoal-core`, `shoal-forge-types`, `shoal-ids`,
-  `shoal-protocol` and `shoal-store`. Flag code there that is a method of
-  `Manager`, or that calls a subsystem other than through an interface it
-  declares.
+- `crates/shoal-daemon-base` holds the daemon's log, a request's caller, the
+  approval requests subsystems make, config state, gates, events,
+  notifications, item numbers and file access, and depends on no Shoal crate
+  but `shoal-core`, `shoal-forge-types`, `shoal-ids`, `shoal-protocol` and
+  `shoal-store`. Flag code there that is a method of `Manager`, or that calls
+  a subsystem other than through an interface it declares.
+- A subsystem crate of the daemon, such as `crates/shoal-leases`, offers its
+  operations through a service `Manager` holds and reaches other subsystems
+  only through interfaces it declares; `shoal-leases` depends on no Shoal
+  crate but `shoal-core`, `shoal-daemon-base`, `shoal-ids`, `shoal-protocol`,
+  `shoal-store` and `shoal-subprocess`. Flag a `Manager` method that does a
+  subsystem's work, a subsystem crate that reads another's tables or calls it
+  other than through such an interface, and a test of one subsystem that
+  builds a `Manager` instead of the service over stand-ins.
 - The CLI (`crates/shoal-cli`) and the daemon (`crates/shoal-daemon`) depend
   on neither each other; the `shoal` package's `main` joins them. Flag a
   dependency of the daemon, even a dev-dependency, on a crate that calls the

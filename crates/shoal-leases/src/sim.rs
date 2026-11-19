@@ -1,9 +1,9 @@
 //! Exclusive, worktree-owned Xcode simulator leases. Claims are persisted
 //! before every simctl mutation so interrupted work can be reconciled.
 use crate::sim::audit::CleanRequestExt;
-pub mod audit;
+mod audit;
 mod planning;
-pub mod records;
+mod records;
 mod simctl;
 
 use anyhow::{Result, ensure};

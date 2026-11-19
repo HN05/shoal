@@ -558,7 +558,7 @@ impl Manager {
             })
             .await?;
         // Its leases end with the agent, though its execution stays.
-        self.release_agent_leases(id).await;
+        self.leases.release_agent_leases(self, id).await;
         Ok(Pause::Paused)
     }
 

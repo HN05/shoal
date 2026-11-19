@@ -213,7 +213,10 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<(), SweepFa
     );
     step(
         "ended executions' leases",
-        manager.release_leases_of_ended_executions().await,
+        manager
+            .leases
+            .release_leases_of_ended_executions(manager)
+            .await,
     );
     step("grace periods", manager.begin_grace_pass().await);
     step("branch observation", observe_branches(manager).await);

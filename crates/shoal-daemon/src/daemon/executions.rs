@@ -350,7 +350,8 @@ impl Manager {
         };
         let registered = self.register_execution(&space_id, record).await?;
         if let Some(launch) = &launch {
-            self.give_demo_its_leases(&registered.id, &space_id, launch)
+            self.leases
+                .give_demo_its_leases(&registered.id, &space_id, launch)
                 .await;
         }
         // Setup releases its Git gate before the hook; resources remain guarded
@@ -747,7 +748,7 @@ impl Manager {
         self.keep_stopped_turn(&id, None).await;
         // Before its record goes, so a demo that replaces it waits for them.
         if complete {
-            self.release_execution_leases(&id).await;
+            self.leases.release_execution_leases(self, &id).await;
         }
         let connections = self.executions.connections().await;
         let completed = self
@@ -962,7 +963,7 @@ impl Manager {
     /// Delete an execution record whose processes the caller proved stopped.
     pub(crate) async fn forget_execution(&self, id: &ExecutionId) -> Result<()> {
         self.keep_stopped_turn(id, None).await;
-        self.release_execution_leases(id).await;
+        self.leases.release_execution_leases(self, id).await;
         let demo = self.delete_execution_record(id).await?;
         self.close_demo_session(demo).await;
         Ok(())

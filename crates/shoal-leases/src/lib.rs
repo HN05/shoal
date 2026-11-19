@@ -11,7 +11,7 @@ use shoal_core::{config, env, fsutil, hooks, repository, tools};
 use shoal_daemon_base::{callers, gates, log, notifications};
 use shoal_daemon_base::{config_state::ConfigState, notifications::Notifications};
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::approvals::ApprovalRequest;
+use shoal_protocol::approvals::{ApprovalRequest, Target};
 use shoal_protocol::notifications::NotificationKind;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use shoal_protocol::{model, protocol, state, time, validate};
@@ -19,14 +19,14 @@ use shoal_store as store;
 use shoal_subprocess as subprocess;
 use tokio::sync::{Notify, futures::Notified};
 
-pub mod acquired_leases;
+mod acquired_leases;
 pub mod allocation;
 pub mod containers;
 pub mod daemon;
 pub mod ports;
 mod queue;
 pub mod resources;
-pub mod secrets;
+mod secrets;
 pub mod sim;
 #[cfg(test)]
 mod stand_in;
@@ -73,7 +73,7 @@ impl Leases {
 
     /// Each workspace still waiting for a lease, with the pool or the
     /// simulators it waits for.
-    pub fn waiters(&self) -> Vec<(shoal_protocol::approvals::Target, SpaceId)> {
+    pub fn waiters(&self) -> Vec<(Target, SpaceId)> {
         self.queues.waiters()
     }
 

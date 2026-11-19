@@ -62,7 +62,7 @@ impl Fixture {
             layers: Mutex::new(layers(repo)),
             hooks: Mutex::default(),
             hooks_run: Mutex::default(),
-            demos: Vec::new(),
+            running: Mutex::default(),
             touched: Mutex::default(),
             announced: Mutex::default(),
         };
@@ -157,8 +157,8 @@ pub(crate) struct StandIn {
     pub(crate) hooks: Mutex<HashMap<HookKind, StandInHook>>,
     /// The executables of the hooks run, in order.
     pub(crate) hooks_run: Mutex<Vec<PathBuf>>,
-    /// The executions that run demos; every other execution runs an agent.
-    pub(crate) demos: Vec<ExecutionId>,
+    /// The executions with a record, and whether each runs a process.
+    pub(crate) running: Mutex<HashMap<ExecutionId, bool>>,
     /// The workspaces whose requests counted as their activity.
     pub(crate) touched: Mutex<Vec<SpaceId>>,
     /// The approval requests announced to whoever decides them.
@@ -234,14 +234,19 @@ impl Settings for StandIn {
     }
 }
 
+/// Every execution runs an agent; none runs a demo.
 impl Agents for StandIn {
     fn caller_agent<'a>(&'a self, caller: &'a Caller) -> BoxFuture<'a, Option<ExecutionId>> {
-        let agent = caller.execution_id().filter(|id| !self.demos.contains(id));
-        Box::pin(async move { agent.cloned() })
+        Box::pin(async move { caller.execution_id().cloned() })
     }
 
-    fn runs_demo<'a>(&'a self, execution: &'a ExecutionId) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(async move { Ok(self.demos.contains(execution)) })
+    fn runs_demo<'a>(&'a self, _execution: &'a ExecutionId) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async { Ok(false) })
+    }
+
+    fn recorded_executions(&self) -> BoxFuture<'_, Result<HashMap<ExecutionId, bool>>> {
+        let running = self.running.lock().unwrap().clone();
+        Box::pin(async move { Ok(running) })
     }
 
     fn has_queued_launch<'a>(&'a self, _id: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {

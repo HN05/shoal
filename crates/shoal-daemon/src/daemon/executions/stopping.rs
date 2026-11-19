@@ -458,7 +458,11 @@ impl Manager {
         )
         .await?;
         // The stopped agents' leases waited for the stop to end.
-        if let Err(error) = self.release_ended_leases_of(&workspace.id).await {
+        if let Err(error) = self
+            .leases
+            .release_ended_leases_of(self, &workspace.id)
+            .await
+        {
             log!(
                 "leases of the agents stopped in {} not released: {error:#}",
                 workspace.name
