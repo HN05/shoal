@@ -162,3 +162,14 @@ async fn a_start_releases_only_the_hold_of_the_repository_it_started_in() {
     assert!(carried(&first).await.is_empty());
     manager.store.shutdown().await;
 }
+
+#[tokio::test]
+async fn the_first_sweep_releases_the_refs_a_restart_left_unheld() {
+    let (root, manager) = manager().await;
+    let (repo, _) = carried_here(&manager, root.path()).await;
+
+    manager.release_unclaimed_carried().await.unwrap();
+
+    assert!(carried(&repo).await.is_empty());
+    manager.store.shutdown().await;
+}
