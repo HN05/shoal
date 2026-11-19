@@ -7,7 +7,10 @@
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::transcripts::{FollowedSession, SpaceSessions, Transcript, locate};
 
-use std::{collections::BTreeMap, path::PathBuf};
+use std::{
+    collections::{BTreeMap, HashMap},
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context as _, Result};
 use tokio::{io::BufReader, net::UnixStream};
@@ -46,7 +49,7 @@ pub struct SessionFollow<D> {
     /// The session it follows now.
     session: FollowedSession,
     /// Where it read each of the session's files to.
-    offsets: BTreeMap<PathBuf, u64>,
+    cursor: Cursor,
     /// The session followed, until [`Self::next`] returns it.
     first: Option<FollowedSession>,
 }
@@ -85,7 +88,7 @@ pub async fn follow_session<D: Daemon>(
         named: session,
         responses: Some(responses),
         session: followed.clone(),
-        offsets: BTreeMap::new(),
+        cursor: Cursor::default(),
         first: Some(followed),
     })
 }
@@ -136,7 +139,11 @@ impl<D: Daemon> SessionFollow<D> {
             match response.body.into_result() {
                 // As while the space's machine or the hub restarts.
                 Err(error) if connection::machine_unreachable(&error) => self.responses = None,
-                body => return self.take(body?),
+                body => {
+                    if let Some(followed) = self.take(body?)? {
+                        return Ok(followed);
+                    }
+                }
             }
         }
     }
@@ -145,32 +152,31 @@ impl<D: Daemon> SessionFollow<D> {
     /// come back, from where each file was read to; the session it then
     /// follows when it is another.
     async fn follow_again(&mut self) -> Result<Option<FollowedSession>> {
+        let from = self.cursor.resume();
         let (daemon, space, named) = (&self.daemon, &self.space, &self.named);
-        let offsets = &self.offsets;
         let (responses, followed) =
-            connection::after_restart(|| open(daemon, space, named, offsets)).await?;
+            connection::after_restart(|| open(daemon, space, named, &from)).await?;
         self.responses = Some(responses);
         Ok(self.went_on_in(followed))
     }
 
-    /// What `body`, a frame of the follow, brings, keeping where the bytes
-    /// it carries end.
-    fn take(&mut self, body: Body) -> Result<Followed> {
+    /// What `body`, a frame of the follow, brings that it has not read
+    /// yet, keeping where the bytes it carries end.
+    fn take(&mut self, body: Body) -> Result<Option<Followed>> {
         match body {
             Body::FollowedSession(followed) => {
-                self.offsets.clear();
+                self.cursor = Cursor::default();
                 self.session = followed.clone();
-                Ok(Followed::Session(followed))
+                Ok(Some(Followed::Session(followed)))
             }
             Body::SessionBytes(gained) => {
                 let bytes = gained.bytes()?;
-                let end = gained.offset + bytes.len() as u64;
-                self.offsets.insert(gained.file.clone(), end);
-                Ok(Followed::Bytes {
+                let unread = self.cursor.take(&gained.file, gained.offset, bytes);
+                Ok(unread.map(|(offset, bytes)| Followed::Bytes {
                     file: gained.file,
-                    offset: gained.offset,
+                    offset,
                     bytes,
-                })
+                }))
             }
             body => Err(body.unexpected("SessionBytes")),
         }
@@ -183,8 +189,72 @@ impl<D: Daemon> SessionFollow<D> {
         if followed.session.session == self.session.session.session {
             return None;
         }
-        self.offsets.clear();
+        self.cursor = Cursor::default();
         self.session = followed.clone();
         Some(followed)
     }
 }
+
+/// The most a follow opened again spends of its request on where it read
+/// each file to, well within a frame.
+const RESUME_BYTES: usize = 32 << 10;
+
+/// Where a follow read each of its session's files to, and what of them
+/// the daemon sends again once it follows again.
+#[derive(Debug, Default)]
+struct Cursor {
+    offsets: BTreeMap<PathBuf, u64>,
+    /// The files a follow opened again left out of where it read to, which
+    /// the daemon sends from their start, with where it read each to.
+    replaying: HashMap<PathBuf, u64>,
+}
+
+impl Cursor {
+    /// Where a follow opened again reads on from: the files read furthest,
+    /// as many as [`RESUME_BYTES`] holds; the daemon sends the others from
+    /// their start, which [`Self::take`] skips to where it read them to.
+    fn resume(&mut self) -> BTreeMap<PathBuf, u64> {
+        let mut read: Vec<_> = self.offsets.iter().collect();
+        read.sort_by_key(|(_, offset)| std::cmp::Reverse(**offset));
+        let mut from = BTreeMap::new();
+        let mut spent = 0;
+        self.replaying.clear();
+        for (file, &offset) in read {
+            // Its path as JSON, its offset and what separates them.
+            let cost = serde_json::to_string(file).map_or(usize::MAX, |path| path.len() + 24);
+            if spent + cost <= RESUME_BYTES {
+                spent += cost;
+                from.insert(file.clone(), offset);
+            } else {
+                self.replaying.insert(file.clone(), offset);
+            }
+        }
+        from
+    }
+
+    /// What of `bytes`, of `file` from `offset`, the follow has not read,
+    /// from its offset, keeping where it read `file` to; none once it read
+    /// them all before.
+    fn take(&mut self, file: &Path, offset: u64, bytes: Vec<u8>) -> Option<(u64, Vec<u8>)> {
+        let end = offset + bytes.len() as u64;
+        let (offset, bytes) = match self.replaying.get(file).copied() {
+            Some(read) if end <= read => {
+                if end == read {
+                    self.replaying.remove(file);
+                }
+                return None;
+            }
+            Some(read) => {
+                self.replaying.remove(file);
+                let skip = read.saturating_sub(offset) as usize;
+                (offset.max(read), bytes[skip..].to_vec())
+            }
+            None => (offset, bytes),
+        };
+        self.offsets.insert(file.to_owned(), end);
+        Some((offset, bytes))
+    }
+}
+
+#[cfg(test)]
+mod tests;
