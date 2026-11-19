@@ -8,6 +8,7 @@ use shoal_refs::{BranchName, CommitId};
 use super::{clean_checkout, local_commit, records::RecordedMerge};
 use crate::{
     daemon::workspace::Manager,
+    forge::items::action::MergeMethod,
     git::{
         self,
         default_branch::DefaultBranchLookup,
@@ -108,29 +109,45 @@ async fn ensure_unpushed(
     default: &BranchName,
     merge: &RecordedMerge,
 ) -> Result<()> {
-    let (branch, previous, result) = (
-        &merge.merge.branch,
-        merge.merge.previous.as_str(),
-        merge.merge.result.as_str(),
-    );
+    let (branch, result) = (&merge.merge.branch, merge.merge.result.as_str());
     if !pushed(&repo.path, default, result).await? {
         return Ok(());
     }
-    // A merge commit made on the default branch reverts as one; a
-    // fast-forward, by each commit it brought, unless merges among them,
-    // which git revert takes only one at a time, need the inverse diff.
-    let merge_commit = !merged_parents(&repo.path, result).await?.is_empty()
-        && tip_commit(&repo.path, &format!("{result}^1")).await? == previous;
-    let revert = if merge_commit {
+    let revert = revert_command(repo, merge).await?;
+    // A merge commit or fast-forward leaves the branch's commits in the
+    // default branch, which a revert keeps; a squash or rebase copied them.
+    let again = match merge.merge.method {
+        MergeMethod::Merge => format!(
+            "Git then counts {branch}'s commits as merged, so merging it again brings in only newer commits"
+        ),
+        MergeMethod::Squash | MergeMethod::Rebase => {
+            format!("merging {branch} again then brings its changes back")
+        }
+    };
+    bail!(
+        "{default} was pushed with the merge of {branch}, so shoal unmerge cannot undo it; undo it with {revert} and push that. {again}"
+    )
+}
+
+/// The Git command that reverts `merge`: a squash commit or a merge commit
+/// made on the default branch as one; a rebase or fast-forward by each
+/// commit it brought, unless merges among them, which git revert takes
+/// only one at a time, need the inverse diff.
+async fn revert_command(repo: &Repository, merge: &RecordedMerge) -> Result<String> {
+    let path = &repo.path;
+    let (previous, result) = (merge.merge.previous.as_str(), merge.merge.result.as_str());
+    if merge.merge.method == MergeMethod::Squash {
+        return Ok(format!("git revert {result}"));
+    }
+    let merge_commit = !merged_parents(path, result).await?.is_empty()
+        && tip_commit(path, &format!("{result}^1")).await? == previous;
+    Ok(if merge_commit {
         format!("git revert -m 1 {result}")
-    } else if merges_between(&repo.path, previous, result).await? {
+    } else if merges_between(path, previous, result).await? {
         format!("git diff {result} {previous} | git apply --index, then a commit,")
     } else {
         format!("git revert {previous}..{result}")
-    };
-    bail!(
-        "{default} was pushed with the merge of {branch}, so shoal unmerge cannot undo it; undo it with {revert} and push that. Git then counts {branch}'s commits as merged, so merging it again brings in only newer commits"
-    )
+    })
 }
 
 /// Refuse to replay the history from the merge's result to `tip` when it

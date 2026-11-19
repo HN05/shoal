@@ -286,6 +286,39 @@ async fn a_conflicting_rebase_merge_leaves_main_as_it_was() {
     a_conflicting_merge_by(MergeMethod::Rebase).await;
 }
 
+/// The refusal to unmerge a merge by `method` once main went to its
+/// upstream, with main's commit before the merge and after it.
+async fn pushed_refusal(method: MergeMethod) -> (String, String, String) {
+    let f = Fixture::new().await;
+    let first = f.add("first", "first").await;
+    write_commit(&first.path, "notes", "first's notes");
+    write_commit(&f.repo, "tracked", "main side");
+    let before = f.main();
+    f.merge_by("first", method).await.unwrap();
+    let origin = f.root.path().join("origin.git");
+    let origin = origin.to_str().unwrap();
+    git(&f.repo, &["init", "-q", "--bare", "-b", "main", origin]);
+    git(&f.repo, &["remote", "add", "origin", origin]);
+    git(&f.repo, &["push", "-q", "-u", "origin", "main"]);
+    let error = f.unmerge("first").await.unwrap_err();
+    (format!("{error:#}"), before, f.main())
+}
+
+#[tokio::test]
+async fn a_pushed_squash_merge_is_reverted_as_one_commit() {
+    let (error, _, result) = pushed_refusal(MergeMethod::Squash).await;
+    assert!(error.contains(&format!("git revert {result} ")), "{error}");
+}
+
+#[tokio::test]
+async fn a_pushed_rebase_merge_is_reverted_by_each_commit_it_copied() {
+    let (error, before, result) = pushed_refusal(MergeMethod::Rebase).await;
+    assert!(
+        error.contains(&format!("git revert {before}..{result} ")),
+        "{error}"
+    );
+}
+
 #[tokio::test]
 async fn unmerge_refuses_stacked_conflicting_and_pushed_merges_changing_nothing() {
     let f = Fixture::new().await;

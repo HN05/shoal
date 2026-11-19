@@ -3635,10 +3635,12 @@ when:
 
 - the default branch's upstream has the merge's result, as the last fetch saw it.
   The refusal gives the revert that undoes it, to push: `git revert -m 1 <commit>`
-  for a merge commit, `git revert <before>..<commit>` for a fast-forward, or, when
-  that fast-forward brought merge commits, the inverse diff applied and committed;
-  Git then counts the branch's commits as merged, so merging the branch again
-  brings in only newer commits;
+  for a merge commit, `git revert <commit>` for a squash, `git revert
+  <before>..<commit>` for a fast-forward or rebase, or, when that fast-forward
+  brought merge commits, the inverse diff applied and committed. After a merge
+  commit or fast-forward, Git then counts the branch's commits as merged, so
+  merging the branch again brings in only newer commits; after a squash or
+  rebase, merging it again brings its changes back;
 - a later merge's branch contains the unmerged branch's commits, as a stacked
   workspace's does, since replaying it would bring them back. The refusal names
   that merge, to unmerge first;
