@@ -6,7 +6,8 @@ use anyhow::{Context, Result, bail, ensure};
 use shoal_refs::{BranchName, CommitId};
 
 use crate::{
-    git::{self, repo::clean_branch, run_isolated as git_run, scratch},
+    forge::items::action::MergeMethod,
+    git::{self, merge_tree, repo::clean_branch, run_isolated as git_run, scratch},
     model::{UnmergePlan, Unmerged},
 };
 
@@ -69,11 +70,27 @@ pub async fn merge_has_own_changes(repo: &Path, commit: &str) -> Result<bool> {
     Ok(recorded.trim() != merged)
 }
 
-/// The commit a merge of `source` onto `previous` left the default branch
-/// at, found in `tip`'s first-parent history: `source` itself after a
-/// fast-forward, else the merge commit of the two. `None` when that history
-/// shows no such merge, as after one that merged nothing.
+/// The commit a merge of `source` onto `previous` by `method` left the
+/// default branch at, found in `tip`'s first-parent history. `None` when
+/// that history shows no such merge, as after one that merged nothing.
 pub async fn merge_result(
+    repo: &Path,
+    tip: &str,
+    previous: &CommitId,
+    source: &CommitId,
+    method: MergeMethod,
+) -> Result<Option<CommitId>> {
+    match method {
+        MergeMethod::Merge => merged(repo, tip, previous, source).await,
+        MergeMethod::Squash => squashed(repo, tip, previous, source).await,
+        MergeMethod::Rebase => rebased(repo, tip, previous, source).await,
+    }
+}
+
+/// The commit a merge of `source` onto `previous` left in `tip`'s
+/// first-parent history: `source` itself after a fast-forward, else the
+/// merge commit of the two.
+async fn merged(
     repo: &Path,
     tip: &str,
     previous: &CommitId,
@@ -96,17 +113,92 @@ pub async fn merge_result(
     if fast_forward {
         return Ok(Some(source.clone()));
     }
-    let Some(chain) = first_parent_chain(repo, tip, previous.as_str()).await? else {
-        return Ok(None);
-    };
-    let Some(first) = chain.last() else {
+    let Some(first) = first_after(repo, tip, previous).await? else {
         return Ok(None);
     };
     let merged = merged_parents(repo, first.as_str()).await?;
     Ok(merged
         .iter()
         .any(|parent| parent == source)
-        .then(|| first.clone()))
+        .then_some(first))
+}
+
+/// The commit a squash merge of `source` onto `previous` left in `tip`'s
+/// first-parent history: the one commit on `previous` whose tree is the
+/// merge of the two.
+async fn squashed(
+    repo: &Path,
+    tip: &str,
+    previous: &CommitId,
+    source: &CommitId,
+) -> Result<Option<CommitId>> {
+    let Some(first) = first_after(repo, tip, previous).await? else {
+        return Ok(None);
+    };
+    if !merged_parents(repo, first.as_str()).await?.is_empty() {
+        return Ok(None);
+    }
+    let merged = merge_tree::merged_tree(repo, previous.as_str(), source.as_str()).await?;
+    let recorded = git_run(repo, &["rev-parse", &format!("{first}^{{tree}}")]).await?;
+    Ok((merged.as_deref() == Some(recorded.trim())).then_some(first))
+}
+
+/// The last commit a rebase merge of `source` onto `previous` left in
+/// `tip`'s first-parent history: the chain on `previous` whose commits
+/// replay the branch's own, in order, as [`replay_identity`] tells them.
+async fn rebased(
+    repo: &Path,
+    tip: &str,
+    previous: &CommitId,
+    source: &CommitId,
+) -> Result<Option<CommitId>> {
+    let branch = rebased_commits(repo, previous, source).await?;
+    let Some(mut chain) = first_parent_chain(repo, tip, previous.as_str()).await? else {
+        return Ok(None);
+    };
+    chain.reverse();
+    if branch.is_empty() || chain.len() < branch.len() {
+        return Ok(None);
+    }
+    for (copy, original) in chain.iter().zip(&branch) {
+        if replay_identity(repo, copy.as_str()).await?
+            != replay_identity(repo, original.as_str()).await?
+        {
+            return Ok(None);
+        }
+    }
+    Ok(Some(chain[branch.len() - 1].clone()))
+}
+
+/// The commits of `source` a rebase onto `previous` copies, oldest first:
+/// those `previous` lacks, but merges and those whose change `previous`
+/// already has.
+async fn rebased_commits(
+    repo: &Path,
+    previous: &CommitId,
+    source: &CommitId,
+) -> Result<Vec<CommitId>> {
+    let range = format!("{previous}...{source}");
+    let listed = git_run(
+        repo,
+        &[
+            "rev-list",
+            "--reverse",
+            "--no-merges",
+            "--cherry-pick",
+            "--right-only",
+            &range,
+            "--",
+        ],
+    )
+    .await?;
+    Ok(listed.lines().map(CommitId::from).collect())
+}
+
+/// The first commit after `previous` in `tip`'s first-parent history.
+async fn first_after(repo: &Path, tip: &str, previous: &CommitId) -> Result<Option<CommitId>> {
+    let chain = first_parent_chain(repo, tip, previous.as_str()).await?;
+    Ok(chain.and_then(|mut chain| chain.pop()))
 }
 
 /// Whether the upstream of `default`, as the last fetch saw it, holds

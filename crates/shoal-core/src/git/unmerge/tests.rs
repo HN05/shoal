@@ -138,3 +138,99 @@ async fn a_checkout_moved_by_a_commit_or_a_switch_is_not_at_its_planned_tip() {
     git(&repo, &["switch", "-q", "-c", "other", tip.as_str()]);
     assert!(!super::checkout_at(&repo, &main, &tip).await.unwrap());
 }
+
+/// `main` and `side`, which forked from it with commits to `feature` and
+/// `notes`, after a commit of `main`'s own; their commits and the commit
+/// `main` was at.
+fn diverged(root: &std::path::Path) -> (std::path::PathBuf, CommitId) {
+    let repo = repository(root, "repo");
+    git(&repo, &["switch", "-q", "-c", "side"]);
+    fs::write(repo.join("feature"), "feature\n").unwrap();
+    commit(&repo, "feature");
+    fs::write(repo.join("notes"), "notes\n").unwrap();
+    commit(&repo, "notes");
+    git(&repo, &["switch", "-q", "main"]);
+    fs::write(repo.join("main"), "main\n").unwrap();
+    commit(&repo, "main");
+    let previous = rev(&repo, "main").as_str().into();
+    (repo, previous)
+}
+
+/// The commit `merge_result` finds for `side` merged by `method` onto
+/// `previous`, in `main`'s history.
+async fn result(
+    repo: &std::path::Path,
+    previous: &CommitId,
+    method: crate::forge::items::action::MergeMethod,
+) -> Option<String> {
+    let source = rev(repo, "side").as_str().into();
+    super::merge_result(repo, "main", previous, &source, method)
+        .await
+        .unwrap()
+        .map(|commit| commit.to_string())
+}
+
+#[tokio::test]
+async fn a_squash_merge_is_the_one_commit_with_the_merged_tree() {
+    use crate::forge::items::action::MergeMethod;
+    let root = tempfile::tempdir().unwrap();
+    let (repo, previous) = diverged(root.path());
+    git(&repo, &["merge", "-q", "--squash", "side"]);
+    git(&repo, &["commit", "-q", "--no-edit"]);
+    let squashed = rev(&repo, "main");
+    fs::write(repo.join("later"), "later\n").unwrap();
+    commit(&repo, "later");
+    assert_eq!(
+        result(&repo, &previous, MergeMethod::Squash).await,
+        Some(squashed)
+    );
+    // Neither a merge commit nor a rebase of the branch is there.
+    assert_eq!(result(&repo, &previous, MergeMethod::Merge).await, None);
+    assert_eq!(result(&repo, &previous, MergeMethod::Rebase).await, None);
+
+    // A commit with another tree is no squash of the branch.
+    git(&repo, &["reset", "-q", "--hard", previous.as_str()]);
+    fs::write(repo.join("feature"), "feature\n").unwrap();
+    commit(&repo, "feature");
+    assert_eq!(result(&repo, &previous, MergeMethod::Squash).await, None);
+}
+
+#[tokio::test]
+async fn a_rebase_merge_is_the_chain_that_replays_the_branch_s_commits() {
+    use crate::forge::items::action::MergeMethod;
+    let root = tempfile::tempdir().unwrap();
+    let (repo, previous) = diverged(root.path());
+    // A change main already has is one the rebase leaves out.
+    git(&repo, &["switch", "-q", "side"]);
+    fs::write(repo.join("main"), "main\n").unwrap();
+    commit(&repo, "main");
+    git(&repo, &["switch", "-q", "--detach", "side"]);
+    git(&repo, &["rebase", "-q", "main"]);
+    let rebased = rev(&repo, "HEAD");
+    git(&repo, &["switch", "-q", "main"]);
+    git(&repo, &["merge", "-q", "--ff-only", &rebased]);
+    fs::write(repo.join("later"), "later\n").unwrap();
+    commit(&repo, "later");
+    assert_eq!(
+        rev(&repo, &format!("{rebased}~2")),
+        previous.as_str(),
+        "the rebase copied both commits of the branch's own"
+    );
+    assert_eq!(
+        result(&repo, &previous, MergeMethod::Rebase).await,
+        Some(rebased)
+    );
+    assert_eq!(result(&repo, &previous, MergeMethod::Squash).await, None);
+
+    // Commits of the same changes by another author are no rebase of them.
+    git(&repo, &["reset", "-q", "--hard", previous.as_str()]);
+    for file in ["feature", "notes"] {
+        fs::write(repo.join(file), format!("{file}\n")).unwrap();
+        git(&repo, &["add", file]);
+        git(
+            &repo,
+            &["-c", "user.name=Someone Else", "commit", "-q", "-m", file],
+        );
+    }
+    assert_eq!(result(&repo, &previous, MergeMethod::Rebase).await, None);
+}

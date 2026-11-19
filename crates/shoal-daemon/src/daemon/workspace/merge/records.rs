@@ -13,6 +13,7 @@ use shoal_refs::{BranchName, CommitId};
 use super::tracking_ref;
 use crate::{
     daemon::{log, workspace::Manager},
+    forge::items::action::MergeMethod,
     git::{
         self,
         unmerge::{first_parent_chain, holds_commits_of, merge_result, replay_identity},
@@ -86,7 +87,14 @@ impl Manager {
         let Some(tip) = git::status::local_branch_commit(repo, default).await? else {
             return Ok(());
         };
-        let merged = merge_result(repo, tip.as_str(), previous, &plan.source).await?;
+        let merged = merge_result(
+            repo,
+            tip.as_str(),
+            previous,
+            &plan.source,
+            MergeMethod::Merge,
+        )
+        .await?;
         let Some(result) = merged else {
             return Ok(());
         };
