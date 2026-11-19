@@ -2700,12 +2700,15 @@ dependencies = [
  "serde_json",
  "shoal-core",
  "shoal-daemon-base",
+ "shoal-forge-types",
  "shoal-ids",
  "shoal-protocol",
  "shoal-refs",
  "shoal-store",
  "tempfile",
  "tokio",
+ "toml",
+ "toml_edit",
 ]
 
 [[package]]

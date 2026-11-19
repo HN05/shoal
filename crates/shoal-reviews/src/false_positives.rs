@@ -1,14 +1,12 @@
 //! A repository's false positives: claims its reviews raised that were
 //! resolved as wrong, kept in a file beside its local config so that every
 //! later review of the repository receives them and the user can edit them.
-use shoal_ids::repository_ids::RepositoryId;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, Value, value};
 
-use super::super::manager::Manager;
 use crate::{
     fsutil::atomic::{self, Permissions, ReplaceOptions},
     reviews::{FindingId, Outcome, Review},
@@ -21,13 +19,13 @@ const HEADER: &str = "# Claims that Shoal's reviews of this repository raised an
 /// One claim resolved as wrong.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct FalsePositive {
+pub struct FalsePositive {
     /// The finding it was resolved from; none for one the user added.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) finding: Option<FindingId>,
-    pub(crate) claim: String,
-    pub(crate) path: String,
-    pub(crate) reason: String,
+    pub finding: Option<FindingId>,
+    pub claim: String,
+    pub path: String,
+    pub reason: String,
 }
 
 #[derive(Deserialize)]
@@ -40,7 +38,7 @@ struct Entries {
 /// The context of an error reading a repository's false positives, which
 /// fails the review as [`crate::reviews::FailureReason::InvalidFalsePositives`].
 #[derive(Debug)]
-pub(super) struct Unreadable;
+pub struct Unreadable;
 
 impl std::fmt::Display for Unreadable {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -48,61 +46,50 @@ impl std::fmt::Display for Unreadable {
     }
 }
 
-impl Manager {
-    /// The false positives of the repository `repository_id`, newest first.
-    /// An error reading them has the context [`Unreadable`].
-    pub(super) async fn false_positives(
-        &self,
-        repository_id: &RepositoryId,
-    ) -> Result<Vec<FalsePositive>> {
-        let Some(path) = self.false_positives_path(repository_id).await? else {
-            return Ok(Vec::new());
-        };
-        let listed = tokio::task::spawn_blocking(move || read(&path)).await?;
-        listed.context(Unreadable)
-    }
+/// The false positives in the file at `path`, newest first; none without
+/// one. An error reading them has the context [`Unreadable`].
+pub async fn listed(path: Option<PathBuf>) -> Result<Vec<FalsePositive>> {
+    let Some(path) = path else {
+        return Ok(Vec::new());
+    };
+    let listed = tokio::task::spawn_blocking(move || read(&path)).await?;
+    listed.context(Unreadable)
+}
 
-    /// Keep `finding` of `review` in its repository's false positives while
-    /// `outcome` is one, or drop it from them, and return the file as it
-    /// was when that changed it. The caller holds the registry gate, which
-    /// moves and removal take, so the file stays where it was found.
-    pub(super) async fn keep_false_positive(
-        &self,
-        review: &Review,
-        finding: FindingId,
-        outcome: Option<&Outcome>,
-    ) -> Result<Option<Previous>> {
-        let entry = match outcome {
-            Some(Outcome::FalsePositive { reason }) => Some(entry(review, finding, reason)?),
-            _ => None,
-        };
-        let repository_id = self
-            .workspace_by_id(&review.workspace_id)
-            .await?
-            .repository()
-            .clone();
-        let path = match entry {
-            Some(_) => Some(self.writable_false_positives_path(&repository_id).await?),
-            None => self.false_positives_path(&repository_id).await?,
-        };
-        let Some(path) = path else {
-            return Ok(None);
-        };
-        tokio::task::spawn_blocking(move || record(&path, finding, entry)).await?
+/// The entry `outcome` keeps for `finding` of `review`: one while it is a
+/// false positive.
+pub fn kept(
+    review: &Review,
+    finding: FindingId,
+    outcome: Option<&Outcome>,
+) -> Result<Option<FalsePositive>> {
+    match outcome {
+        Some(Outcome::FalsePositive { reason }) => Ok(Some(entry(review, finding, reason)?)),
+        _ => Ok(None),
     }
+}
+
+/// Keep `entry` as the one of `finding` in the file at `path`, or drop it
+/// without one, and return the file as it was when that changed it.
+pub async fn keep(
+    path: PathBuf,
+    finding: FindingId,
+    entry: Option<FalsePositive>,
+) -> Result<Option<Previous>> {
+    tokio::task::spawn_blocking(move || record(&path, finding, entry)).await?
 }
 
 /// A false positives file as it was before an edit, which [`Previous::restore`]
 /// puts back.
 #[derive(Debug)]
-pub(super) struct Previous {
+pub struct Previous {
     path: PathBuf,
     /// None when the edit created the file.
     text: Option<String>,
 }
 
 impl Previous {
-    pub(super) async fn restore(self) -> Result<()> {
+    pub async fn restore(self) -> Result<()> {
         tokio::task::spawn_blocking(move || match &self.text {
             Some(text) => store(&self.path, text, true),
             None => std::fs::remove_file(&self.path)

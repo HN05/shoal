@@ -2,15 +2,19 @@
 //! the background without a session or terminal, and the records of what
 //! they found and how their workspace's agent answered it. What reviews
 //! need of the rest of the daemon is the interface in [`daemon`].
-use shoal_core::{ai, config, env, process, reviews};
+use shoal_core::{ai, config, env, fsutil, process, reviews};
 use shoal_daemon_base::log;
+use shoal_forge_types as forge;
 use shoal_protocol::agent;
 
 #[cfg(test)]
 use shoal_core::test_support;
 
 pub mod daemon;
+pub mod false_positives;
+pub mod history;
 pub mod oneshot;
+pub mod reviewer;
 #[cfg(test)]
 mod stand_in;
 pub mod store;

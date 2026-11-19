@@ -10,10 +10,7 @@ use anyhow::{Context, Result, anyhow};
 use shoal_refs::{BranchName, CommitId};
 use tokio::{sync::watch, task::JoinSet};
 
-use super::{
-    CheckoutHold, history,
-    reviewer::{self, Ended, Files, Reviewer},
-};
+use super::CheckoutHold;
 use crate::{
     agent::{Agent, ModelChoice},
     config::{Effective, templates},
@@ -30,7 +27,11 @@ use shoal_forge::review::view::ViewRequests;
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::{space_names::SpaceSelector, time::UnixTime};
 use shoal_reviews::oneshot;
-use shoal_reviews::store;
+use shoal_reviews::{
+    false_positives, history,
+    reviewer::{self, Ended, Files, Reviewer},
+    store,
+};
 
 /// Start every queued review, now and whenever one is queued; each then
 /// waits in the agent queue for admission.
@@ -118,7 +119,7 @@ impl Manager {
     /// unreadable false positives, else as its reviewer could not run.
     async fn fail_unprepared(&self, id: ReviewId, error: anyhow::Error) {
         log!("review {id}: {error:#}");
-        let reason = match error.downcast_ref::<super::false_positives::Unreadable>() {
+        let reason = match error.downcast_ref::<false_positives::Unreadable>() {
             Some(_) => FailureReason::InvalidFalsePositives,
             None => FailureReason::ExecutionFailed,
         };

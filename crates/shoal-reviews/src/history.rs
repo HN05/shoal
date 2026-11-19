@@ -5,7 +5,7 @@ use std::fmt::Write as _;
 
 use shoal_refs::CommitId;
 
-use super::false_positives::FalsePositive;
+use crate::false_positives::FalsePositive;
 use crate::{
     forge::review::view::Details,
     reviews::{Finding, OutcomeKind, Review},
@@ -13,18 +13,18 @@ use crate::{
 
 /// The most a review's whole prompt holds: the built-in reviewers take it
 /// as one argument, which Linux limits to 128 KiB.
-pub(super) const PROMPT_LIMIT: usize = 120 * 1024;
+pub const PROMPT_LIMIT: usize = 120 * 1024;
 
 /// The most of the prompt the false positives take, which leaves the
 /// earlier reviews room.
-pub(super) const FALSE_POSITIVES_LIMIT: usize = 32 * 1024;
+pub const FALSE_POSITIVES_LIMIT: usize = 32 * 1024;
 
 /// The repository's false positives, given newest first, then the earlier
 /// reviews, their findings, replies, outcomes and checks, then the PR's
 /// discussion, in at most `limit` bytes. Of the false positives the newest
 /// that fit in [`FALSE_POSITIVES_LIMIT`] are kept, and of the rest the
 /// newest part.
-pub(super) fn history(
+pub fn history(
     false_positives: &[FalsePositive],
     earlier: &[Review],
     pull: Option<&Details>,
@@ -41,7 +41,7 @@ pub(super) fn history(
 
 /// The false positives, given newest first, as the prompt lists them: the
 /// newest that fit in `limit` bytes, none when none fits.
-pub(super) fn listed(false_positives: &[FalsePositive], limit: usize) -> String {
+pub fn listed(false_positives: &[FalsePositive], limit: usize) -> String {
     const OMITTED: &str = "\n\n[older false positives omitted]";
     let mut text = String::from(
         "# False positives\n\nClaims that earlier reviews of this repository raised and that \

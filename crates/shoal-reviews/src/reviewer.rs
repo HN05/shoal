@@ -5,20 +5,23 @@ use std::{fs, path::PathBuf, time::Duration};
 use anyhow::{Context, Result};
 use tokio::sync::watch;
 
-use crate::reviews::{
-    FailureReason, ReviewId,
-    output::{self, ResultFormat, ReviewerOutput},
+use crate::{
+    log,
+    oneshot::{self, AgentCommand},
+    reviews::{
+        FailureReason, ReviewId,
+        output::{self, ResultFormat, ReviewerOutput},
+    },
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
-use shoal_reviews::oneshot::{self, AgentCommand};
 
 /// A reviewer still running after this long is stopped. Fixed, since a
 /// review that long has stopped making progress.
-pub(crate) const TIMEOUT: Duration = Duration::from_secs(30 * 60);
+pub const TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 /// The files of one review's run, in its own directory.
 #[derive(Clone)]
-pub(super) struct Files {
+pub struct Files {
     pub directory: PathBuf,
 }
 
@@ -54,7 +57,7 @@ impl Files {
 }
 
 /// What one reviewer runs with.
-pub(super) struct Reviewer<'a> {
+pub struct Reviewer<'a> {
     pub runs: &'a oneshot::Runs,
     pub command: AgentCommand,
     pub files: &'a Files,
@@ -67,7 +70,7 @@ pub(super) struct Reviewer<'a> {
 
 /// How a run ended.
 #[derive(Debug, PartialEq, Eq)]
-pub(super) enum Ended {
+pub enum Ended {
     Returned {
         output: ReviewerOutput,
         /// The session the reviewer reported.
@@ -83,7 +86,7 @@ pub(super) enum Ended {
 impl Ended {
     /// This end without the session its reviewer reported, for a run whose
     /// session no later review can find.
-    pub(super) fn without_session(self) -> Self {
+    pub fn without_session(self) -> Self {
         match self {
             Self::Returned { output, .. } => Self::Returned {
                 output,
@@ -96,7 +99,7 @@ impl Ended {
 
 /// Run `reviewer` until it exits, its timeout passes or `cancel` turns true,
 /// and read its result, which another reviewer of the run does not see.
-pub(super) async fn run(reviewer: &Reviewer<'_>, cancel: &mut watch::Receiver<bool>) -> Ended {
+pub async fn run(reviewer: &Reviewer<'_>, cancel: &mut watch::Receiver<bool>) -> Ended {
     let files = reviewer.files;
     let run = oneshot::Run {
         runs: reviewer.runs,
@@ -117,18 +120,18 @@ fn ended(reviewer: &Reviewer<'_>, exited: Result<oneshot::Ended>) -> Ended {
             Ok(Ok((output, session))) => Ended::Returned { output, session },
             Ok(Err(reason)) => Ended::Failed(reason),
             Err(error) => {
-                crate::daemon::log!("reading a reviewer's output: {error:#}");
+                log!("reading a reviewer's output: {error:#}");
                 Ended::Failed(FailureReason::InvalidOutput)
             }
         },
         Ok(oneshot::Ended::Cancelled) => Ended::Cancelled,
         Ok(oneshot::Ended::TimedOut) => Ended::Failed(FailureReason::TimedOut),
         Err(error) if error.downcast_ref::<oneshot::LeftRunning>().is_some() => {
-            crate::daemon::log!("ending a reviewer: {error:#}");
+            log!("ending a reviewer: {error:#}");
             Ended::LeftRunning
         }
         Err(error) => {
-            crate::daemon::log!("running a reviewer: {error:#}");
+            log!("running a reviewer: {error:#}");
             Ended::Failed(FailureReason::ExecutionFailed)
         }
     }
@@ -170,12 +173,12 @@ const RESULT_LIMIT: u64 = 8 * 1024 * 1024;
 const DIAGNOSTIC_LIMIT: u64 = 64 * 1024;
 
 /// Write the ID of review `id`, whose run these files are.
-pub(super) fn write_id(files: &Files, id: ReviewId) -> Result<()> {
+pub fn write_id(files: &Files, id: ReviewId) -> Result<()> {
     fs::write(files.id(), id.to_string()).with_context(|| format!("write {}", files.id().display()))
 }
 
 /// Write the output schema the reviewer is given.
-pub(super) fn write_schema(files: &Files) -> Result<()> {
+pub fn write_schema(files: &Files) -> Result<()> {
     fs::write(files.schema(), output::SCHEMA)
         .with_context(|| format!("write {}", files.schema().display()))
 }

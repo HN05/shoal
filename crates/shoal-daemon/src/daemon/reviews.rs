@@ -21,14 +21,14 @@ use shoal_protocol::{
     space_names::{SpaceName, SpaceSelector},
     time::UnixTime,
 };
-use shoal_reviews::store;
+use shoal_reviews::{
+    false_positives::{self, FalsePositive},
+    store,
+};
 
 mod delivery;
-mod false_positives;
 pub(crate) mod gate;
-mod history;
 mod post;
-mod reviewer;
 mod run;
 
 pub(crate) use run::run;
@@ -318,6 +318,38 @@ impl Manager {
         }
         drop(registry);
         self.review(finding.review).await
+    }
+
+    /// The false positives of the repository `repository_id`, newest first.
+    /// An error reading them has the context [`false_positives::Unreadable`].
+    async fn false_positives(&self, repository_id: &RepositoryId) -> Result<Vec<FalsePositive>> {
+        false_positives::listed(self.false_positives_path(repository_id).await?).await
+    }
+
+    /// Keep `finding` of `review` in its repository's false positives while
+    /// `outcome` is one, or drop it from them, and return the file as it
+    /// was when that changed it. The caller holds the registry gate, which
+    /// moves and removal take, so the file stays where it was found.
+    async fn keep_false_positive(
+        &self,
+        review: &Review,
+        finding: FindingId,
+        outcome: Option<&Outcome>,
+    ) -> Result<Option<false_positives::Previous>> {
+        let entry = false_positives::kept(review, finding, outcome)?;
+        let repository_id = self
+            .workspace_by_id(&review.workspace_id)
+            .await?
+            .repository()
+            .clone();
+        let path = match entry {
+            Some(_) => Some(self.writable_false_positives_path(&repository_id).await?),
+            None => self.false_positives_path(&repository_id).await?,
+        };
+        let Some(path) = path else {
+            return Ok(None);
+        };
+        false_positives::keep(path, finding, entry).await
     }
 
     /// Store `outcome` as `finding`'s, or reopen it without one.

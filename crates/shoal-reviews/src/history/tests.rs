@@ -2,7 +2,7 @@ use super::*;
 use crate::reviews::{
     Check, FindingId, FixCheck, Outcome, Reply, ReviewId, ReviewState, ReviewTarget, Severity,
 };
-use crate::time::UnixTime;
+use shoal_protocol::time::UnixTime;
 
 fn finding(number: i64, outcome: Option<Outcome>, check: Option<Check>) -> Finding {
     Finding {
