@@ -35,7 +35,7 @@ fn stored(bytes: Vec<u8>) -> Stored {
             content_type: "application/octet-stream".parse().unwrap(),
             revision: Revision(7),
             size: bytes.len() as u64,
-            updated_at: UnixTime::now(),
+            updated_at: UnixTime::from_seconds(1_800_000_000),
         },
         bytes,
     }
