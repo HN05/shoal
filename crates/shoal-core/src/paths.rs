@@ -56,6 +56,15 @@ pub trait StateFiles {
     fn space_state(&self, space_id: &SpaceId) -> PathBuf {
         self.state().join("workspaces").join(space_id)
     }
+
+    /// What the viewer of the space's demo `demo` writes to its standard
+    /// error, kept from its latest start, so it outlives the daemon that
+    /// started it.
+    fn viewer_log(&self, space_id: &SpaceId, demo: &str) -> PathBuf {
+        self.space_state(space_id)
+            .join("viewers")
+            .join(format!("{demo}.log"))
+    }
 }
 
 impl StateFiles for Paths {

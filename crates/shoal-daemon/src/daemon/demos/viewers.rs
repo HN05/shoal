@@ -6,8 +6,9 @@
 //! other processes. The daemon records its process with the demo, by which
 //! it spares the viewer between the demo's runs, across its own restarts too.
 use std::{
-    collections::{BTreeMap, HashMap, VecDeque},
+    collections::{BTreeMap, HashMap},
     ffi::OsString,
+    path::{Path, PathBuf},
     process::Stdio,
     sync::{Arc, Mutex},
     time::Duration,
@@ -19,8 +20,7 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_leases::{allocation::Allocation, ports::Acquisition};
 use shoal_protocol::{demos::Running, scope_tokens::ScopeToken, space_names::SpaceSelector};
 use tokio::{
-    io::{AsyncBufReadExt as _, BufReader},
-    process::{Child, ChildStderr, Command},
+    process::{Child, Command},
     sync::Mutex as AsyncMutex,
     time::Instant,
 };
@@ -32,7 +32,7 @@ use crate::{
     daemon::{manager::Manager, scope::Caller},
     env,
     model::{ExecutionSpace, PortRequest},
-    paths::Paths,
+    paths::{Paths, StateFiles as _},
     process::identity::{self as process, Identity},
     refusal::{Reason, Refusal},
 };
@@ -333,22 +333,26 @@ struct Starting {
     child: Child,
     process: Identity,
     program: String,
-    errors: Arc<Mutex<VecDeque<String>>>,
+    /// The file it writes its errors to.
+    log: PathBuf,
 }
 
 impl Starting {
     /// Start `demo`'s viewer on `port` at `place`, leading a process group
-    /// of its own and marked as the demo's execution, keeping the errors it
-    /// prints.
+    /// of its own and marked as the demo's execution, its errors written to
+    /// a file that needs no reader, so it may write them after the daemon
+    /// goes.
     fn spawn(demo: &Running, port: u16, place: &Place) -> Result<Self> {
         let command = (demo.launch)
             .filled_viewer_command(port)
             .context("the demo has no viewer")?;
         let (program, args) = command.split_first().context("the viewer has no program")?;
+        let log = place.paths.viewer_log(&place.space.id, &demo.launch.name);
+        let errors = create_log(&log)?;
         let mut viewer = Command::new(program);
         env::apply_space_identity(&mut viewer, &place.space, &place.paths);
         env::apply_configured(&mut viewer, &place.configured);
-        let mut child = viewer
+        let child = viewer
             .args(args)
             .current_dir(&place.space.path)
             .envs(&place.execution)
@@ -356,21 +360,17 @@ impl Starting {
             .env(env::EXECUTION_ID, &demo.execution_id)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::piped())
+            .stderr(errors)
             .process_group(0)
             .spawn()
             .map_err(|error| not_started(program, error))?;
-        let errors = Arc::new(Mutex::new(VecDeque::new()));
-        if let Some(stderr) = child.stderr.take() {
-            tokio::spawn(keep_errors(stderr, errors.clone()));
-        }
         let pid = child.id().context("the viewer exited at once")?;
         let process = process::capture(pid)?.context("the viewer exited at once")?;
         Ok(Self {
             child,
             process,
             program: program.clone(),
-            errors,
+            log,
         })
     }
 
@@ -392,10 +392,10 @@ impl Starting {
     }
 
     async fn await_port(&mut self, port: u16) -> Result<()> {
-        let (child, errors) = (&mut self.child, &self.errors);
+        let (child, log) = (&mut self.child, &self.log);
         let exited = || {
             let status = child.try_wait()?;
-            Ok(status.map(|status| format!("exited with {status}{}", printed(errors))))
+            Ok(status.map(|status| format!("exited with {status}{}", printed(log))))
         };
         await_port(port, &self.program, exited).await
     }
@@ -444,14 +444,24 @@ async fn stop_unreaped(child: &mut Child) {
     let _ = child.wait().await;
 }
 
-/// The last lines of `errors`, after a colon.
-fn printed(errors: &Mutex<VecDeque<String>>) -> String {
-    let errors = errors.lock().unwrap_or_else(|error| error.into_inner());
-    if errors.is_empty() {
+/// The file at `log`, emptied, for a viewer to write its errors to.
+fn create_log(log: &Path) -> Result<std::fs::File> {
+    if let Some(directory) = log.parent() {
+        std::fs::create_dir_all(directory)?;
+    }
+    std::fs::File::create(log).with_context(|| format!("create {}", log.display()))
+}
+
+/// The last [`ERROR_LINES`] lines of the viewer's errors at `log`, after a
+/// colon.
+fn printed(log: &Path) -> String {
+    let errors = std::fs::read_to_string(log).unwrap_or_default();
+    let lines: Vec<_> = errors.lines().collect();
+    let last = &lines[lines.len().saturating_sub(ERROR_LINES)..];
+    if last.is_empty() {
         return String::new();
     }
-    let lines: Vec<_> = errors.iter().map(String::as_str).collect();
-    format!(": {}", lines.join("\n"))
+    format!(": {}", last.join("\n"))
 }
 
 /// Why the viewer `program` did not start, naming how to install a missing
@@ -466,18 +476,6 @@ fn not_started(program: &str, error: std::io::Error) -> anyhow::Error {
         _ => format!("viewer {program} did not start: {error}"),
     };
     Refusal::new(Reason::NotReady, message).into()
-}
-
-/// Keep the last [`ERROR_LINES`] lines `stderr` carries in `errors`.
-async fn keep_errors(stderr: ChildStderr, errors: Arc<Mutex<VecDeque<String>>>) {
-    let mut lines = BufReader::new(stderr).lines();
-    while let Ok(Some(line)) = lines.next_line().await {
-        let mut errors = errors.lock().unwrap_or_else(|error| error.into_inner());
-        if errors.len() == ERROR_LINES {
-            errors.pop_front();
-        }
-        errors.push_back(line);
-    }
 }
 
 #[cfg(test)]

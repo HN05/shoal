@@ -28,6 +28,7 @@ while True:
     connection, _ = server.accept()
     connection.sendall(sys.argv[2].encode())
     connection.close()
+    print("served", file=sys.stderr, flush=True)
 "#;
 
 const ECHO_VIEWER: &[&str] = &["python3", "-c", ECHO_DEVICE, "{port}", "{udid}"];
@@ -357,6 +358,26 @@ async fn forgetting_a_demo_s_execution_stops_its_viewer() {
     tokio::time::timeout(Duration::from_secs(60), stopped)
         .await
         .unwrap_or_else(|_| panic!("viewer {} still runs", process.pid));
+}
+
+#[tokio::test]
+async fn a_viewer_writes_its_errors_where_no_daemon_needs_to_read_them() {
+    let (temp, manager) = manager().await;
+    let (workspace, demo) = running(&manager, temp.path(), Some(ECHO_VIEWER)).await;
+    let port = manager.open_viewer(&demo, None).await.unwrap();
+    assert_eq!(read(port).await, "UDID-1");
+    let log = manager.paths.viewer_log(&workspace, &demo.launch.name);
+    let written = async {
+        while !std::fs::read_to_string(&log)
+            .unwrap_or_default()
+            .contains("served")
+        {
+            tokio::time::sleep(START_POLL).await;
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(60), written)
+        .await
+        .unwrap_or_else(|_| panic!("{} has no line the viewer wrote", log.display()));
 }
 
 #[tokio::test]
