@@ -66,7 +66,7 @@ fn record(
 /// Follow a report of `state` after `previous` from `execution`, for a turn
 /// no failure ended: the agent going idle from a turn ended one that went
 /// through, so the next failed turn is told again.
-pub(in crate::daemon::workspace) fn follow_state(
+pub(in crate::daemon) fn follow_state(
     db: &Connection,
     execution: Option<&ExecutionId>,
     previous: Option<AgentState>,

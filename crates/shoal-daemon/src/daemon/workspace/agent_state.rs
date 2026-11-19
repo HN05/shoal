@@ -666,12 +666,12 @@ fn save(tx: &rusqlite::Transaction<'_>, report: &Report) -> Result<Option<(Agent
     }
     let changed = write_state(tx, report, starts)?;
     let previous = recorded.map(|recorded| recorded.state);
-    super::turn_retry::follow_state(tx, &report.space, report.state)?;
+    super::super::turn_retry::follow_state(tx, &report.space, report.state)?;
     crate::daemon::idle_wakes::sleep::follow_state(tx, &report.space, previous, report.state)?;
     super::engagement::follow_state(tx, &report.space, previous, report.state, report.at)?;
     if !report.failed {
         let execution = report.execution.as_ref();
-        super::turn_retry::unretried::follow_state(tx, execution, previous, report.state)?;
+        super::super::turn_retry::unretried::follow_state(tx, execution, previous, report.state)?;
     }
     let status = get(tx, &report.space)?.expect("agent state was just recorded");
     Ok(Some((status, changed)))

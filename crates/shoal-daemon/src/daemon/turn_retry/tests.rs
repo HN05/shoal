@@ -70,7 +70,7 @@ async fn another_agent(
         .begin_execution(
             workspace.id.as_str(),
             None,
-            super::super::ExecutionKind::Command,
+            super::super::workspace::ExecutionKind::Command,
             None,
         )
         .await
@@ -569,7 +569,7 @@ async fn a_lost_connection_keeps_the_reset_and_an_ended_execution_drops_it() {
         .await
         .unwrap();
     // The wrapper, with its proxy, may reattach.
-    let kind = super::super::ExecutionKind::Command;
+    let kind = super::super::workspace::ExecutionKind::Command;
     manager
         .finish_execution(execution.clone(), kind, None)
         .await

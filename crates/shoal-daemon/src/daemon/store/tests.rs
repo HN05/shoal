@@ -1520,8 +1520,8 @@ fn migrated_workspaces_keep_their_turn_retry() -> Result<()> {
              VALUES ('workspace','execution','overloaded',2,1000,0);",
     )?;
     migrate(&mut db)?;
-    let retry = crate::daemon::workspace::turn_retry::get(&db, &"workspace".into())?;
-    let kept = crate::daemon::workspace::turn_retry::TurnRetry {
+    let retry = crate::daemon::turn_retry::get(&db, &"workspace".into())?;
+    let kept = crate::daemon::turn_retry::TurnRetry {
         failure: crate::state::TurnFailure::Overloaded,
         attempt: 2,
         due_at: UnixTime::from_seconds(1000),

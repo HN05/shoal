@@ -40,7 +40,6 @@ mod ownership;
 pub(crate) mod paths;
 pub(crate) mod places;
 mod pr_gate;
-pub(crate) mod proxy_retries;
 mod refresh;
 mod registry;
 mod repo_configuration;
@@ -59,8 +58,6 @@ mod status;
 mod stopped_work;
 pub(crate) mod subagents;
 mod tree;
-pub(crate) mod turn_retry;
-pub(crate) mod upstream_limits;
 mod usage;
 mod xcode;
 
@@ -177,12 +174,13 @@ pub struct Manager {
     /// One-shot agent runs whose processes may still be running.
     pub(crate) oneshot_runs: crate::daemon::oneshot::Runs,
     /// The retry each proxied execution's proxy waits to make.
-    proxy_retries:
-        std::sync::Mutex<std::collections::HashMap<ExecutionId, proxy_retries::ProxyRetry>>,
+    pub(super) proxy_retries:
+        std::sync::Mutex<std::collections::HashMap<ExecutionId, super::proxy_retries::ProxyRetry>>,
     /// The limit each proxied execution's proxy found its upstream under,
     /// with the time it stands until.
-    upstream_limits:
-        std::sync::Mutex<std::collections::HashMap<ExecutionId, upstream_limits::UpstreamLimit>>,
+    pub(super) upstream_limits: std::sync::Mutex<
+        std::collections::HashMap<ExecutionId, super::upstream_limits::UpstreamLimit>,
+    >,
     /// The config files of worktrees the current format rejects, which the
     /// daemon ignores.
     rejected_configs: repo_configuration::RejectedConfigs,

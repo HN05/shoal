@@ -33,7 +33,7 @@ async fn a_reported_limit_stands_until_the_proxy_or_its_execution_ends() {
         .begin_execution(
             workspace.id.as_str(),
             None,
-            super::super::ExecutionKind::Command,
+            super::super::workspace::ExecutionKind::Command,
             None,
         )
         .await
@@ -61,7 +61,11 @@ async fn a_reported_limit_stands_until_the_proxy_or_its_execution_ends() {
         .await
         .unwrap();
     manager
-        .finish_execution(execution, super::super::ExecutionKind::Command, Some(0))
+        .finish_execution(
+            execution,
+            super::super::workspace::ExecutionKind::Command,
+            Some(0),
+        )
         .await
         .unwrap();
     assert!(limits().is_empty());

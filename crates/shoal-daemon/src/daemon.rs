@@ -52,6 +52,7 @@ pub(crate) mod per_daemon;
 mod permissions;
 pub mod ports;
 pub(crate) mod progress;
+pub(crate) mod proxy_retries;
 pub mod questions;
 pub(crate) mod queue;
 pub(crate) mod queued_starts;
@@ -86,7 +87,9 @@ pub(crate) mod test_support;
 mod tmp_dirs;
 pub(crate) mod triggers;
 mod turn_ends;
+pub(crate) mod turn_retry;
 mod untracked;
+pub(crate) mod upstream_limits;
 pub(crate) mod wake_timers;
 mod warnings;
 pub mod workspace;
@@ -221,12 +224,7 @@ pub async fn run(
         "webhooks",
         triggers::serve_webhooks,
     );
-    spawn_supervised(
-        &mut background,
-        &manager,
-        "turn retries",
-        workspace::turn_retry::run,
-    );
+    spawn_supervised(&mut background, &manager, "turn retries", turn_retry::run);
     spawn_supervised(
         &mut background,
         &manager,

@@ -584,7 +584,7 @@ async fn a_failed_turn_lost_before_a_later_idle_report_is_still_retried() {
     let id = workspace.id.clone();
     let retry = manager
         .store
-        .run(move |db| crate::daemon::workspace::turn_retry::get(db, &id))
+        .run(move |db| crate::daemon::turn_retry::get(db, &id))
         .await
         .unwrap();
     assert!(retry.is_some(), "the failed turn is retried");

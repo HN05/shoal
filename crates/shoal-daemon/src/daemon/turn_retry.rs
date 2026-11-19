@@ -15,7 +15,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction, params};
 pub(crate) use shoal_protocol::executions::TurnRetry;
 
 use self::unretried::Unretried;
-use super::Manager;
+use super::workspace::Manager;
 use crate::{
     daemon::{agent_messages, log, store},
     model::Space,
