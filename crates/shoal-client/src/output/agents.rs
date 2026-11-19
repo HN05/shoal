@@ -99,6 +99,9 @@ pub struct Restarted {
 pub struct RestartedAgent {
     pub space: SpaceName,
     pub agent: Option<shoal_protocol::agent::Agent>,
+    /// The other joined machine its space runs on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine: Option<String>,
     /// Where it runs now, when its wrapper runs in a terminal host.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub place: Option<shoal_protocol::sessions::Origin>,
@@ -108,8 +111,17 @@ pub struct RestartedAgent {
 /// none.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CancelledRestarts {
-    pub cancelled: Vec<SpaceName>,
-    pub unrecorded: Vec<SpaceName>,
+    pub cancelled: Vec<RestartSpace>,
+    pub unrecorded: Vec<RestartSpace>,
+}
+
+/// A space a restart command acted on, by its name, with the other joined
+/// machine it runs on.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RestartSpace {
+    pub space: SpaceName,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine: Option<String>,
 }
 
 /// An agent whose restart the daemon took for later, by its space's name,
@@ -118,6 +130,9 @@ pub struct CancelledRestarts {
 pub struct PendingAgent {
     pub space: SpaceName,
     pub agent: shoal_protocol::agent::Agent,
+    /// The other joined machine its space runs on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine: Option<String>,
     pub waits: shoal_protocol::model::RestartWait,
 }
 
@@ -126,6 +141,9 @@ pub struct PendingAgent {
 pub struct Skipped {
     pub space: SpaceName,
     pub agent: Option<shoal_protocol::agent::Agent>,
+    /// The other joined machine its space runs on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine: Option<String>,
     pub reason: String,
 }
 

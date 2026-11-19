@@ -156,6 +156,26 @@ fn a_restart_and_its_cancel_go_to_the_machine_of_the_space() {
 }
 
 #[test]
+fn a_restart_names_the_machine_of_the_space_and_fails_at_once_while_it_is_offline() {
+    let (hub, laptop, there) = laptop_space();
+    let restarted = hub.ok(&["restart", &there]);
+    let [skipped] = restarted["skipped"].as_array().unwrap().as_slice() else {
+        panic!("expected the laptop to skip its space: {restarted}");
+    };
+    assert_eq!(skipped["machine"], "laptop", "{restarted}");
+    reroute(&laptop, Some("false"));
+    wait_for("the hub to see the laptop go", || {
+        let members = hub.ok(&["hub", "ls"])["members"].clone();
+        let laptop = (members.as_array().unwrap().iter()).find(|member| member["name"] == "laptop");
+        (laptop?["connected"] == false).then_some(())
+    });
+    let refused = hub.run(&["restart", &there]);
+    assert!(!refused.status.success(), "{}", printed(&refused));
+    let shown = printed(&refused).to_string();
+    assert!(shown.contains("machine laptop is offline"), "{shown}");
+}
+
+#[test]
 fn a_command_that_needs_the_space_s_files_names_its_machine() {
     let (hub, _laptop, there) = laptop_space();
     let output = hub.run(&["files", &there]);

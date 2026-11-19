@@ -428,8 +428,12 @@ start the agent again in the same terminal, as an automatic restore does; a
 wrapper whose Shoal binary an upgrade replaced continues from the installed one
 in the same process, and wrappers of 0.13.0 and earlier keep their binary until
 the agent is stopped and resumed. Either way the restore command finds the
-agent through `PATH` again, so an updated agent binary runs. `--all` selects every workspace and chat, and
-`--agent <name>` only agents of that name. The command asks the daemon to
+agent through `PATH` again, so an updated agent binary runs. `--all` selects every workspace and chat of this
+machine, a named space is restarted on whichever [joined machine](#hub) runs
+it, `--machine <name or ID>`, repeatable, selects every space of that machine
+instead, those of an offline one skipped, naming it, and `--agent <name>`
+only agents of that name on any machine. A report names the machine of a
+space elsewhere, as `--json` does in `machine`. The command asks the daemon to
 restart the agent of each selected space, which has at most one, and the
 daemon restarts them together; `--sequential` has it restart them in one line
 per machine with its other sequential restarts, one at a time, each once the
@@ -927,15 +931,14 @@ permissions, which its machine vouches for, so an agent acts on the spaces
 below its own on every machine and is refused the rest, and a device's go as
 yours. An action a space's permission sets to `propose` is refused from another
 machine, since its approval request would belong to that space's machine. This covers `status`, `log`, `questions`, `approvals`, `messages send`,
-`stop`, `resume`, `rename`, `done`, `rm`, `priority`,
+`stop`, `resume`, `restart`, `rename`, `done`, `rm`, `priority`,
 `progress`, `sleep`, `conflicts`, `diff`, `attach`, holds, the issue, PR and
 CI commands that act on a space, and following an agent's session, whose bytes come back as its machine
 reads them. The link to the hub carries such answers as byte streams beside
 its other traffic, each held to what its reader has taken, so a reader that
 falls behind holds up nothing else. A machine that received a request but
 did not answer it in time fails the command, saying that the request may go
-on there, which `shoal status <space>` shows. `restart` acts on the agents of
-its own machine. Commands that need the
+on there, which `shoal status <space>` shows. Commands that need the
 space's files or processes, such as `setup`, leases, demos,
 `stop --interrupt`, `--leftovers` and `--processes`, `files` and an agent's
 hooks, run only

@@ -92,6 +92,10 @@ pub enum SessionsCommand {
     Restart {
         #[command(flatten)]
         targets: SpaceTargets,
+        /// Every space of this joined machine instead, by its name or the ID
+        /// shoal hub ls shows. Repeatable.
+        #[arg(long = "machine", value_name = "MACHINE", conflicts_with_all = ["space", "all"])]
+        machines: Vec<String>,
         /// Restart only agents of this name, such as claude.
         #[arg(short = 'a', long, value_parser = AgentParser)]
         agent: Option<Agent>,

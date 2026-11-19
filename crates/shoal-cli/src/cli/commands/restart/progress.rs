@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 
+use super::target::{Target, on_machine};
 use crate::client::output::agents::{PendingAgent, Restarted, RestartedAgent, Skipped};
 use crate::{
     cli::{
@@ -13,7 +14,7 @@ use crate::{
         output::{Palette, Style},
         ui,
     },
-    model::{RestartOutcome, RestartWait, Space},
+    model::{RestartOutcome, RestartWait},
     sessions::Origin,
     terminal,
 };
@@ -55,23 +56,25 @@ impl<'a> Progress<'a> {
     pub(super) fn skipped(&mut self, skipped: Skipped) {
         let place = self.next();
         if !self.ctx.json {
-            let message = format!("Skipped {} {place}: {}", skipped.space, skipped.reason);
+            let space = on_machine(&skipped.space, skipped.machine.as_deref());
+            let message = format!("Skipped {space} {place}: {}", skipped.reason);
             outln!("{}", Palette::stdout(false).paint(Style::Warning, &message));
         }
         self.skipped.push(skipped);
     }
 
     /// Report what the daemon did with the restart of the agent of `space`.
-    pub(super) fn ended(&mut self, space: &Space, outcome: Result<RestartOutcome>) {
-        let name = &space.name;
+    pub(super) fn ended(&mut self, space: &Target, outcome: Result<RestartOutcome>) {
+        let (name, shown, machine) = (&space.name, space.shown(), space.machine_name());
         match outcome {
             Ok(RestartOutcome::Restarted { agent, place }) => {
                 let position = self.next();
                 let before = self.places.get(&space.id);
-                let line = restarted(name, &position, before, place.as_ref());
+                let line = restarted((name, &shown), &position, before, place.as_ref());
                 let restarted = RestartedAgent {
                     space: name.clone(),
                     agent: Some(agent),
+                    machine,
                     place,
                 };
                 self.report.done(self.ctx, &line, restarted);
@@ -80,7 +83,7 @@ impl<'a> Progress<'a> {
                 let position = self.next();
                 if !self.ctx.json {
                     outln!(
-                        "Pending {name} {position}: {}",
+                        "Pending {shown} {position}: {}",
                         waiting(&waits, space.number)
                     );
                 }
@@ -88,16 +91,18 @@ impl<'a> Progress<'a> {
                 self.pending.push(PendingAgent {
                     space,
                     agent,
+                    machine,
                     waits,
                 });
             }
             Ok(RestartOutcome::Skipped { agent, reason }) => self.skipped(Skipped {
                 space: name.clone(),
                 agent,
+                machine,
                 reason,
             }),
             Err(error) => {
-                let message = format!("Failed {name} {}: {error:#}", self.next());
+                let message = format!("Failed {shown} {}: {error:#}", self.next());
                 self.report.failed_saying(self.ctx, &message, name, &error);
             }
         }
@@ -132,11 +137,12 @@ impl<'a> Progress<'a> {
     }
 }
 
-/// The line for the agent of `name`, `position` among those selected, which
-/// ran in `before` and runs in `place` now: it names that place as a
-/// background start does when the agent moved there.
+/// The line for the agent of the space `name`, shown as `shown` with the
+/// machine it runs on, `position` among those selected, which ran in
+/// `before` and runs in `place` now: it names that place as a background
+/// start does when the agent moved there.
 fn restarted(
-    name: &str,
+    (name, shown): (&str, &str),
     position: &str,
     before: Option<&Origin>,
     place: Option<&Origin>,
@@ -145,8 +151,8 @@ fn restarted(
         .filter(|place| before.is_none_or(|before| !before.same_place(place)))
         .and_then(|place| terminal::background_place(place, name));
     match moved {
-        Some(place) => format!("Restarted {name} {position} {place}"),
-        None => format!("Restarted {name} {position}"),
+        Some(place) => format!("Restarted {shown} {position} {place}"),
+        None => format!("Restarted {shown} {position}"),
     }
 }
 

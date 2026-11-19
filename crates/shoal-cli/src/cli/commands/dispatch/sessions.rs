@@ -57,11 +57,13 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
         }
         SessionsCommand::Restart {
             targets,
+            machines,
             cancel: true,
             ..
-        } => restart::cancel(&ctx, targets).await,
+        } => restart::cancel(&ctx, targets, &machines).await,
         SessionsCommand::Restart {
             targets,
+            machines,
             agent,
             wait,
             sequential,
@@ -75,7 +77,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
                 in_place,
                 change: change(&permissions),
             };
-            restart::run(&ctx, targets, agent, restart).await
+            restart::run(&ctx, targets, &machines, agent, restart).await
         }
         SessionsCommand::Queue {
             command,

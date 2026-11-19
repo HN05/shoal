@@ -1,6 +1,7 @@
 //! Restarting agents, each in a new wrapper or in place, so each runs its
 //! agent's current binary: the daemon restarts the agent of each space the
-//! command asks it to, and says what it did. A chat's agent restarts in a
+//! command asks it to, and says what it did, passing the request through the
+//! hub for a space of another joined machine. A chat's agent restarts in a
 //! new place, as `shoal restore` restores a chat.
 use anyhow::Result;
 use futures_util::{StreamExt, stream::FuturesUnordered};
@@ -10,13 +11,15 @@ use crate::{
     agent::Agent,
     cli::{args::SpaceTargets, context::Context},
     config::permissions::PermissionChange,
-    model::{AgentRestart, RestartOutcome, Space},
+    model::{AgentRestart, RestartOutcome},
 };
 use shoal_protocol::space_names::SpaceSelector;
+use target::Target;
 
 mod cancel;
 mod progress;
 mod selection;
+mod target;
 
 pub(super) use cancel::cancel;
 use progress::Progress;
@@ -28,10 +31,11 @@ const PARALLEL_RESTARTS: usize = 16;
 pub(super) async fn run(
     ctx: &Context,
     targets: SpaceTargets,
+    machines: &[String],
     agent: Option<Agent>,
     restart: AgentRestart,
 ) -> Result<i32> {
-    let selection = selection::load(ctx, targets, agent.as_ref()).await?;
+    let selection = selection::load(ctx, targets, machines, agent.as_ref()).await?;
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         selection::ensure_below(&selection.spaces)?;
     }
@@ -75,14 +79,15 @@ pub(super) async fn run(
 }
 
 /// Refuse `change` before any agent restarts where this scoped process
-/// does not hold what it gives the agent of one of `spaces`.
+/// does not hold what it gives the agent of one of `spaces` of this
+/// machine; another machine checks its own spaces.
 async fn ensure_change_fits(
     ctx: &Context,
-    spaces: &[Space],
+    spaces: &[Target],
     change: &PermissionChange,
 ) -> Result<()> {
-    for space in spaces {
-        let repository = space.repository_id.as_ref().map(Into::into);
+    for space in spaces.iter().filter(|space| space.machine.is_none()) {
+        let repository = space.repository.as_ref().map(Into::into);
         super::permissions::ensure_held(ctx, repository, &change.set).await?;
     }
     Ok(())
@@ -93,7 +98,7 @@ async fn ensure_change_fits(
 /// did with each.
 async fn restart_all(
     ctx: &Context,
-    spaces: Vec<Space>,
+    spaces: Vec<Target>,
     restart: &AgentRestart,
     progress: &mut Progress<'_>,
 ) {
@@ -118,10 +123,10 @@ async fn restart_all(
 /// What the daemon did with the restart of the agent of `space`.
 async fn restart_space(
     ctx: &Context,
-    space: &Space,
+    space: &Target,
     restart: &AgentRestart,
 ) -> Result<RestartOutcome> {
-    let selector = SpaceSelector::id(&space.id);
+    let selector = space.selector();
     match crate::client::agents::restart(&ctx.paths, selector, restart.clone()).await {
         Err(error) => Err(with_restore(ctx, space, error).await),
         outcome => outcome,
@@ -129,9 +134,12 @@ async fn restart_space(
 }
 
 /// `error`, of the failed restart of `space`'s agent, naming how to restore
-/// the agent when the space saved stopped work for that. The daemon's error
-/// stays its cause, which callers can inspect.
-async fn with_restore(ctx: &Context, space: &Space, error: anyhow::Error) -> anyhow::Error {
+/// the agent when the space, one of this machine's, saved stopped work for
+/// that. The daemon's error stays its cause, which callers can inspect.
+async fn with_restore(ctx: &Context, space: &Target, error: anyhow::Error) -> anyhow::Error {
+    if space.machine.is_some() {
+        return error;
+    }
     let saved = crate::client::saved::read(&ctx.paths, SpaceSelector::id(&space.id)).await;
     match saved.is_ok_and(|saved| saved.is_restorable()) {
         true => error.context(format!(

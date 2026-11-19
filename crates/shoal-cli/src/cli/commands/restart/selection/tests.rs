@@ -28,8 +28,81 @@ fn running(space: &Space, agent: Option<&str>) -> RunningAgent {
     }
 }
 
-fn names(spaces: &[Space]) -> Vec<&str> {
+fn names(spaces: &[Target]) -> Vec<&str> {
     spaces.iter().map(|space| space.name.as_str()).collect()
+}
+
+/// The joined machine `name`, connected or not.
+fn machine(name: &str, connected: bool) -> Member {
+    serde_json::from_value(serde_json::json!({
+        "id": name, "kind": "machine", "name": name, "joined_at": 0,
+        "last_seen": 0, "connected": connected, "hub": false,
+    }))
+    .unwrap()
+}
+
+/// The space `name` of `machine`, which reports `running` running there.
+fn listed(name: &str, running: Option<&str>, machine: &Member) -> (Listed, Member) {
+    let listed = serde_json::from_value(serde_json::json!({
+        "machine": machine.id, "id": name, "number": 7, "name": name, "kind": "workspace",
+        "status": "working", "running": running, "reported_at": 0,
+    }));
+    (listed.unwrap(), machine.clone())
+}
+
+/// What a selection takes of `elsewhere`, other machines' spaces.
+fn elsewhere(elsewhere: Vec<(Listed, Member)>, agent: Option<&str>, named: bool) -> Selection {
+    let mut selection = select(Vec::new(), &[], None, false);
+    let agent = agent.map(Agent::from);
+    select_elsewhere(&mut selection, elsewhere, agent.as_ref(), named);
+    selection
+}
+
+fn skipped_names(selection: &Selection) -> Vec<&str> {
+    (selection.skipped.iter())
+        .map(|skipped| skipped.space.as_str())
+        .collect()
+}
+
+#[test]
+fn another_machine_s_spaces_are_selected_by_the_agent_it_reports_running() {
+    let desk = machine("desk", true);
+    let spaces = || {
+        vec![
+            listed("claude", Some("claude"), &desk),
+            listed("codex", Some("codex"), &desk),
+            listed("idle", None, &desk),
+        ]
+    };
+    assert_eq!(
+        names(&elsewhere(spaces(), None, false).spaces),
+        ["claude", "codex"]
+    );
+    let claude = elsewhere(spaces(), Some("claude"), false);
+    assert_eq!(names(&claude.spaces), ["claude"]);
+    assert!(claude.skipped.is_empty());
+    // Named, each goes to its machine unless it runs another agent there.
+    assert_eq!(
+        names(&elsewhere(spaces(), None, true).spaces),
+        ["claude", "codex", "idle"]
+    );
+    let named = elsewhere(spaces(), Some("claude"), true);
+    assert_eq!(names(&named.spaces), ["claude"]);
+    assert_eq!(skipped_names(&named), ["codex", "idle"]);
+    assert_eq!(named.skipped[0].machine.as_deref(), Some("desk"));
+}
+
+#[test]
+fn an_offline_machine_s_spaces_are_skipped_unless_named() {
+    let laptop = machine("laptop", false);
+    let spaces = || vec![listed("away", Some("claude"), &laptop)];
+    let selected = elsewhere(spaces(), None, false);
+    assert!(selected.spaces.is_empty());
+    assert_eq!(skipped_names(&selected), ["away"]);
+    assert!(selected.skipped[0].reason.contains("laptop is offline"));
+    // A named one goes to the daemon, which refuses it at once, naming
+    // the machine.
+    assert_eq!(names(&elsewhere(spaces(), None, true).spaces), ["away"]);
 }
 
 #[test]

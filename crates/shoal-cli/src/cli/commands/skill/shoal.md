@@ -194,7 +194,8 @@ turn of the child's agent, a workspace's or a chat's, which stays running;
 `restore` continues a turn an interrupt ended and queues the stopped agents,
 a workspace's or a chat's, whoever stopped them; for a workspace whose setup
 failed, it retries the setup, and the agent waiting for it starts. `--all`
-acts on every space below the caller's, and `stop --yes` confirms that an
+acts on every space below the caller's on this machine, `restart --machine
+<name>` on those of another joined machine, and `stop --yes` confirms that an
 execution Shoal cannot prove ended did. A space outside the caller's scope is
 refused with an error naming it.
 
