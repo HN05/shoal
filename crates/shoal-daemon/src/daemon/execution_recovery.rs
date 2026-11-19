@@ -449,7 +449,8 @@ impl Resumes<'_> {
             ..
         } = self;
         let ports = manager
-            .list_ports(Some(&SpaceSelector::id(workspace_id)))
+            .leases
+            .list_ports(manager, Some(&SpaceSelector::id(workspace_id)))
             .await?;
         let (claim, narrowing) = self.saved_narrowing().await?;
         if !manager.resume_agent_execution(execution_id, grant).await? {

@@ -131,7 +131,10 @@ impl Manager {
                 .await?,
             ),
         };
-        (self.notify_allocation((&space.name, id), &outcome, "")).await;
+        (self
+            .leases
+            .notify_allocation(self, (&space.name, id), &outcome, ""))
+        .await;
         Ok(outcome)
     }
 

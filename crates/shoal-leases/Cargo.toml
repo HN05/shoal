@@ -1,0 +1,25 @@
+[package]
+name = "shoal-leases"
+version.workspace = true
+description = "The leases Shoal's daemon grants: ports, resource permits, simulators, containers and secrets"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+futures-util.workspace = true
+libc.workspace = true
+rusqlite = { workspace = true, features = ["bundled"] }
+shoal-core.workspace = true
+shoal-daemon-base.workspace = true
+shoal-ids = { workspace = true, features = ["rusqlite"] }
+shoal-protocol = { workspace = true, features = ["rusqlite"] }
+shoal-store.workspace = true
+socket2 = "0.6"
+tokio = { workspace = true, features = ["sync", "time"] }
+
+
+[dev-dependencies]
+shoal-ids = { workspace = true, features = ["test-support"] }

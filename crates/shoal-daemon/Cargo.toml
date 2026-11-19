@@ -37,12 +37,12 @@ shoal-daemon-base.workspace = true
 shoal-forge.workspace = true
 shoal-forge-types = { workspace = true, features = ["rusqlite"] }
 shoal-ids = { workspace = true, features = ["rusqlite"] }
+shoal-leases.workspace = true
 shoal-protocol = { workspace = true, features = ["rusqlite"] }
 shoal-refs = { workspace = true, features = ["rusqlite"] }
 shoal-schedule = { workspace = true, features = ["rusqlite"] }
 shoal-store.workspace = true
 shoal-subprocess.workspace = true
-socket2 = "0.6"
 tempfile.workspace = true
 tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "handshake", "__rustls-tls"] }
 tokio = { workspace = true, features = ["macros", "net", "io-util", "process", "rt", "rt-multi-thread", "signal", "sync", "time"] }

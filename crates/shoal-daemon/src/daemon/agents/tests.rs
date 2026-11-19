@@ -334,7 +334,9 @@ async fn overload_stops_only_one_agent_and_preserves_work_and_leases() {
         .await
         .unwrap();
     manager
+        .leases
         .acquire_port(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             "web".into(),
             PortRequest::default(),

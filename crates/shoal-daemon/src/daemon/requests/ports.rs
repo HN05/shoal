@@ -22,18 +22,22 @@ pub(super) async fn handle(
             name,
             request,
         } => manager
-            .acquire_port(&workspace, name, request, caller)
+            .leases
+            .acquire_port(&**manager, &workspace, name, request, caller)
             .await?
             .into_body(),
         PortMethod::PortRelease { workspace, name } => {
-            manager.release_port(&workspace, name).await?;
+            manager
+                .leases
+                .release_port(&**manager, &workspace, name)
+                .await?;
             Body::Ok
         }
         PortMethod::PortOverview { workspace } => {
-            Body::PortOverview(manager.port_overview(&workspace).await?)
+            Body::PortOverview(manager.leases.port_overview(&**manager, &workspace).await?)
         }
         PortMethod::PortCatalog { workspace } => {
-            Body::PortCatalog(manager.port_catalog(&workspace).await?)
+            Body::PortCatalog(manager.leases.port_catalog(&**manager, &workspace).await?)
         }
     }))
 }

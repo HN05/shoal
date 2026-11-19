@@ -73,7 +73,8 @@ impl Manager {
                 approved: true,
             }),
         };
-        self.notify_allocation((&workspace.name, &workspace.id), &outcome, "")
+        self.leases
+            .notify_allocation(self, (&workspace.name, &workspace.id), &outcome, "")
             .await;
         Ok(outcome)
     }

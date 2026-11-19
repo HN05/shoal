@@ -2528,12 +2528,12 @@ dependencies = [
  "shoal-forge",
  "shoal-forge-types",
  "shoal-ids",
+ "shoal-leases",
  "shoal-protocol",
  "shoal-refs",
  "shoal-schedule",
  "shoal-store",
  "shoal-subprocess",
- "socket2",
  "tempfile",
  "tokio",
  "tokio-tungstenite",
@@ -2612,6 +2612,23 @@ dependencies = [
  "rusqlite",
  "serde",
  "uuid",
+]
+
+[[package]]
+name = "shoal-leases"
+version = "0.19.0"
+dependencies = [
+ "anyhow",
+ "futures-util",
+ "libc",
+ "rusqlite",
+ "shoal-core",
+ "shoal-daemon-base",
+ "shoal-ids",
+ "shoal-protocol",
+ "shoal-store",
+ "socket2",
+ "tokio",
 ]
 
 [[package]]

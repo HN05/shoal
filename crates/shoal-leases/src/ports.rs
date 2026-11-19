@@ -1,6 +1,5 @@
 //! Cooperative TCP port reservations owned by a worktree.
-use crate::daemon::approvals::ApprovalRequestExt;
-pub(crate) use crate::model::PortRequest;
+pub use crate::model::PortRequest;
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Transaction, params};
 use shoal_ids::space_ids::SpaceId;
@@ -12,20 +11,19 @@ use std::{
 };
 
 use crate::{
+    Leases,
+    allocation::Allocation,
+    callers::Caller,
     config::{Ports, repo::ConflictPolicy},
-    daemon::{
-        allocation::Allocation,
-        approvals::{self, ApprovalRequest, PortSpecification, Specification, Target},
-        manager::Manager,
-        notifications::NotificationKind,
-        scope::Caller,
-        store,
-    },
+    daemon::{Daemon, Grants},
     env,
     model::{PortCatalog, PortOverview, PortReservation, PortSuggestion},
     protocol::Body,
-    validate,
+    store, validate,
 };
+use shoal_daemon_base::approval_requests::ApprovalRequestExt;
+use shoal_protocol::approvals::{ApprovalRequest, PortSpecification, Specification, Target};
+use shoal_protocol::notifications::NotificationKind;
 use shoal_protocol::space_names::SpaceSelector;
 
 mod selection;
@@ -121,43 +119,44 @@ fn validate_env_var(env_var: &str, default: &str) -> Result<()> {
     Ok(())
 }
 
-impl Manager {
+impl Leases {
     pub async fn acquire_port(
         &self,
+        daemon: &dyn Daemon,
         selector: &SpaceSelector,
         name: String,
         request: PortRequest,
         caller: Option<&Caller>,
     ) -> Result<Acquisition> {
-        let workspace = self.workspace(selector).await?;
-        let ports = self
-            .workspace_settings(&workspace)
-            .await?
+        let workspace = daemon.workspace(selector).await?;
+        let ports = (self.settings(daemon, &workspace).await?)
             .into_settings()
             .ports;
         let claim = PortClaim::resolve(workspace.id.clone(), name, request, ports, caller)?;
-        self.touch(&workspace.id).await;
-        let (outcome, conflict) = self.store.write(move |tx| claim_port(tx, claim)).await?;
+        daemon.touch(&workspace.id).await;
+        let grants = self.grants.clone();
+        let (outcome, conflict) = (self.store)
+            .write(move |tx| claim_port(tx, &*grants, claim))
+            .await?;
+        let space = (&workspace.name, &workspace.id);
         if let Some(conflict) = conflict {
-            self.notify_space(
-                &workspace.name,
-                &workspace.id,
-                NotificationKind::PortConflict,
-                conflict,
-            )
-            .await;
+            let kind = NotificationKind::PortConflict;
+            self.notify(daemon, space, kind, conflict).await;
         }
         if let Acquisition::Allocation(allocation) = &outcome {
-            self.notify_allocation((&workspace.name, &workspace.id), allocation, "")
-                .await;
+            self.notify_allocation(daemon, space, allocation, "").await;
         }
         Ok(outcome)
     }
 
-    pub async fn port_overview(&self, selector: &SpaceSelector) -> Result<PortOverview> {
-        let workspace = self.workspace(selector).await?;
+    pub async fn port_overview(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+    ) -> Result<PortOverview> {
+        let workspace = daemon.workspace(selector).await?;
         let reserved = self
-            .list_ports(Some(&SpaceSelector::id(&workspace.id)))
+            .list_ports(daemon, Some(&SpaceSelector::id(&workspace.id)))
             .await?;
         Ok(PortOverview {
             workspace,
@@ -165,11 +164,13 @@ impl Manager {
         })
     }
 
-    pub async fn port_catalog(&self, selector: &SpaceSelector) -> Result<PortCatalog> {
-        let workspace = self.workspace(selector).await?;
-        let ports = self
-            .workspace_settings(&workspace)
-            .await?
+    pub async fn port_catalog(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+    ) -> Result<PortCatalog> {
+        let workspace = daemon.workspace(selector).await?;
+        let ports = (self.settings(daemon, &workspace).await?)
             .into_settings()
             .ports;
         Ok(PortCatalog {
@@ -183,22 +184,29 @@ impl Manager {
 
     pub async fn list_ports(
         &self,
+        daemon: &dyn Daemon,
         selector: Option<&SpaceSelector>,
     ) -> Result<Vec<PortReservation>> {
-        let workspace_id = self.workspace_filter(selector).await?;
+        let workspace_id = self.workspace_filter(daemon, selector).await?;
         self.store
             .run(move |db| store::ports(db, workspace_id.as_ref()))
             .await
     }
 
-    pub async fn release_port(&self, selector: &SpaceSelector, name: String) -> Result<()> {
-        let workspace = self.workspace(selector).await?;
-        self.touch(&workspace.id).await;
+    pub async fn release_port(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+        name: String,
+    ) -> Result<()> {
+        let workspace = daemon.workspace(selector).await?;
+        daemon.touch(&workspace.id).await;
+        let grants = self.grants.clone();
         self.store
             .write(move |tx| {
                 store::require_ready(tx, &workspace.id)?;
-                let released =
-                    approvals::release(tx, &workspace.id, &Target::Port(name.clone()), &name)?;
+                let target = Target::Port(name.clone());
+                let released = grants.release(tx, &workspace.id, &target, &name)?;
                 ensure!(
                     tx.execute(
                         "DELETE FROM ports WHERE workspace_id=?1 AND name=?2",
@@ -283,7 +291,11 @@ enum Selection {
 
 /// Claim or renew atomically, returning the outcome and any port conflict to
 /// report. Grants and approval requests commit; a suggestion changes nothing.
-fn claim_port(tx: &Transaction<'_>, claim: PortClaim) -> Result<(Acquisition, Option<String>)> {
+fn claim_port(
+    tx: &Transaction<'_>,
+    grants: &dyn Grants,
+    claim: PortClaim,
+) -> Result<(Acquisition, Option<String>)> {
     store::require_ready(tx, &claim.workspace_id)?;
     let existing = store::ports(tx, Some(&claim.workspace_id))?;
     if let Some(reservation) = existing.iter().find(|p| p.name == claim.name) {
@@ -309,7 +321,7 @@ fn claim_port(tx: &Transaction<'_>, claim: PortClaim) -> Result<(Acquisition, Op
             lifetime,
             claim.request.reason.as_deref(),
         );
-        if let Some(approval) = approvals::check(tx, approval)? {
+        if let Some(approval) = grants.check(tx, approval)? {
             return Ok((
                 Acquisition::Allocation(Allocation::Approval(Box::new(approval))),
                 None,

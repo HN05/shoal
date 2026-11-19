@@ -80,7 +80,9 @@ async fn deleted_parent_sweep_releases_leases_and_keeps_a_branch_with_work() {
             .await
             .unwrap();
         manager
+            .leases
             .acquire_port(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 "web".into(),
                 PortRequest::default(),
@@ -121,7 +123,14 @@ async fn deleted_parent_sweep_releases_leases_and_keeps_a_branch_with_work() {
         sweep(&manager, &mut Timers::default()).await.unwrap();
 
         assert!(manager.workspace_by_id(&workspace.id).await.is_err());
-        assert!(manager.list_ports(None).await.unwrap().is_empty());
+        assert!(
+            manager
+                .leases
+                .list_ports(&*manager, None)
+                .await
+                .unwrap()
+                .is_empty()
+        );
         assert!(manager.list_resources(None).await.unwrap().is_empty());
         let branch = if pending_rename {
             "refs/heads/new/topic"
@@ -484,7 +493,9 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
     fs::remove_file(&rwlock_config).unwrap();
     let original = snapshot(&manager).await.unwrap();
     manager
+        .leases
         .acquire_port(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             "web".into(),
             PortRequest {
@@ -558,7 +569,14 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
     sweep(&manager, &mut timers).await.unwrap();
     assert!(!workspace.path.exists());
     assert!(manager.list_workspaces().await.unwrap().is_empty());
-    assert!(manager.list_ports(None).await.unwrap().is_empty());
+    assert!(
+        manager
+            .leases
+            .list_ports(&*manager, None)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     assert_eq!(
         git::run(
             &repository_dir,

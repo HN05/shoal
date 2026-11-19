@@ -1,9 +1,8 @@
 //! Shared outcomes of daemon-owned resource allocation.
-use crate::{
-    daemon::{approvals::ApprovalRequest, manager::Manager, notifications::NotificationKind},
-    protocol::Body,
-};
+use crate::{Leases, daemon::Daemon, protocol::Body};
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::approvals::ApprovalRequest;
+use shoal_protocol::notifications::NotificationKind;
 use shoal_protocol::space_names::SpaceName;
 
 pub enum Allocation<T> {
@@ -22,29 +21,22 @@ impl<T> Allocation<T> {
     }
 }
 
-impl Manager {
+impl Leases {
     /// Record allocation notifications after the claim transaction has finished.
     pub async fn notify_allocation<T>(
         &self,
-        (workspace, id): (&SpaceName, &SpaceId),
+        daemon: &dyn Daemon,
+        space: (&SpaceName, &SpaceId),
         outcome: &Allocation<T>,
         busy_prefix: &str,
     ) {
         match outcome {
             Allocation::Granted(_) => {}
             Allocation::Busy(message) => {
-                self.notify_space(
-                    workspace,
-                    id,
-                    NotificationKind::ResourceBusy,
-                    format!("{busy_prefix}{message}"),
-                )
-                .await;
+                let message = format!("{busy_prefix}{message}");
+                (self.notify(daemon, space, NotificationKind::ResourceBusy, message)).await;
             }
-            Allocation::Approval(request) => self.notify_approval(request).await,
+            Allocation::Approval(request) => daemon.announce(request).await,
         }
     }
 }
-
-#[cfg(test)]
-mod tests;

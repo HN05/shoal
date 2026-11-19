@@ -281,12 +281,14 @@ impl Manager {
             .await;
         place.settle(&result);
         if let Ok(outcome) = &result {
-            self.notify_allocation(
-                (&workspace_name.0, &workspace_name.1),
-                outcome,
-                "simulator: ",
-            )
-            .await;
+            self.leases
+                .notify_allocation(
+                    self,
+                    (&workspace_name.0, &workspace_name.1),
+                    outcome,
+                    "simulator: ",
+                )
+                .await;
         }
         if let Some(audit) = audit {
             self.finish_clean_request(audit, &result).await?;

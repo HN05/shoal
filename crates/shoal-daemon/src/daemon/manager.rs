@@ -29,8 +29,10 @@ pub struct Manager {
     pub(crate) publications: super::progress::Publications,
     /// The spaces whose issues wait for the agent account to be settled.
     pub(crate) agent_settles: super::links::issue::agent_settles::AgentSettles,
-    pub config_state: super::config_state::ConfigState,
-    pub notifications: super::notifications::Notifications,
+    pub config_state: Arc<super::config_state::ConfigState>,
+    pub notifications: Arc<super::notifications::Notifications>,
+    /// The leases workspaces hold.
+    pub leases: shoal_leases::Leases,
     pub paths: Paths,
     /// Arrival order of queued resource and simulator requests.
     pub(crate) queues: super::queue::Queues,
@@ -102,9 +104,18 @@ impl Manager {
         let config = Config::load(&paths)?;
         super::forge_hosts::learn_forge_pins(&Default::default(), &config.machine.forges);
         let store = open_store(&paths).await?;
+        let config_state = Arc::new(super::config_state::ConfigState::new(config));
+        let notifications = Arc::new(super::notifications::Notifications::new(store.clone()));
+        let leases = shoal_leases::Leases::new(
+            store.clone(),
+            config_state.clone(),
+            notifications.clone(),
+            Arc::new(super::leases::ApprovalGrants),
+        );
         Ok(Arc::new(Self {
-            config_state: super::config_state::ConfigState::new(config),
-            notifications: super::notifications::Notifications::new(store.clone()),
+            config_state,
+            notifications,
+            leases,
             waits: Default::default(),
             watch_starts: Default::default(),
             cleanup_health: Default::default(),

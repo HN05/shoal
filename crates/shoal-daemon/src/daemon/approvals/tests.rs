@@ -835,7 +835,7 @@ fn specifications_round_trip_recorded_json_and_reject_mixed_shapes() -> Result<(
     assert!(matches!(
         serde_json::from_value(serde_json::json!({"preferred": 8080, "env": "PORT_WEB",
                 "on_conflict": "auto", "range": [1, 2]}))?,
-        Specification::Port(PortSpecification {
+        Specification::Port(shoal_protocol::approvals::PortSpecification {
             preferred: Some(8080),
             ..
         })

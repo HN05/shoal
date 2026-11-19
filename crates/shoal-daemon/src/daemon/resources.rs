@@ -451,7 +451,13 @@ impl Manager {
             .await
             .context("resource lease retained; repeat acquire to retry the hook, or release it")?;
         }
-        self.notify_allocation((&workspace_name.0, &workspace_name.1), &acquisition, "")
+        self.leases
+            .notify_allocation(
+                self,
+                (&workspace_name.0, &workspace_name.1),
+                &acquisition,
+                "",
+            )
             .await;
         Ok(acquisition)
     }

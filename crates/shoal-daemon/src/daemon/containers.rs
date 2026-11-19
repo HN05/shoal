@@ -219,7 +219,11 @@ impl Manager {
         let selector = SpaceSelector::id(&workspace.id);
         for name in names {
             let request = PortRequest::default();
-            let pending = match self.acquire_port(&selector, name, request, caller).await? {
+            let pending = match self
+                .leases
+                .acquire_port(self, &selector, name, request, caller)
+                .await?
+            {
                 ports::Acquisition::Allocation(Allocation::Granted(_)) => continue,
                 ports::Acquisition::Allocation(Allocation::Approval(request)) => {
                     ContainerAcquisition::Approval(request)
@@ -361,7 +365,10 @@ impl Manager {
         project: &'a ContainerProject,
         worktree: Option<&'a Path>,
     ) -> Result<Compose<'a>> {
-        let ports = (self.list_ports(Some(&SpaceSelector::id(&project.workspace_id)))).await?;
+        let ports = (self
+            .leases
+            .list_ports(self, Some(&SpaceSelector::id(&project.workspace_id))))
+        .await?;
         Ok(Compose::at(project, worktree, ports).await)
     }
 

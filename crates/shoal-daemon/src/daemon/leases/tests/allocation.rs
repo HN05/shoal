@@ -1,6 +1,8 @@
-use super::*;
+use crate::daemon::allocation::Allocation;
 use crate::daemon::approvals::ApprovalRequestExt;
-use crate::daemon::approvals::{DecisionStatus, PortSpecification, Specification, Target};
+use crate::daemon::approvals::{ApprovalRequest, DecisionStatus, Specification, Target};
+use crate::daemon::notifications::NotificationKind;
+use shoal_protocol::approvals::PortSpecification;
 use shoal_protocol::config::repo::Lifetime;
 
 #[tokio::test]
@@ -16,7 +18,13 @@ async fn notifications_preserve_busy_wording_and_only_announce_pending_approvals
         .await
         .unwrap();
     manager
-        .notify_allocation((&worker.name, &worker.id), &Allocation::Granted(()), "")
+        .leases
+        .notify_allocation(
+            &*manager,
+            (&worker.name, &worker.id),
+            &Allocation::Granted(()),
+            "",
+        )
         .await;
     let port = |name: &str| {
         ApprovalRequest::new(
@@ -42,7 +50,9 @@ async fn notifications_preserve_busy_wording_and_only_announce_pending_approvals
             .unwrap();
         assert_ne!(decided.status, DecisionStatus::Pending);
         manager
+            .leases
             .notify_allocation::<()>(
+                &*manager,
                 (&worker.name, &worker.id),
                 &Allocation::Approval(Box::new(request)),
                 "",
@@ -59,7 +69,9 @@ async fn notifications_preserve_busy_wording_and_only_announce_pending_approvals
     for _ in 0..2 {
         for prefix in ["", "simulator: "] {
             manager
+                .leases
                 .notify_allocation::<()>(
+                    &*manager,
                     (&worker.name, &worker.id),
                     &Allocation::Busy("busy".into()),
                     prefix,
@@ -67,7 +79,9 @@ async fn notifications_preserve_busy_wording_and_only_announce_pending_approvals
                 .await;
         }
         manager
+            .leases
             .notify_allocation::<()>(
+                &*manager,
                 (&worker.name, &worker.id),
                 &Allocation::Approval(Box::new(request.clone())),
                 "",
