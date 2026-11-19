@@ -661,7 +661,7 @@ async fn prepare_agent_launch(
 async fn prepare_push_gate(
     paths: &CommandPaths,
     space: &SpaceSelector,
-    agent: &crate::execution::TrackedAgent,
+    agent: &shoal_protocol::executions::TrackedAgent,
 ) -> Result<shoal_core::agent_git::push_gate::Launch> {
     let records = crate::homes::records(paths, space).await?;
     let crate::agents::AgentHome::Workspace(workspace) = records.home()? else {

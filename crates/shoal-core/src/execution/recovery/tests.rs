@@ -11,7 +11,7 @@ fn pressure_handoffs_are_private() {
         &paths,
         &SpaceId::from("workspace"),
         &ExecutionId::from("execution"),
-        &crate::execution::TrackedAgent::named("codex"),
+        &shoal_protocol::executions::TrackedAgent::named("codex"),
         Some("critical memory pressure"),
         None,
     )
@@ -52,7 +52,7 @@ fn pressure_handoffs_are_private() {
         &paths,
         &SpaceId::from("workspace"),
         &ExecutionId::from("execution"),
-        &crate::execution::TrackedAgent::named("codex"),
+        &shoal_protocol::executions::TrackedAgent::named("codex"),
         None,
         None,
     )
@@ -93,7 +93,7 @@ fn only_a_daemon_saved_stop_counts_as_undelivered() {
         &paths,
         &SpaceId::from("workspace"),
         &ExecutionId::from("execution"),
-        &crate::execution::TrackedAgent::named("codex"),
+        &shoal_protocol::executions::TrackedAgent::named("codex"),
         None,
         None,
     )
@@ -290,7 +290,7 @@ fn the_first_saved_turn_stays_through_later_saves() {
         &paths,
         &SpaceId::from("workspace"),
         &ExecutionId::from("execution"),
-        &crate::execution::TrackedAgent::named("codex"),
+        &shoal_protocol::executions::TrackedAgent::named("codex"),
         None,
         None,
     )
@@ -405,7 +405,7 @@ fn each_agent_keeps_a_last_session() {
     LastSession::save(
         &paths,
         &SpaceId::from("workspace"),
-        &crate::execution::TrackedAgent::named("claude code"),
+        &shoal_protocol::executions::TrackedAgent::named("claude code"),
         &ExecutionId::from("execution"),
     )
     .unwrap();
@@ -458,7 +458,7 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session_and_stop() {
         Record {
             session: Some("stopped".into()),
             ..Record::new(
-                &crate::execution::TrackedAgent::named("claude"),
+                &shoal_protocol::executions::TrackedAgent::named("claude"),
                 Some("its terminal closed"),
                 Stage::Stopped,
                 Some(herdr_pane("w1:p2")),
@@ -528,7 +528,7 @@ fn a_restored_session_learns_why_and_when_it_stopped_and_what_the_stop_ended() {
         &paths,
         &SpaceId::from("workspace"),
         &ExecutionId::from("execution"),
-        &crate::execution::TrackedAgent::named("claude"),
+        &shoal_protocol::executions::TrackedAgent::named("claude"),
         Some("critical memory pressure"),
         None,
     )
@@ -583,13 +583,13 @@ fn a_permission_change_reaches_each_saved_agent_and_keeps_the_rest() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
     let workspace = SpaceId::from("workspace");
-    let agent = crate::execution::TrackedAgent {
+    let agent = shoal_protocol::executions::TrackedAgent {
         narrowing: crate::config::permissions::PermissionsConfig::assigned(&[
             "push=propose".into(),
             "merge=propose".into(),
         ])
         .unwrap(),
-        ..crate::execution::TrackedAgent::named("claude")
+        ..shoal_protocol::executions::TrackedAgent::named("claude")
     };
     save_record(
         &paths,

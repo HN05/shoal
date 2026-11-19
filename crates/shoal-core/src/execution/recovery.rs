@@ -3,6 +3,7 @@ use crate::config::permissions::PermissionChange;
 use crate::paths::StateFiles;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::{agent_session_ids::AgentSessionId, space_ids::SpaceId};
+use shoal_protocol::executions::TrackedAgent;
 use std::{
     collections::BTreeMap,
     ffi::OsString,
@@ -99,8 +100,8 @@ pub fn resumed_prompt(stop: Option<&Stop>, handoff: Option<&str>) -> String {
 
 impl Recovery {
     /// The agent it restores, with the model and effort it runs with.
-    pub fn tracked(&self) -> super::TrackedAgent {
-        super::TrackedAgent {
+    pub fn tracked(&self) -> TrackedAgent {
+        TrackedAgent {
             name: self.agent.clone(),
             model: self.model.clone(),
             mode: self.mode.clone(),
@@ -195,7 +196,7 @@ pub enum Restorer {
 pub trait RecordExt: Sized {
     /// The record of `agent`, stopped for `reason`.
     fn new(
-        agent: &super::TrackedAgent,
+        agent: &TrackedAgent,
         reason: Option<&str>,
         stage: Stage,
         origin: Option<Origin>,
@@ -223,7 +224,7 @@ pub trait RecordExt: Sized {
 
 impl RecordExt for Record {
     fn new(
-        agent: &super::TrackedAgent,
+        agent: &TrackedAgent,
         reason: Option<&str>,
         stage: Stage,
         origin: Option<Origin>,
@@ -299,7 +300,7 @@ pub fn save_record(
     paths: &Paths,
     space_id: &SpaceId,
     id: &ExecutionId,
-    agent: &super::TrackedAgent,
+    agent: &TrackedAgent,
     reason: Option<&str>,
     turn: Option<AgentState>,
 ) -> Result<PathBuf> {
@@ -632,7 +633,7 @@ pub trait LastSessionExt: Sized {
     fn save(
         paths: &Paths,
         space_id: &SpaceId,
-        agent: &super::TrackedAgent,
+        agent: &TrackedAgent,
         id: &ExecutionId,
     ) -> Result<()>;
 
@@ -668,7 +669,7 @@ impl LastSessionExt for LastSession {
     fn save(
         paths: &Paths,
         space_id: &SpaceId,
-        agent: &super::TrackedAgent,
+        agent: &TrackedAgent,
         id: &ExecutionId,
     ) -> Result<()> {
         Self {

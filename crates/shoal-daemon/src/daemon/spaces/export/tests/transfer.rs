@@ -198,7 +198,7 @@ async fn import_opens_the_exported_branch_with_its_files_and_agents() {
         &exporting.paths,
         &workspace.id,
         &ExecutionId::from("stopped-agent"),
-        &crate::execution::TrackedAgent::named("claude"),
+        &shoal_protocol::executions::TrackedAgent::named("claude"),
         Some("overload"),
         None,
     )
@@ -491,7 +491,7 @@ async fn a_copy_keeps_the_workspace_and_imports_on_a_branch_of_its_own() {
         &manager.paths,
         &workspace.id,
         &ExecutionId::from("stopped-agent"),
-        &crate::execution::TrackedAgent::named("claude"),
+        &shoal_protocol::executions::TrackedAgent::named("claude"),
         None,
         None,
     )

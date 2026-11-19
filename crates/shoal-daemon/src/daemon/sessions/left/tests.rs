@@ -4,13 +4,11 @@ use crate::{
         executions::{ExecutionKind, ExecutionRequest},
         places::ExecutionPlace,
     },
-    execution::{
-        TrackedAgent,
-        recovery::{self, Record, RecordExt as _},
-    },
+    execution::recovery::{self, Record, RecordExt as _},
     sessions::{HostName, Origin},
 };
 use anyhow::Result;
+use shoal_protocol::executions::TrackedAgent;
 use shoal_protocol::{executions::Stage, space_names::SpaceSelector};
 
 /// An agent that restores saved agents in another block than the ones they

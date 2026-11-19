@@ -1,10 +1,10 @@
 //! A scripted forge whose issue the tests of issue links assign.
+use shoal_protocol::executions::TrackedAgent;
 use std::sync::{Arc, Mutex};
 
 use crate::daemon::test_support::{configure, git, manager, repository};
 use crate::{
     daemon::{executions::ExecutionKind, manager::Manager},
-    execution::TrackedAgent,
     model::{Assigner, Workspace},
 };
 use serde_json::{Value, json};

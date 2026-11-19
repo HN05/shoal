@@ -97,7 +97,7 @@ impl Manager {
         let kind = super::executions::ExecutionKind::Command;
         let mut started =
             (self.begin_execution_placed(&selector, None, kind, None, request)).await?;
-        let agent = crate::execution::TrackedAgent {
+        let agent = shoal_protocol::executions::TrackedAgent {
             name: chat.agent.clone().context("the chat names no agent")?,
             model: Default::default(),
             mode: chat.agent_mode(),

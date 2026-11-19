@@ -1,6 +1,7 @@
 //! Tracked executions that outlive the process starting them, with their
 //! output in a log.
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::executions::TrackedAgent;
 use std::{
     ffi::OsString,
     io::Write,
@@ -35,7 +36,7 @@ pub async fn launch_detached(
     log: PathBuf,
     command: Vec<OsString>,
     wrapper: &Wrapper<'_>,
-    agent: Option<&super::TrackedAgent>,
+    agent: Option<&TrackedAgent>,
 ) -> Result<DetachedExecution> {
     let launch = DetachedCommand::prepare(paths, space, log, command, wrapper, agent)?;
     launch.start().await
@@ -116,7 +117,7 @@ impl DetachedCommand {
         log: PathBuf,
         command: Vec<OsString>,
         wrapper: &Wrapper<'_>,
-        agent: Option<&super::TrackedAgent>,
+        agent: Option<&TrackedAgent>,
     ) -> Result<Self> {
         ensure!(space.path.is_dir(), "{} directory is missing", space.kind);
         let file = prepare_detached_log(&log, space, &command)?;

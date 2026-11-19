@@ -373,7 +373,7 @@ async fn refused_agent(manager: &Arc<Manager>, workspace: &crate::model::Workspa
             space: SpaceSelector::id(&workspace.id),
             wrapper,
             kind: ExecutionKind::Command,
-            agent: Some(crate::execution::TrackedAgent::named("claude")),
+            agent: Some(shoal_protocol::executions::TrackedAgent::named("claude")),
             recover: true,
             reattach: false,
             caller: None,

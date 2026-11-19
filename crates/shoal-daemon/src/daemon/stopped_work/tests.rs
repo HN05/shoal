@@ -5,13 +5,11 @@ use crate::{
         stopped_work::PermissionTargets,
         test_support::{chat, manager, repository},
     },
-    execution::{
-        TrackedAgent,
-        recovery::{LastSession, LastSessionExt},
-    },
+    execution::recovery::{LastSession, LastSessionExt},
     protocol::SavedAgent,
 };
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::executions::TrackedAgent;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// The stopped `agents`, without waiting launches.

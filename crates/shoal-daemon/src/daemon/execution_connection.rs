@@ -5,6 +5,7 @@
 use crate::daemon::agents::ProtectionExt;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::executions::TrackedAgent;
 use shoal_protocol::launches::LaunchSource;
 use std::sync::Arc;
 
@@ -25,7 +26,6 @@ use super::{
     workspace::RecordChange,
 };
 use crate::{
-    execution::TrackedAgent,
     model::{Protection, Space},
     process::identity::Identity,
     protocol::{self, Body, Control, ErrorCode, ExecutionEvent, Reattach, Response},

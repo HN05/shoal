@@ -715,7 +715,7 @@ async fn an_idle_agent_with_work_outside_its_group_keeps_a_working_turn() {
             &manager.paths,
             &workspace.id,
             &id,
-            &crate::execution::TrackedAgent::named("claude"),
+            &shoal_protocol::executions::TrackedAgent::named("claude"),
             None,
             None,
         )

@@ -56,7 +56,7 @@ async fn a_stopped_agent_refuses_another_worker_until_it_is_resumed_or_forgotten
         &manager.paths,
         &workspace.id,
         &execution,
-        &crate::execution::TrackedAgent::named("claude"),
+        &shoal_protocol::executions::TrackedAgent::named("claude"),
         None,
         None,
     )

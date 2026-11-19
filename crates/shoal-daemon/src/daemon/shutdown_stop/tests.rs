@@ -80,7 +80,7 @@ async fn a_shutdown_stops_running_work_and_restores_it_only_once_cancelled() {
         &manager.paths,
         &workspace.id,
         &ExecutionId::from("earlier"),
-        &crate::execution::TrackedAgent::named("claude"),
+        &shoal_protocol::executions::TrackedAgent::named("claude"),
         None,
         None,
     )
@@ -116,7 +116,7 @@ async fn a_shutdown_stops_running_work_and_restores_it_only_once_cancelled() {
         &manager.paths,
         &workspace.id,
         &plan.id,
-        &crate::execution::TrackedAgent::named("claude"),
+        &shoal_protocol::executions::TrackedAgent::named("claude"),
         None,
         None,
     )
@@ -207,7 +207,7 @@ fn only_requested_or_queued_restores_continue_without_the_user() {
         &paths,
         &open.id,
         &ExecutionId::from("requested"),
-        &crate::execution::TrackedAgent::named("claude"),
+        &shoal_protocol::executions::TrackedAgent::named("claude"),
         None,
         None,
     )
@@ -227,7 +227,7 @@ fn only_requested_or_queued_restores_continue_without_the_user() {
         &paths,
         &open.id,
         &ExecutionId::from("unattended"),
-        &crate::execution::TrackedAgent::named("claude"),
+        &shoal_protocol::executions::TrackedAgent::named("claude"),
         None,
         None,
     )
@@ -284,7 +284,7 @@ async fn a_shutdown_keeps_a_protection_stopped_agent_from_resuming() {
     manager
         .track_agent(
             &id,
-            &crate::execution::TrackedAgent::named("claude"),
+            &shoal_protocol::executions::TrackedAgent::named("claude"),
             &workspace.id,
             &workspace.name,
             true,

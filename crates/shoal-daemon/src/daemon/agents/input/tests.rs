@@ -32,7 +32,7 @@ async fn agent(manager: &Manager, root: &std::path::Path) -> (Workspace, Workspa
     manager
         .track_agent(
             &id,
-            &crate::execution::TrackedAgent::named("claude"),
+            &shoal_protocol::executions::TrackedAgent::named("claude"),
             &workspace.id,
             &workspace.name,
             false,

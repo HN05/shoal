@@ -4,6 +4,7 @@ use crate::execution::recovery::LastSessionExt;
 use rusqlite::OptionalExtension;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::executions::TrackedAgent;
 use shoal_protocol::model::ByKind;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use std::{
@@ -25,7 +26,6 @@ use crate::daemon::log;
 use crate::{
     agent::ModelChoice,
     daemon::notifications::NotificationKind,
-    execution::TrackedAgent,
     protocol::timing,
     state::{AgentState, WorkspaceState},
 };

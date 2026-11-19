@@ -1,6 +1,7 @@
 //! Starting Shoal work beside this terminal: additions, restores, tracked
 //! agents and chats, focused or in the background.
 use shoal_ids::space_ids::SpaceNumber;
+use shoal_protocol::executions::TrackedAgent;
 use shoal_protocol::space_names::SpaceSelector;
 use std::{
     ffi::OsString,
@@ -14,7 +15,6 @@ use crate::{
     cli::{context::Context, recent},
     config::{Effective, modes::ModeName},
     env,
-    execution::TrackedAgent,
     model::{Chat, Part, Repository, Space, Workspace},
     sessions::Origin,
     start_plan::{AddPlan, open_add},

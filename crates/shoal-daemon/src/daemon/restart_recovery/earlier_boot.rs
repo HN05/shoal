@@ -47,7 +47,7 @@ impl Manager {
         let Some(name) = agent else {
             return Ok(());
         };
-        let agent = crate::execution::TrackedAgent {
+        let agent = shoal_protocol::executions::TrackedAgent {
             name,
             model: execution.model.clone(),
             mode: (execution.mode.clone()).unwrap_or(crate::config::modes::ModeName::DEFAULT),

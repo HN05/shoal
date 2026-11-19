@@ -554,7 +554,7 @@ async fn a_failed_turn_lost_before_a_later_idle_report_is_still_retried() {
     manager
         .track_agent(
             &started.plan.id,
-            &crate::execution::TrackedAgent::named("claude"),
+            &shoal_protocol::executions::TrackedAgent::named("claude"),
             &workspace.id,
             &workspace.name,
             true,

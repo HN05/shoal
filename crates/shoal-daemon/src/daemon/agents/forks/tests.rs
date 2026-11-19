@@ -28,7 +28,7 @@ async fn agent(
     manager
         .track_agent(
             &id,
-            &crate::execution::TrackedAgent::named(name),
+            &shoal_protocol::executions::TrackedAgent::named(name),
             &workspace.id,
             &workspace.name,
             true,

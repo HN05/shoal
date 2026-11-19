@@ -24,7 +24,7 @@ async fn idle_agent(manager: &Manager, root: &tempfile::TempDir) -> StartedExecu
     manager
         .track_agent(
             &execution.plan.id,
-            &crate::execution::TrackedAgent::named("claude"),
+            &shoal_protocol::executions::TrackedAgent::named("claude"),
             &workspace.id,
             &workspace.name,
             true,

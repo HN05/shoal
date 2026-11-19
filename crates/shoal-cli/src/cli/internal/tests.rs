@@ -247,7 +247,7 @@ fn detached_round_trips_literal_arguments_and_globals() {
         "literal ; $value".into(),
         OsString::from_vec(vec![0xff]),
     ];
-    let happy = crate::execution::TrackedAgent {
+    let happy = shoal_protocol::executions::TrackedAgent {
         narrowing: Default::default(),
         mode: "plan".into(),
         name: "happy-codex".into(),
@@ -360,7 +360,7 @@ fn session_round_trips_records_and_literal_arguments() {
         } = parse(
             Worker::Session {
                 space: &SpaceId::from("space-id"),
-                agent: &crate::execution::TrackedAgent {
+                agent: &shoal_protocol::executions::TrackedAgent {
                     narrowing: Default::default(),
                     mode: "chat".into(),
                     name: "claude".into(),
@@ -434,7 +434,7 @@ fn proxy_report_round_trips_its_json() {
 fn take_over_round_trips_the_agent_and_its_connection() {
     let record = Path::new("/state/a record.json");
     let log = Path::new("/logs/session log");
-    let agent = crate::execution::TrackedAgent {
+    let agent = shoal_protocol::executions::TrackedAgent {
         narrowing: crate::config::permissions::PermissionsConfig::assigned(
             &["push=propose".into()],
         )

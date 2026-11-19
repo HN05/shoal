@@ -1,9 +1,9 @@
+use shoal_protocol::executions::TrackedAgent;
 use std::sync::Arc;
 
 use crate::daemon::{executions::ExecutionKind, manager::Manager};
 use crate::{
     daemon::test_support::{manager, repository},
-    execution::TrackedAgent,
     model::{CleanupReason, Workspace},
     state::AgentState,
 };

@@ -257,7 +257,7 @@ async fn run_agent(
 struct Tracked {
     settings: Effective,
     command: Vec<OsString>,
-    agent: crate::execution::TrackedAgent,
+    agent: shoal_protocol::executions::TrackedAgent,
 }
 
 /// The agent of the recorded `chat` as `launch` says, with `model_args`;
@@ -302,7 +302,7 @@ async fn tracked(
         opening,
         args,
     )?;
-    let agent = crate::execution::TrackedAgent {
+    let agent = shoal_protocol::executions::TrackedAgent {
         name: agent,
         model,
         mode,

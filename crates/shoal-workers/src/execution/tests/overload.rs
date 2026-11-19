@@ -556,7 +556,7 @@ async fn run_tracked_agent(script: &str) {
         &paths,
         id,
         vec!["sh".into(), "-c".into(), script.into()],
-        Some(shoal_core::execution::TrackedAgent::named("fixture")),
+        Some(shoal_protocol::executions::TrackedAgent::named("fixture")),
     )
     .await
     // A daemon crash ends the wrapper with an error, as it does a real one.
@@ -1412,7 +1412,7 @@ async fn resumed_agent_child() {
         &paths,
         id,
         vec!["sh".into(), "-c".into(), script.into()],
-        shoal_core::execution::TrackedAgent::named("fixture"),
+        shoal_protocol::executions::TrackedAgent::named("fixture"),
         (vec![record.into()], None),
     )
     .await

@@ -65,7 +65,7 @@ async fn agent_caller(manager: &Manager, id: &SpaceId, space: &SpaceName, name: 
     manager
         .track_agent(
             caller.execution_id().unwrap(),
-            &crate::execution::TrackedAgent::named(name),
+            &shoal_protocol::executions::TrackedAgent::named(name),
             id,
             space,
             true,

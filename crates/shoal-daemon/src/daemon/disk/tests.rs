@@ -457,7 +457,7 @@ async fn low_space_warns_running_agents_before_cleanup_starts() {
     manager
         .track_agent(
             &execution.plan.id,
-            &crate::execution::TrackedAgent::named("claude"),
+            &shoal_protocol::executions::TrackedAgent::named("claude"),
             &workspace.id,
             &workspace.name,
             false,

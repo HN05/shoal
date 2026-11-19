@@ -87,7 +87,7 @@ async fn an_exit_answers_again_with_the_spaces_of_the_work_it_stopped() {
             &manager.paths,
             &chat.id,
             &format!("{name}-agent").into(),
-            &crate::execution::TrackedAgent::named("claude"),
+            &shoal_protocol::executions::TrackedAgent::named("claude"),
             None,
             None,
         )
@@ -134,7 +134,7 @@ async fn a_restart_answers_with_the_spaces_of_the_work_it_cut_off() {
             &manager.paths,
             &chat.id,
             &format!("{name}-agent").into(),
-            &crate::execution::TrackedAgent::named("claude"),
+            &shoal_protocol::executions::TrackedAgent::named("claude"),
             None,
             None,
         )

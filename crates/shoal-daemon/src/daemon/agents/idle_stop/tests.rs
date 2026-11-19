@@ -59,9 +59,9 @@ async fn agent(
         .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
         .await
         .unwrap();
-    let agent = crate::execution::TrackedAgent {
+    let agent = shoal_protocol::executions::TrackedAgent {
         mode: setup.mode.into(),
-        ..crate::execution::TrackedAgent::named("claude")
+        ..shoal_protocol::executions::TrackedAgent::named("claude")
     };
     manager
         .track_agent(
@@ -510,9 +510,9 @@ async fn idle_chat(
         .begin_agent_execution(chat.id.as_str())
         .await
         .unwrap();
-    let agent = crate::execution::TrackedAgent {
+    let agent = shoal_protocol::executions::TrackedAgent {
         mode: mode.into(),
-        ..crate::execution::TrackedAgent::named("claude")
+        ..shoal_protocol::executions::TrackedAgent::named("claude")
     };
     manager
         .track_agent(

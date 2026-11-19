@@ -210,7 +210,7 @@ async fn overload_notifications_explain_recovery_policy_and_missing_records() {
         manager
             .track_agent(
                 id,
-                &crate::execution::TrackedAgent::named("codex"),
+                &shoal_protocol::executions::TrackedAgent::named("codex"),
                 &workspace.id,
                 &workspace.name,
                 recover,
@@ -288,7 +288,7 @@ async fn inspection_and_agent_list_report_an_agent_awaiting_its_restore() {
     manager
         .track_agent(
             id,
-            &crate::execution::TrackedAgent::named("codex"),
+            &shoal_protocol::executions::TrackedAgent::named("codex"),
             &workspace.id,
             &workspace.name,
             true,
@@ -358,7 +358,7 @@ async fn overload_stops_only_one_agent_and_preserves_work_and_leases() {
     manager
         .track_agent(
             &second.plan.id,
-            &crate::execution::TrackedAgent::named("second"),
+            &shoal_protocol::executions::TrackedAgent::named("second"),
             &workspace.id,
             &workspace.name,
             false,
@@ -369,7 +369,7 @@ async fn overload_stops_only_one_agent_and_preserves_work_and_leases() {
     manager
         .track_agent(
             &first.plan.id,
-            &crate::execution::TrackedAgent::named("first"),
+            &shoal_protocol::executions::TrackedAgent::named("first"),
             &workspace.id,
             &workspace.name,
             false,
@@ -446,7 +446,7 @@ async fn overload_stops_idle_agents_lowest_rank_first_before_working_ones() {
         manager
             .track_agent(
                 &execution.plan.id,
-                &crate::execution::TrackedAgent::named(name),
+                &shoal_protocol::executions::TrackedAgent::named(name),
                 &workspace.id,
                 &workspace.name,
                 false,
@@ -537,7 +537,7 @@ async fn overload_stops_the_agent_the_user_interacted_with_longest_ago_first() {
         manager
             .track_agent(
                 &id,
-                &crate::execution::TrackedAgent::named(name),
+                &shoal_protocol::executions::TrackedAgent::named(name),
                 &workspace.id,
                 &workspace.name,
                 false,
@@ -596,7 +596,7 @@ async fn a_turn_reported_after_protection_read_the_turns_counts_as_working() {
     manager
         .track_agent(
             &id,
-            &crate::execution::TrackedAgent::named("claude"),
+            &shoal_protocol::executions::TrackedAgent::named("claude"),
             &workspace.id,
             &workspace.name,
             false,
@@ -713,9 +713,9 @@ async fn chat_agent(
         .begin_agent_execution(chat.id.as_str())
         .await
         .unwrap();
-    let agent = crate::execution::TrackedAgent {
+    let agent = shoal_protocol::executions::TrackedAgent {
         mode: mode.into(),
-        ..crate::execution::TrackedAgent::named("claude")
+        ..shoal_protocol::executions::TrackedAgent::named("claude")
     };
     (manager.track_agent(
         &execution.plan.id,

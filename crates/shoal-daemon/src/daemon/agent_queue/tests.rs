@@ -465,7 +465,7 @@ pub(super) async fn connected_agent(
     manager
         .track_agent(
             &started.plan.id,
-            &crate::execution::TrackedAgent::named("claude"),
+            &shoal_protocol::executions::TrackedAgent::named("claude"),
             &workspace.id,
             &workspace.name,
             true,
@@ -1713,9 +1713,9 @@ async fn queue_saved_restore(
     mode: &str,
 ) -> QueueEntry {
     let execution = ExecutionId::from(format!("stopped-{mode}"));
-    let agent = crate::execution::TrackedAgent {
+    let agent = shoal_protocol::executions::TrackedAgent {
         mode: mode.into(),
-        ..crate::execution::TrackedAgent::named("claude")
+        ..shoal_protocol::executions::TrackedAgent::named("claude")
     };
     let saved =
         crate::execution::recovery::save_record(&manager.paths, id, &execution, &agent, None, None);

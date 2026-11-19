@@ -93,7 +93,7 @@ impl Running {
             &manager.paths,
             &workspace.id,
             &ExecutionId::from("earlier"),
-            &crate::execution::TrackedAgent::named("claude"),
+            &shoal_protocol::executions::TrackedAgent::named("claude"),
             None,
             None,
         )

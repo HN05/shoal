@@ -21,7 +21,7 @@ async fn a_streamed_request_s_vouch_stands_for_its_caller_only_until_its_answer_
         .unwrap()
         .plan
         .id;
-    let agent = crate::execution::TrackedAgent::named("claude");
+    let agent = shoal_protocol::executions::TrackedAgent::named("claude");
     (manager.track_agent(
         &execution,
         &agent,

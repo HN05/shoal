@@ -1,6 +1,7 @@
 //! The command that restores a tracked agent, resolved from its space's
 //! settings and records as the daemon has them now.
 use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_protocol::executions::TrackedAgent;
 use std::{ffi::OsString, path::Path};
 
 use anyhow::Result;
@@ -12,9 +13,8 @@ use crate::{
     model::ExecutionSpace,
     protocol::ConfigTarget,
 };
-use shoal_core::execution::{
-    TrackedAgent,
-    recovery::{Record, RecordExt as _, Recovery, Stop, StopExt as _, resumed_prompt},
+use shoal_core::execution::recovery::{
+    Record, RecordExt as _, Recovery, Stop, StopExt as _, resumed_prompt,
 };
 use shoal_protocol::space_names::SpaceSelector;
 

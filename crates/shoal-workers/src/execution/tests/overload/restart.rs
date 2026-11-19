@@ -112,7 +112,7 @@ async fn update_restart_discards_a_stop_that_never_reached_the_agent() {
         &manager.paths,
         &workspace.id,
         &id,
-        &shoal_core::execution::TrackedAgent::named("fixture"),
+        &shoal_protocol::executions::TrackedAgent::named("fixture"),
         Some("test memory pressure"),
         None,
     )

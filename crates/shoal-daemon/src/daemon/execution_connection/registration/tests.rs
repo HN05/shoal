@@ -112,7 +112,7 @@ fn context(space: &shoal_ids::space_ids::SpaceId, agent: Option<&str>) -> Execut
             .unwrap()
             .unwrap(),
         kind: ExecutionKind::Command,
-        agent: agent.map(crate::execution::TrackedAgent::named),
+        agent: agent.map(shoal_protocol::executions::TrackedAgent::named),
         recover: true,
         reattach: true,
         queue_entry: None,

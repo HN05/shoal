@@ -52,7 +52,7 @@ async fn agent_named(name: &str) -> Fixture {
     manager
         .track_agent(
             &id,
-            &crate::execution::TrackedAgent::named(name),
+            &shoal_protocol::executions::TrackedAgent::named(name),
             &workspace.id,
             &workspace.name,
             false,
@@ -236,7 +236,7 @@ async fn a_mark_outlasts_the_agent_reconnecting_to_a_restarted_daemon() {
     manager
         .track_agent(
             &id,
-            &crate::execution::TrackedAgent::named("claude"),
+            &shoal_protocol::executions::TrackedAgent::named("claude"),
             &workspace.id,
             &workspace.name,
             false,
@@ -294,7 +294,7 @@ async fn a_coordinator_that_received_the_question_hears_a_reply_closed_it() {
     manager
         .track_agent(
             &id,
-            &crate::execution::TrackedAgent::named("claude"),
+            &shoal_protocol::executions::TrackedAgent::named("claude"),
             &child.id,
             &child.name,
             false,

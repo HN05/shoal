@@ -1081,7 +1081,7 @@ async fn tracked_agents_without_turn_states_coordinate_and_report() {
         manager
             .track_agent(
                 &started.plan.id,
-                &crate::execution::TrackedAgent::named("droid"),
+                &shoal_protocol::executions::TrackedAgent::named("droid"),
                 &workspace.id,
                 &workspace.name,
                 false,
@@ -1152,7 +1152,7 @@ async fn an_agent_waiting_for_its_restore_keeps_its_workspaces_activity() {
     manager
         .track_agent(
             &started.plan.id,
-            &crate::execution::TrackedAgent::named("droid"),
+            &shoal_protocol::executions::TrackedAgent::named("droid"),
             &child.id,
             &child.name,
             true,

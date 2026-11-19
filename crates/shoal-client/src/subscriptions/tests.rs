@@ -368,7 +368,7 @@ async fn a_chat_reaches_a_subscription_with_its_agent_links_and_messages() {
 
 #[tokio::test]
 async fn a_session_an_agent_reports_reaches_a_subscription() {
-    use shoal_core::execution::TrackedAgent;
+    use shoal_protocol::executions::TrackedAgent;
     use shoal_protocol::transcripts::ReportedSession;
     use shoal_protocol::{executions::ExecutionKind, state::AgentState};
     let daemon = TestDaemon::start().await;
@@ -643,7 +643,7 @@ async fn discarding_a_stopped_session_reaches_a_subscription() {
     shoal_core::execution::recovery::LastSession::save(
         &daemon.manager.paths,
         &workspace.id,
-        &shoal_core::execution::TrackedAgent::named("claude"),
+        &shoal_protocol::executions::TrackedAgent::named("claude"),
         &shoal_ids::execution_ids::ExecutionId::from("execution"),
     )
     .unwrap();

@@ -811,7 +811,7 @@ impl Manager {
             self.forget_agent_stop(&request.execution).await;
         }
         if let Some(name) = &request.agent {
-            let agent = crate::execution::TrackedAgent {
+            let agent = shoal_protocol::executions::TrackedAgent {
                 name: name.clone(),
                 model: request.model.clone(),
                 mode: (request.mode.clone()).unwrap_or(crate::config::modes::ModeName::DEFAULT),

@@ -10,7 +10,6 @@ use crate::{
     agents::{Integration, ensure_available},
     cli::{context::Context, terminal},
     config::Effective,
-    execution,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -39,7 +38,7 @@ pub(super) async fn tracked(
         new_session,
         ..
     } = launch;
-    let agent = execution::TrackedAgent {
+    let agent = shoal_protocol::executions::TrackedAgent {
         name,
         model,
         mode,

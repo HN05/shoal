@@ -2,6 +2,7 @@
 //! commands the daemon, the execution wrapper and the CLI run in their own
 //! processes.
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::executions::TrackedAgent;
 use shoal_protocol::space_names::SpaceSelector;
 use std::{
     ffi::OsString,
@@ -10,7 +11,7 @@ use std::{
 
 use anyhow::Result;
 
-use crate::{agent::ModelChoice, execution::TrackedAgent, paths::Paths};
+use crate::{agent::ModelChoice, paths::Paths};
 use shoal_protocol::sessions::HostName;
 
 /// The hidden command that holds every worker below.
@@ -179,7 +180,7 @@ fn model_args(model: &ModelChoice) -> Vec<OsString> {
 
 /// The worker option that carries `agent`'s `--permission` narrowing, as
 /// JSON; none without one.
-fn narrowing_args(agent: &crate::execution::TrackedAgent) -> Vec<OsString> {
+fn narrowing_args(agent: &TrackedAgent) -> Vec<OsString> {
     match agent.narrowing.is_empty() {
         true => Vec::new(),
         false => vec![
@@ -193,7 +194,7 @@ fn narrowing_args(agent: &crate::execution::TrackedAgent) -> Vec<OsString> {
 
 /// The worker option that says `agent` begins a new session; none when it
 /// continues or forks one.
-fn new_session_arg(agent: &crate::execution::TrackedAgent) -> Option<OsString> {
+fn new_session_arg(agent: &TrackedAgent) -> Option<OsString> {
     agent.new_session.then(|| "--new-session".into())
 }
 

@@ -67,7 +67,7 @@ pub(super) async fn start(
         args,
     };
     let prepared = with_effort(app.prepare(session).await?, app, &settings, &model);
-    let agent = execution::TrackedAgent {
+    let agent = shoal_protocol::executions::TrackedAgent {
         name: app.execution_agent(),
         model,
         mode,
@@ -94,7 +94,7 @@ pub(super) async fn start(
 /// it cannot start.
 async fn launch_session(
     ctx: &Context,
-    agent: &execution::TrackedAgent,
+    agent: &shoal_protocol::executions::TrackedAgent,
     space: &crate::model::ExecutionSpace,
     files: &Path,
     prepared: Box<dyn Prepared>,
@@ -344,7 +344,7 @@ pub(super) async fn start_chat(
         args,
     };
     let prepared = with_effort(app.prepare(session).await?, app, settings, model);
-    let agent = execution::TrackedAgent {
+    let agent = shoal_protocol::executions::TrackedAgent {
         name: app.execution_agent(),
         model: model.clone(),
         mode: mode.clone(),

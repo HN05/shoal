@@ -28,7 +28,7 @@ async fn running_agents_are_warned_once_per_signal_until_the_repeat_interval() {
             agents.push((workspace, execution));
         }
     }
-    let claude = crate::execution::TrackedAgent::named("claude");
+    let claude = shoal_protocol::executions::TrackedAgent::named("claude");
     let track = |index: usize| {
         let (workspace, execution) = &agents[index];
         manager.track_agent(
@@ -110,7 +110,7 @@ async fn only_disk_warnings_wake_an_idle_agent() {
     manager
         .track_agent(
             &agent.plan.id,
-            &crate::execution::TrackedAgent::named("claude"),
+            &shoal_protocol::executions::TrackedAgent::named("claude"),
             &workspace.id,
             &workspace.name,
             false,

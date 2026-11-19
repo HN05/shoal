@@ -1,5 +1,6 @@
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::executions::TrackedAgent;
 
 use crate::{
     cli::{
@@ -11,7 +12,6 @@ use crate::{
         context::Context,
         terminal,
     },
-    execution::TrackedAgent,
     sessions::HostName,
 };
 use shoal_protocol::space_names::SpaceSelector;

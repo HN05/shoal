@@ -51,7 +51,7 @@ impl Fixture {
         self.manager
             .track_agent(
                 &id,
-                &crate::execution::TrackedAgent::named("claude"),
+                &shoal_protocol::executions::TrackedAgent::named("claude"),
                 &self.workspace.id,
                 &self.workspace.name,
                 false,

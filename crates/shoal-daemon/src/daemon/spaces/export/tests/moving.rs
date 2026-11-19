@@ -45,7 +45,7 @@ async fn stopped_workspace(manager: &Manager, repo: &crate::model::Repository) -
         &manager.paths,
         &workspace.id,
         &ExecutionId::from("stopped-agent"),
-        &crate::execution::TrackedAgent::named("claude"),
+        &shoal_protocol::executions::TrackedAgent::named("claude"),
         Some("overload"),
         None,
     )

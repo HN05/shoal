@@ -46,7 +46,7 @@ pub(super) async fn handle(
                 space,
                 wrapper,
                 kind,
-                agent: agent.map(|name| crate::execution::TrackedAgent {
+                agent: agent.map(|name| shoal_protocol::executions::TrackedAgent {
                     name,
                     model,
                     mode: mode.unwrap_or(crate::config::modes::ModeName::DEFAULT),

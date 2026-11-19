@@ -28,7 +28,7 @@ async fn agent(
         .await?
         .plan
         .id;
-    let agent = crate::execution::TrackedAgent::named(name);
+    let agent = shoal_protocol::executions::TrackedAgent::named(name);
     manager
         .track_agent(
             &id,

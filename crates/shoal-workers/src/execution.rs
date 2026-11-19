@@ -22,6 +22,7 @@ mod wake;
 
 use anyhow::{Context as _, Result, ensure};
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::executions::TrackedAgent;
 use shoal_protocol::space_names::SpaceSelector;
 use std::{ffi::OsString, path::PathBuf};
 
@@ -31,7 +32,7 @@ pub use completion::SetupVerificationFailure;
 use launch::{run_taken_over, run_tracked};
 use mode::Mode;
 pub use restore::{Restored, resolve};
-use shoal_core::execution::{TrackedAgent, clear_terminal, recovery};
+use shoal_core::execution::{clear_terminal, recovery};
 
 /// `agent` names the agent the command runs; the daemon tells the user when it exits.
 pub async fn run(

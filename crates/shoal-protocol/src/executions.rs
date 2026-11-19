@@ -31,6 +31,35 @@ states!(
     }
 );
 
+/// An agent a tracked wrapper runs: its name, as `--agent` names it, the
+/// model and effort it runs with, and the mode it started in, which its
+/// restores keep.
+#[derive(Debug, Clone)]
+pub struct TrackedAgent {
+    pub name: crate::agent::Agent,
+    pub model: crate::agent::ModelChoice,
+    pub mode: crate::config::modes::ModeName,
+    /// The permissions `--permission` gives its agent, whatever its mode's.
+    pub narrowing: crate::config::permissions::PermissionsConfig,
+    /// Whether it begins a new session, rather than continuing or forking
+    /// one, so its watches start from what its space follows now.
+    pub new_session: bool,
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl TrackedAgent {
+    /// Agent `name` running with the tool's own model and effort.
+    pub fn named(name: impl Into<crate::agent::Agent>) -> Self {
+        Self {
+            narrowing: Default::default(),
+            name: name.into(),
+            model: Default::default(),
+            mode: crate::config::modes::ModeName::DEFAULT,
+            new_session: false,
+        }
+    }
+}
+
 /// The least time between dynamic starts, so their first reads do not collide.
 pub const STAGGER: Duration = Duration::from_secs(10);
 
