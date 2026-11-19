@@ -9,7 +9,7 @@ mod sessions;
 mod trust;
 
 use std::{
-    ffi::{OsStr, OsString},
+    ffi::OsString,
     path::{Path, PathBuf},
 };
 
@@ -18,18 +18,19 @@ use anyhow::{Context as _, Result, ensure};
 use crate::{
     agent::{Agent, ModelChoice},
     agents::{
-        ADDED, Added, AgentHome, HomeRecords, added, agent_integration, agent_off,
-        ensure_available, ensure_forks, integration, programs, resolve_model,
+        ADDED, Added, AgentHome, HomeRecords, added, agent_integration, ensure_available,
+        ensure_forks, integration, resolve_model,
     },
     ai::IntegrationKind,
     cli::{context::Context, ui},
-    config::{Effective, modes, named_commands::Commands, templates},
+    config::{Effective, modes, templates},
     model::{RemovedSpace, Workspace},
     protocol::ConfigTarget,
-    tools::{ensure_program, program_available},
+    tools::ensure_program,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
+pub(in crate::cli) use crate::agents::{installed, names};
 pub(in crate::cli) use desktop::{app, ensure_opens, hand_off};
 pub(in crate::cli) use sessions::{SessionHome, install_kept_session_files};
 pub(in crate::cli) use trust::{cleanup_moved_trust, cleanup_repository_trust};
@@ -324,28 +325,6 @@ fn pick_agent(
     Ok(picked)
 }
 
-/// The agents pickers and completion offer under `settings`, built-in
-/// providers first, leaving out those `settings` turn off.
-pub(in crate::cli) fn names(settings: &Effective) -> Vec<Agent> {
-    let mut names: Vec<String> = crate::ai::PROVIDERS
-        .iter()
-        .map(|provider| provider.name.to_owned())
-        .collect();
-    for name in crate::ai::agents(&settings.tools) {
-        if !names.iter().any(|known| known == name) {
-            names.push(name.to_owned());
-        }
-    }
-    for Added { name, .. } in ADDED {
-        if !names.iter().any(|known| known == name) {
-            names.push((*name).to_owned());
-        }
-    }
-    let mut agents: Vec<Agent> = names.iter().filter_map(|name| name.parse().ok()).collect();
-    agents.retain(|agent| agent_off(settings, agent).is_none());
-    agents
-}
-
 /// Agent names Shoal knows without configuration, for help and completion.
 pub(in crate::cli) fn builtin_names() -> Vec<String> {
     let mut names: Vec<String> = crate::ai::PROVIDERS
@@ -358,17 +337,6 @@ pub(in crate::cli) fn builtin_names() -> Vec<String> {
         }
     }
     names
-}
-
-/// Whether every executable the agent itself starts is available, so pickers
-/// and completion offer only agents that can launch; a launch refuses a
-/// missing session host itself.
-pub(in crate::cli) fn installed(name: &Agent, commands: &Commands, search_path: &OsStr) -> bool {
-    programs(name, commands, None).is_some_and(|programs| {
-        programs
-            .into_iter()
-            .all(|program| program_available(program, search_path))
-    })
 }
 
 /// Refuse a reviewer without a review template or whose review command's

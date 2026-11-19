@@ -15,6 +15,7 @@ pub(crate) mod happy;
 mod homes;
 pub mod hook_reports;
 pub mod hooks;
+mod installed;
 mod proxy;
 pub mod trust;
 
@@ -39,6 +40,7 @@ pub use checks::{
     named_agent, programs, resolve_launch, resolve_model,
 };
 pub use homes::{AgentHome, HomeRecords};
+pub use installed::{installed, installed_agents, names};
 pub use proxy::{
     Routing, agent_url, launch_proxy, proxy_defaults, proxy_ends_turns, proxy_environment,
     route_through_proxy, upstream, with_proxy_args,
