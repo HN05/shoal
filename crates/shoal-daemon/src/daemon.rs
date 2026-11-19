@@ -44,6 +44,7 @@ pub mod notifications;
 pub(crate) mod oneshot;
 pub(crate) mod operations;
 mod overload;
+mod overload_recovery;
 mod ownership;
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) mod per_daemon;

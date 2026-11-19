@@ -37,7 +37,6 @@ pub(crate) use lifecycle::{BelowElsewhere, fail_interrupted_removals};
 mod location;
 pub(crate) mod lost_reports;
 mod merge;
-mod overload_recovery;
 mod ownership;
 pub(crate) mod paths;
 pub(crate) mod places;
@@ -138,7 +137,7 @@ pub struct Manager {
     /// Arrival order of queued resource and simulator requests.
     pub(crate) queues: super::queue::Queues,
     pub executions: executions::Executions,
-    pub overload_recovery: overload_recovery::OverloadRecovery,
+    pub overload_recovery: super::overload_recovery::OverloadRecovery,
     /// The busy CPU the overload monitor reads for job admission.
     pub(crate) busy_cpu: super::busy_cpu::BusyCpu,
     pub agent_queue: agent_queue::AgentQueue,
