@@ -366,10 +366,12 @@ impl Hub {
     async fn signed_version(&self, opening: &Value) -> Option<HubVersion> {
         let nonce: Nonce = serde_json::from_value(opening["nonce"].clone()).ok()?;
         let identity = self.hub_identity().await.ok()?;
+        let schema = shoal_store::SCHEMA_VERSION;
         Some(HubVersion {
             version: OWN_VERSION.to_owned(),
+            schema,
             key: identity.public.clone(),
-            signature: identity.sign(&HubVersion::signed(OWN_VERSION, &nonce)),
+            signature: identity.sign(&HubVersion::signed(OWN_VERSION, schema, &nonce)),
         })
     }
 
@@ -470,7 +472,9 @@ struct Advice {
 fn advice(updates: Updates, newer: bool) -> Advice {
     let advice = |update: String, grace| Advice { update, grace };
     match (updates, newer) {
-        (Updates::Follows, _) => advice(
+        // It installs an older release only where that reads its state.
+        (Updates::Follows, true) => advice("run shoal hub update".into(), FOLLOW_GRACE),
+        (Updates::Follows, false) => advice(
             format!("it did not install that one; run shoal update --version {OWN_VERSION} on it"),
             FOLLOW_GRACE,
         ),

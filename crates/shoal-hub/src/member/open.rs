@@ -42,7 +42,7 @@ pub(super) enum Opened {
     Welcomed(Welcomed),
     /// The hub refused the link: for sure when the refusal came `sealed`,
     /// and otherwise as anyone between the sides could have.
-    Refused(LinkRefused),
+    Refused(Box<LinkRefused>),
 }
 
 /// The hub's refusal of a link, whether it came `sealed`, and the version
@@ -50,7 +50,7 @@ pub(super) enum Opened {
 pub(super) struct LinkRefused {
     pub refusal: Refusal,
     pub sealed: bool,
-    pub hub_version: Option<String>,
+    pub hub_version: Option<HubVersion>,
 }
 
 /// The hub took this machine as `member`, named `name`; it holds `hub_key`.
@@ -132,11 +132,11 @@ impl Hub {
         let (key, transcript) = match channel.expect::<Frame>().await? {
             Frame::Refused(refusal) => {
                 let hub_version = hub_version(&refusal, &hello.nonce, &expected);
-                return Ok(Opened::Refused(LinkRefused {
+                return Ok(Opened::Refused(Box::new(LinkRefused {
                     refusal,
                     sealed: false,
                     hub_version,
-                }));
+                })));
             }
             Frame::Challenge {
                 key,
@@ -170,11 +170,11 @@ impl Hub {
                 name,
                 hub_key: key,
             }),
-            Frame::Refused(refusal) => Opened::Refused(LinkRefused {
+            Frame::Refused(refusal) => Opened::Refused(Box::new(LinkRefused {
                 hub_version: hub_version(&refusal, &transcript.hello.nonce, &expected),
                 refusal,
                 sealed: channel.sealed_last(),
-            }),
+            })),
             frame => bail!(
                 "expected the hub's welcome, not {}",
                 shown(&format!("{frame:?}"))
@@ -218,11 +218,11 @@ fn check_hub(
 
 /// The version `refusal` says the hub runs, once the hub's signature of
 /// it over `nonce`, this machine's, checks with a key `expected` admits.
-fn hub_version(refusal: &Refusal, nonce: &Nonce, expected: &Expected) -> Option<String> {
+fn hub_version(refusal: &Refusal, nonce: &Nonce, expected: &Expected) -> Option<HubVersion> {
     let signed = refusal.version.as_ref()?;
-    let bytes = HubVersion::signed(&signed.version, nonce);
+    let bytes = HubVersion::signed(&signed.version, signed.schema, nonce);
     let checks = expected.admits(&signed.key) && verify(&signed.key, &bytes, &signed.signature);
-    checks.then(|| signed.version.clone())
+    checks.then(|| signed.clone())
 }
 
 /// The request that opens a link with `hello`.

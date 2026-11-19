@@ -263,7 +263,7 @@ impl Hub {
         let (transport, opened) = self.open_link(plan).await?;
         let welcomed = match opened {
             Opened::Welcomed(welcomed) => welcomed,
-            Opened::Refused(refused) => return Ok(Err(refused)),
+            Opened::Refused(refused) => return Ok(Err(*refused)),
         };
         log!("hub: connected to {route} as {}", welcomed.member);
         Ok(Ok(transport))
@@ -382,8 +382,9 @@ impl Hub {
             log!("hub: could not record the revoked membership: {error:#}");
         }
         self.member.set(None, Some(text));
-        if let Some(version) = hub_version {
-            self.follow_hub(daemon, &shown(&version)).await;
+        if let Some(hub) = hub_version {
+            self.follow_hub(daemon, &shown(&hub.version), hub.schema)
+                .await;
         } else if sealed || self.member.unsealed_alert.due() {
             self.notify(
                 daemon,

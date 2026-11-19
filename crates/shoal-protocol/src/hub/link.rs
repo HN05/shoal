@@ -253,16 +253,21 @@ pub struct Refusal {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HubVersion {
     pub version: String,
+    /// The newest state schema the hub's release reads, so a member whose
+    /// state a newer release migrated past it never installs it.
+    pub schema: i64,
     pub key: PublicKey,
     pub signature: Signature,
 }
 
 impl HubVersion {
-    /// What the hub signs: its role, then `version` and the `nonce` of the
-    /// member's hello, so the signature serves that hello alone.
-    pub fn signed(version: &str, nonce: &Nonce) -> Vec<u8> {
+    /// What the hub signs: its role, then `version`, `schema` and the
+    /// `nonce` of the member's hello, so the signature serves that hello
+    /// alone.
+    pub fn signed(version: &str, schema: i64, nonce: &Nonce) -> Vec<u8> {
         let mut bytes = b"shoal hub link: version\n".to_vec();
-        for field in [version.as_bytes(), nonce.as_bytes()] {
+        let schema = schema.to_be_bytes();
+        for field in [version.as_bytes(), &schema, nonce.as_bytes()] {
             bytes.extend_from_slice(&(field.len() as u32).to_be_bytes());
             bytes.extend_from_slice(field);
         }

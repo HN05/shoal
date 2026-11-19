@@ -87,6 +87,13 @@ fn way(auto_update: bool, development: bool, installed: Installed) -> Way {
     }
 }
 
+/// Whether a release whose newest state schema is `schema` reads the state
+/// this machine's daemon keeps: an older one cannot start on state a newer
+/// release migrated past it.
+fn reads_state(schema: i64) -> bool {
+    schema >= shoal_store::SCHEMA_VERSION
+}
+
 /// The command that brings this machine to `version`.
 pub(super) fn command(version: &str) -> String {
     match Installed::current() {
@@ -121,13 +128,18 @@ impl Hub {
             .map_or(Updates::Manual, |way| way.updates())
     }
 
-    /// Follow the hub to its `version`, at most once per [`RETRY`].
-    pub(super) async fn follow_hub(&self, daemon: &dyn Daemon, version: &str) {
+    /// Follow the hub to its `version`, whose newest state schema is
+    /// `schema`, at most once per [`RETRY`].
+    pub(super) async fn follow_hub(&self, daemon: &dyn Daemon, version: &str, schema: i64) {
         if !self.member.followed.take(version) {
             return;
         }
         let stays = "so this machine stays off the hub until it runs that version";
         let message = match self.way(daemon) {
+            _ if !reads_state(schema) => format!(
+                "The hub runs Shoal {version}, older than this machine's {}, which cannot read the state this machine keeps, {stays}: run shoal hub update",
+                env!("CARGO_PKG_VERSION")
+            ),
             Ok(Way::Install(installation)) => {
                 match self.install_hub_version(&installation, version).await {
                     Ok(()) => return,

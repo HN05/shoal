@@ -87,10 +87,11 @@ async fn the_hub_signs_its_version_over_the_refused_members_nonce() {
     let signed = refusal.version.unwrap();
     assert_eq!(signed.version, OWN_VERSION);
     assert_eq!(signed.key, hub.hub_identity().await.unwrap().public);
+    assert_eq!(signed.schema, shoal_store::SCHEMA_VERSION);
     let checks = |nonce| {
         verify(
             &signed.key,
-            &HubVersion::signed(OWN_VERSION, nonce),
+            &HubVersion::signed(OWN_VERSION, signed.schema, nonce),
             &signed.signature,
         )
     };

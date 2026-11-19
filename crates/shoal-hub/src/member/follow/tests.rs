@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use shoal_core::update::{Installation, Installed};
 
-use super::{Followed, RETRY, Way, way};
+use super::{Followed, RETRY, Way, reads_state, way};
 
 #[tokio::test(start_paused = true)]
 async fn a_version_is_acted_on_again_only_while_it_is_not_installed() {
@@ -16,6 +16,12 @@ async fn a_version_is_acted_on_again_only_while_it_is_not_installed() {
     followed.installed("0.3.0");
     tokio::time::advance(RETRY).await;
     assert!(!followed.take("0.3.0"));
+}
+
+#[test]
+fn a_release_older_than_the_state_is_never_installed() {
+    assert!(reads_state(shoal_store::SCHEMA_VERSION));
+    assert!(!reads_state(shoal_store::SCHEMA_VERSION - 1));
 }
 
 #[test]

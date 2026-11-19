@@ -33,6 +33,7 @@ mod event_tests;
 mod frozen;
 mod item_numbers;
 mod migrations;
+pub use migrations::SCHEMA_VERSION;
 mod place_owners;
 mod place_servers;
 mod queue_plans;

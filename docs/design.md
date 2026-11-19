@@ -164,7 +164,8 @@ update, while the member keeps working on its own. A member follows the
 hub's version once that signature checks with the key it paired with, so
 nothing between them chooses its release: a downloaded installation installs
 exactly that release, older or newer, through `shoal update`'s checks, unless
-`[machine.hub] auto_update` is off, and the daemon's restart on a replaced
+`[machine.hub] auto_update` is off or the release is too old to read the
+state, whose schema the signature also covers, and the daemon's restart on a replaced
 binary carries its agents through; a Homebrew one is only told to upgrade,
 since one package manager owns each installation. Pairing codes live
 in the hub's memory and admit one join within ten minutes. Each machine

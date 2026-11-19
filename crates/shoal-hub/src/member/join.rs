@@ -5,7 +5,7 @@ use anyhow::{Result, bail};
 use shoal_protocol::{
     hub::{
         Left, MemberKind, Membership, Route,
-        link::{Call, Intent, Joining},
+        link::{Call, HubVersion, Intent, Joining},
     },
     protocol::JoinVia,
 };
@@ -58,16 +58,20 @@ impl Hub {
             expected,
             updates: self.updates(daemon),
         };
-        let welcomed = match self.open_link(plan).await?.1 {
-            Opened::Welcomed(welcomed) => welcomed,
-            Opened::Refused(LinkRefused {
-                hub_version: Some(version),
+        let refused = match self.open_link(plan).await?.1 {
+            Opened::Welcomed(welcomed) => Ok(welcomed),
+            Opened::Refused(refused) => Err(*refused),
+        };
+        let welcomed = match refused {
+            Ok(welcomed) => welcomed,
+            Err(LinkRefused {
+                hub_version: Some(HubVersion { version, .. }),
                 ..
             }) => bail!(
                 "the hub runs Shoal {version} and takes only that one; run {} here, then join again",
                 follow::command(&version)
             ),
-            Opened::Refused(LinkRefused { refusal, .. }) => {
+            Err(LinkRefused { refusal, .. }) => {
                 bail!("the hub refused this machine: {}", refusal.message)
             }
         };
