@@ -153,13 +153,13 @@ impl Manager {
     }
 
     /// Refuse the space `parent`, which runs on another machine, as the
-    /// parent of the space `space` of `repository`, by what its machine
-    /// last reported to the hub, as a parent here is refused: it must be a
-    /// ready workspace or a chat of the same repository, by origin, or a
-    /// chat without one, and not below `space`.
+    /// parent of the space `space` of `repository`, none for a new one, by
+    /// what its machine last reported to the hub, as a parent here is
+    /// refused: it must be a ready workspace or a chat of the same
+    /// repository, by origin, or a chat without one, and not below `space`.
     pub(crate) async fn ensure_parent_elsewhere(
         &self,
-        space: &SpaceId,
+        space: Option<&SpaceId>,
         repository: Option<&RepositoryId>,
         parent: &SpaceId,
     ) -> Result<()> {
@@ -192,7 +192,7 @@ impl Manager {
             summary.name
         );
         ensure!(
-            !chain_from(&directory, parent.clone()).contains(space),
+            !space.is_some_and(|space| chain_from(&directory, parent.clone()).contains(space)),
             "parent {} is below the space it would take",
             summary.name
         );
@@ -264,6 +264,28 @@ impl Manager {
             }
         };
         Ok(Some(reported))
+    }
+
+    /// This machine's registration of the repository of the space `id`,
+    /// which another machine runs, by the origin the hub lists it with;
+    /// none for a chat without one, or for a repository this machine has
+    /// not registered.
+    pub(crate) async fn repository_elsewhere(&self, id: &SpaceId) -> Result<Option<RepositoryId>> {
+        let Some((_, directory)) = self.directory_or_known().await? else {
+            return Ok(None);
+        };
+        let listed = (directory.spaces.iter()).find(|listed| &listed.space.id == id);
+        let origin = listed.and_then(|listed| listed.space.repository.as_ref()?.origin.clone());
+        let Some(origin) = origin else {
+            return Ok(None);
+        };
+        for repository in self.repositories().await? {
+            let identity = crate::repository::identity(&repository.source).await;
+            if identity.unwrap_or_default().as_ref() == Some(&origin) {
+                return Ok(Some(repository.id));
+            }
+        }
+        Ok(None)
     }
 
     /// The origin other machines know the registered repository `id` by.

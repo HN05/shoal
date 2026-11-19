@@ -73,7 +73,7 @@ impl Manager {
         let Some(parent) = launch.parent.as_ref().or(below).filter(|_| !names) else {
             return Ok(());
         };
-        launch.repository = (self.space(parent).await?.repository_id).map(|id| id.to_string());
+        launch.repository = (self.parent_repository(parent).await?).map(|id| id.to_string());
         Ok(())
     }
 

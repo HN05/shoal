@@ -2739,3 +2739,34 @@ async fn a_removal_takes_only_the_children_it_was_confirmed_with() {
 
 mod mixed;
 mod outside;
+
+#[tokio::test]
+async fn a_workspace_keeps_the_parent_its_creation_recorded_on_another_machine() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "child".into(), None, None, None)
+        .await
+        .unwrap();
+    // A parent this machine does not have, as a creation records one the
+    // hub lists on another machine.
+    let elsewhere = SpaceId::generate();
+    let (id, parent) = (workspace.id.clone(), elsewhere.clone());
+    (manager.store)
+        .write(move |tx| super::set_parent(tx, &id, Some(&parent)))
+        .await
+        .unwrap();
+    (manager.assign_parent(&workspace.id, Some(elsewhere.clone())))
+        .await
+        .unwrap();
+    let id = workspace.id.clone();
+    let parent = (manager.store)
+        .read(move |tx| super::parent_id(tx, &id))
+        .await
+        .unwrap();
+    assert_eq!(parent, Some(elsewhere));
+}

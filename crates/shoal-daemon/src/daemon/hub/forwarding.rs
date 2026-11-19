@@ -85,7 +85,7 @@ impl Manager {
 
     /// The other joined machine whose space `selector` names, as the hub's
     /// directory lists it; none on a machine in no hub.
-    pub(super) async fn machine_of(
+    pub(crate) async fn machine_of(
         &self,
         selector: &SpaceSelector,
     ) -> Result<Option<(Member, Listed)>> {

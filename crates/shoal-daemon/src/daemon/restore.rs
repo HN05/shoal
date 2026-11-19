@@ -318,7 +318,9 @@ impl Manager {
         let elsewhere =
             self.find_space(&parent.id).await?.is_none() && self.runs_elsewhere(&parent.id).await;
         let taken = match elsewhere {
-            true => (self.ensure_parent_elsewhere(&space, repository.as_ref(), &parent.id)).await,
+            true => {
+                (self.ensure_parent_elsewhere(Some(&space), repository.as_ref(), &parent.id)).await
+            }
             false => {
                 let id = parent.id.clone();
                 (self.store)

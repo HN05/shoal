@@ -141,7 +141,7 @@ impl Manager {
         }
         let new = NewSpace {
             name,
-            parent: self.space_id(launch.parent.as_ref()).await?,
+            parent: self.parent_space_id(launch.parent.as_ref()).await?,
             priority: launch.priority,
         };
         let preparing = Preparing {
@@ -174,7 +174,7 @@ impl Manager {
             }
             _ => self.parent_below(caller, &mut parent).await?,
         }
-        start.new.parent = self.space_id(parent.as_ref()).await?;
+        start.new.parent = self.parent_space_id(parent.as_ref()).await?;
         Ok(())
     }
 

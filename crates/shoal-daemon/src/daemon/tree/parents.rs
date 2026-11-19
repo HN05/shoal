@@ -1,6 +1,6 @@
 //! Giving a workspace the space it is opened below: the chat or workspace
 //! whose agent opened it, or the user when one opened it outside any.
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 use rusqlite::params;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
@@ -104,7 +104,9 @@ impl Manager {
     }
 
     /// Refuse a space of the repository `repository` selects, or of none for
-    /// a chat without one, below `parent` when the parent cannot take it now.
+    /// a chat without one, below `parent` when the parent cannot take it now,
+    /// as this machine has it or, for one another joined machine runs, as
+    /// the hub lists it.
     pub(crate) async fn ensure_parent_takes(
         &self,
         repository: Option<&crate::repository::Selector>,
@@ -117,12 +119,51 @@ impl Manager {
             Some(repository) => Some(self.repository(repository.clone()).await?.id),
             None => None,
         };
+        if self.find_space(&parent).await?.is_none() && self.runs_elsewhere(&parent).await {
+            let repository = repository.as_ref();
+            return self
+                .ensure_parent_elsewhere(None, repository, &parent)
+                .await;
+        }
         self.store
             .run(move |db| {
                 super::ready_parent(db, repository.as_ref(), &parent)?;
                 Ok(())
             })
             .await
+    }
+
+    /// The ID of the space `selector` names as a new space's parent: one
+    /// here, else one another joined machine runs, as the hub lists it.
+    pub(crate) async fn parent_space_id(
+        &self,
+        selector: Option<&SpaceSelector>,
+    ) -> Result<Option<SpaceId>> {
+        let Some(selector) = selector else {
+            return Ok(None);
+        };
+        match self.space(selector).await {
+            Ok(space) => Ok(Some(space.id)),
+            Err(error) => match self.machine_of(selector).await {
+                Ok(Some((_, listed))) => Ok(Some(listed.space.id)),
+                _ => Err(error),
+            },
+        }
+    }
+
+    /// The repository of the space `selector` names as a new space's
+    /// parent, which a child shares: its own here, or for one another
+    /// joined machine runs, this machine's registration of the repository
+    /// the hub lists it in.
+    pub(crate) async fn parent_repository(
+        &self,
+        selector: &SpaceSelector,
+    ) -> Result<Option<RepositoryId>> {
+        let id = (self.parent_space_id(Some(selector)).await?).context("a parent names a space")?;
+        match self.find_space(&id).await? {
+            Some(space) => Ok(space.repository_id),
+            None => self.repository_elsewhere(&id).await,
+        }
     }
 
     /// Assign `workspace` to `parent` and read it again.
@@ -139,7 +180,9 @@ impl Manager {
 
 /// An unknown parent, or a chat being removed, leaves the workspace to the
 /// user. A workspace below a chat being removed stays there: the removal
-/// listed it after reserving the chat, on this one thread, and takes it.
+/// listed it after reserving the chat, on this one thread, and takes it. A
+/// parent the workspace already has stays, as one another joined machine
+/// runs, which its creation recorded once the hub listed it.
 fn assign(
     tx: &rusqlite::Transaction<'_>,
     workspace: &SpaceId,
@@ -156,6 +199,9 @@ fn assign(
         "the workspace is being removed"
     );
     let current = super::parent_id(tx, workspace)?;
+    if parent.is_some() && parent == current.as_ref() {
+        return Ok(());
+    }
     if let Some(current) = &current
         && spaces::space_kind(tx, current)? == Some(SpaceKind::Workspace)
     {

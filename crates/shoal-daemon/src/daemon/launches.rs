@@ -66,7 +66,7 @@ impl LaunchReads for ManagerReads<'_> {
     }
 
     async fn space_repository(&self, space: &SpaceSelector) -> Result<Option<RepositoryId>> {
-        Ok(self.manager.space(space).await?.repository_id)
+        self.manager.parent_repository(space).await
     }
 
     async fn settings(&self, target: ConfigTarget) -> Result<Effective> {
@@ -122,11 +122,11 @@ impl Manager {
         self.record_user_interaction(caller, &space).await;
     }
 
-    /// Name the spaces `launch` names by ID: the space it goes below, and
-    /// the workspace it starts in, the current one the start was made in
-    /// when it names none.
+    /// Name the spaces `launch` names by ID: the space it goes below, here
+    /// or on another joined machine, and the workspace it starts in, the
+    /// current one the start was made in when it names none.
     pub(super) async fn select_launch_spaces(&self, launch: &mut Launch) -> Result<()> {
-        if let Some(parent) = self.space_id(launch.parent.as_ref()).await? {
+        if let Some(parent) = self.parent_space_id(launch.parent.as_ref()).await? {
             launch.parent = Some(SpaceSelector::Id(parent));
         }
         if let Some(SpaceChoice::Current) = launch.in_workspace {
