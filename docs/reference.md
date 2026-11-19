@@ -5363,7 +5363,8 @@ its head commit and that commit's date, whether it is the default branch or
 the forge protects it, whether the default branch has its changes, the open
 PRs whose head it is, and the workspace whose branch it is, with where that
 workspace's work stands: `done` once marked done, else `merged` once the
-default branch has its changes, else `active`. Whether the default branch has
+default branch has the changes of its local branch, which may hold commits it
+has not pushed, else `active`. Whether the default branch has
 a branch's changes is the check cleanup makes, which counts squash and rebase
 merges, in the registered checkout against the commits the daemon fetched;
 it is unknown for a commit the checkout lacks and in a repository that is not

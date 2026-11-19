@@ -122,14 +122,12 @@ async fn describe(branch: ForgeBranch, context: &Context<'_>) -> Result<ListedBr
         .filter(|pull| !pull.fork && pull.head == branch.name)
         .map(|pull| pull.number)
         .collect();
-    let space = (context.workspaces.iter())
-        .find(|workspace| workspace.part.branch() == Some(&branch.name))
-        .map(|workspace| BranchSpace {
-            id: workspace.id.clone(),
-            number: workspace.number,
-            name: workspace.name.clone(),
-            state: work(workspace.part.done, merged),
-        });
+    let owner =
+        (context.workspaces.iter()).find(|workspace| workspace.part.branch() == Some(&branch.name));
+    let space = match owner {
+        Some(workspace) => Some(branch_space(workspace, &branch.name, context).await?),
+        None => None,
+    };
     Ok(ListedBranch {
         default: &branch.name == context.default,
         branch,
@@ -152,12 +150,38 @@ async fn default_has(path: &Path, head: &CommitId, default: &BranchName) -> Resu
     Ok(Some(merged))
 }
 
-/// Where a workspace's work stands: marked `done`, else merged where the
-/// default branch is known to have its branch's changes, else active.
-fn work(done: bool, merged: Option<bool>) -> SpaceWork {
-    match (done, merged) {
-        (true, _) => SpaceWork::Done,
-        (false, Some(true)) => SpaceWork::Merged,
-        (false, _) => SpaceWork::Active,
+/// `workspace`, whose branch `branch` is, with where its work stands:
+/// marked `done`, else merged where the default branch is known to have the
+/// changes of its local branch, which may hold commits the forge's lacks,
+/// else active.
+async fn branch_space(
+    workspace: &Workspace,
+    branch: &BranchName,
+    context: &Context<'_>,
+) -> Result<BranchSpace> {
+    let state = if workspace.part.done {
+        SpaceWork::Done
+    } else if local_merged(branch, context).await? == Some(true) {
+        SpaceWork::Merged
+    } else {
+        SpaceWork::Active
+    };
+    Ok(BranchSpace {
+        id: workspace.id.clone(),
+        number: workspace.number,
+        name: workspace.name.clone(),
+        state,
+    })
+}
+
+/// Whether the default branch has the changes of the checkout's local
+/// `branch`; none where Shoal cannot tell.
+async fn local_merged(branch: &BranchName, context: &Context<'_>) -> Result<Option<bool>> {
+    let Some(checkout) = context.checkout else {
+        return Ok(None);
+    };
+    match git::status::local_branch_commit(&checkout.path, branch).await? {
+        Some(local) => default_has(&checkout.path, &local, context.default).await,
+        None => Ok(None),
     }
 }

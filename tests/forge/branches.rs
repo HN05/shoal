@@ -349,6 +349,16 @@ fn an_agent_deletes_an_active_spaces_branch_only_within_its_scope() {
     );
     assert_eq!(branches.deleted(), Vec::<String>::new());
 
+    // A workspace whose pushed branch merged goes on in its newer local
+    // commits.
+    let mut pushed = branches.heads.clone();
+    pushed.insert("other", branches.heads["main"].clone());
+    branches.respond_at(&pushed, &[], &[]);
+    let behind = branches.delete_as("topic", &["other"]);
+    assert!(!behind.status.success(), "{}", printed(&behind));
+    assert_eq!(branches.deleted(), Vec::<String>::new());
+    branches.respond(&[], &[]);
+
     // Its own branch, one below it and a finished space's go, unmerged ones
     // only with --force.
     let unforced = branches.delete_as("topic", &["topic"]);
