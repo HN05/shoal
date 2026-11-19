@@ -47,7 +47,7 @@ impl Manager {
         if let Some(caller) = caller {
             (self.confine_checked(caller, &mut creation, &mut parent)).await?;
         }
-        let parent = self.space_id(parent.as_ref()).await?;
+        let parent = self.parent_space_id(parent.as_ref()).await?;
         let repository = (&repo.id).into();
         (self.ensure_parent_repository(&repository, parent.as_ref())).await?;
         let (branch, existing) = (creation.branch.as_deref(), creation.existing.as_deref());
