@@ -11,6 +11,7 @@ use super::super::{
     scope::{Caller, Scoped},
 };
 use crate::protocol::{self, AlertMethod, AlertTarget, AlertsFor, Body, Response};
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn handle(
@@ -81,7 +82,21 @@ async fn acting(
     let Some(from) = from else {
         return Ok(None);
     };
-    Ok(Some(Caller::of_space(manager.space(&from).await?.id)))
+    Ok(Some(Caller::of_space(acting_space(manager, &from).await?)))
+}
+
+/// The ID of the space `from` names: one of this machine's, or else one the
+/// hub lists on another machine, as the chat of a request that machine
+/// forwarded here, which only it has.
+async fn acting_space(manager: &Manager, from: &SpaceSelector) -> Result<SpaceId> {
+    let missing = match manager.space(from).await {
+        Ok(space) => return Ok(space.id),
+        Err(missing) => missing,
+    };
+    match manager.hub.machine_of(manager, from).await {
+        Ok(Some((_, listed))) => Ok(listed.space.id),
+        _ => Err(missing),
+    }
 }
 
 /// Reading, clearing and watching the user's alerts is the `notifications`

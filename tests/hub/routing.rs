@@ -286,6 +286,34 @@ fn a_coordinator_messages_its_child_on_another_machine_and_nothing_outside_its_s
 }
 
 #[test]
+fn a_process_acting_as_its_space_sends_and_withdraws_an_alert_on_another_machine() {
+    let (hub, laptop, there) = laptop_space();
+    // A chat's agent without a scope token names its chat, which only its
+    // own machine has.
+    let sender = workspace(&hub, "sender");
+    listed(&laptop, &sender, &hub_machine(&hub));
+    let to = json!({"space": {"space": there}});
+    let sent = request(
+        &hub,
+        json!({"send_alert": {"to": to, "from": sender, "message": "from the hub"}}),
+    );
+    let id = sent["data"]["alerts"][0]
+        .as_i64()
+        .unwrap_or_else(|| panic!("{sent}"));
+    let alert = message_with(&laptop, &there, "from the hub");
+    assert_eq!(
+        (&alert["sender"], &alert["space_id"]),
+        (&json!("space"), &json!(sender)),
+        "{alert}"
+    );
+    let withdrawn = request(
+        &hub,
+        json!({"withdraw_alert": {"id": id, "space": there, "from": sender}}),
+    );
+    assert_eq!(withdrawn["data"]["id"], id, "{withdrawn}");
+}
+
+#[test]
 fn a_child_s_question_reaches_its_coordinator_on_another_machine() {
     let Tree {
         hub,
