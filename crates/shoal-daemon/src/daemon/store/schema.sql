@@ -830,7 +830,8 @@ CREATE TABLE agent_restarts (
     asked_by TEXT,
     recorded_at INTEGER NOT NULL,
     generation TEXT NOT NULL,
-    execution TEXT NOT NULL
+    execution TEXT NOT NULL,
+    begun INTEGER NOT NULL DEFAULT 0 CHECK(begun IN (0,1))
 );
 
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;

@@ -577,3 +577,55 @@ async fn a_recorded_restart_goes_with_its_agent_rather_than_restart_the_next() {
     assert!(!*next.stop.borrow());
     assert!(recorded(&manager).await.is_empty());
 }
+
+#[tokio::test]
+async fn a_wrapper_that_reattaches_continues_the_begun_restart_with_its_options() {
+    use crate::daemon::workspace::agents::ProtectionExt as _;
+    let (root, manager) = manager().await;
+    let (workspace, execution) = working(root.path(), &manager).await;
+    let space = SpaceSelector::id(&workspace.id);
+    let change = PermissionChange::assigned("push=direct").unwrap();
+    let restart = AgentRestart {
+        change: Some(change.clone()),
+        ..waiting()
+    };
+    (manager.restart_space(None, &space, restart))
+        .await
+        .unwrap();
+    (manager.set_agent_state(&space, AgentState::Idle, None, None))
+        .await
+        .unwrap();
+    manager.restart_finished_turns().await.unwrap();
+    let mut stop = execution.stop.clone();
+    stop.wait_for(|stopping| *stopping).await.unwrap();
+    let id = execution.plan.id.clone();
+
+    // As the wrapper reattaches to a daemon that knows the restart only
+    // from its record.
+    let protection = crate::model::Protection::restart();
+    manager.await_agent_restore(&id, protection).await;
+    assert_eq!(manager.restart_change(&id).await, Some(change));
+    assert!(manager.settle_restart(&id).await);
+    assert!(recorded(&manager).await.is_empty());
+}
+
+#[tokio::test]
+async fn a_recorded_restart_follows_its_agent_to_a_new_execution() {
+    let (_root, manager) = manager().await;
+    let recorded_for = |execution: &str| Recorded {
+        space_id: "space".into(),
+        execution: execution.into(),
+        restart: waiting(),
+        asked_by: None,
+    };
+    let old = recorded_for("old");
+    manager
+        .store
+        .write(move |tx| {
+            record::put(tx, &old)?;
+            record::follow(tx, &"old".into(), &"new".into())
+        })
+        .await
+        .unwrap();
+    assert_eq!(recorded(&manager).await, [recorded_for("new")]);
+}

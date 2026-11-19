@@ -281,6 +281,19 @@ impl Manager {
             .context("the agent disconnected")?
     }
 
+    /// The restart the daemon recorded and began for the agent of `id`,
+    /// which no longer stays recorded, as the agent's wrapper continues it.
+    async fn take_begun_restart(&self, id: &ExecutionId) -> Option<crate::model::AgentRestart> {
+        let execution = id.to_owned();
+        let taken = (self.store)
+            .write(move |tx| crate::daemon::restarts::record::take_begun(tx, &execution))
+            .await;
+        taken.unwrap_or_else(|error| {
+            log!("recorded restart of execution {id} not read: {error:#}");
+            None
+        })
+    }
+
     /// Save the recovery `handoff` of `agent`, the agent of `id`: its path,
     /// or none when it could not be saved and the stop goes without one.
     fn save_handoff(
@@ -310,13 +323,16 @@ impl Manager {
 
     /// Restore the protection stop of an agent whose wrapper reattached
     /// while waiting for its automatic restore. A restart continues without
-    /// the request that asked for it, which ended with the previous daemon,
-    /// in a new wrapper.
+    /// the request that asked for it, which ended with the previous daemon:
+    /// as the restart the daemon recorded and began says, or else in a new
+    /// wrapper.
     pub(crate) async fn await_agent_restore(&self, id: &ExecutionId, protection: Protection) {
         if protection.is_restart() {
+            let restart = self.take_begun_restart(id).await.unwrap_or_default();
             self.executions
                 .with_agent(id, |agent| {
-                    agent.restarts.current = Some(restart::Restart::new(false, None));
+                    let restart = restart::Restart::new(restart.in_place, restart.change);
+                    agent.restarts.current = Some(restart);
                 })
                 .await;
             return;

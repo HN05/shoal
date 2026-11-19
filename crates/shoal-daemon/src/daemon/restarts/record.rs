@@ -27,7 +27,7 @@ pub(super) fn put(db: &Connection, recorded: &Recorded) -> Result<()> {
         "INSERT INTO agent_restarts(space_id,restart,asked_by,recorded_at,generation,execution)
          VALUES (?1,?2,?3,?4,?5,?6)
          ON CONFLICT(space_id) DO UPDATE SET restart=excluded.restart,asked_by=excluded.asked_by,
-            generation=excluded.generation,execution=excluded.execution",
+            generation=excluded.generation,execution=excluded.execution,begun=0",
         params![
             recorded.space_id,
             serde_json::to_string(&recorded.restart)?,
@@ -67,6 +67,41 @@ pub(super) fn take_generation(db: &Connection, id: &SpaceId, generation: &str) -
     db.execute(
         "DELETE FROM agent_restarts WHERE space_id=?1 AND generation=?2",
         params![id, generation],
+    )?;
+    Ok(())
+}
+
+/// Mark the restart of `generation` recorded for the space `id` as begun,
+/// which a wrapper that reattaches to the next daemon continues.
+pub(super) fn begin(db: &Connection, id: &SpaceId, generation: &str) -> Result<()> {
+    db.execute(
+        "UPDATE agent_restarts SET begun=1 WHERE space_id=?1 AND generation=?2",
+        params![id, generation],
+    )?;
+    Ok(())
+}
+
+/// The begun restart recorded for the agent that runs as `execution`,
+/// which it no longer has, as its wrapper continues it.
+pub(crate) fn take_begun(db: &Connection, execution: &ExecutionId) -> Result<Option<AgentRestart>> {
+    let restart: Option<String> = db
+        .query_row(
+            "DELETE FROM agent_restarts WHERE execution=?1 AND begun=1 RETURNING restart",
+            [execution],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(restart
+        .map(|restart| serde_json::from_str(&restart))
+        .transpose()?)
+}
+
+/// Follow the agent that ran as `from` to `to`, the execution a new
+/// wrapper runs it as after a restart.
+pub(crate) fn follow(db: &Connection, from: &ExecutionId, to: &ExecutionId) -> Result<()> {
+    db.execute(
+        "UPDATE agent_restarts SET execution=?2 WHERE execution=?1",
+        params![from, to],
     )?;
     Ok(())
 }

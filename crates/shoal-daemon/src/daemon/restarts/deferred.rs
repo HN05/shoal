@@ -170,6 +170,10 @@ impl Manager {
             }
         };
         self.restarts.set_acting(id, true);
+        let (space, begun_generation) = (id.to_owned(), generation.clone());
+        (self.store)
+            .write(move |tx| super::record::begin(tx, &space, &begun_generation))
+            .await?;
         let waiting = waiters.remove(id).unwrap_or_default();
         Ok(Some((recorded, generation, waiting, begun)))
     }

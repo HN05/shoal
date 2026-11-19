@@ -179,22 +179,35 @@ impl Manager {
     /// The agent of `id`, which the queue entry `entry` started, continues
     /// the restart whose start that entry is.
     pub(crate) async fn continue_restart(&self, entry: &QueueEntryId, id: &ExecutionId) {
-        self.executions
+        let continued = self
+            .executions
             .with_restarts(|agents, renewals| {
-                let Some(agent) = agents.get_mut(id) else {
-                    return;
-                };
-                let Some(renewal) = renewals.values_mut().find(|renewal| {
+                let agent = agents.get_mut(id)?;
+                let (from, renewal) = renewals.iter_mut().find(|(_, renewal)| {
                     matches!(renewal, Renewal::Starting(handover) if handover.entry.as_ref() == Some(entry))
-                }) else {
-                    return;
-                };
+                })?;
                 let Renewal::Starting(handover) = std::mem::replace(renewal, Renewal::Started(id.to_owned())) else {
-                    return;
+                    return None;
                 };
                 agent.restarts = handover.restarts;
+                Some(from.clone())
             })
             .await;
+        if let Some(from) = continued {
+            self.follow_recorded_restarts(&from, id).await;
+        }
+    }
+
+    /// Have the restarts recorded for the agent that ran as `from` follow
+    /// it to `to`, which a daemon after this one knows it as.
+    async fn follow_recorded_restarts(&self, from: &ExecutionId, to: &ExecutionId) {
+        let (old, new) = (from.to_owned(), to.to_owned());
+        let followed = (self.store)
+            .write(move |tx| crate::daemon::restarts::record::follow(tx, &old, &new))
+            .await;
+        if let Err(error) = followed {
+            crate::daemon::log!("recorded restarts not moved to execution {to}: {error:#}");
+        }
     }
 
     /// End the restart of the agent that ran as `execution` without
