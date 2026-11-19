@@ -1996,8 +1996,9 @@ the command, and a demo only keeps it running and tells the user.
 The journal records a demo's start at its command's first run, when a start
 reports it, and its stop when its record goes with the execution, so clients
 showing demos follow them without polling; restarts between runs are not
-changes. The listing carries a web demo's URL, which the daemon derives as
-opening does, so clients do not rebuild it.
+changes. The listing carries each demo's kind and a web demo's URL, which
+the daemon derives as opening does, so clients neither infer the kind from the
+preset nor rebuild the URL.
 
 `max_heavy_agents` admission belongs to the daemon, so concurrent additions and its
 dispatcher share one count. Slots derive from what the daemon tracks: connected

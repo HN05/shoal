@@ -38,6 +38,7 @@ fn listings_show_running_demos_then_the_configured_ones_not_running() {
             execution_id: "execution".into(),
             started_at: UnixTime::from_seconds(0),
             has_run: true,
+            kind: shoal_protocol::demos::Kind::Terminal,
             url: None,
             launch,
         }],

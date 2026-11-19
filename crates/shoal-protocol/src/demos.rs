@@ -36,6 +36,20 @@ states!(
     }
 );
 
+states!(
+    /// What a running demo shows, which says how a client shows it.
+    Kind {
+        /// A terminal: the screen of the place it runs in.
+        Terminal => "terminal",
+        /// A server on a port, which a client reaches by TCP.
+        Server => "server",
+        /// A server on a port, which a client opens as a web page.
+        Web => "web",
+        /// An app on a simulator.
+        Simulator => "simulator",
+    }
+);
+
 impl Preset {
     /// Whether the demo serves on a reserved port.
     pub fn serves(self) -> bool {
@@ -94,6 +108,7 @@ pub struct Running {
     pub started_at: crate::time::UnixTime,
     /// The demo's command has started; a start reports the demo only then.
     pub has_run: bool,
+    pub kind: Kind,
     /// Where a browser opens a web demo.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
@@ -102,6 +117,21 @@ pub struct Running {
 }
 
 impl Launch {
+    /// What the demo shows: its preset's, else a terminal.
+    pub fn kind(&self) -> Kind {
+        match self.preset {
+            None => Kind::Terminal,
+            Some(Preset::Server) => Kind::Server,
+            Some(Preset::Web) => Kind::Web,
+            Some(Preset::Simulator) => Kind::Simulator,
+        }
+    }
+
+    /// The port a serving demo listens on, on this machine.
+    pub fn port(&self) -> Option<u16> {
+        self.environment.get(PORT)?.parse().ok()
+    }
+
     /// Where a serving demo listens, on this machine.
     pub fn address(&self) -> Option<String> {
         let port = self.environment.get(PORT)?;

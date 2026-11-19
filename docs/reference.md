@@ -1984,7 +1984,8 @@ variables, otherwise shows it where it runs, as `shoal attach` shows a session: 
 host focuses its place inside that host, and from another terminal attaches to it
 or shows it where the host shows its places, such as Rex's Mac app.
 `shoal demo ls` lists the configured and
-running demos, with a running web demo's `url` in its JSON, `shoal demo screen NAME [--lines N]` prints the end of what it
+running demos, with each running demo's `kind` (`terminal`, `server`, `web`
+or `simulator`) and a web demo's `url` in its JSON, `shoal demo screen NAME [--lines N]` prints the end of what it
 shows, and `shoal demo send NAME KEYS` types into it, so an agent sees and drives
 the screen you are looking at. `shoal demo stop [NAME]` stops one demo, or every
 demo of the workspace.

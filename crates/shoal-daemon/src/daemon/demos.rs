@@ -231,6 +231,7 @@ fn list(db: &Connection, workspace: Option<&SpaceId>) -> Result<Vec<Running>> {
             execution_id,
             started_at,
             has_run,
+            kind: launch.kind(),
             url: launch.url(),
             launch,
         })
