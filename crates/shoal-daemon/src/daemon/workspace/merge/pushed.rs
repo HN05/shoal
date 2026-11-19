@@ -3,8 +3,11 @@
 use anyhow::Result;
 
 use super::{RecordChange, tracking_ref};
+use shoal_refs::CommitId;
+
 use crate::{
     daemon::{links::wait::PushedMerge, log, workspace::Manager},
+    forge::items::action::MergeMethod,
     git,
     model::MergePlan,
 };
@@ -31,9 +34,10 @@ impl Manager {
 }
 
 /// What the execution of `plan` pushed: the default branch's tip, once it
-/// holds the merged branch and the branch's upstream, as Git tracks it after
-/// the push, holds the tip. A merge an earlier push failed to publish counts,
-/// though this execution merged nothing new, since its push publishes it.
+/// holds the merge and the branch's upstream, as Git tracks it after the
+/// push, holds the tip. A merge commit or fast-forward an earlier push
+/// failed to publish counts, though this execution merged nothing new,
+/// since its push publishes it.
 async fn pushed_merge(plan: &MergePlan) -> Result<Option<PushedMerge>> {
     let Some(push) = &plan.push else {
         return Ok(None);
@@ -49,7 +53,7 @@ async fn pushed_merge(plan: &MergePlan) -> Result<Option<PushedMerge>> {
     let holds = async |ancestor: &str, descendant: &str| {
         git::is_ancestor(repo, ancestor, descendant, git::isolated_command).await
     };
-    if !holds(plan.source.as_str(), tip.as_str()).await? || !holds(tip.as_str(), &tracking).await? {
+    if !holds_merge(plan, &tip).await? || !holds(tip.as_str(), &tracking).await? {
         return Ok(None);
     }
     Ok(Some(PushedMerge {
@@ -58,6 +62,24 @@ async fn pushed_merge(plan: &MergePlan) -> Result<Option<PushedMerge>> {
         branch: push.branch().into(),
         commit: tip,
     }))
+}
+
+/// Whether the default branch at `tip` holds the merge of `plan`: the
+/// merged branch, or the commits a squash or rebase of it made.
+async fn holds_merge(plan: &MergePlan, tip: &CommitId) -> Result<bool> {
+    let repo = &plan.repo.path;
+    if plan.method == MergeMethod::Merge {
+        return git::is_ancestor(
+            repo,
+            plan.source.as_str(),
+            tip.as_str(),
+            git::isolated_command,
+        )
+        .await;
+    }
+    let previous = &plan.default_refresh.commit;
+    let found = git::unmerge::merge_result(repo, tip.as_str(), previous, &plan.source, plan.method);
+    Ok(found.await?.is_some())
 }
 
 #[cfg(test)]

@@ -82,22 +82,17 @@ fn a_merge_refuses_the_flags_of_the_path_it_does_not_take() -> Result<()> {
 }
 
 #[test]
-fn a_local_merge_takes_only_the_merge_method() -> Result<()> {
-    assert!(
-        parsed(&["-X", "merge"])?
-            .ensure_local_flags("space 3")
-            .is_ok()
-    );
-    assert!(
-        parsed(&["-X", "squash"])?
-            .ensure_local_flags("space 3")
-            .is_err()
-    );
-    assert!(
-        parsed(&["-X", "rebase"])?
-            .ensure_local_flags("space 3")
-            .is_err()
-    );
+fn a_local_merge_takes_every_method_and_a_message() -> Result<()> {
+    for flags in [
+        &["-X", "merge"][..],
+        &["-X", "squash", "--message", "Fix login"],
+        &["-X", "rebase"],
+    ] {
+        assert!(
+            parsed(flags)?.ensure_local_flags("space 3").is_ok(),
+            "{flags:?}"
+        );
+    }
     Ok(())
 }
 
@@ -111,13 +106,9 @@ fn push_flags_override_the_configured_push() -> Result<()> {
 
 #[test]
 fn flags_of_both_paths_are_refused_before_a_space_is_chosen() -> Result<()> {
-    for flags in [
-        &["--auto", "--push"][..],
-        &["--delete-branch", "--no-push"],
-        &["-X", "squash", "--push"],
-    ] {
+    for flags in [&["--auto", "--push"][..], &["--delete-branch", "--no-push"]] {
         assert!(merged(flags).is_err(), "{flags:?}");
     }
-    assert_eq!(merged(&["-X", "merge", "--push"])?, Merged::Work);
+    assert_eq!(merged(&["-X", "squash", "--push"])?, Merged::Work);
     Ok(())
 }

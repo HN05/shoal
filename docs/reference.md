@@ -3535,9 +3535,9 @@ as assigned or opened merges it on the forge as an
 [item action](#issue-and-pr-actions), a space with several is refused, naming
 them, a chat without one is refused, and a workspace without one merges its
 recorded branch into the repository default branch, as below; to merge locally
-while a PR is open, close the PR. `-X`, `--delete-branch`, `--auto` and
-`--cancel-auto` apply to a PR merge, and `--push` and `--no-push` to a local
-merge, which takes `-X merge` alone; a flag of the other path is refused.
+while a PR is open, close the PR. `-X` and `--message` apply to both,
+`--delete-branch`, `--auto` and `--cancel-auto` to a PR merge, and `--push` and
+`--no-push` to a local merge; a flag of the other path is refused.
 Scoped callers merge the work of the spaces below their own with `-s`, under
 their own `merge` and `push` permissions.
 
@@ -3545,10 +3545,26 @@ A local merge is for repositories without a pull-request flow. When the
 default branch has an upstream, Shoal fetches and fast-forwards it first,
 preserving an ahead branch and refusing divergence or a failed fetch. The default
 branch cannot be held by a managed workspace, and any other checkout of it must be
-clean. The workspace must be clean and on its recorded branch. Git fast-forwards or
-creates a merge commit in the default checkout. A merge that does not apply cleanly
-is aborted: merge the default branch into the workspace with Git (`git merge
-main`), resolve the conflicts there, and run `shoal merge` again.
+clean. The workspace must be clean and on its recorded branch. It merges by
+`-X`, else by [`[merge] method`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#merges):
+
+- `merge`, the default: Git fast-forwards or creates a merge commit in the
+  default checkout;
+- `squash`: one commit on the default branch, by whoever merges, whose files
+  are the merge of the default branch and the branch, as `git merge --squash`
+  and a commit make it. `--message` gives its message; without it, a branch of
+  one commit keeps that commit's message, and one of several gets Git's own
+  squash message. `--message` is refused for the other methods;
+- `rebase`: the branch's commits that the default branch lacks, copied onto it
+  as `git rebase` copies them, keeping their authors, in a worktree of Shoal's
+  own; merge commits are left out.
+
+A squash or rebase moves the default branch to the commit it made and leaves
+the workspace's branch as it was, as a forge's squash or rebase merge leaves a
+PR's branch. A merge that does not apply cleanly changes nothing: merge the
+default branch into the workspace with Git (`git merge main`), or for a rebase
+merge rebase the workspace onto it (`git rebase main`), resolve the conflicts
+there, and run `shoal merge` again.
 Merged commits count as pushed for `rm` and automatic cleanup.
 
 A merge that its [review gate](#local-reviews) refuses goes no further. An
@@ -3604,8 +3620,7 @@ pointing to `shoal pr open` and `shoal merge`.
 ### Undo a merge
 
 `shoal unmerge [-s SPACE]` undoes the workspace's latest local merge into the
-default branch while that merge is unpushed. It works for fast-forwards and merge
-commits alike, and the branch and its commits stay as they are; when cleanup deleted
+default branch while that merge is unpushed. It works for every method, and the branch and its commits stay as they are; when cleanup deleted
 the branch, `unmerge` creates it again at the commit that merged. A workspace
 cleanup removed comes back first with `shoal restore <workspace>`, which
 `unmerge` names when it refuses. Afterwards the branch's commits no longer count

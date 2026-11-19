@@ -3,27 +3,27 @@
 use anyhow::Result;
 
 use crate::{
-    cli::{commands::operations, context::Context, ui},
+    cli::{args::merge::MergeArgs, commands::operations, context::Context, ui},
     env,
+    forge::items::action::MergeMethod,
     model::{MergeConfirmation, MergeOptions, MergedBranch},
     protocol::{ConfigTarget, operations::OperationSpec},
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Merge `workspace`'s branch into the default branch. `push` overrides
-/// `[merge] push` when given, and `yes` skips the confirmation a merge asks
-/// for when it pushes or brings the default branch sensitive files it
-/// changed too.
+/// Merge `workspace`'s branch into the default branch by the method and
+/// with the message `args` give. Their `--push` or `--no-push` overrides
+/// `[merge] push`, and `--yes` skips the confirmation a merge asks for when
+/// it pushes or brings the default branch sensitive files it changed too.
 pub(super) async fn merge(
     ctx: &Context,
     workspace: SpaceSelector,
-    push: Option<bool>,
-    yes: bool,
+    args: &MergeArgs,
 ) -> Result<i32> {
     let settings =
         shoal_workers::settings::of(&ctx.paths, ConfigTarget::Space(workspace.clone())).await?;
-    let push = push.unwrap_or(settings.merge.push);
-    let confirmed = match yes {
+    let push = args.push().unwrap_or(settings.merge.push);
+    let confirmed = match args.confirmation.yes {
         true => None,
         // An agent's merge asks the user through its approval instead, which
         // names the files the agent's --yes passed over.
@@ -36,7 +36,12 @@ pub(super) async fn merge(
             confirm_merge(ctx, &workspace, pushing).await?
         }
     };
-    let options = MergeOptions { push, confirmed };
+    let options = MergeOptions {
+        push,
+        method: args.method,
+        message: args.message.clone(),
+        confirmed,
+    };
     let spec = OperationSpec::Merge {
         workspace: workspace.clone(),
         options,
@@ -90,12 +95,14 @@ fn show_merged(ctx: &Context, merged: &MergedBranch) -> Result<()> {
             );
         }
         let (branch, default, commit) = (&merged.branch, &merged.default_branch, &merged.commit);
-        if !merged.updated {
-            outln!("{default} already contains {branch} ({commit})");
-        } else if merged.fast_forward {
-            outln!("Fast-forwarded {default} to {branch} ({commit})");
-        } else {
-            outln!("Merged {branch} into {default} ({commit})");
+        match merged.method {
+            _ if !merged.updated => outln!("{default} already contains {branch} ({commit})"),
+            MergeMethod::Squash => outln!("Squashed {branch} into {default} ({commit})"),
+            MergeMethod::Rebase => outln!("Rebased {branch} onto {default} ({commit})"),
+            MergeMethod::Merge if merged.fast_forward => {
+                outln!("Fast-forwarded {default} to {branch} ({commit})")
+            }
+            MergeMethod::Merge => outln!("Merged {branch} into {default} ({commit})"),
         }
         if let Some(remote) = &merged.pushed_to {
             outln!("Pushed {default} to {remote}");

@@ -15,6 +15,7 @@ use shoal_refs::{BranchName, CommitId};
 use super::{Manager, branches::UpstreamPolicy};
 use crate::{
     daemon::{reviews::gate::Gate, scope::Caller},
+    forge::items::action::MergeMethod,
     fsutil::off_runtime,
     git::{
         self,
@@ -39,6 +40,8 @@ struct MergeSource {
     default: BranchName,
     /// The branch's commit that merges.
     source: CommitId,
+    method: MergeMethod,
+    message: Option<String>,
     push: Option<MergePush>,
 }
 
@@ -52,7 +55,11 @@ impl Manager {
         push: bool,
         caller: Option<&Caller>,
     ) -> Result<MergePreview> {
-        let merge = self.validate_merge(selector, push, caller).await;
+        let options = MergeOptions {
+            push,
+            ..MergeOptions::default()
+        };
+        let merge = self.validate_merge(selector, &options, caller).await;
         let merge = self.queue_unreviewed(merge).await?;
         let default_commit = local_commit(&merge.repo, &merge.default).await?;
         self.merge_preview(
@@ -78,7 +85,7 @@ impl Manager {
         options: &MergeOptions,
         caller: Option<&Caller>,
     ) -> Result<MergePlan> {
-        let merge = self.validate_merge(selector, options.push, caller).await?;
+        let merge = self.validate_merge(selector, options, caller).await?;
         if let Some(confirmed) = &options.confirmed {
             let warning = self
                 .branch_merge_warning(&SpaceSelector::id(&merge.workspace.id))
@@ -92,6 +99,8 @@ impl Manager {
             repo,
             default,
             source,
+            method,
+            message,
             push,
         } = merge;
         let default_refresh = self.refresh_default(&repo, &default).await?;
@@ -106,6 +115,8 @@ impl Manager {
             branch,
             repo,
             source,
+            method,
+            message,
             checkout,
             merge_temporaries,
             default_refresh,
@@ -126,17 +137,17 @@ impl Manager {
         .await
     }
 
-    /// The checks `caller`'s merge makes before it changes anything, its
-    /// review gate last, which queues no review. A merge that pushes needs an upstream for the
-    /// default branch.
+    /// The checks `caller`'s merge as `options` say makes before it changes
+    /// anything, its review gate last, which queues no review. A merge that
+    /// pushes needs an upstream for the default branch.
     async fn validate_merge(
         &self,
         selector: &SpaceSelector,
-        push: bool,
+        options: &MergeOptions,
         caller: Option<&Caller>,
     ) -> Result<MergeSource> {
         let workspace = self.workspace(selector).await?;
-        self.ensure_merging_enabled(&workspace).await?;
+        let (method, message) = self.merge_method(&workspace, options).await?;
         self.ensure_merges_locally(&workspace).await?;
         let repo = self.repository(workspace.repository()).await?;
         ensure!(
@@ -160,7 +171,7 @@ impl Manager {
             git::resolve_commit(&workspace.path, &git::local_ref(&branch), git_run).await?;
         self.ensure_unmanaged_checkout(&repo, &default, "merge")
             .await?;
-        let push = match push {
+        let push = match options.push {
             true => Some(push_target(&repo, &default).await?),
             false => None,
         };
@@ -172,18 +183,29 @@ impl Manager {
             repo,
             default,
             source,
+            method,
+            message,
             push,
         })
     }
 
-    /// Refuse to merge where `[merge] enabled` turns merging off, as in a
-    /// repository that merges only through PRs.
-    async fn ensure_merging_enabled(&self, workspace: &Workspace) -> Result<()> {
+    /// The method and squash message `workspace` merges by as `options`
+    /// ask, else by its `[merge] method`, else by a merge commit or
+    /// fast-forward; refused where `[merge] enabled` turns local merges
+    /// off, as in a repository that merges only through PRs.
+    async fn merge_method(
+        &self,
+        workspace: &Workspace,
+        options: &MergeOptions,
+    ) -> Result<(MergeMethod, Option<String>)> {
+        let settings = self.workspace_settings(workspace).await?;
+        let settings = &settings.merge;
         ensure!(
-            self.workspace_settings(workspace).await?.merge.enabled,
+            settings.enabled,
             "local merges are turned off for this repository ([merge] enabled = false); open a PR with shoal pr open, then merge it with shoal merge"
         );
-        Ok(())
+        let method = (options.method.or(settings.method)).unwrap_or(MergeMethod::Merge);
+        Ok((method, squash_message(method, options.message.as_deref())?))
     }
 
     /// Refuse a local merge of a workspace whose work merges through its
@@ -280,6 +302,20 @@ impl Manager {
         };
         self.managed_workspace_at(&path).await
     }
+}
+
+/// `message`, refused for a merge by `method` other than a squash, or when
+/// it is empty.
+fn squash_message(method: MergeMethod, message: Option<&str>) -> Result<Option<String>> {
+    let Some(message) = message else {
+        return Ok(None);
+    };
+    ensure!(
+        method == MergeMethod::Squash,
+        "a merge message is a squash merge's commit message; this merge is by {method}, so pass -X squash"
+    );
+    ensure!(!message.trim().is_empty(), "the merge message is empty");
+    Ok(Some(message.to_owned()))
 }
 
 /// Refuse a merge that is no longer the one the user confirmed: the branch

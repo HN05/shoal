@@ -36,6 +36,7 @@ pub(crate) struct LocalMerge {
     pub previous: CommitId,
     /// The default branch's commit the merge left it at.
     pub result: CommitId,
+    pub method: MergeMethod,
 }
 
 /// A stored [`LocalMerge`].
@@ -87,14 +88,7 @@ impl Manager {
         let Some(tip) = git::status::local_branch_commit(repo, default).await? else {
             return Ok(());
         };
-        let merged = merge_result(
-            repo,
-            tip.as_str(),
-            previous,
-            &plan.source,
-            MergeMethod::Merge,
-        )
-        .await?;
+        let merged = merge_result(repo, tip.as_str(), previous, &plan.source, plan.method).await?;
         let Some(result) = merged else {
             return Ok(());
         };
@@ -107,6 +101,7 @@ impl Manager {
             source: plan.source.clone(),
             previous: previous.clone(),
             result,
+            method: plan.method,
         };
         self.store.run(move |db| insert(db, &merge)).await?;
         let pushed = self.pushed_merges(&plan.repo, default).await?;
@@ -251,8 +246,8 @@ fn replace_replayed(
 fn insert(db: &Connection, merge: &LocalMerge) -> Result<()> {
     db.execute(
         "INSERT INTO merges(repository_id,default_branch,workspace_id,workspace,branch,
-            source_commit,previous_commit,result_commit,merged_at)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,unixepoch())",
+            source_commit,previous_commit,result_commit,method,merged_at)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,unixepoch())",
         params![
             merge.repository_id,
             merge.default_branch,
@@ -262,6 +257,7 @@ fn insert(db: &Connection, merge: &LocalMerge) -> Result<()> {
             merge.source,
             merge.previous,
             merge.result,
+            merge.method,
         ],
     )?;
     Ok(())
@@ -275,7 +271,7 @@ fn list(
 ) -> Result<Vec<RecordedMerge>> {
     let mut statement = db.prepare(
         "SELECT id,repository_id,default_branch,workspace_id,workspace,branch,
-            source_commit,previous_commit,result_commit
+            source_commit,previous_commit,result_commit,method
          FROM merges WHERE repository_id=?1 AND default_branch=?2 ORDER BY id",
     )?;
     let rows = statement.query_map(params![repository_id, default], |row| {
@@ -290,6 +286,7 @@ fn list(
                 source: row.get(6)?,
                 previous: row.get(7)?,
                 result: row.get(8)?,
+                method: row.get(9)?,
             },
         })
     })?;

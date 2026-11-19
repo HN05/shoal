@@ -1041,7 +1041,8 @@ method = "squash" # "merge", "rebase" or "squash"; no default
 ```
 
 `method` sets how both a local merge and a PR merge merge, unless `-X` says;
-without it, a PR merges by the forge's default.
+without it, a PR merges by the forge's default and a local merge fast-forwards
+or creates a merge commit.
 
 See [merge into the default branch](../../../../../../docs/reference.md#merge-into-the-default-branch).
 

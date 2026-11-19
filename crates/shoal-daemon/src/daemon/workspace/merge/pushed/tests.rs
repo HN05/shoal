@@ -52,6 +52,8 @@ impl Fixture {
         let selector = SpaceSelector::id(&self.workspace.id);
         let options = MergeOptions {
             push,
+            method: None,
+            message: None,
             confirmed: None,
         };
         let plan = self.manager.prepare_merge(&selector, &options, None).await;

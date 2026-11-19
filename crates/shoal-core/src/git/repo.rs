@@ -5,8 +5,13 @@ use anyhow::{Context, Result, bail, ensure};
 use shoal_refs::{BranchName, CommitId};
 
 use crate::{
+    forge::items::action::MergeMethod,
     fsutil::off_runtime,
-    git::{self, run_isolated as git_run},
+    git::{
+        self,
+        merge_methods::{self, Applied},
+        run_isolated as git_run,
+    },
     model::{MergePlan, MergePush, MergedBranch, Repository},
 };
 
@@ -127,73 +132,103 @@ pub async fn finish_merge(plan: MergePlan) -> Result<MergedBranch> {
 }
 
 async fn merge_branch(plan: MergePlan) -> Result<MergedBranch> {
-    let MergePlan {
-        workspace,
-        branch,
+    ensure_unmoved(&plan).await?;
+    let (repo, previous, source) = (&plan.repo.path, &plan.default_refresh.commit, &plan.source);
+    let contained = git::is_ancestor(
         repo,
-        source,
-        checkout,
-        merge_temporaries: _,
-        default_refresh,
-        push: _,
-    } = plan;
-    let default = default_refresh.branch.clone();
-    let default_ref = git::local_ref(&default);
-    clean_branch(&workspace.path, &branch).await?;
-    ensure!(
-        git_run(&workspace.path, &["rev-parse", "HEAD"])
-            .await?
-            .trim()
-            == source,
-        "workspace branch changed before merging; retry"
-    );
-    ensure!(
-        git_run(&repo.path, &["rev-parse", &default_ref])
-            .await?
-            .trim()
-            == default_refresh.commit,
-        "default branch changed before merging; retry"
-    );
-    let previous = default_refresh.commit.clone();
-    let merged = |commit: CommitId, updated: bool, fast_forward: bool| MergedBranch {
-        workspace_id: workspace.id.clone(),
-        repository_id: repo.id.clone(),
-        branch: branch.clone(),
-        default_branch: default.clone(),
-        previous_commit: previous.clone(),
-        commit,
-        updated,
-        fast_forward,
-        default_refresh,
-        pushed_to: None,
-    };
-    if git::is_ancestor(
-        &repo.path,
         source.as_str(),
         previous.as_str(),
         git::isolated_command,
     )
-    .await?
-    {
-        return Ok(merged(previous.clone(), false, true));
+    .await?;
+    let (updated, fast_forward) = match plan.method {
+        _ if contained => (false, true),
+        MergeMethod::Merge => (true, merge_or_fast_forward(&plan).await?),
+        MergeMethod::Squash => {
+            let message = plan.message.as_deref();
+            let squashed = merge_methods::squash(repo, previous, source, message).await?;
+            (move_default(&plan, squashed).await?, false)
+        }
+        MergeMethod::Rebase => {
+            let rebased = merge_methods::rebase(repo, previous, source).await?;
+            (move_default(&plan, rebased).await?, false)
+        }
+    };
+    let default_ref = git::local_ref(&plan.default_refresh.branch);
+    let commit = git_run(repo, &["rev-parse", "--verify", &default_ref])
+        .await?
+        .trim()
+        .into();
+    Ok(merged_branch(plan, commit, updated, fast_forward))
+}
+
+/// Refuse a merge whose workspace branch or default branch moved since
+/// `plan` was made.
+async fn ensure_unmoved(plan: &MergePlan) -> Result<()> {
+    let default_ref = git::local_ref(&plan.default_refresh.branch);
+    clean_branch(&plan.workspace.path, &plan.branch).await?;
+    ensure!(
+        git_run(&plan.workspace.path, &["rev-parse", "HEAD"])
+            .await?
+            .trim()
+            == plan.source,
+        "workspace branch changed before merging; retry"
+    );
+    ensure!(
+        git_run(&plan.repo.path, &["rev-parse", &default_ref])
+            .await?
+            .trim()
+            == plan.default_refresh.commit,
+        "default branch changed before merging; retry"
+    );
+    Ok(())
+}
+
+/// What merging `plan` left the default branch at `commit`.
+fn merged_branch(
+    plan: MergePlan,
+    commit: CommitId,
+    updated: bool,
+    fast_forward: bool,
+) -> MergedBranch {
+    MergedBranch {
+        workspace_id: plan.workspace.id,
+        repository_id: plan.repo.id,
+        branch: plan.branch,
+        default_branch: plan.default_refresh.branch.clone(),
+        previous_commit: plan.default_refresh.commit.clone(),
+        commit,
+        method: plan.method,
+        updated,
+        fast_forward,
+        default_refresh: plan.default_refresh,
+        pushed_to: None,
     }
+}
+
+/// Fast-forward the default branch to `plan`'s branch, or merge the branch
+/// into it with a merge commit in its checkout; whether it fast-forwarded.
+async fn merge_or_fast_forward(plan: &MergePlan) -> Result<bool> {
+    let (branch, source) = (&plan.branch, &plan.source);
+    let (repo, default) = (&plan.repo.path, &plan.default_refresh.branch);
+    let previous = &plan.default_refresh.commit;
     let fast_forward = git::is_ancestor(
-        &repo.path,
+        repo,
         previous.as_str(),
         source.as_str(),
         git::isolated_command,
     )
     .await?;
-    match checkout {
+    match &plan.checkout {
         Some(checkout) => {
-            clean_branch(&checkout, &default).await?;
-            let output = git::bounded(git::merge_commit(&checkout, &branch, source.as_str()))
+            clean_branch(checkout, default).await?;
+            let output = git::bounded(git::merge_commit(checkout, branch, source.as_str()))
                 .capture()
                 .await
                 .context("merge into default branch")?;
             if !output.status.success() {
                 // Leave the checkout as it was; conflicts belong in the workspace.
-                let _ = git_run(&checkout, &["merge", "--abort"]).await;
+                let _ = git_run(checkout, &["merge", "--abort"]).await;
                 bail!(
                     "merging {branch} into {default} failed; run git merge {default} in the workspace, resolve conflicts there, and retry\n{}{}",
                     String::from_utf8_lossy(&output.stdout).trim_end(),
@@ -206,19 +241,60 @@ async fn merge_branch(plan: MergePlan) -> Result<MergedBranch> {
                 fast_forward,
                 "{default} is not checked out and {branch} does not fast-forward it; run git merge {default} in the workspace, then retry"
             );
-            git::fast_forward_local(&repo.path, source.as_str(), &default_ref).await?;
+            git::fast_forward_local(repo, source.as_str(), &git::local_ref(default)).await?;
         }
     }
-    let commit = git_run(&repo.path, &["rev-parse", "--verify", &default_ref])
-        .await?
-        .trim()
-        .into();
-    Ok(merged(commit, true, fast_forward))
+    Ok(fast_forward)
+}
+
+/// Fast-forward the default branch to the commit a squash or rebase of
+/// `plan`'s branch made, if it made one; whether it did. One that does not
+/// apply cleanly changes nothing and names what makes it apply.
+async fn move_default(plan: &MergePlan, applied: Applied) -> Result<bool> {
+    let (branch, default) = (&plan.branch, &plan.default_refresh.branch);
+    let commit = match applied {
+        Applied::Commit(commit) => commit,
+        Applied::Unchanged => return Ok(false),
+        Applied::Conflicts(report) => {
+            let (merging, update) = match plan.method {
+                MergeMethod::Rebase => (format!("rebasing {branch} onto {default}"), "rebase"),
+                _ => (format!("squashing {branch} into {default}"), "merge"),
+            };
+            bail!(
+                "{merging} does not apply cleanly, so nothing changed; run git {update} {default} in the workspace, resolve conflicts there, and retry\n{report}"
+            );
+        }
+    };
+    match &plan.checkout {
+        Some(checkout) => {
+            clean_branch(checkout, default).await?;
+            git::run_without_submodules(
+                checkout,
+                &[
+                    "merge",
+                    "--ff-only",
+                    "--no-stat",
+                    "--no-autostash",
+                    "--no-overwrite-ignore",
+                    "--",
+                    commit.as_str(),
+                ],
+            )
+            .await
+            .with_context(|| format!("move {default}'s checkout to {commit}"))?;
+        }
+        None => {
+            let default_ref = git::local_ref(default);
+            git::fast_forward_local(&plan.repo.path, commit.as_str(), &default_ref).await?;
+        }
+    }
+    Ok(true)
 }
 
 /// The wrapper runs rollback only after stopping the merge process group. Keep
 /// a completed merge, and refuse to reset a checkout whose branch/HEAD changed.
 pub async fn rollback_merge(plan: &MergePlan) -> Result<()> {
+    merge_methods::remove_rebase(&plan.repo.path).await?;
     let Some(checkout) = &plan.checkout else {
         return Ok(());
     };

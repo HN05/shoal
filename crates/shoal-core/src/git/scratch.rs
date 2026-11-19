@@ -24,6 +24,13 @@ pub(crate) struct Scratch {
     command: &'static str,
 }
 
+/// Where `shoal merge` rebases a branch onto the default branch.
+pub(crate) const MERGE: Scratch = Scratch {
+    directory: "shoal-merge",
+    owner: "shoal merge",
+    command: "merge",
+};
+
 /// Where `shoal unmerge` replays the history after a merge.
 pub(crate) const UNMERGE: Scratch = Scratch {
     directory: "shoal-unmerge",

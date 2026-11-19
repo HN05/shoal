@@ -8,6 +8,7 @@ use crate::{
         test_support::{commit, git, manager, repository},
         workspace::{ExecutionKind, ExecutionRequest, Manager, RecordChange},
     },
+    forge::items::action::MergeMethod,
     model::{MergeOptions, Unmerged, Workspace},
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -49,19 +50,37 @@ impl Fixture {
 
     /// Merge the workspace `name` and record it, as a merge execution does.
     async fn merge(&self, name: &str) {
+        self.merge_by(name, MergeMethod::Merge).await.unwrap();
+    }
+
+    /// Merge the workspace `name` by `method` and update the records, as a
+    /// merge execution does, whether or not the worker succeeds.
+    async fn merge_by(&self, name: &str, method: MergeMethod) -> anyhow::Result<()> {
         let _guard = self.manager.gates.lock_git(&self.repo_id).await;
+        let options = MergeOptions {
+            method: Some(method),
+            ..MergeOptions::default()
+        };
+        let selector = self.manager.named(name).await;
         let plan = self
             .manager
-            .prepare_merge(
-                &self.manager.named(name).await,
-                &MergeOptions::default(),
-                None,
-            )
-            .await
-            .unwrap();
-        crate::git::repo::finish_merge(plan.clone()).await.unwrap();
+            .prepare_merge(&selector, &options, None)
+            .await?;
+        let merged = crate::git::repo::finish_merge(plan.clone()).await;
         let change = RecordChange::Merge(Box::new(plan));
         self.manager.update_merge_records(&change).await;
+        merged.map(drop)
+    }
+
+    /// The method and result of each recorded merge, oldest first.
+    async fn recorded(&self) -> Vec<(String, String)> {
+        let listed = self.manager.store.run(|db| {
+            let mut statement =
+                db.prepare("SELECT method,result_commit FROM merges ORDER BY id")?;
+            let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+            Ok(rows.collect::<Result<Vec<_>, _>>()?)
+        });
+        listed.await.unwrap()
     }
 
     /// Undo the workspace `name`'s latest merge and update the records, as
@@ -199,6 +218,72 @@ async fn an_older_merge_is_taken_out_by_replaying_later_merges() {
     // undone in turn.
     f.unmerge("second").await.unwrap();
     assert_eq!(f.main(), before);
+}
+
+/// Merge a workspace of two commits by `method` after a commit of main's
+/// own, and another after it with a merge commit, then undo the first,
+/// replaying the second, and the second in turn.
+async fn later_merges_replay_when_a_merge_by(method: MergeMethod) {
+    let f = Fixture::new().await;
+    let first = f.add("first", "first").await;
+    write_commit(&first.path, "notes", "first's notes");
+    let second = f.add("second", "second").await;
+    write_commit(&f.repo, "tracked", "main side");
+    let before = f.main();
+    f.merge_by("first", method).await.unwrap();
+    assert!(f.repo.join("first").exists() && f.repo.join("notes").exists());
+    assert!(!f.holds(&rev(&first.path, "HEAD")));
+    let copies = match method {
+        MergeMethod::Squash => 1,
+        _ => 2,
+    };
+    assert_eq!(rev(&f.repo, &format!("main~{copies}")), before);
+    assert_eq!(f.recorded().await, [(method.to_string(), f.main())]);
+
+    f.merge("second").await;
+    let unmerged = f.unmerge("first").await.unwrap();
+    assert_eq!(unmerged.replayed, 1);
+    assert!(!f.repo.join("first").exists() && !f.repo.join("notes").exists());
+    assert!(f.repo.join("second").exists());
+    assert_eq!(rev(&f.repo, "main^1"), before);
+    assert_eq!(rev(&f.repo, "main^2"), rev(&second.path, "HEAD"));
+    assert_eq!(rev(&f.repo, "first"), rev(&first.path, "HEAD"));
+    f.unmerge("second").await.unwrap();
+    assert_eq!(f.main(), before);
+    assert_eq!(git(&f.repo, &["status", "--porcelain"]), "");
+}
+
+#[tokio::test]
+async fn a_squash_merge_is_undone_with_later_merges_replayed() {
+    later_merges_replay_when_a_merge_by(MergeMethod::Squash).await;
+}
+
+#[tokio::test]
+async fn a_rebase_merge_is_undone_with_later_merges_replayed() {
+    later_merges_replay_when_a_merge_by(MergeMethod::Rebase).await;
+}
+
+/// Merge by `method` a workspace whose change conflicts with main's.
+async fn a_conflicting_merge_by(method: MergeMethod) {
+    let f = Fixture::new().await;
+    f.add("first", "tracked").await;
+    write_commit(&f.repo, "tracked", "main side");
+    let main = f.main();
+    let error = f.merge_by("first", method).await.unwrap_err();
+    assert!(error.to_string().contains("nothing changed"), "{error:#}");
+    assert_eq!(f.main(), main);
+    assert_eq!(git(&f.repo, &["status", "--porcelain"]), "");
+    assert!(f.recorded().await.is_empty());
+}
+
+#[tokio::test]
+async fn a_conflicting_squash_merge_leaves_main_as_it_was() {
+    a_conflicting_merge_by(MergeMethod::Squash).await;
+}
+
+#[tokio::test]
+async fn a_conflicting_rebase_merge_leaves_main_as_it_was() {
+    a_conflicting_merge_by(MergeMethod::Rebase).await;
 }
 
 #[tokio::test]

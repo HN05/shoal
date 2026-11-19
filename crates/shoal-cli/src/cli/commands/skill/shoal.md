@@ -695,8 +695,9 @@ PR lets a workspace merge locally. A number, a PR URL or `pr` merges that PR,
 or with `pr` alone the assigned one. A PR merges by `-X`, else by
 `[merge] method`, else by the repository's default, and `--message` sets a
 squash merge's commit message; `--auto` merges it once its checks pass and
-`--cancel-auto` withdraws that. A local merge takes `--push` or `--no-push`
-and only `-X merge`; a flag of the other path is refused. `unmerge` undoes a
+`--cancel-auto` withdraws that. A local merge takes `-X` and `--message` too,
+squashing or rebasing the branch onto the default branch, and `--push` or
+`--no-push`; a flag of the other path is refused. `unmerge` undoes a
 workspace's latest local merge while the default branch is unpushed. A
 workspace process's `merge` or `unmerge` first exits 2 with `approval_pending`
 for the PR's or branch's current head, unless its `merge` permission is

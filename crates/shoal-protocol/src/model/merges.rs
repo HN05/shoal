@@ -1,6 +1,7 @@
 //! How a space's work merges, and local merges and unmerges of workspace
 //! branches into the default branch.
 use super::{MergeWarning, Repository, Workspace};
+use crate::forge::items::action::MergeMethod;
 use serde::{Deserialize, Serialize};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
@@ -58,9 +59,11 @@ pub struct MergedBranch {
     pub default_branch: BranchName,
     pub previous_commit: CommitId,
     pub commit: CommitId,
+    pub method: MergeMethod,
     /// False when the default branch already contained the workspace branch.
     pub updated: bool,
-    /// True when the default branch fast-forwarded instead of a merge commit.
+    /// True when a merge fast-forwarded the default branch instead of
+    /// making a merge commit.
     pub fast_forward: bool,
     /// How the default branch was refreshed from its upstream first.
     pub default_refresh: PulledBranch,
@@ -77,6 +80,10 @@ pub struct MergePlan {
     pub branch: BranchName,
     pub repo: Repository,
     pub source: CommitId,
+    pub method: MergeMethod,
+    /// A squash merge's commit message, which Git's otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
     pub checkout: Option<PathBuf>,
     pub merge_temporaries: Vec<PathBuf>,
     pub default_refresh: PulledBranch,
@@ -158,12 +165,20 @@ impl MergePush {
     }
 }
 
-/// How a merge runs: whether it pushes, and the merge the user confirmed.
+/// How a merge runs: by which method, whether it pushes, and the merge the
+/// user confirmed.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MergeOptions {
     /// Push the default branch to its upstream afterwards.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub push: bool,
+    /// The method, else `[merge] method`, else a merge commit or
+    /// fast-forward.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub method: Option<MergeMethod>,
+    /// A squash merge's commit message.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
     /// What the user confirmed, which the merge must still be when it starts.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confirmed: Option<MergeConfirmation>,

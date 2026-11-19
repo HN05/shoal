@@ -29,11 +29,12 @@ pub struct MergeArgs {
     pub space: Option<SpaceSelector>,
     #[command(flatten)]
     pub repo: TargetRepo,
-    /// How a PR merges, by [merge] method or else the repository's default
-    /// on the forge when left out; a local merge takes only merge.
+    /// How the work merges, by [merge] method when left out, and else a PR
+    /// by the repository's default on the forge and a local merge by a
+    /// fast-forward or merge commit.
     #[arg(short = 'X', long, value_enum)]
     pub method: Option<MergeMethod>,
-    /// The commit message of a squash merge.
+    /// The commit message of a squash merge, local or on the forge.
     #[arg(long, conflicts_with = "cancel_auto")]
     pub message: Option<String>,
     /// Delete the PR's branch on the forge after merging.
@@ -108,11 +109,6 @@ impl MergeArgs {
                 "{pull} applies to a PR merge and {local} to a local merge; pass the flags of one"
             );
         }
-        if let Some(method @ (MergeMethod::Squash | MergeMethod::Rebase)) = self.method {
-            bail!(
-                "-X {method} merges only a PR and {local} applies to a local merge; pass the flags of one"
-            );
-        }
         Ok(())
     }
 
@@ -124,17 +120,11 @@ impl MergeArgs {
         Ok(())
     }
 
-    /// Refuse the flags of a PR merge, and the methods a local merge does
-    /// not take, for a local merge of the space `space`.
+    /// Refuse the flags of a PR merge for a local merge of the space
+    /// `space`.
     pub fn ensure_local_flags(&self, space: &str) -> Result<()> {
         if let Some(flag) = self.pull_flag() {
             bail!("{flag} applies to a PR merge; {space} has no open PR, so it merges locally");
-        }
-        if let Some(method @ (MergeMethod::Squash | MergeMethod::Rebase)) = self.method {
-            bail!(
-                "a local merge fast-forwards or creates a merge commit, so it takes no -X {method}; \
-                 {space} has no open PR, so it merges locally"
-            );
         }
         Ok(())
     }
@@ -145,7 +135,6 @@ impl MergeArgs {
             (self.delete_branch, "--delete-branch"),
             (self.auto, "--auto"),
             (self.cancel_auto, "--cancel-auto"),
-            (self.message.is_some(), "--message"),
         ]
         .into_iter()
         .find_map(|(given, flag)| given.then_some(flag))

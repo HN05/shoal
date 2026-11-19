@@ -52,7 +52,7 @@ async fn merge_work(ctx: &Context, args: &MergeArgs) -> Result<i32> {
         }
         MergePath::Local => {
             args.ensure_local_flags(&named_space(args))?;
-            local::merge(ctx, space, args.push(), args.confirmation.yes).await
+            local::merge(ctx, space, args).await
         }
     }
 }

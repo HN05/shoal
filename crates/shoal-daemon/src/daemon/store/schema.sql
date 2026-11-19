@@ -313,7 +313,8 @@ CREATE TABLE merges (
     previous_commit TEXT NOT NULL,
     result_commit TEXT NOT NULL,
     merged_at INTEGER NOT NULL
-);
+, method TEXT NOT NULL DEFAULT 'merge'
+    CHECK(method IN ('merge','rebase','squash')));
 
 CREATE TABLE space_agent_state (
     space_id TEXT PRIMARY KEY,
@@ -637,19 +638,6 @@ CREATE TABLE "workspaces" (
     starting_index TEXT
 );
 
-CREATE TABLE "merge_runs" (
-    space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
-    pr_url TEXT,
-    remote_url TEXT CHECK((pr_url IS NULL) <> (remote_url IS NULL)),
-    merge_commit TEXT NOT NULL,
-    branch TEXT NOT NULL,
-    merged_at INTEGER NOT NULL,
-    looking INTEGER NOT NULL DEFAULT 1 CHECK(looking IN (0,1)),
-    runs TEXT NOT NULL DEFAULT '[]',
-    ended INTEGER NOT NULL DEFAULT 0 CHECK(ended IN (0,1)),
-    PRIMARY KEY(space_id,merge_commit)
-);
-
 CREATE TABLE pending_worktrees (
     workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
     plan TEXT NOT NULL
@@ -773,6 +761,19 @@ CREATE TABLE hub_kept_numbers (
     number INTEGER NOT NULL
 );
 
+CREATE TABLE "merge_runs" (
+    space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+    pr_url TEXT,
+    remote_url TEXT CHECK((pr_url IS NULL) <> (remote_url IS NULL)),
+    merge_commit TEXT NOT NULL,
+    branch TEXT NOT NULL,
+    merged_at INTEGER NOT NULL,
+    looking INTEGER NOT NULL DEFAULT 1 CHECK(looking IN (0,1)),
+    runs TEXT NOT NULL DEFAULT '[]',
+    ended INTEGER NOT NULL DEFAULT 0 CHECK(ended IN (0,1)),
+    PRIMARY KEY(space_id,merge_commit)
+);
+
 CREATE TABLE failed_launches (
     id TEXT PRIMARY KEY,
     space_id TEXT NOT NULL UNIQUE REFERENCES spaces(id) ON DELETE CASCADE,
@@ -811,16 +812,16 @@ CREATE TABLE hub_outbox (
     queued_at INTEGER NOT NULL
 );
 
-CREATE TABLE hub_known_tree (
-    id INTEGER PRIMARY KEY CHECK(id = 1),
-    tree TEXT NOT NULL
-);
-
 CREATE TABLE hub_escalated_questions (
     space_id TEXT NOT NULL,
     number INTEGER NOT NULL,
     created_at INTEGER NOT NULL,
     PRIMARY KEY(space_id, number, created_at)
+);
+
+CREATE TABLE hub_known_tree (
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+    tree TEXT NOT NULL
 );
 
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;

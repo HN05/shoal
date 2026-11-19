@@ -1419,18 +1419,28 @@ state from the forge, since a poll follows no opened PR, and refuses several
 rather than guessing one. There is no flag to merge locally past an open PR,
 which would bypass its review: closing the PR is that decision. Because it
 merges a space's work either way, it is top-level rather than under `pr`, and
-reads a PR it is given as the cross-kind verbs read items. A PR merge without a
-method takes the repository's default, which each forge's merging
-implementation reads or leaves to the forge; GitHub has none, so it takes the
-first method the repository allows. The local merge, the guarded
+reads a PR it is given as the cross-kind verbs read items. `[merge] method`
+sets the method of both kinds of merge, so a repository merges the same way
+with or without PRs. A PR merge without a method takes the repository's
+default, which each forge's merging implementation reads or leaves to the
+forge; GitHub has none, so it takes the first method the repository allows. A
+squash merge's message goes to the forge only where the method is known to
+squash. The local merge, the guarded
 substitute for a pull request, merges the workspace branch into the default
-branch, first refreshing a configured upstream while preserving an ahead branch and
+branch by any of a PR merge's methods: a fast-forward or merge commit, one
+squash commit by whoever merges, made with `merge-tree` and `commit-tree`
+without touching a checkout, or the branch's commits rebased in a worktree of
+its own, keeping their authors; the default branch then fast-forwards to the
+commit either makes, and the workspace's branch stays as it was, as a forge's
+squash or rebase merge leaves a PR's. Without a message, a squash of one commit
+keeps its message and of several takes Git's own. It first refreshes a configured upstream while preserving an ahead branch and
 refusing divergence or fetch failure. It pushes the default branch to that upstream
 only on request, checking the upstream before merging and keeping the merge when the
 push fails. The default branch cannot be
 held by a managed workspace, and any checkout of it must be clean. It aborts a merge
 that does not apply cleanly, leaving conflicts to a Git merge of the default branch into
-the workspace. Merging holds the repository Git gate for the tracked execution; the
+the workspace, or for a rebase merge, whose replay a merge does not resolve, a
+rebase of the workspace onto it. Merging holds the repository Git gate for the tracked execution; the
 daemon validates, resolves the push target and refreshes, and the CLI worker merges.
 Pushing publishes the merge where a local reset cannot reach it, so a merge
 that pushes asks the user first, after the daemon's checks and before it
@@ -1443,8 +1453,10 @@ sensitive files with `--yes`, so the approver decides on them.
 A repository that merges only through PRs turns local merges off with `[merge]
 enabled = false`, which refuses agents' requests for them too.
 Because a local merge can be undone, `unmerge` is a command of its own rather than
-a flag that flips `merge`. The daemon records each merge when its execution ends,
-from what the default branch holds rather than what the worker reports, and drops
+a flag that flips `merge`. The daemon records each merge with its method when its
+execution ends, from what the default branch holds rather than what the worker
+reports: a squash as the one commit whose tree is the merge of the two, a rebase
+as the chain that replays the branch's commits; and drops
 records the default branch no longer holds or its upstream has. `unmerge` undoes
 the branch's latest recorded merge under the same gate, checks and tracked
 execution: it moves the default branch back when nothing came after the merge, and

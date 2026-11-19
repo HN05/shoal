@@ -1538,6 +1538,8 @@ async fn begin_merge_as_agent(
     let request = crate::daemon::workspace::ExecutionRequest {
         merge: Some(crate::model::MergeOptions {
             push,
+            method: None,
+            message: None,
             confirmed: None,
         }),
         ..Default::default()
@@ -1938,6 +1940,8 @@ async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
     commit(&workspace.path, "feature");
     let confirmed = async || crate::model::MergeOptions {
         push: true,
+        method: None,
+        message: None,
         confirmed: Some(
             f.manager
                 .preview_merge(&f.manager.named("worker").await, true, None)
@@ -2010,6 +2014,8 @@ async fn a_confirmed_merge_refuses_a_warning_recorded_after_the_question() {
     }
     let confirmed = async || crate::model::MergeOptions {
         push: false,
+        method: None,
+        message: None,
         confirmed: Some(
             f.manager
                 .preview_merge(&f.manager.named("worker").await, false, None)
@@ -2197,6 +2203,8 @@ impl Manager {
         let _guard = self.gates.lock_git(workspace.repository()).await;
         let options = crate::model::MergeOptions {
             push,
+            method: None,
+            message: None,
             confirmed: None,
         };
         crate::git::repo::finish_merge(self.prepare_merge(&selector, &options, None).await?).await
