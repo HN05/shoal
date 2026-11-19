@@ -70,6 +70,7 @@ async fn an_agent_converts_the_spaces_its_scope_reaches() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     manager.executions.issue_scope("lead".into(), caller).await;
 

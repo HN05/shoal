@@ -246,6 +246,7 @@ async fn a_chat_without_a_repository_opens_no_issue_elsewhere_unless_allowed_dir
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     let issue = || NewIssue {
         title: "Flaky".into(),

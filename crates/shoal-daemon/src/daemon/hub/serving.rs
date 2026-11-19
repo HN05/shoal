@@ -14,7 +14,7 @@ use std::{
 use anyhow::{Context as _, Result, bail};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
-    hub::routing::{Answered, Forwarded, Vouched, VouchedSpace},
+    hub::routing::{Answered, Forwarded, Vouched},
     protocol::{self, Forwarding, Method, Request},
     scope_tokens::ScopeToken,
     space_names::SpaceSelector,
@@ -63,15 +63,6 @@ impl Vouches {
     /// The caller `token` stands for, while its forwarded request runs.
     pub(crate) fn caller(&self, token: &ScopeToken) -> Option<Vouched> {
         self.lock().get(token).cloned()
-    }
-
-    /// What the machine of the space `id` vouches for it, while a request
-    /// its process forwarded runs here.
-    pub(crate) fn space(&self, id: &SpaceId) -> Option<VouchedSpace> {
-        self.lock().values().find_map(|vouched| match vouched {
-            Vouched::Space(space) if &space.space == id => Some(space.clone()),
-            _ => None,
-        })
     }
 }
 
@@ -183,17 +174,10 @@ impl Manager {
         }
     }
 
-    /// What another machine vouches for the space `id`, a space there,
-    /// while a request its process forwarded runs here.
-    pub(crate) fn vouched_space(&self, id: &SpaceId) -> Option<VouchedSpace> {
-        self.hub.vouches.space(id)
-    }
-
     /// Whether `selector` names `caller`'s own space where another machine
     /// vouches for it, which this machine has none of.
     pub(crate) fn names_vouched_own(&self, caller: &Caller, selector: &SpaceSelector) -> bool {
-        selector.given_id() == Some(&caller.space_id)
-            && self.vouched_space(&caller.space_id).is_some()
+        caller.vouched.is_some() && selector.given_id() == Some(&caller.space_id)
     }
 
     /// The ID and name of the space `selector` names: one here, or
@@ -219,9 +203,11 @@ impl Manager {
         Some(match self.hub.vouches.caller(token)? {
             Vouched::User => None,
             Vouched::Space(space) => Some(Caller {
+                space_id: space.space.clone(),
+                execution: None,
                 granted: space.granted,
                 read_only: space.read_only,
-                ..Caller::of_space(space.space)
+                vouched: Some(Arc::new(space)),
             }),
         })
     }

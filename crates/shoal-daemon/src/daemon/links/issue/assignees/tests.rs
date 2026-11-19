@@ -143,6 +143,7 @@ async fn a_scoped_relink_takes_on_no_assignment() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     let warnings = (fixture
         .manager
@@ -172,6 +173,7 @@ async fn a_scoped_relink_checks_its_related_items_as_links_do() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     let manager = &fixture.manager;
     let warnings = (manager.relink_space(&workspace.id, &links, Some(&caller))).await;

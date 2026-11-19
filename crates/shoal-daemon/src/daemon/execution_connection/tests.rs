@@ -48,6 +48,7 @@ async fn scoped_merge_answers_with_its_approval_request() {
                 execution: None,
                 granted: None,
                 read_only: false,
+                vouched: None,
             }),
         },
         manager.gates.owned_operation().await,

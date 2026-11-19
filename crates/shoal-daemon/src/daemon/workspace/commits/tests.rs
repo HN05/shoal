@@ -260,6 +260,7 @@ async fn workspace_processes_create_workspaces_at_a_commit_only_below_their_own(
                 }),
                 granted: None,
                 read_only: false,
+                vouched: None,
             },
         )
         .await;
@@ -704,6 +705,7 @@ async fn reopening_a_prs_workspace_gives_it_to_its_opener() {
             execution: None,
             granted: None,
             read_only: false,
+            vouched: None,
         });
         let head = head.clone();
         async move {
@@ -865,6 +867,7 @@ async fn a_chat_opens_no_workspace_at_a_commit_in_another_repository() {
                 execution: None,
                 granted: None,
                 read_only: false,
+                vouched: None,
             }),
         )
         .await

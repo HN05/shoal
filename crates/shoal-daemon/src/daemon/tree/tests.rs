@@ -221,6 +221,7 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
                 }),
                 granted: None,
                 read_only: false,
+                vouched: None,
             },
         )
         .await;
@@ -297,6 +298,7 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     (manager.executions)
         .issue_scope("scope".into(), scoped.clone())
@@ -438,6 +440,7 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
                 execution: None,
                 granted: None,
                 read_only: false,
+                vouched: None,
             },
         )
         .await;
@@ -502,6 +505,7 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
                 execution: None,
                 granted: None,
                 read_only: false,
+                vouched: None,
             },
         )
         .await;
@@ -562,6 +566,7 @@ async fn workspace_processes_list_their_subtree_with_their_own_workspace_first()
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     assert_eq!(
         names(manager.visible_spaces(Some(&caller)).await.unwrap()),
@@ -1008,6 +1013,7 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
                 execution: None,
                 granted: None,
                 read_only: false,
+                vouched: None,
             },
         )
         .await;
@@ -1220,6 +1226,7 @@ async fn a_scoped_answer_binds_to_the_question_it_was_authorized_for() {
                 execution: None,
                 granted: None,
                 read_only: false,
+                vouched: None,
             },
         )
         .await;
@@ -1471,6 +1478,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
                     execution: None,
                     granted: None,
                     read_only: false,
+                    vouched: None,
                 },
             )
             .await;
@@ -2231,6 +2239,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     manager
         .executions
@@ -2346,6 +2355,7 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
                 execution: None,
                 granted: None,
                 read_only: false,
+                vouched: None,
             },
         )
         .await;
@@ -2489,6 +2499,7 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
                     execution: None,
                     granted: None,
                     read_only: false,
+                    vouched: None,
                 },
             )
             .await;

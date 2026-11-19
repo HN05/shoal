@@ -285,6 +285,7 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
                 execution: None,
                 granted: None,
                 read_only: false,
+                vouched: None,
             },
         )
         .await;

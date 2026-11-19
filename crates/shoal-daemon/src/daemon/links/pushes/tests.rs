@@ -49,6 +49,7 @@ async fn setup_with(
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     (root, manager, workspace, caller)
 }
@@ -358,6 +359,7 @@ async fn a_parent_approves_a_push_only_with_its_own_push_permission() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     let selected = SpaceSelector::id(&child.id);
     let outcome = manager.request_push(&selected, branch(&child).await, Some(&caller));

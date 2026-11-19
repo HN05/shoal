@@ -777,6 +777,7 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
                 }),
                 granted: None,
                 read_only: false,
+                vouched: None,
             },
         )
         .await;
@@ -800,6 +801,7 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
                 execution: None,
                 granted: None,
                 read_only: false,
+                vouched: None,
             },
         )
         .await;
@@ -940,6 +942,7 @@ fn agent_caller(workspace: &crate::model::Workspace) -> crate::daemon::scope::Ca
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     }
 }
 

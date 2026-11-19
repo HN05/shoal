@@ -86,6 +86,7 @@ async fn files_from_outside_any_agent_are_the_users() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     assert_eq!(manager.attacher(Some(&terminal)).await, Attacher::User);
     let command = command_caller(&manager, &workspace, None).await;
@@ -683,6 +684,7 @@ async fn results_outlive_removal_as_long_as_its_record() {
                     execution: None,
                     granted: None,
                     read_only: false,
+                    vouched: None,
                 },
             )
             .await;
@@ -768,6 +770,7 @@ async fn results_stay_reachable_when_a_workspace_between_goes() {
                 execution: None,
                 granted: None,
                 read_only: false,
+                vouched: None,
             },
         )
         .await;
@@ -1147,6 +1150,7 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
                 execution: None,
                 granted: None,
                 read_only: false,
+                vouched: None,
             },
         )
         .await;

@@ -19,6 +19,7 @@ async fn only_scoped_callers_get_the_agent_token_of_a_host_with_one() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
 
     let scoped = manager

@@ -16,6 +16,7 @@ fn caller(space: &shoal_ids::space_ids::SpaceId) -> Caller {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     }
 }
 

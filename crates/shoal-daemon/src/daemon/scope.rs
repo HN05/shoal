@@ -9,8 +9,10 @@ use crate::{
 use anyhow::{Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::hub::routing::VouchedSpace;
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::SpaceSelector;
+use std::sync::Arc;
 
 mod access;
 mod reach;
@@ -36,6 +38,10 @@ pub struct Caller {
     /// It only reads what its scope reaches, as the gate's runs do, and is
     /// refused every request that would change anything.
     pub read_only: bool,
+    /// What another machine vouches for this caller, a process of a space
+    /// there, with the request it forwarded: the reach of its scope and its
+    /// permissions, which decide that request and no other.
+    pub vouched: Option<Arc<VouchedSpace>>,
 }
 
 #[derive(Debug, Clone)]
@@ -193,6 +199,7 @@ impl Caller {
             execution: None,
             granted: None,
             read_only: false,
+            vouched: None,
         }
     }
 

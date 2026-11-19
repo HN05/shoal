@@ -213,6 +213,7 @@ async fn scoped_callers_set_only_their_own_progress_read_below_and_unblock_below
                 execution: None,
                 granted: None,
                 read_only: false,
+                vouched: None,
             },
         )
         .await;

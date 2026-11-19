@@ -267,7 +267,7 @@ impl Manager {
             Acting::Deny => Err(denied(&action.action, &permissions, action.key)),
             Acting::Propose if caller.granted == Some(action.key) => Ok(Taken::AtOnce),
             // Its approval requests live on its own machine.
-            Acting::Propose if self.vouched_space(&caller.space_id).is_some() => {
+            Acting::Propose if caller.vouched.is_some() => {
                 Err(proposed_elsewhere(&action.action, &permissions, action.key))
             }
             Acting::Propose => self.await_action_decision(caller, action, using).await,

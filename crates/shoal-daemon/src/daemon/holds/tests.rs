@@ -60,6 +60,7 @@ async fn holds_are_idempotent_persistent_and_scoped() {
                 }),
                 granted: None,
                 read_only: false,
+                vouched: None,
             },
         )
         .await;
@@ -278,6 +279,7 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
                     execution: None,
                     granted: None,
                     read_only: false,
+                    vouched: None,
                 },
             )
             .await;

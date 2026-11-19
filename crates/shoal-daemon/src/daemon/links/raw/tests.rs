@@ -40,6 +40,7 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     let request = |method| RawRequest {
         method,
@@ -154,6 +155,7 @@ async fn a_chats_agent_reads_as_its_account_and_writes_only_when_allowed() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     let request = |method| RawRequest {
         method,
@@ -241,6 +243,7 @@ async fn agents_download_from_their_forge_as_their_account() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     let url = &format!("http://{host}/user-attachments/assets/abc");
 

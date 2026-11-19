@@ -182,5 +182,6 @@ fn caller_in(id: &SpaceId) -> Caller {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     }
 }

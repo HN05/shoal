@@ -12,6 +12,7 @@ fn caller(starter: &crate::model::Chat) -> Caller {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     }
 }
 

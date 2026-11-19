@@ -153,6 +153,7 @@ async fn setting_a_base_rejects_cycles_and_other_repositories_and_journals_chang
                 execution: None,
                 granted: None,
                 read_only: false,
+                vouched: None,
             },
         )
         .await;

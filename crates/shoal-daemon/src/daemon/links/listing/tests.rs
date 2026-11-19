@@ -63,6 +63,7 @@ async fn a_scoped_chat_lists_items_as_the_agent_account() {
         execution: None,
         granted: None,
         read_only: false,
+        vouched: None,
     };
     for caller in [Some(&agent), None] {
         manager
