@@ -398,11 +398,28 @@ pub(crate) struct Outgoing {
 impl Outgoing {
     /// Send `bytes`, waiting for credit as the reader grants it; failing
     /// once the reader stopped reading or the link closed.
-    pub(crate) async fn write(&mut self, mut bytes: &[u8]) -> Result<()> {
+    pub(crate) async fn write(&mut self, bytes: &[u8]) -> Result<()> {
+        self.send_data(bytes, false).await
+    }
+
+    /// [`Self::write`], returning once the bytes are written to the
+    /// link's transport, as an answer that reports a change is before the
+    /// daemon may exit.
+    pub(crate) async fn write_through(&mut self, bytes: &[u8]) -> Result<()> {
+        self.send_data(bytes, true).await
+    }
+
+    /// Send `bytes` as data frames, the last written to the transport
+    /// before this returns when `through`.
+    async fn send_data(&mut self, mut bytes: &[u8], through: bool) -> Result<()> {
         while !bytes.is_empty() {
             let size = self.take_credit(bytes.len().min(CHUNK)).await?;
             let (chunk, rest) = bytes.split_at(size);
-            self.sender.send(&self.key.data(chunk)).await?;
+            let data = self.key.data(chunk);
+            match through && rest.is_empty() {
+                true => self.sender.send_written(&data).await?,
+                false => self.sender.send(&data).await?,
+            }
             bytes = rest;
         }
         Ok(())
@@ -433,11 +450,12 @@ impl Outgoing {
         }
     }
 
-    /// End the stream, with `error` when it failed.
+    /// End the stream, with `error` when it failed, returning once its end
+    /// and so everything sent before it is written to the transport.
     pub(crate) async fn end(mut self, error: Option<String>) {
         self.ended = true;
         lock(&self.state).writing.remove(&self.key);
-        let _ = self.sender.send(&self.key.end(error)).await;
+        let _ = self.sender.send_written(&self.key.end(error)).await;
     }
 }
 

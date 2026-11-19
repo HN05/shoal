@@ -244,7 +244,7 @@ impl Watcher for Link<'_> {
             return Ok(false);
         };
         // Its reader stopped reading it, or the link closed.
-        Ok(self.out.write(&frames(body)?).await.is_ok())
+        Ok(self.out.write_through(&frames(body)?).await.is_ok())
     }
 
     async fn gone(&mut self) {
