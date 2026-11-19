@@ -34,7 +34,7 @@ pub(in crate::cli::commands) async fn run(
             }
             ConfigCommand::Setup(args) => config_setup::start(&ctx, *args).await,
         },
-        ServiceCommand::Update => update::run(&ctx).await,
+        ServiceCommand::Update { version } => update::run(&ctx, version).await,
         ServiceCommand::Daemon { command } => service::run(ctx, command, daemon).await,
         ServiceCommand::Hub { command } => hub::run(&ctx, command).await,
     }

@@ -64,7 +64,8 @@ Upgrade with `brew update && brew upgrade hn05/tap/shoal`. An installation from
 the former `--HEAD` channel moves to releases with `brew reinstall
 hn05/tap/shoal`. `shoal update` refuses Homebrew installations; for a downloaded binary,
 it installs the latest GitHub release's archive for this platform when that
-release is newer, after checking it against the release's `SHA256SUMS` and its
+release is newer, or with `--version` exactly that release, older or newer,
+after checking it against the release's `SHA256SUMS` and its
 reported version, by replacing the resolved executable file, or on macOS the
 `Shoal.app` bundle holding it, which comes from the platform's archive ending
 in `-app`. Managed daemons notice the replacement and restart once daemon operations are

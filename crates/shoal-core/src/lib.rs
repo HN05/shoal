@@ -47,6 +47,7 @@ pub mod tmp_dirs;
 pub mod tools;
 pub mod transfer;
 pub mod triggers;
+pub mod update;
 pub mod workers;
 
 use shoal_forge_types as forge;
