@@ -1,9 +1,11 @@
 //! The base another clone of a repository, from the same `origin`, starts a
 //! branch from for a revision this repository names: one it can fetch from
-//! that remote.
+//! that remote, or else a commit this repository carries there in a bundle
+//! of the history the origin lacks.
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
+use shoal_refs::CommitId;
 
 use super::{FETCH_SAFE_ARGS, resolve_commit, resolve_named_commit, run_isolated};
 
@@ -56,6 +58,50 @@ pub async fn fetch_branch(repo: &Path, branch: &str) -> Result<()> {
     let refspec = format!("+refs/heads/{branch}:refs/remotes/{ORIGIN}/{branch}");
     let fetch = [FETCH_SAFE_ARGS, &["--", ORIGIN, refspec.as_str()]].concat();
     run_isolated(repo, &fetch).await.map(drop)
+}
+
+/// The commit `rev` names in `repo`, which a clone of the origin that lacks
+/// it starts from once [`bundle_carried`] carried it there.
+pub async fn carried_commit(repo: &Path, rev: &str) -> Result<CommitId> {
+    resolve_commit(repo, rev, run_isolated).await
+}
+
+/// The ref a commit carried to another clone goes under there, and in the
+/// repository that bundles it while it does.
+fn carried_reference(commit: &CommitId) -> String {
+    format!("refs/shoal/carried/{commit}")
+}
+
+/// Write to `file` a bundle of `commit` with the history it has that the
+/// origin's `branch`, as `repo` last fetched it, lacks, under its carried
+/// ref, which [`fetch_carried`] takes from it in another clone.
+pub async fn bundle_carried(
+    repo: &Path,
+    file: &Path,
+    (commit, branch): (&CommitId, &str),
+) -> Result<()> {
+    let reference = carried_reference(commit);
+    let file = file.to_str().context("bundle path is not UTF-8")?;
+    run_isolated(repo, &["update-ref", &reference, commit.as_str()]).await?;
+    let fetched = format!("refs/remotes/{ORIGIN}/{branch}");
+    let bundle = [
+        "bundle", "create", "--quiet", file, &reference, "--not", &fetched,
+    ];
+    let bundled = run_isolated(repo, &bundle).await;
+    run_isolated(repo, &["update-ref", "-d", &reference]).await?;
+    bundled.map(drop)
+}
+
+/// Fetch `commit` from the bundle `file` that [`bundle_carried`] wrote into
+/// `repo` under its carried ref, after the origin's `branch`, which holds
+/// the history the bundle leaves out.
+pub async fn fetch_carried(
+    repo: &Path,
+    file: &Path,
+    (commit, branch): (&CommitId, &str),
+) -> Result<()> {
+    fetch_branch(repo, branch).await?;
+    super::bundle::fetch(repo, file, &carried_reference(commit)).await
 }
 
 #[cfg(test)]
