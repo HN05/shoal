@@ -125,10 +125,13 @@ fn a_start_on_another_machine_carries_a_base_only_this_machine_has() {
     assert_eq!(status["workspace"]["state"], "ready", "{status}");
     let base = &status["workspace"]["checkout"]["base"]["commit"];
     assert_eq!(base, commit, "{status}");
-    // Its branch holds the carried commit, which no ref of Shoal's keeps.
+    // Its branch holds the carried commit, which then no ref of Shoal's
+    // keeps.
     let path = std::path::Path::new(status["workspace"]["path"].as_str().unwrap());
-    let carried = git(path, &["for-each-ref", "refs/shoal/carried/"]);
-    assert!(carried.trim().is_empty(), "{carried}");
+    wait_for("the carried ref's removal", || {
+        let carried = git(path, &["for-each-ref", "refs/shoal/carried/"]);
+        carried.trim().is_empty().then_some(())
+    });
 }
 
 #[test]
