@@ -13,6 +13,7 @@ use shoal_protocol::hub::Member;
 use shoal_protocol::launches::{Carried, Launch, StartTarget};
 use shoal_protocol::protocol::{LaunchMethod, Launched, Operation};
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_refs::CommitId;
 
 use super::ManagerReads;
 use crate::{
@@ -119,11 +120,12 @@ impl Manager {
                 machine.name
             )
         })?;
-        let mut base_branch = None;
+        let (mut base_branch, mut commit) = (None, None);
         if let Some(base) = &launch.base {
             let carrying = (machine, &repository, origin.as_str());
-            let found = self.clone_base(carrying, base, caller).await?;
+            let (found, carried) = self.clone_base(carrying, base, caller).await?;
             (launch.base, base_branch) = (Some(found.base), Some(found.branch));
+            commit = carried;
         }
         if matches!(launch.target, Some(StartTarget::Repository(_))) {
             launch.target = None;
@@ -132,6 +134,7 @@ impl Manager {
         Ok(Carried {
             origin: Some(origin),
             base_branch,
+            commit,
         })
     }
 
@@ -139,16 +142,16 @@ impl Manager {
     /// clone of that origin on `machine` fetches it, or else, where only
     /// this machine has its commits, its commit, which this machine
     /// carries there for `caller` with the history the origin's default
-    /// branch lacks.
+    /// branch lacks, and which it returns as carried.
     async fn clone_base(
         &self,
         (machine, repository, origin): (&Member, &Repository, &str),
         base: &str,
         caller: Option<&Caller>,
-    ) -> Result<CloneBase> {
+    ) -> Result<(CloneBase, Option<CommitId>)> {
         let path = &repository.path;
         if let Some(base) = crate::git::clone_base::for_clone(path, base).await? {
-            return Ok(base);
+            return Ok((base, None));
         }
         let commit = crate::git::clone_base::carried_commit(path, base).await?;
         let lookup = crate::git::default_branch::DefaultBranchLookup::Cached;
@@ -156,10 +159,11 @@ impl Manager {
         let carrying = (repository, origin);
         let carried = (&commit, branch.as_str());
         (self.carry_commit(machine, carrying, carried, caller)).await?;
-        Ok(CloneBase {
+        let base = CloneBase {
             base: commit.to_string(),
             branch: branch.to_string(),
-        })
+        };
+        Ok((base, Some(commit)))
     }
 
     /// The registered repository `launch` starts in for `caller`: the one

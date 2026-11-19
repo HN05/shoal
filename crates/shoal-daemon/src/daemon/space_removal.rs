@@ -276,7 +276,8 @@ impl Manager {
     /// Delete the record of `space`, which `cause` removed, and give the user
     /// what only it kept: the approval requests it had not decided, the
     /// messages it had not read and its attached files, which stay for the
-    /// retention period. The forge assignments only it kept go.
+    /// retention period. The forge assignments only it kept go, and so do
+    /// the carried commits only a workspace's record kept.
     pub(crate) async fn delete_space_record(
         &self,
         space: &Space,
@@ -292,6 +293,9 @@ impl Manager {
             self.notifications.recorded(id);
         }
         (self.release_removed_assignees(space, deleted.assignees, &deleted.issues)).await;
+        if let (Some(_), Some(repository)) = (space.worktree(), &space.repository_id) {
+            self.release_carried(repository).await;
+        }
         Ok(())
     }
 

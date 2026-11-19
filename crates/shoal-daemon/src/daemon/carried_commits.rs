@@ -27,6 +27,9 @@ use super::{
 };
 use crate::model::Repository;
 
+mod retention;
+pub(crate) use retention::CarriedHolds;
+
 /// The name of a carried bundle in the temporary directory that holds it.
 const BUNDLE: &str = "carried.bundle";
 
@@ -82,8 +85,9 @@ impl Manager {
 
     /// Take the bundle of `commit` that the caller writes on `stream` once
     /// this daemon answered `request_id`, into `repository`, after the
-    /// origin's `branch`, and answer again once the repository has the
-    /// commit, holding `guard` until then.
+    /// origin's `branch`, held for the launch it is carried for, and answer
+    /// again once the repository has the commit, holding `guard` until
+    /// then.
     pub(crate) async fn receive_commits(
         self: Arc<Self>,
         mut stream: UnixStream,
@@ -92,10 +96,15 @@ impl Manager {
         guard: OperationGuard,
     ) -> Result<()> {
         protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await?;
+        self.carried_holds.take(&repository.id, &commit).await;
         let carried = (&commit, branch.as_str());
         let body = match take_bundle(&mut stream, &repository.path, carried).await {
             Ok(()) => Body::Ok,
-            Err(error) => answer::failure(&error),
+            Err(error) => {
+                // The start that waits for it fails, so no launch comes.
+                self.release_carried_hold(&commit).await;
+                answer::failure(&error)
+            }
         };
         protocol::write(&mut stream, &Response::new(request_id, body)).await?;
         drop(guard);

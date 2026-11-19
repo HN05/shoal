@@ -15,7 +15,9 @@ use crate::{
 };
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::params;
-use shoal_ids::{checkpoint_numbers::CheckpointNumber, space_ids::SpaceId};
+use shoal_ids::{
+    checkpoint_numbers::CheckpointNumber, repository_ids::RepositoryId, space_ids::SpaceId,
+};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::{BranchName, CommitId};
 use std::path::PathBuf;
@@ -147,6 +149,18 @@ impl PendingWorktree {
             source,
             git_profile,
             mode: None,
+        }
+    }
+
+    /// The revision creating this worktree starts from or compares with,
+    /// if it names one: its base, or the commit it is detached at.
+    fn revision(&self) -> Option<&str> {
+        match &self.source {
+            PendingSource::New { base }
+            | PendingSource::Existing { base, .. }
+            | PendingSource::Restore { base, .. } => base.as_deref(),
+            PendingSource::Commit { head } => Some(head.as_str()),
+            PendingSource::Copy { .. } | PendingSource::Outside { .. } => None,
         }
     }
 
@@ -408,6 +422,25 @@ impl Manager {
             .await?;
         Ok(serde_json::from_str(&plan)?)
     }
+}
+
+/// The revisions the pending worktrees of `repository`'s workspaces start
+/// from or compare with, as their plans name them.
+pub(crate) fn pending_revisions(
+    tx: &rusqlite::Transaction<'_>,
+    repository: &RepositoryId,
+) -> Result<Vec<String>> {
+    let mut plans = tx.prepare(
+        "SELECT pending_plan FROM spaces JOIN workspaces USING(id)
+         WHERE repository_id=?1 AND pending_plan IS NOT NULL",
+    )?;
+    let plans = plans.query_map([repository], |row| row.get::<_, String>(0))?;
+    let mut revisions = Vec::new();
+    for plan in plans {
+        let plan: PendingWorktree = serde_json::from_str(&plan?)?;
+        revisions.extend(plan.revision().map(str::to_owned));
+    }
+    Ok(revisions)
 }
 
 /// [`Manager::build_pending_on`] in `tx`, with `owner` the workspace that

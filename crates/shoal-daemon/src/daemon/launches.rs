@@ -87,6 +87,22 @@ impl Manager {
         if let Some(launched) = self.launch_on_machine(&mut launch, caller).await? {
             return Ok(launched);
         }
+        let carried = (launch.forwarded.as_ref()).and_then(|carried| carried.commit.clone());
+        let launched = self.launch_here(launch, source, caller).await;
+        if let Some(commit) = carried {
+            self.release_carried_hold(&commit).await;
+        }
+        launched
+    }
+
+    /// Start an agent on this machine as `launch`, which `source` made,
+    /// asks for `caller`.
+    async fn launch_here(
+        self: &std::sync::Arc<Self>,
+        mut launch: Launch,
+        source: LaunchSource,
+        caller: Option<&Caller>,
+    ) -> Result<Launched> {
         self.take_carried(&mut launch).await?;
         launches::ensure_copy_fits(&launch)?;
         launches::ensure_in_fits(&launch)?;

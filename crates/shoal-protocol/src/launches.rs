@@ -5,6 +5,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 use serde::{Deserialize, Serialize};
 
 use shoal_ids::{agent_session_ids::AgentSessionId, checkpoint_numbers::CheckpointNumber};
+use shoal_refs::CommitId;
 use shoal_schedule::priority::Priority;
 
 use crate::{
@@ -150,6 +151,11 @@ pub struct Carried {
     /// fetches before it starts.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_branch: Option<String>,
+    /// The commit the launch's base names that the other machine carried
+    /// here first, under a ref of Shoal's own, which this machine keeps
+    /// only while something it records needs the commit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<CommitId>,
 }
 
 /// What a setup launch sets up, which decides the space its agent starts in.

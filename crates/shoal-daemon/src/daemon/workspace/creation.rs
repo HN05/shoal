@@ -17,7 +17,7 @@ use crate::{
 };
 use anyhow::{Context, Result, bail, ensure};
 pub(super) use pending::PendingWorktree;
-pub(crate) use pending::build_pending_in;
+pub(crate) use pending::{build_pending_in, pending_revisions};
 use rusqlite::params;
 use shoal_ids::{checkpoint_numbers::CheckpointNumber, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceName;
@@ -228,7 +228,8 @@ impl Manager {
     /// Settle the creation of the recorded `workspace`, whose worktree was
     /// `materialized` under the repository's Git gate `git`: release the
     /// gate, start a configured worktree from the seed build, then record
-    /// how creation went. Removal and setup wait for it to end.
+    /// how creation went, and once it went well release the carried commits
+    /// its plan kept. Removal and setup wait for it to end.
     pub(super) async fn settle_creation(
         &self,
         repo: &Repository,
@@ -238,7 +239,9 @@ impl Manager {
     ) -> Result<Workspace> {
         let _creation = self.hold_creation(workspace, git).await;
         let materialized = self.seed_worktree(repo, workspace, materialized).await;
-        self.record_creation(workspace, materialized).await
+        let created = self.record_creation(workspace, materialized).await?;
+        self.release_carried(&repo.id).await;
+        Ok(created)
     }
 
     /// Hold the creation gate of the new `workspace` in place of the

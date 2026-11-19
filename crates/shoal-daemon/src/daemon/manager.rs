@@ -92,6 +92,8 @@ pub struct Manager {
     pub(crate) hub: crate::daemon::hub::Hub,
     /// The app store's watches.
     pub(crate) apps: crate::daemon::apps::Apps,
+    /// The commits other machines carried here for launches on their way.
+    pub(crate) carried_holds: crate::daemon::carried_commits::CarriedHolds,
 }
 
 impl Manager {
@@ -169,6 +171,7 @@ impl Manager {
             file_access: Default::default(),
             hub: Default::default(),
             apps: Default::default(),
+            carried_holds: Default::default(),
         }))
     }
 
