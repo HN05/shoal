@@ -2,8 +2,9 @@
 //! with the execution of the agent it is for, how that agent restarts and
 //! who asked, and a generation each record
 //! takes anew, which tells a newer request's record from the one it
-//! replaced. One the daemon began stays until the agent's restore applies
-//! its options, which each wrapper that reattaches meanwhile reads.
+//! replaced. Every restart the daemon begins is recorded as begun and
+//! stays until the agent's restore applies its options, which each wrapper
+//! that reattaches meanwhile reads.
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
@@ -25,8 +26,10 @@ pub(crate) struct Recorded {
     pub begun: bool,
 }
 
-/// Record `recorded`, not begun, replacing what the space had.
-pub(super) fn put(db: &Connection, recorded: &Recorded) -> Result<()> {
+/// Record `recorded`, not begun, replacing what the space had, returning
+/// the generation it takes.
+pub(super) fn put(db: &Connection, recorded: &Recorded) -> Result<String> {
+    let generation = uuid::Uuid::new_v4().to_string();
     db.execute(
         "INSERT INTO agent_restarts(space_id,restart,asked_by,recorded_at,generation,execution)
          VALUES (?1,?2,?3,?4,?5,?6)
@@ -37,11 +40,19 @@ pub(super) fn put(db: &Connection, recorded: &Recorded) -> Result<()> {
             serde_json::to_string(&recorded.restart)?,
             recorded.asked_by,
             UnixTime::now(),
-            uuid::Uuid::new_v4().to_string(),
+            generation,
             recorded.execution,
         ],
     )?;
-    Ok(())
+    Ok(generation)
+}
+
+/// Record `recorded` as begun, replacing what the space had, returning the
+/// generation it takes.
+pub(super) fn put_begun(db: &Connection, recorded: &Recorded) -> Result<String> {
+    let generation = put(db, recorded)?;
+    begin(db, &recorded.space_id, &generation)?;
+    Ok(generation)
 }
 
 /// The restart recorded for the space `id`, which it no longer has.

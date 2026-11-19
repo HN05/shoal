@@ -122,9 +122,8 @@ impl Manager {
             }
             Begun::Ended(outcome) => outcome,
         };
-        let goes_on = matches!(outcome, Ok(RestartOutcome::Waits { .. }));
-        self.end_recorded_restart(id, (!goes_on).then_some(generation.as_str()))
-            .await;
+        let ended = super::ended(&outcome).then_some(generation.as_str());
+        self.end_recorded_restart(id, ended).await;
         let ran = matches!(outcome, Ok(RestartOutcome::Restarted { .. }));
         if !answer_all(waiting, &outcome)
             && let Err(error) = &outcome
@@ -234,17 +233,6 @@ impl Manager {
         self.restarts.set_acting(id, false);
         // A newer restart recorded meanwhile waits for the watcher.
         self.signals.agent_changed();
-    }
-
-    /// Forget the restart of `generation` recorded for the space `id`,
-    /// which ended, unless a newer request replaced it.
-    async fn forget_ended_restart(&self, id: &SpaceId, generation: &str) {
-        let (space, ended) = (id.to_owned(), generation.to_owned());
-        let forgotten =
-            (self.store).write(move |tx| super::record::take_generation(tx, &space, &ended));
-        if let Err(error) = forgotten.await {
-            log!("ended restart of {id} not forgotten: {error:#}");
-        }
     }
 
     /// Tell the coordinator whose process asked for `recorded`, or else the

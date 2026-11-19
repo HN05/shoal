@@ -114,6 +114,7 @@ async fn a_space_named_restart_answers_once_its_agent_runs_again() {
         panic!("expected the agent restarted");
     };
     assert_eq!(agent.name(), "claude");
+    assert!(recorded(&manager).await.is_empty());
 }
 
 #[tokio::test]
@@ -441,14 +442,19 @@ async fn a_newer_request_restarts_now_with_the_permission_change_of_the_one_it_s
     let mut stop = execution.stop.clone();
     stop.wait_for(|stopping| *stopping).await.unwrap();
     let id = execution.plan.id.clone();
-    assert_eq!(manager.restart_change(&id).await, Some(push));
-    assert!(recorded(&manager).await.is_empty());
+    assert_eq!(manager.restart_change(&id).await, Some(push.clone()));
+    let [begun] = &recorded(&manager).await[..] else {
+        panic!("expected the restart recorded");
+    };
+    assert!(begun.begun);
+    assert_eq!(begun.restart.change, Some(push));
     run_again(&manager, &id).await;
     let outcome = restarting.await.unwrap().unwrap();
     assert!(
         matches!(outcome, RestartOutcome::Restarted { .. }),
         "{outcome:?}"
     );
+    assert!(recorded(&manager).await.is_empty());
 }
 
 #[tokio::test]
@@ -470,8 +476,9 @@ async fn a_request_after_the_restart_settled_restarts_the_agent_again_once_it_ru
     let id = execution.plan.id.clone();
     assert!(manager.settle_restart(&id).await);
     let second = request(in_place.clone());
-    // The second waits for the agent the first starts.
-    while recorded(&manager).await.is_empty() {
+    // The second waits for the agent the first starts, recorded in place
+    // of the first's begun record.
+    while !recorded(&manager).await.iter().any(|kept| !kept.begun) {
         tokio::task::yield_now().await;
     }
     run_again(&manager, &id).await;
@@ -608,15 +615,14 @@ async fn a_recorded_restart_goes_with_its_agent_rather_than_restart_the_next() {
     assert!(recorded(&manager).await.is_empty());
 }
 
-/// A workspace whose `claude` agent runs as a wrapper of this process,
-/// with the reattachment its wrapper asks for after a takeover, once the
-/// daemon began `restart`, recorded until the agent's turn ended, and it
-/// waits for the stopped agent's processes.
-async fn waiting_for_processes(
+/// A workspace whose `claude` agent runs as a wrapper of this process and
+/// works, with the reattachment its wrapper asks for after a takeover once
+/// a restart stopped the agent, and what its connection receives its stop
+/// on.
+async fn wrapped_agent(
     root: &std::path::Path,
-    manager: &Arc<Manager>,
-    restart: AgentRestart,
-) -> (Workspace, Reattach) {
+    manager: &Manager,
+) -> (Workspace, Reattach, tokio::sync::watch::Receiver<bool>) {
     let workspace = workspace(root, manager).await;
     let wrapper = crate::process::identity::capture(std::process::id())
         .unwrap()
@@ -636,24 +642,9 @@ async fn waiting_for_processes(
         .unwrap();
     track(manager, &workspace, &id, "claude", true).await;
     let space = SpaceSelector::id(&workspace.id);
-    let turn = |state| manager.set_agent_state(&space, state, None, None);
-    turn(AgentState::Working).await.unwrap();
-    let restart = AgentRestart {
-        wait: true,
-        ..restart
-    };
-    (manager.restart_space(None, &space, restart))
+    (manager.set_agent_state(&space, AgentState::Working, None, None))
         .await
         .unwrap();
-    turn(AgentState::Idle).await.unwrap();
-    let acting = tokio::spawn({
-        let (manager, space) = (manager.clone(), workspace.id.clone());
-        async move { manager.act_on_restart(&space).await }
-    });
-    let mut stop = started.stop.clone();
-    stop.wait_for(|stopping| *stopping).await.unwrap();
-    manager.notify_restore_waits(&id, "PID 7 survives").await;
-    assert!(!acting.await.unwrap());
     let request = Reattach {
         narrowing: Default::default(),
         mode: None,
@@ -669,6 +660,47 @@ async fn waiting_for_processes(
         awaiting_restore: Some(crate::model::Protection::restart()),
         between_runs: false,
     };
+    (workspace, request, started.stop)
+}
+
+/// Have the restart that stops the agent on `stop`, which runs as `id`,
+/// wait for the stopped agent's processes.
+async fn wait_for_processes(
+    manager: &Manager,
+    id: &ExecutionId,
+    mut stop: tokio::sync::watch::Receiver<bool>,
+) {
+    stop.wait_for(|stopping| *stopping).await.unwrap();
+    manager.notify_restore_waits(id, "PID 7 survives").await;
+}
+
+/// A workspace whose `claude` agent runs as a wrapper of this process,
+/// with the reattachment its wrapper asks for after a takeover, once the
+/// daemon began `restart`, recorded until the agent's turn ended, and it
+/// waits for the stopped agent's processes.
+async fn waiting_for_processes(
+    root: &std::path::Path,
+    manager: &Arc<Manager>,
+    restart: AgentRestart,
+) -> (Workspace, Reattach) {
+    let (workspace, request, stop) = wrapped_agent(root, manager).await;
+    let space = SpaceSelector::id(&workspace.id);
+    let restart = AgentRestart {
+        wait: true,
+        ..restart
+    };
+    (manager.restart_space(None, &space, restart))
+        .await
+        .unwrap();
+    (manager.set_agent_state(&space, AgentState::Idle, None, None))
+        .await
+        .unwrap();
+    let acting = tokio::spawn({
+        let (manager, space) = (manager.clone(), workspace.id.clone());
+        async move { manager.act_on_restart(&space).await }
+    });
+    wait_for_processes(manager, &request.execution, stop).await;
+    assert!(!acting.await.unwrap());
     (workspace, request)
 }
 
@@ -707,6 +739,63 @@ async fn a_restart_waiting_for_processes_keeps_its_options_through_takeovers() {
     assert!(manager.resume_agent_execution(id, None).await.unwrap());
     assert!(!*wrapper.unwrap().borrow());
     assert!(recorded(&manager).await.is_empty());
+}
+
+#[tokio::test]
+async fn a_restart_begun_at_once_keeps_its_options_through_a_takeover() {
+    let (root, manager) = manager().await;
+    let (workspace, request, stop) = wrapped_agent(root.path(), &manager).await;
+    let space = SpaceSelector::id(&workspace.id);
+    let change = PermissionChange::assigned("push=direct").unwrap();
+    let restart = AgentRestart {
+        in_place: true,
+        change: Some(change.clone()),
+        ..Default::default()
+    };
+    let restarting = tokio::spawn({
+        let (manager, space) = (manager.clone(), space.clone());
+        async move { manager.restart_space(None, &space, restart).await }
+    });
+    wait_for_processes(&manager, &request.execution, stop).await;
+    let outcome = restarting.await.unwrap().unwrap();
+    assert!(
+        matches!(outcome, RestartOutcome::Waits { .. }),
+        "{outcome:?}"
+    );
+
+    take_over(&manager, &request).await;
+    let id = &request.execution;
+    assert_eq!(manager.restart_change(id).await, Some(change));
+    assert!(manager.settle_restart(id).await);
+}
+
+#[tokio::test]
+async fn a_restart_under_way_keeps_the_options_of_a_request_it_took_through_a_takeover() {
+    let (root, manager) = manager().await;
+    let earlier = PermissionChange::assigned("push=direct").unwrap();
+    let restart = AgentRestart {
+        change: Some(earlier.clone()),
+        ..Default::default()
+    };
+    let (workspace, request) = waiting_for_processes(root.path(), &manager, restart).await;
+    let newer = PermissionChange::assigned("merge=direct").unwrap();
+    let restart = AgentRestart {
+        in_place: true,
+        change: Some(newer.clone()),
+        ..Default::default()
+    };
+    let space = SpaceSelector::id(&workspace.id);
+    let outcome = manager.restart_space(None, &space, restart).await.unwrap();
+    assert!(
+        matches!(outcome, RestartOutcome::Waits { .. }),
+        "{outcome:?}"
+    );
+
+    take_over(&manager, &request).await;
+    let id = &request.execution;
+    let merged = PermissionChange::then(Some(earlier), Some(newer));
+    assert_eq!(manager.restart_change(id).await, merged);
+    assert!(manager.settle_restart(id).await);
 }
 
 #[tokio::test]

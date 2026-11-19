@@ -568,15 +568,15 @@ processes are proven stopped, outside the agent queue. A chat's agent
 restarts through the same path. The daemon owns restarts: a request names a space, whose agent the daemon
 picks, and answers once the daemon restarted it, recorded the restart for
 later or skipped it, naming why, such as a protection stop that `shoal queue
-start` ends at once. A restart that waits for the agent's turn to end, or for
-its place in the machine's line of sequential restarts, is a store record of
-its space, how it restarts, its permission change and who asked, which the
-turn ends watcher that conversions use acts on, so it outlives the request and
-the daemon, and a failure with no request left to answer reaches the
-coordinator that asked or the user. Once the daemon begins it, the record stays
-until the agent's restore applies its options, as the wrapper resumes the
-agent in place or a new wrapper registers it, also while the restart waits for
-the stopped agent's processes: each wrapper that reattaches to a later daemon
+start` ends at once. Every restart is a store record of its space, how it
+restarts, its permission change and who asked, so it outlives the request and
+the daemon: the turn ends watcher that conversions use acts on one that waits
+for the agent's turn to end or for its place in the machine's line of
+sequential restarts, and a failure with no request left to answer reaches the
+coordinator that asked or the user. Once the daemon begins it, at once or when
+the watcher acts on it, the record stays until the agent's restore applies its
+options, as the wrapper resumes the agent in place or a new wrapper registers
+it, also while the restart waits for the stopped agent's processes: each wrapper that reattaches to a later daemon
 meanwhile continues it with them, and one that reattaches still running the
 agent, without the stop, lets the restart begin again. Lists, status and
 `shoal restart --cancel` take only a restart not begun yet. A newer request
