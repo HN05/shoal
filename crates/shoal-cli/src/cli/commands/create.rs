@@ -33,6 +33,7 @@ use shoal_protocol::space_names::SpaceSelector;
 /// current directory name, or at the top outside one, follow its
 /// preparation and report it.
 pub(super) async fn run(ctx: &Context, args: CreateArgs) -> Result<i32> {
+    super::start::ensure_scope_token(ctx)?;
     let parent = parent_space(ctx, args.parent.clone()).await?;
     if args.no_branch {
         return at_commit(ctx, parent, &args).await;
