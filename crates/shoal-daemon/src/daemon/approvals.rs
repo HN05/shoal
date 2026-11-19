@@ -13,8 +13,8 @@ pub(crate) use shoal_protocol::approvals::{
     ActionSpecification, ApprovalRequest, DecisionStatus, GateStep, HoldSpecification, MERGE,
     MergeSpecification, PushSpecification, Specification, Target, Undecided, UnmergeSpecification,
 };
+pub(crate) use store::{by_key, pending_count, release_decided_by, renumber};
 pub use store::{check, current, release, request_action};
-pub(crate) use store::{pending_count, release_decided_by, renumber};
 
 #[cfg(test)]
 mod tests;

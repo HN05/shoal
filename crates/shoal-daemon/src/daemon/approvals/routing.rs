@@ -433,7 +433,7 @@ impl Manager {
             }
         };
         let request = &request;
-        match self.give_gate(request).await {
+        match self.reviews.give_gate(self, request).await {
             Ok(true) => return,
             Ok(false) => {}
             Err(error) => log!(

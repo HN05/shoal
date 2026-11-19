@@ -48,9 +48,9 @@ impl Spaces for Manager {
         Box::pin(super::links::pr::current_head(workspace))
     }
 
-    fn diff_base<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<CommitId>> {
+    fn diff_base<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<CommitId>> {
         Box::pin(async move {
-            let selector = SpaceSelector::id(&workspace.id);
+            let selector = SpaceSelector::id(id);
             Ok(Manager::diff_base(self, &selector).await?.commit)
         })
     }
@@ -170,6 +170,13 @@ impl Forge for Manager {
         workspace: &'a Workspace,
     ) -> BoxFuture<'a, Result<(ForgeRepo, Account)>> {
         Box::pin(self.workspace_forge_account(workspace))
+    }
+
+    fn checkout_forge<'a>(
+        &'a self,
+        repository: &'a Repository,
+    ) -> BoxFuture<'a, Result<ForgeRepo>> {
+        Box::pin(Manager::checkout_forge(self, repository))
     }
 
     fn post<'a>(

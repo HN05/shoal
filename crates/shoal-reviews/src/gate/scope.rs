@@ -3,43 +3,42 @@
 //! change nothing. It ends with the run.
 use std::{collections::BTreeMap, ffi::OsString};
 
-use crate::daemon::{manager::Manager, operations::Operations, scope::Caller};
+use shoal_daemon_base::callers::Caller;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::paths::Paths;
 use shoal_protocol::scope_tokens::ScopeToken;
+
+use crate::{daemon::GateDaemon, env};
 
 /// A read-only scope that ends when dropped.
 pub(super) struct RunScope<'a> {
-    operations: &'a Operations,
+    daemon: &'a dyn GateDaemon,
     token: ScopeToken,
 }
 
-impl Manager {
+impl<'a> RunScope<'a> {
     /// A read-only scope of `space` for one gate run.
-    pub(super) fn gate_scope(&self, space: &SpaceId) -> RunScope<'_> {
+    pub(super) fn of(daemon: &'a dyn GateDaemon, space: &SpaceId) -> Self {
         let caller = Caller {
             read_only: true,
             ..Caller::of_space(space.clone())
         };
-        RunScope {
-            operations: &self.operations,
-            token: self.operations.issue(&caller),
-        }
+        let token = daemon.issue_scope(&caller);
+        Self { daemon, token }
     }
-}
 
-impl RunScope<'_> {
     /// The variables that give the run's `shoal` commands this scope with
     /// this daemon.
-    pub(super) fn environment(&self, paths: &crate::paths::Paths) -> BTreeMap<String, OsString> {
+    pub(super) fn environment(&self, paths: &Paths) -> BTreeMap<String, OsString> {
         BTreeMap::from([
-            (crate::env::SCOPE_TOKEN.into(), self.token.expose().into()),
-            (crate::env::STATE_DIR.into(), paths.state.clone().into()),
+            (env::SCOPE_TOKEN.into(), self.token.expose().into()),
+            (env::STATE_DIR.into(), paths.state.clone().into()),
         ])
     }
 }
 
 impl Drop for RunScope<'_> {
     fn drop(&mut self) {
-        self.operations.revoke(&self.token);
+        self.daemon.revoke_scope(&self.token);
     }
 }

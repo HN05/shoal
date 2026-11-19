@@ -1,13 +1,12 @@
 //! The local reviews the daemon runs: queueing them, running each once in
 //! a detached checkout as a one-shot agent run, started in the background
 //! without a session or terminal, recording what the reviewer found and how
-//! the workspace's agent answered it, and the review gates that wait for
-//! them. [`Reviews`] holds what they keep in memory and offers their
+//! the workspace's agent answered it, the review gates that wait for
+//! them, and the gate agent that decides approval requests. [`Reviews`] holds what they keep in memory and offers their
 //! operations; what they need of the rest of the daemon is the interface in
 //! [`daemon`].
 use std::{
     collections::HashMap,
-    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
@@ -16,7 +15,7 @@ use shoal_daemon_base::{gates::Gates, log};
 use shoal_forge_types as forge;
 #[cfg(test)]
 use shoal_protocol::time;
-use shoal_protocol::{agent, model, validate};
+use shoal_protocol::{agent, model, paths::Paths, validate};
 use shoal_store::Store;
 use tokio::sync::{Notify, watch};
 
@@ -42,7 +41,7 @@ pub mod store;
 mod view;
 
 use checkouts::HeldCheckout;
-use daemon::Records;
+use daemon::{Records, Requests};
 use reviews::ReviewId;
 
 pub use run::run;
@@ -52,8 +51,11 @@ pub struct Reviews {
     store: Store,
     gates: Arc<Gates>,
     records: Arc<dyn Records>,
-    /// The home directory an agent's launch environment is laid over.
-    home: PathBuf,
+    requests: Arc<dyn Requests>,
+    /// The daemon's paths: the home directory an agent's launch
+    /// environment is laid over, and the state directory a gate run's
+    /// `shoal` commands reach the daemon through.
+    paths: Paths,
     /// Wakes the scheduler when a review is queued.
     queued: Notify,
     /// Stops each review that has started to run.
@@ -66,27 +68,36 @@ pub struct Reviews {
     ended: watch::Sender<u64>,
     /// One-shot agent runs whose processes may still be running.
     runs: oneshot::Runs,
+    gate: gate::Gatekeeper,
 }
 
 impl Reviews {
-    pub fn new(store: Store, gates: Arc<Gates>, records: Arc<dyn Records>, home: PathBuf) -> Self {
+    pub fn new(
+        store: Store,
+        gates: Arc<Gates>,
+        records: Arc<dyn Records>,
+        requests: Arc<dyn Requests>,
+        paths: Paths,
+    ) -> Self {
         Self {
             store,
             gates,
             records,
-            home,
+            requests,
+            paths,
             queued: Notify::new(),
             cancels: Mutex::default(),
             checkouts: Mutex::default(),
             ended: watch::channel(0).0,
             runs: oneshot::Runs::default(),
+            gate: gate::Gatekeeper::default(),
         }
     }
 
-    /// The one-shot runs whose processes may still be running, which the
-    /// gate's runs share.
-    pub fn runs(&self) -> &oneshot::Runs {
-        &self.runs
+    /// Stop what every one-shot run that has not ended cleanly left, as the
+    /// daemon does after aborting them.
+    pub async fn stop_runs(&self) {
+        self.runs.stop_all().await;
     }
 
     /// Wait until a review's run ends, after subscribing.

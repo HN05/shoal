@@ -1,25 +1,33 @@
-//! What reviews need of the rest of the daemon, which implements it: the
-//! workspaces they review, their repositories and settings, the agent
-//! queue that admits their runs, the agents and coordinators that hear of
-//! them and the forge a PR's review is posted on.
+//! What reviews and the gate need of the rest of the daemon, which
+//! implements it: the workspaces they review, their repositories and
+//! settings, the agent queue that admits their runs, the agents and
+//! coordinators that hear of them, the forge a PR's review is posted on,
+//! and for the gate the spaces whose requests it decides and the approvals
+//! that carry out its verdicts.
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::PathBuf;
 
 use anyhow::Result;
 use futures_util::future::BoxFuture;
-use rusqlite::Connection;
+use rusqlite::{Connection, Transaction};
+use shoal_daemon_base::{callers::Caller, notifications::About};
 use shoal_forge::account::Account;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::approvals::ApprovalRequest;
+use shoal_protocol::config::permissions::Permissions;
+use shoal_protocol::notifications::NotificationKind;
 use shoal_protocol::repository::Selector;
+use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+use shoal_protocol::views::Viewed;
 use shoal_refs::CommitId;
 
 use crate::{
     config::Effective,
     forge::{ForgeRepo, items::reference::ItemRef, items::review::NewReview},
-    model::{Repository, Workspace},
+    model::{Repository, Space, Workspace},
 };
 
 /// The workspaces reviews are of.
@@ -38,8 +46,8 @@ pub trait Spaces: Send + Sync {
     /// on the branch, or at the commit, it records.
     fn head<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<CommitId>>;
 
-    /// The commit `shoal diff` compares `workspace` with.
-    fn diff_base<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<CommitId>>;
+    /// The commit `shoal diff` compares the workspace `id` with.
+    fn diff_base<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<CommitId>>;
 }
 
 /// The registered repositories reviews run in.
@@ -147,6 +155,10 @@ pub trait Forge: Send + Sync {
         workspace: &'a Workspace,
     ) -> BoxFuture<'a, Result<(ForgeRepo, Account)>>;
 
+    /// The forge of the registered checkout's `origin`.
+    fn checkout_forge<'a>(&'a self, repository: &'a Repository)
+    -> BoxFuture<'a, Result<ForgeRepo>>;
+
     /// Post `review` on the PR `pull` as `workspace`'s agents, recording
     /// the change as the space's own.
     fn post<'a>(
@@ -162,6 +174,103 @@ pub trait Forge: Send + Sync {
 pub trait Daemon: Spaces + Repositories + Settings + Agents + Forge {}
 
 impl<T: Spaces + Repositories + Settings + Agents + Forge> Daemon for T {}
+
+/// The spaces whose approval requests the gate decides.
+pub trait Requesters: Send + Sync {
+    /// The space `id`, a workspace or a chat.
+    fn space<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Space>>;
+
+    /// The issues and PRs linked to the space `id` as `shoal view` reads
+    /// them, without their comments.
+    fn view_items<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Viewed>>;
+
+    /// The permissions of the space `id` for an action in `repository`.
+    fn permissions<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        repository: Option<&'a RepositoryId>,
+    ) -> BoxFuture<'a, Result<Permissions>>;
+
+    /// Tell the agents of the space `id`, wherever it runs, `message`;
+    /// whether it was queued for them.
+    fn tell_space<'a>(&'a self, id: &'a SpaceId, message: String) -> BoxFuture<'a, bool>;
+
+    /// Tell the user `message`, of `kind`, about what `about` names.
+    fn notify(&self, about: About, kind: NotificationKind, message: String) -> BoxFuture<'_, ()>;
+
+    /// A scope token for `caller`, which the daemon accepts until it is
+    /// revoked.
+    fn issue_scope(&self, caller: &Caller) -> ScopeToken;
+
+    /// End the scope `token` gave.
+    fn revoke_scope(&self, token: &ScopeToken);
+}
+
+/// The approvals that carry out the gate's verdicts.
+pub trait Approvals: Send + Sync {
+    /// Approve `allowed`, which the gate allowed, as the user's approval
+    /// would.
+    fn approve<'a>(&'a self, allowed: &'a ApprovalRequest) -> BoxFuture<'a, Result<()>>;
+
+    /// Tell whoever decides the pending `request` about it.
+    fn announce<'a>(&'a self, request: &'a ApprovalRequest) -> BoxFuture<'a, ()>;
+
+    /// Remove the files a denied proposal attached.
+    fn prune_proposal_files<'a>(&'a self, denied: &'a ApprovalRequest) -> BoxFuture<'a, ()>;
+}
+
+/// Everything the gate needs of the daemon.
+pub trait GateDaemon: Daemon + Requesters + Approvals {}
+
+impl<T: Daemon + Requesters + Approvals> GateDaemon for T {}
+
+/// The approval requests the gate decides, which it reads and changes in
+/// the transactions that record its verdicts, so a verdict and the
+/// request's state change as one. Its methods run on the store's thread,
+/// so they are not futures.
+pub trait Requests: Send + Sync {
+    /// The request stored under `key`.
+    fn request(&self, db: &Connection, key: &str) -> Result<Option<ApprovalRequest>>;
+
+    /// Hand the pending, unrouted request stored under `key` to the gate;
+    /// false when it is no longer one to hand over.
+    fn give(&self, tx: &Transaction<'_>, key: &str) -> Result<bool>;
+
+    /// The pending requests the gate is deciding, oldest first.
+    fn deciding(&self, db: &Connection) -> Result<Vec<ApprovalRequest>>;
+
+    /// The pending requests the gate allowed whose approval never started.
+    fn stranded(&self, db: &Connection) -> Result<Vec<ApprovalRequest>>;
+
+    /// Record that the gate allowed the request stored under `key`.
+    fn allow(&self, tx: &Transaction<'_>, key: &str) -> Result<ApprovalRequest>;
+
+    /// Deny the request stored under `key`, as the gate did.
+    fn deny(&self, tx: &Transaction<'_>, key: &str) -> Result<ApprovalRequest>;
+
+    /// Pass the request stored under `key` on, for `reason`, quoting the
+    /// case `rule`.
+    fn escalate(
+        &self,
+        tx: &Transaction<'_>,
+        key: &str,
+        reason: &str,
+        rule: &str,
+    ) -> Result<ApprovalRequest>;
+
+    /// Give the request stored under `key`, which the gate cannot judge for
+    /// `reason`, to the normal route.
+    fn unjudged(&self, tx: &Transaction<'_>, key: &str, reason: &str) -> Result<ApprovalRequest>;
+
+    /// Give the allowed request stored under `key`, whose approval failed
+    /// with `failure`, to the normal route while it is still pending.
+    fn unapplied(
+        &self,
+        tx: &Transaction<'_>,
+        key: &str,
+        failure: &str,
+    ) -> Result<Option<ApprovalRequest>>;
+}
 
 /// The records of the spaces reviews are of, which reviews read in the
 /// connection or transaction that reads the reviews, so a review and its

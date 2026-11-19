@@ -15,24 +15,22 @@ use serde_json::Value;
 use tokio::sync::watch;
 
 use super::{
-    context::Case,
+    context::{self, Case},
     prompt,
+    scope::RunScope,
     store::{self, Session},
     verdict::{self, Invalid, Verdict},
 };
 use crate::{
+    Reviews,
     agent::Agent,
-    daemon::{
-        agent_queue::{self, OneShotAdmission, Serving},
-        approvals::ApprovalRequest,
-        log,
-        manager::Manager,
-    },
+    daemon::{Admission, GateDaemon},
+    log, oneshot,
     reviews::{FailureReason, output},
     shoal_dirs::{Contents, ShoalDir},
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
-use shoal_reviews::oneshot;
+use shoal_protocol::approvals::ApprovalRequest;
 
 /// A run still running after this long is stopped; a decision that long
 /// has stopped making progress.
@@ -76,18 +74,23 @@ struct Prompts {
     resumed: Option<(AgentSessionId, String)>,
 }
 
-impl Manager {
+impl Reviews {
     /// Ask the gate about `request`, as its case describes it: its own
     /// agent, then its fallback once when that fails.
-    pub(super) async fn consult_gate(&self, request: &ApprovalRequest, case: &Case) -> Consulted {
+    pub(super) async fn consult_gate(
+        &self,
+        daemon: &dyn GateDaemon,
+        request: &ApprovalRequest,
+        case: &Case,
+    ) -> Consulted {
         let prompts = self.gate_prompts(request, case).await;
-        let failure = match self.ask_gate_agent(request, case, &prompts).await {
+        let failure = match self.ask_gate_agent(daemon, request, case, &prompts).await {
             Ok(decided) => return decided,
             Err(failure) => failure,
         };
         match &case.fallback {
             Some(fallback) => {
-                (self.ask_fallback(request, case, fallback, &prompts.full, failure)).await
+                (self.ask_fallback(daemon, request, case, fallback, &prompts.full, failure)).await
             }
             None => Consulted::Failed(format!("{}: {}", case.agent, described(failure))),
         }
@@ -96,11 +99,11 @@ impl Manager {
     /// The prompts of `request`: a new session's, and its subject's
     /// resumable session's when it has one.
     async fn gate_prompts(&self, request: &ApprovalRequest, case: &Case) -> Prompts {
-        let commits = self.gate_commits(case, None).await;
+        let commits = context::commits(case, None).await;
         let opening = request_prompt(request, case, commits.as_deref(), None);
         let resumed = match self.resumable_gate_session(request, case).await {
             Some(saved) => {
-                let since = self.gate_commits(case, saved.seen.as_deref()).await;
+                let since = context::commits(case, saved.seen.as_deref()).await;
                 let asked = request_prompt(request, case, since.as_deref(), Some(&case.items));
                 Some((saved.session, asked))
             }
@@ -118,19 +121,27 @@ impl Manager {
     /// none.
     async fn ask_gate_agent(
         &self,
+        daemon: &dyn GateDaemon,
         request: &ApprovalRequest,
         case: &Case,
         prompts: &Prompts,
     ) -> Result<Consulted, FailureReason> {
         if let Some((session, asked)) = &prompts.resumed {
             match self
-                .ask_gate(request, case, &case.agent, Some(session), asked)
+                .ask_gate(daemon, request, case, &case.agent, Some(session), asked)
                 .await
             {
                 Ok(returned) => {
                     let resumed = Some(session.clone());
-                    return (self.read_verdict(request, case, returned, resumed, &prompts.full))
-                        .await;
+                    return (self.read_verdict(
+                        daemon,
+                        request,
+                        case,
+                        returned,
+                        resumed,
+                        &prompts.full,
+                    ))
+                    .await;
                 }
                 Err(FailureReason::TimedOut) => return Err(FailureReason::TimedOut),
                 Err(failure) => log!(
@@ -139,14 +150,16 @@ impl Manager {
                 ),
             }
         }
-        let returned = (self.ask_gate(request, case, &case.agent, None, &prompts.full)).await?;
-        (self.read_verdict(request, case, returned, None, &prompts.full)).await
+        let returned =
+            (self.ask_gate(daemon, request, case, &case.agent, None, &prompts.full)).await?;
+        (self.read_verdict(daemon, request, case, returned, None, &prompts.full)).await
     }
 
     /// The verdict of `fallback`, in a new run of the `full` prompt, after
     /// the case's agent failed for `failure`.
     async fn ask_fallback(
         &self,
+        daemon: &dyn GateDaemon,
         request: &ApprovalRequest,
         case: &Case,
         fallback: &Agent,
@@ -158,7 +171,9 @@ impl Manager {
             request.number,
             case.agent
         );
-        let returned = self.ask_gate(request, case, fallback, None, full).await;
+        let returned = self
+            .ask_gate(daemon, request, case, fallback, None, full)
+            .await;
         let verdict = returned.and_then(|returned| {
             verdict::read(returned.result, &case.rules.escalate)
                 .map_err(|_| FailureReason::InvalidOutput)
@@ -183,6 +198,7 @@ impl Manager {
     /// or `resumed`, else in a new run of the `full` prompt.
     async fn read_verdict(
         &self,
+        daemon: &dyn GateDaemon,
         request: &ApprovalRequest,
         case: &Case,
         returned: Returned,
@@ -205,11 +221,11 @@ impl Manager {
         let told = prompt::misquoted(&quoted);
         let again = match &session {
             Some(session) => {
-                (self.ask_gate(request, case, &case.agent, Some(session), &told)).await?
+                (self.ask_gate(daemon, request, case, &case.agent, Some(session), &told)).await?
             }
             None => {
                 let prompt = format!("{full}\n\n{told}");
-                self.ask_gate(request, case, &case.agent, None, &prompt)
+                self.ask_gate(daemon, request, case, &case.agent, None, &prompt)
                     .await?
             }
         };
@@ -255,6 +271,7 @@ impl Manager {
     /// once load recovers.
     async fn ask_gate(
         &self,
+        daemon: &dyn GateDaemon,
         request: &ApprovalRequest,
         case: &Case,
         agent: &Agent,
@@ -263,12 +280,12 @@ impl Manager {
     ) -> Result<Returned, FailureReason> {
         let mut after_stop = false;
         loop {
-            let (admission, mut cancelled) = (self.admit_gate(request, case, after_stop))
+            let (admission, mut cancelled) = (self.admit_gate(daemon, request, case, after_stop))
                 .await
                 .map_err(|error| failed(request, error))?;
             let files = run_files(case, request).map_err(|error| failed(request, error))?;
             let ended = self
-                .run_gate_once(case, agent, session, prompt, &files, &mut cancelled)
+                .run_gate_once(daemon, case, agent, session, prompt, &files, &mut cancelled)
                 .await;
             match ended {
                 Ok(Ran::Stopped) => {
@@ -294,35 +311,30 @@ impl Manager {
     /// The agent queue's admission of a gate run for `request`, ranked with
     /// the work of its space, with the signal by which protection stops it;
     /// a run it stopped asks again `after_stop`.
-    async fn admit_gate(
+    async fn admit_gate<'a>(
         &self,
-        request: &ApprovalRequest,
-        case: &Case,
+        daemon: &'a dyn GateDaemon,
+        request: &'a ApprovalRequest,
+        case: &'a Case,
         after_stop: bool,
-    ) -> Result<(OneShotAdmission<'_>, watch::Receiver<bool>)> {
+    ) -> Result<(Box<dyn Admission + 'a>, watch::Receiver<bool>)> {
         let (cancel, cancelled) = watch::channel(false);
         let stop = Arc::new(cancel);
-        let queued_after = self.store.read(|tx| agent_queue::last_seq(tx)).await?;
-        let serving = Serving {
-            space: request.space_id.clone(),
-            queued_after,
-        };
-        let mut admission = (self.agent_queue).request_oneshot(
-            &case.repository.id,
-            serving,
-            after_stop,
-            move || {
-                stop.send_replace(true);
-            },
-        );
+        let stop = Box::new(move || {
+            stop.send_replace(true);
+        });
+        let (repository, space) = (&case.repository.id, &request.space_id);
+        let mut admission = daemon.admit(repository, space, after_stop, stop).await?;
         admission.admitted().await;
         Ok((admission, cancelled))
     }
 
     /// Run `agent` once in the checkout, writing to `files`, under a
     /// read-only scope of the requesting space that ends with the run.
+    #[allow(clippy::too_many_arguments)]
     async fn run_gate_once(
         &self,
+        daemon: &dyn GateDaemon,
         case: &Case,
         agent: &Agent,
         session: Option<&AgentSessionId>,
@@ -330,12 +342,12 @@ impl Manager {
         files: &Path,
         cancelled: &mut watch::Receiver<bool>,
     ) -> Result<Ran> {
-        let scope = self.gate_scope(&case.space);
+        let scope = RunScope::of(daemon, &case.space);
         let environment = scope.environment(&self.paths);
         let home = &self.paths.home;
         let command = gate_command(case, agent, session, prompt, files, &environment, home)?;
         let run = oneshot::Run {
-            runs: self.reviews.runs(),
+            runs: &self.runs,
             command: &command.command,
             directory: &case.repository.path,
             files,

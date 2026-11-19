@@ -225,7 +225,7 @@ impl Manager {
             .run(move |db| movable_records(db, &id, running).map(drop))
             .await?;
         self.reviews.ensure_none_in(self, &repo.id).await?;
-        self.ensure_no_gate_runs_in(&repo.id).await?;
+        self.reviews.ensure_no_gate_runs_in(self, &repo.id).await?;
         let stopping = self.stopping_processes(&repo.id, running);
         let processes = process::in_directory_besides(directory, stopping).await?;
         ensure!(

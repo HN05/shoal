@@ -80,7 +80,7 @@ fn lookup(db: &Connection, sql: &str, params: impl Params) -> Result<Option<Appr
         .transpose()
 }
 
-pub(super) fn by_key(db: &Connection, key: &str) -> Result<Option<ApprovalRequest>> {
+pub(crate) fn by_key(db: &Connection, key: &str) -> Result<Option<ApprovalRequest>> {
     lookup(db, BY_KEY, [key])
 }
 

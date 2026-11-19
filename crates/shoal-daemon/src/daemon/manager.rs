@@ -72,7 +72,6 @@ pub struct Manager {
     pub(crate) forge_memories: crate::daemon::links::ForgeMemories,
     /// The local reviews of workspaces.
     pub reviews: Arc<shoal_reviews::Reviews>,
-    pub(crate) gate: crate::daemon::gate::Gatekeeper,
     pub(crate) runners: crate::daemon::runner::Runners,
     /// The retry each proxied execution's proxy waits to make.
     pub(super) proxy_retries:
@@ -115,7 +114,8 @@ impl Manager {
             store.clone(),
             gates.clone(),
             Arc::new(super::reviews::ReviewRecords),
-            paths.home.clone(),
+            Arc::new(super::gate::GatedRequests),
+            paths.clone(),
         ));
         Ok(Arc::new(Self {
             config_state,
@@ -161,7 +161,6 @@ impl Manager {
             seeds: Default::default(),
             forge_memories: Default::default(),
             reviews,
-            gate: Default::default(),
             runners: Default::default(),
             proxy_retries: Default::default(),
             upstream_limits: Default::default(),

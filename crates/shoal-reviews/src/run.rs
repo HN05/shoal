@@ -395,7 +395,7 @@ impl Reviews {
         session: Option<&AgentSessionId>,
         cancelled: &mut watch::Receiver<bool>,
     ) -> Ended {
-        let reviewer = match reviewer_for(run, agent, model, session, &self.home) {
+        let reviewer = match reviewer_for(run, agent, model, session, &self.paths.home) {
             Ok(reviewer) => reviewer,
             Err(error) => {
                 log!("review by {agent}: {error:#}");
@@ -665,7 +665,7 @@ async fn review_commits(
     match target {
         ReviewTarget::Workspace => {
             let head = daemon.head(workspace).await?;
-            let base = daemon.diff_base(workspace).await?;
+            let base = daemon.diff_base(&workspace.id).await?;
             Ok(Commits { head, base })
         }
         ReviewTarget::Pr { head, base, .. } => {

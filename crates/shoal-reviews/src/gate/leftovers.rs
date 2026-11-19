@@ -5,17 +5,23 @@ use anyhow::Result;
 
 use super::run::remove_run;
 use crate::{
-    daemon::{log, manager::Manager},
+    Reviews,
+    daemon::Daemon,
+    log,
     shoal_dirs::{Contents, ShoalDir},
 };
 use shoal_ids::repository_ids::RepositoryId;
 
-impl Manager {
+impl Reviews {
     /// Refuse while a gate run is in the repository `id`'s directory, as one
     /// whose agent may still work in its checkout, which a move or removal
     /// would take from under it.
-    pub(crate) async fn ensure_no_gate_runs_in(&self, id: &RepositoryId) -> Result<()> {
-        let repository = self.repository(id).await?;
+    pub async fn ensure_no_gate_runs_in(
+        &self,
+        daemon: &dyn Daemon,
+        id: &RepositoryId,
+    ) -> Result<()> {
+        let repository = daemon.repository(id).await?;
         let dir = ShoalDir::of(&repository, Contents::GateRuns);
         let running = tokio::task::spawn_blocking(move || -> Result<bool> {
             let entries = match dir.check_own()? {
@@ -36,8 +42,8 @@ impl Manager {
 
     /// Stop and remove the gate runs a stopped daemon left in each
     /// repository's directory; the requests they decided run again.
-    pub(crate) async fn recover_gate_runs(&self) -> Result<()> {
-        for repository in self.repositories().await? {
+    pub async fn recover_gate_runs(&self, daemon: &dyn Daemon) -> Result<()> {
+        for repository in daemon.repositories().await? {
             let dir = ShoalDir::of(&repository, Contents::GateRuns);
             if !dir.check_own()? {
                 continue;
@@ -50,12 +56,12 @@ impl Manager {
                     continue;
                 }
                 let files = entry.path();
-                match self.reviews.runs().stop_leftovers(&files).await {
+                match self.runs.stop_leftovers(&files).await {
                     Ok(()) => remove_run(&files),
                     Err(error) => {
                         log!("{}: {error:#}", files.display());
-                        self.reviews.runs().track(&files);
-                        self.agent_queue.hold_oneshot(&repository.id);
+                        self.runs.track(&files);
+                        daemon.hold_admission(&repository.id);
                     }
                 }
             }

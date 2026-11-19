@@ -282,7 +282,9 @@ pub async fn run(
     spawn_supervised(&mut background, &manager, "reviews", |manager| {
         shoal_reviews::run(manager.reviews.clone(), manager)
     });
-    spawn_supervised(&mut background, &manager, "gate", gate::run);
+    spawn_supervised(&mut background, &manager, "gate", |manager| {
+        shoal_reviews::gate::run(manager.reviews.clone(), manager)
+    });
     spawn_supervised(
         &mut background,
         &manager,
@@ -354,7 +356,7 @@ pub async fn run(
     background.shutdown().await;
     // Aborting a run kills its process group; what it started elsewhere
     // carries its marker.
-    manager.reviews.runs().stop_all().await;
+    manager.reviews.stop_runs().await;
     manager.stop_remaining_work(&mut stopped).await;
     if let Some(requested) = &mut requested_exit {
         requested.answer(&manager, &stopped).await;
@@ -411,7 +413,7 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     {
         log!("{error:#}");
     }
-    let gate = manager.recover_gate_runs();
+    let gate = manager.reviews.recover_gate_runs(&*manager);
     if let Err(error) = startup.step("stopping interrupted gate runs", gate).await {
         log!("{error:#}");
     }

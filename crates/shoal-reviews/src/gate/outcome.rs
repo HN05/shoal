@@ -9,15 +9,14 @@ use super::{
     store::{self, Session},
     verdict::Verdict,
 };
-use crate::agent::Agent;
-use crate::daemon::{
-    approvals::{ApprovalRequest, gated, proposals::ProposalDecision},
-    events, log,
-    manager::Manager,
-    notifications::Source,
-};
+use crate::{Reviews, agent::Agent, daemon::GateDaemon, log};
+use shoal_daemon_base::events;
 use shoal_ids::agent_session_ids::AgentSessionId;
-use shoal_protocol::{approvals::GateVerdict, events::GateEvent, time::UnixTime};
+use shoal_protocol::{
+    approvals::{ApprovalRequest, GateVerdict},
+    events::GateEvent,
+    time::UnixTime,
+};
 
 /// A verdict as the gate's records keep it.
 struct Recorded<'a> {
@@ -28,10 +27,11 @@ struct Recorded<'a> {
     session: Option<&'a AgentSessionId>,
 }
 
-impl Manager {
+impl Reviews {
     /// Carry out what the gate made of `request`.
     pub(super) async fn conclude_gate(
         &self,
+        daemon: &dyn GateDaemon,
         request: &ApprovalRequest,
         case: &Case,
         consulted: Consulted,
@@ -44,7 +44,7 @@ impl Manager {
             } => (verdict, agent, session),
             Consulted::Failed(failure) => {
                 return self
-                    .conclude_gate_failure(request, Some(case), failure)
+                    .conclude_gate_failure(daemon, request, Some(case), failure)
                     .await;
             }
         };
@@ -62,15 +62,17 @@ impl Manager {
         };
         match &verdict {
             Verdict::Allow { .. } => {
-                (self.gate_allows(request, case, recorded(GateVerdict::Allow, None))).await
+                (self.gate_allows(daemon, request, case, recorded(GateVerdict::Allow, None))).await
             }
             Verdict::Deny { .. } => {
                 let recorded = recorded(GateVerdict::Deny, None);
-                self.gate_denies(request, &case.action, recorded).await
+                self.gate_denies(daemon, request, &case.action, recorded)
+                    .await
             }
             Verdict::Escalate { rule, .. } => {
                 let recorded = recorded(GateVerdict::Escalate, Some(rule));
-                self.gate_escalates(request, &case.action, recorded).await
+                self.gate_escalates(daemon, request, &case.action, recorded)
+                    .await
             }
         }
     }
@@ -79,6 +81,7 @@ impl Manager {
     /// such a denial does not count toward the ones that stop asking.
     pub(super) async fn conclude_gate_failure(
         &self,
+        daemon: &dyn GateDaemon,
         request: &ApprovalRequest,
         case: Option<&Case>,
         failure: String,
@@ -94,7 +97,7 @@ impl Manager {
             agent: case.map(|case| &case.agent),
             session: None,
         };
-        self.gate_denies(request, &action, recorded).await
+        self.gate_denies(daemon, request, &action, recorded).await
     }
 
     /// Keep `session` as the one the request's subject resumes, having seen
@@ -126,13 +129,19 @@ impl Manager {
 
     /// Approve `request`, which the gate allowed, as the user's approval
     /// would.
-    async fn gate_allows(&self, request: &ApprovalRequest, case: &Case, recorded: Recorded<'_>) {
+    async fn gate_allows(
+        &self,
+        daemon: &dyn GateDaemon,
+        request: &ApprovalRequest,
+        case: &Case,
+        recorded: Recorded<'_>,
+    ) {
         let (key, action, kind) = (request.key.clone(), case.action.clone(), recorded.kind);
-        let gate = gate_event(request, &recorded);
+        let (gate, requests) = (gate_event(request, &recorded), self.requests.clone());
         let allowed = self
             .store
             .write(move |tx| {
-                let allowed = gated::allow(tx, &key)?;
+                let allowed = requests.allow(tx, &key)?;
                 record(tx, &allowed, &action, kind, &gate)?;
                 Ok(allowed)
             })
@@ -141,27 +150,22 @@ impl Manager {
             Ok(allowed) => allowed,
             Err(error) => return log!("approval {}: {error:#}", request.number),
         };
-        if self.carry_out_allow(&allowed).await {
-            (self.tell_gate_coordinator(&allowed, "allowed", recorded.reason)).await;
+        if self.carry_out_allow(daemon, &allowed).await {
+            (self.tell_gate_coordinator(daemon, &allowed, "allowed", recorded.reason)).await;
         }
     }
 
     /// Approve `allowed`, which the gate allowed, as the user's approval
     /// would; false when that failed, which hands it to the normal route.
-    pub(super) async fn carry_out_allow(&self, allowed: &ApprovalRequest) -> bool {
-        let decided = self
-            .decide_approval(
-                allowed.number,
-                true,
-                Some(allowed.clone()),
-                ProposalDecision::default(),
-                None,
-            )
-            .await;
-        match decided {
-            Ok(_) => true,
+    pub(super) async fn carry_out_allow(
+        &self,
+        daemon: &dyn GateDaemon,
+        allowed: &ApprovalRequest,
+    ) -> bool {
+        match daemon.approve(allowed).await {
+            Ok(()) => true,
             Err(error) => {
-                self.pass_on_unapplied(allowed, error).await;
+                self.pass_on_unapplied(daemon, allowed, error).await;
                 false
             }
         }
@@ -170,32 +174,44 @@ impl Manager {
     /// Give an allowed request whose approval could not be carried out, and
     /// that is still pending, to the normal route, telling its agent why; one
     /// the failure outdated was answered already.
-    async fn pass_on_unapplied(&self, allowed: &ApprovalRequest, error: anyhow::Error) {
+    async fn pass_on_unapplied(
+        &self,
+        daemon: &dyn GateDaemon,
+        allowed: &ApprovalRequest,
+        error: anyhow::Error,
+    ) {
         log!("approval {}: allowed, then {error:#}", allowed.number);
         let (key, failure) = (allowed.key.clone(), format!("{error:#}"));
+        let requests = self.requests.clone();
         let marked = self
             .store
-            .write(move |tx| gated::unapplied(tx, &key, &failure))
+            .write(move |tx| requests.unapplied(tx, &key, &failure))
             .await;
         let pending = match marked {
             Ok(Some(pending)) => pending,
             Ok(None) => return,
             Err(error) => return log!("approval {}: {error:#}", allowed.number),
         };
-        (self.tell_space(&pending.space_id, unapplied_message(&pending, &error))).await;
-        self.notify_approval(&pending).await;
+        (daemon.tell_space(&pending.space_id, unapplied_message(&pending, &error))).await;
+        daemon.announce(&pending).await;
     }
 
     /// End `request` as the gate denied it, or as its failure did, and tell
     /// the agent why and that it may ask again once it changed what the
     /// reason names.
-    async fn gate_denies(&self, request: &ApprovalRequest, action: &str, recorded: Recorded<'_>) {
+    async fn gate_denies(
+        &self,
+        daemon: &dyn GateDaemon,
+        request: &ApprovalRequest,
+        action: &str,
+        recorded: Recorded<'_>,
+    ) {
         let (key, action, kind) = (request.key.clone(), action.to_owned(), recorded.kind);
-        let gate = gate_event(request, &recorded);
+        let (gate, requests) = (gate_event(request, &recorded), self.requests.clone());
         let denied = self
             .store
             .write(move |tx| {
-                let denied = gated::deny(tx, &key)?;
+                let denied = requests.deny(tx, &key)?;
                 record(tx, &denied, &action, kind, &gate)?;
                 Ok(denied)
             })
@@ -205,11 +221,11 @@ impl Manager {
             Err(error) => return log!("approval {}: {error:#}", request.number),
         };
         if denied.target.is_proposal() {
-            self.prune_proposal_files(&denied).await;
+            daemon.prune_proposal_files(&denied).await;
         }
-        (self.tell_space(&denied.space_id, denial_message(&denied, &recorded))).await;
+        (daemon.tell_space(&denied.space_id, denial_message(&denied, &recorded))).await;
         let verb = denial_verb(recorded.kind);
-        self.tell_gate_coordinator(&denied, verb, recorded.reason)
+        self.tell_gate_coordinator(daemon, &denied, verb, recorded.reason)
             .await;
     }
 
@@ -217,6 +233,7 @@ impl Manager {
     /// normal route, to the nearest space above with an agent or the user.
     async fn gate_escalates(
         &self,
+        daemon: &dyn GateDaemon,
         request: &ApprovalRequest,
         action: &str,
         recorded: Recorded<'_>,
@@ -227,11 +244,11 @@ impl Manager {
             recorded.rule.unwrap_or_default(),
         );
         let rule = rule.to_owned();
-        let gate = gate_event(request, &recorded);
+        let (gate, requests) = (gate_event(request, &recorded), self.requests.clone());
         let escalated = self
             .store
             .write(move |tx| {
-                let escalated = gated::escalate(tx, &key, &reason, &rule)?;
+                let escalated = requests.escalate(tx, &key, &reason, &rule)?;
                 record(tx, &escalated, &action, kind, &gate)?;
                 Ok(escalated)
             })
@@ -240,14 +257,20 @@ impl Manager {
             Ok(escalated) => escalated,
             Err(error) => return log!("approval {}: {error:#}", request.number),
         };
-        self.notify_approval(&escalated).await;
+        daemon.announce(&escalated).await;
         let message = escalation_message(&escalated, recorded.reason);
-        self.tell_space(&escalated.space_id, message).await;
+        daemon.tell_space(&escalated.space_id, message).await;
     }
 
     /// Tell the coordinator of the request's space, in one line, that the
     /// gate `did` the request for `reason`.
-    async fn tell_gate_coordinator(&self, request: &ApprovalRequest, did: &str, reason: &str) {
+    async fn tell_gate_coordinator(
+        &self,
+        daemon: &dyn GateDaemon,
+        request: &ApprovalRequest,
+        did: &str,
+        reason: &str,
+    ) {
         let Some(name) = &request.space else {
             return;
         };
@@ -256,15 +279,7 @@ impl Manager {
             request.number,
             request.subject()
         );
-        (self.tell_coordinator(
-            name,
-            Some(&request.space_id),
-            None,
-            line,
-            Vec::new(),
-            Source::Daemon,
-        ))
-        .await;
+        (daemon.tell_coordinator(name, &request.space_id, line)).await;
     }
 }
 

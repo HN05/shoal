@@ -2,21 +2,31 @@
 //! the service over: one workspace, a worktree of a real repository on its
 //! own branch, recorded in a temporary store, under a global config a test
 //! gives, whose one-shot runs the agent queue admits at once, except a run
-//! protection stopped, which waits until a test says load recovered.
+//! protection stopped, which waits until a test says load recovered. The
+//! approval requests the gate decides are kept in memory and change as the
+//! daemon's records do; approving one records it as approved.
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result, bail};
 use futures_util::future::BoxFuture;
-use rusqlite::Connection;
-use shoal_daemon_base::gates::Gates;
+use rusqlite::{Connection, Transaction};
+use shoal_daemon_base::{callers::Caller, gates::Gates, notifications::About};
 use shoal_forge::account::Account;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::approvals::{ApprovalRequest, DecisionStatus, GateStep};
+use shoal_protocol::config::permissions::Permissions;
+use shoal_protocol::item_numbers::ItemNumber;
+use shoal_protocol::notifications::NotificationKind;
+use shoal_protocol::paths::Paths;
 use shoal_protocol::repository::Selector;
+use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+use shoal_protocol::views::Viewed;
 use shoal_refs::CommitId;
 use shoal_store::Store;
 use tokio::sync::watch;
@@ -24,10 +34,13 @@ use tokio::sync::watch;
 use crate::{
     Reviews,
     config::{Config, Effective, repo::ConfigLayers},
-    daemon::{Admission, Agents, Forge, Records, Repositories, Settings, Spaces},
+    daemon::{
+        Admission, Agents, Approvals, Forge, Records, Repositories, Requesters, Requests, Settings,
+        Spaces,
+    },
     forge::{ForgeRepo, items::reference::ItemRef, items::review::NewReview},
     git,
-    model::{Repository, Workspace},
+    model::{Repository, Space, Workspace},
     shoal_dirs::{Contents, ShoalDir},
     test_support,
 };
@@ -37,6 +50,7 @@ pub(crate) struct Fixture {
     pub(crate) root: tempfile::TempDir,
     pub(crate) reviews: Arc<Reviews>,
     pub(crate) daemon: Arc<StandIn>,
+    pub(crate) requests: Arc<StandInRequests>,
     pub(crate) workspace: Workspace,
     pub(crate) repository: Repository,
     /// The repository's directory of review runs.
@@ -62,9 +76,22 @@ impl Fixture {
             workspace: "workspace",
             name: "fix-login",
         });
-        let home = root.path().join("home");
-        let reviews = Reviews::new(store, Arc::new(Gates::default()), records, home);
+        let state = root.path().join("state");
+        let paths = Paths {
+            home: root.path().join("home"),
+            socket: state.join("daemon.sock"),
+            state,
+        };
+        let requests = Arc::new(StandInRequests::default());
+        let gates = Arc::new(Gates::default());
+        let reviews = Reviews::new(store, gates, records, requests.clone(), paths);
         let daemon = StandIn {
+            requests: requests.clone(),
+            notified: Mutex::default(),
+            announced: Mutex::default(),
+            approve_fails: AtomicBool::new(false),
+            space_gone: AtomicBool::new(false),
+            scopes: Mutex::default(),
             config: Mutex::new(test_support::global_config(config)),
             repository: repository.clone(),
             workspace: workspace.clone(),
@@ -78,6 +105,7 @@ impl Fixture {
             root,
             reviews: Arc::new(reviews),
             daemon: Arc::new(daemon),
+            requests,
             workspace,
             runs: ShoalDir::of(&repository, Contents::ReviewRuns),
             repository,
@@ -88,6 +116,12 @@ impl Fixture {
     pub(crate) fn run_reviews(&self) {
         let daemon: Arc<dyn crate::daemon::Daemon> = self.daemon.clone();
         tokio::spawn(crate::run(self.reviews.clone(), daemon));
+    }
+
+    /// Run the gate on the requests it decides in the background.
+    pub(crate) fn run_gate(&self) {
+        let daemon: Arc<dyn crate::daemon::GateDaemon> = self.daemon.clone();
+        tokio::spawn(crate::gate::run(self.reviews.clone(), daemon));
     }
 
     /// Make `config` the global config later operations read.
@@ -165,6 +199,17 @@ pub(crate) async fn store(path: PathBuf, id: &'static str) -> Store {
 
 /// The rest of the daemon as the fixture's workspace sees it.
 pub(crate) struct StandIn {
+    requests: Arc<StandInRequests>,
+    /// What the user was told, by kind.
+    pub(crate) notified: Mutex<Vec<(NotificationKind, String)>>,
+    /// The keys of the requests announced to whoever decides them.
+    pub(crate) announced: Mutex<Vec<String>>,
+    /// Whether approving a request fails, as when what it does cannot run.
+    pub(crate) approve_fails: AtomicBool,
+    /// Whether the workspace is gone, as a request that outlives it finds.
+    pub(crate) space_gone: AtomicBool,
+    /// The scope tokens issued, each with whether it is still live.
+    pub(crate) scopes: Mutex<Vec<(ScopeToken, Caller, bool)>>,
     config: Mutex<Config>,
     repository: Repository,
     workspace: Workspace,
@@ -209,9 +254,9 @@ impl Spaces for StandIn {
         Box::pin(revision(&workspace.path, &["rev-parse", "HEAD"]))
     }
 
-    fn diff_base<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<CommitId>> {
+    fn diff_base<'a>(&'a self, _id: &'a SpaceId) -> BoxFuture<'a, Result<CommitId>> {
         let base = ["merge-base", "main", "HEAD"];
-        Box::pin(async move { revision(&workspace.path, &base).await })
+        Box::pin(async move { revision(&self.workspace.path, &base).await })
     }
 }
 
@@ -344,6 +389,13 @@ impl Forge for StandIn {
         Box::pin(async { bail!("the repository has no forge") })
     }
 
+    fn checkout_forge<'a>(
+        &'a self,
+        _repository: &'a Repository,
+    ) -> BoxFuture<'a, Result<ForgeRepo>> {
+        Box::pin(async { bail!("the repository has no forge") })
+    }
+
     fn post<'a>(
         &'a self,
         _workspace: &'a Workspace,
@@ -372,5 +424,246 @@ impl Records for StandInRecords {
     ) -> Result<Vec<SpaceId>> {
         let listed = repository.is_none_or(|repository| repository.as_str() == "repo");
         Ok(listed.then(|| self.workspace.into()).into_iter().collect())
+    }
+}
+
+/// The workspace asks the gate, while it exists.
+impl Requesters for StandIn {
+    fn space<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Space>> {
+        Box::pin(async move {
+            let gone = self.space_gone.load(Ordering::SeqCst);
+            let found = (*id == self.workspace.id && !gone).then(|| self.workspace.clone().into());
+            found.with_context(|| format!("no space {id}"))
+        })
+    }
+
+    fn view_items<'a>(&'a self, _id: &'a SpaceId) -> BoxFuture<'a, Result<Viewed>> {
+        Box::pin(async {
+            Ok(Viewed {
+                items: Vec::new(),
+                views: Vec::new(),
+            })
+        })
+    }
+
+    fn permissions<'a>(
+        &'a self,
+        _id: &'a SpaceId,
+        _repository: Option<&'a RepositoryId>,
+    ) -> BoxFuture<'a, Result<Permissions>> {
+        let permissions = (self.settings_now())
+            .and_then(|settings| crate::config::permissions::resolve(&settings, None));
+        Box::pin(async move { permissions })
+    }
+
+    fn tell_space<'a>(&'a self, _id: &'a SpaceId, message: String) -> BoxFuture<'a, bool> {
+        self.messages.lock().unwrap().push(message);
+        self.requests.changed();
+        Box::pin(async { true })
+    }
+
+    fn notify(&self, _about: About, kind: NotificationKind, message: String) -> BoxFuture<'_, ()> {
+        self.notified.lock().unwrap().push((kind, message));
+        Box::pin(async {})
+    }
+
+    fn issue_scope(&self, caller: &Caller) -> ScopeToken {
+        let mut scopes = self.scopes.lock().unwrap();
+        let token = ScopeToken::from(format!("scope-{}", scopes.len()));
+        scopes.push((token.clone(), caller.clone(), true));
+        token
+    }
+
+    fn revoke_scope(&self, token: &ScopeToken) {
+        let mut scopes = self.scopes.lock().unwrap();
+        for (issued, _, live) in scopes.iter_mut() {
+            *live &= issued != token;
+        }
+    }
+}
+
+/// Approving a request records it as approved, unless approvals fail.
+impl Approvals for StandIn {
+    fn approve<'a>(&'a self, allowed: &'a ApprovalRequest) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+            if self.approve_fails.load(Ordering::SeqCst) {
+                bail!("the push cannot run");
+            }
+            (self.requests).change(&allowed.key, |request| {
+                request.status = DecisionStatus::Approved;
+                Ok(())
+            })?;
+            Ok(())
+        })
+    }
+
+    fn announce<'a>(&'a self, request: &'a ApprovalRequest) -> BoxFuture<'a, ()> {
+        self.announced.lock().unwrap().push(request.key.clone());
+        self.requests.changed();
+        Box::pin(async {})
+    }
+
+    fn prune_proposal_files<'a>(&'a self, _denied: &'a ApprovalRequest) -> BoxFuture<'a, ()> {
+        Box::pin(async {})
+    }
+}
+
+/// Approval requests in memory, in the order they were made.
+pub(crate) struct StandInRequests {
+    requests: Mutex<Vec<ApprovalRequest>>,
+    /// Counts what changed a request or told someone of one.
+    changes: watch::Sender<u64>,
+}
+
+impl Default for StandInRequests {
+    fn default() -> Self {
+        Self {
+            requests: Mutex::default(),
+            changes: watch::channel(0).0,
+        }
+    }
+}
+
+impl StandInRequests {
+    /// Wait for the next change of a request, or a message or notice of
+    /// one, after subscribing.
+    pub(crate) fn changes(&self) -> watch::Receiver<u64> {
+        self.changes.subscribe()
+    }
+
+    fn changed(&self) {
+        self.changes.send_modify(|changes| *changes += 1);
+    }
+
+    /// Record `request` under a key and number of its own.
+    pub(crate) fn add(&self, request: ApprovalRequest) -> ApprovalRequest {
+        let mut requests = self.requests.lock().unwrap();
+        let item = requests.len() as u32 + 1;
+        let request = ApprovalRequest {
+            key: format!("request-{item}"),
+            number: ItemNumber {
+                space: 1.into(),
+                item,
+            },
+            ..request
+        };
+        requests.push(request.clone());
+        request
+    }
+
+    /// The request stored under `key`.
+    pub(crate) fn get(&self, key: &str) -> Option<ApprovalRequest> {
+        let requests = self.requests.lock().unwrap();
+        requests.iter().find(|request| request.key == key).cloned()
+    }
+
+    /// Apply `change` to the request stored under `key`.
+    fn change(
+        &self,
+        key: &str,
+        change: impl FnOnce(&mut ApprovalRequest) -> Result<()>,
+    ) -> Result<ApprovalRequest> {
+        let mut requests = self.requests.lock().unwrap();
+        let request = (requests.iter_mut().find(|request| request.key == key))
+            .context("the approval request no longer exists")?;
+        change(request)?;
+        let changed = request.clone();
+        drop(requests);
+        self.changed();
+        Ok(changed)
+    }
+
+    /// Apply `change` to the request stored under `key` while the gate
+    /// still decides it.
+    fn with_gate(
+        &self,
+        key: &str,
+        change: impl FnOnce(&mut ApprovalRequest),
+    ) -> Result<ApprovalRequest> {
+        self.change(key, |request| {
+            anyhow::ensure!(
+                request.status == DecisionStatus::Pending
+                    && request.gate == Some(GateStep::Deciding),
+                "approval request {} is no longer the gate's to decide",
+                request.number
+            );
+            change(request);
+            Ok(())
+        })
+    }
+
+    fn pending_at(&self, step: GateStep) -> Vec<ApprovalRequest> {
+        let requests = self.requests.lock().unwrap();
+        (requests.iter())
+            .filter(|request| request.status == DecisionStatus::Pending)
+            .filter(|request| request.gate.as_ref() == Some(&step))
+            .cloned()
+            .collect()
+    }
+}
+
+impl Requests for StandInRequests {
+    fn request(&self, _db: &Connection, key: &str) -> Result<Option<ApprovalRequest>> {
+        Ok(self.get(key))
+    }
+
+    fn give(&self, _tx: &Transaction<'_>, key: &str) -> Result<bool> {
+        let given = self.change(key, |request| {
+            if request.status == DecisionStatus::Pending && request.gate.is_none() {
+                request.gate = Some(GateStep::Deciding);
+            }
+            Ok(())
+        })?;
+        Ok(given.gate == Some(GateStep::Deciding))
+    }
+
+    fn deciding(&self, _db: &Connection) -> Result<Vec<ApprovalRequest>> {
+        Ok(self.pending_at(GateStep::Deciding))
+    }
+
+    fn stranded(&self, _db: &Connection) -> Result<Vec<ApprovalRequest>> {
+        Ok(self.pending_at(GateStep::Allowed))
+    }
+
+    fn allow(&self, _tx: &Transaction<'_>, key: &str) -> Result<ApprovalRequest> {
+        self.with_gate(key, |request| request.gate = Some(GateStep::Allowed))
+    }
+
+    fn deny(&self, _tx: &Transaction<'_>, key: &str) -> Result<ApprovalRequest> {
+        self.with_gate(key, |request| request.status = DecisionStatus::Denied)
+    }
+
+    fn escalate(
+        &self,
+        _tx: &Transaction<'_>,
+        key: &str,
+        reason: &str,
+        rule: &str,
+    ) -> Result<ApprovalRequest> {
+        let (reason, rule) = (reason.to_owned(), rule.to_owned());
+        let escalated = GateStep::Escalated { reason, rule };
+        self.with_gate(key, |request| request.gate = Some(escalated))
+    }
+
+    fn unjudged(&self, _tx: &Transaction<'_>, key: &str, reason: &str) -> Result<ApprovalRequest> {
+        let reason = reason.to_owned();
+        let unjudged = GateStep::Unjudged { reason };
+        self.with_gate(key, |request| request.gate = Some(unjudged))
+    }
+
+    fn unapplied(
+        &self,
+        _tx: &Transaction<'_>,
+        key: &str,
+        failure: &str,
+    ) -> Result<Option<ApprovalRequest>> {
+        let error = failure.to_owned();
+        let changed = self.change(key, |request| {
+            if request.status == DecisionStatus::Pending {
+                request.gate = Some(GateStep::Unapplied { error });
+            }
+            Ok(())
+        })?;
+        Ok((changed.status == DecisionStatus::Pending).then_some(changed))
     }
 }
