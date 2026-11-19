@@ -201,7 +201,7 @@ fn another_machines_space_lists_below_its_parent_naming_its_machine() {
         "spaces": [
             {"machine": "laptop", "id": "remote", "number": 7, "name": "remote child",
              "kind": "chat", "status": "needs-input", "parent": parent.id,
-             "reported_at": 0},
+             "running": "codex", "reported_at": 0},
         ],
     }))
     .unwrap();
@@ -223,4 +223,6 @@ fn another_machines_space_lists_below_its_parent_naming_its_machine() {
     // The hub last saw it, and the space shows as its machine reported it.
     assert!(rows[1].contains("laptop, seen"), "{rows:?}");
     assert!(rows[1].contains("needs input"), "{rows:?}");
+    // Without a status line, it names the agent that runs there.
+    assert!(rows[1].trim_end().ends_with("codex"), "{rows:?}");
 }

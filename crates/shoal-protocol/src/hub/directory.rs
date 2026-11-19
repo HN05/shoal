@@ -41,6 +41,10 @@ pub struct SpaceSummary {
     /// pass up and decides their requests.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub agent: bool,
+    /// The name of the agent that runs there, as `--agent` takes it, while
+    /// one runs that Shoal did not stop.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub running: Option<crate::agent::Agent>,
     /// Its effective permissions, which narrow those of the spaces below it
     /// on other machines.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -137,6 +141,7 @@ impl Listed {
                 status: space.status,
                 agent_state: space.agent_state,
                 agent: space.agent,
+                running: space.running.clone(),
                 permissions: space.permissions,
                 chat_modes: space.chat_modes.clone(),
                 progress: space.progress.clone(),

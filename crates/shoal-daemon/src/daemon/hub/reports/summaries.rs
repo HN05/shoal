@@ -9,11 +9,12 @@ use tokio::time::Instant;
 use anyhow::Result;
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
+    agent::Agent,
     approvals::{ApprovalRequest, DecisionStatus},
     config::permissions::Permissions,
     hub::directory::{RepositoryOrigin, SpaceSummary},
     list_status::ListStatus,
-    model::{ByKind, QueueEntry, Repository, Space},
+    model::{ByKind, QueueEntry, Repository, RunningAgent, Space},
     questions::Question,
 };
 
@@ -66,6 +67,7 @@ impl Manager {
         let questions = self.open_questions().await?;
         let mut approvals = self.approval_requests(None).await?;
         approvals.retain(|request| request.status == DecisionStatus::Pending);
+        let running = running_agents(self.running_agents().await?);
         let agents = self.tracked_agents().await;
         let (parents, with_agents) = (self.store)
             .run(move |db| {
@@ -80,6 +82,7 @@ impl Manager {
             approvals,
             parents,
             agents: with_agents,
+            running,
         };
         let repositories = self.repositories().await?;
         let mut summaries = HashMap::new();
@@ -122,7 +125,8 @@ impl Manager {
 /// What a summary reads besides a space's record: the spaces whose agent's
 /// stop saved work to restore, the agents queued to start, the open
 /// questions and pending approval requests of every space, the space above
-/// each, which may run on another machine, and the spaces with an agent.
+/// each, which may run on another machine, the spaces with an agent, and
+/// the agent that runs in each.
 struct Around {
     stopped: HashSet<SpaceId>,
     queued: Vec<QueueEntry>,
@@ -130,6 +134,16 @@ struct Around {
     approvals: Vec<ApprovalRequest>,
     parents: HashMap<SpaceId, SpaceId>,
     agents: HashSet<SpaceId>,
+    running: HashMap<SpaceId, Agent>,
+}
+
+/// The agent each space runs among `agents`, by name, where Shoal did not
+/// stop it.
+fn running_agents(agents: Vec<RunningAgent>) -> HashMap<SpaceId, Agent> {
+    (agents.into_iter())
+        .filter(|running| running.stopped.is_none())
+        .filter_map(|running| Some((running.space_id, running.agent?)))
+        .collect()
 }
 
 /// The summary of `space`, of `repository`, with what `around` holds of it.
@@ -138,6 +152,7 @@ fn summary(space: Space, repository: Option<RepositoryOrigin>, around: &Around) 
     let (id, number, name) = (space.id.clone(), space.number, space.name.clone());
     let parent = around.parents.get(&space.id).cloned();
     let agent = around.agents.contains(&space.id);
+    let running = around.running.get(&space.id).cloned();
     let (mode, progress) = (space.mode.clone(), space.progress.clone());
     let agent_state = space.agent_state.map(|status| status.state);
     let stopped = around.stopped.contains(&id);
@@ -166,6 +181,7 @@ fn summary(space: Space, repository: Option<RepositoryOrigin>, around: &Around) 
         status,
         agent_state,
         agent,
+        running,
         permissions: None,
         chat_modes: Vec::new(),
         progress,

@@ -110,6 +110,7 @@ fn listed(space: KnownSpace) -> Listed {
             status: space.unready.unwrap_or(ListStatus::Inactive),
             agent_state: None,
             agent: false,
+            running: None,
             permissions: None,
             chat_modes: Vec::new(),
             progress: None,

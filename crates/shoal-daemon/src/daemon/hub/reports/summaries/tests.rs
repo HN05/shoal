@@ -1,3 +1,4 @@
+use serde_json::json;
 use shoal_protocol::{model::Workspace, state::WorkspaceState};
 
 use super::*;
@@ -33,7 +34,33 @@ fn around() -> Around {
         approvals: Vec::new(),
         parents: HashMap::new(),
         agents: HashSet::new(),
+        running: HashMap::new(),
     }
+}
+
+/// An agent of the space `space` as the daemon lists it, named `agent`,
+/// stopped by Shoal when `stopped`.
+fn agent_of(space: &str, agent: Option<&str>, stopped: bool) -> RunningAgent {
+    let protection = json!({"reason": "memory", "resumes_when": "memory frees"});
+    serde_json::from_value(json!({
+        "execution": format!("{space}-execution"), "space_id": space, "agent": agent,
+        "restorable": true, "stopped": stopped.then_some(protection),
+    }))
+    .unwrap()
+}
+
+#[test]
+fn a_space_reports_the_agent_it_runs_unless_shoal_stopped_it_or_its_name_is_unknown() {
+    let running = running_agents(vec![
+        agent_of("working", Some("codex"), false),
+        agent_of("protected", Some("claude"), true),
+        agent_of("disconnected", None, false),
+    ]);
+    let codex = Agent::from("codex");
+    assert_eq!(
+        running,
+        [(SpaceId::from("working".to_owned()), codex)].into()
+    );
 }
 
 #[test]

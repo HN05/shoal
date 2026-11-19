@@ -879,8 +879,9 @@ upgrade to run. A refused machine keeps working on its own.
 Each machine keeps its spaces and reports a summary of each to the hub as it
 changes, all of them again whenever its link opens: its number and name, its
 kind, its repository by origin, the space above it, which may run on another
-machine, its mode, what lists show it doing, whether it has an agent, its
-progress, and its open questions and approval requests. `shoal list`, `shoal inbox` and
+machine, its mode, what lists show it doing, whether it has an agent and
+the name of the one that runs there, its progress, and its open questions and
+approval requests. `shoal list`, `shoal inbox` and
 `shoal status <space>` on any machine of the hub show the other machines'
 spaces as their machines last reported them, and once they do, every row names
 its machine; a space a scoped caller's scope reaches, through the spaces above

@@ -43,7 +43,8 @@ pub(super) fn machine_title_limit(width: Option<usize>) -> Option<WidthLimit> {
     })
 }
 
-/// The row of another machine's space, as its machine last reported it.
+/// The row of another machine's space, as its machine last reported it,
+/// naming the agent it runs where its status line does not take the place.
 pub(super) fn remote_row(
     remote: &Remote,
     repository: Cell,
@@ -63,6 +64,7 @@ pub(super) fn remote_row(
             progress_cell(space.progress.as_ref()),
             (
                 status_line(space.progress.as_ref())
+                    .or(space.running.as_ref().map(|agent| agent.name()))
                     .unwrap_or_default()
                     .to_owned(),
                 None,
