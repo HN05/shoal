@@ -79,7 +79,13 @@ async fn keep_attached(
     let mut wait = FIRST_WAIT;
     loop {
         let space = SpaceSelector::id(space);
-        let attached = crate::client::attaching::attach(&ctx.paths, space, viewer.clone()).await;
+        // The terminal is raw, so Ctrl-C is a key, which stops a request
+        // whose answer does not come.
+        let asked = crate::client::attaching::attach(&ctx.paths, space, viewer.clone());
+        let attached = tokio::select! {
+            attached = asked => attached,
+            () = ctrl_c(&mut keys) => bail!("stopped attaching to machine {machine}"),
+        };
         let (screen, input) = match attached {
             Ok(attached) => attached,
             Err(error) if viewer.again.is_some() && lost(&error) => {
@@ -232,16 +238,18 @@ async fn stop_on_ctrl_c(
     wait: Duration,
     machine: &str,
 ) -> Result<()> {
-    let waited = tokio::time::sleep(wait);
-    tokio::pin!(waited);
-    loop {
-        tokio::select! {
-            () = &mut waited => return Ok(()),
-            keys = keys.recv() => {
-                if keys.is_none_or(|keys| keys.contains(&CTRL_C)) {
-                    bail!("stopped attaching again to machine {machine}");
-                }
-            }
+    tokio::select! {
+        () = tokio::time::sleep(wait) => Ok(()),
+        () = ctrl_c(keys) => bail!("stopped attaching again to machine {machine}"),
+    }
+}
+
+/// Resolves once Ctrl-C is typed, or the terminal's input ends; the keys
+/// typed before it go nowhere.
+async fn ctrl_c(keys: &mut mpsc::UnboundedReceiver<Vec<u8>>) {
+    while let Some(typed) = keys.recv().await {
+        if typed.contains(&CTRL_C) {
+            return;
         }
     }
 }
