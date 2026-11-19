@@ -1,7 +1,9 @@
 //! The hub's listener: HTTP on `[machine.hub] listen`, which upgrades a
-//! request to the link's path to a WebSocket carrying a member's link. It
-//! handles no TLS, which a proxy or tunnel in front of it provides, and
-//! binds again once a reload changes its address or the hub role.
+//! request to the link's path to a WebSocket carrying a member's link and
+//! forwards a member's request under a path prefix of `[machine.hub]
+//! forward` to the server it names. It handles no TLS, which a proxy or
+//! tunnel in front of it provides, and binds again once a reload changes
+//! its address or the hub role.
 use std::{
     convert::Infallible,
     net::SocketAddr,
@@ -10,10 +12,10 @@ use std::{
 };
 
 use anyhow::{Context as _, Result};
-use http_body_util::Empty;
+use http_body_util::{BodyExt as _, Empty};
 use hyper::{
     Request, Response, StatusCode,
-    body::{Bytes, Incoming},
+    body::Incoming,
     header::{self, HeaderValue},
     server::conn::http1,
     service::service_fn,
@@ -32,6 +34,7 @@ use tokio_tungstenite::{
 
 use super::{
     accept::Over,
+    app_servers::Body,
     transport::{self, Channel},
 };
 use crate::daemon::{log, manager::Manager, notifications::NotificationKind};
@@ -192,10 +195,14 @@ async fn accept(
 
 /// Answer the requests on `stream` until it closes or upgrades, holding
 /// `permit` until then and through the link an upgrade carries.
-async fn serve(manager: Arc<Manager>, stream: TcpStream, permit: Arc<OwnedSemaphorePermit>) {
+pub(super) async fn serve(
+    manager: Arc<Manager>,
+    stream: TcpStream,
+    permit: Arc<OwnedSemaphorePermit>,
+) {
     let service = service_fn(move |request| {
         let (manager, permit) = (manager.clone(), permit.clone());
-        async move { Ok::<_, Infallible>(respond(manager, request, permit)) }
+        async move { Ok::<_, Infallible>(respond(manager, request, permit).await) }
     });
     let _ = http1::Builder::new()
         .timer(TokioTimer::new())
@@ -206,18 +213,39 @@ async fn serve(manager: Arc<Manager>, stream: TcpStream, permit: Arc<OwnedSemaph
 }
 
 /// The response to `request`: a WebSocket upgrade at the link's path, whose
-/// link a task then serves, and `404` for anything else.
-fn respond(
+/// link a task then serves, the server's under a forwarded path prefix,
+/// and `404` for anything else.
+async fn respond(
     manager: Arc<Manager>,
     request: Request<Incoming>,
     permit: Arc<OwnedSemaphorePermit>,
-) -> Response<Empty<Bytes>> {
+) -> Response<Body> {
+    if request.uri().path() == PATH {
+        return open_link(manager, request, permit);
+    }
+    let forwarded = (manager.hub_settings()).and_then(|hub| {
+        hub.forwarded(request.uri().path())
+            .map(|(_, address)| address)
+    });
+    match forwarded {
+        Some(address) => manager.forward_to_server(request, address).await,
+        None => status(StatusCode::NOT_FOUND),
+    }
+}
+
+/// The response to `request` at the link's path: a WebSocket upgrade, whose
+/// link a task then serves, and `404` for anything else.
+fn open_link(
+    manager: Arc<Manager>,
+    request: Request<Incoming>,
+    permit: Arc<OwnedSemaphorePermit>,
+) -> Response<Body> {
     let key = request.headers().get(header::SEC_WEBSOCKET_KEY).cloned();
     let upgrades = request
         .headers()
         .get(header::UPGRADE)
         .is_some_and(|upgrade| upgrade.as_bytes().eq_ignore_ascii_case(b"websocket"));
-    let (Some(key), true, PATH) = (key, upgrades, request.uri().path()) else {
+    let (Some(key), true) = (key, upgrades) else {
         return status(StatusCode::NOT_FOUND);
     };
     tokio::spawn(async move {
@@ -249,8 +277,8 @@ fn respond(
 }
 
 /// A response with `status` and no body.
-fn status(status: StatusCode) -> Response<Empty<Bytes>> {
-    let mut response = Response::new(Empty::new());
+fn status(status: StatusCode) -> Response<Body> {
+    let mut response = Response::new(Empty::new().map_err(|never| match never {}).boxed());
     *response.status_mut() = status;
     response
 }

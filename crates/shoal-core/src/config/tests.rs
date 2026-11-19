@@ -562,3 +562,17 @@ fn only_the_global_config_starts_a_mode_without_a_repository() {
     assert!(error.contains("modes.manage.repository"), "{error}");
     assert!(crate::config::repo::parse("[modes.manage]\nkind = 'chat'\n").is_ok());
 }
+
+#[test]
+fn the_hub_forwards_a_path_to_the_longest_prefix_that_covers_it() {
+    let config = Config::from_toml(
+        "[machine.hub.forward]\n\"/quay/\" = \"127.0.0.1:8080\"\n\"/quay/api/\" = \"127.0.0.1:8081\"\n",
+    )
+    .unwrap();
+    let hub = &config.machine.hub;
+    let port = |path| hub.forwarded(path).map(|(_, address)| address.port());
+    assert_eq!(port("/quay/api/boards"), Some(8081));
+    assert_eq!(port("/quay/board"), Some(8080));
+    assert_eq!(port("/hub"), None);
+    assert!(Config::from_toml("[machine.hub.forward]\n\"quay\" = \"127.0.0.1:1\"\n").is_err());
+}

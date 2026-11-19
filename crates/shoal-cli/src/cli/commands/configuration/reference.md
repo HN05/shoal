@@ -282,6 +282,9 @@ listen = "127.0.0.1:7474"                # The default
 url = "https://shoal.example.ts.net"     # Default: http:// and the listen address
 connect = ["ssh", "desk", "shoal", "daemon", "connect"]   # Overrides a joined machine's route
 escalate_after_minutes = 30              # The default
+
+[machine.hub.forward]
+"/quay/" = "127.0.0.1:8080"              # A path prefix and the local server it reaches
 ```
 
 With `enabled`, the daemon is the [hub](../../../../../../docs/reference.md#hub)
@@ -303,6 +306,12 @@ The command ends in `shoal daemon connect` on the hub, with an absolute path to
 on this machine waits for a coordinator whose machine is offline before it
 passes to the next space above with an agent on a connected machine, or to
 you.
+
+`forward` maps path prefixes, each starting and ending with `/`, to local
+addresses, such as an app's own server: the hub's listener forwards each
+request under a prefix, the longest that covers it, to its address with its
+path unchanged, but only once a paired machine or device signed it. See
+[path forwarding](../../../../../../docs/reference.md#path-forwarding).
 
 ### App store
 

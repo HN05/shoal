@@ -193,3 +193,14 @@ fn a_stream_s_frames_and_call_keep_their_json() {
         ]
     );
 }
+
+#[test]
+fn a_forwarded_path_prefix_starts_and_ends_with_a_slash() {
+    use super::app_servers::PathPrefix;
+    let quay: PathPrefix = "/quay/".parse().unwrap();
+    assert!(quay.covers("/quay/board"));
+    assert!(!quay.covers("/quay"));
+    for refused in ["quay/", "/quay", "/a b/", "/a?b/"] {
+        assert!(refused.parse::<PathPrefix>().is_err(), "{refused}");
+    }
+}

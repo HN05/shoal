@@ -90,6 +90,13 @@ pub struct Hub {
     /// whose machine is offline before it passes to the next space above
     /// that is online, or to the user.
     pub escalate_after_minutes: u64,
+    /// The local address the hub forwards the requests of paired members
+    /// under each path prefix to, such as an app's own server.
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub forward: std::collections::BTreeMap<
+        shoal_protocol::hub::app_servers::PathPrefix,
+        std::net::SocketAddr,
+    >,
 }
 
 impl Default for Hub {
@@ -100,11 +107,27 @@ impl Default for Hub {
             url: None,
             connect: Vec::new(),
             escalate_after_minutes: 30,
+            forward: Default::default(),
         }
     }
 }
 
 impl Hub {
+    /// The prefix and address of the longest prefix of `forward` that
+    /// covers `path`.
+    pub fn forwarded(
+        &self,
+        path: &str,
+    ) -> Option<(
+        &shoal_protocol::hub::app_servers::PathPrefix,
+        std::net::SocketAddr,
+    )> {
+        (self.forward.iter())
+            .filter(|(prefix, _)| prefix.covers(path))
+            .max_by_key(|(prefix, _)| prefix.as_str().len())
+            .map(|(prefix, address)| (prefix, *address))
+    }
+
     /// The URL the hub advertises for a listener bound to `bound`.
     pub fn advertised(&self, bound: std::net::SocketAddr) -> shoal_protocol::hub::HubUrl {
         (self.url.clone()).unwrap_or_else(|| shoal_protocol::hub::HubUrl::of_listener(bound))

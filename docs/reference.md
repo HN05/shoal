@@ -939,6 +939,23 @@ approval request that waited
 for a coordinator whose machine is offline passes to the next space above
 with an agent on a connected machine, or to you.
 
+#### Path forwarding
+
+[`[machine.hub] forward`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
+lets one address and tunnel serve the hub and an app's own server, such as
+Quay's, which runs as its own process, a paired device using `shoal-client`.
+The hub's listener forwards a request under one of its path prefixes, the
+longest that covers it, to that prefix's local address with its path
+unchanged, upgrades such as a WebSocket's included, once a paired machine or
+device signed it: the request names the member in `shoal-member`, the time
+it was signed in `shoal-time`, within five minutes of the hub's clock, a
+nonce no earlier request used in `shoal-nonce`, and in `shoal-signature`
+the member's signature of what `shoal_protocol::hub::app_servers::signed`
+makes of them, the method and the path with its query. The server receives
+`shoal-member`, which the hub checked, without the other three. The
+signature covers no body. Any other request under a prefix is refused with
+`401` and never reaches the server, and a request under no prefix is `404`.
+
 ## Workspaces
 
 `shoal branch rename [WORKSPACE] BRANCH` renames a ready workspace's checked-out Git
