@@ -243,7 +243,13 @@ pub(in crate::cli::commands) async fn enter_created(
     launch: &Launch,
     started: &StartedWorkspace,
 ) -> Result<Option<i32>> {
-    let settings = AddSettings::workspace(ctx, &started.workspace.id);
+    // A new workspace's worktree may not exist yet, so its repository's
+    // settings place it, as they place a start's.
+    let workspace = &started.workspace;
+    let settings = match started.reused {
+        true => AddSettings::workspace(ctx, &workspace.id),
+        false => AddSettings::new(ctx, &workspace.repository().into()),
+    };
     let settings = settings.get().await?;
     let options = AddOptions::default();
     let Some(attach) = Attach::of(ctx, (launch, false), None, settings, &options) else {
