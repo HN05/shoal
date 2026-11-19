@@ -81,7 +81,7 @@ pub(crate) fn queue_shoal_message(
     message: &str,
 ) -> Result<Option<i64>> {
     let alert = NewAlert::shoal(kind, About::default(), message.to_owned());
-    let queued = store::insert(tx, id, &alert, Delivery::Wake, false)?;
+    let queued = store::insert(tx, id, &alert, Delivery::Wake, false, None)?;
     Ok(queued.new.then_some(queued.id))
 }
 
@@ -175,13 +175,7 @@ impl Manager {
         let id = id.to_owned();
         let queued = self
             .store
-            .write(move |tx| {
-                let queued = store::insert(tx, &id, &alert, delivery, for_user)?;
-                if let Some(copied) = &copied {
-                    copied.record(tx, &id)?;
-                }
-                Ok(queued)
-            })
+            .write(move |tx| store::insert(tx, &id, &alert, delivery, for_user, copied.as_ref()))
             .await?;
         if queued.new {
             self.signals.message_queued();

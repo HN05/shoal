@@ -844,14 +844,13 @@ fn scoped(id: SpaceId) -> crate::daemon::scope::Caller {
 }
 
 /// Queue alerts for `workspace` with the text `text` gives each and the
-/// files `files` until the space refuses one, then check that what its
-/// agent receives still fits one frame.
-async fn fill_one_delivery(
+/// files `files` until the space refuses one; how many it took.
+async fn queue_until_refused(
     manager: &Manager,
     workspace: &crate::model::Workspace,
     text: impl Fn(usize) -> String,
     files: Vec<crate::daemon::workspace_files::NewFile>,
-) {
+) -> usize {
     let to = SpaceSelector::id(&workspace.id);
     let mut sent = 0;
     while (manager.send_space_message(None, &to, text(sent), files.clone()))
@@ -860,23 +859,27 @@ async fn fill_one_delivery(
     {
         sent += 1;
     }
-    assert!(sent > 0);
+    sent
+}
+
+/// Check that what the agent of `workspace` receives of its unread alerts
+/// stays within their limit.
+async fn assert_fits_one_delivery(manager: &Manager, workspace: &crate::model::Workspace) {
     let unread = manager.unread_messages(&workspace.id).await.unwrap().alerts;
-    assert_eq!(unread.len(), sent);
     let delivered = serde_json::to_vec(&unread).unwrap();
     assert!(
-        delivered.len() < crate::protocol::MAX_FRAME,
-        "{sent} alerts take {} bytes",
+        delivered.len() <= super::MAX_UNREAD_BYTES,
+        "{} alerts take {} bytes",
+        unread.len(),
         delivered.len()
     );
 }
 
-#[tokio::test]
-async fn unread_alerts_with_long_titled_files_still_fit_one_delivery() {
-    let (temp, manager) = manager().await;
-    let workspace = workspace(&temp, &manager, "receiver").await;
+/// Twenty files, each with a long name and the longest title of
+/// four-byte characters.
+fn long_titled_files(temp: &tempfile::TempDir) -> Vec<crate::daemon::workspace_files::NewFile> {
     let title = "🦀".repeat(crate::validate::MAX_FILE_TITLE_LEN);
-    let files: Vec<_> = (0..20)
+    (0..20)
         .map(|n| {
             let path = temp.path().join(format!("{n:02}{}.log", "x".repeat(200)));
             std::fs::write(&path, "log").unwrap();
@@ -885,8 +888,17 @@ async fn unread_alerts_with_long_titled_files_still_fit_one_delivery() {
                 title: Some(title.clone()),
             }
         })
-        .collect();
-    fill_one_delivery(&manager, &workspace, |n| format!("logs {n}"), files).await;
+        .collect()
+}
+
+#[tokio::test]
+async fn unread_alerts_with_long_titled_files_still_fit_one_delivery() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager, "receiver").await;
+    let files = long_titled_files(&temp);
+    let sent = queue_until_refused(&manager, &workspace, |n| format!("logs {n}"), files).await;
+    assert!(sent > 0);
+    assert_fits_one_delivery(&manager, &workspace).await;
 }
 
 #[tokio::test]
@@ -894,5 +906,19 @@ async fn unread_alerts_that_json_escapes_still_fit_one_delivery() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager, &"🦀".repeat(40)).await;
     let text = |n| format!("{n}{}", "\t".repeat(500));
-    fill_one_delivery(&manager, &workspace, text, Vec::new()).await;
+    assert!(queue_until_refused(&manager, &workspace, text, Vec::new()).await > 0);
+    assert_fits_one_delivery(&manager, &workspace).await;
+}
+
+#[tokio::test]
+async fn an_alert_s_copied_files_count_toward_a_nearly_full_queue() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager, "receiver").await;
+    let text = |n| format!("{n}{}", "x".repeat(1000));
+    assert!(queue_until_refused(&manager, &workspace, text, Vec::new()).await > 0);
+    let files = long_titled_files(&temp);
+    let to = SpaceSelector::id(&workspace.id);
+    let attached = manager.send_space_message(None, &to, "logs".into(), files);
+    assert!(attached.await.is_err());
+    assert_fits_one_delivery(&manager, &workspace).await;
 }

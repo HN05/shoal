@@ -1,10 +1,10 @@
 //! The alerts for a space's agent: queueing one, listing the unread ones as
 //! the agent reads them, marking delivered ones read, and what becomes of
 //! them when their space goes.
-use anyhow::{Result, bail, ensure};
+use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
-use super::{Delivery, MAX_UNREAD, MAX_UNREAD_BYTES, Queued, Unread};
+use super::{Copied, Delivery, MAX_UNREAD, MAX_UNREAD_BYTES, Queued, Unread};
 use crate::{
     daemon::{
         alerts::{self, About, Alert, COLUMNS, FROM, NewAlert},
@@ -15,18 +15,22 @@ use crate::{
 use shoal_ids::space_ids::SpaceId;
 
 /// Queue `alert` for the agent of the space `space_id` in the caller's
-/// transaction, `for_user` when the user receives it should the space go
-/// before its agent reads it: its ID, or that of an identical alert from
-/// the same sender about the same space that is still unread, which it
-/// does not repeat. An identical unread alert that does not wake the agent
-/// wakes it once queued again with [`Delivery::Wake`]. A workspace being removed takes none, since
-/// removal decides from the alerts it has.
+/// transaction, with the records of the files it `copied`, `for_user` when
+/// the user receives it should the space go before its agent reads it:
+/// its ID, or that of an identical alert from the same sender about the
+/// same space that is still unread, which it does not repeat. An identical
+/// unread alert that does not wake the agent wakes it once queued again
+/// with [`Delivery::Wake`]. A workspace being removed takes none, since
+/// removal decides from the alerts it has. One that would leave more
+/// unread than its agent receives at once fails, and the caller's
+/// transaction rolls back what it recorded.
 pub(super) fn insert(
     tx: &Transaction<'_>,
     space_id: &SpaceId,
     alert: &NewAlert,
     delivery: Delivery,
     for_user: bool,
+    copied: Option<&Copied>,
 ) -> Result<Queued> {
     let attachments = alert.attachments_column()?;
     let present: Option<bool> = tx
@@ -59,6 +63,9 @@ pub(super) fn insert(
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()?;
+    if let Some(copied) = copied {
+        copied.record(tx, space_id)?;
+    }
     if let Some((id, woke)) = pending {
         if woke || !wakes {
             return Ok(Queued { id, new: false });
@@ -76,10 +83,10 @@ pub(super) fn insert(
         "the space already has {MAX_UNREAD} unread alerts"
     );
     let id = alerts::insert(tx, Some(space_id), alert, wakes, for_user)?;
-    if delivered_bytes(tx, space_id)? > MAX_UNREAD_BYTES {
-        tx.execute("DELETE FROM alerts WHERE id=?1", [id])?;
-        bail!("the space's unread alerts would exceed {MAX_UNREAD_BYTES} bytes");
-    }
+    ensure!(
+        delivered_bytes(tx, space_id)? <= MAX_UNREAD_BYTES,
+        "the space's unread alerts would exceed {MAX_UNREAD_BYTES} bytes"
+    );
     Ok(Queued { id, new: true })
 }
 
