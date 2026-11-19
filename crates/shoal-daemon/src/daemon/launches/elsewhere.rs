@@ -111,10 +111,11 @@ impl Manager {
         })
     }
 
-    /// The registered repository `launch` starts in for `caller`, none for
-    /// one whose mode starts it without one or that names a repository
-    /// this machine has not registered, which the other machine finds on
-    /// its own.
+    /// The registered repository `launch` starts in for `caller`: the one
+    /// it names, refused when this machine has not registered it, else the
+    /// one an item it names, its parent or its directory belongs to; none
+    /// for one whose mode starts it without one, or that this machine
+    /// finds none for, which the other machine finds on its own.
     async fn launch_repository(
         &self,
         launch: &Launch,
@@ -122,6 +123,13 @@ impl Manager {
     ) -> Result<Option<Repository>> {
         if !self.launch_shape(launch, caller).await?.repository {
             return Ok(None);
+        }
+        if let Some(named) = named_repository(launch) {
+            let repositories = self.repositories().await?;
+            let directory = launch.directory.as_deref();
+            let selector = crate::repository::named_in(named.to_owned(), directory)?;
+            let repository = crate::repository::select(&repositories, selector).await?;
+            return Ok(Some(repository.clone()));
         }
         let reads = ManagerReads::new(self, caller);
         launches::shape::launch_repository(&reads, launch).await
@@ -137,6 +145,16 @@ async fn clone_base(repository: &Repository, base: &str, machine: &str) -> Resul
             "base {base} has commits only this machine has, which machine {machine} cannot fetch; push them with git push origin {base}, then start again"
         ),
     }
+}
+
+/// The repository `launch` names, with `--repo` or as its positional
+/// argument.
+fn named_repository(launch: &Launch) -> Option<&str> {
+    let positional = match &launch.target {
+        Some(StartTarget::Repository(named)) => Some(named.as_str()),
+        _ => None,
+    };
+    launch.repository.as_deref().or(positional)
 }
 
 /// Refuse what `launch` asks of this machine that the machine `machine`

@@ -104,3 +104,13 @@ fn a_start_on_another_machine_refuses_a_base_only_this_machine_has() {
     let error = String::from_utf8_lossy(&started.stderr);
     assert!(error.contains("git push"), "{error}");
 }
+
+#[test]
+fn a_start_on_another_machine_refuses_a_repository_this_machine_has_not_registered() {
+    let machines = machines();
+    let started = start_in_coordinator(&machines, &["--repo", "typo", "--branch", "x"]);
+    assert!(!started.status.success(), "{}", printed(&started));
+    let listed = machines.laptop.ok(&["list"]);
+    let started = (listed.as_array().unwrap().iter()).any(|space| space["name"] == "x");
+    assert!(!started, "{listed}");
+}
