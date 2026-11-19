@@ -4,12 +4,7 @@
 //! prefix's address with its path unchanged, upgrades such as a WebSocket's
 //! included, and its answer comes back the same way. Any other request
 //! under the prefix is refused, and the server never sees it.
-use std::{
-    collections::HashMap,
-    net::SocketAddr,
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Result, anyhow, ensure};
 use http_body_util::{BodyExt as _, Full, combinators::BoxBody};
@@ -28,38 +23,6 @@ use crate::daemon::{log, manager::Manager};
 
 /// The body of a response the listener sends.
 pub(super) type Body = BoxBody<Bytes, hyper::Error>;
-
-/// The nonces of the requests the hub forwarded lately, which no later
-/// request may use again while its time is within the skew. The daemon
-/// keeps them only while it runs, so it takes no request signed before it
-/// started, whose nonce a daemon before it may have taken.
-pub(super) struct Nonces {
-    seen: Mutex<HashMap<Nonce, Instant>>,
-    since: crate::time::UnixTime,
-}
-
-impl Default for Nonces {
-    fn default() -> Self {
-        Self {
-            seen: Default::default(),
-            since: crate::time::UnixTime::now(),
-        }
-    }
-}
-
-impl Nonces {
-    /// Take the nonce of a request signed at `time`, unless an earlier
-    /// request, or one before this daemon started, may have taken it.
-    fn take(&self, nonce: Nonce, time: u64) -> bool {
-        if time < self.since.seconds().unsigned_abs() {
-            return false;
-        }
-        let now = Instant::now();
-        let mut seen = self.seen.lock().unwrap();
-        seen.retain(|_, at| now.duration_since(*at) < 2 * app_servers::SKEW);
-        seen.insert(nonce, now).is_none()
-    }
-}
 
 impl Manager {
     /// The response to `request` from the server at `address`, once its
@@ -135,12 +98,26 @@ impl Manager {
             verify(&key, &signed, &claim.signature),
             "its signature does not check"
         );
-        ensure!(
-            self.hub.nonces.take(claim.nonce, claim.time),
-            "its nonce was used before, or it was signed before this daemon started"
-        );
+        let (nonce, expires_at) = (claim.nonce, claim.time + app_servers::SKEW.as_secs());
+        let taken = (self.store).write(move |tx| take_nonce(tx, &nonce, expires_at));
+        ensure!(taken.await?, "its nonce was used before");
         Ok(())
     }
+}
+
+/// Take `nonce`, unless a request took it before, keeping it until
+/// `expires_at`, when no request signed with it is taken any longer.
+fn take_nonce(tx: &rusqlite::Transaction<'_>, nonce: &Nonce, expires_at: u64) -> Result<bool> {
+    let now = crate::time::UnixTime::now();
+    tx.execute(
+        "DELETE FROM hub_forward_nonces WHERE expires_at < ?1",
+        [now],
+    )?;
+    let taken = tx.execute(
+        "INSERT OR IGNORE INTO hub_forward_nonces(nonce, expires_at) VALUES (?1, ?2)",
+        rusqlite::params![nonce, expires_at as i64],
+    )?;
+    Ok(taken == 1)
 }
 
 /// What a request's headers claim of who signed it.

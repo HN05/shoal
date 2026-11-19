@@ -140,6 +140,7 @@ fn remove_schema_objects(db: &Connection) -> Result<()> {
     // One transaction syncs the whole removal once instead of every statement.
     let tx = db.unchecked_transaction()?;
     let db: &Connection = &tx;
+    db.execute_batch(include_str!("hub_forward_nonces_undo.sql"))?;
     db.execute_batch(include_str!("app_entries_undo.sql"))?;
     db.execute_batch(include_str!("agent_restarts_undo.sql"))?;
     db.execute_batch(include_str!("hub_routing_undo.sql"))?;

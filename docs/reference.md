@@ -954,9 +954,9 @@ the member's signature of what `shoal_protocol::hub::app_servers::signed`
 makes of them, the method and the path with its query. The server receives
 `shoal-member`, which the hub checked, without the other three. The
 signature covers no body. Any other request under a prefix is refused with
-`401` and never reaches the server, as is one signed before the hub's daemon
-last started, whose nonce the daemon before it may have taken, and a request
-under no prefix is `404`.
+`401` and never reaches the server, and a request under no prefix is `404`.
+The hub keeps each nonce it took in its store until requests signed when it
+was are no longer taken, so a restart lets none through twice.
 
 ## Workspaces
 

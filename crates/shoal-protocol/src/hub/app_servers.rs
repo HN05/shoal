@@ -3,8 +3,7 @@
 //! own server, once the request proves it comes from a paired member: it
 //! names the member and carries the time it was signed at, a nonce no
 //! earlier request used, and the member's signature of [`signed`] over
-//! them, its method and its target, in the headers below, signed after the
-//! hub's daemon started. The hub keeps
+//! them, its method and its target, in the headers below. The hub keeps
 //! the member's header, whose member it verified, and drops the others
 //! before it forwards the request. The signature covers no body.
 use std::{fmt, str::FromStr};

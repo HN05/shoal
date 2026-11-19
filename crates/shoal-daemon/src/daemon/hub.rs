@@ -62,8 +62,6 @@ pub(crate) struct Hub {
     refusal_alerts: accept::RefusalAlerts,
     /// As the hub: where its listener is bound, or why it is not.
     listener: listener::Bound,
-    /// As the hub: the nonces of the requests it forwarded lately.
-    nonces: app_servers::Nonces,
     /// As a member: its link to the hub.
     member: member::Link,
     /// The callers other machines vouch for, while this machine answers

@@ -48,12 +48,7 @@ async fn server() -> (SocketAddr, tokio::sync::mpsc::UnboundedReceiver<String>) 
 /// The hub forwarding `/quay/` to `server`, with a paired device.
 async fn hub(server: SocketAddr) -> (tempfile::TempDir, Arc<Manager>, MemberId, Identity) {
     let (root, manager) = test_support::manager().await;
-    let config = format!(
-        "[machine.hub]\nenabled = true\nlisten = \"127.0.0.1:0\"\n[machine.hub.forward]\n\"/quay/\" = \"{server}\"\n"
-    );
-    manager
-        .config_state
-        .publish(Config::from_toml(&config).unwrap());
+    forwarding(&manager, server);
     let device = Identity::new(&KeyPair::generate().unwrap()).unwrap();
     let key = device.public.clone();
     let member = (manager.store)
@@ -61,6 +56,16 @@ async fn hub(server: SocketAddr) -> (tempfile::TempDir, Arc<Manager>, MemberId, 
         .await
         .unwrap();
     (root, manager, member, device)
+}
+
+/// Make `manager` the hub, forwarding `/quay/` to `server`.
+fn forwarding(manager: &Manager, server: SocketAddr) {
+    let config = format!(
+        "[machine.hub]\nenabled = true\nlisten = \"127.0.0.1:0\"\n[machine.hub.forward]\n\"/quay/\" = \"{server}\"\n"
+    );
+    manager
+        .config_state
+        .publish(Config::from_toml(&config).unwrap());
 }
 
 /// The response the hub's listener gives `request`, its head and body.
@@ -85,11 +90,6 @@ async fn respond(manager: &Arc<Manager>, request: String) -> String {
 /// `nonce`.
 fn signed(member: &MemberId, key: &Identity, target: &str, nonce: &str) -> String {
     let time = UnixTime::now().seconds() as u64;
-    signed_at(member, key, target, nonce, time)
-}
-
-/// [`signed`] at `time`.
-fn signed_at(member: &MemberId, key: &Identity, target: &str, nonce: &str, time: u64) -> String {
     let nonce = nonce.parse().unwrap();
     let signed = app_servers::signed(member, time, &nonce, "GET", target);
     let signature = key.sign(&signed);
@@ -115,9 +115,15 @@ async fn a_paired_device_s_signed_request_reaches_the_server_once() {
     assert!(head.starts_with("get /quay/board?view=all "), "{head}");
     assert!(head.contains(&format!("shoal-member: {member}")), "{head}");
     assert!(!head.contains(app_servers::SIGNATURE), "{head}");
-    // The same request again, as whatever saw it might send it.
-    let replayed = respond(&manager, request).await;
+    // The same request again, as whatever saw it might send it, and
+    // again once the hub's daemon restarted.
+    let replayed = respond(&manager, request.clone()).await;
     assert!(replayed.starts_with("HTTP/1.1 401"), "{replayed}");
+    let restarted = Manager::open(manager.paths.clone()).await.unwrap();
+    forwarding(&restarted, address);
+    let replayed = respond(&restarted, request).await;
+    assert!(replayed.starts_with("HTTP/1.1 401"), "{replayed}");
+    assert!(heads.try_recv().is_err());
 }
 
 #[tokio::test]
@@ -145,11 +151,7 @@ async fn a_request_no_paired_member_signed_never_reaches_the_server() {
             MemberId::generate()
         ),
     );
-    // Signed within the skew but before this daemon started, so a daemon
-    // before it may have taken its nonce.
-    let earlier = UnixTime::now().seconds() as u64 - 60;
-    let before = signed_at(&member, &device, "/quay/", &nonce().to_string(), earlier);
-    for request in [unsigned, unknown, forged, moved, doubled, before] {
+    for request in [unsigned, unknown, forged, moved, doubled] {
         let response = respond(&manager, request.clone()).await;
         assert!(
             response.starts_with("HTTP/1.1 401"),

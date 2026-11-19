@@ -851,6 +851,11 @@ CREATE TABLE app_revisions (
     revision INTEGER NOT NULL
 );
 
+CREATE TABLE hub_forward_nonces (
+    nonce TEXT PRIMARY KEY,
+    expires_at INTEGER NOT NULL
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
