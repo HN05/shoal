@@ -3,6 +3,7 @@
 //! agent that sleeps or is stopped there. A user on another machine
 //! attaches through a terminal the space's machine makes for them.
 mod owner;
+mod viewer;
 
 pub(in crate::cli::commands) use owner::attach_for_viewer;
 
@@ -38,6 +39,13 @@ pub(super) async fn attach(
         "attach to sessions outside scoped executions"
     );
     ensure!(ctx.on_terminal(), "attach requires a terminal");
+    if let Some(selector) = &target
+        && let Some((remote, view)) = super::machines::space_elsewhere(ctx, selector).await?
+    {
+        let machine = view.directory.machine(&remote.machine);
+        let machine = machine.map_or(remote.machine.as_str(), |machine| machine.name.as_str());
+        return viewer::attach(ctx, remote.space.id.clone(), machine, session).await;
+    }
     let target = Target::resolve(ctx, target).await?;
     // Attaching is the user's interaction with the space's agent.
     crate::client::agents::report_attach(&ctx.paths, SpaceSelector::id(target.id())).await?;

@@ -1,0 +1,294 @@
+//! `shoal attach` of a space on another joined machine: that machine runs
+//! the attach on a terminal of its own, which this one shows in raw mode,
+//! sending it every key and each new size, so the host's own detach key
+//! detaches. A dropped link leaves the session running there; this
+//! terminal says so and attaches again to the same session once the
+//! machine answers, until Ctrl-C.
+use std::{
+    io::{Read as _, Write as _},
+    time::Duration,
+};
+
+use anyhow::{Context as _, Result, bail};
+use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::{
+    attaching::{ChosenSession, FromSession, TerminalSize, ToSession, Viewer, ViewerApp},
+    space_names::SpaceSelector,
+};
+use tokio::{
+    signal::unix::{Signal, SignalKind, signal},
+    sync::mpsc,
+};
+
+use shoal_core::execution::INPUT_MODES_RESET;
+
+use crate::{
+    cli::context::Context,
+    client::{
+        attaching::{Keys, Screen},
+        connection,
+    },
+};
+
+/// The first wait before attaching again after a dropped link, which
+/// doubles up to [`LONGEST_WAIT`].
+const FIRST_WAIT: Duration = Duration::from_secs(1);
+const LONGEST_WAIT: Duration = Duration::from_secs(30);
+
+/// The key that stops attaching again.
+const CTRL_C: u8 = 0x03;
+
+/// Attach this terminal to a session of `space`, which runs on `machine`,
+/// the one `session` names when given, and exit as the attach there does.
+pub(super) async fn attach(
+    ctx: &Context,
+    space: SpaceId,
+    machine: &str,
+    session: Option<String>,
+) -> Result<i32> {
+    let mut viewer = Viewer {
+        session,
+        again: None,
+        size: terminal_size(),
+        term: std::env::var("TERM").ok(),
+        apps: viewer_apps().await,
+    };
+    let mut raw = RawTerminal::enter()?;
+    let mut keys = typed_keys();
+    let mut resizes = signal(SignalKind::window_change()).context("watch the terminal's size")?;
+    let mut chosen = None;
+    let mut wait = FIRST_WAIT;
+    loop {
+        let space = SpaceSelector::id(&space);
+        let attached = crate::client::attaching::attach(&ctx.paths, space, viewer.clone()).await;
+        let (screen, input) = match attached {
+            Ok(attached) => attached,
+            Err(error) if viewer.again.is_some() && lost(&error) => {
+                stop_on_ctrl_c(&mut keys, wait, machine).await?;
+                wait = (wait * 2).min(LONGEST_WAIT);
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
+        wait = FIRST_WAIT;
+        let shown = Shown {
+            keys: &mut keys,
+            resizes: &mut resizes,
+            chosen: &mut chosen,
+        };
+        if let Some(code) = shown.show(screen, input).await? {
+            raw.left_by_its_client();
+            return Ok(code);
+        }
+        let Some(session) = &chosen else {
+            bail!("lost the connection to machine {machine} before it chose a session");
+        };
+        lost_notice(machine, &session.name);
+        viewer.again = Some(session.place.clone());
+        stop_on_ctrl_c(&mut keys, wait, machine).await?;
+    }
+}
+
+/// What a connection to the attach's machine carries while it lasts.
+struct Shown<'a> {
+    keys: &'a mut mpsc::UnboundedReceiver<Vec<u8>>,
+    resizes: &'a mut Signal,
+    /// The session the attach chose, once it says.
+    chosen: &'a mut Option<ChosenSession>,
+}
+
+impl Shown<'_> {
+    /// Show what `screen` brings and send typed keys and new sizes on
+    /// `input`, until the attach exits, giving its code, or the connection
+    /// drops, giving none. Keys go on apart from the screen, so a paste the
+    /// other machine takes slowly never stops what this terminal shows.
+    async fn show(self, screen: Screen, input: Keys) -> Result<Option<i32>> {
+        tokio::select! {
+            shown = show_screen(screen, self.chosen) => shown,
+            typed = type_keys(input, self.keys, self.resizes) => typed.map(|()| None),
+        }
+    }
+}
+
+/// Show what `screen` brings, keeping the session it says the attach
+/// chose in `chosen`, until the attach exits, giving its code, or the
+/// connection drops, giving none.
+async fn show_screen(
+    mut screen: Screen,
+    chosen: &mut Option<ChosenSession>,
+) -> Result<Option<i32>> {
+    loop {
+        match screen.next().await {
+            Ok(Some(FromSession::Screen(bytes))) => show_bytes(&bytes)?,
+            Ok(Some(FromSession::Session(session))) => *chosen = Some(session),
+            Ok(Some(FromSession::Exited(code))) => return Ok(Some(code)),
+            Ok(None) | Err(_) => return Ok(None),
+        }
+    }
+}
+
+/// Send the keys typed here and each new size of this terminal on
+/// `input`, until the connection drops; fails once the terminal's input
+/// ends.
+async fn type_keys(
+    mut input: Keys,
+    keys: &mut mpsc::UnboundedReceiver<Vec<u8>>,
+    resizes: &mut Signal,
+) -> Result<()> {
+    // The size may have changed while the attach was asked for.
+    let mut size = terminal_size();
+    loop {
+        let sent = match size.take() {
+            Some(size) => input.send(&ToSession::Resize(size)).await,
+            None => tokio::select! {
+                keys = keys.recv() => match keys {
+                    Some(keys) => input.send(&ToSession::Keys(keys)).await,
+                    None => bail!("the terminal's input ended"),
+                },
+                _ = resizes.recv() => {
+                    size = terminal_size();
+                    continue;
+                }
+            },
+        };
+        if sent.is_err() {
+            return Ok(());
+        }
+    }
+}
+
+/// The keys typed on this terminal, as it sends them. A thread reads them,
+/// since a blocking read would hold the runtime open after the attach.
+fn typed_keys() -> mpsc::UnboundedReceiver<Vec<u8>> {
+    let (sender, receiver) = mpsc::unbounded_channel();
+    std::thread::spawn(move || {
+        let mut stdin = std::io::stdin().lock();
+        let mut buffer = [0; 4096];
+        while let Ok(read @ 1..) = stdin.read(&mut buffer) {
+            if sender.send(buffer[..read].to_vec()).is_err() {
+                return;
+            }
+        }
+    });
+    receiver
+}
+
+/// Wait `wait` before attaching again, failing once Ctrl-C is typed;
+/// other keys go nowhere meanwhile.
+async fn stop_on_ctrl_c(
+    keys: &mut mpsc::UnboundedReceiver<Vec<u8>>,
+    wait: Duration,
+    machine: &str,
+) -> Result<()> {
+    let waited = tokio::time::sleep(wait);
+    tokio::pin!(waited);
+    loop {
+        tokio::select! {
+            () = &mut waited => return Ok(()),
+            keys = keys.recv() => {
+                if keys.is_none_or(|keys| keys.contains(&CTRL_C)) {
+                    bail!("stopped attaching again to machine {machine}");
+                }
+            }
+        }
+    }
+}
+
+/// Whether `error`, from asking to attach again, means the machine, the
+/// hub or this daemon cannot be reached yet.
+fn lost(error: &anyhow::Error) -> bool {
+    connection::machine_unreachable(error)
+        || connection::is_unreachable(error)
+        || connection::stream_closed(error)
+}
+
+/// Say on its own line that the link to `machine` dropped while `session`
+/// keeps running there.
+/// The host's client there can no longer switch off the input modes it
+/// turned on here, such as mouse tracking, so this terminal does.
+fn lost_notice(machine: &str, session: &str) {
+    show_bytes(
+        format!(
+            "{INPUT_MODES_RESET}\r\nshoal: lost the connection to machine {machine}; {session} keeps running there. Reconnecting, Ctrl-C to stop\r\n"
+        )
+        .as_bytes(),
+    )
+    .ok();
+}
+
+fn show_bytes(bytes: &[u8]) -> Result<()> {
+    let mut stdout = std::io::stdout().lock();
+    stdout.write_all(bytes)?;
+    Ok(stdout.flush()?)
+}
+
+/// This terminal's size; none off a terminal.
+fn terminal_size() -> Option<TerminalSize> {
+    let (rows, columns) = shoal_core::execution::terminal_size(std::io::stdout())?;
+    Some(TerminalSize { rows, columns })
+}
+
+/// This machine's apps that show the sessions of a host's servers on
+/// several machines, with the label each reports.
+async fn viewer_apps() -> Vec<ViewerApp> {
+    let mut apps = Vec::new();
+    for host in crate::terminal::hosts() {
+        if let Some(label) = host.viewer_app().await {
+            apps.push(ViewerApp {
+                host: host.name(),
+                label,
+            });
+        }
+    }
+    apps
+}
+
+/// This terminal in raw mode, which it leaves however the attach ends,
+/// switching off the emulator's input modes too unless the host's client
+/// that turned them on left it.
+struct RawTerminal {
+    previous: libc::termios,
+    left_by_client: bool,
+}
+
+impl RawTerminal {
+    fn enter() -> Result<Self> {
+        let mut settings = std::mem::MaybeUninit::uninit();
+        // SAFETY: tcgetattr initializes settings on success.
+        if unsafe { libc::tcgetattr(libc::STDIN_FILENO, settings.as_mut_ptr()) } != 0 {
+            return Err(std::io::Error::last_os_error()).context("read the terminal's settings");
+        }
+        // SAFETY: tcgetattr succeeded.
+        let previous = unsafe { settings.assume_init() };
+        let mut raw = previous;
+        // SAFETY: cfmakeraw and tcsetattr change only the settings given
+        // and this terminal's.
+        let entered = unsafe {
+            libc::cfmakeraw(&mut raw);
+            libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &raw)
+        };
+        if entered != 0 {
+            return Err(std::io::Error::last_os_error()).context("enter raw mode");
+        }
+        Ok(Self {
+            previous,
+            left_by_client: false,
+        })
+    }
+
+    /// The host's client left the terminal as it found it, as when the
+    /// attach there ended.
+    fn left_by_its_client(&mut self) {
+        self.left_by_client = true;
+    }
+}
+
+impl Drop for RawTerminal {
+    fn drop(&mut self) {
+        if !self.left_by_client {
+            let _ = show_bytes(INPUT_MODES_RESET.as_bytes());
+        }
+        // SAFETY: restores the settings read from this terminal.
+        unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &self.previous) };
+    }
+}

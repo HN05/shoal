@@ -8,6 +8,7 @@ pub mod agents;
 pub mod approvals;
 pub mod apps;
 pub mod assignments;
+pub mod attaching;
 pub mod branches;
 pub mod chats;
 pub mod ci;

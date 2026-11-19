@@ -12,7 +12,8 @@ pub use copy_ignored::copy_ignored_worker;
 pub use detached::{DetachedExecution, DetachedLaunch, Wrapper, launch_detached, report_launch};
 pub(crate) use terminal::reset_input_modes;
 pub use terminal::{
-    INPUT_MODES_RESET, Terminal, clear_terminal, run_in_terminal, take_foreground, terminal_width,
+    INPUT_MODES_RESET, Terminal, clear_terminal, run_in_terminal, take_foreground, terminal_size,
+    terminal_width,
 };
 
 /// Exit status as a shell would report it: the code, or 128 + signal.

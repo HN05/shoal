@@ -185,6 +185,12 @@ pub(crate) fn reset_input_modes() {
 
 /// The columns of the terminal `fd` writes to, or `None` when it is not one.
 pub fn terminal_width(fd: impl AsFd) -> Option<usize> {
+    terminal_size(fd).map(|(_, columns)| usize::from(columns))
+}
+
+/// The rows and columns of the terminal `fd` writes to, or `None` when it
+/// is not one.
+pub fn terminal_size(fd: impl AsFd) -> Option<(u16, u16)> {
     let mut size = libc::winsize {
         ws_row: 0,
         ws_col: 0,
@@ -199,7 +205,7 @@ pub fn terminal_width(fd: impl AsFd) -> Option<usize> {
             &mut size as *mut libc::winsize,
         )
     };
-    (status == 0 && size.ws_col > 0).then_some(usize::from(size.ws_col))
+    (status == 0 && size.ws_col > 0).then_some((size.ws_row, size.ws_col))
 }
 
 /// What switches off the emulator input modes an interrupted TUI may leave,
