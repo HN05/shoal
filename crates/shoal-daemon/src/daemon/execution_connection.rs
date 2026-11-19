@@ -26,9 +26,9 @@ use super::{
 };
 use crate::{
     execution::TrackedAgent,
-    model::Space,
+    model::{Protection, Space},
     process::identity::Identity,
-    protocol::{self, Body, Control, ErrorCode, ExecutionEvent, Protection, Reattach, Response},
+    protocol::{self, Body, Control, ErrorCode, ExecutionEvent, Reattach, Response},
 };
 use registration::Registered;
 use shoal_protocol::space_names::SpaceSelector;

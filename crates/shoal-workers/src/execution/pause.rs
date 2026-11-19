@@ -17,10 +17,10 @@ use super::{
 use crate::{
     client::connection::CommandPaths,
     config::permissions::PermissionsConfig,
-    model::{ExecutionPlan, PortReservation},
+    model::{ExecutionPlan, PortReservation, Protection},
     paths::Paths,
     process,
-    protocol::{ExecutionEvent, Protection},
+    protocol::ExecutionEvent,
 };
 use place::Key;
 pub(super) use place::Place;

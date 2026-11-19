@@ -16,6 +16,14 @@ pub struct AgentStatus {
     pub prompt_cache_expires_at: Option<crate::time::UnixTime>,
 }
 
+/// Why protection stopped an agent, and what its automatic restore waits for.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Protection {
+    pub reason: String,
+    /// Completes "once …"; recovery also waits for every other signal.
+    pub resumes_when: String,
+}
+
 /// Why Shoal put a space's agent to sleep and what wakes it: an asleep
 /// agent comes back on its own through the agent queue, unlike a stopped
 /// one, which waits for `shoal restore`.
@@ -56,7 +64,7 @@ pub struct RunningAgent {
     pub restart: Option<PendingRestart>,
     /// Why Shoal stopped it, while its wrapper waits to restore it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stopped: Option<crate::protocol::Protection>,
+    pub stopped: Option<Protection>,
     /// The executions it ran as before restarts started it in new wrappers,
     /// while this daemon runs.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

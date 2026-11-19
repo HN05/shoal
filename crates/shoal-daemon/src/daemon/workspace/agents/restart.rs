@@ -12,8 +12,12 @@ use super::{Agent, Manager, stops};
 use crate::daemon::log;
 use crate::daemon::workspace::agent_state;
 use crate::{
-    config::permissions::PermissionChange, daemon::store, execution::recovery, model::RunningAgent,
-    protocol::Protection, sessions::Origin, state::AgentState,
+    config::permissions::PermissionChange,
+    daemon::store,
+    execution::recovery,
+    model::{Protection, RunningAgent},
+    sessions::Origin,
+    state::AgentState,
 };
 
 mod renewal;

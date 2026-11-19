@@ -18,7 +18,7 @@ use super::{
     agent_turns::Turn,
     capacity::Activity,
 };
-pub(crate) use crate::protocol::Protection;
+pub(crate) use crate::model::Protection;
 
 use crate::daemon::log;
 use crate::{

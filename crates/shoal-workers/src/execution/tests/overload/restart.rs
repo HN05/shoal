@@ -83,7 +83,7 @@ async fn daemon_crash_under_memory_pressure_keeps_the_agent_waiting_for_its_rest
 #[tokio::test]
 async fn daemon_crash_under_disk_pressure_keeps_the_agent_waiting_for_its_restore() {
     interrupt_while_protected(Interruption::Crash, async |manager| {
-        let protection = shoal_protocol::protocol::Protection {
+        let protection = shoal_protocol::model::Protection {
             reason: "test disk pressure".into(),
             resumes_when: "free disk space recovers".into(),
         };

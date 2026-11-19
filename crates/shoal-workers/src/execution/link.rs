@@ -18,11 +18,12 @@ use tokio::{
 use crate::{
     client::connection,
     client::connection::CommandPaths,
+    model::Protection,
     paths::Paths,
     process::identity::Identity,
     protocol::{
-        self, Body, Control, ExecutionEvent, ExecutionMethod, Method, Protection, Reattach,
-        Request, Response, timing,
+        self, Body, Control, ExecutionEvent, ExecutionMethod, Method, Reattach, Request, Response,
+        timing,
     },
 };
 

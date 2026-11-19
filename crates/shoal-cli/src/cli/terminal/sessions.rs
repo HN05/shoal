@@ -8,8 +8,7 @@ use anyhow::Result;
 
 use crate::{
     config::Effective,
-    model::Execution,
-    protocol::Protection,
+    model::{Execution, Protection},
     sessions::{HostName, Origin},
     terminal::{Host, Session, Sessions, enabled_host, named},
 };

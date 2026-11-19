@@ -125,7 +125,7 @@ fn agent_places_count_stopped_agents_as_connected() {
     let agents = [
         agent("w1", Some(&running), Some("claude")),
         RunningAgent {
-            stopped: Some(crate::protocol::Protection {
+            stopped: Some(crate::model::Protection {
                 reason: "critical memory pressure".into(),
                 resumes_when: "an update arrives for it".into(),
             }),

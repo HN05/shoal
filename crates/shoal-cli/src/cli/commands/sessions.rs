@@ -15,8 +15,8 @@ use crate::{
         ui::{self, Fallback, NoCurrentWorkspace},
     },
     client::connection::CommandPaths,
-    model::{Chat, Inspection, Spaces},
-    protocol::{ConfigTarget, Protection},
+    model::{Chat, Inspection, Protection, Spaces},
+    protocol::ConfigTarget,
     sessions::Origin,
     terminal::Session,
 };

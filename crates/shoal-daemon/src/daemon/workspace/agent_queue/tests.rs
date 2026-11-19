@@ -1266,7 +1266,7 @@ async fn an_update_restores_an_idle_agent_only_once_disk_space_recovered() {
         .unwrap();
     assert!(
         manager
-            .stop_agents_for_disk_space(&crate::protocol::Protection::load("low disk"))
+            .stop_agents_for_disk_space(&crate::model::Protection::load("low disk"))
             .await
             .len()
             == 1

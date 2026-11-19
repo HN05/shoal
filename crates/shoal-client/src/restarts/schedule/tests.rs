@@ -119,7 +119,7 @@ fn an_agent_protection_stopped_while_the_run_waited_is_skipped() {
         joins: None,
     }];
     let stopped = RunningAgent {
-        stopped: Some(shoal_protocol::protocol::Protection {
+        stopped: Some(shoal_protocol::model::Protection {
             reason: "critical memory pressure".into(),
             resumes_when: "system load is healthy".into(),
         }),

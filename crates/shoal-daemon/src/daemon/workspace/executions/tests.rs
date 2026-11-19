@@ -578,7 +578,7 @@ async fn a_wrapper_awaiting_a_restore_reattaches_after_its_child_was_forgotten()
         .await
         .unwrap();
     manager.reattach_execution(&request).await.unwrap_err();
-    let protection = crate::protocol::Protection::load("test memory pressure");
+    let protection = crate::model::Protection::load("test memory pressure");
     let reattached = manager
         .reattach_execution(&Reattach {
             awaiting_restore: Some(protection.clone()),

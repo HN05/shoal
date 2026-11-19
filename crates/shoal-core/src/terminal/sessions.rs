@@ -5,7 +5,7 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
 use crate::{
-    protocol::Protection,
+    model::Protection,
     sessions::{HostName, Origin},
 };
 

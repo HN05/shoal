@@ -9,7 +9,7 @@ pub(super) use keys::Key;
 use keys::Keys;
 use screen::{Screen, Wake};
 
-use crate::protocol::Protection;
+use crate::model::Protection;
 
 pub(in super::super) struct Place(Shown);
 

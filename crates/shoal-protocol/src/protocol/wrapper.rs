@@ -1,5 +1,6 @@
 //! The execution wrapper's messages: reattachment, execution events and
 //! the daemon's controls.
+use crate::model::Protection;
 use crate::processes::Identity;
 use serde::{Deserialize, Serialize};
 use shoal_ids::execution_ids::ExecutionId;
@@ -52,14 +53,6 @@ pub struct Reattach {
     /// daemon may already have forgotten.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub between_runs: bool,
-}
-
-/// Why protection stopped an agent, and what its automatic restore waits for.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Protection {
-    pub reason: String,
-    /// Completes "once …"; recovery also waits for every other signal.
-    pub resumes_when: String,
 }
 
 /// Wrapper → daemon messages after an [`ExecutionMethod::Execute`] response.

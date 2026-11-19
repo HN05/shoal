@@ -1,5 +1,5 @@
 //! Executions and the plans and places they run with.
-use super::{MergePlan, PortReservation, UnmergePlan};
+use super::{MergePlan, PortReservation, Protection, UnmergePlan};
 use crate::processes::Identity;
 use crate::state::ExecutionState;
 use serde::{Deserialize, Serialize};
@@ -37,7 +37,7 @@ pub struct Execution {
     pub narrowing: crate::config::permissions::PermissionsConfig,
     /// Why Shoal stopped its agent, while its wrapper waits to restore it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stopped: Option<crate::protocol::Protection>,
+    pub stopped: Option<Protection>,
 }
 
 /// Everything the execution wrapper needs to launch a tracked command.

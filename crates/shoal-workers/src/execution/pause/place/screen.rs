@@ -3,7 +3,7 @@
 //! waits for, and the keys that wake or stop it.
 use std::io::Write;
 
-use crate::protocol::Protection;
+use crate::model::Protection;
 
 /// Hide the cursor and reset text attributes, which the agent's interface
 /// may have left behind.
