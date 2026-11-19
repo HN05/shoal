@@ -96,10 +96,29 @@ fn open(path: &Path) -> Option<gix::Repository> {
         full: options.clone(),
         reduced: options,
     };
-    let discovery = gix::discover::upwards::Options::default().apply_environment();
+    let discovery = gix::discover::upwards::Options {
+        // Git passes over a ceiling directory that holds none of `path`.
+        match_ceiling_dir_or_error: false,
+        ..Default::default()
+    }
+    .apply_environment();
+    let ceilings = discovery.ceiling_dirs.clone();
     let repo = gix::ThreadSafeRepository::discover_opts(path, discovery, trust).ok()?;
     let repo = repo.to_thread_local();
-    readable(&repo).then_some(repo)
+    (readable(&repo) && !found_in_ceiling(&repo, path, &ceilings)).then_some(repo)
+}
+
+/// Whether gix found `repo` in one of the `ceilings` above `path`, which
+/// gix searches and Git, never entering a ceiling directory, does not.
+fn found_in_ceiling(repo: &gix::Repository, path: &Path, ceilings: &[PathBuf]) -> bool {
+    if ceilings.is_empty() {
+        return false;
+    }
+    let found = repo.workdir().unwrap_or(repo.git_dir());
+    match (found.canonicalize(), path.canonicalize()) {
+        (Ok(found), Ok(path)) => found != path && ceilings.contains(&found),
+        _ => true,
+    }
 }
 
 /// What gix may read: by default all Git reads, and also the configuration

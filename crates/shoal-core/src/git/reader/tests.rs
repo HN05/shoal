@@ -69,6 +69,28 @@ async fn a_directory_outside_any_repository_reads_through_git() {
     assert_eq!(reader(&outside.path().join("missing")).await, "git");
 }
 
+#[test]
+fn a_repository_in_a_ceiling_directory_reads_as_git_does() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    std::fs::create_dir(repo.join("nested")).unwrap();
+    let ceilings = std::env::join_paths([root.path().join("elsewhere"), repo.clone()]);
+    run_helper("a_ceiling_helper", &repo, |command| {
+        command.env("GIT_CEILING_DIRECTORIES", ceilings.unwrap())
+    });
+}
+
+/// Read the repository from within, where it is a ceiling Git never
+/// enters, and from the ceiling itself, which Git reads.
+#[tokio::test]
+#[ignore = "run by a_repository_in_a_ceiling_directory_reads_as_git_does"]
+async fn a_ceiling_helper() {
+    let repo = helper_repository();
+    let within = crate::git::head_and_branch(&repo.join("nested")).await;
+    assert!(within.is_err(), "{within:?}");
+    assert_eq!(reader(&repo).await, "gix");
+}
+
 /// The variable that names the repository a helper reads.
 const HELPER_REPOSITORY: &str = "SHOAL_TEST_HELPER_REPOSITORY";
 
