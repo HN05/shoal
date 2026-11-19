@@ -12,6 +12,9 @@ use shoal_protocol::space_names::SpaceSelector;
 pub(in crate::cli::commands) async fn cancel(ctx: &Context, targets: SpaceTargets) -> Result<i32> {
     let all = targets.all;
     let spaces = selection::spaces(ctx, targets).await?;
+    if crate::process::scoped::inherits_scope(&ctx.paths.state) {
+        selection::ensure_below(&spaces)?;
+    }
     let mut cancelled = CancelledRestarts {
         cancelled: Vec::new(),
         unrecorded: Vec::new(),

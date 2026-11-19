@@ -104,15 +104,12 @@ fn restarted<'a>(agents: &'a [RunningAgent], space: &Space) -> Option<&'a Runnin
 /// before any restarts, as the daemon would refuse its agent. The daemon
 /// refuses each space outside the caller's scope, which needs the scope
 /// token: a process that cleared it stays refused.
-pub(super) fn ensure_below(selection: &Selection) -> Result<()> {
+pub(super) fn ensure_below(spaces: &[Space]) -> Result<()> {
     let own = crate::env::own_space();
     ensure!(
         own.is_some()
             && crate::env::is_scoped()
-            && selection
-                .spaces
-                .iter()
-                .all(|space| Some(&space.id) != own.as_ref()),
+            && spaces.iter().all(|space| Some(&space.id) != own.as_ref()),
         "scoped processes restart only the spaces below their own; finish their own with shoal done"
     );
     Ok(())

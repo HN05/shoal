@@ -33,7 +33,7 @@ pub(super) async fn run(
 ) -> Result<i32> {
     let selection = selection::load(ctx, targets, agent.as_ref()).await?;
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {
-        selection::ensure_below(&selection)?;
+        selection::ensure_below(&selection.spaces)?;
     }
     if selection.spaces.is_empty() && selection.skipped.is_empty() {
         let message = match &agent {
