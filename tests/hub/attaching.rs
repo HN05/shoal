@@ -1,6 +1,6 @@
 //! Attaching to an agent's session on another machine: that machine runs
 //! Shoal's attach on a terminal of its own and carries it to the viewer.
-use std::{fs, process::Stdio};
+use std::{fs, io::Read as _, os::fd::AsRawFd as _, process::Stdio};
 
 use shoal_client::attaching::attach;
 use shoal_protocol::{
@@ -15,6 +15,7 @@ use super::{
         fixture::Base,
         install_test_script, printed,
         prompt::{self, AnswerOptions},
+        pty,
         wait::wait_for,
         zmx::PASSTHROUGH_ZMX,
     },
@@ -131,6 +132,63 @@ fn shoal_attach_shows_an_agent_s_session_on_another_machine_in_this_terminal() {
     assert!(transcript.contains("shoal attach"), "{transcript}");
     let calls = fs::read_to_string(laptop.root.path().join("zmx-calls")).unwrap();
     assert!(calls.contains(r#"["attach", "persist"]"#), "{calls}");
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
+#[test]
+fn a_signal_ends_an_attach_to_another_machine_leaving_the_terminal_as_it_was() {
+    let hub = machine(true, "app");
+    let (laptop, space, mut agent) = laptop_agent(&hub);
+    // The laptop's zmx stays attached until its terminal hangs up.
+    let bin = laptop.root.path().join("bin");
+    fs::rename(bin.join("zmx"), bin.join("zmx-passthrough")).unwrap();
+    install_test_script(
+        bin.join("zmx"),
+        "#!/bin/sh\nif [ \"$1\" = attach ]; then echo attached; exec sleep 600; fi\n\
+         exec \"$(dirname \"$0\")/zmx-passthrough\" \"$@\"\n",
+    );
+    let (mut master, slave) = pty::open();
+    let mut viewer = (hub.command())
+        .args(["attach", &space])
+        .stdin(slave.try_clone().unwrap())
+        .stdout(slave.try_clone().unwrap())
+        .stderr(slave.try_clone().unwrap())
+        .spawn()
+        .unwrap();
+    let mut shown = Vec::new();
+    let mut read_shown = |shown: &mut Vec<u8>| {
+        let mut bytes = [0; 4096];
+        while let Ok(read @ 1..) = master.read(&mut bytes) {
+            shown.extend_from_slice(&bytes[..read]);
+        }
+    };
+    wait_for("the session shown", || {
+        read_shown(&mut shown);
+        String::from_utf8_lossy(&shown)
+            .contains("attached")
+            .then_some(())
+    });
+    // SAFETY: kill signals the viewer this test started.
+    assert_eq!(unsafe { libc::kill(viewer.id() as i32, libc::SIGTERM) }, 0);
+    let status = wait_for("the attach to end", || viewer.try_wait().unwrap());
+    assert!(!status.success(), "{status}");
+    read_shown(&mut shown);
+    let shown = String::from_utf8_lossy(&shown);
+    assert!(shown.contains("\x1b[?1000l"), "{shown:?}");
+    let mut settings = std::mem::MaybeUninit::uninit();
+    // SAFETY: tcgetattr initializes settings on success.
+    assert_eq!(
+        unsafe { libc::tcgetattr(slave.as_raw_fd(), settings.as_mut_ptr()) },
+        0
+    );
+    // SAFETY: tcgetattr succeeded.
+    let settings = unsafe { settings.assume_init() };
+    assert_ne!(
+        settings.c_lflag & libc::ICANON,
+        0,
+        "the terminal stayed raw"
+    );
     agent.kill().unwrap();
     agent.wait().unwrap();
 }

@@ -40,26 +40,45 @@ const CTRL_C: u8 = 0x03;
 
 /// Attach this terminal to a session of `space`, which runs on `machine`,
 /// the one `session` names when given, and exit as the attach there does.
+/// A signal that ends this process, such as SIGTERM, ends the attach,
+/// leaving the terminal as it found it.
 pub(super) async fn attach(
     ctx: &Context,
     space: SpaceId,
     machine: &str,
     session: Option<String>,
 ) -> Result<i32> {
-    let mut viewer = Viewer {
+    let viewer = Viewer {
         session,
         again: None,
         size: terminal_size(),
         term: std::env::var("TERM").ok(),
         apps: viewer_apps().await,
     };
+    let mut ended = Termination::watch()?;
     let mut raw = RawTerminal::enter()?;
+    let code = tokio::select! {
+        code = keep_attached(ctx, &space, machine, viewer) => code?,
+        signal = ended.signalled() => bail!("stopped by {signal}"),
+    };
+    raw.left_by_its_client();
+    Ok(code)
+}
+
+/// Attach to `space` on `machine` as `viewer` asks, again after each
+/// dropped link, until the attach there exits, giving its code.
+async fn keep_attached(
+    ctx: &Context,
+    space: &SpaceId,
+    machine: &str,
+    mut viewer: Viewer,
+) -> Result<i32> {
     let mut keys = typed_keys();
     let mut resizes = signal(SignalKind::window_change()).context("watch the terminal's size")?;
     let mut chosen = None;
     let mut wait = FIRST_WAIT;
     loop {
-        let space = SpaceSelector::id(&space);
+        let space = SpaceSelector::id(space);
         let attached = crate::client::attaching::attach(&ctx.paths, space, viewer.clone()).await;
         let (screen, input) = match attached {
             Ok(attached) => attached,
@@ -77,7 +96,6 @@ pub(super) async fn attach(
             chosen: &mut chosen,
         };
         if let Some(code) = shown.show(screen, input).await? {
-            raw.left_by_its_client();
             return Ok(code);
         }
         let Some(session) = &chosen else {
@@ -86,6 +104,40 @@ pub(super) async fn attach(
         lost_notice(machine, &session.name);
         viewer.again = Some(session.place.clone());
         stop_on_ctrl_c(&mut keys, wait, machine).await?;
+    }
+}
+
+/// The signals that would end this process while its terminal is raw,
+/// caught so that it restores the terminal first. In raw mode Ctrl-C is a
+/// key the attach sends on; these come from elsewhere.
+struct Termination(Vec<(&'static str, Signal)>);
+
+impl Termination {
+    fn watch() -> Result<Self> {
+        let kinds = [
+            ("SIGTERM", SignalKind::terminate()),
+            ("SIGHUP", SignalKind::hangup()),
+            ("SIGINT", SignalKind::interrupt()),
+        ];
+        let watched = kinds
+            .into_iter()
+            .map(|(name, kind)| Ok((name, signal(kind)?)));
+        Ok(Self(
+            watched
+                .collect::<std::io::Result<_>>()
+                .context("watch for signals")?,
+        ))
+    }
+
+    /// The name of the first signal that comes.
+    async fn signalled(&mut self) -> &'static str {
+        let arrivals = self.0.iter_mut().map(|(name, signal)| {
+            Box::pin(async move {
+                signal.recv().await;
+                *name
+            })
+        });
+        futures_util::future::select_all(arrivals).await.0
     }
 }
 
