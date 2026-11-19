@@ -109,6 +109,7 @@ impl Manager {
         }
         // Reserved first, so the environment exports it.
         let port = self.reserve_viewer_port(demo, caller).await?;
+        refuse_occupied(port, &demo.launch.name).await?;
         let place = self.viewer_place(demo).await?;
         let starting = self.spawn_recorded_viewer(demo, port, &place).await?;
         let process = starting.process.clone();
@@ -316,6 +317,18 @@ pub(crate) async fn stop_recorded(process: &Identity) {
     if let Err(error) = process::stop_verified(std::slice::from_ref(process)).await {
         log!("viewer {} not stopped: {error:#}", process.pid);
     }
+}
+
+/// Refuse a viewer `port` another process already listens on, which a
+/// new viewer's readiness would take for its own.
+async fn refuse_occupied(port: u16, demo: &str) -> Result<()> {
+    if connect(port).await.is_err() {
+        return Ok(());
+    }
+    let message = format!(
+        "port {port}, reserved for the viewer of demo {demo}, is in use by another process; stop it, or `shoal release port {demo}` so the next open reserves another"
+    );
+    Err(Refusal::new(Reason::NotReady, message).into())
 }
 
 /// Whether `process` runs: alive under its recorded identity and not

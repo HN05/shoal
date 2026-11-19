@@ -436,6 +436,20 @@ async fn a_viewer_an_earlier_daemon_left_starting_that_never_serves_is_replaced(
 }
 
 #[tokio::test]
+async fn a_viewer_port_another_process_listens_on_starts_no_viewer() {
+    let (temp, manager) = manager().await;
+    let (_, demo) = running(&manager, temp.path(), Some(ECHO_VIEWER)).await;
+    let port = manager.reserve_viewer_port(&demo, None).await.unwrap();
+    let _other = tokio::net::TcpListener::bind(("127.0.0.1", port))
+        .await
+        .unwrap();
+    let refused = manager.open_viewer(&demo, None).await.err().unwrap();
+    assert_eq!(Reason::of(&refused), Some(Reason::NotReady), "{refused:#}");
+    let viewer = manager.running_viewer(&demo.execution_id).await.unwrap();
+    assert!(viewer.is_none(), "a viewer started on a port in use");
+}
+
+#[tokio::test]
 async fn a_viewer_that_exits_fails_the_open_with_what_it_printed() {
     let (temp, manager) = manager().await;
     let viewer = ["sh", "-c", "echo 'no device {udid}' >&2; exit 3"];
