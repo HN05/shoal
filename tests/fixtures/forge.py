@@ -16,16 +16,23 @@ body, its Authorization value and status; an uploaded file's body is
 form. The server reports a Forgejo version, unlogged, when no response names
 "GET version", so Shoal recognizes it as Forgejo. Git's own requests to a
 clone URL, such as the daemon's background fetch, get 404 unlogged: they
-are not forge API calls, and arrive whenever a sync runs.
+are not forge API calls, and arrive whenever a sync runs. Pushes are the
+exception: `git http-backend` serves them to a repository under
+$HOME/forge/git, once the client signs in with Basic auth, and each is
+logged as "PUSH owner/name" with its ref updates, each "old new ref", as
+the body and its "username:password" as the authorization.
 """
+import base64
 import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 
 ROOT = os.path.join(os.environ["HOME"], "forge")
 LOG = os.path.join(ROOT, "requests.jsonl")
+GIT_ROOT = os.path.join(ROOT, "git")
 
 
 def load_responses():
@@ -46,8 +53,7 @@ def respond(key, body, auth=None, tag=None):
     answer = answer.get("body")
     if status == 200 and tag is not None and tag == etag(answer):
         status, answer = 304, None
-    with open(LOG, "a") as f:
-        f.write(json.dumps({"key": key, "body": body, "auth": auth, "status": status}) + "\n")
+    log(key, body, auth, status)
     return status, answer, headers
 
 
@@ -149,6 +155,56 @@ def form_file(data):
     }
 
 
+def log(key, body, auth, status):
+    with open(LOG, "a") as f:
+        f.write(json.dumps({"key": key, "body": body, "auth": auth, "status": status}) + "\n")
+
+
+def git_push(method, path, headers, data):
+    """Serve the push request `path` to a repository under GIT_ROOT through
+    `git http-backend`, as status, headers and body."""
+    route, _, query = path.partition("?")
+    repository = route[1:].partition(".git/")[0]
+    if "service=git-upload-pack" in query or route.endswith("/git-upload-pack"):
+        return 404, {}, b""
+    if not os.path.isdir(os.path.join(GIT_ROOT, repository + ".git")):
+        return 404, {}, b""
+    auth = headers.get("Authorization", "")
+    if not auth.startswith("Basic "):
+        return 401, {"WWW-Authenticate": 'Basic realm="forge"'}, b""
+    login = base64.b64decode(auth.removeprefix("Basic ")).decode()
+    env = {
+        **os.environ,
+        "GIT_PROJECT_ROOT": GIT_ROOT,
+        "GIT_HTTP_EXPORT_ALL": "1",
+        "PATH_INFO": route,
+        "QUERY_STRING": query,
+        "REQUEST_METHOD": method,
+        "CONTENT_TYPE": headers.get("Content-Type", ""),
+        "CONTENT_LENGTH": str(len(data)),
+        "REMOTE_USER": login.partition(":")[0],
+        "REMOTE_ADDR": "127.0.0.1",
+        "GIT_PROTOCOL": headers.get("Git-Protocol", ""),
+    }
+    served = subprocess.run(["git", "http-backend"], input=data, env=env, capture_output=True, check=True)
+    head, _, body = served.stdout.partition(b"\r\n\r\n")
+    sent = dict(line.split(": ", 1) for line in head.decode().split("\r\n") if line)
+    status = int(sent.pop("Status", "200").split()[0])
+    if route.endswith("/git-receive-pack"):
+        log("PUSH " + repository, ref_updates(data), login, status)
+    return status, sent, body
+
+
+def ref_updates(data):
+    """The ref updates, each "old new ref", a receive-pack request names
+    before its pack."""
+    updates = []
+    while len(data) >= 4 and (size := int(data[:4], 16)) > 0:
+        updates.append(data[4:size].split(b"\0")[0].decode().strip())
+        data = data[size:]
+    return updates
+
+
 def serve(port_file):
     """Serve the scripted Forgejo API on a loopback port, written to
     `port_file` once it listens."""
@@ -160,15 +216,16 @@ def serve(port_file):
         def handle_request(self):
             length = int(self.headers.get("Content-Length") or 0)
             data = self.rfile.read(length)
+            if GIT_TRANSPORT.match(self.path):
+                self.send(*git_push(self.command, self.path, self.headers, data))
+                return
             if self.headers.get("Content-Type", "").startswith("multipart/form-data"):
                 body = form_file(data)
             else:
                 body = json.loads(data) if length else None
             path = self.path.removeprefix("/api/v1/")
             key = f"{self.command} {path}"
-            if GIT_TRANSPORT.match(path):
-                status, answer, headers = 404, None, {}
-            elif key == "GET version" and key not in load_responses():
+            if key == "GET version" and key not in load_responses():
                 status, answer, headers = 200, {"version": "11.0.0+gitea-1.22.0"}, {}
             else:
                 status, answer, headers = respond(
@@ -178,13 +235,16 @@ def serve(port_file):
                     tag=self.headers.get("If-None-Match"),
                 )
             data = b"" if answer is None else (answer if isinstance(answer, str) else json.dumps(answer)).encode()
-            self.send_response(status)
             if status == 200:
-                self.send_header("ETag", etag(answer))
+                headers = {"ETag": etag(answer), **headers}
+            if "Content-Type" not in headers:
+                headers = {**headers, "Content-Type": "application/json"}
+            self.send(status, headers, data)
+
+        def send(self, status, headers, data):
+            self.send_response(status)
             for name, value in headers.items():
                 self.send_header(name, value)
-            if "Content-Type" not in headers:
-                self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
