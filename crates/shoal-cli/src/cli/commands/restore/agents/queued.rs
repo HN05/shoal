@@ -21,7 +21,7 @@ pub async fn start_entry(
     entry: shoal_ids::queue_entry_ids::QueueEntryId,
 ) -> Result<i32> {
     ensure!(
-        !crate::env::inherits_scope(&ctx.paths.state),
+        !crate::process::scoped::inherits_scope(&ctx.paths.state),
         "restore agents outside scoped executions"
     );
     let ([space], Some(execution)) = (targets.space.as_slice(), execution) else {

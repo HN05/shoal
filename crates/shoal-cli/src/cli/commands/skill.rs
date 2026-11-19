@@ -52,7 +52,7 @@ pub(super) fn run(
         return Ok(0);
     };
     ensure!(
-        !crate::env::inherits_scope(&Paths::command_state_dir(state_dir)?),
+        !crate::process::scoped::inherits_scope(&Paths::command_state_dir(state_dir)?),
         "workspace processes cannot install user-level skills; run shoal skill install outside the scoped execution"
     );
     ensure!(
@@ -135,7 +135,7 @@ pub(super) fn run(
 /// and says nothing unless the user has something to do, since it runs before
 /// every command, including those a shell runs as it starts.
 pub(super) fn refresh_installed(state: &Path, json_output: bool) {
-    if crate::env::inherits_scope(state) || !crate::build::changes_user_files() {
+    if crate::process::scoped::inherits_scope(state) || !crate::build::changes_user_files() {
         return;
     }
     let warn = |error: anyhow::Error| {

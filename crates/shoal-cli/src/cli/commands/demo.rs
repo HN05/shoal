@@ -21,7 +21,7 @@ pub(super) async fn run(
 ) -> Result<i32> {
     // Without its token, the daemon would answer a workspace process as the user.
     ensure!(
-        crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
+        crate::env::is_scoped() || !crate::process::scoped::inherits_scope(&ctx.paths.state),
         "a workspace process that cleared its scope token cannot use shoal demo"
     );
     // Before a picker opens or anything is stopped or replaced.

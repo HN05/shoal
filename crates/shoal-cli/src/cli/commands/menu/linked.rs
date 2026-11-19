@@ -9,7 +9,6 @@ use crate::{
         context::Context,
         ui,
     },
-    env,
     model::LinkedItem,
     refusal::{Reason, Refusal},
 };
@@ -22,7 +21,7 @@ pub(super) async fn view_command(ctx: &Context, space: Option<SpaceSelector>) ->
     let (items, kind) = linked_items(ctx, &space).await?;
     ensure!(!items.is_empty(), "the {kind} links no issue or PR");
     // Workspace processes cannot open the browser.
-    let browse = !env::inherits_scope(&ctx.paths.state);
+    let browse = !crate::process::scoped::inherits_scope(&ctx.paths.state);
     let (url, web) = ui::pick_linked(ctx, &items, browse)?;
     Ok(Command::Items(ItemsCommand::View(ViewArgs {
         items: ItemArgs {

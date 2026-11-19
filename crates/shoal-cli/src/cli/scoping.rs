@@ -16,7 +16,7 @@ impl Scoping {
     /// Scoped when this process or an ancestor carries scope for the `state`
     /// directory, so a cleared scope token does not unscope it.
     pub fn inherited(state: &Path) -> Self {
-        Self::when(crate::env::inherits_scope(state))
+        Self::when(crate::process::scoped::inherits_scope(state))
     }
 
     /// Scoped when this process carries a scope that names its own

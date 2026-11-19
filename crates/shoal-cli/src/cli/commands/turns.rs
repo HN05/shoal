@@ -23,7 +23,7 @@ use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 pub(super) async fn interrupt(ctx: &Context, selected: Vec<SpaceSelector>) -> Result<i32> {
     let selected = ui::select_spaces(ctx, selected, false).await?;
     let spaces = super::stop::resolve(ctx, selected, false).await?;
-    if crate::env::inherits_scope(&ctx.paths.state) {
+    if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         super::stop::ensure_below(&spaces)?;
     }
     let interruptions = running_turns(ctx, &spaces).await?;

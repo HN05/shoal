@@ -23,7 +23,7 @@ pub(super) async fn run(
     options: Options,
 ) -> Result<i32> {
     let selection = selection::load(ctx, targets).await?;
-    if crate::env::inherits_scope(&ctx.paths.state) {
+    if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         selection::ensure_below(&selection)?;
     }
     let plan = selection.plan(agent.as_ref());

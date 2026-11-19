@@ -4,9 +4,12 @@
 //! own platform binaries, such as shells), so a descendant that cleared its
 //! scope token still finds a recorded ancestor.
 use super::identity::{self, Identity};
-use crate::fsutil::{
-    self,
-    atomic::{Permissions, ReplaceOptions},
+use crate::{
+    env,
+    fsutil::{
+        self,
+        atomic::{Permissions, ReplaceOptions},
+    },
 };
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
@@ -58,6 +61,18 @@ impl Drop for Records {
             remove(&self.directory, command);
         }
     }
+}
+
+/// True when this process or an ancestor carries scope for the `state`
+/// directory, so clearing Shoal variables in a child does not lift its
+/// execution's limits. Tracked executions record their processes; an exported
+/// environment is found only where ancestors' environments are readable.
+pub fn inherits_scope(state: &Path) -> bool {
+    env::is_scoped()
+        || recorded_ancestor(state)
+        || identity::scoped_ancestor_state_dirs()
+            .iter()
+            .any(|dir| env::same_directory(dir, state))
 }
 
 /// True when an ancestor of this process is recorded in `state`.

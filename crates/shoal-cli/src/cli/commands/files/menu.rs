@@ -105,7 +105,7 @@ fn print(file: &AttachedFile) -> Result<i32> {
 /// its path, also for a terminal elsewhere; workspace processes cannot.
 fn open(ctx: &Context, file: &AttachedFile) -> Result<i32> {
     ensure!(
-        !crate::env::inherits_scope(&ctx.paths.state),
+        !crate::process::scoped::inherits_scope(&ctx.paths.state),
         "workspace processes cannot open files on the user's screen; ask the user"
     );
     outln!("{}", file.path.display());

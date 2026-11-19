@@ -78,7 +78,7 @@ pub(super) async fn clear(ctx: &Context) -> Result<i32> {
 /// cleared its scope token, which the daemon would take for the user.
 fn refuse_workspace_processes(ctx: &Context) -> Result<()> {
     ensure!(
-        crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
+        crate::env::is_scoped() || !crate::process::scoped::inherits_scope(&ctx.paths.state),
         "workspace processes read and clear notifications only with their scope token"
     );
     Ok(())

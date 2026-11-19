@@ -28,7 +28,7 @@ pub(super) async fn attach(
     session: Option<String>,
 ) -> Result<i32> {
     ensure!(
-        !crate::env::inherits_scope(&ctx.paths.state),
+        !crate::process::scoped::inherits_scope(&ctx.paths.state),
         "attach to sessions outside scoped executions"
     );
     ensure!(ctx.on_terminal(), "attach requires a terminal");

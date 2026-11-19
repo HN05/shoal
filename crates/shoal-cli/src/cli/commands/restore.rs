@@ -19,7 +19,7 @@ pub(super) async fn run(
     if let Some(checkpoint) = checkpoint {
         return checkpoints::run(ctx, targets.space, checkpoint).await;
     }
-    if crate::env::inherits_scope(&ctx.paths.state) {
+    if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         agents::ensure_queued()?;
     }
     let named = !targets.space.is_empty();

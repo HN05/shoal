@@ -403,18 +403,6 @@ pub fn workspace_scope() -> bool {
     is_scoped() && own_chat().is_none()
 }
 
-/// True when this process or an ancestor carries scope for the `state`
-/// directory, so clearing Shoal variables in a child does not lift its
-/// execution's limits. Tracked executions record their processes; an exported
-/// environment is found only where ancestors' environments are readable.
-pub fn inherits_scope(state: &std::path::Path) -> bool {
-    is_scoped()
-        || crate::process::scoped::recorded_ancestor(state)
-        || crate::process::identity::scoped_ancestor_state_dirs()
-            .iter()
-            .any(|dir| same_directory(dir, state))
-}
-
 pub fn same_directory(a: &std::path::Path, b: &std::path::Path) -> bool {
     match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
         (Ok(a), Ok(b)) => a == b,

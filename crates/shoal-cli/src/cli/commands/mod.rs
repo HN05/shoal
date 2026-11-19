@@ -104,7 +104,6 @@ use crate::{
         output::{Palette, Style},
         shell,
     },
-    env,
     model::Workspace,
     paths::Paths,
 };
@@ -201,7 +200,9 @@ fn picker_start(ctx: &Context, command: Option<&Command>) -> Option<Option<menu:
         Some(Command::Space(SpaceCommand::Inbox {
             repository: None,
             print: false,
-        })) if lists_interactively(ctx) && !env::inherits_scope(&ctx.paths.state) => {
+        })) if lists_interactively(ctx)
+            && !crate::process::scoped::inherits_scope(&ctx.paths.state) =>
+        {
             Some(Some(menu::View::Inbox))
         }
         Some(Command::Space(SpaceCommand::List {

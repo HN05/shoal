@@ -198,7 +198,7 @@ async fn remember(
 
 /// Whether this caller keeps a history: scoped callers keep none.
 fn keeps_history(ctx: &Context) -> bool {
-    !crate::env::inherits_scope(&ctx.paths.state)
+    !crate::process::scoped::inherits_scope(&ctx.paths.state)
 }
 
 #[cfg(test)]

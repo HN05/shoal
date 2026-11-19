@@ -60,7 +60,7 @@ async fn start(ctx: &Context, mut args: StartArgs) -> Result<i32> {
 /// and a request would reach agents outside its scope.
 pub(super) fn ensure_scope_token(ctx: &Context) -> Result<()> {
     ensure!(
-        crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
+        crate::env::is_scoped() || !crate::process::scoped::inherits_scope(&ctx.paths.state),
         "workspace processes start and ask agents only with their scope token"
     );
     Ok(())

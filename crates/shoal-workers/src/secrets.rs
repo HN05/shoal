@@ -50,7 +50,11 @@ fn served_to<'a>(secrets: &'a Secrets, tool: &str) -> Vec<(&'a String, &'a Secre
 /// policy applies even when it changed after the agent started; unscoped
 /// callers need no approval.
 async fn authorize(paths: &CommandPaths, tool: &str, served: &[(&String, &Secret)]) -> Result<()> {
-    if !must_authorize(tool, env::inherits_scope(&paths.state), env::is_scoped())? {
+    if !must_authorize(
+        tool,
+        crate::process::scoped::inherits_scope(&paths.state),
+        env::is_scoped(),
+    )? {
         return Ok(());
     }
     for (name, secret) in served {

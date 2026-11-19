@@ -31,7 +31,7 @@ pub(in crate::cli::commands) async fn start_worker(
     // Without its token, the daemon would take a workspace process's start
     // for the user's.
     ensure!(
-        crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
+        crate::env::is_scoped() || !crate::process::scoped::inherits_scope(&ctx.paths.state),
         "workspace processes start agents only with their scope token"
     );
     let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace)

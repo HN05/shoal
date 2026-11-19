@@ -32,7 +32,7 @@ pub fn file(paths: &Paths, platform: Platform) -> PathBuf {
 pub fn executable(explicit: Option<PathBuf>) -> Result<PathBuf> {
     let path = match explicit {
         Some(path) => path,
-        None => fsutil::executables::invoked_executable()?,
+        None => crate::process::executable::invoked_executable()?,
     };
     let path = if path.is_absolute() {
         path

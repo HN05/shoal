@@ -56,7 +56,7 @@ pub(super) async fn restore(
     named: bool,
     options: Options,
 ) -> Result<i32> {
-    let scoped = crate::env::inherits_scope(&ctx.paths.state);
+    let scoped = crate::process::scoped::inherits_scope(&ctx.paths.state);
     let change = options.change.as_ref();
     let restores_agents = !options.forget && !options.no_agents;
     let whole = named && !options.forget && options.execution.is_none();

@@ -39,7 +39,7 @@ pub(crate) fn shoal() -> std::io::Result<String> {
 fn executable(started: &crate::installed::Executable) -> std::io::Result<std::path::PathBuf> {
     match started.path() {
         Some(path) => Ok(path.to_owned()),
-        None => crate::fsutil::executables::invoked_executable(),
+        None => crate::process::executable::invoked_executable(),
     }
 }
 

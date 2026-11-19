@@ -55,7 +55,7 @@ pub(super) async fn cancel(ctx: &Context, entry: Option<String>) -> Result<i32> 
 /// daemon would take for the user; with the token it confines the change.
 fn require_scope_token(ctx: &Context) -> Result<()> {
     ensure!(
-        !crate::env::inherits_scope(&ctx.paths.state) || crate::env::is_scoped(),
+        !crate::process::scoped::inherits_scope(&ctx.paths.state) || crate::env::is_scoped(),
         "workspace processes change the agent queue only with their scope token"
     );
     Ok(())

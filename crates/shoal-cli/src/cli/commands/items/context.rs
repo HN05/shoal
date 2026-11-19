@@ -5,7 +5,6 @@ use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{context::Context, ui},
-    env,
     forge::{ForgeRepo, items::reference::ItemInput},
     model::Repository,
     protocol::{ItemContext, RepoTarget},
@@ -190,7 +189,9 @@ async fn registered_target(ctx: &Context, repo: Option<&str>) -> Result<Option<R
     let Some(named) = repo else {
         return Ok(None);
     };
-    if env::inherits_scope(&ctx.paths.state) && !in_chat_outside_repositories(ctx).await? {
+    if crate::process::scoped::inherits_scope(&ctx.paths.state)
+        && !in_chat_outside_repositories(ctx).await?
+    {
         return Ok(None);
     }
     let Some(checkout) = registered(ctx, named).await? else {

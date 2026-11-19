@@ -12,7 +12,6 @@ use crate::{
         output::{self, Palette, Style},
     },
     client::views,
-    env,
     forge::{
         ci::{checks::CheckLog, run_view::JobRef},
         items::{link::Selection, reaction::Reaction, reference::ItemRef},
@@ -154,7 +153,7 @@ pub(super) fn open_urls(ctx: &Context, urls: Vec<String>) -> Result<i32> {
 /// Refuse workspace processes, whose user may be elsewhere.
 pub(super) fn may_open_browser(ctx: &Context) -> Result<()> {
     ensure!(
-        !env::inherits_scope(&ctx.paths.state),
+        !crate::process::scoped::inherits_scope(&ctx.paths.state),
         "workspace processes cannot open a browser; ask the user"
     );
     Ok(())

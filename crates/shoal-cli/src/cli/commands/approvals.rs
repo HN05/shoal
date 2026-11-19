@@ -96,7 +96,7 @@ async fn prompt_decision(ctx: &Context, request: Box<ApprovalRequest>) -> Result
 /// one routed to its space, or one of another space as its `decide`
 /// permission allows, which the daemon confines to the spaces below.
 async fn can_decide(ctx: &Context, request: &ApprovalRequest) -> Result<bool> {
-    if !crate::env::inherits_scope(&ctx.paths.state) {
+    if !crate::process::scoped::inherits_scope(&ctx.paths.state) {
         return Ok(true);
     }
     let owner = match crate::env::own_space() {
@@ -250,7 +250,7 @@ pub(super) async fn decide(
     let (number, shown) = match number {
         Some(number) => (number, None),
         // Workspace processes decide only the requests routed to them, by number.
-        None if crate::env::inherits_scope(&ctx.paths.state) => {
+        None if crate::process::scoped::inherits_scope(&ctx.paths.state) => {
             anyhow::bail!(
                 "workspace processes decide by number: shoal approvals SPACE.ITEM --approve"
             )
@@ -345,7 +345,7 @@ async fn escalate(
 /// A process that cleared the scope token it inherits would act as the user.
 pub(super) fn ensure_scope_token(ctx: &Context) -> Result<()> {
     ensure!(
-        crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
+        crate::env::is_scoped() || !crate::process::scoped::inherits_scope(&ctx.paths.state),
         "workspace processes cannot decide approval requests without their scope token"
     );
     Ok(())

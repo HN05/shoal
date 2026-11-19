@@ -37,7 +37,7 @@ pub(in crate::cli) async fn start_add(
     workspace: &Workspace,
 ) -> Result<bool> {
     ensure!(
-        !env::inherits_scope(&ctx.paths.state),
+        !crate::process::scoped::inherits_scope(&ctx.paths.state),
         "workspace processes cannot allocate workspaces"
     );
     let host = beside(ctx, settings);

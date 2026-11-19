@@ -119,7 +119,7 @@ fi
 /// the shell's last path, without needing a daemon or a usable current directory.
 pub fn recovery_directory(path: &Path, state: &Path) -> Result<PathBuf> {
     ensure!(
-        !crate::env::inherits_scope(state),
+        !crate::process::scoped::inherits_scope(state),
         "workspace processes cannot navigate outside their worktree"
     );
     ensure!(path.is_absolute(), "recovery path must be absolute");
@@ -164,7 +164,7 @@ pub fn completions(shell: clap_complete::Shell) -> Result<String> {
 /// scoped process's shell, including one that cleared its token, is its
 /// agent's, which keeps its own working directory, so it is never moved.
 pub fn navigate(ctx: &CliContext, path: &Path) -> Result<()> {
-    if crate::env::inherits_scope(&ctx.paths.state) {
+    if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         return Ok(());
     }
     let json = ctx.json;

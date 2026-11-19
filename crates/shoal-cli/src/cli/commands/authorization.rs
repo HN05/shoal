@@ -15,13 +15,13 @@ use crate::{
 /// sends take what it governs.
 pub(super) async fn authorize(ctx: &Context, command: &Command) -> Result<()> {
     ensure!(
-        !(command.rewrites_config() && env::inherits_scope(&ctx.paths.state)),
+        !(command.rewrites_config() && crate::process::scoped::inherits_scope(&ctx.paths.state)),
         "a scoped process changes Shoal's config only key by key, which it may check gives only the permissions it holds; ask the user to run this command"
     );
     // The daemon refuses a request with a scope token; ancestry also
     // catches a process that cleared its token.
     ensure!(
-        !(command.belongs_to_user() && env::inherits_scope(&ctx.paths.state)),
+        !(command.belongs_to_user() && crate::process::scoped::inherits_scope(&ctx.paths.state)),
         "only the user's own terminal, or a command it runs, such as over ssh, changes the hub's machines or relays to the daemon"
     );
     match command.permission() {
@@ -69,7 +69,7 @@ async fn authorize_in(ctx: &Context, key: PermissionKey, repository: Option<&str
 /// below a scoped process, refused when it cleared the scope token, without
 /// which the daemon would take it for the user.
 pub(in crate::cli::commands) fn scoped(ctx: &Context) -> Result<bool> {
-    if !env::inherits_scope(&ctx.paths.state) {
+    if !crate::process::scoped::inherits_scope(&ctx.paths.state) {
         return Ok(false);
     }
     ensure!(
@@ -82,7 +82,7 @@ pub(in crate::cli::commands) fn scoped(ctx: &Context) -> Result<bool> {
 /// Whether this process may take what the permission `key` governs, at once
 /// or after approval: always for the user.
 pub(in crate::cli::commands) async fn permits(ctx: &Context, key: PermissionKey) -> Result<bool> {
-    if !env::inherits_scope(&ctx.paths.state) {
+    if !crate::process::scoped::inherits_scope(&ctx.paths.state) {
         return Ok(true);
     }
     let held = crate::client::workspaces::held_permissions(&ctx.paths, None).await?;

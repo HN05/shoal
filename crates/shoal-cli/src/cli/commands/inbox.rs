@@ -76,7 +76,7 @@ impl Inbox {
     pub(in crate::cli) async fn request(ctx: &Context, filter: &ListFilter) -> Result<Self> {
         // Without its token, the daemon would answer a workspace process as the user.
         ensure!(
-            crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
+            crate::env::is_scoped() || !crate::process::scoped::inherits_scope(&ctx.paths.state),
             "a workspace process that cleared its scope token cannot list the inbox"
         );
         let spaces = crate::client::spaces::list(&ctx.paths).await?;

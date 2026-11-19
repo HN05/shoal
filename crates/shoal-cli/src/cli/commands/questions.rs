@@ -248,7 +248,7 @@ async fn answer(
 
 fn ensure_answering_scope(ctx: &Context) -> Result<()> {
     ensure!(
-        crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
+        crate::env::is_scoped() || !crate::process::scoped::inherits_scope(&ctx.paths.state),
         "workspace processes cannot answer questions without their scope token"
     );
     Ok(())

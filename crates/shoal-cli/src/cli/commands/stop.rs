@@ -42,7 +42,7 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
     }
     let selected = ui::select_spaces(ctx, targets.space, false).await?;
     // A process of a space that cleared its token is still that space's.
-    if crate::env::inherits_scope(&ctx.paths.state) {
+    if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         targets::ensure_scoped()?;
     }
     // Every target is resolved, and those here checked, before any stops.
@@ -51,7 +51,7 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
         true => Vec::new(),
         false => resolve(ctx, here, !skip_children).await?,
     };
-    if crate::env::inherits_scope(&ctx.paths.state) {
+    if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         ensure_below(&selected)?;
     }
     let tree = elsewhere::stop_tree(ctx, &selected, &elsewhere, skip_children).await?;

@@ -202,7 +202,7 @@ fn new_session_arg(agent: &crate::execution::TrackedAgent) -> Option<OsString> {
 /// text to the person at that terminal whatever `SHOAL_OUTPUT` it has.
 pub fn shoal_argv(paths: &Paths) -> Result<Vec<OsString>> {
     Ok(vec![
-        crate::fsutil::executables::invoked_executable()?.into_os_string(),
+        crate::process::executable::invoked_executable()?.into_os_string(),
         "--state-dir".into(),
         paths.state.clone().into_os_string(),
         "--text".into(),
@@ -242,7 +242,7 @@ pub(crate) fn internal_command_for(
     worker: Worker<'_>,
 ) -> Result<Vec<OsString>> {
     let mut args = vec![
-        crate::fsutil::executables::invoked_executable()?.into_os_string(),
+        crate::process::executable::invoked_executable()?.into_os_string(),
         "--state-dir".into(),
         state.as_os_str().to_owned(),
         if json { "--json" } else { "--text" }.into(),

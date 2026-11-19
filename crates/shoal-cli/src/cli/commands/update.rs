@@ -63,7 +63,7 @@ pub(super) async fn run(ctx: &Context) -> Result<i32> {
 
 /// The file this command runs from; Homebrew updates its own installations.
 fn installed_binary() -> Result<PathBuf> {
-    let path = fs::canonicalize(crate::fsutil::executables::invoked_executable()?)
+    let path = fs::canonicalize(crate::process::executable::invoked_executable()?)
         .context("resolve the shoal executable")?;
     ensure!(
         !homebrew_installed(&path),
