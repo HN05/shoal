@@ -837,7 +837,10 @@ Shoal keeps a demo's command running, restarts it when it exits, and tells the
 user how to open it; `shoal demo` and the inbox open it for them. The `server`
 preset reserves a port and passes it as `PORT`, and `web` does the same for a
 page opened in a browser; the `simulator` preset leases the workspace's
-simulator and passes its UDID as `SHOAL_SIM_UDID`. Chats have no demos.
+simulator and passes its UDID as `SHOAL_SIM_UDID`. `shoal demo NAME
+--workspace W` on a `server` or `web` demo another machine of the hub runs
+forwards it to a port of this machine, printing where, until stopped. Chats
+have no demos.
 
 ## Triggers
 

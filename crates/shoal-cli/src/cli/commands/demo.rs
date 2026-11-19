@@ -1,5 +1,6 @@
 //! `shoal demo`: commands kept running in a workspace for the user to try.
 //! An agent starts one, the user opens it, and both can read its screen.
+mod forward;
 mod list;
 mod lookup;
 mod open;

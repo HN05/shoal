@@ -146,6 +146,7 @@ impl Operation {
                     | RemovalMethod::RemoveSpace { .. }
                     | RemovalMethod::StartRemoval { .. }
             ) | Self::Queue(QueueMethod::SetPriority { .. } | QueueMethod::QueueRestore { .. })
+                | Self::Demo(DemoMethod::ListDemos { .. })
                 | Self::Hold(
                     HoldMethod::HoldAcquire { .. }
                         | HoldMethod::HoldRelease { .. }

@@ -1990,6 +1990,15 @@ Opening runs the demo's `open` command in the workspace with the demo's
 variables, otherwise shows it where it runs, as `shoal attach` shows a session: its
 host focuses its place inside that host, and from another terminal attaches to it
 or shows it where the host shows its places, such as Rex's Mac app.
+`shoal demo [NAME] --workspace W` for a `server` or `web` demo another
+[machine of the hub](#hub) runs listens on this machine's loopback, on the
+demo's own port number when it is free and otherwise on any, prints the local
+`localhost` address or URL there, and carries each connection to the demo
+through the hub, both ways and unread, so WebSockets work, until Ctrl-C. An
+agent runs it in the foreground for a demo in its scope; with `--json` it
+prints the demo's `name`, its `machine`, the local `location` and `port`
+first. Other demos of another machine open only there, and one whose machine
+is offline fails at once, naming the machine and when the hub last saw it.
 `shoal demo ls` lists the configured and
 running demos, with each running demo's `kind` (`terminal`, `server`, `web`
 or `simulator`) and a web demo's `url` in its JSON, `shoal demo screen NAME [--lines N]` prints the end of what it

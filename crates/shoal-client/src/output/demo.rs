@@ -38,4 +38,18 @@ pub struct Sent {
     pub sent: bool,
 }
 
-outputs!(Stopping, Screen, Sent);
+/// A demo another machine runs, which `shoal demo` forwards from a port
+/// of this machine until it stops.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Forwarding {
+    pub name: String,
+    /// The machine that runs it.
+    pub machine: String,
+    /// Where the user reaches it here: a web demo's URL, otherwise its
+    /// address.
+    pub location: String,
+    /// The port of this machine's loopback it listens on.
+    pub port: u16,
+}
+
+outputs!(Stopping, Screen, Sent, Forwarding);

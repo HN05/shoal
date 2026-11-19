@@ -1,13 +1,16 @@
 //! Opening a demo on another machine: the demo's machine relays a stream's
 //! bytes to and from the demo's port through the hub, unread.
-use std::path::PathBuf;
+use std::{io::BufRead as _, path::PathBuf, process::Stdio};
 
 use shoal_client::{
     connection::Daemon,
     demos::{DemoStream, open_stream},
 };
 use shoal_protocol::{demos::Kind, space_names::SpaceSelector};
-use tokio::io::{AsyncRead, AsyncReadExt as _, AsyncWrite, AsyncWriteExt as _};
+use tokio::{
+    io::{AsyncRead, AsyncReadExt as _, AsyncWrite, AsyncWriteExt as _},
+    net::TcpStream,
+};
 
 use super::{
     directory::{join, listed, machine, workspace},
@@ -108,6 +111,39 @@ fn an_app_opens_a_web_demo_on_another_machine_both_ways() {
         stream.connection.read_to_end(&mut rest).await.unwrap();
         assert!(rest.is_empty());
     });
+}
+
+#[test]
+fn shoal_demo_forwards_another_machine_s_web_demo_from_a_local_port() {
+    let hub = machine(true, "app");
+    let (_laptop, space, laptop_id) = laptop_demo(&hub);
+    let desk = machine(false, "app");
+    join(&desk, &hub, "desk");
+    listed(&desk, &space, &laptop_id);
+    let mut forwarding = desk
+        .command()
+        .args(["--json", "demo", "site", "--workspace", &space])
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut printed = String::new();
+    let stdout = forwarding.stdout.take().unwrap();
+    std::io::BufReader::new(stdout)
+        .read_line(&mut printed)
+        .unwrap();
+    let printed: serde_json::Value = serde_json::from_str(&printed).unwrap();
+    let port = printed["port"].as_u64().unwrap();
+    assert_eq!(printed["location"], format!("http://localhost:{port}"));
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async {
+        // Each connection reaches the demo on its own.
+        for turn in [&b"first"[..], b"second"] {
+            let connection = TcpStream::connect(("127.0.0.1", port as u16)).await;
+            echoed(connection.unwrap(), turn).await;
+        }
+    });
+    forwarding.kill().unwrap();
+    forwarding.wait().unwrap();
 }
 
 #[test]

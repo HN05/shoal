@@ -1,12 +1,13 @@
 //! `shoal demo [name]`: opening a running demo, named or picked, in this
-//! terminal.
+//! terminal, or forwarding one another joined machine runs.
 use anyhow::{Context as _, Result, ensure};
 
 use super::{
+    forward::forward,
     lookup::{find, running, scope},
     presets,
 };
-use crate::cli::{context::Context, output::Palette, terminal, ui};
+use crate::cli::{commands::machines, context::Context, output::Palette, terminal, ui};
 use shoal_protocol::demos::Running;
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -15,6 +16,11 @@ pub(super) async fn open(
     name: Option<String>,
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
+    if let Some(selector) = &workspace
+        && let Some(elsewhere) = machines::space_elsewhere(ctx, selector).await?
+    {
+        return forward(ctx, name, elsewhere).await;
+    }
     ensure!(ctx.on_terminal(), "opening a demo requires a terminal");
     let workspace = scope(ctx, workspace).await?;
     let demos = running(ctx, workspace.as_ref()).await?;
@@ -26,7 +32,7 @@ pub(super) async fn open(
     Ok(0)
 }
 
-fn pick(ctx: &Context, demos: Vec<Running>) -> Result<Running> {
+pub(super) fn pick(ctx: &Context, demos: Vec<Running>) -> Result<Running> {
     ensure!(!demos.is_empty(), "no demos are running");
     let rows = ui::aligned(
         demos
