@@ -12,10 +12,8 @@ use crate::cli::{
     ui,
 };
 use crate::client::leases;
-use crate::client::output::acquisition::NotAcquired;
-use shoal_protocol::resources::{
-    Catalog, Overview, ResourceKind, ResourceLease, ResourceRequest, WorkspaceOverview,
-};
+use crate::client::output::{acquisition::NotAcquired, overviews::WorkspaceOverview};
+use shoal_protocol::resources::{Catalog, Overview, ResourceKind, ResourceLease, ResourceRequest};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Exit 2 means no compatible capacity or a pending or denied approval; a

@@ -249,13 +249,6 @@ pub struct Catalog {
     pub pools: Vec<CatalogPool>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct WorkspaceOverview {
-    pub workspace: crate::model::Workspace,
-    #[serde(flatten)]
-    pub overview: Overview,
-}
-
 impl ResourceConfig {
     fn validate_repository(&self, name: &str) -> Result<()> {
         match (self.kind, self.repo.as_deref()) {

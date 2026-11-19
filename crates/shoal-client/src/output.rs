@@ -108,7 +108,6 @@ outputs!(
     shoal_protocol::questions::Listing,
     shoal_protocol::questions::Question,
     shoal_protocol::resources::Overview,
-    shoal_protocol::resources::WorkspaceOverview,
     shoal_protocol::resources::ResourceLease,
     shoal_protocol::reviews::Review,
     shoal_protocol::secrets::SecretGrant,
